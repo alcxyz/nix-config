@@ -20,7 +20,6 @@
       #  unrarSupport = true;
       #})
       calibre
-      calibre-web
 
       cameractrls
       cameractrls-gtk4
@@ -32,7 +31,6 @@
       wineWowPackages.waylandFull
 
       ghostty
-      deluge
 
       nautilus
 
