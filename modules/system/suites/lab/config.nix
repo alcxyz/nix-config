@@ -1,40 +1,15 @@
-{ options
-, config
-, lib
-, pkgs
-, ...
-}:
+{ options, config, lib, pkgs, ... }:
 with lib;
-with lib.custom; let
-  cfg = config.suites.lab;
-in
 {
-  options.suites.lab = with types; {
-    enable = mkBoolOpt false "Enable the lab suite";
+  options.lab = with types; {
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable the lab system configuration (services, virtualization, firewall).";
+    };
   };
 
-  config = mkIf cfg.enable {
-
-    environment.systemPackages = with pkgs; [
-      terraform
-      opentofu
-      ansible
-      k3s
-      kubectl
-      kubernetes-helm
-      kubeswitch
-      k9s
-      lens
-      termshark
-      atac
-      azure-cli
-      google-cloud-sdk
-      devbox
-      cockpit
-      podman-compose
-      lima
-    ];
-
+  config = mkIf config.lab.enable {
     services.k3s = {
       enable = true;
       role = "server";
@@ -46,7 +21,6 @@ in
       ];
     };
 
-    #boot.supportedFilesystems = [ "nfs" ];
     services.rpcbind.enable = true;
 
     virtualisation.containers.enable = true;
@@ -72,13 +46,5 @@ in
     networking.firewall.allowedUDPPorts = [
       # 8472 # k3s, flannel: required if using multi-node for inter-node networking
     ];
-
-    #environment.variables.KUBECONFIG = "$HOME/.kube/config:$HOME/.kube/rpi0";
-    #environment.variables.KUBECONFIG = builtins.concatStringsSep ":" [
-    #  "/home/alc/.kube/config"
-    #  "/home/alc/.kube/rpi0"
-    #  # Add more paths as needed
-    #];
-
   };
 }
