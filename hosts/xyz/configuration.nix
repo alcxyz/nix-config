@@ -8,6 +8,9 @@
     # <nixpkgs/nixos/modules/services/networking/networkmanager.nix>
     # <nixpkgs/nixos/modules/system/boot/loader/systemd-boot/systemd-boot.nix>
     # <nixpkgs/nixos/modules/system/etc/passwd.nix>
+    ./modules/system/suites/common/default.nix
+    ./modules/system/suites/lab/default.nix
+    ./modules/system/suites/desktop/default.nix
   ];
 
   # Define the hostname using the specialArgs passed from the flake
@@ -34,8 +37,13 @@
 
   # Set your system state version. This determines the compatibility of your system configuration.
   # It's recommended to set this to the NixOS version you initially install.
-  system.stateVersion = "23.11"; # Replace with your desired version (e.g., "24.05")
+  system.stateVersion = "24.11"; # Replace with your desired version (e.g., "24.05")
 
   # Add other system configurations here
+
+  # Enable suites
+  suites.common.enable = true;
+  suites.lab.enable = false;
+  suites.desktop.enable = false;
 
 }
