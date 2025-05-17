@@ -26,6 +26,9 @@
 
     # Import the new system suite for Hyprland packages
     ./modules/system/suites/hyprland/default.nix
+
+    # Import the KVM system module
+    ./modules/system/virtualisation/kvm
   ];
 
   # ==================== System Configuration ====================
