@@ -1,186 +1,124 @@
-{ config, pkgs, inputs, username, hostName, configDir, ... }:
+# hosts/xyz/configuration.nix
+{ config, pkgs, inputs, username, hostName, configDir, lib, ... }:
 
 {
   # ==================== Imports ====================
   imports = [
-    ./hardware-configuration.nix
+    ./hardware-configuration.nix # Host-specific hardware
 
-    # Import the base system configuration module which collects other system modules
-    ../../modules/system/default.nix
-
-    # Import other system suites
-    ../../modules/system/suites/lab/default.nix
-    ../../modules/system/suites/desktop/default.nix
+    # Import system suites using configDir for robust paths from flake root
+    "${configDir}/modules/system/suites/lab/default.nix"
+    "${configDir}/modules/system/suites/desktop/default.nix"
+    "${configDir}/modules/system/suites/hyprland/default.nix"
 
     # Import hardware-specific modules
-    ../../modules/system/hardware/nvidia.nix
+    "${configDir}/modules/system/hardware/nvidia.nix"
 
-    # Import system service modules that are enabled directly in the host config
-    ../../modules/system/services/zfs/default.nix
+    # Import system service modules
+    "${configDir}/modules/system/services/zfs/default.nix" # Make sure networking.hostId is NOT in here
+    "${configDir}/modules/system/services/calibre-web/default.nix"
+    "${configDir}/modules/system/services/deluge/default.nix"
+    "${configDir}/modules/system/services/kanata/default.nix"
+    "${configDir}/modules/system/services/nfs/default.nix"
+    "${configDir}/modules/system/services/samba/default.nix"
 
-    # Import additional system programs and services that are enabled directly in the host config
-    ../../modules/system/programs/gnupg/default.nix
-    ../../modules/system/services/calibre-web/default.nix
-    ../../modules/system/services/deluge/default.nix
-    ../../modules/system/services/kanata/default.nix
-    ../../modules/system/services/nfs/default.nix
-    ../../modules/system/services/samba/default.nix
+    # Import additional system programs
+    "${configDir}/modules/system/programs/gnupg/default.nix"
 
-    # Import the new system suite for Hyprland packages
-    ../../modules/system/suites/hyprland/default.nix
-
-    # Import the KVM system module
-    ../../modules/system/virtualisation/kvm
+    # Import KVM system module
+    "${configDir}/modules/system/virtualisation/kvm/default.nix" # Assuming default.nix is the entry
   ];
 
+  # NOTE: The import of ../../modules/system/default.nix has been REMOVED
+  # because self.modules.system (which is that file) is now included
+  # in the modules list in your flake.nix for this host.
+
   # ==================== System Configuration ====================
-
-  # Define the hostname using the specialArgs passed from the flake
-  networking.hostName = hostName;
-
-  # Set your system state version. This determines the compatibility of your system configuration.
-  # It's recommended to set this to the NixOS version you initially install.
-  system.stateVersion = "24.11"; # Replace with your desired version (e.g., "24.05")
-
-  # Enable the Nix daemon (usually enabled by default, but good to be explicit)
+  networking.hostName = hostName; # Set by specialArgs
+  system.stateVersion = "24.11";
   nix.daemon.enable = true;
 
   # === Basic System Setup ===
-
-  # Configure bootloader (example: systemd-boot)
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
   # === Users and Shells ===
-
-  # Configure users (example: using the username from specialArgs)
   users.users.${username} = {
     isNormalUser = true;
     extraGroups = [ "networkmanager" "wheel" "nixbld" "vfio" "audio" "sound" "video" "input" "tty" "docker" "podman" ];
-    packages = with pkgs; [
-      # Add any packages you want available to this user system-wide
-    ];
   };
-
-  # Configure root user's shell
   users.users.root.shell = pkgs.bashInteractive;
-
-  # Set the system-wide default shell for new users
   users.defaultUserShell = pkgs.nushell;
 
   # === Environment and Base Packages ===
-
-  # System-wide environment packages
-  environment.systemPackages = with pkgs; [
-    bat
-    nitch
-    glow
-  ];
-
-  # System-wide shell aliases
+  environment.systemPackages = with pkgs; [ bat nitch glow ];
   environment.shellAliases = {
     nixyz = "nixos-rebuild switch --flake .#xyz";
-    # Retained the sudo alias which was present in the original file
     sudo = "doas";
   };
 
-  # Locale configuration
   i18n.defaultLocale = "en_US.UTF-8";
-
-  # Time configuration
   time.timeZone = "Europe/Oslo";
-
-  # XKB configuration
   console.useXkbConfig = true;
-  services.xserver.xkb = {
-    layout = "no";
-  };
+  services.xserver.xkb = { layout = "no"; };
 
   # === Security ===
-
-  # Doas configuration
   security.sudo.enable = false;
   security.doas = {
     enable = true;
-    extraRules = [
-      {
-        users = [config.user.name];
-        noPass = true;
-        keepEnv = true;
-      }
-    ];
+    extraRules = [{
+      users = [ username ]; # Use the username variable
+      noPass = true;
+      keepEnv = true;
+    }];
   };
 
-  # === Services and Features (Enabled via Imports) ===
-  # Services and features are typically enabled within the modules they are defined in,
-  # or enabled here if they are standard NixOS options not part of a custom module.
-  # The suites below enable groups of modules.
+  # === Services and Features (Enabled via Options from Modules) ===
 
-  # === Suites ===
+  # Enable the base system configurations from self.modules.system
+  system.enable = true; # This option is defined in modules/system/default.nix
 
-  # Enable the consolidated system module which imports submodules
-  system.enable = true;
-
-  # Enable other suites
+  # Enable other suites (options defined in their respective suite modules)
   suites.lab.enable = false;
   suites.desktop.enable = false;
   suites.hyprland.enable = true;
 
-  # Enable the KVM system module
-  virtualisation.kvm-system.enable = true;
-
+  # Enable KVM (option defined in modules/system/virtualisation/kvm/default.nix)
+  virtualisation.kvm-system.enable = true; # Ensure your KVM module defines this option path
 
   # ==================== Hardware Specific ====================
-
-  # Enable Nvidia hardware configuration
-  hardware.nvidia.enable = true;
-
+  hardware.nvidia.enable = true; # Option from modules/system/hardware/nvidia.nix
 
   # ==================== Networking Specific ====================
-
-  # Host-specific networking configuration
-  networking = {
-    networkmanager.enable = true;
-    hostId = "4e7ded69";
-    bridges.br0.interfaces = [ "enp7s0" ];
-    interfaces = {
-      enp6s0 = {
-        useDHCP = true;
-      };
-      enp7s0 = {
-        useDHCP = false;
-      };
-      br0 = {
-        useDHCP = false;
-      };
-    };
+  networking.networkmanager.enable = true;
+  networking.hostId = "4e7ded69"; # Crucial: Host-specific, keep it here.
+  networking.bridges.br0.interfaces = [ "enp7s0" ];
+  networking.interfaces = {
+    enp6s0.useDHCP = true;
+    enp7s0.useDHCP = false;
+    br0.useDHCP = false;
   };
 
-  # ==================== Other Programs/Services ====================
-
-  # Enable additional system services and programs (enabled individually)
+  # ==================== Other Programs/Services (Enabled via Options) ====================
   services.calibre-web.enable = true;
   services.deluge.enable = true;
   services.kanata.enable = true;
-  services.zfs.enable = true;
+  services.zfs.enable = true;       # Option from modules/system/services/zfs/default.nix
   services.nfs.enable = true;
   services.samba.enable = true;
-  programs.gnupg.enable = true;
+  programs.gnupg.enable = true;     # Option from modules/system/programs/gnupg/default.nix
   programs.dconf.enable = true;
 
-
-  # ==================== Home Manager Configuration ====================
-
-  # Home Manager configuration for the user
+  # ==================== Home Manager Configuration (NixOS Managed) ====================
+  # This configures Home Manager for 'alc' when building this NixOS system.
+  # It's separate from your standalone `homeConfigurations.alc` but can share the same `home.nix`.
   home-manager.users.${username} = {
     imports = [
-      # Import your main home configuration
-      ./users/${username}/home.nix
-
-      # Import the user-specific shell configuration
-      ./modules/home/shell
+      # Import the main home.nix for the user, using configDir for the path.
+      "${configDir}/users/${username}/home.nix"
     ];
-
-    # Other user-specific configurations...
+    # pkgs = pkgs; # This is implicitly passed by home-manager.nixosModule.
+    # Home Manager will use the system's 'pkgs' and specialArgs from nixosSystem.
   };
 }
+
