@@ -14,7 +14,7 @@
     ./modules/system/hardware/nvidia.nix
 
     # Import system service modules that are enabled directly in the host config
-    ./modules/system/services/zfs/default.nix # Import the new ZFS service module
+    ./modules/system/services/zfs/default.nix
 
     # Import additional system programs and services that are enabled directly in the host config
     ./modules/system/programs/gnupg/default.nix
@@ -70,10 +70,9 @@
 
   # System-wide environment packages
   environment.systemPackages = with pkgs; [
-    bat # Generally useful system-wide
-    nitch # Generally useful system-wide
-    glow # Generally useful system-wide
-    propagatedIcon # Added from old user module
+    bat
+    nitch
+    glow
   ];
 
   # System-wide shell aliases
@@ -93,7 +92,6 @@
   console.useXkbConfig = true;
   services.xserver.xkb = {
     layout = "no";
-    #xkbOptions = "caps:escape";
   };
 
   # === Security ===
@@ -124,7 +122,10 @@
   # Enable other suites
   suites.lab.enable = false;
   suites.desktop.enable = false;
-  suites.hyprland.enable = true; # Enable the new Hyprland system suite
+  suites.hyprland.enable = true;
+
+  # Enable the KVM system module
+  virtualisation.kvm-system.enable = true;
 
 
   # ==================== Hardware Specific ====================
