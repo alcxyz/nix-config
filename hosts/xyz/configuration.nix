@@ -1,7 +1,7 @@
 { config, pkgs, inputs, username, hostName, configDir, ... }:
 
 {
-  # Import necessary modules
+  # ==================== Imports ====================
   imports = [
     # Import base NixOS configuration modules here
     # For example, a minimal setup might need networking, users, etc.
@@ -30,16 +30,28 @@
 
     # Import the Nix configuration module
     ./modules/system/nix/default.nix
-
-    # Removed import for ./modules/system/shell as its config is integrated below
   ];
+
+  # ==================== System Configuration ====================
 
   # Define the hostname using the specialArgs passed from the flake
   networking.hostName = hostName;
 
+  # Set your system state version. This determines the compatibility of your system configuration.
+  # It's recommended to set this to the NixOS version you initially install.
+  system.stateVersion = "24.11"; # Replace with your desired version (e.g., "24.05")
+
+  # Enable the Nix daemon (usually enabled by default, but good to be explicit)
+  nix.daemon.enable = true;
+
+
+  # === Basic System Setup ===
+
   # Configure bootloader (example: systemd-boot)
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+
+  # === Users and Shells ===
 
   # Configure users (example: using the username from specialArgs)
   users.users.${username} = {
@@ -50,43 +62,44 @@
     ];
   };
 
-  # Configure root user's shell (from system shell module)
+  # Configure root user's shell
   users.users.root.shell = pkgs.bashInteractive;
 
-  # Set the system-wide default shell for new users (from system shell module)
+  # Set the system-wide default shell for new users
   users.defaultUserShell = pkgs.nushell;
 
-  # Enable services
-  services.ssh.enable = true; # Enable the system SSH module
-  services.zfs.enable = true; # Enable the ZFS module
+  # === Environment and Base Packages ===
 
-  # The previous services.openssh.enable = true; is replaced by the module option.
+  # System-wide environment packages (integrated from system shell module)
+  environment.systemPackages = with pkgs; [
+    bat # Generally useful system-wide
+    nitch # Generally useful system-wide
+    glow # Generally useful system-wide
+  ];
 
-  # Enable the Nix daemon (usually enabled by default, but good to be explicit)
-  nix.daemon.enable = true;
+  # System-wide shell aliases (integrated from system shell module)
+  environment.shellAliases = {
+    nixyz = "nixos-rebuild switch --flake .#xyz";
+    # Retained the sudo alias which was present in the original file
+    sudo = "doas";
+  };
 
-  # Set your system state version. This determines the compatibility of your system configuration.
-  # It's recommended to set this to the NixOS version you initially install.
-  system.stateVersion = "24.11"; # Replace with your desired version (e.g., "24.05")
-
-  # Add other system configurations here
-
-  # === Integrated system configurations ===
-  # Locale configuration
+  # Locale configuration (integrated from system locale module)
   i18n.defaultLocale = "en_US.UTF-8";
-  console = { keyMap = "en"; };
 
-  # Time configuration
+  # Time configuration (integrated from system time module)
   time.timeZone = "Europe/Oslo";
 
-  # XKB configuration
+  # XKB configuration (integrated from system xkb module)
   console.useXkbConfig = true;
   services.xserver.xkb = {
     layout = "no";
     #xkbOptions = "caps:escape";
   };
 
-  # Doas configuration
+  # === Security ===
+
+  # Doas configuration (integrated from system security doas module)
   security.sudo.enable = false;
   security.doas = {
     enable = true;
@@ -98,28 +111,28 @@
       }
     ];
   };
-  # Removed system-wide sudo alias as it's now in Home Manager shell module
-  # environment.shellAliases = {sudo = "doas";};
-  # === End integrated configurations ===
 
-  # System-wide environment packages (from system shell module)
-  environment.systemPackages = with pkgs; [
-    bat # Generally useful system-wide
-    nitch # Generally useful system-wide
-    glow # Generally useful system-wide
-  ];
+  # === Services and Features (Enabled via Imports) ===
+  # Services and features are typically enabled within the modules they are defined in,
+  # or enabled here if they are standard NixOS options not part of a custom module.
+  # The suites below enable groups of modules.
 
-  # System-wide shell aliases (from system shell module)
-  environment.shellAliases = {
-    nixyz = "nixos-rebuild switch --flake .#xyz";
-  };
-
+  # === Suites ===
 
   # Enable suites
   suites.common.enable = true;
   suites.lab.enable = false;
   suites.desktop.enable = false;
   suites.hyprland.enable = true; # Enable the new Hyprland system suite
+
+
+  # ==================== Hardware Specific ====================
+
+  # Enable Nvidia hardware configuration
+  hardware.nvidia.enable = true;
+
+
+  # ==================== Networking Specific ====================
 
   # Host-specific networking configuration
   networking = {
@@ -139,16 +152,18 @@
     };
   };
 
-  # Enable Nvidia hardware configuration
-  hardware.nvidia.enable = true;
+  # ==================== Other Programs/Services ====================
 
-  # Enable additional system services and programs
-  programs.gnupg.enable = true;
+  # Enable additional system services and programs (enabled individually)
   services.calibre-web.enable = true;
   services.deluge.enable = true;
   services.kanata.enable = true;
   services.nfs.enable = true;
   services.samba.enable = true;
+  programs.gnupg.enable = true;
+
+
+  # ==================== Home Manager Configuration ====================
 
   # Home Manager configuration for the user
   home-manager.users.${username} = {
