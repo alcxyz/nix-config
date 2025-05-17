@@ -6,14 +6,19 @@ with lib;
   imports =
     [
       ./modules/home/environment.nix
-      ./modules/home/desktop/default.nix # Import the new desktop module
-      ./modules/home/programs/foot/default.nix # Import the foot module from its new directory
-      ./modules/home/programs/wezterm/default.nix # Import the new WezTerm module
-      # Removed ./modules/home/programs/direnv/default.nix
-      ./modules/home/programs/git/default.nix # Import the new Git module
-      ./modules/home/programs/gnupg/default.nix # Import the new GnuPG module
-      ./modules/home/programs/ssh/default.nix # Import the new SSH client module
-      ./modules/home/programs/rclone/default.nix # Import the new rclone module
+      ./modules/home/desktop/default.nix # Imports general desktop options like colorscheme
+
+      # Import the main Home Manager Hyprland desktop suite module
+      ./modules/home/desktop/hyprland/default.nix
+
+      # Import other Home Manager program modules (not part of the Hyprland suite)
+      ./modules/home/programs/foot/default.nix
+      ./modules/home/programs/wezterm/default.nix
+      ./modules/home/programs/git/default.nix
+      ./modules/home/programs/gnupg/default.nix
+      ./modules/home/programs/ssh/default.nix
+      ./modules/home/programs/rclone/default.nix
+      # Removed individual Hyprland addon imports (swww) as they are now imported by ./modules/home/desktop/hyprland/default.nix
     ];
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
@@ -93,7 +98,7 @@ with lib;
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 
-  # Enable and configure programs directly
+  # Enable and configure programs directly or via imported modules
   programs.foot.enable = true;
   programs.wezterm.enable = true;
   programs.git.enable = true;
@@ -107,9 +112,16 @@ with lib;
   # Enable SSH client configuration via imported module
   programs.ssh.enable = true;
 
-  # Enable Rclone via imported module
+  # Enable Rclone via imported module (currently disabled in the module default)
   programs.rclone.enable = false;
 
-  # The desktop module is imported above, its options and configurations
+  # Enable the Home Manager Hyprland desktop suite
+  desktop.hyprland.enable = true;
+
+  # Individual Hyprland addon enable options are now managed within the desktop.hyprland module.
+  # Removed: desktop.hyprland.waybar.enable = true;
+  # Removed: desktop.hyprland.swww.enable = true;
+
+  # The desktop module (general options) is imported above, its options and configurations
   # are now available and merged into this configuration.
 }

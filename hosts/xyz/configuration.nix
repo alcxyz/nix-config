@@ -24,6 +24,9 @@
     ./modules/system/services/kanata/default.nix
     ./modules/system/services/nfs/default.nix
     ./modules/system/services/samba/default.nix
+
+    # Import the new system suite for Hyprland packages
+    ./modules/system/suites/hyprland/default.nix
   ];
 
   # Define the hostname using the specialArgs passed from the flake
@@ -61,6 +64,7 @@
   suites.common.enable = true;
   suites.lab.enable = false;
   suites.desktop.enable = false;
+  suites.hyprland.enable = true; # Enable the new Hyprland system suite
 
   # Host-specific networking configuration
   networking = {

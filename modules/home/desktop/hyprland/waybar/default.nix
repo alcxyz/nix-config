@@ -1,4 +1,5 @@
-{ options
+{
+  options
 , config
 , pkgs
 , lib
@@ -6,23 +7,28 @@
 , ...
 }:
 with lib;
-with lib.custom; let
-  cfg = config.desktop.addons.waybar;
-  #inherit (inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}) colors;
-  colors = (inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}).palette;
+
+let
+  cfg = config.programs.waybar; # Use programs.waybar as the option path
+  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  colors = colorscheme.palette;
 in
 {
-  options.desktop.addons.waybar = with types; {
-    enable = mkBoolOpt false "Enable or disable waybar";
+  options.programs.waybar = with types; { # Define programs.waybar.enable
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable the Home Manager configuration for Waybar.";
+    };
   };
 
   config = mkIf cfg.enable {
-    environment.systemPackages = [
-      pkgs.waybar
-    ];
+    # Waybar package should be installed at the system level.
+    # environment.systemPackages = [ pkgs.waybar ];
 
+    # Configure Waybar configuration files via Home Manager
     home.configFile."waybar/config.jsonc" = {
-      source = ./config.jsonc;
+      source = ./config.jsonc; # Path relative to this module
       onChange = ''
         ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
       '';
