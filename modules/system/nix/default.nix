@@ -11,9 +11,17 @@ let
   cfg = config.system.nix;
 in
 {
-  options.system.nix = with types; {
-    enable = mkBoolOpt true "Whether or not to manage nix configuration.";
-    package = mkOpt package pkgs.nixVersions.latest "Which nix package to use.";
+  options.system.nix = with lib.types; { # Explicitly use lib.types
+    enable = lib.mkOption {
+      type = bool;
+      default = true;
+      description = "Whether or not to manage nix configuration.";
+    };
+    package = lib.mkOption {
+      type = package;
+      default = pkgs.nixVersions.latest;
+      description = "Which nix package to use.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -28,7 +36,7 @@ in
       # Use config.username which is passed as a specialArg
       users = [ "root" config.username ];
     in {
-      inherit (cfg) package;
+      inherit (cfg) package; # This correctly refers to options.system.nix.package
 
       settings =
         {

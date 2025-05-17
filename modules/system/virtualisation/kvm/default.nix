@@ -4,11 +4,13 @@ let
   cfg = config.virtualisation.kvm-system;
 in
 {
-  options.virtualisation.kvm-system = with types; {
-    enable = mkBoolOpt false "Whether or not to enable KVM virtualisation.";
-    vfioIds =
-      mkOpt (listOf str) [ "10de:1b80" "10de:10f0" ] # Secondary 16x
-        "The hardware IDs to pass through to a virtual machine.";
+  options.virtualisation.kvm-system = with lib.types; { # Explicitly use lib.types
+    enable = lib.mkEnableOption "Whether or not to enable KVM virtualisation."; # Uses mkEnableOption, defaults to false
+    vfioIds = lib.mkOption {
+      type = listOf str; # listOf and str are from lib.types
+      default = [ "10de:1b80" "10de:10f0" ]; # Secondary 16x
+      description = "The hardware IDs to pass through to a virtual machine.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -37,7 +39,7 @@ in
       "f /dev/shm/scream 0660 root qemu-libvirtd -"
     ];
 
-    environment.systemPackages = with pkgs; [ guestfs-tools virt-manager swtpm libtpms OVMF looking-glass-client swtpm ];
+    environment.systemPackages = with pkgs; [ guestfs-tools virt-manager swtpm libtpms OVMF looking-glass-client ]; # Removed duplicate swtpm
 
     virtualisation.libvirtd = {
       enable = true;
@@ -62,8 +64,8 @@ in
       };
     };
 
-    users.groups.qemu = { };
-    users.users.${username}.extraGroups = [ "qemu-libvirtd" "libvirt" "libvirtd" ];
+    users.groups.qemu-libvirtd = {}; # Ensure group exists for qemu user
+    # users.groups.qemu = { }; # qemu-libvirtd is often the correct group for libvirt
+    users.users.${username}.extraGroups = [ "qemu-libvirtd" "libvirt" ]; # Removed redundant "libvirtd"
   };
 }
-

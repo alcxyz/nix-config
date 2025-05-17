@@ -2,15 +2,16 @@
   options, config, lib, pkgs, username, ... }:
 with lib;
 {
-  options.services.deluge = mkOption {
+  options.services.deluge.enable = mkOption {
     type = types.bool;
     default = false;
-    description = "Enable the Deluge system service."; # Updated description and option path
+    description = "Enable the Deluge system service.";
   };
 
-  config = mkIf config.services.deluge {
+  config = mkIf config.services.deluge.enable {
+    # This services.deluge refers to the actual NixOS service options
     services.deluge = {
-      enable = true;
+      enable = true; # This enables the Deluge service itself
       user = "${username}"; # Use passed username
       group = "${config.users.users.${username}.group}"; # Use the user's primary group
       dataDir = "/home/${username}"; # Assuming this is the desired data directory, using username
@@ -32,6 +33,9 @@ with lib;
     networking.firewall.allowedTCPPorts = [
       8112 # Deluge web UI
       51413 # Deluge daemon
+    ];
+    networking.firewall.allowedUDPPorts = [
+      51413 # Deluge daemon also uses UDP
     ];
 
   };

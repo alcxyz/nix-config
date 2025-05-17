@@ -5,11 +5,14 @@
   ...
 }:
 with lib;
-with lib.custom; let
+# Removed 'with lib.custom;'
+let
+  # cfg now directly refers to config.system.env, which is the option itself.
+  # This is fine for the 'extraInit' part as it reads the final value of the option.
   cfg = config.system.env;
 in {
-  options.system.env = with types;
-    mkOption {
+  options.system.env = with lib.types; # Explicitly use lib.types
+    lib.mkOption { # This is already the standard lib.mkOption
       type = attrsOf (oneOf [str path (listOf (either str path))]);
       apply = mapAttrs (_n: v:
         if isList v
@@ -34,8 +37,10 @@ in {
         LESSHISTFILE = "$XDG_CACHE_HOME/less.history";
         WGETRC = "$XDG_CONFIG_HOME/wgetrc";
       };
+      # cfg here refers to the final evaluated value of options.system.env
       extraInit =
-        concatStringsSep "\n"
+        concatStringsSep "
+"
         (mapAttrsToList (n: v: ''export ${n}="${v}"'') cfg);
     };
   };

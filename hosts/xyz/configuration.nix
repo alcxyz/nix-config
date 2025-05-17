@@ -112,13 +112,12 @@
   # ==================== Home Manager Configuration (NixOS Managed) ====================
   # This configures Home Manager for 'alc' when building this NixOS system.
   # It's separate from your standalone `homeConfigurations.alc` but can share the same `home.nix`.
-  home-manager.users.${username} = {
+  /* home-manager.users.${username} = {
     imports = [
       # Import the main home.nix for the user, using configDir for the path.
       "${configDir}/users/${username}/home.nix"
     ];
     # pkgs = pkgs; # This is implicitly passed by home-manager.nixosModule.
     # Home Manager will use the system's 'pkgs' and specialArgs from nixosSystem.
-  };
+  }; */
 }
-
