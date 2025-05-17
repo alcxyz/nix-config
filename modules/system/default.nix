@@ -18,9 +18,8 @@ in
     ./hardware/audio.nix
     ./fonts/default.nix
     ./env/default.nix
-    # Removed networking.nix - host specific
-    # Core system modules - enabling directly instead of importing core/default.nix
     ./nix/default.nix
+    ./services/ssh/default.nix
   ];
 
   config = mkIf cfg.enable {
@@ -30,15 +29,8 @@ in
 
     # Enable core system features
     system.nix.enable = true; # Moved from core/default.nix
-    system.security.doas.enable = true; # Moved from core/default.nix
     system.fonts.enable = true; # Moved from core/default.nix
-    system.locale.enable = true; # Moved from core/default.nix
-    system.time.enable = true; # Moved from core/default.nix
-    system.xkb.enable = true; # Moved from core/default.nix
-
-    # Enabled services (moved from core/default.nix)
     services.ssh.enable = true;
-    programs.dconf.enable = true;
 
     # The environment module is imported, its default configurations will apply.
     # The custom system.env option is now available for use in host configs.

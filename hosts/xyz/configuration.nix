@@ -14,7 +14,6 @@
     ./modules/system/hardware/nvidia.nix
 
     # Import system service modules that are enabled directly in the host config
-    ./modules/system/services/ssh/default.nix
     ./modules/system/services/zfs/default.nix # Import the new ZFS service module
 
     # Import additional system programs and services that are enabled directly in the host config
@@ -27,9 +26,6 @@
 
     # Import the new system suite for Hyprland packages
     ./modules/system/suites/hyprland/default.nix
-
-    # Import the Nix configuration module if not handled in modules/system/default.nix
-    ./modules/system/nix/default.nix
   ];
 
   # ==================== System Configuration ====================
@@ -55,7 +51,7 @@
   # Configure users (example: using the username from specialArgs)
   users.users.${username} = {
     isNormalUser = true;
-    extraGroups = [ "networkmanager" "wheel" "nixbld" "vfio" "audio" "sound" "video" "input" "tty" "docker" "podman" ]; # Added missing groups
+    extraGroups = [ "networkmanager" "wheel" "nixbld" "vfio" "audio" "sound" "video" "input" "tty" "docker" "podman" ];
     packages = with pkgs; [
       # Add any packages you want available to this user system-wide
     ];
@@ -160,9 +156,11 @@
   services.calibre-web.enable = true;
   services.deluge.enable = true;
   services.kanata.enable = true;
+  services.zfs.enable = true;
   services.nfs.enable = true;
   services.samba.enable = true;
   programs.gnupg.enable = true;
+  programs.dconf.enable = true;
 
 
   # ==================== Home Manager Configuration ====================
