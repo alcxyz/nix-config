@@ -12,6 +12,7 @@ in
     };
   };
 
+  # Conditionally import sub-modules
   imports = lib.optionals cfg.enable [
     ./packages/default.nix
     ./hardware/bluetooth.nix
@@ -22,15 +23,15 @@ in
     ./services/ssh/default.nix
   ];
 
-  config = { # Removed mkIf cfg.enable
+  config = mkIf cfg.enable { # Apply mkIf here to the configuration attributes
     # Enable hardware components
-    hardware.bluetooth.enable = cfg.enable; # Added cfg.enable conditional
-    hardware.audio.enable = cfg.enable; # Added cfg.enable conditional
+    hardware.bluetooth.enable = true;
+    hardware.audio.enable = true;
 
     # Enable core system features
-    system.nix.enable = cfg.enable; # Added cfg.enable conditional
-    system.fonts.enable = cfg.enable; # Added cfg.enable conditional
-    services.ssh.enable = cfg.enable; # Added cfg.enable conditional
+    system.nix.enable = true;
+    system.fonts.enable = true;
+    services.ssh.enable = true;
 
     # The environment module is imported, its default configurations will apply.
     # The custom system.env option is now available for use in host configs.
