@@ -65,9 +65,13 @@ with lib;
     # Add other user-specific packages here
   ];
 
-  # Manage user dotfiles and directories.
+  # Manage user dotfiles and directories (integrated from old user module).
   home.file = {
-    # Example: ".screenrc".source = dotfiles/screenrc;
+    ".config/hypr/UserScripts/.keep".text = "";
+    ".config/swaylock/.keep".text = "";
+    ".config/wlogout/.keep".text = "";
+    ".config/waybar/.keep".text = "";
+    ".face".source = ./profile.png;
   };
 
 
