@@ -56,7 +56,7 @@
   # Configure users (example: using the username from specialArgs)
   users.users.${username} = {
     isNormalUser = true;
-    extraGroups = [ "networkmanager" "wheel" ]; # Add your user to necessary groups
+    extraGroups = [ "networkmanager" "wheel" "nixbld" "vfio" "audio" "sound" "video" "input" "tty" "docker" "podman" ]; # Added missing groups
     packages = with pkgs; [
       # Add any packages you want available to this user system-wide
     ];
@@ -70,14 +70,15 @@
 
   # === Environment and Base Packages ===
 
-  # System-wide environment packages (integrated from system shell module)
+  # System-wide environment packages
   environment.systemPackages = with pkgs; [
     bat # Generally useful system-wide
     nitch # Generally useful system-wide
     glow # Generally useful system-wide
+    propagatedIcon # Added from old user module
   ];
 
-  # System-wide shell aliases (integrated from system shell module)
+  # System-wide shell aliases
   environment.shellAliases = {
     nixyz = "nixos-rebuild switch --flake .#xyz";
     # Retained the sudo alias which was present in the original file
