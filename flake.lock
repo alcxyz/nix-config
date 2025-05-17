@@ -60,7 +60,47 @@
         "type": "github"
       }
     },
+    "darwin": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1747494142,
+        "narHash": "sha256-7TAUwDVZWq82t/x3+zZ5y+Tjl2hLL2c8+8pv9zCUbTo=",
+        "owner": "lnl7",
+        "repo": "nix-darwin",
+        "rev": "8e251e45346e9d58e0eece2512e40c183f967e8f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "lnl7",
+        "repo": "nix-darwin",
+        "type": "github"
+      }
+    },
     "home-manager": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1747439237,
+        "narHash": "sha256-5rCGrnkglKKj4cav1U3HC+SIUNJh08pqOK4spQv9RjA=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "ae755329092c87369b9e9a1510a8cf1ce2b1c708",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "home-manager_2": {
       "inputs": {
         "nixpkgs": [
           "zen-browser",
@@ -154,12 +194,8 @@
     },
     "root": {
       "inputs": {
-        "darwin": [
-          "nixpkgs"
-        ],
-        "home-manager": [
-          "nixpkgs"
-        ],
+        "darwin": "darwin",
+        "home-manager": "home-manager",
         "hyprpanel": "hyprpanel",
         "nix-colors": "nix-colors",
         "nixpkgs": "nixpkgs",
@@ -168,7 +204,7 @@
     },
     "zen-browser": {
       "inputs": {
-        "home-manager": "home-manager",
+        "home-manager": "home-manager_2",
         "nixpkgs": [
           "nixpkgs"
         ]

@@ -7,12 +7,12 @@
 
     darwin = {
       url = "github:lnl7/nix-darwin";
-      follows = "nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs"; # Corrected: darwin follows nixpkgs from its own inputs
     };
 
     home-manager = {
       url = "github:nix-community/home-manager";
-      follows = "nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs"; # Corrected: home-manager follows nixpkgs from its own inputs
     };
 
     zen-browser = {
@@ -26,153 +26,104 @@
     };
 
     nix-colors.url = "github:misterio77/nix-colors";
-
   };
 
   outputs = { self, nixpkgs, darwin, home-manager, nix-colors, ... }@inputs:
   let
-    # Define the user for whom Home Manager is configured
     username = "alc";
-
-    # Define the architectures we support
     supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
-    # Helper to get the pkgs set for a specific architecture
     pkgsFor = arch: import nixpkgs {
       system = arch;
-      config.allowUnfree = true; # Example: Allow unfree packages (adjust as needed)
+      config.allowUnfree = true;
     };
 
-    # Define NixOS hosts and their configurations
     nixosHosts = {
       xyz = {
-        system = "x86_64-linux"; # Or "aarch64-linux" if on ARM server
+        system = "x86_64-linux";
         configuration = ./hosts/xyz/configuration.nix;
       };
       nuc = {
-        system = "x86_64-linux"; # Or "aarch64-linux" if on ARM server
+        system = "x86_64-linux";
         configuration = ./hosts/nuc/configuration.nix;
       };
-      # Add other NixOS hosts here
     };
 
-    # Define Nix-Darwin hosts and their configurations
     darwinHosts = {
       mac = {
-        system = "aarch64-darwin"; # For Apple Silicon. Use "x86_64-darwin" for Intel Macs.
+        system = "aarch64-darwin";
         configuration = ./hosts/mac/configuration.nix;
       };
-      # Add other Nix-Darwin hosts here
     };
-
-    # Combine all hosts
-    allHosts = nixosHosts // darwinHosts;
 
   in
   {
-    # Define the NixOS configurations for each NixOS host.
     nixosConfigurations = builtins.mapAttrs
       (hostName: hostAttrs:
         nixpkgs.lib.nixosSystem {
           inherit (hostAttrs) system;
-
           specialArgs = {
             inherit inputs pkgsFor hostName username;
-            configDir = self; # Pass the flake directory path
-            pkgs = pkgsFor hostAttrs.system; # Pass pkgs for the host's system
+            configDir = self; # 'self' here refers to the flake's outputs, its path is used
+            pkgs = pkgsFor hostAttrs.system;
           };
-
           modules = [
-            # Import the host-specific system configuration
-            hostAttrs.configuration
-
-            # Import shared system modules
-            # inputs.self.modules.system.my-service # Example shared module
-
-            # Add nix-colors module
+            hostAttrs.configuration # Host-specific configuration (e.g., hosts/xyz/configuration.nix)
+            self.modules.system # Shared system module (modules/system/default.nix)
             nix-colors.nixosModules.nix-colors
+            # home-manager.nixosModules.home-manager # Add this if you want NixOS to manage HM for this host
           ];
         }
       )
-      nixosHosts; # Map only over the nixosHosts
+      nixosHosts;
 
-    # Define the Nix-Darwin configurations for each Darwin host.
     darwinConfigurations = builtins.mapAttrs
       (hostName: hostAttrs:
         darwin.lib.darwinSystem {
           inherit (hostAttrs) system;
-
           specialArgs = {
             inherit inputs pkgsFor hostName username;
-            configDir = self; # Pass the flake directory path
-            pkgs = pkgsFor hostAttrs.system; # Pass pkgs for the host's system
+            configDir = self;
+            pkgs = pkgsFor hostAttrs.system;
           };
-
           modules = [
-            # Import the host-specific system configuration
             hostAttrs.configuration
-
-            # Import shared system modules (ensure they handle Darwin or use lib.isLinux/lib.isDarwin)
-            # inputs.self.modules.system.my-service # Example shared module (needs Darwin compatibility)
-
-            # Optional: If you have Home Manager configs that *must* be applied via the
-            # Darwin system build (less common for standalone HM but possible),
-            # you could import home-manager.darwinModules.home-manager here.
-            # We are NOT doing this for standalone HM as requested.
-
-            # Add nix-colors module (if applicable for Darwin configs)
-            # nix-colors.nixosModules.nix-colors # Uncomment if nix-colors has Darwin modules
+            # self.modules.system # If you have parts of it compatible with Darwin
+            # nix-colors.nixosModules.nix-colors # If it has Darwin support
+            # home-manager.darwinModules.home-manager # For Darwin-managed HM
           ];
         }
       )
-      darwinHosts; # Map only over the darwinHosts
+      darwinHosts;
 
-
-    # Define standalone Home Manager configurations.
-    # We have one configuration for user 'alc' intended for any supported system.
-    # The `pkgs` passed here is mostly for the flake evaluation context.
-    # When `home-manager switch` is run on a target machine, it will use that machine's pkgs.
     homeConfigurations.${username} = home-manager.lib.homeManagerConfiguration {
-      # Pass the current system's pkgs for flake evaluation context.
-      # The pkgs used for package installation on the target machine
-      # are implicitly determined by Home Manager when `home-manager switch` is run.
-      pkgs = nixpkgs.legacyPackages.${builtins.currentSystem};
-
+      pkgs = pkgsFor.${builtins.currentSystem}; # pkgs for the system evaluating the flake
       extraSpecialArgs = {
         inherit inputs username pkgsFor;
-        # Pass pkgs for the *evaluation* system. Use pkgsFor in home.nix for target-specific pkgs.
-        pkgs = pkgsFor.${builtins.currentSystem};
+        # pkgs = pkgsFor.${builtins.currentSystem}; # Redundant if top-level pkgs is set this way
+                                                 # but harmless. Ensures 'pkgs' arg in modules is this.
       };
-
       modules = [
-        # Import your user-specific home configuration
-        ./users/${username}/home.nix
-
-        # Crucially, enable the home-manager program itself
-        { programs.home-manager.enable = true; }
-
-        # Optionally, include shared Home Manager modules
-        # inputs.self.modules.home.my-editor
-
-        # Add nix-colors home-manager module
+        ./users/${username}/home.nix # Path relative to flake root
         nix-colors.homeManagerModules.nix-colors
+        # { programs.home-manager.enable = true; } # Already in your users/alc/home.nix
       ];
     };
 
-    # Add development shells for all supported systems.
     devShells = builtins.listToAttrs (map (system: {
       name = system;
-      # Use the shell definition from shells/default/default.nix
-      value = import ./shells/default.nix { pkgs = pkgsFor system; }; # Corrected import path
+      value = import ./shells/default.nix { pkgs = pkgsFor system; };
     }) supportedSystems);
 
-    # Expose custom modules for easy importing (if you create any)
     modules = {
-      # System modules (might need lib.isLinux/lib.isDarwin guards internally)
-      system = import ./modules/system { inherit inputs pkgsFor; };
-      # Home modules (should be portable or use guards)
-      home = import ./modules/home { inherit inputs pkgsFor; };
-    };
+      # This makes self.modules.system refer to the actual module definition
+      system = import ./modules/system/default.nix;
 
+      # Assuming modules/home/default.nix is your main entry point for shared HM modules
+      # If not, adjust or remove.
+      home = if builtins.pathExists ./modules/home/default.nix
+             then import ./modules/home/default.nix
+             else {}; # Placeholder if no central home module aggregator
+    };
   };
 }

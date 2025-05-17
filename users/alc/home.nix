@@ -1,117 +1,135 @@
-{ config, pkgs, username, lib, ... }:
+# users/alc/home.nix
+{
+  config, # The Home Manager configuration being built
+  pkgs,   # Package set (from homeManagerConfiguration's pkgs or extraSpecialArgs.pkgs)
+  lib,    # Nixpkgs library functions
+  username, # From extraSpecialArgs (value: "alc")
+  inputs,   # From extraSpecialArgs (all flake inputs)
+  pkgsFor,  # From extraSpecialArgs (the pkgsFor function)
+  ...       # Catches any other arguments
+}:
 
-with lib;
+with lib; # Make lib functions available without `lib.` prefix
 
 {
   # ==================== Imports ====================
-  imports =
-    [
-      # Import general user environment settings (e.g., PATH, other variables)
-      ./modules/home/environment.nix
+  # These paths are relative to this home.nix file.
+  # This is a common and clear way to structure Home Manager module imports.
+  imports = [
+    # General user environment settings
+    ../../modules/home/environment.nix
 
-      # Import desktop environment general options (e.g., colorscheme)
-      ./modules/home/desktop/default.nix
+    # Desktop environment general options (e.g., colorscheme)
+    ../../modules/home/desktop/default.nix
 
-      # Import the main Home Manager Hyprland desktop suite module
-      ./modules/home/desktop/hyprland/default.nix
+    # Main Home Manager Hyprland desktop suite module
+    ../../modules/home/desktop/hyprland/default.nix
 
-      # Import the user-specific shell configuration module (Crucial addition)
-      ./modules/home/shell/default.nix
+    # User-specific shell configuration module
+    ../../modules/home/shell/default.nix
 
-      # Import other Home Manager program modules (not part of specific suites)
-      # Note: foot, wezterm, git, gnupg, ssh, rclone are now enabled/configured below
-      # via options provided by these imported modules.
-      ./modules/home/programs/foot/default.nix
-      ./modules/home/programs/wezterm/default.nix
-      ./modules/home/programs/git/default.nix
-      ./modules/home/programs/gnupg/default.nix
-      ./modules/home/programs/ssh/default.nix
-      ./modules/home/programs/rclone/default.nix
-    ];
+    # Other Home Manager program modules
+    ../../modules/home/programs/foot/default.nix
+    ../../modules/home/programs/wezterm/default.nix
+    ../../modules/home/programs/git/default.nix
+    ../../modules/home/programs/gnupg/default.nix
+    ../../modules/home/programs/ssh/default.nix
+    ../../modules/home/programs/rclone/default.nix
+
+    # You can also import modules from flake inputs if needed, e.g.:
+    # inputs.nix-colors.homeManagerModules.nix-colors # Already added in flake.nix's homeConfigurations
+  ];
 
   # ==================== Home Manager Core Settings ====================
-  # Home Manager needs a bit of information about you and the paths it should
-  # manage.
-  home.username = username;
-  home.homeDirectory = "/home/${username}";
-
-  # This value determines the Home Manager release that your configuration is
-  # compatible with.
-  home.stateVersion = "24.11"; # Please read the comment before changing.
+  home.username = username; # Uses the 'username' argument passed from extraSpecialArgs
+  home.homeDirectory = if pkgs.stdenv.isDarwin
+                       then "/Users/${username}"
+                       else "/home/${username}";
+  home.stateVersion = "24.11";
 
   # Let Home Manager install and manage itself.
+  # This is also set in your flake.nix's homeConfigurations for standalone,
+  # but having it here is fine and makes this home.nix self-contained if used elsewhere.
   programs.home-manager.enable = true;
-
 
   # ==================== User Environment ====================
   # Configure user-specific environment variables and XDG paths.
-  # Note: Some XDG variables might be set system-wide; Home Manager settings
-  # often override or complement system settings in user sessions.
-  xdg.cacheHome = "/home/${username}/.cache";
-  xdg.configHome = "/home/${username}/.config";
-  xdg.dataHome = "/home/${username}/.local/share";
-  xdg.stateHome = "/home/${username}/.local/state";
+  xdg.cacheHome = "${home.homeDirectory}/.cache";
+  xdg.configHome = "${home.homeDirectory}/.config";
+  xdg.dataHome = "${home.homeDirectory}/.local/share";
+  xdg.stateHome = "${home.homeDirectory}/.local/state";
 
-  # home.sessionVariables = {
-    # EDITOR and DIRENV_LOG_FORMAT are noted as being in modules/home/environment.nix
-    # If other session variables are needed, add them here or in environment.nix.
-  # };
-
+  # home.sessionVariables are typically set in modules/home/environment.nix
+  # or directly here if they are very specific to this user profile.
 
   # ==================== Packages and Files ====================
   # User-specific packages managed by Home Manager.
-  # Note: Some shell-related packages are installed via ./modules/home/shell/default.nix
-  home.packages = [
-    # Add other user-specific packages here
+  home.packages = with pkgs; [
+    # Example: Add packages specific to 'alc' that aren't part of a module
+    # neofetch
+    # htop
   ];
 
-  # Manage user dotfiles and directories (integrated from old user module).
+  # Manage user dotfiles and directories.
+  # Paths for 'source' are relative to this home.nix file.
   home.file = {
     "Documents/.keep".text = "";
     "Downloads/.keep".text = "";
     "Music/.keep".text = "";
     "Pictures/.keep".text = "";
     "dev/.keep".text = "";
-    ".face".source = ./profile.png; # Corrected path to ./profile.png
-    "Pictures/profile.png".source = ./profile.png; # Corrected path to ./profile.png
+    ".face".source = ./profile.png; # Assumes profile.png is next to home.nix
+    "Pictures/profile.png".source = ./profile.png;
   };
-
 
   # ==================== Program and Feature Enabling ====================
   # Enable and configure programs and features, often defined in imported modules.
+  # The options (e.g., desktop.hyprland.enable) should be defined in the
+  # modules imported above.
 
   # === Desktop Environment and Related ===
-  # Enable the Home Manager Hyprland desktop suite (imported above)
-  desktop.hyprland.enable = true;
-
-  # The general desktop module (general options like colorscheme) is imported above.
+  desktop.hyprland.enable = true; # Option from modules/home/desktop/hyprland/default.nix
 
   # === Shell and Terminal ===
-  # The shell configuration module is imported above and handles shell setup.
-  # We can set options defined by the shell module here if needed.
-  # programs.nushell.enable is set within ./modules/home/shell/default.nix
-
-  programs.foot.enable = true;
-  programs.wezterm.enable = true;
+  # Shell configuration is handled by modules/home/shell/default.nix
+  # programs.nushell.enable would be set within that module.
+  programs.foot.enable = true;    # Option from modules/home/programs/foot/default.nix
+  programs.wezterm.enable = true; # Option from modules/home/programs/wezterm/default.nix
 
   # === Development and Version Control ===
-  programs.git.enable = true;
+  programs.git.enable = true; # Option from modules/home/programs/git/default.nix
 
   # === Security and Authentication ===
-  programs.gnupg.enable = true; # Enabled here for logical grouping
-  programs.ssh.enable = true; # Enabled here for logical grouping
-
+  programs.gnupg.enable = true; # Option from modules/home/programs/gnupg/default.nix
+  programs.ssh.enable = true;   # Option from modules/home/programs/ssh/default.nix
 
   # === Utilities and Other Programs ===
-  programs.nix-ld.enable = true; # Enables nix-ld for the user
+  programs.nix-ld = {
+    enable = true; # Standard Home Manager option
+    package = pkgs.nix-ld; # Explicitly specify the package if needed
+  };
   programs.direnv = {
-    enable = true;
-    nix-direnv.enable = true;
+    enable = true;          # Standard Home Manager option
+    nix-direnv.enable = true; # Standard Home Manager option
   };
 
-  programs.rclone.enable = false;
+  programs.rclone.enable = false; # Option from modules/home/programs/rclone/default.nix
 
+  # ==================== Nixpkgs Overlays/Configuration (Optional) ====================
+  # If you need to apply overlays or specific configurations to the 'pkgs'
+  # instance used by this Home Manager configuration:
+  # nixpkgs.overlays = [
+  #   (final: prev: {
+  #     # myCustomPackage = prev.myCustomPackage.override { ... };
+  #   })
+  # ];
+  # nixpkgs.config = {
+  #   allowUnfree = true;
+  #   # Other nixpkgs config options
+  # };
 
   # ==================== Other Configurations ====================
   # Add any other top-level Home Manager options here.
+  # For example, if you had a theming module:
+  # theme.name = "catppuccin-mocha";
 }
