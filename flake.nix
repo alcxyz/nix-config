@@ -7,12 +7,12 @@
 
     darwin = {
       url = "github:lnl7/nix-darwin";
-      inputs.nixpkgs.follows = "nixpkgs"; # Corrected: darwin follows nixpkgs from its own inputs
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     home-manager = {
       url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs"; # Corrected: home-manager follows nixpkgs from its own inputs
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     zen-browser = {
@@ -64,14 +64,14 @@
           inherit (hostAttrs) system;
           specialArgs = {
             inherit inputs pkgsFor hostName username;
-            configDir = self; # 'self' here refers to the flake's outputs, its path is used
+            configDir = self;
             pkgs = pkgsFor hostAttrs.system;
           };
           modules = [
-            hostAttrs.configuration # Host-specific configuration (e.g., hosts/xyz/configuration.nix)
-            self.modules.system # Shared system module (modules/system/default.nix)
+            hostAttrs.configuration
+            self.modules.system
             nix-colors.nixosModules.nix-colors
-            # home-manager.nixosModules.home-manager # Add this if you want NixOS to manage HM for this host
+            # home-manager.nixosModules.home-manager
           ];
         }
       )
@@ -88,42 +88,34 @@
           };
           modules = [
             hostAttrs.configuration
-            # self.modules.system # If you have parts of it compatible with Darwin
-            # nix-colors.nixosModules.nix-colors # If it has Darwin support
-            # home-manager.darwinModules.home-manager # For Darwin-managed HM
+            # self.modules.system 
+            # home-manager.darwinModules.home-manager
           ];
         }
       )
       darwinHosts;
 
     homeConfigurations.${username} = home-manager.lib.homeManagerConfiguration {
-      pkgs = pkgsFor.${builtins.currentSystem}; # pkgs for the system evaluating the flake
+      pkgs = pkgsFor.${builtins.currentSystem};
       extraSpecialArgs = {
         inherit inputs username pkgsFor;
-        # pkgs = pkgsFor.${builtins.currentSystem}; # Redundant if top-level pkgs is set this way
-                                                 # but harmless. Ensures 'pkgs' arg in modules is this.
       };
       modules = [
-        ./users/${username}/home.nix # Path relative to flake root
+        ./users/${username}/home.nix
         nix-colors.homeManagerModules.nix-colors
-        # { programs.home-manager.enable = true; } # Already in your users/alc/home.nix
       ];
     };
 
-    devShells = builtins.listToAttrs (map (system: {
+    /* devShells = builtins.listToAttrs (map (system: {
       name = system;
       value = import ./shells/default.nix { pkgs = pkgsFor system; };
-    }) supportedSystems);
-
+    }) supportedSystems); */
+    
     modules = {
-      # This makes self.modules.system refer to the actual module definition
       system = import ./modules/system/default.nix;
-
-      # Assuming modules/home/default.nix is your main entry point for shared HM modules
-      # If not, adjust or remove.
       home = if builtins.pathExists ./modules/home/default.nix
              then import ./modules/home/default.nix
-             else {}; # Placeholder if no central home module aggregator
+             else {}; 
     };
   };
 }

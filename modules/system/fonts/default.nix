@@ -6,12 +6,17 @@
   ...
 }:
 with lib;
-with lib.custom; let
+# Removed 'with lib.custom;'
+let
   cfg = config.system.fonts;
 in {
-  options.system.fonts = with types; {
-    enable = mkBoolOpt false "Whether or not to manage fonts.";
-    fonts = mkOpt (listOf package) [] "Custom font packages to install.";
+  options.system.fonts = with lib.types; { # Explicitly use lib.types
+    enable = lib.mkEnableOption "Whether or not to manage fonts.";
+    fonts = lib.mkOption {
+      type = listOf package; # 'listOf' and 'package' are from lib.types
+      default = [];
+      description = "Custom font packages to install.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -31,6 +36,6 @@ in {
         #(nerdfonts.override {fonts = ["JetBrainsMono"];})
         nerd-fonts.jetbrains-mono
       ]
-      ++ cfg.fonts;
+      ++ cfg.fonts; # cfg.fonts refers to options.system.fonts.fonts
   };
 }

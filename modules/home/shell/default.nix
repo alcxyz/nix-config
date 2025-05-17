@@ -65,10 +65,6 @@ with lib; # Keep 'with lib;' as lib is needed
       def , [...packages] {
           nix shell ($packages | each {|s| $"nixpkgs#($s)"})
       }
-      def wezterm [] {
-        $env.WAYLAND_DISPLAY = ""
-        ${pkgs.wezterm}/bin/wezterm
-      }
 
       source ~/.config/carapace/init.nu
     '';
