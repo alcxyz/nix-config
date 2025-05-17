@@ -16,6 +16,14 @@
     # Import system service modules
     ./modules/system/services/ssh/default.nix
     ./modules/system/services/zfs/default.nix # Import the new ZFS service module
+
+    # Import additional system programs and services
+    ./modules/system/programs/gnupg/default.nix
+    ./modules/system/services/calibre-web/default.nix
+    ./modules/system/services/deluge/default.nix
+    ./modules/system/services/kanata/default.nix
+    ./modules/system/services/nfs/default.nix
+    ./modules/system/services/samba/default.nix
   ];
 
   # Define the hostname using the specialArgs passed from the flake
@@ -74,5 +82,13 @@
 
   # Enable Nvidia hardware configuration
   hardware.nvidia.enable = true;
+
+  # Enable additional system services and programs
+  programs.gnupg.enable = true;
+  services.calibre-web.enable = true;
+  services.deluge.enable = true;
+  services.kanata.enable = true;
+  services.nfs.enable = true;
+  services.samba.enable = true;
 
 }

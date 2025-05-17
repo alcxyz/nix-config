@@ -13,6 +13,7 @@ with lib;
       ./modules/home/programs/git/default.nix # Import the new Git module
       ./modules/home/programs/gnupg/default.nix # Import the new GnuPG module
       ./modules/home/programs/ssh/default.nix # Import the new SSH client module
+      ./modules/home/programs/rclone/default.nix # Import the new rclone module
     ];
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
@@ -105,6 +106,9 @@ with lib;
 
   # Enable SSH client configuration via imported module
   programs.ssh.enable = true;
+
+  # Enable Rclone via imported module
+  programs.rclone.enable = false;
 
   # The desktop module is imported above, its options and configurations
   # are now available and merged into this configuration.
