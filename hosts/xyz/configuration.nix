@@ -3,32 +3,34 @@
 {
   # ==================== Imports ====================
   imports = [
+    ./hardware-configuration.nix
+
     # Import the base system configuration module which collects other system modules
-    ./modules/system/default.nix
+    ../../modules/system/default.nix
 
     # Import other system suites
-    ./modules/system/suites/lab/default.nix
-    ./modules/system/suites/desktop/default.nix
+    ../../modules/system/suites/lab/default.nix
+    ../../modules/system/suites/desktop/default.nix
 
     # Import hardware-specific modules
-    ./modules/system/hardware/nvidia.nix
+    ../../modules/system/hardware/nvidia.nix
 
     # Import system service modules that are enabled directly in the host config
-    ./modules/system/services/zfs/default.nix
+    ../../modules/system/services/zfs/default.nix
 
     # Import additional system programs and services that are enabled directly in the host config
-    ./modules/system/programs/gnupg/default.nix
-    ./modules/system/services/calibre-web/default.nix
-    ./modules/system/services/deluge/default.nix
-    ./modules/system/services/kanata/default.nix
-    ./modules/system/services/nfs/default.nix
-    ./modules/system/services/samba/default.nix
+    ../../modules/system/programs/gnupg/default.nix
+    ../../modules/system/services/calibre-web/default.nix
+    ../../modules/system/services/deluge/default.nix
+    ../../modules/system/services/kanata/default.nix
+    ../../modules/system/services/nfs/default.nix
+    ../../modules/system/services/samba/default.nix
 
     # Import the new system suite for Hyprland packages
-    ./modules/system/suites/hyprland/default.nix
+    ../../modules/system/suites/hyprland/default.nix
 
     # Import the KVM system module
-    ./modules/system/virtualisation/kvm
+    ../../modules/system/virtualisation/kvm
   ];
 
   # ==================== System Configuration ====================
