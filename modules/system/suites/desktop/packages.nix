@@ -1,7 +1,14 @@
-{ config, pkgs, inputs, lib, ... }:
+{
+  config,
+  pkgs,
+  inputs,
+  lib,
+  ...
+}:
+with lib;
 
 {
-  config = {
+  config = mkIf config.suites.desktop.enable {
     environment.systemPackages = with pkgs; [
       inputs.zen-browser.packages.x86_64-linux.default
       brave
@@ -54,6 +61,8 @@
       gh
       lazygit
       commitizen
+
+      # Hyprland and its addons packages will be managed by a separate system suite.
     ];
   };
 }

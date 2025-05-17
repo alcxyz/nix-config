@@ -1,26 +1,27 @@
-{ options
-, config
+{
+  config
 , lib
 , pkgs
 , inputs
 , ...
 }:
 with lib;
-with lib.custom; let
-  cfg = config.desktop.addons.wlogout;
-  #inherit (inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}) colors;
-  colors = (inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}).palette;
+
+let
+  # Depend on the parent desktop.hyprland.enable option
+  parentCfg = config.desktop.hyprland;
+  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  colors = colorscheme.palette;
 in
 {
-  options.desktop.addons.wlogout = with types; {
-    enable = mkBoolOpt false "Enable or disable wlogout.";
-  };
+  # This module configures wlogout when the Hyprland desktop suite is enabled.
+  # It does not define its own enable option.
 
-  config = mkIf cfg.enable {
-    environment.systemPackages = with pkgs; [
-      wlogout
-    ];
+  config = mkIf parentCfg.enable {
+    # wlogout package should be installed at the system level (already added).
+    # environment.systemPackages = [ pkgs.wlogout ];
 
+    # Configure wlogout configuration files via Home Manager
     home.configFile."wlogout/style.css".text = ''
        * {
          all: unset;

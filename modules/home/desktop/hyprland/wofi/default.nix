@@ -1,27 +1,28 @@
-{ options
-, config
+{
+  config
 , lib
 , pkgs
 , inputs
 , ...
 }:
 with lib;
-with lib.custom; let
-  cfg = config.desktop.addons.wofi;
-  #inherit (inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}) colors;
-  colors = (inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}).palette;
+
+let
+  # Depend on the parent desktop.hyprland.enable option
+  parentCfg = config.desktop.hyprland;
+  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  colors = colorscheme.palette;
 in
 {
-  options.desktop.addons.wofi = with types; {
-    enable = mkBoolOpt false "Enable or disable the wofi run launcher.";
-  };
+  # This module configures Wofi when the Hyprland desktop suite is enabled.
+  # It does not define its own enable option.
 
-  config = mkIf cfg.enable {
-    environment.systemPackages = with pkgs; [
-      wofi
-    ];
+  config = mkIf parentCfg.enable {
+    # Wofi package should be installed at the system level (already added).
+    # environment.systemPackages = [ pkgs.wofi ];
 
-    home.configFile."wofi/config".source = ./config;
+    # Configure Wofi configuration files via Home Manager
+    home.configFile."wofi/config".source = ./config; # Path relative to this module
     home.configFile."wofi/style.css".text = ''
       window {
           margin: 5px;
@@ -91,5 +92,6 @@ in
           background-size: 400% 400%;
         }
     '';
+    };
   };
 }
