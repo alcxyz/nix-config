@@ -5,12 +5,16 @@
 , ...
 }:
 with lib;
-with lib.custom; let
+let
   cfg = config.hardware.audio;
 in
 {
   options.hardware.audio = with types; {
-    enable = mkBoolOpt false "Enable pipewire";
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable pipewire";
+    };
   };
 
   config = mkIf cfg.enable {

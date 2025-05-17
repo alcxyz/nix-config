@@ -4,12 +4,14 @@
 , ...
 }:
 with lib;
-with lib.custom; let
+let
   cfg = config.hardware.nvidia;
 in
 {
-  options.hardware.nvidia = with types; {
-    enable = mkBoolOpt false "Enable drivers and patches for Nvidia hardware.";
+  options.hardware.nvidia = mkOption {
+    type = types.bool;
+    default = false;
+    description = "Enable drivers and patches for Nvidia hardware.";
   };
 
   config = mkIf cfg.enable {

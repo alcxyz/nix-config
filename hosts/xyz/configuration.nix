@@ -11,6 +11,7 @@
     ./modules/system/suites/common/default.nix
     ./modules/system/suites/lab/default.nix
     ./modules/system/suites/desktop/default.nix
+    ./modules/system/hardware/nvidia.nix
   ];
 
   # Define the hostname using the specialArgs passed from the flake
@@ -45,5 +46,26 @@
   suites.common.enable = true;
   suites.lab.enable = false;
   suites.desktop.enable = false;
+
+  # Host-specific networking configuration
+  networking = {
+    networkmanager.enable = true;
+    hostId = "4e7ded69";
+    bridges.br0.interfaces = [ "enp7s0" ];
+    interfaces = {
+      enp6s0 = {
+        useDHCP = true;
+      };
+      enp7s0 = {
+        useDHCP = false;
+      };
+      br0 = {
+        useDHCP = false;
+      };
+    };
+  };
+
+  # Enable Nvidia hardware configuration
+  hardware.nvidia.enable = true;
 
 }
