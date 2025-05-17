@@ -1,15 +1,21 @@
-{ options
+{
+  options
 , config
 , lib
 , ...
 }:
 with lib;
-with lib.custom; let
-  cfg = config.services.smb;
+
+let
+  cfg = config.services.samba; # Updated option path
 in
 {
-  options.services.smb = with types; {
-    enable = mkBoolOpt false "Enable samba";
+  options.services.samba = with types; { # Updated option path
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable the Samba server and related services."; # Updated description
+    };
   };
 
   config = mkIf cfg.enable {
@@ -79,7 +85,7 @@ in
       openFirewall = true;
     };
 
-    #networking.firewall.enable = true;
+    #networking.firewall.enable = true; # These are generally enabled at a higher level
     #networking.firewall.allowPing = true;
   };
 }

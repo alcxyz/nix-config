@@ -12,6 +12,10 @@
     ./modules/system/suites/lab/default.nix
     ./modules/system/suites/desktop/default.nix
     ./modules/system/hardware/nvidia.nix
+
+    # Import system service modules
+    ./modules/system/services/ssh/default.nix
+    ./modules/system/services/zfs/default.nix # Import the new ZFS service module
   ];
 
   # Define the hostname using the specialArgs passed from the flake
@@ -30,8 +34,11 @@
     ];
   };
 
-  # Enable SSH for remote access
-  services.openssh.enable = true;
+  # Enable services
+  services.ssh.enable = true; # Enable the system SSH module
+  services.zfs.enable = true; # Enable the ZFS module
+
+  # The previous services.openssh.enable = true; is replaced by the module option.
 
   # Enable the Nix daemon (usually enabled by default, but good to be explicit)
   nix.daemon.enable = true;

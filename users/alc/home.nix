@@ -9,8 +9,10 @@ with lib;
       ./modules/home/desktop/default.nix # Import the new desktop module
       ./modules/home/programs/foot/default.nix # Import the foot module from its new directory
       ./modules/home/programs/wezterm/default.nix # Import the new WezTerm module
+      # Removed ./modules/home/programs/direnv/default.nix
       ./modules/home/programs/git/default.nix # Import the new Git module
       ./modules/home/programs/gnupg/default.nix # Import the new GnuPG module
+      ./modules/home/programs/ssh/default.nix # Import the new SSH client module
     ];
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
@@ -100,6 +102,9 @@ with lib;
     enable = true;
     nix-direnv.enable = true;
   };
+
+  # Enable SSH client configuration via imported module
+  programs.ssh.enable = true;
 
   # The desktop module is imported above, its options and configurations
   # are now available and merged into this configuration.

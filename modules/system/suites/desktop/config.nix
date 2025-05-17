@@ -16,9 +16,6 @@ with lib;
   };
 
   config = mkIf config.desktop.enable {
-    apps.foot.enable = true;
-    apps.wez.enable = true;
-
     desktop.hyprland.enable = true;
     programs.firefox.enable = true;
 
