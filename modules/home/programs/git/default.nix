@@ -1,5 +1,4 @@
 {
-  options,
   config,
   pkgs,
   lib,
@@ -7,19 +6,11 @@
 }:
 with lib;
 
-let
-  cfg = config.programs.git; # Updated option path
-in
 {
-  options.programs.git = with types; { # Updated option path
-    enable = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Enable git Home Manager configuration (aliases and config files)."; # Updated description
-    };
-  };
+  # This module configures the built-in Home Manager programs.git module.
+  # It does not define its own enable option, but depends on programs.git.enable being set elsewhere.
 
-  config = mkIf cfg.enable {
+  config = mkIf config.programs.git.enable { # Use the built-in enable option
     # Home Manager configurations for Git
     environment.shellAliases = {
       # Git
