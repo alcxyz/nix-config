@@ -6,9 +6,11 @@
   ...
 }:
 with lib;
-with lib.custom; let
+
+let
   cfg = config.system.nix;
-in {
+in
+{
   options.system.nix = with types; {
     enable = mkBoolOpt true "Whether or not to manage nix configuration.";
     package = mkOpt package pkgs.nixVersions.latest "Which nix package to use.";
@@ -23,7 +25,8 @@ in {
     ];
 
     nix = let
-      users = ["root" config.user.name];
+      # Use config.username which is passed as a specialArg
+      users = [ "root" config.username ];
     in {
       inherit (cfg) package;
 
@@ -37,11 +40,10 @@ in {
           auto-optimise-store = true;
           trusted-users = users;
           allowed-users = users;
-        }
-        // (lib.optionalAttrs config.apps.tools.direnv.enable {
+          # Made keep-outputs and keep-derivations unconditional for direnv support
           keep-outputs = true;
           keep-derivations = true;
-        });
+        };
 
       gc = {
         automatic = true;
