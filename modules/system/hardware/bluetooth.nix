@@ -1,7 +1,7 @@
 { options, config, lib, pkgs, ... }:
 with lib;
 {
-  options.bluetooth = with types; {
+  options.hardware.bluetooth = with types; {
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -9,7 +9,7 @@ with lib;
     };
   };
 
-  config = mkIf config.bluetooth.enable {
+  config = mkIf config.hardware.bluetooth.enable {
     services.blueman.enable = true;
 
     hardware.bluetooth = {
