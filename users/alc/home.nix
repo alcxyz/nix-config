@@ -67,11 +67,13 @@ with lib;
 
   # Manage user dotfiles and directories (integrated from old user module).
   home.file = {
-    ".config/hypr/UserScripts/.keep".text = "";
-    ".config/swaylock/.keep".text = "";
-    ".config/wlogout/.keep".text = "";
-    ".config/waybar/.keep".text = "";
-    ".face".source = ./profile.png;
+    "Documents/.keep".text = "";
+    "Downloads/.keep".text = "";
+    "Music/.keep".text = "";
+    "Pictures/.keep".text = "";
+    "dev/.keep".text = "";
+    ".face".source = ./profile.png; # Corrected path to ./profile.png
+    "Pictures/profile.png".source = ./profile.png; # Corrected path to ./profile.png
   };
 
 
