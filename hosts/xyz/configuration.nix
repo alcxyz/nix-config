@@ -3,21 +3,21 @@
 {
   # ==================== Imports ====================
   imports = [
-    # Import base NixOS configuration modules here
-    # For example, a minimal setup might need networking, users, etc.
-    # <nixpkgs/nixos/modules/services/networking/networkmanager.nix>
-    # <nixpkgs/nixos/modules/system/boot/loader/systemd-boot/systemd-boot.nix>
-    # <nixpkgs/nixos/modules/system/etc/passwd.nix>
-    ./modules/system/suites/common/default.nix
+    # Import the base system configuration module which collects other system modules
+    ./modules/system/default.nix
+
+    # Import other system suites
     ./modules/system/suites/lab/default.nix
     ./modules/system/suites/desktop/default.nix
+
+    # Import hardware-specific modules
     ./modules/system/hardware/nvidia.nix
 
-    # Import system service modules
+    # Import system service modules that are enabled directly in the host config
     ./modules/system/services/ssh/default.nix
     ./modules/system/services/zfs/default.nix # Import the new ZFS service module
 
-    # Import additional system programs and services
+    # Import additional system programs and services that are enabled directly in the host config
     ./modules/system/programs/gnupg/default.nix
     ./modules/system/services/calibre-web/default.nix
     ./modules/system/services/deluge/default.nix
@@ -28,7 +28,7 @@
     # Import the new system suite for Hyprland packages
     ./modules/system/suites/hyprland/default.nix
 
-    # Import the Nix configuration module
+    # Import the Nix configuration module if not handled in modules/system/default.nix
     ./modules/system/nix/default.nix
   ];
 
@@ -43,7 +43,6 @@
 
   # Enable the Nix daemon (usually enabled by default, but good to be explicit)
   nix.daemon.enable = true;
-
 
   # === Basic System Setup ===
 
@@ -85,13 +84,13 @@
     sudo = "doas";
   };
 
-  # Locale configuration (integrated from system locale module)
+  # Locale configuration
   i18n.defaultLocale = "en_US.UTF-8";
 
-  # Time configuration (integrated from system time module)
+  # Time configuration
   time.timeZone = "Europe/Oslo";
 
-  # XKB configuration (integrated from system xkb module)
+  # XKB configuration
   console.useXkbConfig = true;
   services.xserver.xkb = {
     layout = "no";
@@ -100,7 +99,7 @@
 
   # === Security ===
 
-  # Doas configuration (integrated from system security doas module)
+  # Doas configuration
   security.sudo.enable = false;
   security.doas = {
     enable = true;
@@ -120,8 +119,10 @@
 
   # === Suites ===
 
-  # Enable suites
-  suites.common.enable = true;
+  # Enable the consolidated system module which imports submodules
+  system.enable = true;
+
+  # Enable other suites
   suites.lab.enable = false;
   suites.desktop.enable = false;
   suites.hyprland.enable = true; # Enable the new Hyprland system suite
