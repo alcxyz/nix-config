@@ -112,7 +112,7 @@
             # Import the host-specific system configuration
             hostAttrs.configuration
 
-            # Import shared system modules (ensure they handle Darwin or use lib.isDarwin)
+            # Import shared system modules (ensure they handle Darwin or use lib.isLinux/lib.isDarwin)
             # inputs.self.modules.system.my-service # Example shared module (needs Darwin compatibility)
 
             # Optional: If you have Home Manager configs that *must* be applied via the
@@ -162,23 +162,8 @@
     # Add development shells for all supported systems.
     devShells = builtins.listToAttrs (map (system: {
       name = system;
-      value = pkgsFor system.mkShell {
-        packages = with pkgsFor system; [
-          nixpkgs-fmt # Format Nix code
-          alejandra # Another Nix code formatter (often preferred)
-          editorconfig-checker # Check .editorconfig files
-          # Add other tools useful for managing your NixOS/Darwin config here
-          # Example: if you need a specific package to build something on aarch64-darwin
-          # only add it here if needed for developing the *flake*, not for the target system
-        ];
-        shellHook = ''
-          echo "Entering flake development shell for ${system}."
-          echo "Useful commands:"
-          echo "  NixOS system rebuild (e.g., xyz): sudo nixos-rebuild switch --flake .#xyz"
-          echo "  Darwin system rebuild (e.g., mac): darwin-rebuild switch --flake .#mac"
-          echo "  User rebuild (any host):   home-manager switch --flake .#${username}"
-        '';
-      };
+      # Use the shell definition from shells/default/default.nix
+      value = import ./shells/default.nix { pkgs = pkgsFor system; }; # Corrected import path
     }) supportedSystems);
 
     # Expose custom modules for easy importing (if you create any)
