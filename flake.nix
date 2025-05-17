@@ -20,9 +20,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    nix-colors.url = "github:misterio77/nix-colors";
+
   };
 
-  outputs = { self, nixpkgs, darwin, home-manager, ... }@inputs:
+  outputs = { self, nixpkgs, darwin, home-manager, nix-colors, ... }@inputs:
   let
     # Define the user for whom Home Manager is configured
     username = "alc";
@@ -81,6 +83,9 @@
 
             # Import shared system modules
             # inputs.self.modules.system.my-service # Example shared module
+
+            # Add nix-colors module
+            nix-colors.nixosModules.nix-colors
           ];
         }
       )
@@ -109,6 +114,9 @@
             # Darwin system build (less common for standalone HM but possible),
             # you could import home-manager.darwinModules.home-manager here.
             # We are NOT doing this for standalone HM as requested.
+
+            # Add nix-colors module (if applicable for Darwin configs)
+            # nix-colors.nixosModules.nix-colors # Uncomment if nix-colors has Darwin modules
           ];
         }
       )
@@ -140,6 +148,9 @@
 
         # Optionally, include shared Home Manager modules
         # inputs.self.modules.home.my-editor
+
+        # Add nix-colors home-manager module
+        nix-colors.homeManagerModules.nix-colors
       ];
     };
 
@@ -175,4 +186,3 @@
 
   };
 }
-
