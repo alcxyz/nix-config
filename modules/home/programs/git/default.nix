@@ -6,22 +6,21 @@
   ...
 }:
 with lib;
-with lib.custom; let
-  cfg = config.apps.tools.git;
-in {
-  options.apps.tools.git = with types; {
-    enable = mkBoolOpt true "Enable or disable git";
+
+let
+  cfg = config.programs.git; # Updated option path
+in
+{
+  options.programs.git = with types; { # Updated option path
+    enable = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable git Home Manager configuration (aliases and config files)."; # Updated description
+    };
   };
 
   config = mkIf cfg.enable {
-    environment.systemPackages = with pkgs; [
-      git
-      git-remote-gcrypt
-      gh
-      lazygit
-      commitizen
-    ];
-
+    # Home Manager configurations for Git
     environment.shellAliases = {
       # Git
       gc = "git commit -m";
@@ -43,7 +42,8 @@ in {
       g = "lazygit";
     };
 
-    home.configFile."git/config".text = import ./config.nix {sshKeyPath = "/home/${config.user.name}/.ssh/key.pub"; name = "alcxyz"; email = "me@alc.no";};
-    home.configFile."lazygit/config.yml".source = ./lazygitConfig.yml;
+    # Configure git config and lazygit config files
+    home.configFile."git/config".text = import ./config.nix {sshKeyPath = "/home/${config.user.name}/.ssh/key.pub"; name = "alcxyz"; email = "me@alc.no";}; # Path relative to this module
+    home.configFile."lazygit/config.yml".source = ./lazygitConfig.yml; # Path relative to this module
   };
 }

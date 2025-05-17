@@ -6,6 +6,11 @@
       ./modules/home/environment.nix
       ./modules/home/programs/foot.nix
       ./modules/home/desktop/default.nix # Import the new desktop module
+      ./modules/home/programs/wezterm/default.nix # Import the new WezTerm module
+      ./modules/home/programs/direnv/default.nix # Import the new direnv module
+      ./modules/home/programs/git/default.nix # Import the new Git module
+      ./modules/home/programs/gnupg/default.nix # Import the new GnuPG module
+      ./modules/home/programs/nix-ld/default.nix # Import the new nix-ld module
     ];
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
@@ -86,6 +91,11 @@
 
   # Enable programs
   programs.foot.enable = true;
+  programs.wezterm.enable = true; # Enable WezTerm through its new module path
+  programs.direnv.enable = true; # Enable direnv through its new module path
+  programs.git.enable = true; # Enable Git Home Manager config through its new module path
+  programs.gnupg.enable = true; # Enable GnuPG Home Manager config through its new module path
+  programs.nix-ld.enable = true; # Enable nix-ld through its new module path
 
   # The desktop module is imported above, its options and configurations
   # are now available and merged into this configuration.
