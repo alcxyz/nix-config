@@ -1,15 +1,20 @@
-{ options
+{
+  options
 , config
 , lib
 , ...
 }:
 with lib;
-with lib.custom; let
+let
   cfg = config.services.nfs;
 in
 {
   options.services.nfs = with types; {
-    enable = mkBoolOpt false "Enable nfs";
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable the NFS server system service."; # Updated description
+    };
   };
 
   config = mkIf cfg.enable {
@@ -28,5 +33,4 @@ in
     networking.firewall.allowedUDPPorts = [ 111 2049 4000 4001 4002 20048 ]; #NFSv3
     services.rpcbind.enable = true;
   };
-
 }
