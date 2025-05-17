@@ -71,7 +71,8 @@
             hostAttrs.configuration
             self.modules.system
             nix-colors.nixosModules.nix-colors
-            # home-manager.nixosModules.home-manager
+            nixpkgs.nixosModules.readOnlyPkgs # Added to address specialArgs.pkgs warning
+            # home-manager.nixosModules.home-manager # This remains commented out
           ];
         }
       )
