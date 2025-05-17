@@ -1,16 +1,16 @@
-{ config, pkgs, username, ... }:
+{ config, pkgs, username, lib, ... }:
+
+with lib;
 
 {
   imports =
     [
       ./modules/home/environment.nix
-      ./modules/home/programs/foot.nix
       ./modules/home/desktop/default.nix # Import the new desktop module
+      ./modules/home/programs/foot/default.nix # Import the foot module from its new directory
       ./modules/home/programs/wezterm/default.nix # Import the new WezTerm module
-      ./modules/home/programs/direnv/default.nix # Import the new direnv module
       ./modules/home/programs/git/default.nix # Import the new Git module
       ./modules/home/programs/gnupg/default.nix # Import the new GnuPG module
-      ./modules/home/programs/nix-ld/default.nix # Import the new nix-ld module
     ];
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
@@ -83,19 +83,23 @@
   #  /etc/profiles/per-user/root/etc/profile.d/hm-session-vars.sh
   #
   home.sessionVariables = {
-    # EDITOR = "emacs";
+    # EDITOR is now managed in modules/home/environment.nix
+    # DIRENV_LOG_FORMAT is now managed in modules/home/environment.nix
   };
 
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 
-  # Enable programs
+  # Enable and configure programs directly
   programs.foot.enable = true;
-  programs.wezterm.enable = true; # Enable WezTerm through its new module path
-  programs.direnv.enable = true; # Enable direnv through its new module path
-  programs.git.enable = true; # Enable Git Home Manager config through its new module path
-  programs.gnupg.enable = true; # Enable GnuPG Home Manager config through its new module path
-  programs.nix-ld.enable = true; # Enable nix-ld through its new module path
+  programs.wezterm.enable = true;
+  programs.git.enable = true;
+  programs.gnupg.enable = true;
+  programs.nix-ld.enable = true;
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
 
   # The desktop module is imported above, its options and configurations
   # are now available and merged into this configuration.

@@ -1,24 +1,15 @@
 {
-  options,
   config,
   lib,
   ...
 }:
 with lib;
 
-let
-  cfg = config.programs.gnupg; # Updated option path
-in
 {
-  options.programs.gnupg = with types; { # Updated option path
-    enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable gnupg Home Manager configuration (agent and config file)."; # Updated description
-    };
-  };
+  # This module configures the built-in Home Manager programs.gnupg module.
+  # It does not define its own enable option, but depends on programs.gnupg.enable being set elsewhere.
 
-  config = mkIf cfg.enable {
+  config = mkIf config.programs.gnupg.enable { # Use the built-in enable option
     # Home Manager configurations for GnuPG agent and config file
     programs.gnupg.agent = {
       enable = true;
