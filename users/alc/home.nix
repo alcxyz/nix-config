@@ -4,6 +4,8 @@
   imports =
     [
       ./modules/home/environment.nix
+      ./modules/home/programs/foot.nix
+      ./modules/home/desktop/default.nix # Import the new desktop module
     ];
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
@@ -81,4 +83,10 @@
 
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
+
+  # Enable programs
+  programs.foot.enable = true;
+
+  # The desktop module is imported above, its options and configurations
+  # are now available and merged into this configuration.
 }
