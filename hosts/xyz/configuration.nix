@@ -27,6 +27,11 @@
 
     # Import the new system suite for Hyprland packages
     ./modules/system/suites/hyprland/default.nix
+
+    # Import the Nix configuration module
+    ./modules/system/nix/default.nix
+
+    # Removed import for ./modules/system/shell as its config is integrated below
   ];
 
   # Define the hostname using the specialArgs passed from the flake
@@ -45,6 +50,12 @@
     ];
   };
 
+  # Configure root user's shell (from system shell module)
+  users.users.root.shell = pkgs.bashInteractive;
+
+  # Set the system-wide default shell for new users (from system shell module)
+  users.defaultUserShell = pkgs.nushell;
+
   # Enable services
   services.ssh.enable = true; # Enable the system SSH module
   services.zfs.enable = true; # Enable the ZFS module
@@ -59,6 +70,50 @@
   system.stateVersion = "24.11"; # Replace with your desired version (e.g., "24.05")
 
   # Add other system configurations here
+
+  # === Integrated system configurations ===
+  # Locale configuration
+  i18n.defaultLocale = "en_US.UTF-8";
+  console = { keyMap = "en"; };
+
+  # Time configuration
+  time.timeZone = "Europe/Oslo";
+
+  # XKB configuration
+  console.useXkbConfig = true;
+  services.xserver.xkb = {
+    layout = "no";
+    #xkbOptions = "caps:escape";
+  };
+
+  # Doas configuration
+  security.sudo.enable = false;
+  security.doas = {
+    enable = true;
+    extraRules = [
+      {
+        users = [config.user.name];
+        noPass = true;
+        keepEnv = true;
+      }
+    ];
+  };
+  # Removed system-wide sudo alias as it's now in Home Manager shell module
+  # environment.shellAliases = {sudo = "doas";};
+  # === End integrated configurations ===
+
+  # System-wide environment packages (from system shell module)
+  environment.systemPackages = with pkgs; [
+    bat # Generally useful system-wide
+    nitch # Generally useful system-wide
+    glow # Generally useful system-wide
+  ];
+
+  # System-wide shell aliases (from system shell module)
+  environment.shellAliases = {
+    nixyz = "nixos-rebuild switch --flake .#xyz";
+  };
+
 
   # Enable suites
   suites.common.enable = true;
@@ -95,4 +150,16 @@
   services.nfs.enable = true;
   services.samba.enable = true;
 
+  # Home Manager configuration for the user
+  home-manager.users.${username} = {
+    imports = [
+      # Import your main home configuration
+      ./users/${username}/home.nix
+
+      # Import the user-specific shell configuration
+      ./modules/home/shell
+    ];
+
+    # Other user-specific configurations...
+  };
 }
