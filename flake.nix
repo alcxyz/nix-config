@@ -79,7 +79,7 @@
           specialArgs = {
             inherit inputs pkgsFor hostName username;
             configDir = self; # Pass the flake directory path
-            pkgs = pkgsFor hostAttrs.system; # Pass pkgs for the host's system
+            # Removed: pkgs = pkgsFor hostAttrs.system;
           };
 
           modules = [
@@ -91,6 +91,12 @@
 
             # Add nix-colors module
             nix-colors.nixosModules.nix-colors
+
+            # Add the readOnlyPkgs module and set nixpkgs.pkgs as recommended by the warning
+            {
+              imports = [ nixpkgs.nixosModules.readOnlyPkgs ];
+              nixpkgs.pkgs = pkgsFor hostAttrs.system;
+            }
           ];
         }
       )
@@ -105,7 +111,7 @@
           specialArgs = {
             inherit inputs pkgsFor hostName username;
             configDir = self; # Pass the flake directory path
-            pkgs = pkgsFor hostAttrs.system; # Pass pkgs for the host's system
+            pkgs = pkgsFor hostAttrs.system; # Keep for now, warning was specific to nixosSystem
           };
 
           modules = [
