@@ -47,6 +47,13 @@
       '')
 
       pulseaudio
+
+      # Add Git and related tools
+      git
+      git-remote-gcrypt
+      gh
+      lazygit
+      commitizen
     ];
   };
 }
