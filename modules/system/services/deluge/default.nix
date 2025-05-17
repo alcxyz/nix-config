@@ -1,4 +1,5 @@
-{ options, config, lib, pkgs, username, ... }:
+{
+  options, config, lib, pkgs, username, ... }:
 with lib;
 {
   options.services.deluge = mkOption {
@@ -10,8 +11,8 @@ with lib;
   config = mkIf config.services.deluge {
     services.deluge = {
       enable = true;
-      user = "${username}"; # Assuming username is passed as specialArgs
-      group = "users"; # Assuming 'users' group exists and is appropriate
+      user = "${username}"; # Use passed username
+      group = "${config.users.users.${username}.group}"; # Use the user's primary group
       dataDir = "/home/${username}"; # Assuming this is the desired data directory, using username
       web.enable = true;
     };
@@ -27,7 +28,11 @@ with lib;
       deluge
     ];
 
-    # Firewall rules for Deluge will need to be opened in the main host config or a networking module.
-    # The ports from the original config were 8112 (web) and 51413 (daemon).
+    # Explicitly open necessary firewall ports for Deluge
+    networking.firewall.allowedTCPPorts = [
+      8112 # Deluge web UI
+      51413 # Deluge daemon
+    ];
+
   };
 }

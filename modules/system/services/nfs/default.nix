@@ -2,14 +2,16 @@
   options
 , config
 , lib
+, pkgs
 , ...
 }:
 with lib;
+
 let
-  cfg = config.services.nfs;
+  cfg = config.services.nfs; # Keep option path consistent
 in
 {
-  options.services.nfs = with types; {
+  options.services.nfs = with types; { # Keep option path consistent
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -28,9 +30,14 @@ in
       '';
     };
 
+    # Ensure NFS server waits for ZFS mounts
+    systemd.services.nfs-server.after = [ "zfs-mount.service" ];
+
     boot.supportedFilesystems = [ "nfs" ];
     networking.firewall.allowedTCPPorts = [ 2049 ]; #NFS
     networking.firewall.allowedUDPPorts = [ 111 2049 4000 4001 4002 20048 ]; #NFSv3
     services.rpcbind.enable = true;
+
+    # Note: Firewall settings for Samba should be in the Samba module or host config.
   };
 }
