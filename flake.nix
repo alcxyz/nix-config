@@ -71,12 +71,11 @@
             { nixpkgs.system = hostAttrs.system; }
             { nixpkgs.pkgs = pkgsFor hostAttrs.system; }
             
-            # inputs.nixpkgs.nixosModules.readOnlyPkgs # Temporarily removed for diagnostics
+            #inputs.nixpkgs.nixosModules.readOnlyPkgs
             
             hostAttrs.configuration
             self.modules.nixos
-            # nix-colors.nixosModules.nix-colors
-            home-manager.nixosModules.home-manager
+            #home-manager.nixosModules.home-manager
           ];
         }
       )
