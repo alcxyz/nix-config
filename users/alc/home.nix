@@ -10,10 +10,12 @@
 
 with lib;
 
-let # ADDED LET BLOCK
-  # Make gtkThemeFromScheme available
-  inherit (inputs.nix-colors.lib-contrib {inherit pkgs;}) gtkThemeFromScheme;
-in
+# The 'let' block for gtkThemeFromScheme is likely no longer needed
+# if it was only for the GTK theme package.
+# If you use gtkThemeFromScheme for other purposes, you can keep it.
+# let
+#   inherit (inputs.nix-colors.lib-contrib {inherit pkgs;}) gtkThemeFromScheme;
+# in
 {
   # ==================== Imports ====================
   imports = [
@@ -26,7 +28,7 @@ in
     ../../modules/home-manager/programs/wofi/default.nix
     ../../modules/home-manager/programs/wlogout/default.nix
     ../../modules/home-manager/services/swww/default.nix
-    ../../modules/home-manager/services/hypridle/default.nix
+    ../../modules/home-manager/services/hypridle/default.nix # Your custom module
     ../../modules/home-manager/services/hyprlock/default.nix
 
     # Other Home Manager program modules
@@ -47,6 +49,11 @@ in
 
   programs.home-manager.enable = true;
 
+  # ==================== Nix-Colors Settings ====================
+  # Use the standard nix-colors option to set the theme.
+  # This will be available as config.colorscheme.*
+  colorscheme.name = "catppuccin-mocha";
+
   # ==================== User Environment ====================
   xdg.cacheHome = "${home.homeDirectory}/.cache";
   xdg.configHome = "${home.homeDirectory}/.config";
@@ -59,37 +66,25 @@ in
     FLAKE = "/home/${username}/nix-config";
   };
 
-  # ==================== Desktop Customization (Moved from desktop/default.nix) ====================
-  # Define the colorscheme directly
-  desktop.colorscheme = "catppuccin-mocha";
+  # ==================== Desktop Customization ====================
+  # REMOVED: desktop.colorscheme = "catppuccin-mocha";
 
-  # GTK theme settings (previously in desktop/default.nix)
-  home.extraOptions.gtk = {
+  # GTK theme settings
+  # Use the modern programs.gtk path. nix-colors will automatically configure
+  # programs.gtk.theme.name and programs.gtk.theme.package based on config.colorscheme.name.
+  programs.gtk = {
     enable = true;
-    theme = {
-      name = inputs.nix-colors.colorschemes.${config.desktop.colorscheme}.slug;
-      package = gtkThemeFromScheme {scheme = inputs.nix-colors.colorschemes.${config.desktop.colorscheme};};
-    };
+    # The 'theme' sub-attribute for name and package is handled by nix-colors.
     iconTheme = {
       name = "Papirus-Dark";
       package = pkgs.papirus-icon-theme;
     };
+    # You can add other GTK settings here if needed, e.g.:
+    # font.name = "Noto Sans 11";
   };
     
-    #LEAVE THIS COMMENT BLOCK FOR LATER - SIMPLY IGNORE IT FOR NOW!
-    # Assuming prism is a Home Manager option (adjust if it's NixOS specific)
-    # prism = {
-    #   enable = true;
-    #   wallpapers = ./wallpapers; # Path is now relative to this file (modules/home-manager/desktop/)
-    #   colorscheme = inputs.nix-colors.colorschemes.${cfg.colorscheme};
-    # };
-
-    # GTK theme setting - note that gtkThemeFromScheme is used below for a HM-managed theme
-    # This environment variable might be redundant or conflict depending on setup.
-    # Consider removing this if home.extraOptions.gtk handles it fully.
-    # environment.variables = {
-    #   GTK_THEME = "Catppuccin-Mocha-Compact-Blue-dark"; # Original value, consider deriving from colorscheme
-    # };
+  # ... (rest of your configurations, packages, files, etc.)
+  # Ensure the sections for home.packages, home.file, program enables are still here.
 
   # ==================== Packages and Files ====================
   home.packages = with pkgs; [
@@ -103,8 +98,8 @@ in
     "Music/.keep".text = "";
     "Pictures/.keep".text = "";
     "dev/.keep".text = "";
-    ".face".source = ./profile.png;
-    "Pictures/profile.png".source = ./profile.png;
+    ".face".source = ./profile.jpg;
+    "Pictures/profile.jpg".source = ./profile.jpg;
     ".config/wallpapers" = {
       source = ./wallpapers;
       recursive = true;
@@ -118,7 +113,7 @@ in
   programs.wofi.enable = true;
   programs.wlogout.enable = true;
   services.swww.enable = true;
-  services.hypridle.managed.enable = true;
+  services.hypridle.managed.enable = true; # Using your managed hypridle module
   services.hyprlock.enable = true;
 
   programs.foot.enable = true;
@@ -138,16 +133,14 @@ in
 
   programs.rclone.enable = false;
 
-  # ==================== Nixpkgs Overlays/Configuration (Optional) ====================
-  # nixpkgs.overlays = [
-  #   (final: prev: {
-  #     # myCustomPackage = prev.myCustomPackage.override { ... };
-  #   })
-  # ];
-  # nixpkgs.config = {
-  #   allowUnfree = true;
-  # };
 
-  # ==================== Other Configurations ====================
-  # theme.name = "catppuccin-mocha";
+    #LEAVE THIS COMMENT BLOCK FOR LATER - SIMPLY IGNORE IT FOR NOW!
+    # Assuming prism is a Home Manager option (adjust if it's NixOS specific)
+    # prism = {
+    #   enable = true;
+    #   wallpapers = ./wallpapers; # Path is now relative to this file (modules/home-manager/desktop/)
+    #   colorscheme = inputs.nix-colors.colorschemes.${cfg.colorscheme};
+    # };
+
 }
+
