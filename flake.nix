@@ -76,7 +76,7 @@
             hostAttrs.configuration
             self.modules.nixos
             # nix-colors.nixosModules.nix-colors
-            # home-manager.nixosModules.home-manager
+            home-manager.nixosModules.home-manager
           ];
         }
       )
