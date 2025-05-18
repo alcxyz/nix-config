@@ -89,6 +89,7 @@ with lib; # Keep 'with lib;' as lib is needed
     v = "nvim";
     l = "ls -all";
     c = "clear";
+    g = "lazygit";
     t = "tmux";
     ta = "tmux a";
     ".." = "cd ..";
