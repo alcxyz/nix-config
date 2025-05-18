@@ -7,7 +7,7 @@
   inputs,
   ...
 }:
-with lib;
+with lib; # Ensure lib is in scope for lib.optionals
 
 let
   cfg = config.desktop.hyprland;
@@ -25,34 +25,26 @@ in
     hypridle = {
       enable = mkEnableOption "Hypridle configuration";
       settings = mkOption {
-        type = types.attrs; # Changed to types.attrs for simplicity, submodule defines specifics
+        type = types.attrs;
         default = {};
         description = "Settings for the Hypridle daemon. Specific options are defined in the hypridle submodule.";
-        # Example of how you might structure if defining here:
-        # type = with types; nullOr (submodule {
-        #   options = {
-        #     lockTimeout = mkOption { type = types.int; default = 300; };
-        #     dpmsTimeout = mkOption { type = types.int; default = 600; };
-        #     # etc.
-        #   };
-        # });
       };
     };
     hyprlock = { 
       enable = mkEnableOption "hyprlock configuration"; 
-      # Potentially add settings options for hyprlock here too if needed
     };
     # hyprpanel = { enable = mkEnableOption "hyprpanel configuration"; }; # Commented out
   };
 
-  imports = mkIf cfg.enable [
+  # Use lib.optionals to ensure `imports` is always a list
+  imports = lib.optionals cfg.enable [
     ./waybar/default.nix
     ./swww/default.nix
     ./wofi/default.nix
     ./wlogout/default.nix
-    ./hypridle/default.nix # This will now define options.desktop.hyprland.hypridle.settings.*
+    ./hypridle/default.nix
     ./hyprlock/default.nix
-    # ./hyprpanel/default.nix
+    # ./hyprpanel/default.nix # Commented out
   ];
 
   config = mkIf cfg.enable {
@@ -83,8 +75,6 @@ in
       wofi.enable = true;
       wlogout.enable = true;
       hypridle.enable = true; 
-      # hypridle.settings.lockTimeout = 300; # You can override submodule defaults here
-      # hypridle.settings.dpmsTimeout = 600;
       hyprlock.enable = true;
     };
   };
