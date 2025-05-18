@@ -119,7 +119,6 @@ with lib;
   programs.foot.enable = true;
   programs.wezterm.enable = true;
   programs.git.managed.enable = true;
-  programs.git.managed.lazygit.enable = true;
   #programs.gnupg.enable = true;
   programs.ssh.enable = true;
 

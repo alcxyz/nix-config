@@ -9,13 +9,11 @@
 with lib;
 
 let
-  # cfg will now refer to our managed options
   cfg = config.programs.git.managed;
 
-  # Default values for some managed options
   defaultUserName = "alcxyz";
   defaultUserEmail = "me@alc.no";
-  defaultSshKeyPath = "${config.home.homeDirectory}/.ssh/key.pub"; # Use actual home dir
+  defaultSshKeyPath = "${config.home.homeDirectory}/.ssh/key.pub";
 
   defaultAliases = {
     gc = "commit -m";
@@ -51,69 +49,68 @@ in
 {
   options.programs.git.managed = {
     enable = mkEnableOption "managed Git and Lazygit configuration";
-
     userName = mkOption {
       type = types.str;
       default = defaultUserName;
       description = "Git user name.";
     };
-
     userEmail = mkOption {
       type = types.str;
       default = defaultUserEmail;
       description = "Git user email.";
     };
-
     signingKey = mkOption {
-      type = types.nullOr types.str; # Allow null if not signing
+      type = types.nullOr types.str;
       default = defaultSshKeyPath;
       description = "Path to GPG/SSH signing key for Git commits.";
     };
-
     signByDefault = mkOption {
       type = types.bool;
       default = true;
       description = "Whether to sign commits by default.";
     };
-
     aliases = mkOption {
       type = types.attrsOf types.str;
       default = defaultAliases;
       description = "Git command aliases.";
     };
-
     extraConfig = mkOption {
-      type = types.attrs; # More flexible for nested structures
+      type = types.attrs;
       default = defaultExtraConfig;
       description = "Additional Git configurations.";
     };
-
     lazygit = {
-      enable = mkEnableOption "Lazygit configuration";
+      # Removed enable flag for lazygit here
       configFile = mkOption {
         type = types.nullOr types.path;
-        default = ./lazygitConfig.yml; # Assumes it's co-located
-        description = "Path to Lazygit's config.yml. Set to null to disable.";
+        default = ./lazygitConfig.yml; # Assumes co-located with this module file
+        description = "Path to Lazygit's config.yml. Set to null to not manage this file.";
       };
     };
   };
 
-  config = mkIf cfg.enable { # This is the main switch for this managed module
-    programs.git = {
-      enable = true; # Enable the standard Home Manager git module
-      userName = cfg.userName;
-      userEmail = cfg.userEmail;
-      signing = {
-        key = cfg.signingKey;
-        signByDefault = cfg.signByDefault;
+  config = mkMerge [
+    # Part 1: Git program configuration
+    (mkIf cfg.enable {
+      programs.git = {
+        enable = true; # Enable the base home-manager git program
+        userName = cfg.userName;
+        userEmail = cfg.userEmail;
+        signing = {
+          key = cfg.signingKey;
+          signByDefault = cfg.signByDefault;
+        };
+        extraConfig = cfg.extraConfig;
+        aliases = cfg.aliases;
       };
-      extraConfig = cfg.extraConfig;
-      aliases = cfg.aliases;
-    };
+    })
 
-    # Configure lazygit if its specific enable flag is true and configFile is set
-    home.configFile."lazygit/config.yml" = mkIf (cfg.lazygit.enable && cfg.lazygit.configFile != null) {
-      source = cfg.lazygit.configFile;
-    };
-  };
+    # Part 2: Lazygit configuration file
+    # This is now conditional on the main cfg.enable and if a configFile path is provided
+    (mkIf (cfg.enable && cfg.lazygit.configFile != null) {
+      home.configFile."lazygit/config.yml" = {
+        source = cfg.lazygit.configFile;
+      };
+    })
+  ];
 }
