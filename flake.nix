@@ -28,8 +28,7 @@
     username = "alc";
     lib = nixpkgs.lib; # For lib.mapAttrs'
 
-    # Explicitly define the nix-colors home-manager module
-    nixColorsHomeManagerModule = inputs.nix-colors.homeManagerModules.nix-colors;
+    # No longer need: nixColorsHomeManagerModule = inputs.nix-colors.homeManagerModules.default;
 
     linuxPkgs = import nixpkgs {
       system = "x86_64-linux";
@@ -98,7 +97,7 @@
         };
         modules = [
           ./users/${username}/home.nix
-          nixColorsHomeManagerModule # Use the variable defined above
+          inputs.nix-colors.homeManagerModules.default # Inlined here
         ];
       };
 
@@ -143,3 +142,4 @@
     };
   };
 }
+
