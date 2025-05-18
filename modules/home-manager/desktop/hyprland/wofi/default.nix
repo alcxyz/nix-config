@@ -1,25 +1,25 @@
 {
-  config
-, lib
-, pkgs
-, inputs
-, ...
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
 }:
 with lib;
 
 let
-  # Depend on the parent desktop.hyprland.enable option
-  parentCfg = config.desktop.hyprland;
+  # Use the specific enable flag for wofi from the parent hyprland module
+  cfg = config.desktop.hyprland.wofi; 
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # This module configures Wofi when the Hyprland desktop suite is enabled.
-  # It does not define its own enable option.
+  # The option 'options.desktop.hyprland.wofi.enable' is defined in 
+  # modules/home-manager/desktop/hyprland/default.nix
 
-  config = mkIf parentCfg.enable {
-    # Wofi package should be installed at the system level (already added).
-    # environment.systemPackages = [ pkgs.wofi ];
+  config = mkIf cfg.enable {
+    # Enable the core Home Manager wofi program.
+    programs.wofi.enable = true;
 
     # Configure Wofi configuration files via Home Manager
     home.configFile."wofi/config".source = ./config; # Path relative to this module
@@ -92,6 +92,5 @@ in
           background-size: 400% 400%;
         }
     '';
-    };
   };
 }
