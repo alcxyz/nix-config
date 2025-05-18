@@ -1,25 +1,27 @@
 {
-  config
-, lib
-, pkgs
-, inputs
-, ...
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
 }:
 with lib;
 
 let
-  # Depend on the parent desktop.hyprland.enable option
-  parentCfg = config.desktop.hyprland;
+  # Use the specific enable flag for wlogout from the parent hyprland module
+  cfg = config.desktop.hyprland.wlogout; 
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # This module configures wlogout when the Hyprland desktop suite is enabled.
-  # It does not define its own enable option.
+  # The option 'options.desktop.hyprland.wlogout.enable' is defined in 
+  # modules/home-manager/desktop/hyprland/default.nix
 
-  config = mkIf parentCfg.enable {
-    # wlogout package should be installed at the system level (already added).
-    # environment.systemPackages = [ pkgs.wlogout ];
+  config = mkIf cfg.enable { // This now correctly uses config.desktop.hyprland.wlogout.enable
+    # Enable the core Home Manager wlogout program if it exists,
+    # or add the package to home.packages.
+    # Wlogout has a home-manager module: programs.wlogout
+    programs.wlogout.enable = true; 
 
     # Configure wlogout configuration files via Home Manager
     home.configFile."wlogout/style.css".text = ''
