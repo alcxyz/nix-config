@@ -28,6 +28,9 @@
     username = "alc";
     lib = nixpkgs.lib; # For lib.mapAttrs'
 
+    # Explicitly define the nix-colors home-manager module
+    nixColorsHomeManagerModule = inputs.nix-colors.homeManagerModules.nix-colors;
+
     linuxPkgs = import nixpkgs {
       system = "x86_64-linux";
       config.allowUnfree = true;
@@ -95,7 +98,7 @@
         };
         modules = [
           ./users/${username}/home.nix
-          nix-colors.homeManagerModules.nix-colors
+          nixColorsHomeManagerModule # Use the variable defined above
         ];
       };
 
@@ -140,4 +143,3 @@
     };
   };
 }
-
