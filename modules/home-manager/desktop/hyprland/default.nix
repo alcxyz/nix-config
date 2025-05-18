@@ -29,7 +29,7 @@ in
     wlogout = { enable = mkEnableOption "wlogout configuration"; };
     hypridle = { enable = mkEnableOption "hypridle configuration"; };
     hyprlock = { enable = mkEnableOption "hyprlock configuration"; };
-    hyprpanel = { enable = mkEnableOption "hyprpanel configuration"; };
+    # hyprpanel = { enable = mkEnableOption "hyprpanel configuration"; }; # Commented out
     # Add options for other addons here
   };
 
@@ -41,7 +41,7 @@ in
     ./wlogout/default.nix # Wlogout
     ./hypridle/default.nix # Hypridle
     ./hyprlock/default.nix # Hyprlock
-    ./hyprpanel/default.nix # Hyprpanel
+    # ./hyprpanel/default.nix # Hyprpanel # Commented out
     # ... and other addons
   ];
 
@@ -73,7 +73,7 @@ in
           # windowrule =
           #   float,
           #   <window_class>
-          #   bordercolor 0xff${colors.base0A}
+          #   bordercolor = 0xff${colors.base0A}
 
         '';
       };
@@ -88,7 +88,7 @@ in
       wlogout.enable = true;
       hypridle.enable = true;
       hyprlock.enable = true;
-      hyprpanel.enable = false; # Keeping hyprpanel off as you indicated it's less important now
+      # hyprpanel.enable = false; # Commented out
       # Set enable options for other addons here
     };
 

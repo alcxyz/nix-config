@@ -1,30 +1,28 @@
 {
-  options
-, config
-, pkgs
-, lib
-, inputs
-, ...
+  options,
+  config,
+  pkgs,
+  lib,
+  inputs,
+  ...
 }:
 with lib;
 
 let
-  cfg = config.programs.waybar; # Use programs.waybar as the option path
+  # Use the enable flag defined in the parent hyprland module
+  cfg = config.desktop.hyprland.waybar; 
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  options.programs.waybar = with types; { # Define programs.waybar.enable
-    enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable the Home Manager configuration for Waybar.";
-    };
-  };
+  # The option 'options.desktop.hyprland.waybar.enable' is defined in 
+  # modules/home-manager/desktop/hyprland/default.nix
 
   config = mkIf cfg.enable {
-    # Waybar package should be installed at the system level.
-    # environment.systemPackages = [ pkgs.waybar ];
+    # Enable the core Home Manager waybar program. 
+    # This ensures the waybar package is installed via Home Manager 
+    # and any default service/program setup is done.
+    programs.waybar.enable = true;
 
     # Configure Waybar configuration files via Home Manager
     home.configFile."waybar/config.jsonc" = {

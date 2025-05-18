@@ -34,7 +34,7 @@ with lib;
     };
 
     # Configure git config and lazygit config files
-    home.configFile."git/config".text = import ./config.nix {sshKeyPath = "/home/${config.user.name}/.ssh/key.pub"; name = "alcxyz"; email = "me@alc.no";}; # Path relative to this module
+    home.configFile."git/config".text = import ./config.nix {sshKeyPath = "/home/${config.home.username}/.ssh/key.pub"; name = "alcxyz"; email = "me@alc.no";}; # Path relative to this module
     home.configFile."lazygit/config.yml".source = ./lazygitConfig.yml; # Path relative to this module
   };
 }
