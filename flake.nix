@@ -70,7 +70,7 @@
           modules = [
             hostAttrs.configuration
             self.modules.system
-            inputs.nix-colors.nixosModules.nix-colors # Commented out for testing
+              #nix-colors.nixosModules.nix-colors
             inputs.nixpkgs.nixosModules.readOnlyPkgs
             { nixpkgs.pkgs = inputs.pkgsFor hostAttrs.system; } # Still set nixpkgs.pkgs
             # home-manager.nixosModules.home-manager
