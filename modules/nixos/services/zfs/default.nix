@@ -24,6 +24,7 @@ in
 
     environment.systemPackages = [ pkgs.zfs ];
     boot.supportedFilesystems = [ "zfs" ];
+    boot.zfs.devNodes = "/dev/disk/by-id";
     #boot.zfs.forceImportRoot = false; # Keep commented out if not used
     boot.zfs.extraPools = [ "hyperdisk" "fundrive" ]; # Define your ZFS pools
     networking.hostId = "4e7ded69"; # Ensure this matches your host's ID if needed for ZFS
