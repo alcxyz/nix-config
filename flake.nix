@@ -74,7 +74,7 @@
             # inputs.nixpkgs.nixosModules.readOnlyPkgs # Temporarily removed for diagnostics
             
             hostAttrs.configuration
-            self.modules.system
+            self.modules.nixos
             # nix-colors.nixosModules.nix-colors
             # home-manager.nixosModules.home-manager
           ];
@@ -93,7 +93,7 @@
           };
           modules = [
             hostAttrs.configuration
-            # self.modules.system 
+            # self.modules.nixos 
             # home-manager.darwinModules.home-manager
           ];
         }
@@ -117,9 +117,9 @@
     }) supportedSystems); */
     
     modules = {
-      system = import ./modules/system/default.nix;
-      home = if builtins.pathExists ./modules/home/default.nix
-             then import ./modules/home/default.nix
+      nixos = import ./modules/nixos/default.nix;
+      home-manager = if builtins.pathExists ./modules/home-manager/default.nix
+             then import ./modules/home-manager/default.nix
              else {}; 
     };
 

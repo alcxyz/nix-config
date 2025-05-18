@@ -20,7 +20,7 @@ in
     # Assuming prism is a Home Manager option (adjust if it's NixOS specific)
     prism = {
       enable = true;
-      wallpapers = ./wallpapers; # Path is now relative to this file (modules/home/desktop/)
+      wallpapers = ./wallpapers; # Path is now relative to this file (modules/home-manager/desktop/)
       colorscheme = inputs.nix-colors.colorschemes.${cfg.colorscheme};
     };
 

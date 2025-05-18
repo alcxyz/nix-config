@@ -1,4 +1,4 @@
-# modules/system/services/ssh/default.nix
+# modules/nixos/services/ssh/default.nix
 {
   options,
   config,

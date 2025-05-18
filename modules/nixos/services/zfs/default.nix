@@ -1,3 +1,4 @@
+# modules/nixos/services/zfs/default.nix
 {
   options
 , config
@@ -57,9 +58,9 @@ in
 
     # Dependencies for other services on ZFS pools being imported:
     # This needs to be added to the respective service modules (NFS, Samba) if they depend on ZFS.
-    # Example (would go in modules/system/services/nfs/default.nix):
+    # Example (would go in modules/nixos/services/nfs/default.nix):
     # systemd.services.nfs-server.after = [ "zfs-import-hyperdisk.service" "zfs-import-fundrive.service" ];
-    # Example (would go in modules/system/services/samba/default.nix):
+    # Example (would go in modules/nixos/services/samba/default.nix):
     # systemd.services.smbd.after = [ "zfs-import-hyperdisk.service" "zfs-import-fundrive.service" ];
     # systemd.services.nmbd.after = [ "zfs-import-hyperdisk.service" "zfs-import-fundrive.service" ];
 

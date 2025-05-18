@@ -17,24 +17,24 @@ with lib; # Make lib functions available without `lib.` prefix
   # This is a common and clear way to structure Home Manager module imports.
   imports = [
     # General user environment settings
-    ../../modules/home/environment.nix
+    ../../modules/home-manager/environment.nix
 
     # Desktop environment general options (e.g., colorscheme)
-    ../../modules/home/desktop/default.nix
+    ../../modules/home-manager/desktop/default.nix
 
     # Main Home Manager Hyprland desktop suite module
-    ../../modules/home/desktop/hyprland/default.nix
+    ../../modules/home-manager/desktop/hyprland/default.nix
 
     # User-specific shell configuration module
-    ../../modules/home/shell/default.nix
+    ../../modules/home-manager/shell/default.nix
 
     # Other Home Manager program modules
-    ../../modules/home/programs/foot/default.nix
-    ../../modules/home/programs/wezterm/default.nix
-    ../../modules/home/programs/git/default.nix
-    ../../modules/home/programs/gnupg/default.nix
-    ../../modules/home/programs/ssh/default.nix
-    ../../modules/home/programs/rclone/default.nix
+    ../../modules/home-manager/programs/foot/default.nix
+    ../../modules/home-manager/programs/wezterm/default.nix
+    ../../modules/home-manager/programs/git/default.nix
+    ../../modules/home-manager/programs/gnupg/default.nix
+    ../../modules/home-manager/programs/ssh/default.nix
+    ../../modules/home-manager/programs/rclone/default.nix
 
     # You can also import modules from flake inputs if needed, e.g.:
     # inputs.nix-colors.homeManagerModules.nix-colors # Already added in flake.nix's homeConfigurations
@@ -59,7 +59,7 @@ with lib; # Make lib functions available without `lib.` prefix
   xdg.dataHome = "${home.homeDirectory}/.local/share";
   xdg.stateHome = "${home.homeDirectory}/.local/state";
 
-  # home.sessionVariables are typically set in modules/home/environment.nix
+  # home.sessionVariables are typically set in modules/home-manager/environment.nix
   # or directly here if they are very specific to this user profile.
 
   # ==================== Packages and Files ====================
@@ -88,20 +88,20 @@ with lib; # Make lib functions available without `lib.` prefix
   # modules imported above.
 
   # === Desktop Environment and Related ===
-  desktop.hyprland.enable = true; # Option from modules/home/desktop/hyprland/default.nix
+  desktop.hyprland.enable = true; # Option from modules/home-manager/desktop/hyprland/default.nix
 
   # === Shell and Terminal ===
-  # Shell configuration is handled by modules/home/shell/default.nix
+  # Shell configuration is handled by modules/home-manager/shell/default.nix
   # programs.nushell.enable would be set within that module.
-  programs.foot.enable = true;    # Option from modules/home/programs/foot/default.nix
-  programs.wezterm.enable = true; # Option from modules/home/programs/wezterm/default.nix
+  programs.foot.enable = true;    # Option from modules/home-manager/programs/foot/default.nix
+  programs.wezterm.enable = true; # Option from modules/home-manager/programs/wezterm/default.nix
 
   # === Development and Version Control ===
-  programs.git.enable = true; # Option from modules/home/programs/git/default.nix
+  programs.git.enable = true; # Option from modules/home-manager/programs/git/default.nix
 
   # === Security and Authentication ===
-  programs.gnupg.enable = true; # Option from modules/home/programs/gnupg/default.nix
-  programs.ssh.enable = true;   # Option from modules/home/programs/ssh/default.nix
+  programs.gnupg.enable = true; # Option from modules/home-manager/programs/gnupg/default.nix
+  programs.ssh.enable = true;   # Option from modules/home-manager/programs/ssh/default.nix
 
   # === Utilities and Other Programs ===
   programs.nix-ld = {
@@ -113,7 +113,7 @@ with lib; # Make lib functions available without `lib.` prefix
     nix-direnv.enable = true; # Standard Home Manager option
   };
 
-  programs.rclone.enable = false; # Option from modules/home/programs/rclone/default.nix
+  programs.rclone.enable = false; # Option from modules/home-manager/programs/rclone/default.nix
 
   # ==================== Nixpkgs Overlays/Configuration (Optional) ====================
   # If you need to apply overlays or specific configurations to the 'pkgs'

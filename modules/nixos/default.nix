@@ -1,4 +1,4 @@
-# modules/system/default.nix
+# modules/nixos/default.nix
 { options, config, lib, pkgs, username, ... }: # These args are supplied by nixosSystem
 
 with lib;
@@ -18,7 +18,7 @@ in
   # The decision to enable them or their contents can be handled by config.system.enable
   # either in this file's config block or within the imported modules themselves.
   imports = [
-    # Paths are relative to this file (modules/system/default.nix)
+    # Paths are relative to this file (modules/nixos/default.nix)
     # ./packages/default.nix # Removed, packages are now inlined below
     ./hardware/bluetooth.nix
     ./hardware/audio.nix # Your audio module
@@ -32,7 +32,7 @@ in
   config = mkIf cfg.enable {
     # Configurations applied when system.enable = true;
 
-    # Packages from the former modules/system/packages/default.nix
+    # Packages from the former modules/nixos/packages/default.nix
     environment.systemPackages = with pkgs; [
       stash
       neovim
