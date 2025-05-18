@@ -119,5 +119,10 @@
              then import ./modules/home/default.nix
              else {}; 
     };
+
+    # === Top-level aliases for building systems ===
+    xyz = self.nixosConfigurations.xyz.config.system.build.toplevel;
+    nuc = self.nixosConfigurations.nuc.config.system.build.toplevel;
+    mac = self.darwinConfigurations.mac.config.system.build.toplevel;
   };
 }
