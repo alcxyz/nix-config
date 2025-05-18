@@ -35,7 +35,7 @@ with lib;
     ../../modules/home-manager/programs/foot/default.nix
     ../../modules/home-manager/programs/wezterm/default.nix
     ../../modules/home-manager/programs/git/default.nix
-    ../../modules/home-manager/programs/gnupg/default.nix
+    #../../modules/home-manager/programs/gnupg/default.nix
     ../../modules/home-manager/programs/ssh/default.nix
     ../../modules/home-manager/programs/rclone/default.nix
   ];
@@ -119,7 +119,7 @@ with lib;
   programs.foot.enable = true;
   programs.wezterm.enable = true;
   programs.git.enable = true;
-  programs.gnupg.enable = true;
+  #programs.gnupg.enable = true;
   programs.ssh.enable = true;
 
   programs.nix-ld = {
