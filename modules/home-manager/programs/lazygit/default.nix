@@ -21,7 +21,7 @@ in
   config = mkIf cfg.enable {
     home.packages = [ pkgs.lazygit ];
 
-    home.configFile."lazygit/config.yml" = {
+    xdg.configFile."lazygit/config.yml" = {
       # Assumes lazygitConfig.yml is co-located with this module file
       # Create this file: modules/home-manager/programs/lazygit/lazygitConfig.yml
       source = ./lazygitConfig.yml;
