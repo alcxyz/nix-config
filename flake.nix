@@ -99,19 +99,33 @@
       )
       darwinHosts;
 
-    homeConfigurations = builtins.listToAttrs (map (system: {
-      name = system;
-      value = home-manager.lib.homeManagerConfiguration {
-        pkgs = pkgsFor system; # Use pkgsFor with the specific system
+    homeConfigurations =
+    let
+      # username, inputs, and pkgsFor are already defined in your flake
+      currentSystem = builtins.currentSystem; # Get the system Nix is evaluating for
+      currentPkgs = pkgsFor currentSystem;   # Get packages for that system
+    in
+    {
+      "${username}" = home-manager.lib.homeManagerConfiguration { # This will create "alc"
+        pkgs = currentPkgs; # Use packages for the current system
         extraSpecialArgs = {
-          inherit inputs username pkgsFor system; # Also pass system here
+          inherit inputs username;
+          system = currentSystem; # Pass the name of the current system
+          pkgs = currentPkgs;    # Pass the actual package set for the current system
+          # If your home.nix needs to behave differently on, say, Linux vs Darwin,
+          # you can add a condition here or in your home.nix based on the 'system' arg.
+          # For example, in home.nix:
+          # specialArgs@{ config, pkgs, system, ... }:
+          # if system == "x86_64-linux" then { /* Linux specific stuff */ } else { /* other stuff */ }
         };
         modules = [
           ./users/${username}/home.nix
           nix-colors.homeManagerModules.nix-colors
+          # Example of a system-specific module if needed:
+          # (if currentSystem == "x86_64-linux" then ./users/${username}/linux-specific.nix else {})
         ];
       };
-    }) supportedSystems);
+    };
 
     /* devShells = builtins.listToAttrs (map (system: {
       name = system;
