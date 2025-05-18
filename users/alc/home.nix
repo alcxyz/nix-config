@@ -118,7 +118,7 @@ in
   programs.wofi.enable = true;
   programs.wlogout.enable = true;
   services.swww.enable = true;
-  services.hypridle.enable = true;
+  services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
 
   programs.foot.enable = true;
