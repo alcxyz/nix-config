@@ -26,7 +26,8 @@
   outputs = { self, nixpkgs, darwin, home-manager, nix-colors, ... }@inputs:
   let
     username = "alc";
-    # Define specific package sets for your fixed architectures
+    lib = nixpkgs.lib; # For lib.mapAttrs'
+
     linuxPkgs = import nixpkgs {
       system = "x86_64-linux";
       config.allowUnfree = true;
@@ -47,11 +48,10 @@
       mac = { configuration = ./hosts/mac/configuration.nix; };
     };
 
-    # Define all NixOS system configurations
     allNixosSystems = builtins.mapAttrs
       (hostName: hostAttrs:
         nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux"; # Fixed system for NixOS hosts
+          system = "x86_64-linux";
           specialArgs = {
             inherit inputs hostName username;
             configDir = self;
@@ -62,17 +62,15 @@
             { nixpkgs.pkgs = linuxPkgs; }
             hostAttrs.configuration
             self.modules.nixos
-            # home-manager.nixosModules.home-manager
           ];
         }
       )
       nixosHosts;
 
-    # Define all Darwin system configurations
     allDarwinSystems = builtins.mapAttrs
       (hostName: hostAttrs:
         darwin.lib.darwinSystem {
-          system = "aarch64-darwin"; # Fixed system for Darwin hosts
+          system = "aarch64-darwin";
           specialArgs = {
             inherit inputs hostName username;
             configDir = self;
@@ -80,62 +78,66 @@
           };
           modules = [
             hostAttrs.configuration
-            # home-manager.darwinModules.home-manager
           ];
         }
       )
       darwinHosts;
 
-  in # This is the main output set
+    # Helper function to create a Home Manager configuration
+    # Takes the system string (e.g., "x86_64-linux") and the pkgs for that system
+    mkHomeConfiguration = systemForUser: pkgsForUser:
+      home-manager.lib.homeManagerConfiguration {
+        pkgs = pkgsForUser; # This is the pkgs Home Manager will primarily use
+        extraSpecialArgs = {
+          inherit inputs username; # username is "alc"
+          system = systemForUser; # e.g., "x86_64-linux" or "aarch64-darwin"
+          pkgs = pkgsForUser; # Make pkgs available in home.nix via extraSpecialArgs too
+        };
+        modules = [
+          ./users/${username}/home.nix
+          nix-colors.homeManagerModules.nix-colors
+        ];
+      };
+
+  in
   {
-    # Merge NixOS and Darwin systems directly into outputs
-    # This makes .#xyz, .#nuc, .#mac directly available
   } // allNixosSystems // allDarwinSystems // {
-    # Keep the grouped configurations as well
     nixosConfigurations = allNixosSystems;
     darwinConfigurations = allDarwinSystems;
 
-    homeConfigurations = {
-      "${username}" = # This is the "alc" attribute
-        let
-          currentSystem = builtins.currentSystem;
-          currentPkgs = if currentSystem == "x86_64-linux" then linuxPkgs
-                        else if currentSystem == "aarch64-darwin" then darwinPkgs
-                        else throw "Unsupported system for home-manager: ${currentSystem}";
-        in
-        home-manager.lib.homeManagerConfiguration {
-          pkgs = currentPkgs;
-          extraSpecialArgs = {
-            inherit inputs username;
-            system = currentSystem;
-            pkgs = currentPkgs;
-          };
-          modules = [
-            ./users/${username}/home.nix
-            nix-colors.homeManagerModules.nix-colors
-          ];
-        };
-    }; # End of the "alc" configuration block
+    homeConfigurations =
+      let
+        # Create home configurations for NixOS hosts
+        nixosHomeConfigs = lib.mapAttrs' (hostName: _:
+          lib.nameValuePair "${username}-${hostName}" (
+            mkHomeConfiguration "x86_64-linux" linuxPkgs
+          )
+        ) nixosHosts;
+
+        # Create home configurations for Darwin hosts
+        darwinHomeConfigs = lib.mapAttrs' (hostName: _:
+          lib.nameValuePair "${username}-${hostName}" (
+            mkHomeConfiguration "aarch64-darwin" darwinPkgs
+          )
+        ) darwinHosts;
+      in
+      nixosHomeConfigs // darwinHomeConfigs; # Merge them
 
     devShells = builtins.listToAttrs (map (system: {
       name = system;
-      value = import ./shells/default.nix { 
-        pkgs = if system == "x86_64-linux" then linuxPkgs 
-               else if system == "aarch64-darwin" then darwinPkgs 
-               else throw "Unsupported system for devShell: ${system}"; 
+      value = import ./shells/default.nix {
+        pkgs = if system == "x86_64-linux" then linuxPkgs
+               else if system == "aarch64-darwin" then darwinPkgs
+               else throw "Unsupported system for devShell: ${system}";
       };
     }) supportedSystems);
-    
+
     modules = {
       nixos = import ./modules/nixos/default.nix;
       home-manager = if builtins.pathExists ./modules/home-manager/default.nix
              then import ./modules/home-manager/default.nix
-             else {}; 
+             else {};
     };
-
-    # The explicit aliases below are no longer needed
-    # xyz = self.nixosConfigurations.xyz;
-    # nuc = self.nixosConfigurations.nuc;
-    # mac = self.darwinConfigurations.mac;
   };
 }
+
