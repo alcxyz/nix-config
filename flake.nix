@@ -99,16 +99,19 @@
       )
       darwinHosts;
 
-    homeConfigurations.${username} = home-manager.lib.homeManagerConfiguration {
-      pkgs = pkgsFor builtins.currentSystem;
-      extraSpecialArgs = {
-        inherit inputs username pkgsFor;
+    homeConfigurations = builtins.listToAttrs (map (system: {
+      name = system;
+      value = home-manager.lib.homeManagerConfiguration {
+        pkgs = pkgsFor system; # Use pkgsFor with the specific system
+        extraSpecialArgs = {
+          inherit inputs username pkgsFor system; # Also pass system here
+        };
+        modules = [
+          ./users/${username}/home.nix
+          nix-colors.homeManagerModules.nix-colors
+        ];
       };
-      modules = [
-        ./users/${username}/home.nix
-        nix-colors.homeManagerModules.nix-colors
-      ];
-    };
+    }) supportedSystems);
 
     /* devShells = builtins.listToAttrs (map (system: {
       name = system;
