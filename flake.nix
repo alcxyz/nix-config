@@ -4,56 +4,49 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
     zen-browser = {
       url = "github:0xc000022070/zen-browser-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
     hyprpanel = {
       url = "github:Jas-SinghFSU/HyprPanel";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
     nix-colors.url = "github:misterio77/nix-colors";
   };
 
   outputs = { self, nixpkgs, darwin, home-manager, nix-colors, ... }@inputs:
   let
     username = "alc";
-    supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
-
-    pkgsFor = arch: import nixpkgs {
-      system = arch;
+    # Define specific package sets for your fixed architectures
+    linuxPkgs = import nixpkgs {
+      system = "x86_64-linux";
+      config.allowUnfree = true;
+    };
+    darwinPkgs = import nixpkgs {
+      system = "aarch64-darwin";
       config.allowUnfree = true;
     };
 
+    # Your actual supported systems based on host configurations
+    supportedSystems = [ "x86_64-linux" "aarch64-darwin" ];
+
+    # Host definitions - system attribute is now implicit
     nixosHosts = {
-      xyz = {
-        system = "x86_64-linux";
-        configuration = ./hosts/xyz/configuration.nix;
-      };
-      nuc = {
-        system = "x86_64-linux";
-        configuration = ./hosts/nuc/configuration.nix;
-      };
+      xyz = { configuration = ./hosts/xyz/configuration.nix; };
+      nuc = { configuration = ./hosts/nuc/configuration.nix; };
     };
 
     darwinHosts = {
-      mac = {
-        system = "aarch64-darwin";
-        configuration = ./hosts/mac/configuration.nix;
-      };
+      mac = { configuration = ./hosts/mac/configuration.nix; };
     };
 
   in
@@ -61,21 +54,19 @@
     nixosConfigurations = builtins.mapAttrs
       (hostName: hostAttrs:
         nixpkgs.lib.nixosSystem {
-          inherit (hostAttrs) system;
+          system = "x86_64-linux"; # Fixed system for NixOS hosts
           specialArgs = {
-            inherit inputs pkgsFor hostName username;
+            inherit inputs hostName username;
             configDir = self;
-            pkgs = pkgsFor hostAttrs.system;
+            pkgs = linuxPkgs; # Use pre-defined linuxPkgs
+            # pkgsFor is no longer needed here
           };
           modules = [
-            { nixpkgs.system = hostAttrs.system; }
-            { nixpkgs.pkgs = pkgsFor hostAttrs.system; }
-            
-            #inputs.nixpkgs.nixosModules.readOnlyPkgs
-            
+            { nixpkgs.system = "x86_64-linux"; }
+            { nixpkgs.pkgs = linuxPkgs; }
             hostAttrs.configuration
             self.modules.nixos
-            #home-manager.nixosModules.home-manager
+            # home-manager.nixosModules.home-manager # You might want to add this for NixOS integration
           ];
         }
       )
@@ -84,16 +75,17 @@
     darwinConfigurations = builtins.mapAttrs
       (hostName: hostAttrs:
         darwin.lib.darwinSystem {
-          inherit (hostAttrs) system;
+          system = "aarch64-darwin"; # Fixed system for Darwin hosts
           specialArgs = {
-            inherit inputs pkgsFor hostName username;
+            inherit inputs hostName username;
             configDir = self;
-            pkgs = pkgsFor hostAttrs.system;
+            pkgs = darwinPkgs; # Use pre-defined darwinPkgs
+            # pkgsFor is no longer needed here
           };
           modules = [
             hostAttrs.configuration
-            # self.modules.nixos 
-            # home-manager.darwinModules.home-manager
+            # self.modules.nixos # This is NixOS specific, usually not for Darwin
+            # home-manager.darwinModules.home-manager # You might want to add this for Darwin integration
           ];
         }
       )
@@ -101,36 +93,35 @@
 
     homeConfigurations =
     let
-      # username, inputs, and pkgsFor are already defined in your flake
-      currentSystem = builtins.currentSystem; # Get the system Nix is evaluating for
-      currentPkgs = pkgsFor currentSystem;   # Get packages for that system
+      currentSystem = builtins.currentSystem;
+      # Determine pkgs based on the current system
+      currentPkgs = if currentSystem == "x86_64-linux" then linuxPkgs
+                      else if currentSystem == "aarch64-darwin" then darwinPkgs
+                      else throw "Unsupported system for home-manager: ${currentSystem}";
     in
     {
-      "${username}" = home-manager.lib.homeManagerConfiguration { # This will create "alc"
-        pkgs = currentPkgs; # Use packages for the current system
+      "${username}" = home-manager.lib.homeManagerConfiguration {
+        pkgs = currentPkgs;
         extraSpecialArgs = {
           inherit inputs username;
-          system = currentSystem; # Pass the name of the current system
-          pkgs = currentPkgs;    # Pass the actual package set for the current system
-          # If your home.nix needs to behave differently on, say, Linux vs Darwin,
-          # you can add a condition here or in your home.nix based on the 'system' arg.
-          # For example, in home.nix:
-          # specialArgs@{ config, pkgs, system, ... }:
-          # if system == "x86_64-linux" then { /* Linux specific stuff */ } else { /* other stuff */ }
+          system = currentSystem;
+          pkgs = currentPkgs;
         };
         modules = [
           ./users/${username}/home.nix
           nix-colors.homeManagerModules.nix-colors
-          # Example of a system-specific module if needed:
-          # (if currentSystem == "x86_64-linux" then ./users/${username}/linux-specific.nix else {})
         ];
       };
     };
 
-    /* devShells = builtins.listToAttrs (map (system: {
+    devShells = builtins.listToAttrs (map (system: {
       name = system;
-      value = import ./shells/default.nix { pkgs = pkgsFor system; };
-    }) supportedSystems); */
+      value = import ./shells/default.nix { 
+        pkgs = if system == "x86_64-linux" then linuxPkgs 
+               else if system == "aarch64-darwin" then darwinPkgs 
+               else throw "Unsupported system for devShell: ${system}"; 
+      };
+    }) supportedSystems);
     
     modules = {
       nixos = import ./modules/nixos/default.nix;

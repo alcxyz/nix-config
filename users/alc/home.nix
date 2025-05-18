@@ -5,9 +5,9 @@
   lib,    # Nixpkgs library functions
   username, # From extraSpecialArgs (value: "alc")
   inputs,   # From extraSpecialArgs (all flake inputs)
-  pkgsFor,  # From extraSpecialArgs (the pkgsFor function)
-  ...       # Catches any other arguments
-}:
+  # pkgsFor, # Removed as it's no longer passed from flake.nix and was unused here
+  ...
+}: # Catches any other arguments
 
 with lib; # Make lib functions available without `lib.` prefix
 
