@@ -15,7 +15,8 @@ in
   };
 
   # These imports are conditional on this module being enabled
-  imports = mkIf cfg.enable [
+  # Wrapped the mkIf in a list for module system compatibility
+  imports = [ (mkIf cfg.enable [
     # Paths are relative to this file (modules/system/default.nix)
     ./packages/default.nix
     ./hardware/bluetooth.nix
@@ -25,7 +26,7 @@ in
     ./nix/default.nix
     ./services/ssh/default.nix
     # Add other core system components here that are part of the "base"
-  ];
+  ]) ];
 
   config = mkIf cfg.enable {
     # Configurations applied when system.enable = true;
@@ -42,11 +43,10 @@ in
     # If ./fonts/default.nix defines system.fonts.enable:
     # system.fonts.enable = true; # Example
 
-    # If ./services/ssh/default.nix defines services.openssh.enable (NixOS standard option):
+    # If ./services.ssh/default.nix defines services.openssh.enable (NixOS standard option):
     services.ssh.enable = true; # Example, assuming ssh module configures services.openssh
 
     # The environment module (./env/default.nix) is imported;
     # its configurations will apply if it defines them unconditionally or via its own options.
   };
 }
-

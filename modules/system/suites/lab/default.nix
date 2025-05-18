@@ -12,8 +12,9 @@ in
     };
   };
 
-  imports = mkIf cfg.enable [
+  # Corrected: Wrap mkIf in a list for imports
+  imports = [ (mkIf cfg.enable [
     ./config.nix
     ./packages.nix
-  ];
+  ]) ];
 }

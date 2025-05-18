@@ -17,12 +17,13 @@ in
     };
   };
 
-  imports = mkIf cfg.enable [
+  imports = [ (mkIf cfg.enable [
     ./packages.nix
     # Add other system-level configurations for Hyprland here if needed (e.g., services)
-  ];
+  ]) ];
 
-  config = mkIf cfg.enable {
-    # Any top-level Hyprland system configurations can go here.
-  };
+  config =
+    if cfg.enable then { # Changed to if/else for the config attribute value
+      # Any top-level Hyprland system configurations can go here.
+    } else {}; # Return an empty set if the suite is not enabled
 }
