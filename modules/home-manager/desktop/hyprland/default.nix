@@ -1,81 +1,54 @@
 # modules/home-manager/desktop/hyprland/default.nix
 {
-  options,
-  config,
-  lib,
-  pkgs,
-  inputs,
-  ...
+  options, config, lib, pkgs, inputs, ...
 }:
-with lib; # Ensure lib is in scope for lib.optionals
+with lib;
 
 let
-  cfg = config.desktop.hyprland;
-  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
-  colors = colorscheme.palette;
+  # This module is now controlled by config.desktop.hyprland.enable,
+  # which is set by the parent module (modules/home-manager/desktop/default.nix).
+  hyprlandIsEnabled = config.desktop.hyprland.enable;
+
+  # Standard way to access the colorscheme, assuming config.desktop.colorscheme is set by the parent.
+  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  colors = activeColorscheme.palette;
 in
 {
-  options.desktop.hyprland = with types; {
-    enable = mkEnableOption "Enable the Home Manager configuration for the Hyprland desktop environment suite.";
+  # This module NO LONGER defines options for itself or its former submodules.
+  # Those are now defined in modules/home-manager/desktop/default.nix.
+  # It only provides the configuration for Hyprland itself.
 
-    waybar = { enable = mkEnableOption "Waybar configuration"; };
-    swww = { enable = mkEnableOption "SWWW configuration"; };
-    wofi = { enable = mkEnableOption "Wofi configuration"; };
-    wlogout = { enable = mkEnableOption "wlogout configuration"; };
-    hypridle = {
-      enable = mkEnableOption "Hypridle configuration";
-      settings = mkOption {
-        type = types.attrs;
-        default = {};
-        description = "Settings for the Hypridle daemon. Specific options are defined in the hypridle submodule.";
-      };
-    };
-    hyprlock = { 
-      enable = mkEnableOption "hyprlock configuration"; 
-    };
-    # hyprpanel = { enable = mkEnableOption "hyprpanel configuration"; }; # Commented out
-  };
+  # No 'imports' for waybar, wofi, etc. here anymore.
 
-  # Use lib.optionals to ensure `imports` is always a list
-  imports = lib.optionals cfg.enable [
-    ./waybar/default.nix
-    ./swww/default.nix
-    ./wofi/default.nix
-    ./wlogout/default.nix
-    ./hypridle/default.nix
-    ./hyprlock/default.nix
-    # ./hyprpanel/default.nix # Commented out
-  ];
-
-  config = mkIf cfg.enable {
+  config = mkIf hyprlandIsEnabled {
+    # Core Hyprland program setup
     programs.hyprland = {
       enable = true;
-      withUWSM = true;
+      withUWSM = true; 
       xwayland.enable = true;
     };
 
+    # Session variables specific to Hyprland environment
     environment.sessionVariables.NIXOS_OZONE_WL = "1";
 
+    # Hyprland config files
     home.configFile = {
+      # Paths are relative to this file's location (modules/home-manager/desktop/hyprland/)
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;
-      "hypr/colors.conf" = {
+      "hypr/colors.conf" = { # Dynamically generated colors.conf
         text = ''
           general {
             col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
             col.inactive_border = 0xff${colors.base00}
+            # Add other color-related settings for hyprland.conf itself here
           }
         '';
       };
+      # Any other files specific to Hyprland core configuration
     };
 
-    desktop.hyprland = {
-      waybar.enable = true;
-      swww.enable = true;
-      wofi.enable = true;
-      wlogout.enable = true;
-      hypridle.enable = true; 
-      hyprlock.enable = true;
-    };
+    # NO LONGER responsible for enabling waybar, wofi, etc.
+    # That's handled by modules/home-manager/desktop/default.nix
   };
 }
