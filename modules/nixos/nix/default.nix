@@ -1,18 +1,18 @@
+\
 {
   options,
   config,
   pkgs,
   lib,
-  username,
+  username, # Passed in from specialArgs
   ...
 }:
 with lib;
-
 let
   cfg = config.system.nix;
 in
 {
-  options.system.nix = with lib.types; { # Explicitly use lib.types
+  options.system.nix = with lib.types; {
     enable = lib.mkOption {
       type = bool;
       default = true;
@@ -20,50 +20,44 @@ in
     };
     package = lib.mkOption {
       type = package;
-      default = pkgs.nixVersions.latest;
+      default = pkgs.nixVersions.latest; # Or pkgs.nix if you prefer
       description = "Which nix package to use.";
+    };
+    extraOptions = lib.mkOption {
+      type = lines; # Use 'lines' for multi-line string, or 'str' for a single block
+      default = "";
+      description = "Extra lines to add to nix.conf (used if specific nix.settings aren't set or for options not covered by nix.settings).";
     };
   };
 
   config = mkIf cfg.enable {
     environment.systemPackages = with pkgs; [
       nil
-      nixfmt-classic
+      nixfmt-classic # Or nixfmt depending on your preference
       nix-index
       nix-prefetch-git
     ];
 
-    nix = let
-      # Use username passed as a specialArg (already in module args)
-      users = [ "root" username ];
-    in {
-      inherit (cfg) package; # This correctly refers to options.system.nix.package
+    nix = {
+      inherit (cfg) package; # This correctly refers to config.system.nix.package
 
-      settings =
-        {
-          experimental-features = "nix-command flakes";
-          http-connections = 50;
-          warn-dirty = false;
-          log-lines = 50;
-          sandbox = "relaxed";
-          auto-optimise-store = true;
-          trusted-users = users;
-          allowed-users = users;
-          # Made keep-outputs and keep-derivations unconditional for direnv support
-          keep-outputs = true;
-          keep-derivations = true;
-        };
-
-      gc = {
-        automatic = true;
-        dates = "weekly";
-        options = "--delete-older-than 7d";
+      # Configure Nix daemon settings
+      settings = {
+        experimental-features = [ "nix-command" "flakes" ];
+        accept-flake-config = true;
+        # 'username' is passed as a specialArg to your NixOS configuration
+        trusted-users = [ "root" username ];
+        allowed-users = [ "root" username ];
+        # Optionally, you can also set auto-optimise-store if desired
+        # auto-optimise-store = true;
       };
 
-      # flake-utils-plus options removed as the flake input/module is not present
-      # generateRegistryFromInputs = true;
-      # generateNixPathFromInputs = true;
-      # linkInputs = true;
+      # This allows you to still use extraOptions from your main configuration
+      # for settings not covered above or for legacy configurations.
+      # Nix will merge settings from 'nix.settings' and 'nix.extraOptions'.
+      # For keys defined in both (like experimental-features), 'nix.settings'
+      # usually takes precedence or they are merged if the option type allows.
+      extraOptions = cfg.extraOptions;
     };
   };
 }
