@@ -160,7 +160,7 @@ in {
           }
         '';
     };
-    environment.sessionVariables.HYPRLOCK_SCRIPT = "${lockScript}/bin/lock-screen";
+    home.sessionVariables.HYPRLOCK_SCRIPT = "${lockScript}/bin/lock-screen";
   };
 }
 

@@ -19,7 +19,7 @@ with lib;
 
     home.file.".local/share/gnupg/gpg-agent.conf".source = ./gpg-agent.conf; # Path relative to this module
 
-    environment.variables = {
+    home.sessionVariables = {
       GNUPGHOME = "$XDG_DATA_HOME/gnupg";
     };
   };
