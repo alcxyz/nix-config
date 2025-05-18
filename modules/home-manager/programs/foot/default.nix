@@ -3,7 +3,7 @@
 with lib;
 
 let
-  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.colorscheme};
   colors = colorscheme.palette;
 in
 {

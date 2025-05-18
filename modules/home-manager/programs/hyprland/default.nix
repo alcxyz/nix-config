@@ -11,7 +11,7 @@ with lib;
 
 let
   cfg = config.programs.hyprland; # Use the module's own enable option
-  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}; # Access shared colorscheme
+  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.colorscheme}; # Access shared colorscheme
   colors = activeColorscheme.palette;
 in
 {

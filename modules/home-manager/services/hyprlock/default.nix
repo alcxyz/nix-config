@@ -11,7 +11,7 @@ with lib;
 let
   cfg = config.services.hyprlock;
   # Make nix-colors available for the default wallpaper color
-  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.colorscheme};
   colors = activeColorscheme.palette;
 
   lockScript = pkgs.writeShellScriptBin "lock-screen" ''
@@ -163,4 +163,3 @@ in {
     home.sessionVariables.HYPRLOCK_SCRIPT = "${lockScript}/bin/lock-screen";
   };
 }
-
