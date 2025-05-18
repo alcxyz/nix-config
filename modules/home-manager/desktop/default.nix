@@ -18,11 +18,11 @@ in
 
   config = {
     # Assuming prism is a Home Manager option (adjust if it's NixOS specific)
-    prism = {
-      enable = true;
-      wallpapers = ./wallpapers; # Path is now relative to this file (modules/home-manager/desktop/)
-      colorscheme = inputs.nix-colors.colorschemes.${cfg.colorscheme};
-    };
+    # prism = {
+    #   enable = true;
+    #   wallpapers = ./wallpapers; # Path is now relative to this file (modules/home-manager/desktop/)
+    #   colorscheme = inputs.nix-colors.colorschemes.${cfg.colorscheme};
+    # };
 
     # GTK theme setting - note that gtkThemeFromScheme is used below for a HM-managed theme
     # This environment variable might be redundant or conflict depending on setup.
