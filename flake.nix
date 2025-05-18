@@ -68,13 +68,11 @@
             pkgs = pkgsFor hostAttrs.system;
           };
           modules = [
-            # Explicitly set nixpkgs.system and nixpkgs.pkgs first
             { nixpkgs.system = hostAttrs.system; }
             { nixpkgs.pkgs = pkgsFor hostAttrs.system; }
             
-            inputs.nixpkgs.nixosModules.readOnlyPkgs # Then apply readOnlyPkgs
+            # inputs.nixpkgs.nixosModules.readOnlyPkgs # Temporarily removed for diagnostics
             
-            # Then your custom modules and host configuration
             hostAttrs.configuration
             self.modules.system
             # nix-colors.nixosModules.nix-colors

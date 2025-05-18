@@ -3,27 +3,22 @@
   config,
   lib,
   pkgs,
+  username, # Added username for consistency, though not strictly used here yet
   ...
 }:
 with lib;
 
 let
-  cfg = config.services.kanata; # Updated option path
+  # cfg now refers to the standard NixOS option config.services.kanata (specifically its .enable attribute)
+  cfg = config.services.kanata;
 in
 {
-  options.services.kanata = with types; { # Updated option path
-    enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable the Kanata keyboard remapper system service."; # Updated description
-    };
-  };
+  # Removed options.services.kanata block to avoid re-declaration
+  # The option services.kanata.enable is defined by the main NixOS Kanata module.
 
-  config = mkIf cfg.enable {
-    # Install Kanata package at the system level
+  config = mkIf cfg.enable { # This mkIf now correctly refers to the standard services.kanata.enable
     environment.systemPackages = [ pkgs.kanata ];
 
-    # Enable the Kanata user service
     systemd.user.services.kanata = {
       description = "Kanata keyboard remapper";
       wantedBy = [ "default.target" ];
@@ -37,16 +32,10 @@ in
       };
     };
 
-    # Set up uinput for non-root users
     services.udev.extraRules = ''
-      # Allow users in input group to use kanata
       KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
     '';
 
-    # Ensure users who use Kanata are in the input group
-    # This part needs to be handled at the user level (Home Manager)
-    # users.groups.input = {}; # This option is for declaring system groups, not adding users to groups
-    # security.pam.loginLimits = [...]; # This is a system-level setting, keep it here
     security.pam.loginLimits = [
       {
         domain = "@input";
@@ -55,8 +44,5 @@ in
         value = "unlimited";
       }
     ];
-
-    # The addition of the user to the input group needs to be done in Home Manager (e.g., users/alc/home.nix)
-    # The original commented-out line users.users.${user.name}.extraGroups = [ "input" ]; was a Home Manager option.
   };
 }

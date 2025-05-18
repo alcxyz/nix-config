@@ -1,26 +1,20 @@
 { options, config, lib, pkgs, ... }:
 with lib;
 {
-  options.hardware.bluetooth = with types; {
-    enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable system-wide bluetooth services and hardware configuration.";
-    };
-  };
+  # Removed options.hardware.bluetooth definition
 
   config = mkIf config.hardware.bluetooth.enable {
     services.blueman.enable = true;
 
     hardware.bluetooth = {
-      enable = true;
+      # enable = true; # REMOVED: This was causing recursion.
       settings = {
         General = {
           FastConnectable = true;
           JustWorksRepairing = "always";
           Privacy = "device";
         };
-        Policy = with pkgs; {
+        Policy = {
           AutoEnable = true;
         };
       };

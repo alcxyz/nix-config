@@ -2,34 +2,26 @@
   options, config, lib, pkgs, username, ... }:
 with lib;
 {
-  options.services.deluge.enable = mkOption {
-    type = types.bool;
-    default = false;
-    description = "Enable the Deluge system service.";
-  };
+  # Removed options.services.deluge.enable definition
+  # The option services.deluge.enable is defined by the main NixOS Deluge module.
 
   config = mkIf config.services.deluge.enable {
-    # This services.deluge refers to the actual NixOS service options
     services.deluge = {
-      enable = true; # This enables the Deluge service itself
-      user = "${username}"; # Use passed username
-      group = "${config.users.users.${username}.group}"; # Use the user's primary group
-      dataDir = "/home/${username}"; # Assuming this is the desired data directory, using username
+      # enable = true; # REMOVED: This was causing recursion. The outer mkIf handles enablement.
+      user = "${username}";
+      group = "${config.users.users.${username}.group}";
+      dataDir = "/home/${username}";
       web.enable = true;
     };
 
     systemd.services.deluged = {
-      # Consider adding explicit dependencies here if needed, e.g.,
-      # after = [ "zfs-import-hyperdisk.service" "zfs-import-fundrive.service" ];
-      # This would depend on whether you re-enabled the ZFS import services or added alternative waits.
-      after = [ "zfs-mount.service" ]; # Keep original dependency for now
+      after = [ "zfs-mount.service" ];
     };
 
     environment.systemPackages = with pkgs; [
       deluge
     ];
 
-    # Explicitly open necessary firewall ports for Deluge
     networking.firewall.allowedTCPPorts = [
       8112 # Deluge web UI
       51413 # Deluge daemon

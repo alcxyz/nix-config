@@ -1,99 +1,91 @@
 {
-  options
-, config
-, lib
-, username
-, ...
+  options,
+  config,
+  lib,
+  pkgs, # Added pkgs for completeness, though not used directly in this snippet
+  username,
+  ...
 }:
 with lib;
 
 let
-  cfg = config.services.samba; # Keep option path consistent
-  # Access the user's primary group assuming username is passed as specialArgs
+  # cfg now refers to the standard NixOS option config.services.samba (specifically its .enable attribute)
+  cfg = config.services.samba;
   userPrimaryGroup = config.users.users.${username}.group;
 in
 {
-  options.services.samba = with types; { # Keep option path consistent
-    enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable the Samba server and related services."; # Updated description
-    };
-  };
+  # Removed options.services.samba block to avoid re-declaration
+  # The option services.samba.enable is defined by the main NixOS Samba module.
+  # This module now only sets values based on that standard option.
 
-  config = mkIf cfg.enable {
-    services.samba = {
-      enable = true;
-      openFirewall = true;
-      settings = { 
-        global = {
-        "workgroup" = "WORKGROUP";
-        "server string" = "xyz";
-        "netbios name" = "xyz";
-        "security" = "user";
-        "use sendfile" = "yes";
-        "max protocol" = "smb2";
-        # note: localhost is the ipv6 localhost ::1
-        "hosts allow" = "192.168.1. 127.0.0.1 localhost";
-        "hosts deny" = "0.0.0.0/0";
-          #"bind interfaces only" = "yes";
-        "guest account" = "nobody";
-        "map to guest" = "bad user";
-        };
-        "games" = {
-          "path" = "/fundrive/games"; # Assuming /fundrive is a Samba share point
-          "browseable" = "yes";
-          "read only" = "no";
-          "guest ok" = "yes";
-          "create mask" = "0755";
-          "directory mask" = "0755";
-          "force user" = "${username}"; # Use dynamic username
-          "force group" = "${userPrimaryGroup}"; # Use dynamic primary group
-        };
-        "archive" = {
-          "path" = "/hyperdisk/archive"; # Assuming /hyperdisk is a Samba share point
-          "browseable" = "yes";
-          "read only" = "no";
-          "guest ok" = "yes";
-          "create mask" = "0755";
-          "directory mask" = "0755";
-          "force user" = "${username}"; # Use dynamic username
-          "force group" = "${userPrimaryGroup}"; # Use dynamic primary group
-        };
-        "vault" = {
-          "path" = "/hyperdisk/vault"; # Assuming /hyperdisk is a Samba share point
-          "browseable" = "yes";
-          "read only" = "no";
-          "guest ok" = "yes";
-          "create mask" = "0644"; # Check if 0644 is correct for files in a vault
-          "directory mask" = "0755";
-          "force user" = "${username}"; # Use dynamic username
-          "force group" = "${userPrimaryGroup}"; # Use dynamic primary group
-        };
-        "stash" = {
-          "path" = "/hyperdisk/stash"; # Assuming /hyperdisk is a Samba share point
-          "browseable" = "yes";
-          "read only" = "no";
-          "guest ok" = "yes";
-          "create mask" = "0644"; # Check if 0644 is correct for files in a stash
-          "directory mask" = "0755";
-          "force user" = "${username}"; # Use dynamic username
-          "force group" = "${userPrimaryGroup}"; # Use dynamic primary group
-        };
+  config = mkIf cfg.enable { # This mkIf now correctly refers to the standard services.samba.enable
+    # services.samba.enable = true; # This line is redundant if cfg.enable is already true from the global option.
+                                  # The global services.samba.enable = true; in configuration.nix handles enabling it.
+                                  # What we want here are the specific *settings* for Samba.
+
+    services.samba.openFirewall = true; # Set specific sub-options
+    services.samba.settings = { 
+      global = {
+      "workgroup" = "WORKGROUP";
+      "server string" = "xyz";
+      "netbios name" = "xyz";
+      "security" = "user";
+      "use sendfile" = "yes";
+      "max protocol" = "smb2";
+      "hosts allow" = "192.168.1. 127.0.0.1 localhost";
+      "hosts deny" = "0.0.0.0/0";
+      "guest account" = "nobody";
+      "map to guest" = "bad user";
       };
-
+      "games" = {
+        "path" = "/fundrive/games";
+        "browseable" = "yes";
+        "read only" = "no";
+        "guest ok" = "yes";
+        "create mask" = "0755";
+        "directory mask" = "0755";
+        "force user" = "${username}";
+        "force group" = "${userPrimaryGroup}";
+      };
+      "archive" = {
+        "path" = "/hyperdisk/archive";
+        "browseable" = "yes";
+        "read only" = "no";
+        "guest ok" = "yes";
+        "create mask" = "0755";
+        "directory mask" = "0755";
+        "force user" = "${username}";
+        "force group" = "${userPrimaryGroup}";
+      };
+      "vault" = {
+        "path" = "/hyperdisk/vault";
+        "browseable" = "yes";
+        "read only" = "no";
+        "guest ok" = "yes";
+        "create mask" = "0644";
+        "directory mask" = "0755";
+        "force user" = "${username}";
+        "force group" = "${userPrimaryGroup}";
+      };
+      "stash" = {
+        "path" = "/hyperdisk/stash";
+        "browseable" = "yes";
+        "read only" = "no";
+        "guest ok" = "yes";
+        "create mask" = "0644";
+        "directory mask" = "0755";
+        "force user" = "${username}";
+        "force group" = "${userPrimaryGroup}";
+      };
     };
+
     services.samba-wsdd = {
       enable = true;
       openFirewall = true;
     };
 
-    # Ensure Samba services wait for ZFS mounts
     systemd.services.smbd.after = [ "zfs-mount.service" ];
     systemd.services.nmbd.after = [ "zfs-mount.service" ];
-    systemd.services.samba-wsdd.after = [ "zfs-mount.service" ]; # Add dependency for wsdd as well
-
-    #networking.firewall.enable = true; # These are generally enabled at a higher level
-    #networking.firewall.allowPing = true;
+    systemd.services.samba-wsdd.after = [ "zfs-mount.service" ];
   };
 }
