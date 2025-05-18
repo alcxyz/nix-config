@@ -14,7 +14,6 @@ let
 
   defaultUserName = "alcxyz";
   defaultUserEmail = "me@alc.no";
-  # Use config.home.homeDirectory which is correctly evaluated by Home Manager
   defaultSshKeyPath = "${config.home.homeDirectory}/.ssh/key.pub";
 
   defaultAliases = {
@@ -50,7 +49,7 @@ let
 in
 {
   options.programs.git.managed = {
-    enable = mkEnableOption "managed Git and Lazygit configuration";
+    enable = mkEnableOption "managed Git configuration";
 
     userName = mkOption {
       type = types.str;
@@ -87,13 +86,11 @@ in
       default = defaultExtraConfig;
       description = "Additional Git configurations.";
     };
-
-    # Lazygit options are removed as it's now implicitly managed
   };
 
   config = mkIf cfg.enable {
     programs.git = {
-      enable = true;
+      enable = true; # Enable the standard Home Manager git module
       userName = cfg.userName;
       userEmail = cfg.userEmail;
       signing = {
@@ -103,15 +100,7 @@ in
       extraConfig = cfg.extraConfig;
       aliases = cfg.aliases;
     };
-
-    # Lazygit configuration is now directly part of the managed git enabling
-    # Assumes lazygitConfig.yml is co-located with this module file
-    home.configFile."lazygit/config.yml" = {
-      source = ./lazygitConfig.yml;
-    };
-
-    # Ensure lazygit package is installed if your managed git is enabled
-    home.packages = [ pkgs.lazygit ];
+    # Removed lazygit package and configFile from here
   };
 }
 

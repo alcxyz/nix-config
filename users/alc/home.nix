@@ -28,13 +28,14 @@ with lib;
     ../../modules/home-manager/programs/wofi/default.nix
     ../../modules/home-manager/programs/wlogout/default.nix
     ../../modules/home-manager/services/swww/default.nix
-    ../../modules/home-manager/services/hypridle/default.nix # Your custom module
+    ../../modules/home-manager/services/hypridle/default.nix
     ../../modules/home-manager/services/hyprlock/default.nix
 
     # Other Home Manager program modules
     ../../modules/home-manager/programs/foot/default.nix
     ../../modules/home-manager/programs/wezterm/default.nix
     ../../modules/home-manager/programs/git/default.nix
+    ../../modules/home-manager/programs/lazygit/default.nix
     #../../modules/home-manager/programs/gnupg/default.nix
     ../../modules/home-manager/programs/ssh/default.nix
     ../../modules/home-manager/programs/rclone/default.nix
@@ -119,6 +120,7 @@ with lib;
   programs.foot.enable = true;
   programs.wezterm.enable = true;
   programs.git.managed.enable = true;
+  programs.lazygit.managed.enable = true;
   #programs.gnupg.enable = true;
   programs.ssh.enable = true;
 
