@@ -14,11 +14,12 @@ in
     };
   };
 
-  # These imports are conditional on this module being enabled
-  # Wrapped the mkIf in a list for module system compatibility
-  imports = [ (mkIf cfg.enable [
+  # These imports are now unconditional within this file.
+  # The decision to enable them or their contents can be handled by config.system.enable
+  # either in this file's config block or within the imported modules themselves.
+  imports = [
     # Paths are relative to this file (modules/system/default.nix)
-    ./packages/default.nix
+    # ./packages/default.nix # Removed, packages are now inlined below
     ./hardware/bluetooth.nix
     ./hardware/audio.nix # Your audio module
     ./fonts/default.nix
@@ -26,10 +27,72 @@ in
     ./nix/default.nix
     ./services/ssh/default.nix
     # Add other core system components here that are part of the "base"
-  ]) ];
+  ];
 
   config = mkIf cfg.enable {
     # Configurations applied when system.enable = true;
+
+    # Packages from the former modules/system/packages/default.nix
+    environment.systemPackages = with pkgs; [
+      stash
+      neovim
+      tmux
+      tree
+      wget
+      atuin
+      vagrant
+      chezmoi
+      ranger
+      bunster
+      portal
+      age
+      sshs
+
+      # Development
+      git
+      git-remote-gcrypt
+      lazygit
+      bat
+      fzf
+      fd
+      jq
+      rustc
+      cargo
+      go
+      gopls
+      lua-language-server
+      nodejs_22
+
+      # Util
+      ripgrep
+      openssl
+      killall
+      gptfdisk
+      unzip
+      sshfs
+      htop
+      btop
+      ffmpeg
+      python3
+      python3Packages.rencode
+
+      xclip
+      xarchiver
+      xsel
+      rar
+      unrar
+
+      nfs-utils
+      gnumake
+      gcc
+      dig
+      lsof
+      ntfs3g
+      pandoc
+
+      bluetuith
+      pavucontrol
+    ];
 
     # Enable features from the imported modules above
     # These options should be defined within the respective imported modules

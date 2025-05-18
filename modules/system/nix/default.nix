@@ -3,6 +3,7 @@
   config,
   pkgs,
   lib,
+  username, # Added username as it's used in config.nix.settings
   ...
 }:
 with lib;
@@ -33,8 +34,8 @@ in
     ];
 
     nix = let
-      # Use config.username which is passed as a specialArg
-      users = [ "root" config.username ];
+      # Use username passed as a specialArg (already in module args)
+      users = [ "root" username ];
     in {
       inherit (cfg) package; # This correctly refers to options.system.nix.package
 
@@ -59,10 +60,10 @@ in
         options = "--delete-older-than 7d";
       };
 
-      # flake-utils-plus
-      generateRegistryFromInputs = true;
-      generateNixPathFromInputs = true;
-      linkInputs = true;
+      # flake-utils-plus options removed as the flake input/module is not present
+      # generateRegistryFromInputs = true;
+      # generateNixPathFromInputs = true;
+      # linkInputs = true;
     };
   };
 }

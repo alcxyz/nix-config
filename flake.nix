@@ -68,11 +68,16 @@
             pkgs = pkgsFor hostAttrs.system;
           };
           modules = [
+            # Explicitly set nixpkgs.system and nixpkgs.pkgs first
+            { nixpkgs.system = hostAttrs.system; }
+            { nixpkgs.pkgs = pkgsFor hostAttrs.system; }
+            
+            inputs.nixpkgs.nixosModules.readOnlyPkgs # Then apply readOnlyPkgs
+            
+            # Then your custom modules and host configuration
             hostAttrs.configuration
             self.modules.system
-              #nix-colors.nixosModules.nix-colors
-            inputs.nixpkgs.nixosModules.readOnlyPkgs
-            { nixpkgs.pkgs = inputs.pkgsFor hostAttrs.system; } # Still set nixpkgs.pkgs
+            # nix-colors.nixosModules.nix-colors
             # home-manager.nixosModules.home-manager
           ];
         }
@@ -98,7 +103,7 @@
       darwinHosts;
 
     homeConfigurations.${username} = home-manager.lib.homeManagerConfiguration {
-      pkgs = pkgsFor.${builtins.currentSystem};
+      pkgs = pkgsFor builtins.currentSystem;
       extraSpecialArgs = {
         inherit inputs username pkgsFor;
       };

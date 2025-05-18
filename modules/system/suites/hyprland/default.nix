@@ -2,12 +2,11 @@
   options,
   config,
   lib,
+  pkgs, # Added pkgs to function arguments
+  # inputs, # hyprpanel might require this, will see if pkgs.hyprpanel works
   ...
 }:
 with lib;
-let
-  cfg = config.suites.hyprland;
-in
 {
   options.suites.hyprland = with types; {
     enable = mkOption {
@@ -17,13 +16,28 @@ in
     };
   };
 
-  imports = [ (mkIf cfg.enable [
-    ./packages.nix
-    # Add other system-level configurations for Hyprland here if needed (e.g., services)
-  ]) ];
+  # Removed: imports = if config.suites.hyprland.enable then [ ./packages.nix ] else [ ];
 
-  config =
-    if cfg.enable then { # Changed to if/else for the config attribute value
-      # Any top-level Hyprland system configurations can go here.
-    } else {}; # Return an empty set if the suite is not enabled
+  config = mkIf config.suites.hyprland.enable {
+    # Packages from the former packages.nix are now here:
+    environment.systemPackages = with pkgs; [
+      hyprland
+      waybar
+      swww
+      wofi
+      wlogout
+      hypridle
+      hyprlock
+      #hyprpanel # Assuming this is available in pkgs, possibly via an overlay from the input
+      swaynotificationcenter
+      libnotify
+      # Add any other essential packages like hyprctl if not a dependency of hyprland
+      # hyprctl # included with hyprland package
+    ];
+
+    # Any other top-level Hyprland system configurations can go here.
+    # For example:
+    # services.xserver.displayManager.sddm.enable = true; # Ensure this is suitable for Hyprland
+    # services.xserver.windowManager.hyprland.enable = true; # If there's such an option
+  };
 }
