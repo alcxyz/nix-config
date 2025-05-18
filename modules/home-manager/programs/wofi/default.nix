@@ -9,13 +9,13 @@ with lib;
 
 let
   # Use the specific enable flag for wofi from the parent hyprland module
-  cfg = config.desktop.hyprland.wofi; 
+  cfg = config.programs.wofi; # Updated path
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # The option 'options.desktop.hyprland.wofi.enable' is defined in 
-  # modules/home-manager/desktop/hyprland/default.nix
+  # The option 'options.programs.wofi.enable' will be defined in 
+  # a new or existing programs aggregator module (e.g. modules/home-manager/programs/default.nix)
 
   config = mkIf cfg.enable {
     # Enable the core Home Manager wofi program.
@@ -23,7 +23,7 @@ in
 
     # Configure Wofi configuration files via Home Manager
     home.configFile."wofi/config".source = ./config; # Path relative to this module
-    home.configFile."wofi/style.css".text = ''
+    home.configFile."wofi/style.css".text = '''
       window {
           margin: 5px;
           border: 5px solid #181926;
@@ -91,6 +91,6 @@ in
           background: #${colors.base0D};
           background-size: 400% 400%;
         }
-    '';
+    ''';
   };
 }

@@ -8,23 +8,19 @@
 with lib;
 
 let
-  # Use the specific enable flag for wlogout from the parent hyprland module
-  cfg = config.desktop.hyprland.wlogout; 
+  # Use the specific enable flag for wlogout
+  cfg = config.programs.wlogout; # Updated path
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # The option 'options.desktop.hyprland.wlogout.enable' is defined in 
-  # modules/home-manager/desktop/hyprland/default.nix
+  # The option 'options.programs.wlogout.enable' will be defined in
+  # a new or existing programs aggregator module (e.g. modules/home-manager/programs/default.nix)
 
-  config = mkIf cfg.enable { // This now correctly uses config.desktop.hyprland.wlogout.enable
-    # Enable the core Home Manager wlogout program if it exists,
-    # or add the package to home.packages.
-    # Wlogout has a home-manager module: programs.wlogout
+  config = mkIf cfg.enable {
     programs.wlogout.enable = true; 
 
-    # Configure wlogout configuration files via Home Manager
-    home.configFile."wlogout/style.css".text = ''
+    home.configFile."wlogout/style.css".text = '''
        * {
          all: unset;
          font-family: JetBrains Mono Nerd Font;
@@ -46,9 +42,9 @@ in
          color: #${colors.base0D};
          transition: ease 0.4s;
        }
-    '';
+    ''';
 
-    home.configFile."wlogout/layout".text = ''
+    home.configFile."wlogout/layout".text = '''
       {
         "label" : "lock",
         "action" : "hyprlock",
@@ -73,6 +69,6 @@ in
         "text" : "󰑓",
         "keybind" : ""
       }
-    '';
+    ''';
   };
 }

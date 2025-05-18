@@ -10,13 +10,13 @@ with lib;
 
 let
   # Use the enable flag defined in the parent hyprland module
-  cfg = config.desktop.hyprland.waybar; 
+  cfg = config.programs.waybar; 
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # The option 'options.desktop.hyprland.waybar.enable' is defined in 
-  # modules/home-manager/desktop/hyprland/default.nix
+  # The option 'options.programs.waybar.enable' is defined in 
+  # modules/home-manager/programs/default.nix (TODO: This needs to be created or verified)
 
   config = mkIf cfg.enable {
     # Enable the core Home Manager waybar program. 
@@ -27,12 +27,12 @@ in
     # Configure Waybar configuration files via Home Manager
     home.configFile."waybar/config.jsonc" = {
       source = ./config.jsonc; # Path relative to this module
-      onChange = ''
+      onChange = '''
         ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
-      '';
+      ''';
     };
     home.configFile."waybar/style.css" = {
-      text = ''
+      text = '''
         * {
           /* `otf-font-awesome` is required to be installed for icons */
           font-family: JetBrainsMono Nerd Font;
@@ -219,10 +219,10 @@ in
           min-width: 500px;
           border-radius: 17px;
         }
-      '';
-      onChange = ''
+      ''';
+      onChange = '''
         ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
-      '';
+      ''';
     };
   };
 }

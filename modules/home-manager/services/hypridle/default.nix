@@ -1,20 +1,20 @@
-# modules/home-manager/desktop/hyprland/hypridle/default.nix
+# modules/home-manager/services/hypridle/default.nix
 {
   options, config, lib, pkgs, inputs, ...
 }:
 with lib;
 let
-  # This module's activation is controlled by config.desktop.hyprland.hypridle.enable
-  moduleEnableCfg = config.desktop.hyprland.hypridle;
+  # This module's activation is controlled by config.services.hypridle.enable
+  moduleEnableCfg = config.services.hypridle;
 
-  # Settings for hypridle are taken from config.desktop.hyprland.hypridle.settings
+  # Settings for hypridle are taken from config.services.hypridle.settings
   # Defaults are specified in the options definition below.
-  settings = config.desktop.hyprland.hypridle.settings;
+  settings = config.services.hypridle.settings;
 in
 {
-  options.desktop.hyprland.hypridle = {
-    # The 'enable' option itself (options.desktop.hyprland.hypridle.enable)
-    # is defined in the parent module (hyprland/default.nix).
+  options.services.hypridle = { # MODIFIED PATH
+    # The 'enable' option itself (options.services.hypridle.enable)
+    # will be defined in a services aggregator module.
     # This submodule defines the 'settings' options under that path.
     settings = {
       lockTimeout = mkOption {
@@ -45,7 +45,7 @@ in
     home.packages = [ pkgs.hypridle ];
 
     home.configFile."hypr/hypridle.conf" = {
-      text = ''
+      text = '''
         general {
             lock_cmd = ${settings.lockCommand}
             before_sleep_cmd = ${settings.lockCommand}
@@ -60,15 +60,15 @@ in
             on-timeout = ${settings.hyprctlCommand} dispatch dpms off
             on-resume = ${settings.hyprctlCommand} dispatch dpms on
         }
-      '';
-      onChange = ''
+      ''';
+      onChange = '''
         # Ensure hypridle is in PATH or use full path from pkgs.hypridle
         if command -v hypridle &> /dev/null; then
           hypridle reload
         elif [ -x "${pkgs.hypridle}/bin/hypridle" ]; then
           ${pkgs.hypridle}/bin/hypridle reload
         fi
-      '';
+      ''';
     };
     
     systemd.user.services.hypridle = {

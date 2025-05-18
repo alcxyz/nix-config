@@ -9,14 +9,9 @@
 with lib;
 
 let
-  # Depend on the parent desktop.hyprland.enable option (handled by mkIf in the config block)
-  # parentCfg = config.desktop.hyprland;
+  cfg = config.services.hyprlock; # MODIFIED PATH
 
-  # Define options specific to this hyprlock module
-  cfg = config.desktop.hyprland.hyprlock; # Use the correct nested option path
-
-  # Create the lock script that can optionally turn off displays
-  lockScript = pkgs.writeShellScriptBin "lock-screen" ''
+  lockScript = pkgs.writeShellScriptBin "lock-screen" '''
     # Ensure hyprlock and hyprctl are in the PATH or use full paths
     HYPRLOCK="${cfg.package}/bin/hyprlock"
     HYPRCTL="${pkgs.hyprland}/bin/hyprctl"
@@ -26,10 +21,10 @@ let
     # If we're turning off displays, wait for specified delay then do it
     ${pkgs.coreutils}/bin/sleep ${toString cfg.displayOffDelay}
     $HYPRCTL dispatch dpms off
-  '';
+  ''';
 
 in {
-  options.desktop.hyprland.hyprlock = with types; { # Define options nested under desktop.hyprland
+  options.services.hyprlock = with types; { # MODIFIED PATH
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -54,37 +49,30 @@ in {
       description = "Seconds to wait before turning off displays after manual locking";
     };
 
-    # Note: lockTimeout and dpmsTimeout were options in the original hypridle module
-    # that configured hypridle to *call* the lock command.
-    # Here, we are configuring the lock command *itself*. These options might belong back in hypridle.
-
     lockCommand = mkOption {
       type = types.str;
-      # Default to the custom lock script provided by this module
       default = "${lockScript}/bin/lock-screen";
       description = "Command to run to lock the screen";
     };
 
     hyprctlCommand = mkOption {
       type = types.str;
-      default = "${pkgs.hyprland}/bin/hyprctl"; # Default to hyprctl binary path
+      default = "${pkgs.hyprland}/bin/hyprctl";
       description = "Path to hyprctl command";
     };
 
     wallpaper = { # Wallpaper configuration options
-      # Enhanced wallpaper options
       path = mkOption {
         type = types.str;
         default = "screenshot";
-        description = ''
+        description = '''
           Path to wallpaper image. Special values:
           - "screenshot": Use a screenshot of the current desktop
           - "/path/to/image.jpg": Use a specific image file
           Note: This is ignored if useStandardDir is true.
-        '';
+        ''';
       };
 
-      # New options for standard wallpaper directory
       useStandardDir = mkOption {
         type = types.bool;
         default = false;
@@ -93,13 +81,6 @@ in {
 
       standardDir = mkOption {
         type = types.str;
-        # Use the wallpapers directory from the Home Manager desktop module
-        # Assumes the desktop module defines desktop.wallpapersDir or similar.
-        # For now, hardcoding a likely path, but this could be made an option.
-        # default = "/home/${config.home.username}/.config/wallpapers";
-        # Let's refer to the wallpapers directory in the parent Hyprland module
-        # Assumes the parent Hyprland module defines an option for wallpapers dir.
-        # For now, hardcode the path relative to the user's home dir.
         default = "${config.home.homeDirectory}/.config/wallpapers";
         description = "Path to the standard wallpapers directory";
       };
@@ -138,28 +119,23 @@ in {
     };
   };
 
-  # Apply configuration if this module is enabled (depends on parent Hyprland suite enablement)
   config = mkIf cfg.enable {
-    # Install the custom lock script as a user package
     home.packages = [ lockScript ];
 
-    # Create configuration for hyprlock
     home.configFile."hypr/hyprlock.conf" = {
       text = 
         let
-          # Calculate the wallpaper path here based on options
           wallpaperPath = 
-            if cfg.wallpaper.useStandardDir then # <--- Check useStandardDir FIRST
+            if cfg.wallpaper.useStandardDir then
               if cfg.wallpaper.randomFromDir then
-                # Use find, shuf, and coreutils with full paths
                 "$(${pkgs.findutils}/bin/find ${cfg.wallpaper.standardDir} -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) | ${pkgs.coreutils}/bin/shuf -n 1)"
               else
                 "${cfg.wallpaper.standardDir}/${cfg.wallpaper.filename}"
-            else if cfg.wallpaper.path == "screenshot" then "screenshot" # <--- Then check for explicit "screenshot"
+            else if cfg.wallpaper.path == "screenshot" then "screenshot"
             else
-              cfg.wallpaper.path; # <--- Otherwise, use the explicit path set by the user
+              cfg.wallpaper.path;
         in
-        ''
+        '''
           background {
               monitor =
               path = ${wallpaperPath}
@@ -200,12 +176,9 @@ in {
               halign = center
               valign = center
           }
-        '';
+        ''';
     };
 
-    # Export the lock script path for other modules (like hypridle) to use
     environment.sessionVariables.HYPRLOCK_SCRIPT = "${lockScript}/bin/lock-screen";
-
-    # The hyprlock package is installed via the system suite.
   };
 }

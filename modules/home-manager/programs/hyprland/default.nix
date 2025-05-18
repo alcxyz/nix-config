@@ -37,13 +37,13 @@ in
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;
       "hypr/colors.conf" = { # Dynamically generated colors.conf
-        text = ''
+        text = '''
           general {
             col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
             col.inactive_border = 0xff${colors.base00}
             # Add other color-related settings for hyprland.conf itself here
           }
-        '';
+        ''';
       };
       # Any other files specific to Hyprland core configuration
     };
