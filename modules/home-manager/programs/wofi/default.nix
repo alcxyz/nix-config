@@ -8,21 +8,19 @@
 with lib;
 
 let
-  # Use the specific enable flag for wofi from the parent hyprland module
-  cfg = config.programs.wofi; # Updated path
+  cfg = config.programs.wofi;
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # The option 'options.programs.wofi.enable' will be defined in 
-  # a new or existing programs aggregator module (e.g. modules/home-manager/programs/default.nix)
+  options.programs.wofi = {
+    enable = mkEnableOption "Wofi application launcher";
+  };
 
   config = mkIf cfg.enable {
-    # Enable the core Home Manager wofi program.
     programs.wofi.enable = true;
 
-    # Configure Wofi configuration files via Home Manager
-    home.configFile."wofi/config".source = ./config; # Path relative to this module
+    home.configFile."wofi/config".source = ./config;
     home.configFile."wofi/style.css".text = '''
       window {
           margin: 5px;

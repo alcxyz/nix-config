@@ -1,42 +1,35 @@
-# modules/home-manager/desktop/hyprland/default.nix
+# modules/home-manager/programs/hyprland/default.nix
 {
   options, config, lib, pkgs, inputs, ...
 }:
 with lib;
 
 let
-  # This module is now controlled by config.desktop.hyprland.enable,
-  # which is set by the parent module (modules/home-manager/desktop/default.nix).
-  hyprlandIsEnabled = config.desktop.hyprland.enable;
-
-  # Standard way to access the colorscheme, assuming config.desktop.colorscheme is set by the parent.
-  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  cfg = config.programs.hyprland; # Use the module's own enable option
+  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme}; # Access shared colorscheme
   colors = activeColorscheme.palette;
 in
 {
-  # This module NO LONGER defines options for itself or its former submodules.
-  # Those are now defined in modules/home-manager/desktop/default.nix.
-  # It only provides the configuration for Hyprland itself.
+  options.programs.hyprland = {
+    enable = mkEnableOption "Hyprland window manager";
+    # Add any other hyprland-specific options here if needed in the future
+    # package = mkOption { type = types.package; default = pkgs.hyprland; };
+  };
 
-  # No 'imports' for waybar, wofi, etc. here anymore.
-
-  config = mkIf hyprlandIsEnabled {
-    # Core Hyprland program setup
+  config = mkIf cfg.enable {
     programs.hyprland = {
-      enable = true;
+      enable = true; # This enables the core HM program option for hyprland
+      # package = cfg.package; # If you define a package option above
       withUWSM = true; 
       xwayland.enable = true;
     };
 
-    # Session variables specific to Hyprland environment
     environment.sessionVariables.NIXOS_OZONE_WL = "1";
 
-    # Hyprland config files
     home.configFile = {
-      # Paths are relative to this file's location (modules/home-manager/desktop/hyprland/)
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;
-      "hypr/colors.conf" = { # Dynamically generated colors.conf
+      "hypr/colors.conf" = { 
         text = '''
           general {
             col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
@@ -45,10 +38,6 @@ in
           }
         ''';
       };
-      # Any other files specific to Hyprland core configuration
     };
-
-    # NO LONGER responsible for enabling waybar, wofi, etc.
-    # That's handled by modules/home-manager/desktop/default.nix
   };
 }

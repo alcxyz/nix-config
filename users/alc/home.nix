@@ -17,9 +17,6 @@ in
 {
   # ==================== Imports ====================
   imports = [
-    # General user environment settings
-    ../../modules/home-manager/environment.nix
-
     # User-specific shell configuration module
     ../../modules/home-manager/shell/default.nix
 
@@ -56,6 +53,12 @@ in
   xdg.dataHome = "${home.homeDirectory}/.local/share";
   xdg.stateHome = "${home.homeDirectory}/.local/state";
 
+  home.sessionVariables = {
+    EDITOR = "nvim";
+    DIRENV_LOG_FORMAT = "";
+    FLAKE = "/home/${username}/nix-config";
+  };
+
   # ==================== Desktop Customization (Moved from desktop/default.nix) ====================
   # Define the colorscheme directly
   desktop.colorscheme = "catppuccin-mocha";
@@ -72,7 +75,8 @@ in
       package = pkgs.papirus-icon-theme;
     };
   };
-
+    
+    #LEAVE THIS COMMENT BLOCK FOR LATER - SIMPLY IGNORE IT FOR NOW!
     # Assuming prism is a Home Manager option (adjust if it's NixOS specific)
     # prism = {
     #   enable = true;
@@ -108,6 +112,7 @@ in
   };
 
   # ==================== Program and Feature Enabling ====================
+  #DESKTOP AND WINDOW MANAGEMENT FOR LINUX ONLY
   programs.hyprland.enable = true;
   programs.waybar.enable = true;
   programs.wofi.enable = true;

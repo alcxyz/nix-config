@@ -8,14 +8,14 @@
 with lib;
 
 let
-  # Use the specific enable flag for wlogout
-  cfg = config.programs.wlogout; # Updated path
+  cfg = config.programs.wlogout;
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # The option 'options.programs.wlogout.enable' will be defined in
-  # a new or existing programs aggregator module (e.g. modules/home-manager/programs/default.nix)
+  options.programs.wlogout = {
+    enable = mkEnableOption "wlogout session exit UI";
+  };
 
   config = mkIf cfg.enable {
     programs.wlogout.enable = true; 

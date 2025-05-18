@@ -9,22 +9,18 @@
 with lib;
 
 let
-  # Use the enable flag defined in the parent hyprland module
   cfg = config.programs.waybar; 
   colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = colorscheme.palette;
 in
 {
-  # The option 'options.programs.waybar.enable' is defined in 
-  # modules/home-manager/programs/default.nix (TODO: This needs to be created or verified)
+  options.programs.waybar = {
+    enable = mkEnableOption "Waybar status bar";
+  };
 
   config = mkIf cfg.enable {
-    # Enable the core Home Manager waybar program. 
-    # This ensures the waybar package is installed via Home Manager 
-    # and any default service/program setup is done.
     programs.waybar.enable = true;
 
-    # Configure Waybar configuration files via Home Manager
     home.configFile."waybar/config.jsonc" = {
       source = ./config.jsonc; # Path relative to this module
       onChange = '''

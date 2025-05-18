@@ -9,59 +9,48 @@
 with lib;
 
 let
-  cfg = config.services.hyprlock; # MODIFIED PATH
+  cfg = config.services.hyprlock;
+  # Make nix-colors available for the default wallpaper color
+  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
+  colors = activeColorscheme.palette;
 
   lockScript = pkgs.writeShellScriptBin "lock-screen" '''
-    # Ensure hyprlock and hyprctl are in the PATH or use full paths
     HYPRLOCK="${cfg.package}/bin/hyprlock"
     HYPRCTL="${pkgs.hyprland}/bin/hyprctl"
-
     $HYPRLOCK ${optionalString (!cfg.turnOffDisplaysOnLock) "& exit 0"}
-
-    # If we're turning off displays, wait for specified delay then do it
     ${pkgs.coreutils}/bin/sleep ${toString cfg.displayOffDelay}
     $HYPRCTL dispatch dpms off
   ''';
 
 in {
-  options.services.hyprlock = with types; { # MODIFIED PATH
-    enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable the Home Manager configuration for the hyprlock screen locker.";
-    };
-
+  options.services.hyprlock = with types; {
+    enable = mkEnableOption "Hyprlock screen locker";
     package = mkOption {
       type = types.package;
       default = pkgs.hyprlock;
       description = "The hyprlock package to use";
     };
-
     turnOffDisplaysOnLock = mkOption {
       type = types.bool;
       default = false;
       description = "Whether to turn off displays after manual locking";
     };
-
     displayOffDelay = mkOption {
       type = types.int;
       default = 10;
       description = "Seconds to wait before turning off displays after manual locking";
     };
-
     lockCommand = mkOption {
       type = types.str;
       default = "${lockScript}/bin/lock-screen";
       description = "Command to run to lock the screen";
     };
-
     hyprctlCommand = mkOption {
       type = types.str;
       default = "${pkgs.hyprland}/bin/hyprctl";
       description = "Path to hyprctl command";
     };
-
-    wallpaper = { # Wallpaper configuration options
+    wallpaper = { 
       path = mkOption {
         type = types.str;
         default = "screenshot";
@@ -72,44 +61,37 @@ in {
           Note: This is ignored if useStandardDir is true.
         ''';
       };
-
       useStandardDir = mkOption {
         type = types.bool;
         default = false;
         description = "Whether to use the standard wallpapers directory";
       };
-
       standardDir = mkOption {
         type = types.str;
         default = "${config.home.homeDirectory}/.config/wallpapers";
         description = "Path to the standard wallpapers directory";
       };
-
       filename = mkOption {
         type = types.str;
         default = "default.jpg";
         description = "Wallpaper filename in the standard directory";
       };
-
       randomFromDir = mkOption {
         type = types.bool;
         default = false;
         description = "Whether to use a random wallpaper from the standard directory";
       };
-
       color = mkOption {
         type = types.str;
-        default = "rgba(25, 20, 20, 1.0)";
-        description = "Background color to use behind the wallpaper";
+        default = "rgb(${colors.base00})"; # Default to nix-colors base00
+        description = "Background color to use behind the wallpaper (e.g., rgba(25, 20, 20, 1.0) or rgb(f4c7c7))";
       };
-
-      blur = { # Blur options
+      blur = { 
         size = mkOption {
           type = types.int;
           default = 7;
           description = "Blur size for the background";
         };
-
         passes = mkOption {
           type = types.int;
           default = 3;
@@ -121,7 +103,6 @@ in {
 
   config = mkIf cfg.enable {
     home.packages = [ lockScript ];
-
     home.configFile."hypr/hyprlock.conf" = {
       text = 
         let
@@ -139,7 +120,7 @@ in {
           background {
               monitor =
               path = ${wallpaperPath}
-              color = ${cfg.wallpaper.color}
+              color = ${cfg.wallpaper.color} # This will now use the (potentially themed) default or user override
               blur_passes = ${toString cfg.wallpaper.blur.passes}
               blur_size = ${toString cfg.wallpaper.blur.size}
               noise = 0.0117
@@ -155,7 +136,7 @@ in {
               outline_thickness = 3
               dots_size = 0.2
               dots_spacing = 0.64
-              outer_color = rgb(151515)
+              outer_color = rgb(151515) # Consider theming these too if desired
               inner_color = rgb(200, 200, 200)
               font_color = rgb(10, 10, 10)
               fade_on_empty = true
@@ -178,7 +159,6 @@ in {
           }
         ''';
     };
-
     environment.sessionVariables.HYPRLOCK_SCRIPT = "${lockScript}/bin/lock-screen";
   };
 }
