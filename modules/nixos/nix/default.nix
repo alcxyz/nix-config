@@ -3,7 +3,7 @@
   config,
   pkgs,
   lib,
-  username, # Added username as it's used in config.nix.settings
+  username,
   ...
 }:
 with lib;
