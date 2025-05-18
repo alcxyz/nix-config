@@ -21,7 +21,7 @@ in
     programs.wofi.enable = true;
 
     home.configFile."wofi/config".source = ./config;
-    home.configFile."wofi/style.css".text = '''
+    home.configFile."wofi/style.css".text = ''
       window {
           margin: 5px;
           border: 5px solid #181926;
@@ -89,6 +89,6 @@ in
           background: #${colors.base0D};
           background-size: 400% 400%;
         }
-    ''';
+    '';
   };
 }

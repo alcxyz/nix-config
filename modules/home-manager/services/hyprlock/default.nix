@@ -1,10 +1,10 @@
 {
-  options
-, config
-, lib
-, pkgs
-, inputs
-, ...
+  options,
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
 }:
 with lib;
 
@@ -14,13 +14,13 @@ let
   activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.desktop.colorscheme};
   colors = activeColorscheme.palette;
 
-  lockScript = pkgs.writeShellScriptBin "lock-screen" '''
+  lockScript = pkgs.writeShellScriptBin "lock-screen" ''
     HYPRLOCK="${cfg.package}/bin/hyprlock"
     HYPRCTL="${pkgs.hyprland}/bin/hyprctl"
     $HYPRLOCK ${optionalString (!cfg.turnOffDisplaysOnLock) "& exit 0"}
     ${pkgs.coreutils}/bin/sleep ${toString cfg.displayOffDelay}
     $HYPRCTL dispatch dpms off
-  ''';
+  '';
 
 in {
   options.services.hyprlock = with types; {
@@ -50,16 +50,16 @@ in {
       default = "${pkgs.hyprland}/bin/hyprctl";
       description = "Path to hyprctl command";
     };
-    wallpaper = { 
+    wallpaper = {
       path = mkOption {
         type = types.str;
         default = "screenshot";
-        description = '''
+        description = ''
           Path to wallpaper image. Special values:
           - "screenshot": Use a screenshot of the current desktop
           - "/path/to/image.jpg": Use a specific image file
           Note: This is ignored if useStandardDir is true.
-        ''';
+        '';
       };
       useStandardDir = mkOption {
         type = types.bool;
@@ -86,7 +86,7 @@ in {
         default = "rgb(${colors.base00})"; # Default to nix-colors base00
         description = "Background color to use behind the wallpaper (e.g., rgba(25, 20, 20, 1.0) or rgb(f4c7c7))";
       };
-      blur = { 
+      blur = {
         size = mkOption {
           type = types.int;
           default = 7;
@@ -104,19 +104,20 @@ in {
   config = mkIf cfg.enable {
     home.packages = [ lockScript ];
     home.configFile."hypr/hyprlock.conf" = {
-      text = 
+      text =
         let
-          wallpaperPath = 
+          wallpaperPath =
             if cfg.wallpaper.useStandardDir then
               if cfg.wallpaper.randomFromDir then
-                "$(${pkgs.findutils}/bin/find ${cfg.wallpaper.standardDir} -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) | ${pkgs.coreutils}/bin/shuf -n 1)"
+                # Updated line with single quotes for -name patterns
+                "$(${pkgs.findutils}/bin/find ${cfg.wallpaper.standardDir} -type f \( -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' \) | ${pkgs.coreutils}/bin/shuf -n 1)"
               else
                 "${cfg.wallpaper.standardDir}/${cfg.wallpaper.filename}"
             else if cfg.wallpaper.path == "screenshot" then "screenshot"
             else
               cfg.wallpaper.path;
         in
-        '''
+        ''
           background {
               monitor =
               path = ${wallpaperPath}
@@ -157,8 +158,9 @@ in {
               halign = center
               valign = center
           }
-        ''';
+        '';
     };
     environment.sessionVariables.HYPRLOCK_SCRIPT = "${lockScript}/bin/lock-screen";
   };
 }
+

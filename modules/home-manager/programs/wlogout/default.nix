@@ -20,7 +20,7 @@ in
   config = mkIf cfg.enable {
     programs.wlogout.enable = true; 
 
-    home.configFile."wlogout/style.css".text = '''
+    home.configFile."wlogout/style.css".text = ''
        * {
          all: unset;
          font-family: JetBrains Mono Nerd Font;
@@ -42,9 +42,9 @@ in
          color: #${colors.base0D};
          transition: ease 0.4s;
        }
-    ''';
+    '';
 
-    home.configFile."wlogout/layout".text = '''
+    home.configFile."wlogout/layout".text = ''
       {
         "label" : "lock",
         "action" : "hyprlock",
@@ -69,6 +69,6 @@ in
         "text" : "󰑓",
         "keybind" : ""
       }
-    ''';
+    '';
   };
 }

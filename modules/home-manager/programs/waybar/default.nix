@@ -23,12 +23,12 @@ in
 
     home.configFile."waybar/config.jsonc" = {
       source = ./config.jsonc; # Path relative to this module
-      onChange = '''
+      onChange = ''
         ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
-      ''';
+      '';
     };
     home.configFile."waybar/style.css" = {
-      text = '''
+      text = ''
         * {
           /* `otf-font-awesome` is required to be installed for icons */
           font-family: JetBrainsMono Nerd Font;
@@ -215,10 +215,10 @@ in
           min-width: 500px;
           border-radius: 17px;
         }
-      ''';
-      onChange = '''
+      '';
+      onChange = ''
         ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
-      ''';
+      '';
     };
   };
 }

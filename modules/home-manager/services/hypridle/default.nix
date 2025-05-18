@@ -38,7 +38,7 @@ in
     home.packages = [ pkgs.hypridle ];
 
     home.configFile."hypr/hypridle.conf" = {
-      text = '''
+      text = ''
         general {
             lock_cmd = ${settings.lockCommand}
             before_sleep_cmd = ${settings.lockCommand}
@@ -53,14 +53,14 @@ in
             on-timeout = ${settings.hyprctlCommand} dispatch dpms off
             on-resume = ${settings.hyprctlCommand} dispatch dpms on
         }
-      ''';
-      onChange = '''
+      '';
+      onChange = ''
         if command -v hypridle &> /dev/null; then
           hypridle reload
         elif [ -x "${pkgs.hypridle}/bin/hypridle" ]; then
           ${pkgs.hypridle}/bin/hypridle reload
         fi
-      ''';
+      '';
     };
     
     systemd.user.services.hypridle = {
