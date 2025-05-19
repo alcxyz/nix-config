@@ -71,11 +71,10 @@ with lib;
   # REMOVED: desktop.colorscheme = "catppuccin-mocha";
 
   # GTK theme settings
-  # Use the modern programs.gtk path. nix-colors will automatically configure
-  # programs.gtk.theme.name and programs.gtk.theme.package based on config.colorscheme.name.
-  programs.gtk = {
+  # nix-colors will automatically configure
+  # gtk.theme.name and gtk.theme.package based on config.colorscheme.name.
+  gtk = {
     enable = true;
-    # The 'theme' sub-attribute for name and package is handled by nix-colors.
     iconTheme = {
       name = "Papirus-Dark";
       package = pkgs.papirus-icon-theme;
@@ -145,4 +144,3 @@ with lib;
     # };
 
 }
-
