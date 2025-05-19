@@ -31,11 +31,11 @@ in
 
   config = mkIf cfg.enable {
     environment.systemPackages = with pkgs; [
-      nil
-      nixfmt-classic # Or nixfmt depending on your preference
-      nix-index
-      nix-prefetch-git
-      nix-ld
+      #nil
+      #nixfmt-classic # Or nixfmt depending on your preference
+      #nix-index
+      #nix-prefetch-git
+      #nix-ld
     ];
 
     nix = {
