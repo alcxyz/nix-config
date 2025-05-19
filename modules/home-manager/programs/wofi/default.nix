@@ -9,7 +9,7 @@ with lib;
 
 let
   cfg = config.programs.wofi;
-  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.colorscheme};
+  colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 in
 {
@@ -20,8 +20,8 @@ in
   config = mkIf cfg.enable {
     programs.wofi.enable = true;
 
-    home.configFile."wofi/config".source = ./config;
-    home.configFile."wofi/style.css".text = ''
+    xdg.configFile."wofi/config".source = ./config;
+    xdg.configFile."wofi/style.css".text = ''
       window {
           margin: 5px;
           border: 5px solid #181926;

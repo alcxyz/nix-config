@@ -11,8 +11,8 @@ with lib;
 
 let
   cfg = config.programs.hyprland; # Use the module's own enable option
-  activeColorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.colorscheme}; # Access shared colorscheme
-  colors = activeColorscheme.palette;
+  colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
+  colors = colorscheme.palette;
 in
 {
   options.programs.hyprland = {
@@ -31,7 +31,7 @@ in
 
     home.sessionVariables.NIXOS_OZONE_WL = "1";
 
-    home.configFile = {
+    xdg.configFile = {
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;
       "hypr/colors.conf" = { 

@@ -10,7 +10,7 @@ with lib;
 
 let
   cfg = config.programs.waybar; 
-  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.colorscheme};
+  colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 in
 {
@@ -21,13 +21,13 @@ in
   config = mkIf cfg.enable {
     programs.waybar.enable = true;
 
-    home.configFile."waybar/config.jsonc" = {
+    xdg.configFile."waybar/config.jsonc" = {
       source = ./config.jsonc; # Path relative to this module
       onChange = ''
         ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
       '';
     };
-    home.configFile."waybar/style.css" = {
+    xdg.configFile."waybar/style.css" = {
       text = ''
         * {
           /* `otf-font-awesome` is required to be installed for icons */

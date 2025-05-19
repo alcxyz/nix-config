@@ -20,7 +20,7 @@ with lib; # Keep 'with lib;' as lib is needed
     enableNushellIntegration = true;
   };
   # Assuming starship.toml exists relative to this home module
-  home.configFile."starship.toml".source = ./starship.toml;
+  xdg.configFile."starship.toml".source = ./starship.toml;
 
   home.programs.zoxide = {
     enable = true;

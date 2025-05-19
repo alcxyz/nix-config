@@ -9,7 +9,7 @@ with lib;
 
 let
   cfg = config.programs.wlogout;
-  colorscheme = inputs.nix-colors.colorschemes.${builtins.toString config.colorscheme};
+  colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 in
 {
@@ -20,7 +20,7 @@ in
   config = mkIf cfg.enable {
     programs.wlogout.enable = true; 
 
-    home.configFile."wlogout/style.css".text = ''
+    xdg.configFile."wlogout/style.css".text = ''
        * {
          all: unset;
          font-family: JetBrains Mono Nerd Font;
@@ -44,7 +44,7 @@ in
        }
     '';
 
-    home.configFile."wlogout/layout".text = ''
+    xdg.configFile."wlogout/layout".text = ''
       {
         "label" : "lock",
         "action" : "hyprlock",
