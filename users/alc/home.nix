@@ -38,7 +38,7 @@ with lib;
     ../../modules/home-manager/programs/lazygit/default.nix
     #../../modules/home-manager/programs/gnupg/default.nix
     ../../modules/home-manager/programs/ssh/default.nix
-    ../../modules/home-manager/programs/rclone/default.nix
+    #../../modules/home-manager/programs/rclone/default.nix
   ];
 
   # ==================== Home Manager Core Settings ====================
@@ -56,10 +56,10 @@ with lib;
   colorscheme.name = "catppuccin-mocha";
 
   # ==================== User Environment ====================
-  xdg.cacheHome = "${home.homeDirectory}/.cache";
-  xdg.configHome = "${home.homeDirectory}/.config";
-  xdg.dataHome = "${home.homeDirectory}/.local/share";
-  xdg.stateHome = "${home.homeDirectory}/.local/state";
+  #xdg.cacheHome = "${config.home.homeDirectory}/.cache";
+  #xdg.configHome = "${config.home.homeDirectory}/.config";
+  #xdg.dataHome = "${config.home.homeDirectory}/.local/share";
+  #xdg.stateHome = "${config.home.homeDirectory}/.local/state";
 
   home.sessionVariables = {
     EDITOR = "nvim";
@@ -82,9 +82,6 @@ with lib;
     # You can add other GTK settings here if needed, e.g.:
     # font.name = "Noto Sans 11";
   };
-    
-  # ... (rest of your configurations, packages, files, etc.)
-  # Ensure the sections for home.packages, home.file, program enables are still here.
 
   # ==================== Packages and Files ====================
   home.packages = with pkgs; [
@@ -108,12 +105,12 @@ with lib;
 
   # ==================== Program and Feature Enabling ====================
   #DESKTOP AND WINDOW MANAGEMENT FOR LINUX ONLY
-  programs.hyprland.enable = true;
-  programs.waybar.enable = true;
-  programs.wofi.enable = true;
-  programs.wlogout.enable = true;
-  services.swww.enable = true;
-  services.hypridle.managed.enable = true; # Using your managed hypridle module
+  programs.hyprland.managed.enable = true;
+  programs.waybar.managed.enable = true;
+  programs.wofi.managed.enable = true;
+  programs.wlogout.managed.enable = true;
+  services.swww.managed.enable = true;
+  services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
 
   programs.foot.enable = true;
@@ -123,16 +120,12 @@ with lib;
   #programs.gnupg.enable = true;
   programs.ssh.enable = true;
 
-  programs.nix-ld = {
-    enable = true;
-    package = pkgs.nix-ld;
-  };
   programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
   };
 
-  programs.rclone.enable = false;
+  #programs.rclone.enable = false;
 
 
     #LEAVE THIS COMMENT BLOCK FOR LATER - SIMPLY IGNORE IT FOR NOW!

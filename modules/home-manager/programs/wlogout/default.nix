@@ -8,12 +8,12 @@
 with lib;
 
 let
-  cfg = config.programs.wlogout;
+  cfg = config.programs.wlogout.managed;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 in
 {
-  options.programs.wlogout = {
+  options.programs.wlogout.managed = {
     enable = mkEnableOption "wlogout session exit UI";
   };
 

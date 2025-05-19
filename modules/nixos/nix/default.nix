@@ -35,6 +35,7 @@ in
       nixfmt-classic # Or nixfmt depending on your preference
       nix-index
       nix-prefetch-git
+      nix-ld
     ];
 
     nix = {

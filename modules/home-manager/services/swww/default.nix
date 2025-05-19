@@ -9,10 +9,10 @@
 with lib;
 
 let
-  cfg = config.services.swww;
+  cfg = config.services.swww.managed;
 in
 {
-  options.services.swww = {
+  options.services.swww.managed = {
     enable = mkEnableOption "SWWW wallpaper daemon";
   };
 

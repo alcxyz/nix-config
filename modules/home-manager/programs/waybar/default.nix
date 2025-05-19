@@ -9,12 +9,12 @@
 with lib;
 
 let
-  cfg = config.programs.waybar; 
+  cfg = config.programs.waybar.managed; 
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 in
 {
-  options.programs.waybar = {
+  options.programs.waybar.managed = {
     enable = mkEnableOption "Waybar status bar";
   };
 

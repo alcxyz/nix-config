@@ -8,12 +8,12 @@
 with lib;
 
 let
-  cfg = config.programs.wofi;
+  cfg = config.programs.wofi.managed;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 in
 {
-  options.programs.wofi = {
+  options.programs.wofi.managed = {
     enable = mkEnableOption "Wofi application launcher";
   };
 
