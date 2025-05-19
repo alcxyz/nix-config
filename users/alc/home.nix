@@ -104,16 +104,16 @@ with lib;
 
   # ==================== Program and Feature Enabling ====================
   #DESKTOP AND WINDOW MANAGEMENT FOR LINUX ONLY
-  programs.hyprland.managed.enable = false;
-  programs.waybar.managed.enable = false;
-  programs.wofi.managed.enable = false;
-  programs.wlogout.managed.enable = false;
-  services.swww.managed.enable = false;
-  services.hypridle.managed.enable = false;
-  services.hyprlock.enable = false;
+  programs.hyprland.managed.enable = true;
+  programs.waybar.managed.enable = true;
+  programs.wofi.managed.enable = true;
+  programs.wlogout.managed.enable = true;
+  services.swww.managed.enable = true;
+  services.hypridle.managed.enable = true;
+  services.hyprlock.enable = true;
 
   programs.foot.enable = true;
-  programs.wezterm.enable = false;
+  programs.wezterm.enable = true;
   programs.git.managed.enable = true;
   programs.lazygit.managed.enable = true;
   #programs.gnupg.enable = true;
