@@ -35,21 +35,12 @@ in
       lutris
       winetricks
       wineWowPackages.waylandFull
+
       ghostty
       nautilus
-      grim
-      slurp
-      swappy
-      imagemagick
-
-      (writeShellScriptBin "screenshot" ''
-        grim -g "$(slurp)" - | convert - -shave 1x1 PNG:- | wl-copy
-      '')
-      (writeShellScriptBin "screenshot-edit" ''
-        wl-paste | swappy -f -
-      '')
 
       pulseaudio
+
       git
       git-remote-gcrypt
       gh

@@ -46,7 +46,7 @@ in
         experimental-features = [ "nix-command" "flakes" ];
         accept-flake-config = true;
         warn-dirty = false;
-        sandbox = "relaxed";
+        sandbox = true;
         # 'username' is passed as a specialArg to your NixOS configuration
         trusted-users = [ "root" username ];
         allowed-users = [ "root" username ];

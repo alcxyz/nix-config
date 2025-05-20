@@ -34,6 +34,18 @@ with lib;
       #hyprpanel # Assuming this is available in pkgs, possibly via an overlay from the input
       swaynotificationcenter
       libnotify
+
+      grim
+      slurp
+      swappy
+      imagemagick
+
+      (writeShellScriptBin "screenshot" ''
+        grim -g "$(slurp)" - | convert - -shave 1x1 PNG:- | wl-copy
+      '')
+      (writeShellScriptBin "screenshot-edit" ''
+        wl-paste | swappy -f -
+      '')
     ];
 
     # Any other top-level Hyprland system configurations can go here.

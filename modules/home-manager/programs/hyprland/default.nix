@@ -44,8 +44,8 @@ in
           # Note: Hyprland uses 0xAARRGGBB or 0xRRGGBB format.
           # nix-colors provides RRGGBB hexadecimal strings.
           # We prefix with 0xff for full opacity (AA=ff).
-          "col.active_border" = "0xff${colors.base0C} 0xff${colors.base0D}"; # Gradient example
-          "col.inactive_border" = "0xff${colors.base00}";
+          #"col.active_border" = "0xff${colors.base0C} 0xff${colors.base0D}"; # Gradient example
+          #"col.inactive_border" = "0xff${colors.base00}";
 
           # Add other general settings here using the structured format
           # like:
@@ -97,13 +97,16 @@ in
     home.sessionVariables.NIXOS_OZONE_WL = "1";
 
     xdg.configFile = {
-      # Keep managing the launch script if you have one
       "hypr/launch".source = ./launch;
-
-      # Remove this if you manage your hyprland.conf entirely
-      # using wayland.windowManager.hyprland.settings and extraConfig.
-      # It is the recommended declarative approach.
-      # "hypr/hyprland.conf".source = ./hyprland.conf; # REMOVE THIS
+      "hypr/hyprland.conf".source = ./hyprland.conf;
+      "hypr/colors.conf" = {
+        text = ''
+          general {
+            col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
+            col.inactive_border = 0xff${colors.base00}
+          }
+        '';
+      };
     };
   };
 }
