@@ -28,8 +28,6 @@
     username = "alc";
     lib = nixpkgs.lib; # For lib.mapAttrs'
 
-    # No longer need: nixColorsHomeManagerModule = inputs.nix-colors.homeManagerModules.default;
-
     linuxPkgs = import nixpkgs {
       system = "x86_64-linux";
       config.allowUnfree = true;
@@ -125,6 +123,7 @@
       in
       nixosHomeConfigs // darwinHomeConfigs; # Merge them
 
+    /*
     devShells = builtins.listToAttrs (map (system: {
       name = system;
       value = import ./shells/default.nix {
@@ -133,6 +132,7 @@
                else throw "Unsupported system for devShell: ${system}";
       };
     }) supportedSystems);
+    */
 
     modules = {
       nixos = import ./modules/nixos/default.nix;

@@ -40,8 +40,8 @@ in
     };
     services.pulseaudio.enable = false;
     environment.systemPackages = with pkgs; [
-      shairport-sync
-      shairport-sync-airplay2
+      #shairport-sync
+      #shairport-sync-airplay2
     ];
     #programs.noisetorch.enable = true;
   };

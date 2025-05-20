@@ -31,10 +31,10 @@ in
 
   config = mkIf cfg.enable {
     environment.systemPackages = with pkgs; [
-      #nil
-      #nixfmt-classic # Or nixfmt depending on your preference
-      #nix-index
-      #nix-prefetch-git
+      nil
+      nixfmt-classic
+      nix-index
+      nix-prefetch-git
       #nix-ld
     ];
 
@@ -45,11 +45,13 @@ in
       settings = {
         experimental-features = [ "nix-command" "flakes" ];
         accept-flake-config = true;
+        warn-dirty = false;
+        sandbox = "relaxed";
         # 'username' is passed as a specialArg to your NixOS configuration
         trusted-users = [ "root" username ];
         allowed-users = [ "root" username ];
         # Optionally, you can also set auto-optimise-store if desired
-        # auto-optimise-store = true;
+        auto-optimise-store = true;
       };
 
       # This allows you to still use extraOptions from your main configuration

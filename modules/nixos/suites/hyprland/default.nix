@@ -26,7 +26,7 @@ with lib;
     # Packages from the former packages.nix are now here:
     environment.systemPackages = with pkgs; [
       waybar
-      #swww
+      swww
       wofi
       wlogout
       hypridle

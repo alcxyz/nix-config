@@ -1,14 +1,10 @@
-{ options, config, lib, pkgs, inputs, username, ... }: # Added username
+{ options, config, lib, pkgs, inputs, username, ... }:
 with lib;
 let
-  cfg = config.suites.desktop; # This refers to options.suites.desktop
-  # For options defined within *this* module (like desktop.enable, desktop.autoLogin below)
-  # we refer to them via config.desktop inside the config block.
-  # For options from *other* modules (like config.users.users), we use them directly.
+  cfg = config.suites.desktop;
 
 in
 {
-  # Option for enabling the entire suite
   options.suites.desktop = with types; {
     enable = mkOption {
       type = types.bool;
@@ -20,6 +16,7 @@ in
   config = mkIf cfg.enable { 
     environment.systemPackages = with pkgs; [
       inputs.zen-browser.packages.x86_64-linux.default
+
       brave
       thunderbird
       chromium
@@ -44,12 +41,14 @@ in
       slurp
       swappy
       imagemagick
+
       (writeShellScriptBin "screenshot" ''
         grim -g "$(slurp)" - | convert - -shave 1x1 PNG:- | wl-copy
       '')
       (writeShellScriptBin "screenshot-edit" ''
         wl-paste | swappy -f -
       '')
+
       pulseaudio
       git
       git-remote-gcrypt
