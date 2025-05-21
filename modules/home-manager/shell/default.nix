@@ -168,6 +168,9 @@ with lib;
   # they call must exist and behave as expected in the target shell.
   # ========================================================================
   home.shellAliases = {
+    nixyz = "nixos-rebuild switch --flake .#xyz";
+    hmxyz = "home-manager switch --flake .#alc-xyz";
+
     # Kubernetes aliases (Assuming 'kubectl' is in your PATH)
     k = "kubectl";
     ka = "kubectl apply -f";

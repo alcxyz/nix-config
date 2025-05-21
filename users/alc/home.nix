@@ -83,6 +83,14 @@ with lib;
     # font.name = "Noto Sans 11";
   };
 
+  home.pointerCursor = {
+    enable = true;
+    package = pkgs.adwaita-icon-theme;
+    name = "Adwaita";
+    size = 24;
+    # visible = true;
+  };
+
   # ==================== Packages and Files ====================
   home.packages = with pkgs; [
     # neofetch
@@ -100,13 +108,6 @@ with lib;
       source = ./wallpapers;
       recursive = true;
     };
-  };
-
-  home.pointerCursor = {
-    enable = true;
-    name = "Adwaita";
-    size = 24;
-    # visible = true;
   };
 
   # ==================== Program and Feature Enabling ====================
