@@ -68,28 +68,7 @@ with lib;
   };
 
   # ==================== Desktop Customization ====================
-  # REMOVED: desktop.colorscheme = "catppuccin-mocha";
 
-  # GTK theme settings
-  # nix-colors will automatically configure
-  # gtk.theme.name and gtk.theme.package based on config.colorscheme.name.
-  gtk = {
-    enable = true;
-    iconTheme = {
-      name = "Papirus-Dark";
-      package = pkgs.papirus-icon-theme;
-    };
-    # You can add other GTK settings here if needed, e.g.:
-    # font.name = "Noto Sans 11";
-  };
-
-  home.pointerCursor = {
-    enable = true;
-    package = pkgs.adwaita-icon-theme;
-    name = "Adwaita";
-    size = 24;
-    # visible = true;
-  };
 
   # ==================== Packages and Files ====================
   home.packages = with pkgs; [

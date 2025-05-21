@@ -93,6 +93,28 @@ in
 
     }; # End of wayland.windowManager.hyprland block
 
+    home.pointerCursor = {
+      gtk.enable = true;
+      enable = true;
+      package = pkgs.adwaita-icon-theme;
+      name = "Adwaita";
+      size = 24;
+      # visible = true;
+    };
+
+    # GTK theme settings
+    # nix-colors will automatically configure
+    # gtk.theme.name and gtk.theme.package based on config.colorscheme.name.
+    gtk = {
+      enable = true;
+      iconTheme = {
+        name = "Papirus-Dark";
+        package = pkgs.papirus-icon-theme;
+      };
+      # You can add other GTK settings here if needed, e.g.:
+      # font.name = "Noto Sans 11";
+    };
+
     # This session variable is correctly placed here.
     home.sessionVariables.NIXOS_OZONE_WL = "1";
 
