@@ -125,10 +125,12 @@
 
     devShells = builtins.listToAttrs (map (system: {
       name = system;
-      value = import ./shells/default.nix {
-        pkgs = if system == "x86_64-linux" then linuxPkgs
-               else if system == "aarch64-darwin" then darwinPkgs
-               else throw "Unsupported system for devShell: ${system}";
+      value = {
+        default = import ./shells/default.nix {
+          pkgs = if system == "x86_64-linux" then linuxPkgs
+                 else if system == "aarch64-darwin" then darwinPkgs
+                 else throw "Unsupported system for devShell: ${system}";
+        };
       };
     }) supportedSystems);
 
