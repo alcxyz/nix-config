@@ -102,6 +102,13 @@ with lib;
     };
   };
 
+  home.pointerCursor = {
+    enable = true;
+    name = "Adwaita";
+    size = 24;
+    # visible = true;
+  };
+
   # ==================== Program and Feature Enabling ====================
   #DESKTOP AND WINDOW MANAGEMENT FOR LINUX ONLY
   programs.hyprland.managed.enable = true;

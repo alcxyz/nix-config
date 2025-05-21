@@ -73,7 +73,7 @@ in {
       };
       filename = mkOption {
         type = types.str;
-        default = "default.jpg";
+        default = "lock.jpg";
         description = "Wallpaper filename in the standard directory";
       };
       randomFromDir = mkOption {
@@ -83,7 +83,7 @@ in {
       };
       color = mkOption {
         type = types.str;
-        default = "rgb(${colors.base00})"; # Default to nix-colors base00
+        default = "rgb(${colors.base00})";
         description = "Background color to use behind the wallpaper (e.g., rgba(25, 20, 20, 1.0) or rgb(f4c7c7))";
       };
       blur = {
