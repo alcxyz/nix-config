@@ -195,6 +195,7 @@ with lib;
     # for complex output formatting (like 'ls | format -l'), but simple
     # aliases like 'l' for 'ls -all' work for brevity.
     l = "ls -all";
+    ll = "ls -la";
     c = "clear";
     ".." = "cd .."; # Alias for changing to the parent directory
     # Override the built-in 'cd' command with zoxide's jump function.
@@ -215,6 +216,12 @@ with lib;
 
     # Add any other general command aliases here.
     # Example: gs = "git status"
+    gc = "git commit -m";
+    gca = "git commit -am";
+    gps = "git push";
+    gpl = "git pull";
+    gst = "git status";
+    glog = "git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
   };
 
   # ========================================================================

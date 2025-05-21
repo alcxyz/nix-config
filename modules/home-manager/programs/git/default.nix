@@ -17,21 +17,6 @@ let
   defaultSshKeyPath = "${config.home.homeDirectory}/.ssh/key.pub";
 
   defaultAliases = {
-    gc = "commit -m";
-    gca = "commit -a -m";
-    gp = "push origin HEAD";
-    gpu = "pull origin";
-    gst = "status";
-    glog = "log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
-    gdiff = "diff";
-    gco = "checkout";
-    gb = "branch";
-    gba = "branch -a";
-    gadd = "add";
-    ga = "add -p";
-    gcoall = "checkout -- .";
-    gr = "remote";
-    gre = "reset";
   };
 
   defaultExtraConfig = {

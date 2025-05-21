@@ -98,6 +98,7 @@ with lib;
   services.swww.managed.enable = true;
   services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
+  services.hyprlock.wallpaper.useStandardDir = true;
 
   programs.foot.enable = true;
   programs.wezterm.enable = true;
