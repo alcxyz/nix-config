@@ -66,6 +66,7 @@ with lib;
       enable = true;
       # Enable Nushell integration for Atuin.
       enableNushellIntegration = true;
+      daemon.enable = true;
     };
 
     # Direnv configuration

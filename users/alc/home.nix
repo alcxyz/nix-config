@@ -95,7 +95,10 @@ with lib;
   programs.waybar.managed.enable = true;
   programs.wofi.managed.enable = true;
   programs.wlogout.managed.enable = true;
-  services.swww.managed.enable = true;
+  services.swww.managed = {
+    enable = true;
+    systemd.enable = true;
+  };
   services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
   services.hyprlock.wallpaper.useStandardDir = true;

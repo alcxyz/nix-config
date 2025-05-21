@@ -1,23 +1,30 @@
+# modules/nixos/services/deluge/default.nix
 {
-  options, config, lib, pkgs, username, ... }:
+  options, config, lib, pkgs, username, ... }: # Keep username if it's used elsewhere, but we won't use it for Deluge user
 with lib;
 {
-  # Removed options.services.deluge.enable definition
-  # The option services.deluge.enable is defined by the main NixOS Deluge module.
-
   config = mkIf config.services.deluge.enable {
     services.deluge = {
-      # enable = true; # REMOVED: This was causing recursion. The outer mkIf handles enablement.
-      user = "${username}";
-      group = "${config.users.users.${username}.group}";
-      dataDir = "/home/${username}";
+      # No need to explicitly set user and group here.
+      # NixOS defaults to a 'deluge' user/group which is what we want.
+      # user = "${username}"; # REMOVE THIS LINE
+      # group = "${config.users.users.${username}.group}"; # REMOVE THIS LINE
+
+      # Set dataDir to a more appropriate system location, e.g., /var/lib/deluge
+      # This directory will be owned by the 'deluge' user automatically by NixOS.
+      dataDir = "/Downloads"; # CHANGE THIS LINE from /home/${username}
       web.enable = true;
     };
 
     systemd.services.deluged = {
+      # Ensure deluged starts after your ZFS mount, assuming /fundrive is on ZFS
       after = [ "zfs-mount.service" ];
+      # We might also want to ensure the download directory exists and has correct permissions
+      # This is more robustly handled with preStart, or through external setup/manual chown/chmod
+      # but let's do it manually for now as it's a one-time change.
     };
 
+    # The rest of your configuration (firewall, packages) can remain the same
     environment.systemPackages = with pkgs; [
       deluge
     ];
