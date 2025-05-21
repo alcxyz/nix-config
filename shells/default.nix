@@ -3,8 +3,8 @@ pkgs.mkShell {
   nativeBuildInputs = with pkgs; [
     treefmt
 
-    # alejandra # Commented out
+    alejandra
     # python310Packages.mdformat # Commented out
-    # shfmt # Commented out
+    shfmt
   ];
 }

@@ -119,10 +119,10 @@ with lib;
   #programs.gnupg.enable = true;
   programs.ssh.enable = true;
 
-  /* programs.direnv = {
+  programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
-  }; */
+  }; 
 
   #programs.rclone.enable = false;
 
