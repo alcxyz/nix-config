@@ -71,7 +71,6 @@ in
       openssl
       killall
       gptfdisk
-      unzip
       sshfs
       htop
       btop
@@ -79,11 +78,11 @@ in
       python3
       python3Packages.rencode
 
-      xclip
+      wl-clipboard
       xarchiver
-      xsel
       rar
       unrar
+      unzip
 
       nfs-utils
       gnumake
