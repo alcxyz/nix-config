@@ -36,13 +36,20 @@ with lib; # Ensure lib is in scope for mkForce
         User = config.services.deluge.user;
         Group = config.services.deluge.group;
         WorkingDirectory = config.services.deluge.dataDir;
-        #Type = "simple"; # Common for daemons not forking
+        # Type = "simple"; # Common for daemons not forking
         #Restart = "on-failure"; # Or "always"
         #RestartSec = "10s";
         # Path = [ pkgs.coreutils ... ]; # If deluged needs anything specific in PATH
       };
     };
 
+    networking.firewall.allowedTCPPorts = [
+      8112
+      51413
+    ];
+    networking.firewall.allowedUDPPorts = [
+      51413
+    ];
     # This rule ensures the dataDir (defined by services.deluge.dataDir)
     # is created with the correct ownership and permissions.
     #systemd.tmpfiles.rules = [
