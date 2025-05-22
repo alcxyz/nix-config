@@ -1,43 +1,52 @@
 # modules/nixos/services/deluge/default.nix
-{
-  options, config, lib, pkgs, username, ... }: # Keep username if it's used elsewhere, but we won't use it for Deluge user
-with lib;
-{
-  config = mkIf config.services.deluge.enable {
-    services.deluge = {
-      # No need to explicitly set user and group here.
-      # NixOS defaults to a 'deluge' user/group which is what we want.
-      # user = "${username}"; # REMOVE THIS LINE
-      # group = "${config.users.users.${username}.group}"; # REMOVE THIS LINE
+{ config, lib, pkgs, ... }:
 
-      # Set dataDir to a more appropriate system location, e.g., /var/lib/deluge
-      # This directory will be owned by the 'deluge' user automatically by NixOS.
-      user = "deluge";
-      group = "deluge";
-      dataDir = "/hyperdisk/vault/deluge"; # CHANGE THIS LINE from /home/${username}
-      web.enable = true;
-    };
+with lib; # Ensure lib is in scope for mkForce
+
+# No top-level 'let cfg = ...;' here, as 'config.services.deluge' will be used directly
+# or we define a local 'cfg' where needed if it simplifies long paths.
+
+{
+  # Define options for your custom Deluge service if this module is introducing them.
+  # If this module is *only* overriding systemd settings for the *Nixpkgs* Deluge service,
+  # then you wouldn't define options.services.deluge here, you'd just use
+  # config.services.deluge which comes from Nixpkgs.
+  #
+  # Assuming this module is primarily for overriding the systemd unit of the
+  # Nixpkgs Deluge service:
+
+  config = mkIf config.services.deluge.enable { # Check if the Nixpkgs Deluge service is enabled
 
     systemd.services.deluged = {
-      # Ensure deluged starts after your ZFS mount, assuming /fundrive is on ZFS
-      after = [ "zfs-mount.service" ];
-      # We might also want to ensure the download directory exists and has correct permissions
-      # This is more robustly handled with preStart, or through external setup/manual chown/chmod
-      # but let's do it manually for now as it's a one-time change.
+      # You can add other top-level systemd unit options here if needed, like:
+      # description = "My Custom Deluge Daemon";
+      # after = [ "network.target" "my-zfs-mount.service" ];
+
+      serviceConfig = {
+        # Forcefully override ExecStartPre from the Nixpkgs module
+        #ExecStartPre = lib.mkForce null;
+
+        # Forcefully override ExecStart from the Nixpkgs module
+        # Use config.services.deluge directly to access its options
+        #ExecStart = lib.mkForce (
+        #  "${pkgs.deluge}/bin/deluged --do-not-daemonize --config ${config.services.deluge.dataDir}"
+        #);
+
+        # Explicitly set other necessary serviceConfig options
+        User = config.services.deluge.user;
+        Group = config.services.deluge.group;
+        WorkingDirectory = config.services.deluge.dataDir;
+        #Type = "simple"; # Common for daemons not forking
+        #Restart = "on-failure"; # Or "always"
+        #RestartSec = "10s";
+        # Path = [ pkgs.coreutils ... ]; # If deluged needs anything specific in PATH
+      };
     };
 
-    # The rest of your configuration (firewall, packages) can remain the same
-    environment.systemPackages = with pkgs; [
-      deluge
-    ];
-
-    networking.firewall.allowedTCPPorts = [
-      8112 # Deluge web UI
-      51413 # Deluge daemon
-    ];
-    networking.firewall.allowedUDPPorts = [
-      51413 # Deluge daemon also uses UDP
-    ];
-
+    # This rule ensures the dataDir (defined by services.deluge.dataDir)
+    # is created with the correct ownership and permissions.
+    #systemd.tmpfiles.rules = [
+    #  "d '${config.services.deluge.dataDir}' 0750 ${config.services.deluge.user} ${config.services.deluge.group} - -"
+    #];
   };
 }
