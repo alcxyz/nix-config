@@ -4,61 +4,102 @@
 with lib;
 
 let
-  # Define the dedicated user and group for Stash within this module
-  # This makes it self-contained and avoids hardcoding "stash" elsewhere.
-  stashUser = "stash";
-  stashGroup = "stash";
-
+  cfg = config.services.stash.managed;
+  # We get the package from cfg.package, so stashBinary will use the configured one.
+  stashBinary = "${cfg.package}/bin/stash";
 in
 {
-  # Only enable the Stash service if config.services.stash.enable is true
-  config = mkIf config.services.stash.enable {
-    # Define the Stash service using the built-in Nixpkgs definition
-    services.stash = {
-      enable = true; # Enabled here within the module
-      user = stashUser;
-      group = stashGroup;
+  options.services.stash.managed = {
+    enable = mkEnableOption "custom Stash.managed service";
 
-      # The data directory where Stash stores its database, cache, generated files, etc.
-      # This directory will be created and owned by stash:stash automatically by NixOS.
-      dataDir = "/hyperdisk/vault/stash";
+    # Allow package to be configured, defaulting to pkgs.stash
+    package = mkPackageOption pkgs "stash" { }; # Already here, good!
 
-      # The directories where Stash finds your media.
-      # Make sure this path is accessible by the 'stash' user.
-      scriptDirectories = [ "/hyperdisk/stash" ]; # Deluge's download path
-
-      # The port Stash listens on.
-      port = 9999; # Default, adjust if you need a different port
-
-      # Optional: Add extra arguments if needed
-      # extraArguments = [ "--logfile" "/var/log/stash/stash.log" ];
-
-      # Ensure Stash starts after necessary mounts are available.
-      # This is crucial if your /fundrive is a separate filesystem (e.g., ZFS, btrfs, external drive).
-      extraSystemdServiceConfig = {
-        RequiresMountsFor = [ "/hyperdisk/stash" ];
-        # If you have a specific systemd mount unit for /fundrive (e.g. mnt-fundrive.mount),
-        # or a ZFS pool, you might also use: After = [ "zfs-mount.service" ];
-      };
+    user = mkOption {
+      type = types.str;
+      default = "stash-managed";
+      description = "User to run Stash.managed as.";
     };
+    group = mkOption {
+      type = types.str;
+      default = "stash-managed";
+      description = "Group to run Stash.managed as.";
+    };
+    dataDir = mkOption {
+      type = types.path;
+      default = "/var/lib/stash-managed";
+      description = "Directory for Stash.managed data (config.yml, database, etc.).";
+    };
+    mediaDir = mkOption {
+      type = types.path;
+      default = "/hyperdisk/vault/stash";
+      description = "Directory where your Stash.managed media is located.";
+    };
+    port = mkOption {
+      type = types.port;
+      default = 9999;
+      description = "Port for Stash.managed to listen on.";
+    };
+    openFirewall = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Whether to open the Stash.managed port in the firewall.";
+    };
+    autoStart = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Whether Stash.managed should start automatically on boot.";
+    };
+  };
 
-    # Firewall rules specific to Stash
-    networking.firewall.allowedTCPPorts = [
-      config.services.stash.port # Uses the port defined above
+  config = mkIf cfg.enable {
+    # === ENSURE STASH PACKAGE IS INSTALLED ===
+    environment.systemPackages = [
+      cfg.package # This will be pkgs.stash by default
+    ];
+    # =======================================
+
+    users.users.${cfg.user} = {
+      isSystemUser = true;
+      group = cfg.group;
+      home = cfg.dataDir;
+      extraGroups = [ "deluge" ];
+    };
+    users.groups.${cfg.group} = {};
+
+    systemd.tmpfiles.rules = [
+      "d '${cfg.dataDir}' 0750 ${cfg.user} ${cfg.group} - -"
+      "d '${cfg.mediaDir}' 0775 ${cfg.user} ${cfg.group} - -"
     ];
 
-    # Define the system user and group for Stash.
-    # This ensures they exist and allows us to add them to other groups.
-    users.users.${stashUser} = {
-      isSystem = true;
-      group = stashGroup;
-      # Add the 'stash' user to the 'deluge' group so it can read files
-      # downloaded by Deluge. This assumes your Deluge module also defines a 'deluge' group.
-      extraGroups = [ "deluge" ]; # IMPORTANT for cross-service access
+    systemd.services."stash-managed" = {
+      description = "Stash.managed Application Service";
+      after = [ "network.target" ];
+      unitConfig = {
+        RequiresMountsFor = [
+          cfg.dataDir
+          cfg.mediaDir
+        ];
+      };
+      serviceConfig = {
+        Type = "simple";
+        User = cfg.user;
+        Group = cfg.group;
+        WorkingDirectory = cfg.dataDir;
+        ExecStart = ''
+          ${stashBinary}
+        ''; # Uses the stashBinary defined in the let block
+        Path = [ pkgs.coreutils pkgs.ffmpeg-full ];
+        Restart = "on-failure";
+        RestartSec = "10s";
+        ProtectSystem = "full";
+        PrivateTmp = true;
+        ProtectHome = true;
+        NoNewPrivileges = true;
+      };
+      wantedBy = if cfg.autoStart then [ "multi-user.target" ] else [];
     };
-    users.groups.${stashGroup} = {}; # Define the stash group
 
-    # If you use the 'media' group strategy, you would do this instead:
-    # users.users.${stashUser}.extraGroups = [ "media" ]; # instead of "deluge"
+    networking.firewall.allowedTCPPorts = mkIf cfg.openFirewall [ cfg.port ];
   };
 }

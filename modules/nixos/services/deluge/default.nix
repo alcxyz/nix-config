@@ -12,7 +12,9 @@ with lib;
 
       # Set dataDir to a more appropriate system location, e.g., /var/lib/deluge
       # This directory will be owned by the 'deluge' user automatically by NixOS.
-      dataDir = "/Downloads"; # CHANGE THIS LINE from /home/${username}
+      user = "deluge";
+      group = "deluge";
+      dataDir = "/hyperdisk/vault/deluge"; # CHANGE THIS LINE from /home/${username}
       web.enable = true;
     };
 
