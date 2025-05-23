@@ -1,0 +1,175 @@
+# modules/nixos/virtualisation/kvm/default.nix
+{ config, lib, pkgs, username, ... }: # Added username for potential future use if needed
+with lib;
+let
+  cfg = config.virtualisation.kvm-system;
+in
+{
+  options.virtualisation.kvm-system = with lib.types; {
+    enable = lib.mkEnableOption "Whether or not to enable KVM virtualisation.";
+    vfioIds = lib.mkOption {
+      type = listOf str;
+      default = [ "10de:1b80" "10de:10f0" ]; # Secondary 16x
+      description = "The hardware IDs to pass through to a virtual machine.";
+    };
+
+    # New options for deeper libvirt integration
+    libvirtIntegration = {
+      enable = lib.mkEnableOption "Enable deeper libvirt integration (networks, storage pools).";
+      bridgeName = lib.mkOption {
+        type = str;
+        default = "br0"; # Assumes your host bridge is named br0
+        description = "The name of the host bridge interface to use for the libvirt bridged network.";
+      };
+      storagePools = lib.mkOption {
+        type = attrsOf (submodule {
+          options = {
+            name = lib.mkOption {
+              type = str;
+              description = "Name of the storage pool in libvirt.";
+              example = "vms_zfs";
+            };
+            path = lib.mkOption {
+              type = str;
+              description = "Path to the directory for the storage pool.";
+              example = "/hyperdisk/vault/vm";
+            };
+            type = lib.mkOption {
+              type = enum [ "dir" "fs" "netfs" "logical" "disk" "iscsi" "scsi" "mpath" "rbd" "sheepdog" "gluster" "zfs" ];
+              default = "dir";
+              description = "Type of the storage pool.";
+            };
+            # Add other pool-specific options if needed, e.g., for ZFS pools
+            # target.permissions.mode = lib.mkOption { ... };
+            # source.device.path = lib.mkOption { ... }; # For ZFS pool type
+          };
+        });
+        default = {};
+        description = "Declaratively define libvirt storage pools.";
+        example = {
+          main_vms = {
+            name = "vm_storage"; # This will be the name in libvirt
+            path = "/hyperdisk/vault/vm";
+            type = "dir"; # 'dir' type is suitable for a pre-existing directory
+          };
+        };
+      };
+    };
+  };
+
+  config = mkIf cfg.enable {
+    boot = {
+      kernelModules = [
+        "kvm-amd" # or kvm-intel
+        "vfio_virqfd"
+        "vfio_pci"
+        "vfio_iommu_type1"
+        "vfio"
+      ];
+      kernelParams = [
+        "amd_iommu=on" # or intel_iommu=on
+        "amd_iommu=pt" # Optional, for better performance with passthrough
+        "kvm.ignore_msrs=1"
+      ];
+      extraModprobeConfig = ''
+        options kvm_amd nested=1
+        options kvm ignore_msrs=1
+        ${optionalString (length cfg.vfioIds > 0) "options vfio-pci ids=${concatStringsSep "," cfg.vfioIds}"}
+      '';
+    };
+
+    systemd.tmpfiles.rules = [
+      #"f /dev/shm/looking-glass 0660 root qemu-libvirtd -"
+      #"f /dev/shm/scream 0660 root qemu-libvirtd -"
+      # Consider creating the storage pool paths here if libvirt doesn't,
+      # though libvirt usually manages this for 'dir' type pools if the base path exists.
+      # Example:
+      # "d /hyperdisk/vault/vm 0755 root qemu-libvirtd - -" # Adjust user/group as needed
+    ];
+
+    environment.systemPackages = with pkgs; [
+      guestfs-tools
+      virt-manager
+      swtpm
+      libtpms
+      OVMF
+      looking-glass-client
+      # winfsp # Not for host, but good to remember for guest
+      # virtio-win # For guest ISO
+    ];
+
+    virtualisation.libvirtd = {
+      enable = true;
+      onBoot = "ignore"; # Or "start" if you want VMs to auto-start with host
+      onShutdown = "shutdown";
+      qemu = {
+        package = pkgs.qemu_kvm;
+        swtpm.enable = true;
+        ovmf = {
+          enable = true;
+          packages = [
+            (pkgs.OVMF.override {
+              secureBoot = true;
+              tpmSupport = true;
+            }).fd
+          ];
+        };
+        verbatimConfig = ''
+          namespaces = [ ]
+          security_driver = "none" # Often needed for Virtio-FS, especially with passthrough access mode
+        '';
+      };
+
+      # Declarative networks and storage pools if integration is enabled
+      networks = mkIf cfg.libvirtIntegration.enable {
+        # Default NAT network (libvirt usually creates one, but we can be explicit or disable)
+        # "default" = { # You might want to remove or not define this if you only use bridged
+        #   enable = false;
+        # };
+        "bridged_lan" = { # You can name this whatever you like
+          # autostart = true; # Already defaults to true
+          bridge = cfg.libvirtIntegration.bridgeName; # e.g., "br0"
+          # You can also define MAC ranges, DHCP, etc., here if desired,
+          # but for a simple bridge to LAN, this is often enough.
+          # The VM will get its IP from your main LAN DHCP server.
+        };
+      };
+
+      storagePools = mkIf cfg.libvirtIntegration.enable (
+        mapAttrs (poolName: poolConfig: {
+          # autostart = true; # Already defaults to true
+          name = poolConfig.name; # The name libvirt will use
+          type = poolConfig.type;
+          target = if poolConfig.type == "dir" then {
+            path = poolConfig.path;
+            # Permissions can be set here if needed, e.g.
+            # permissions.mode = "0700";
+            # permissions.owner = 107; # qemu user
+            # permissions.group = 107; # qemu group
+          } else if poolConfig.type == "zfs" then {
+            # For ZFS type pool, source name is the ZFS pool name
+            # source.name = "your_zfs_pool_name";
+            # Or source.dir.path for a ZFS dataset
+          } else {}; # Add other types as needed
+          # For 'dir' type, if path is specified in target, source is not needed.
+          # For other types, source might be required.
+          # Example for 'dir' type, ensuring the path is used:
+          source = if poolConfig.type == "dir" then {} else null; # Or specific source attrs
+        }) cfg.libvirtIntegration.storagePools
+      );
+    };
+
+    users.groups.qemu-libvirtd = {};
+    users.users.${username}.extraGroups = [
+      config.virtualisation.libvirtd.group # Correct group for libvirt management
+      # "kvm" # Often added, but libvirtd group is primary for management
+    ];
+
+    # Ensure the qemu user (often 'libvirt-qemu' or 'qemu-kvm') can access ZFS paths if needed
+    # This might require specific ZFS permissions or adding the qemu user to a group with access.
+    # For Virtio-FS with 'passthrough' accessmode, QEMU needs to be able to access the host path
+    # as the user running QEMU (or with its own privileges if security_driver is complex).
+    # Setting `security_driver = "none"` in qemu.conf simplifies this for Virtio-FS,
+    # but be aware of the security implications (QEMU runs with more privilege regarding file access).
+  };
+}
