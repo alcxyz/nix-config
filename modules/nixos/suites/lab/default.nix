@@ -37,6 +37,7 @@ in
       enable = true;
       role = "server";
       extraFlags = toString [
+        "--flannel-iface=br0" # Crucial: Tells Flannel (default CNI) to use br0.
         #"--flannel-backend=none"
         # "--node-ip 192.168.1.100"
         # "--kubelet-arg=v=4"
@@ -46,17 +47,21 @@ in
     services.rpcbind.enable = true;
 
     virtualisation.containers.enable = true;
+    /*
     virtualisation.podman = {
       enable = true;
       #dockerCompat = true;
       defaultNetwork.settings.dns_enabled = true;
     };
+    */
 
-    virtualisation.docker.enable = true;
-    virtualisation.docker.rootless = {
+    virtualisation.docker = {
       enable = true;
-      setSocketVariable = true;
+      rootless.enable = true;
+      rootless.setSocketVariable = true;
     };
+
+    #boot.kernel.sysctl."net.ipv4.ip_forward" = 1;
 
     networking.firewall.allowedTCPPorts = [
       6443 # k3s

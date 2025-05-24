@@ -170,6 +170,8 @@ with lib;
   # ========================================================================
   home.shellAliases = {
     hmxyz = "home-manager switch --flake .#alc-xyz";
+    hmmac = "home-manager switch --flake .#alc-mac";
+    nixyz = "sudo nixos-rebuild switch --flake .#xyz";
 
     # Kubernetes aliases (Assuming 'kubectl' is in your PATH)
     k = "kubectl";
@@ -189,6 +191,9 @@ with lib;
 
     # Editor alias (Assuming 'nvim' is in your PATH)
     v = "nvim";
+
+    # Docker alias (Assuming 'docker' is in your PATH)
+    d = "docker";
 
     # Common navigation and listing aliases
     # Note: Nushell often has built-in commands or prefers piped commands
