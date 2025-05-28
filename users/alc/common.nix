@@ -82,4 +82,10 @@ with lib;
     enable = true;
     nix-direnv.enable = true;
   };
+
+  programs.wezterm.enable = true;
+  programs.git.managed.enable = true;
+  programs.lazygit.managed.enable = true;
+  #programs.gnupg.enable = true;
+  programs.ssh.enable = true;
 }

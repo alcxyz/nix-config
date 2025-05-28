@@ -1,147 +1,168 @@
 # hosts/mac/configuration.nix
-{ config, pkgs, lib, ... }:
+# This file configures the macOS system itself using Nix-Darwin.
+# It does NOT directly manage Home Manager or user-specific dotfiles.
+{ config, pkgs, lib, inputs, ... }: # Ensure 'inputs' is passed if you need to reference other flake inputs
 
 {
-  # Import your Home Manager configuration from flake.nix
-  # This line tells Nix-Darwin to include your user's Home Manager config.
-  # The `home-manager.users.${username}` refers to the output from your flake.nix
-  # (e.g., homeConfigurations.alc-mac in your case)
-  home-manager.users.alc = { config, ... }: {
-    imports = [
-      # You can put basic user settings here, or just import your home-darwin.nix
-      # If you uncomment this, make sure it corresponds to your desired user,
-      # and that your flake.nix is setup to pass it correctly.
-      # However, since you're setting up home-manager *separately* via mkHomeConfiguration,
-      # you typically wouldn't put an `imports` here.
-      # Instead, your `flake.nix`'s `darwin.lib.darwinSystem.modules` (for the mac host)
-      # should include the `home-manager.darwinModules.home-manager` and then pass
-      # the specific user config.
-
-      # Let's check your current flake.nix's darwinSystem:
-      # modules = [ hostAttrs.configuration ];
-      # This means your hosts/mac/configuration.nix *is* the module being imported.
-      # So, inside hosts/mac/configuration.nix, you'd enable home-manager and refer to your user config.
-
-      # Simplified:
-      # This enables the Home Manager module for Darwin, and it will look for users defined later.
-      # home-manager.darwinModules.home-manager
-    ];
-  };
-
-  # System-wide Nix settings
-  nix = {
-    package = pkgs.nix;
-    extraOptions = ''
-      experimental-features = nix-command flakes
-    '';
-  };
-
-  # Set the hostname
-  networking.hostName = "mac"; # Or "my-macbook-pro"
-
-  # List packages installed system-wide for all users
-  environment.systemPackages = with pkgs; [
-    # General CLI tools available to everyone
-    curl
-    wget
-    tmux
-    git
-    vim
-    # Maybe some GUI apps if you want them globally available (less common for apps)
-    # brave
-  ];
-
-  # macOS-specific system services (launchd)
-  services.nginx.enable = lib.mkDefault false; # Example, if you ran nginx
-
-  # macOS system defaults (defaults write commands)
-  system.defaults = {
-    # Finder settings
-    NSGlobalDomain = {
-      _HIHideMenuBar = true; # Hide the menubar (uncommon)
-      AppleShowAllExtensions = true;
-    };
-    Finder = {
-      ShowPathbar = true;
-      ShowStatusBar = true;
-      _FXShowPosixPathInTitle = true;
-    };
-    # Dock settings
-    com.apple.dock = {
-      autohide = true;
-      # Other dock settings
-    };
-    # Keyboard settings
-    "com.apple.keyboard.fnremap" = {
-      # Custom function key remapping
-    };
-  };
-
-  # Other important system settings
-  programs.gnupg.agent = {
-    enable = true;
-    # ... other GPG agent settings, including for YubiKey
-  };
-
-  # Auto upgrade nix package and the daemon service.
-  # This is crucial for managing your Nix setup itself.
+  # 1. Core Nix-Darwin & Nix settings
+  # Enable the Nix daemon (essential for Nix to work properly on macOS)
   services.nix-daemon.enable = true;
-  # nix.autoOptimiseStore = true; # Enables garbage collection optimization
-  # nix.gc = {
-  #   automatic = true;
-  #   dates = "weekly";
-  #   options = "--delete-older-than 7d";
-  # };
 
+  # Enable automatic garbage collection and store optimization (recommended)
+  nix.autoOptimiseStore = true;
+  nix.gc = {
+    automatic = true;
+    dates = "weekly"; # Or "daily", "monthly" etc.
+    options = "--delete-older-than 7d"; # Keep 7 days of generations
+  };
 
-  # Use your NIX_PATH
+  # Configure Nix experimental features (essential for flakes)
+  nix.extraOptions = ''
+    experimental-features = nix-command flakes
+    keep-derivations = true # Good for debugging if something breaks
+    keep-outputs = true     # Good for debugging
+  '';
+
+  # Set the NIX_PATH, though less critical with flakes, still good practice
   nix.nixPath = [
-    "nixpkgs=/nix/var/nix/profiles/per-user/root/channels/nixos"
+    "nixpkgs=${pkgs.path}" # Current nixpkgs being used
     "darwin-config=${config.darwin.system.build.darwinConfiguration}"
-    "home-manager=${home-manager.url}" # This is needed if you refer to HM
+    # No need to reference home-manager here, as it's separate.
   ];
 
-  # Allow unfree packages, etc. (already handled in flake.nix, but good to be explicit)
+  # Allow unfree packages (already in your flake.nix, but harmless to repeat)
   nixpkgs.config.allowUnfree = true;
 
-  # Your system's timezone
-  time.timeZone = "Europe/Oslo"; # Or your local timezone
-
-  # Create /etc/bashrc (or similar)
-  # environment.shells = with pkgs; [ bash zsh ];
-  # users.users.alc.shell = pkgs.zsh;
-
-  # Your Apple ID (needed for some services or purchases)
-  # services.login-items.enable = true; # Example
-  # programs.login-items.items = {
-  #   "Bartender" = "/Applications/Bartender 4.app";
-  # };
-
-  # Required for some setups, often for Rosetta 2 on M1/M2 Macs
-  # system.apply-darwin-paths = true;
-
-  # Auto-build and apply configuration on channel update (similar to NixOS auto-switch)
+  # Auto upgrade Nix package and the daemon service (keeps Nix itself updated)
   system.auto-upgrade.enable = true;
-  system.auto-upgrade.dates = "daily";
+  system.auto-upgrade.dates = "daily"; # Or "weekly"
 
-  # Set the default shell for new users (if not explicitly set per user)
-  # environment.defaultUserShell = pkgs.zsh; # Needs to be defined in environment.shells
+  # 2. System Information
+  # Set the hostname
+  networking.hostName = "mac"; # Change this to your Mac's desired hostname
 
-  # Fonts
+  # Set the system timezone
+  time.timeZone = "America/New_York"; # Change to your actual timezone, e.g., "Europe/Berlin"
+
+  # 3. System-Wide Environment and Packages
+  # List packages to be installed globally on the system (available to all users)
+  # These are generally CLI tools or applications that don't have user-specific configs.
+  environment.systemPackages = with pkgs; [
+    # Common command-line tools
+    git # Git will be system-wide here, but home-manager will manage your git config.
+    wget
+    curl
+    htop
+    neofetch
+    tmux
+    zsh # To make Zsh available as a system shell (often default on macOS anyway)
+    # Any other system-wide tools
+    # fzf # if you want it globally available
+    # ripgrep
+    # fd
+  ];
+
+  # Define system shells (optional, Zsh is often default on modern macOS)
+  # environment.shells = with pkgs; [ bash zsh ];
+  # environment.defaultUserShell = pkgs.zsh; # Sets default for *new* users.
+
+  # 4. macOS System Defaults (using `system.defaults`)
+  # These map to `defaults write` commands and apply system-wide.
+  system.defaults = {
+    # Global domain settings
+    NSGlobalDomain = {
+      # Show all filename extensions
+      AppleShowAllExtensions = true;
+      # Disable the "Are you sure you want to open this application?" dialog
+      # This can be risky if you download untrusted software!
+      # com.apple.LaunchServices.LSQuarantine = false;
+      # Set a faster keyboard repeat rate
+      KeyRepeat = 2;       # default: 6 (2-30 range)
+      InitialKeyRepeat = 15; # default: 60 (15-120 range)
+    };
+
+    # Finder settings
+    Finder = {
+      # Show hidden files (dotfiles) by default
+      AppleShowAllFiles = true;
+      # Show path bar in Finder windows
+      ShowPathbar = true;
+      # Show status bar in Finder windows
+      ShowStatusBar = true;
+      # Use POSIX path in Finder title bar (instead of macOS default)
+      _FXShowPosixPathInTitle = true;
+      # Keep folders on top when sorting by name in Finder
+      _FXSortFoldersFirst = true;
+    };
+
+    # Dock settings
+    "com.apple.dock" = {
+      autohide = true; # Automatically hide and show the Dock
+      orientation = "left"; # Position the Dock on the left
+      magnification = false; # Disable magnification
+      tilesize = 36; # Set a smaller icon size
+      # Enable "minimize windows into application icon"
+      # This is usually managed by Home Manager `programs.dock.pinning` option if enabled
+      # show-process-indicators = false; # Do not show indicator lights for open applications
+    };
+
+    # Screenshot settings
+    "com.apple.screencapture" = {
+      location = "${config.home.homeDirectory}/Pictures/Screenshots"; # Requires creating this dir
+      type = "png"; # Or "jpg", "pdf", etc.
+      # You might also want to set: `disable-shadow = true;`
+    };
+
+    # Disks: Do not show external drives, CDs, DVDs, iPods, and servers on the desktop
+    "com.apple.finder.FXDesktopExtFoldersOnDesktop" = false;
+    "com.apple.finder.FXDesktopCdRemovableDisksOnDesktop" = false;
+    "com.apple.finder.FXDesktopDevicesOnDesktop" = false;
+    "com.apple.finder.FXDesktopServersOnDesktop" = false;
+
+    # Safari (example, if you use it and want system defaults)
+    # com.apple.Safari = {
+    #   "ShowFullURLInSmartSearchField" = true; # Show full URL
+    #   "PreventSafariFromOpeningNewWindowsDueToJavaScriptAlerts" = true;
+    # };
+
+    # Others as needed
+  };
+
+  # 5. Services (Nix-Darwin specific system-level services)
+  # Examples:
+  # services.openssh.enable = true; # If you want system-wide SSH server
+  # services.caffeinate.enable = true; # Prevent display sleep
+  # services.skhd.enable = true; # If you prefer skhd as a system service rather than user
+  # services.yabai.enable = true; # If you prefer yabai as a system service rather than user
+  # You can keep `programs.gnupg.agent.enable = true;` here if you want the GPG agent
+  # to be a system-wide service, rather than just user-level from Home Manager.
+  # Otherwise, move it to common.nix.
+  programs.gnupg.agent = {
+    enable = true;
+    pinentryFlavor = "mac"; # Use macOS native pinentry
+    enableSSHSupport = true;
+  };
+
+  # 6. Security & Privacy (Advanced - use with caution)
+  # E.g., firewall settings, or permissions.
+  # security.allowApplicationsFrom = "appStoreAndIdentifiedDevelopers"; # Default
+  # security.auditd.enable = true;
+
+  # 7. Font Management (system-wide font directories)
   # fonts.fontDir.enable = true;
   # fonts.fonts = with pkgs; [
-  #   fira-code-nerd-font
+  #   fira-code-nerd-font # Example, to install system-wide fonts
+  #   font-symbols-only-nerd-font
   # ];
 
-  # For virtualisation/containers like Docker Desktop (requires certain permissions/settings)
-  # virtualisation.docker.enable = true;
+  # 8. User Management (if you define system users beyond the one Home Manager manages)
+  # users.users.alc.shell = pkgs.zsh; # Set the default shell for the 'alc' user on the system
+  # users.users.alc.home = "/Users/alc"; # Ensure correct home directory for user
+  # users.users.alc.extraGroups = [ "wheel" "staff" ]; # Add user to groups
+  # If you *already* have this user, you might not need to define it here explicitly,
+  # or you'd only set specific attributes.
 
-
-  # Add support for on-disk Nix store (if you're using /nix instead of /Users/youruser/.nix-profile)
-  # You already have this in your flake, but if you needed a separate nix path, this is where
-  # you'd define it if it's system wide.
-  # nix.buildMachines = []; # if you use remote builders
-
-  # Add ability to use 'nix-channel --update' for non-flakes setups (less relevant with flakes)
-  # nix.extraOptions = "build-users-group = nixbld"; # Example for multi-user
+  # 9. Miscellaneous (Optional, depending on your needs)
+  # virtualisation.docker.enable = true; # For Docker Desktop integration (requires system-level config)
+  # boot.cleanBoot = true; # Tries to keep boot process clean, experimental
 }

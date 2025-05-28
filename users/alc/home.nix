@@ -104,6 +104,7 @@ with lib;
   services.hyprlock.wallpaper.useStandardDir = true;
 
   programs.foot.enable = true;
+
   programs.wezterm.enable = true;
   programs.git.managed.enable = true;
   programs.lazygit.managed.enable = true;

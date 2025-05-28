@@ -38,7 +38,7 @@ with lib;
         User root
 
       Host *
-        identityfile ~/.ssh/key # Ensure this path is correct for your user's home directory
+        identityfile ~/.ssh/key
     '';
 
     # Option 2 (Alternative, more declarative using the built-in module's structured options):
