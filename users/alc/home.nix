@@ -1,84 +1,129 @@
-{ config, pkgs, username, ... }:
-
+# users/alc/home.nix
 {
-  imports =
-    [
+  config, # The Home Manager configuration being built
+  pkgs,   # Package set (from homeManagerConfiguration's pkgs or extraSpecialArgs.pkgs)
+  lib,    # Nixpkgs library functions
+  username, # From extraSpecialArgs (value: "alc")
+  inputs,   # From extraSpecialArgs (all flake inputs)
+  ...
+}:
 
-    ];
-  # Home Manager needs a bit of information about you and the paths it should
-  # manage.
-  home.username = username;
-  home.homeDirectory = "/home/${username}";
-  xdg.cacheHome = "/home/${username}/.cache";
-  xdg.configHome = "/home/${username}/.config";
-  xdg.dataHome = "/home/${username}/.local/share";
-  xdg.stateHome = "/home/${username}/.local/state";
+with lib;
 
-  # This value determines the Home Manager release that your configuration is
-  # compatible with. This helps avoid breakage when a new Home Manager release
-  # introduces backwards incompatible changes.
-  #
-  # You should not change this value, even if you update Home Manager. If you do
-  # want to update the value, then make sure to first check the Home Manager
-  # release notes.
-  home.stateVersion = "24.11"; # Please read the comment before changing.
+# The 'let' block for gtkThemeFromScheme is likely no longer needed
+# if it was only for the GTK theme package.
+# If you use gtkThemeFromScheme for other purposes, you can keep it.
+# let
+#   inherit (inputs.nix-colors.lib-contrib {inherit pkgs;}) gtkThemeFromScheme;
+# in
+{
+  # ==================== Imports ====================
+  imports = [
+    # User-specific shell configuration module
+    ../../modules/home-manager/shell/default.nix
 
-  # The home.packages option allows you to install Nix packages into your
-  # environment.
-  home.packages = [
-    # # Adds the 'hello' command to your environment. It prints a friendly
-    # # "Hello, world!" when run.
-    # pkgs.hello
+    # Moved Hyprland and related components
+    ../../modules/home-manager/programs/hyprland/default.nix
+    ../../modules/home-manager/programs/waybar/default.nix
+    ../../modules/home-manager/programs/wofi/default.nix
+    ../../modules/home-manager/programs/wlogout/default.nix
+    ../../modules/home-manager/services/swww/default.nix
+    ../../modules/home-manager/services/hypridle/default.nix
+    ../../modules/home-manager/services/hyprlock/default.nix
 
-    # # It is sometimes useful to fine-tune packages, for example, by applying
-    # # overrides. You can do that directly here, just don't forget the
-    # # parentheses. Maybe you want to install Nerd Fonts with a limited number of
-    # # fonts?
-    # (pkgs.nerdfonts.override { fonts = [ "FantasqueSansMono" ]; })
-
-    # # You can also create simple shell scripts directly inside your
-    # # configuration. For example, this adds a command 'my-hello' to your
-    # # environment:
-    # (pkgs.writeShellScriptBin "my-hello" ''
-    #   echo "Hello, ${config.home.username}!"
-    # '')
+    # Other Home Manager program modules
+    ../../modules/home-manager/programs/foot/default.nix
+    ../../modules/home-manager/programs/wezterm/default.nix
+    ../../modules/home-manager/programs/git/default.nix
+    ../../modules/home-manager/programs/lazygit/default.nix
+    #../../modules/home-manager/programs/gnupg/default.nix
+    ../../modules/home-manager/programs/ssh/default.nix
+    #../../modules/home-manager/programs/rclone/default.nix
   ];
 
-  # Home Manager is pretty good at managing dotfiles. The primary way to manage
-  # plain files is through 'home.file'.
-  home.file = {
-    # # Building this configuration will create a copy of 'dotfiles/screenrc' in
-    # # the Nix store. Activating the configuration will then make '~/.screenrc' a
-    # # symlink to the Nix store copy.
-    # ".screenrc".source = dotfiles/screenrc;
+  # ==================== Home Manager Core Settings ====================
+  home.username = username;
+  home.homeDirectory = if pkgs.stdenv.isDarwin
+                       then "/Users/${username}"
+                       else "/home/${username}";
+  home.stateVersion = "24.11";
 
-    # # You can also set the file content immediately.
-    # ".gradle/gradle.properties".text = ''
-    #   org.gradle.console=verbose
-    #   org.gradle.daemon.idletimeout=3600000
-    # '';
-  };
-
-  # Home Manager can also manage your environment variables through
-  # 'home.sessionVariables'. These will be explicitly sourced when using a
-  # shell provided by Home Manager. If you don't want to manage your shell
-  # through Home Manager then you have to manually source 'hm-session-vars.sh'
-  # located at either
-  #
-  #  ~/.nix-profile/etc/profile.d/hm-session-vars.sh
-  #
-  # or
-  #
-  #  ~/.local/state/nix/profiles/profile/etc/profile.d/hm-session-vars.sh
-  #
-  # or
-  #
-  #  /etc/profiles/per-user/root/etc/profile.d/hm-session-vars.sh
-  #
-  home.sessionVariables = {
-    # EDITOR = "emacs";
-  };
-
-  # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
+
+  # ==================== Nix-Colors Settings ====================
+  # Use the standard nix-colors option to set the theme.
+  # This will be available as config.colorscheme.*
+  colorscheme.name = "catppuccin-mocha";
+
+  # ==================== User Environment ====================
+  #xdg.cacheHome = "${config.home.homeDirectory}/.cache";
+  #xdg.configHome = "${config.home.homeDirectory}/.config";
+  #xdg.dataHome = "${config.home.homeDirectory}/.local/share";
+  #xdg.stateHome = "${config.home.homeDirectory}/.local/state";
+
+  home.sessionVariables = {
+    EDITOR = "nvim";
+    DIRENV_LOG_FORMAT = "";
+    FLAKE = "/home/${username}/nix-config";
+  };
+
+  # ==================== Desktop Customization ====================
+
+
+  # ==================== Packages and Files ====================
+  home.packages = with pkgs; [
+    # neofetch
+    # htop
+  ];
+
+  home.file = {
+    "Documents/.keep".text = "";
+    "Downloads/.keep".text = "";
+    "Music/.keep".text = "";
+    "Pictures/.keep".text = "";
+    ".face".source = ./profile.jpg;
+    "Pictures/profile.jpg".source = ./profile.jpg;
+    ".config/wallpapers" = {
+      source = ./wallpapers;
+      recursive = true;
+    };
+  };
+
+  # ==================== Program and Feature Enabling ====================
+  #DESKTOP AND WINDOW MANAGEMENT FOR LINUX ONLY
+  programs.hyprland.managed.enable = true;
+  programs.waybar.managed.enable = true;
+  programs.wofi.managed.enable = true;
+  programs.wlogout.managed.enable = true;
+  services.swww.managed = {
+    enable = true;
+    systemd.enable = true;
+  };
+  services.hypridle.managed.enable = true;
+  services.hyprlock.enable = true;
+  services.hyprlock.wallpaper.useStandardDir = true;
+
+  programs.foot.enable = true;
+  programs.wezterm.enable = true;
+  programs.git.managed.enable = true;
+  programs.lazygit.managed.enable = true;
+  #programs.gnupg.enable = true;
+  programs.ssh.enable = true;
+
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  }; 
+
+  #programs.rclone.enable = false;
+
+
+    #LEAVE THIS COMMENT BLOCK FOR LATER - SIMPLY IGNORE IT FOR NOW!
+    # Assuming prism is a Home Manager option (adjust if it's NixOS specific)
+    # prism = {
+    #   enable = true;
+    #   wallpapers = ./wallpapers; # Path is now relative to this file (modules/home-manager/desktop/)
+    #   colorscheme = inputs.nix-colors.colorschemes.${cfg.colorscheme};
+    # };
+
 }
