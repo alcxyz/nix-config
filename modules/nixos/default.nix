@@ -36,6 +36,11 @@ in
 
     services.ssh.enable = true;
 
+    environment.variables = {
+      EDITOR = "nvim";
+      VISUAL = "nvim";
+    };
+
     environment.systemPackages = with pkgs; [
       stash
       neovim
@@ -48,6 +53,7 @@ in
       ranger
       bunster
       portal
+      sops
       age
       sshs
 

@@ -8,6 +8,7 @@ with lib;
 
     hardware.bluetooth = {
       # enable = true; # REMOVED: This was causing recursion.
+      powerOnBoot = true;
       settings = {
         General = {
           FastConnectable = true;

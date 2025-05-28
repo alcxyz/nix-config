@@ -17,6 +17,7 @@ let
   # publicKey is hardcoded. This is fine for a personal configuration.
   # For a more generic module, this could be an option itself.
   publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@AM-VYH2F56CR6";
+  yikzinKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIAhSQvuNQAtvN+ibnJ23+WnqTdENXVyrRJ538sBKUfx ZIN";
 in
 {
   # Define the custom option for enabling this SSH server configuration
@@ -56,6 +57,10 @@ in
       # This dynamically uses the 'username' from specialArgs.
       ${username}.openssh.authorizedKeys.keys = [
         publicKey
+      ];
+
+      yikzin.openssh.authorizedKeys.keys = [
+        #yikzinKey
       ];
     };
 

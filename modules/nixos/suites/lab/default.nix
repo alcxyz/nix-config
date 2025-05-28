@@ -37,7 +37,7 @@ in
       enable = true;
       role = "server";
       extraFlags = toString [
-        "--flannel-iface=br0" # Crucial: Tells Flannel (default CNI) to use br0.
+        #"--flannel-iface=br0" # Crucial: Tells Flannel (default CNI) to use br0.
         #"--flannel-backend=none"
         # "--node-ip 192.168.1.100"
         # "--kubelet-arg=v=4"
@@ -91,6 +91,7 @@ in
       cockpit
       podman-compose
       lima
+      wemux
     ];
   };
 }

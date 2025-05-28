@@ -1,15 +1,15 @@
 { options
 , config
-, lib,
-  pkgs # Added pkgs for config.boot.kernelPackages
+, lib
+, pkgs
 , ...
 }:
 with lib;
 let
-  cfg = config.hardware.nvidia; # cfg now refers to the attrset hardware.nvidia
+  cfg = config.hardware.nvidia;
 in
 {
-  options.hardware.nvidia.enable = mkOption { # Corrected: .enable is added here
+  options.hardware.nvidia.enable = mkOption {
     type = types.bool;
     default = false;
     description = "Enable drivers and patches for Nvidia hardware.";
@@ -20,23 +20,25 @@ in
   # options.hardware.nvidia.nvidiaSettings = mkOption { type = types.bool; default = true; };
   # options.hardware.nvidia.package = mkOption { type = types.package; /* default based on kernel */ };
 
-  config = mkIf cfg.enable { # cfg.enable now correctly refers to options.hardware.nvidia.enable
+  config = mkIf cfg.enable {
     services.xserver.videoDrivers = [ "nvidia" ];
     hardware.nvidia = {
       modesetting.enable = true;
-      open = false; # Consider making this configurable via an option if needed
-      nvidiaSettings = true; # Consider making this configurable
+      open = false;
+      nvidiaSettings = true;
       # Ensure pkgs is available if you access config.boot.kernelPackages
-      package = config.boot.kernelPackages.nvidiaPackages.production;
+      package = config.boot.kernelPackages.nvidiaPackages.beta;
     };
 
     # Enable OpenGL and hardware acceleration.
     hardware.graphics.enable = true;
     #hardware.opengl.driSupport = true; # These are often implicitly handled or part of graphics.enable
-    #hardware.opengl.driSupport32Bit = true;
+    hardware.opengl.driSupport32Bit = true;
 
     environment.variables = {
       CUDA_CACHE_PATH = "$XDG_CACHE_HOME/nv";
+      GBM_BACKEND = "nvidia-drm";
+      __GLX_VENDOR_LIBRARY_NAME = "nvidia";
     };
     environment.shellAliases = { nvidia-settings = "nvidia-settings --config='$XDG_CONFIG_HOME'/nvidia/settings"; };
 

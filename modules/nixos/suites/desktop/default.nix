@@ -28,6 +28,7 @@ in
       obsidian
       obs-studio
       gimp3-with-plugins
+      libreoffice
       calibre
       cameractrls
       cameractrls-gtk4

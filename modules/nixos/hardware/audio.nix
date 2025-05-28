@@ -26,23 +26,11 @@ in
       wireplumber.enable = true;
       jack.enable = false;
       pulse.enable = true;
-      extraConfig.pipewire = {
-        "context.modules" = [
-          {
-            name = "libpipewire-module-raop-discover latency_msec=2000";
-          }
-        ];
-      };
-    };
-    services.avahi = {
-      enable = true;
-      nssmdns4 = true;
     };
     services.pulseaudio.enable = false;
-    environment.systemPackages = with pkgs; [
-      #shairport-sync
-      #shairport-sync-airplay2
-    ];
+
+    #environment.systemPackages = with pkgs; [
+    #];
     #programs.noisetorch.enable = true;
   };
 }
