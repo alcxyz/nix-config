@@ -26,7 +26,7 @@
   outputs = { self, nixpkgs, darwin, home-manager, nix-colors, ... }@inputs:
   let
     username = "alc";
-    lib = nixpkgs.lib; # For lib.mapAttrs'
+    lib = nixpkgs.lib;
 
     linuxPkgs = import nixpkgs {
       system = "x86_64-linux";
@@ -48,54 +48,18 @@
       mac = { configuration = ./hosts/mac/configuration.nix; };
     };
 
-    allNixosSystems = builtins.mapAttrs
-      (hostName: hostAttrs:
-        nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = {
-            inherit inputs hostName username;
-            configDir = self;
-            pkgs = linuxPkgs;
-          };
-          modules = [
-            { nixpkgs.system = "x86_64-linux"; }
-            { nixpkgs.pkgs = linuxPkgs; }
-            hostAttrs.configuration
-            self.modules.nixos
-          ];
-        }
-      )
-      nixosHosts;
-
-    allDarwinSystems = builtins.mapAttrs
-      (hostName: hostAttrs:
-        darwin.lib.darwinSystem {
-          system = "aarch64-darwin";
-          specialArgs = {
-            inherit inputs hostName username;
-            configDir = self;
-            pkgs = darwinPkgs;
-          };
-          modules = [
-            hostAttrs.configuration
-          ];
-        }
-      )
-      darwinHosts;
-
     # Helper function to create a Home Manager configuration
-    # Takes the system string (e.g., "x86_64-linux") and the pkgs for that system
-    mkHomeConfiguration = systemForUser: pkgsForUser:
+    mkHomeConfiguration = systemForUser: pkgsForUser: homeConfigPath:
       home-manager.lib.homeManagerConfiguration {
-        pkgs = pkgsForUser; # This is the pkgs Home Manager will primarily use
+        pkgs = pkgsForUser;
         extraSpecialArgs = {
-          inherit inputs username; # username is "alc"
-          system = systemForUser; # e.g., "x86_64-linux" or "aarch64-darwin"
-          pkgs = pkgsForUser; # Make pkgs available in home.nix via extraSpecialArgs too
+          inherit inputs username systemForUser;
+          configDir = self;
+          pkgs = pkgsForUser;
         };
         modules = [
-          ./users/${username}/home.nix
-          inputs.nix-colors.homeManagerModules.default # Inlined here
+          homeConfigPath
+          inputs.nix-colors.homeManagerModules.default
         ];
       };
 
@@ -107,21 +71,19 @@
 
     homeConfigurations =
       let
-        # Create home configurations for NixOS hosts
         nixosHomeConfigs = lib.mapAttrs' (hostName: _:
           lib.nameValuePair "${username}-${hostName}" (
-            mkHomeConfiguration "x86_64-linux" linuxPkgs
+            mkHomeConfiguration "x86_64-linux" linuxPkgs ./users/${username}/home-linux.nix
           )
         ) nixosHosts;
 
-        # Create home configurations for Darwin hosts
         darwinHomeConfigs = lib.mapAttrs' (hostName: _:
           lib.nameValuePair "${username}-${hostName}" (
-            mkHomeConfiguration "aarch64-darwin" darwinPkgs
+            mkHomeConfiguration "aarch64-darwin" darwinPkgs ./users/${username}/home-darwin.nix
           )
         ) darwinHosts;
       in
-      nixosHomeConfigs // darwinHomeConfigs; # Merge them
+      nixosHomeConfigs // darwinHomeConfigs;
 
     devShells = builtins.listToAttrs (map (system: {
       name = system;
@@ -142,4 +104,3 @@
     };
   };
 }
-
