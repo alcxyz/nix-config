@@ -78,6 +78,7 @@
       # Show all filename extensions
       AppleShowAllExtensions = true;
       loginwindow.LoginwindowText = "Those who would give up essential Liberty, to purchase a little temporary Safety, deserve neither Liberty nor Safety.";
+      screensaver.askForPasswordDelay = 10;
       # Disable the "Are you sure you want to open this application?" dialog
       # This can be risky if you download untrusted software!
       # com.apple.LaunchServices.LSQuarantine = false;
@@ -87,7 +88,8 @@
     };
 
     # Finder settings
-    Finder = {
+    finder = {
+      AppleShowAllExtensions = true;
       # Show hidden files (dotfiles) by default
       AppleShowAllFiles = true;
       # Show path bar in Finder windows
@@ -101,7 +103,7 @@
     };
 
     # Dock settings
-    "com.apple.dock" = {
+    dock = {
       autohide = true; # Automatically hide and show the Dock
       #orientation = "left"; # Position the Dock on the left
       magnification = true; # Disable magnification
