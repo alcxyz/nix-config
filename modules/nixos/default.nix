@@ -85,6 +85,7 @@ in
       python3Packages.rencode
 
       wl-clipboard
+      xclip
       xarchiver
       rar
       unrar

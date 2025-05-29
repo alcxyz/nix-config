@@ -31,8 +31,8 @@ with lib;
 
   # Linux-specific packages
   home.packages = with pkgs; [
-    wl-clipboard # For Wayland clipboard
-    xclip        # For X11 clipboard
+    #wl-clipboard # For Wayland clipboard
+    #xclip        # For X11 clipboard
     nitch
   ];
 
