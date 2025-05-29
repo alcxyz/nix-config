@@ -26,6 +26,11 @@ with lib;
     # Option 1 (Your current approach): Manage the config file directly using home.file
     # This is a valid way to place a literal config file for the user.
     home.file.".ssh/config".text = ''
+      identityfile ~/.ssh/key
+      identityfile ~/.ssh/id_ed25519
+      identityfile ~/.ssh/id_ed25519_sk
+      identityfile ~/.ssh/id_ed25519_sk_rk
+
       Host rpi*
         User root
 
@@ -36,9 +41,6 @@ with lib;
       Host vps
         Hostname 46.202.150.96
         User root
-
-      Host *
-        identityfile ~/.ssh/key
     '';
 
     # Option 2 (Alternative, more declarative using the built-in module's structured options):
