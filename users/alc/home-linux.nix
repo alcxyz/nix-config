@@ -82,9 +82,4 @@ with lib;
   services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
   services.hyprlock.wallpaper.useStandardDir = true;
-
-  # Any other Linux-specific packages or configurations
-  home.packages = with pkgs; [
-    # swaylock # Example of a Linux-only package
-  ];
 }
