@@ -103,6 +103,6 @@ with lib;
     gpl = "git pull"; gst = "git status";
     glog = "git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
     t = "tmux"; ta = "tmux a";
-    neofetch = "nitch";
+    #neofetch = "nitch";
   };
 }

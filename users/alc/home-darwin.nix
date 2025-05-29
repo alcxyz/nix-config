@@ -8,6 +8,7 @@ with lib;
   home.packages = with pkgs; [
     mas
     darwin.system_cmds # If needed for `defaults` in other HM modules, but avoid in shell
+    neofetch
   ];
   programs.atuin.daemon.enable = false;
 
@@ -94,8 +95,8 @@ with lib;
   # macOS-specific home activation (optional)
   home.activation.macosDefaults = lib.hm.dag.entryAfter ["writeBoundary"] ''
     # Set some macOS defaults via home-manager
-    $DRY_RUN_CMD defaults write com.apple.dock autohide -bool true
-    $DRY_RUN_CMD defaults write com.apple.dock tilesize -int 44
-    $DRY_RUN_CMD killall Dock 2>/dev/null || true
+    $DRY_RUN_CMD /usr/bin/defaults write com.apple.dock autohide -bool true
+    $DRY_RUN_CMD /usr/bin/defaults write com.apple.dock tilesize -int 44
+    $DRY_RUN_CMD /usr/bin/killall Dock 2>/dev/null || true  # Use absolute path for killall too
   '';
 }
