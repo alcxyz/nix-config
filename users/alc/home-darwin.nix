@@ -12,7 +12,7 @@ with lib;
 
 {
   imports = [
-    ./common.nix # <--- Import the common configuration first
+    ./common.nix
 
     # macOS-specific imports (e.g., for yabai, skhd, system defaults)
     # Example: ../../modules/home-manager/macos/system-defaults.nix
@@ -46,4 +46,15 @@ with lib;
   #     killall Finder
   #   '';
   # };
+
+  programs.zsh = {
+    enable = true;
+    initExtra = ''
+      # Add any additional configurations here
+      export PATH=/run/current-system/sw/bin:$HOME/.nix-profile/bin:$PATH
+      if [ -e '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' ]; then
+        . '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'
+      fi
+    '';
+  };
 }

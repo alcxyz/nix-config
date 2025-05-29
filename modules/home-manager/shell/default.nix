@@ -17,7 +17,7 @@ with lib;
     # Essential shell tools and utilities
     zoxide        # Fast directory jumper
     starship      # Cross-shell prompt
-    carapace    # Multi-shell completion
+    carapace      # Multi-shell completion
     atuin         # Sync, searchable shell history
     direnv        # Load and unload environment variables based on directory
 

@@ -5,7 +5,7 @@
   lib,
   username,
   inputs,
-  system, # Passed from extraSpecialArgs, useful if a "common" setting needs slight variation
+  system,
   ...
 }:
 
@@ -36,12 +36,12 @@ with lib;
   home.homeDirectory = if pkgs.stdenv.isDarwin
                        then "/Users/${username}"
                        else "/home/${username}";
-  home.stateVersion = "24.11"; # This is usually common
+  home.stateVersion = "24.11";
 
-  programs.home-manager.enable = true; # This is common
+  programs.home-manager.enable = true;
 
   # ==================== Nix-Colors Settings ====================
-  colorscheme.name = "catppuccin-mocha"; # Assuming you want the same colorscheme
+  colorscheme.name = "catppuccin-mocha";
 
   # ==================== User Environment ====================
   home.sessionVariables = {

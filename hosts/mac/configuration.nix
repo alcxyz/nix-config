@@ -39,10 +39,10 @@
 
   # 2. System Information
   # Set the hostname
-  networking.hostName = "mac"; # Change this to your Mac's desired hostname
+  networking.hostName = "mac";
 
   # Set the system timezone
-  time.timeZone = "America/New_York"; # Change to your actual timezone, e.g., "Europe/Berlin"
+  time.timeZone = "Europe/Oslo";
 
   # 3. System-Wide Environment and Packages
   # List packages to be installed globally on the system (available to all users)
@@ -56,6 +56,10 @@
     neofetch
     tmux
     zsh # To make Zsh available as a system shell (often default on macOS anyway)
+    vim
+    direnv
+    sshs
+    glow
     # Any other system-wide tools
     # fzf # if you want it globally available
     # ripgrep
@@ -73,6 +77,7 @@
     NSGlobalDomain = {
       # Show all filename extensions
       AppleShowAllExtensions = true;
+      loginwindow.LoginwindowText = "Those who would give up essential Liberty, to purchase a little temporary Safety, deserve neither Liberty nor Safety.";
       # Disable the "Are you sure you want to open this application?" dialog
       # This can be risky if you download untrusted software!
       # com.apple.LaunchServices.LSQuarantine = false;
@@ -98,8 +103,8 @@
     # Dock settings
     "com.apple.dock" = {
       autohide = true; # Automatically hide and show the Dock
-      orientation = "left"; # Position the Dock on the left
-      magnification = false; # Disable magnification
+      #orientation = "left"; # Position the Dock on the left
+      magnification = true; # Disable magnification
       tilesize = 36; # Set a smaller icon size
       # Enable "minimize windows into application icon"
       # This is usually managed by Home Manager `programs.dock.pinning` option if enabled
@@ -145,6 +150,7 @@
 
   # 6. Security & Privacy (Advanced - use with caution)
   # E.g., firewall settings, or permissions.
+    security.pam.enableSudoTouchIdAuth = true;
   # security.allowApplicationsFrom = "appStoreAndIdentifiedDevelopers"; # Default
   # security.auditd.enable = true;
 
