@@ -6,12 +6,12 @@ with lib;
   imports = [ ./common.nix ];
   # macOS-specific packages
   home.packages = with pkgs; [
-    mas # Mac App Store CLI
+    mas
     darwin.system_cmds # If needed for `defaults` in other HM modules, but avoid in shell
   ];
-  programs.atuin.daemon.enable = true; # Optionally enable for macOS
+  programs.atuin.daemon.enable = false;
 
-  # This is the macOS-specific part of extraConfig.
+    # This is the macOS-specific part of extraConfig.
   # It will be concatenated AFTER the common part from shell/default.nix.
   programs.nushell.extraConfig = ''
     # --- macOS-Specific Nushell Additions (Part 2) ---
@@ -43,17 +43,19 @@ with lib;
       fi
     '';
   };
+  
+  programs.gpg.managed.agent.pinentryPackage = pkgs.pinentry_mac;
 
   programs.git.managed = {
-    userName = "alcxyz"; # Global default
-    userEmail = "me@alc.no"; # Global default
-    signingKey = "${config.home.homeDirectory}/.ssh/id_ed25519.pub"; # Global default signing key
-    signByDefault = true; # Sign commits by default globally
+    userName = "alcxyz";
+    userEmail = "me@alc.no";
+    signingKey = "${config.home.homeDirectory}/.ssh/id_ed25519.pub";
+    signByDefault = true;
 
     # Other global extra configs
     extraConfig = {
-      core = { editor = "nvim"; }; # Corrected
-      # gpg.format = "ssh"; # This is already in the module's defaultExtraConfig
+      core = { editor = "nvim"; };
+      gpg.format = "ssh";
     };
 
     aliases = {

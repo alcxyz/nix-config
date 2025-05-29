@@ -16,24 +16,24 @@ with lib;
   programs = {
     starship = {
       enable = true;
-      enableNushellIntegration = true; # Let HM handle this
+      enableNushellIntegration = true;
     };
     zoxide = {
       enable = true;
-      enableNushellIntegration = true; # Let HM handle this
+      enableNushellIntegration = true;
     };
-    carapace = { # Carapace might still need manual if HM's isn't perfect
+    carapace = {
       enable = true;
-      enableNushellIntegration = true; # Let HM handle this
+      enableNushellIntegration = true;
     };
     atuin = {
       enable = true;
-      enableNushellIntegration = true; # Let HM handle this
-      #daemon.enable = true; # Platform-specific files will enable daemon
+      enableNushellIntegration = true;
+      #daemon.enable = true;
     };
     direnv = {
       enable = true;
-      enableNushellIntegration = true; # Let HM handle this
+      enableNushellIntegration = true;
     };
 
     nushell = {

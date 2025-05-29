@@ -82,4 +82,5 @@ with lib;
   services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
   services.hyprlock.wallpaper.useStandardDir = true;
+  services.gpg-agent.pinentry.package = pkgs.pinentry-gtk2;
 }

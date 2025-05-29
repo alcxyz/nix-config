@@ -1,30 +1,18 @@
-{
-  options,
-  config,
-  lib,
-  pkgs,
-  ...
-}:
+# modules/nixos/programs/gnupg/default.nix
+{ config, lib, pkgs, ... }:
+
 with lib;
+
 {
-  options.programs.gnupg = with types; {
-    enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable gnupg system configuration";
-    };
-  };
+  # Define an option for enabling system-level GPG related features
+  options.mySystem.gnupg.smartcardSupport = mkEnableOption "system-wide smart card daemon (pcscd) for GnuPG and other uses";
+  # You could also have options for installing a base gnupg package system-wide if desired,
+  # though often not strictly necessary if Home Manager handles it for users.
 
-  config = mkIf config.programs.gnupg.enable {
-    # System-level package installations for pinentry
-    environment.systemPackages = with pkgs; [
-      pinentry
-      pinentry-curses
-    ];
-
-    # System-level service for pcscd (smart card reader daemon)
+  config = mkIf config.mySystem.gnupg.smartcardSupport {
     services.pcscd.enable = true;
 
-    # Note: User-specific GnuPG agent and config are in the Home Manager module
+    # Example: If you wanted to ensure gnupg is available system-wide for some reason
+    # environment.systemPackages = [ pkgs.gnupg ];
   };
 }
