@@ -27,12 +27,11 @@ in
       open = false;
       nvidiaSettings = true;
       # Ensure pkgs is available if you access config.boot.kernelPackages
-      package = config.boot.kernelPackages.nvidiaPackages.beta;
+      package = config.boot.kernelPackages.nvidiaPackages.stable;
     };
 
     # Enable OpenGL and hardware acceleration.
     hardware.graphics.enable = true;
-    #hardware.opengl.driSupport = true; # These are often implicitly handled or part of graphics.enable
     hardware.graphics.enable32Bit = true;
 
     environment.variables = {
