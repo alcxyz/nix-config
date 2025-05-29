@@ -9,7 +9,7 @@ with lib;
     mas # Mac App Store CLI
     darwin.system_cmds # If needed for `defaults` in other HM modules, but avoid in shell
   ];
-  #programs.atuin.daemon.enable = true; # Optionally enable for macOS
+  programs.atuin.daemon.enable = true; # Optionally enable for macOS
 
   # This is the macOS-specific part of extraConfig.
   # It will be concatenated AFTER the common part from shell/default.nix.

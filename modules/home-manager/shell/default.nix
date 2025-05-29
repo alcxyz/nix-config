@@ -29,7 +29,7 @@ with lib;
     atuin = {
       enable = true;
       enableNushellIntegration = true; # Let HM handle this
-      daemon.enable = true; # Platform-specific files will enable daemon
+      #daemon.enable = true; # Platform-specific files will enable daemon
     };
     direnv = {
       enable = true;
