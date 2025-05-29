@@ -45,17 +45,17 @@ with lib;
     # (No specific PATH modifications needed for Linux beyond common, usually)
 
     # Linux clipboard helper
-    def clipboard [action: string] {
-        if $action == "copy" {
-            if (which wl-copy | is-not-empty) { wl-copy }
-            else if (which xclip | is-not-empty) { xclip -selection clipboard }
-            else { print "Error: No clipboard tool (wl-copy or xclip) found for copy." }
-        } else if $action == "paste" {
-            if (which wl-paste | is-not-empty) { wl-paste }
-            else if (which xclip | is-not-empty) { xclip -selection clipboard -o }
-            else { print "Error: No clipboard tool (wl-paste or xclip) found for paste." }
-        } else { print "Usage: clipboard <copy|paste>" }
-    }
+    #def clipboard [action: string] {
+    #    if $action == "copy" {
+    #        if (which wl-copy | is-not-empty) { wl-copy }
+    #        else if (which xclip | is-not-empty) { xclip -selection clipboard }
+    #        else { print "Error: No clipboard tool (wl-copy or xclip) found for copy." }
+    #    } else if $action == "paste" {
+    #        if (which wl-paste | is-not-empty) { wl-paste }
+    #        else if (which xclip | is-not-empty) { xclip -selection clipboard -o }
+    #        else { print "Error: No clipboard tool (wl-paste or xclip) found for paste." }
+    #    } else { print "Usage: clipboard <copy|paste>" }
+    #}
     # --- End Linux-Specific Nushell Additions (Part 2) ---
   '';
 

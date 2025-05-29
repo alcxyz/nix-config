@@ -56,33 +56,40 @@ with lib;
 
         # Common PATH setup (Nix, User, System base)
         # Platform-specific configs will MODIFY $env.PATH after this.
-        let nix_paths = [
-            $"($env.HOME)/.nix-profile/bin",
-            "/run/current-system/sw/bin",
-            "/nix/var/nix/profiles/default/bin"
+        #let nix_paths = [
+        #    $"($env.HOME)/.nix-profile/bin",
+        #    "/run/current-system/sw/bin",
+        #    "/nix/var/nix/profiles/default/bin"
+        #]
+        #let user_paths = [ $"($env.HOME)/.cargo/bin", $"($env.HOME)/.local/bin" ]
+        #let system_paths = [ "/usr/bin", "/bin", "/usr/sbin", "/sbin" ]
+        #$env.PATH = ($nix_paths ++ $user_paths ++ $system_paths | where {|p| ($p | path exists)} | uniq)
+
+        # In your nushell extraConfig, IF NEEDED:
+        let custom_paths = [
+            $"($env.HOME)/.cargo/bin",
+            $"($env.HOME)/.local/bin"
         ]
-        let user_paths = [ $"($env.HOME)/.cargo/bin", $"($env.HOME)/.local/bin" ]
-        let system_paths = [ "/usr/bin", "/bin", "/usr/sbin", "/sbin" ]
-        $env.PATH = ($nix_paths ++ $user_paths ++ $system_paths | where {|p| ($p | path exists)} | uniq)
+        $env.PATH = ($env.PATH | append $custom_paths | uniq | where {|p| ($p | path exists) })
 
         # Common Custom Nushell functions
-        def , [...packages] { nix shell ($packages | each {|s| $"nixpkgs#($s)"}) }
-        def la [] { ls -la | sort-by type name }
-        def .. [] { cd .. }
-        def ... [] { cd ../.. }
-        def gs [] { git status --short }
+        #def , [...packages] { nix shell ($packages | each {|s| $"nixpkgs#($s)"}) }
+        #def la [] { ls -la | sort-by type name }
+        #def .. [] { cd .. }
+        #def ... [] { cd ../.. }
+        #def gs [] { git status --short }
 
         # Debugging tool check
-        def check-tools [] {
-            let tools = ["nvim", "git", "starship", "zoxide", "direnv", "atuin"]
-            $tools | each {|tool|
-                {
-                    tool: $tool,
-                    available: (which $tool | is-not-empty),
-                    path: (which $tool | get path.0? | default "not found")
-                }
-            }
-        }
+        #def check-tools [] {
+        #    let tools = ["nvim", "git", "starship", "zoxide", "direnv", "atuin"]
+        #    $tools | each {|tool|
+        #        {
+        #            tool: $tool,
+        #            available: (which $tool | is-not-empty),
+        #            path: (which $tool | get path.0? | default "not found")
+        #        }
+        #    }
+        #}
         # --- End Common Nushell Configuration (Part 1) ---
       '';
     };
