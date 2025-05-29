@@ -33,7 +33,7 @@ in
     # Enable OpenGL and hardware acceleration.
     hardware.graphics.enable = true;
     #hardware.opengl.driSupport = true; # These are often implicitly handled or part of graphics.enable
-    hardware.opengl.driSupport32Bit = true;
+    hardware.graphics.enable32Bit = true;
 
     environment.variables = {
       CUDA_CACHE_PATH = "$XDG_CACHE_HOME/nv";
