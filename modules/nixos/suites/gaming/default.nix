@@ -15,6 +15,9 @@ in
   };
 
   config = mkIf cfg.enable {
+    # Ensure audio is enabled as a dependency
+    hardware.audio.enable = mkDefault true;
+
     # Ensure your main user 'alc' is in necessary groups (audio, video, input, media)
     # This is already handled in your hosts/xyz/configuration.nix
 
@@ -36,17 +39,62 @@ in
       pipewire
     ];
 
-    # PipeWire/PulseAudio configuration for the virtual sink
-    # This ensures the null sink is loaded when PipeWire starts.
-    services.pulseaudio.extraConfig = ''
-      load-module module-null-sink sink_name=GameAudioSink sink_properties=device.description="Virtual_Sink_for_Games"
-    '';
-    # If you are purely on PipeWire without pulseaudio.enable = true,
-    # you might need to use PipeWire's native config or a WirePlumber script.
-    # However, `hardware.pulseaudio.extraConfig` often works for PipeWire too
-    # as PipeWire implements the PulseAudio API.
-    # Let's assume your `hardware.audio.enable = true` (which enables PipeWire with Pulse support)
-    # from `modules/nixos/default.nix` makes this work.
+    # Create persistent PipeWire null sink for game audio routing
+    systemd.user.services.pipewire-game-sink = {
+      description = "Create persistent PipeWire game audio sink";
+      wantedBy = [ "pipewire.service" ];
+      after = [ "pipewire.service" ];
+      requisite = [ "pipewire.service" ];
+      
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = let
+          createSinkScript = pkgs.writeShellScript "create-game-sink" ''
+            # Wait for PipeWire to be fully ready
+            timeout=10
+            while [ $timeout -gt 0 ]; do
+              if ${pkgs.pipewire}/bin/pw-cli info &>/dev/null; then
+                break
+              fi
+              sleep 1
+              timeout=$((timeout - 1))
+            done
+            
+            # Check if sink already exists to avoid duplicates
+            if ! ${pkgs.pipewire}/bin/pw-cli ls Node | ${pkgs.gnugrep}/bin/grep -q "GameAudioSink"; then
+              # Create the null sink with all specified properties
+              ${pkgs.pipewire}/bin/pw-cli create-node adapter '{
+                factory.name=support.null-audio-sink
+                node.name=GameAudioSink
+                node.description="Virtual_Sink_for_Games"
+                media.class=Audio/Sink
+                audio.channels=2
+                audio.position=[FL,FR]
+                object.linger=true
+                node.dont-remix=true
+                node.pause-on-idle=false
+              }'
+            fi
+          '';
+        in "${createSinkScript}";
+        
+        ExecStop = let
+          removeSinkScript = pkgs.writeShellScript "remove-game-sink" ''
+            # Find and destroy the sink by name
+            SINK_ID=$(${pkgs.pipewire}/bin/pw-cli ls Node | \
+              ${pkgs.gnugrep}/bin/grep -A5 "GameAudioSink" | \
+              ${pkgs.gnugrep}/bin/grep "id:" | \
+              ${pkgs.gawk}/bin/awk '{print $2}' | \
+              ${pkgs.gnused}/bin/sed 's/,//')
+            
+            if [ -n "$SINK_ID" ]; then
+              ${pkgs.pipewire}/bin/pw-cli destroy "$SINK_ID"
+            fi
+          '';
+        in "${removeSinkScript}";
+      };
+    };
 
     # Configure the Sunshine service (which is a systemd USER service)
     services.sunshine = {
@@ -72,7 +120,19 @@ in
           }
           {
             name = "EmulationStation-DE (Gamescoped)";
-            do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -- ${pkgs.emulationstation-de}/bin/emulationstation-de";
+            do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -- ${pkgs.emulationstation-de}/bin/bin/emulationstation-de";
+          }
+          {
+            name = "Steam Big Picture (with Game Audio Sink)";
+            # Example of routing audio to the virtual sink for streaming
+            do-cmd = let
+              steamWithAudioSink = pkgs.writeShellScript "steam-with-audio-sink" ''
+                # Set the game audio sink as default for this session
+                ${pkgs.pulseaudio}/bin/pactl set-default-sink GameAudioSink
+                # Launch Steam Big Picture with Gamescope
+                ${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -b -- ${pkgs.steam}/bin/steam -bigpicture
+              '';
+            in "${steamWithAudioSink}";
           }
         ];
       };
