@@ -1,5 +1,5 @@
 # modules/nixos/suites/gaming/default.nix
-{ options, config, lib, pkgs, username /* assuming username is passed as a specialArg */, ... }:
+{ options, config, lib, pkgs, username, ... }: # username is 'alc'
 
 with lib;
 let
@@ -10,105 +10,115 @@ in
     enable = mkOption {
       type = bool;
       default = false;
-      description = "Enable the gaming suite configurations, including Steam, Gamescope, and Sunshine.";
+      description = "Enable the gaming suite configurations, including Steam, Gamescope, and Sunshine, running under the main user.";
     };
   };
 
   config = mkIf cfg.enable {
+    # Ensure your main user is in all necessary groups
+    # Your `hosts/xyz/configuration.nix` already adds 'alc' to:
+    # "networkmanager", "wheel", "vfio", "audio", "sound", "video", "input", "tty",
+    # "docker", "podman", "deluge", "stash", "media", "kvm", "libvirtd"
+    # This is good. The 'media' group is key for ROMs/shared game data.
+    # 'audio', 'video', 'input' are essential.
+
     environment.systemPackages = with pkgs; [
       # Core gaming and streaming
-      steam # Already enabled via programs.steam.enable, but good for suite completeness
+      steam
       gamescope
-      sunshine
+      sunshine # Sunshine itself will be installed
 
-      # Emulation frontend (ES-DE)
-      # Option 1: If available in nixpkgs (check `nix search nixpkgs emulationstation-de`)
-      # emulationstation-de
-      # Option 2: If using Flatpak (ensure services.flatpak.enable = true in main config)
-      # You would then install ES-DE via `flatpak install flathub org.es_de.emulationstation-de`
-      # For now, this package is a placeholder. We'll need to decide on the source.
+      # Emulation frontend
+      emulationstation-de
 
-      # Common Emulators (add more as needed)
-      retroarchFull # Includes many cores
-      dolphin-emu   # GameCube/Wii
-      pcsx2         # PS2
-      # yuzu-mainline # Switch (ensure you handle firmware/keys appropriately)
-      # ryujinx       # Switch (ensure you handle firmware/keys appropriately)
+      # Common Emulators
+      retroarchFull
+      dolphin-emu
+      pcsx2
+      # yuzu-mainline
+      # ryujinx
 
-      # Utilities for audio scripting and inspection
-      pipewire.utils # For pw-cli, pw-cat, etc.
-      # pavucontrol is already in your base nixos module
-      # qpwgraph      # Optional: GUI for PipeWire graph
-      # helvum        # Optional: Another GUI for PipeWire graph
+      # Utilities
+      pipewire.utils
     ];
 
-    # Sunshine - Game Streaming Host
     services.sunshine = {
       enable = true;
-      openFirewall = true; # Automatically open necessary firewall ports.
-                           # If set to false, you'll need to manually add ports:
-                           # TCP: 47984 (Web UI), 47989 (Control), 48010 (General)
-                           # UDP: 47990 (Control), 47998 (Discovery), 47999 (Discovery), 48000 (Video/Audio), 48002 (Discovery), 48010 (Video/Audio)
-                           # (Check Sunshine docs for the most up-to-date port list)
+      openFirewall = true;
+      user = username; # Run Sunshine service process as your main user ('alc')
+      group = users.users.${username}.group; # Run as your main user's primary group
 
-      # Ensure Sunshine runs with access to necessary resources.
-      # The NixOS module usually handles adding the 'sunshine' user to 'video' and 'input' groups.
-      # If hardware encoding issues arise, ensure NVIDIA drivers are correctly set up system-wide
-      # (your hardware/nvidia.nix should cover this). Sunshine typically auto-detects NVENC.
+      # By running as your user, Sunshine's commands will execute in your user's context,
+      # having access to your DISPLAY, XAUTHORITY, DBUS_SESSION_BUS_ADDRESS,
+      # and your Steam session/data.
 
       apps = {
         "Steam Big Picture (Gamescoped Games)" = {
-          # This command launches Steam. Gamescope for individual games
-          # will be handled by Steam's per-game launch options.
-          # The user Sunshine runs as needs to be able to launch Steam.
-          # Consider if Steam needs to be launched as your main user.
-          # If so, Sunshine might need to run commands via `sudo -u ${username}` or similar,
-          # which adds complexity. Often, running Steam under the sunshine user is fine
-          # if its config/data directories are set up correctly or if it's a separate Steam instance.
-          # For simplicity, let's assume Steam can be launched directly.
-          # If Steam is already running under your user session, Sunshine might not be able to
-          # launch another instance easily. This is a common point of friction.
-          #
-          # A common approach is to have Sunshine launch a script that ensures Steam is running
-          # (or starts it) in the correct user session, potentially using systemd user services.
-          #
-          # For now, a direct launch:
+          # This command now runs as 'alc' and should interact with your existing Steam session.
+          # It might bring Steam to the foreground if already running, or launch it.
           do-cmd = "${pkgs.steam}/bin/steam -bigpicture";
           # If you prefer Steam's desktop mode:
           # do-cmd = "${pkgs.steam}/bin/steam";
 
-          # Alternative: Wrap Steam itself in Gamescope if you only interact with it
-          # via streaming or on the dedicated gaming workspace.
+          # Optional: Wrap Steam itself in Gamescope if you want its UI streamed via Gamescope too.
+          # This is good if you intend for the gaming workspace to *always* be Gamescope'd.
           # do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -b -- ${pkgs.steam}/bin/steam -bigpicture";
         };
 
-        # Optional: Direct entry for ES-DE (if you want to launch it outside of Steam sometimes)
         "EmulationStation-DE (Gamescoped)" = {
-          # This assumes ES-DE is installed and in PATH or you provide the full path.
-          # Replace `/path/to/your/emulationstation-de` with the actual command.
-          # This command needs to be determined based on how ES-DE is installed.
-          # If using Flatpak: "flatpak run org.es_de.emulationstation-de"
-          do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -- /path/to/your/emulationstation-de";
-          # Use -f for fullscreen gamescope.
+          # This also runs as 'alc'
+          do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -- ${pkgs.emulationstation-de}/bin/emulationstation-de";
         };
       };
 
-      # If you need to pass specific settings to sunshine.conf, you can use:
+      # Settings for Sunshine can still be applied if needed
       # settings = {
-      #   # Example for NVIDIA, though often auto-detected:
-      #   # hevc_encoder = "nvenc";
-      #   # av1_encoder = "nvenc";
-      #   # encoder_bitrate = 50000; # Example bitrate in kbps
+      #   # encoder_bitrate = 50000;
       # };
     };
 
-    # Ensure necessary groups for gaming/streaming related tasks.
-    # Your main user `${username}` is already in "audio", "video", "input".
-    # The `sunshine` user created by its service module should also be in these.
-    users.users.sunshine.extraGroups = [ "audio" "video" "input" ];
+    # IMPORTANT: Environment variables for services running as a user
+    # When a system service runs as a regular user, it doesn't automatically inherit
+    # the full graphical session environment (like DISPLAY, XAUTHORITY, WAYLAND_DISPLAY, DBUS_SESSION_BUS_ADDRESS).
+    # Sunshine might need these to correctly launch GUI applications like Steam within your active session.
+    #
+    # There are several ways to handle this:
+    # 1. Sunshine's own mechanisms (check its documentation for passing environment vars to commands).
+    # 2. Systemd `PassEnvironment` or `EnvironmentFile` for the sunshine.service.
+    # 3. A wrapper script for `do-cmd` that sources these variables.
 
+    # For Hyprland (Wayland), the key variables are often:
+    # DISPLAY (for XWayland apps like Steam)
+    # WAYLAND_DISPLAY
+    # XDG_RUNTIME_DIR
+    # DBUS_SESSION_BUS_ADDRESS
+    # XAUTHORITY (usually points to a file in XDG_RUNTIME_DIR for XWayland)
 
-    # If ES-DE is installed via Flatpak, enable Flatpak support
-    # services.flatpak.enable = true; # You might already have this.
+    # NixOS allows setting environment variables for systemd services:
+    systemd.services.sunshine.serviceConfig = {
+      # These are common variables needed for GUI apps to connect to your user's session.
+      # They are typically set when you log in.
+      # We need a way to get the *current* values for user 'alc'.
+      # This can be tricky as they are session-specific.
+
+      # Approach A: Hardcoding (less flexible, only works if they are static or you know them)
+      # Environment = [
+      #   "DISPLAY=:0" # Or whatever your XWayland display is
+      #   "WAYLAND_DISPLAY=wayland-1" # Check `echo $WAYLAND_DISPLAY` in your session
+      #   "XDG_RUNTIME_DIR=/run/user/${toString config.users.users.${username}.uid}"
+      #   "DBUS_SESSION_BUS_ADDRESS=unix:path=${config.systemd.user.runtimeDir}/bus" # Check `echo $DBUS_SESSION_BUS_ADDRESS`
+      #   "XAUTHORITY=${config.users.users.${username}.home}/.Xauthority" # Or path in XDG_RUNTIME_DIR
+      # ];
+
+      # Approach B (More Robust): Use a wrapper script for Sunshine's commands
+      # that sources these variables from the user's environment or uses `systemd run --user ...`
+      # This is generally preferred over hardcoding in the system service unit.
+      # For now, we'll omit explicitly setting them here and see if Sunshine/Steam
+      # can pick them up when Sunshine runs as your user. If not, this is the area to revisit.
+      # Modern systems with systemd user sessions sometimes make this easier.
+    };
+
+    # Ensure programs.steam.enable = true; is set in your main configuration
+    # (it is in your hosts/xyz/configuration.nix).
   };
 }

@@ -69,6 +69,11 @@ with lib;
     recursive = true;
   };
 
+  home.file.".config/hypr/scripts/manage_game_audio.sh" = {
+    source = ./manage_game_audio.sh;
+    executable = true;
+  };
+
   # Enable Linux-specific programs
   programs.foot.enable = true;
   programs.hyprland.managed.enable = true;
