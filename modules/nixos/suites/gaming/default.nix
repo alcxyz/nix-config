@@ -10,23 +10,19 @@ in
     enable = mkOption {
       type = bool;
       default = false;
-      description = "Enable the gaming suite configurations, including Steam, Gamescope, and Sunshine, running under the main user.";
+      description = "Enable the gaming suite configurations, including Steam, Gamescope, and Sunshine.";
     };
   };
 
   config = mkIf cfg.enable {
-    # Ensure your main user is in all necessary groups
-    # Your `hosts/xyz/configuration.nix` already adds 'alc' to:
-    # "networkmanager", "wheel", "vfio", "audio", "sound", "video", "input", "tty",
-    # "docker", "podman", "deluge", "stash", "media", "kvm", "libvirtd"
-    # This is good. The 'media' group is key for ROMs/shared game data.
-    # 'audio', 'video', 'input' are essential.
+    # Ensure your main user 'alc' is in necessary groups (audio, video, input, media)
+    # This is already handled in your hosts/xyz/configuration.nix
 
     environment.systemPackages = with pkgs; [
       # Core gaming and streaming
-      steam
+      # steam # Already enabled via programs.steam.enable in hosts/xyz/configuration.nix
       gamescope
-      sunshine # Sunshine itself will be installed
+      # sunshine # The module itself adds cfg.package to systemPackages
 
       # Emulation frontend
       emulationstation-de
@@ -35,90 +31,56 @@ in
       retroarchFull
       dolphin-emu
       pcsx2
-      # yuzu-mainline
-      # ryujinx
 
       # Utilities
-      pipewire.utils
+      pipewire
     ];
 
+    # Configure the Sunshine service (which is a systemd USER service)
     services.sunshine = {
-      enable = true;
-      openFirewall = true;
-      user = username; # Run Sunshine service process as your main user ('alc')
-      group = users.users.${username}.group; # Run as your main user's primary group
+      enable = true; # This enables the systemd user service for Sunshine
+      autoStart = true; # Ensures it starts with your graphical session
+      openFirewall = true; # Opens system firewall ports
 
-      # By running as your user, Sunshine's commands will execute in your user's context,
-      # having access to your DISPLAY, XAUTHORITY, DBUS_SESSION_BUS_ADDRESS,
-      # and your Steam session/data.
+      # capSysAdmin = true; # Only if you need DRM/KMS capture and understand the implications.
+                           # For Gamescope capture, this is usually not needed.
 
-      apps = {
-        "Steam Big Picture (Gamescoped Games)" = {
-          # This command now runs as 'alc' and should interact with your existing Steam session.
-          # It might bring Steam to the foreground if already running, or launch it.
-          do-cmd = "${pkgs.steam}/bin/steam -bigpicture";
-          # If you prefer Steam's desktop mode:
-          # do-cmd = "${pkgs.steam}/bin/steam";
-
-          # Optional: Wrap Steam itself in Gamescope if you want its UI streamed via Gamescope too.
-          # This is good if you intend for the gaming workspace to *always* be Gamescope'd.
-          # do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -b -- ${pkgs.steam}/bin/steam -bigpicture";
-        };
-
-        "EmulationStation-DE (Gamescoped)" = {
-          # This also runs as 'alc'
-          do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -- ${pkgs.emulationstation-de}/bin/emulationstation-de";
-        };
+      applications = {
+        # env = { # Optional: Environment variables for all Sunshine commands
+        #   # These will be available to the do-cmd scripts.
+        #   # Example: "STEAM_GAME_ID_FOR_GAMESCOPE" = "12345";
+        # };
+        apps = [
+          {
+            name = "Steam Big Picture (Gamescoped Games)";
+            # Since this is a user service running as 'alc', this command
+            # will execute as 'alc' and should use your existing Steam session.
+            do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -b -- ${pkgs.steam}/bin/steam -bigpicture";
+            # image-path = "/path/to/steam_icon.png"; # Optional
+          }
+          {
+            name = "EmulationStation-DE (Gamescoped)";
+            do-cmd = "${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -r 60 -f -- ${pkgs.emulationstation-de}/bin/emulationstation-de";
+          }
+        ];
       };
 
-      # Settings for Sunshine can still be applied if needed
-      # settings = {
-      #   # encoder_bitrate = 50000;
+      # settings = { # Global Sunshine settings from sunshine.conf
+      #   # Example:
+      #   # "sunshine_name" = "NixOS-XYZ";
+      #   # "port" = 47989; # Default, but can be changed
+      #   # "encoder_bitrate" = 50000; # kbps
       # };
     };
 
-    # IMPORTANT: Environment variables for services running as a user
-    # When a system service runs as a regular user, it doesn't automatically inherit
-    # the full graphical session environment (like DISPLAY, XAUTHORITY, WAYLAND_DISPLAY, DBUS_SESSION_BUS_ADDRESS).
-    # Sunshine might need these to correctly launch GUI applications like Steam within your active session.
-    #
-    # There are several ways to handle this:
-    # 1. Sunshine's own mechanisms (check its documentation for passing environment vars to commands).
-    # 2. Systemd `PassEnvironment` or `EnvironmentFile` for the sunshine.service.
-    # 3. A wrapper script for `do-cmd` that sources these variables.
+    # Since Sunshine is a user service, we need to ensure it's enabled for your user.
+    # The `services.sunshine.enable = true;` above should handle enabling the
+    # `sunshine.service` unit within the user's systemd instance.
+    # You can verify this after a rebuild with:
+    # `systemctl --user status sunshine`
+    # `systemctl --user is-enabled sunshine`
 
-    # For Hyprland (Wayland), the key variables are often:
-    # DISPLAY (for XWayland apps like Steam)
-    # WAYLAND_DISPLAY
-    # XDG_RUNTIME_DIR
-    # DBUS_SESSION_BUS_ADDRESS
-    # XAUTHORITY (usually points to a file in XDG_RUNTIME_DIR for XWayland)
-
-    # NixOS allows setting environment variables for systemd services:
-    systemd.services.sunshine.serviceConfig = {
-      # These are common variables needed for GUI apps to connect to your user's session.
-      # They are typically set when you log in.
-      # We need a way to get the *current* values for user 'alc'.
-      # This can be tricky as they are session-specific.
-
-      # Approach A: Hardcoding (less flexible, only works if they are static or you know them)
-      # Environment = [
-      #   "DISPLAY=:0" # Or whatever your XWayland display is
-      #   "WAYLAND_DISPLAY=wayland-1" # Check `echo $WAYLAND_DISPLAY` in your session
-      #   "XDG_RUNTIME_DIR=/run/user/${toString config.users.users.${username}.uid}"
-      #   "DBUS_SESSION_BUS_ADDRESS=unix:path=${config.systemd.user.runtimeDir}/bus" # Check `echo $DBUS_SESSION_BUS_ADDRESS`
-      #   "XAUTHORITY=${config.users.users.${username}.home}/.Xauthority" # Or path in XDG_RUNTIME_DIR
-      # ];
-
-      # Approach B (More Robust): Use a wrapper script for Sunshine's commands
-      # that sources these variables from the user's environment or uses `systemd run --user ...`
-      # This is generally preferred over hardcoding in the system service unit.
-      # For now, we'll omit explicitly setting them here and see if Sunshine/Steam
-      # can pick them up when Sunshine runs as your user. If not, this is the area to revisit.
-      # Modern systems with systemd user sessions sometimes make this easier.
-    };
-
-    # Ensure programs.steam.enable = true; is set in your main configuration
-    # (it is in your hosts/xyz/configuration.nix).
+    # No need for `systemd.services.sunshine` overrides for User/Group here,
+    # as it's a user service.
   };
 }

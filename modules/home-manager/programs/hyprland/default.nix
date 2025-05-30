@@ -118,6 +118,21 @@ in
     # This session variable is correctly placed here.
     home.sessionVariables.NIXOS_OZONE_WL = "1";
 
+    home.file.".config/hypr/scripts/manage_game_audio.sh" = {
+      source = ./scripts/manage_game_audio.sh;
+      executable = true;
+    };
+
+    home.file.".config/hypr/scripts/launch_steam_gamescoped.sh" = {
+      source = ./scripts/launch_steam_gamescoped.sh; # If it's next to home-linux.nix
+      # Or directly as text:
+      # text = ''
+      #   #!/usr/bin/env bash
+      #   gamescope --steam -W 1920 -H 1080 -r 60 -f -b -- steam -bigpicture
+      # '';
+      executable = true;
+    };
+
     xdg.configFile = {
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;
