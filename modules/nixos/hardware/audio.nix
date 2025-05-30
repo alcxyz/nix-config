@@ -29,6 +29,14 @@ in
     };
     services.pulseaudio.enable = false;
 
+    # Place the WirePlumber script
+    # This will put it in /etc/wireplumber/main.lua.d/51-create-game-sink.lua
+    # WirePlumber should automatically load scripts from this directory.
+    environment.etc."wireplumber/main.lua.d/51-create-game-sink.lua" = {
+      source = ./wireplumber_create_game_sink.lua;
+      mode = "0444"; # Read-only is fine
+    };
+
     #environment.systemPackages = with pkgs; [
     #];
     #programs.noisetorch.enable = true;

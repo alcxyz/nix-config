@@ -36,6 +36,18 @@ in
       pipewire
     ];
 
+    # PipeWire/PulseAudio configuration for the virtual sink
+    # This ensures the null sink is loaded when PipeWire starts.
+    services.pulseaudio.extraConfig = ''
+      load-module module-null-sink sink_name=GameAudioSink sink_properties=device.description="Virtual_Sink_for_Games"
+    '';
+    # If you are purely on PipeWire without pulseaudio.enable = true,
+    # you might need to use PipeWire's native config or a WirePlumber script.
+    # However, `hardware.pulseaudio.extraConfig` often works for PipeWire too
+    # as PipeWire implements the PulseAudio API.
+    # Let's assume your `hardware.audio.enable = true` (which enables PipeWire with Pulse support)
+    # from `modules/nixos/default.nix` makes this work.
+
     # Configure the Sunshine service (which is a systemd USER service)
     services.sunshine = {
       enable = true; # This enables the systemd user service for Sunshine

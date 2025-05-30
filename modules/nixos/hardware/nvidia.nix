@@ -27,7 +27,7 @@ in
       open = false;
       nvidiaSettings = true;
       # Ensure pkgs is available if you access config.boot.kernelPackages
-      package = config.boot.kernelPackages.nvidiaPackages.stable;
+      package = config.boot.kernelPackages.nvidiaPackages.beta;
     };
 
     # Enable OpenGL and hardware acceleration.

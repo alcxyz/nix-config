@@ -1,56 +1,89 @@
 #!/usr/bin/env bash
 # users/alc/manage_game_audio.sh
 
-# Placeholder for game audio management script
-GAMING_WORKSPACE_NAME="9" # Must match $ws_gaming in hyprland.conf
-LOG_FILE="/tmp/game_audio_management.log" # For debugging
+# Define the log file path
+AUDIO_LOG_FILE="/tmp/manage_game_audio.log"
 
-# Ensure the log file exists and is writable, or log to journal
-# For simplicity, using /tmp for now. Consider a path in XDG_CACHE_HOME.
-touch "$LOG_FILE"
-chmod 666 "$LOG_FILE" # Make it world-writable for easy debugging if script runs as different user context initially
+# Clear previous log file or ensure it exists and is writable
+touch "$AUDIO_LOG_FILE"
+chmod 666 "$AUDIO_LOG_FILE"
 
-echo "Script called at $(date)" >> "$LOG_FILE"
+# Function to log messages with a timestamp
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$AUDIO_LOG_FILE"
+}
 
-# Get current active workspace name/ID using hyprctl and jq
-# Ensure jq is installed (added to home.packages in home-linux.nix)
-# The path to hyprctl should be in the user's PATH.
-ACTIVE_WORKSPACE_NAME=$(hyprctl activeworkspace -j | jq -r '.name') # Or .id if you use numbers for workspace names in rules
+log_message "--- Audio Management Script Called ---"
 
-echo "Active workspace: $ACTIVE_WORKSPACE_NAME" >> "$LOG_FILE"
-echo "Gaming workspace: $GAMING_WORKSPACE_NAME" >> "$LOG_FILE"
+# Configuration
+# Ensure this matches how you refer to the workspace in Hyprland rules/binds
+# If hyprctl activeworkspace -j returns an ID like "9", use "9".
+# If it returns a name like "name:9", use "name:9".
+# Let's assume for now it's just the number.
+GAMING_WORKSPACE_ID="9"
+TARGET_APP_NAME_PATTERN="Steam" # Or a more specific process name if Steam is too broad
 
-# TODO:
-# 1. Identify the game's audio stream (e.g., Steam, or the specific game)
-#    - Use `pactl list sink-inputs` or `pw-cli dump short Node` and filter by application.name or similar.
-# 2. If ACTIVE_WORKSPACE_NAME == GAMING_WORKSPACE_NAME:
-#    - Unmute game audio stream (e.g., `pactl set-sink-input-mute <index> 0` or `pw-cli s <id> Props '{ mute: false }'`)
-# 3. Else:
-#    - Mute game audio stream (e.g., `pactl set-sink-input-mute <index> 1` or `pw-cli s <id> Props '{ mute: true }'`)
-
-if [[ "$ACTIVE_WORKSPACE_NAME" == "$GAMING_WORKSPACE_NAME" ]]; then
-  echo "Switched TO gaming workspace. Should UNMUTE game audio." >> "$LOG_FILE"
-  # Example: Try to unmute all of Steam (very broad, needs refinement)
-  # steam_pids=$(pgrep -x steam) # Get all PIDs for steam
-  # if [[ -n "$steam_pids" ]]; then
-  #   for steam_pid in $steam_pids; do
-  #     # Find sink inputs associated with this PID
-  #     pactl list sink-inputs short | grep "process.id = \"$steam_pid\"" | awk '{print $1}' | while read -r id ; do
-  #       echo "Unmuting Steam sink input $id" >> "$LOG_FILE"
-  #       pactl set-sink-input-mute "$id" 0
-  #     done
-  #   done
-  # fi
-else
-  echo "Switched AWAY from gaming workspace. Should MUTE game audio." >> "$LOG_FILE"
-  # Example: Try to mute all of Steam
-  # steam_pids=$(pgrep -x steam)
-  # if [[ -n "$steam_pids" ]]; then
-  #   for steam_pid in $steam_pids; do
-  #     pactl list sink-inputs short | grep "process.id = \"$steam_pid\"" | awk '{print $1}' | while read -r id ; do
-  #       echo "Muting Steam sink input $id" >> "$LOG_FILE"
-  #       pactl set-sink-input-mute "$id" 1
-  #     done
-  #   done
-  # fi
+# Get current active workspace ID
+ACTIVE_WORKSPACE_ID=$(hyprctl activeworkspace -j | jq -r '.id')
+if [[ -z "$ACTIVE_WORKSPACE_ID" ]]; then
+    log_message "Error: Could not determine active workspace ID."
+    exit 1
 fi
+log_message "Active Workspace ID: '$ACTIVE_WORKSPACE_ID', Target Gaming Workspace ID: '$GAMING_WORKSPACE_ID'"
+
+# Find the audio sink input index for the target application
+# This uses pactl and awk to find the index.
+# It looks for application.process.binary or application.name containing the pattern.
+SINK_INPUT_INDEX=$(pactl list sink-inputs | awk -v app="$TARGET_APP_NAME_PATTERN" '
+    BEGIN { RS="Sink Input #"; FS="\n"; ORS="" }
+    # Check application.process.binary first
+    $0 ~ "application.process.binary = \"" app "\"" {print $1; found=1; exit}
+    $0 ~ "application.process.binary = \"" tolower(app) "\"" {print $1; found=1; exit}
+    # Then check application.name if not found by binary
+    $0 ~ "application.name = \"" app "\"" {print $1; found=1; exit}
+    $0 ~ "application.name = \"" tolower(app) "\"" {print $1; found=1; exit}
+    END {if (!found) print ""}
+' | tr -d '[:space:]')
+
+
+if [[ -n "$SINK_INPUT_INDEX" ]]; then
+    log_message "Found Sink Input Index for '$TARGET_APP_NAME_PATTERN': $SINK_INPUT_INDEX"
+
+    # Check if the sink input is currently muted
+    CURRENT_MUTE_STATUS=$(pactl list sink-inputs | awk -v idx="$SINK_INPUT_INDEX" '
+        BEGIN {RS="Sink Input #"; FS="\n"}
+        $1 == idx {
+            for (i=1; i<=NF; ++i) {
+                if ($i ~ /Mute: (yes|no)/) {
+                    gsub(/.*Mute: /, "", $i);
+                    print $i;
+                    exit;
+                }
+            }
+        }
+    ')
+    log_message "Current Mute Status for index $SINK_INPUT_INDEX: '$CURRENT_MUTE_STATUS'"
+
+    if [[ "$ACTIVE_WORKSPACE_ID" == "$GAMING_WORKSPACE_ID" ]]; then
+        log_message "Action: Switched TO gaming workspace. Setting mute to NO for index $SINK_INPUT_INDEX."
+        pactl set-sink-input-mute "$SINK_INPUT_INDEX" 0 # 0 for no (unmute)
+        if [[ $? -ne 0 ]]; then
+            log_message "Error: pactl unmute command failed."
+        else
+            log_message "Successfully unmuted."
+        fi
+    else
+        log_message "Action: Switched AWAY from gaming workspace. Setting mute to YES for index $SINK_INPUT_INDEX."
+        pactl set-sink-input-mute "$SINK_INPUT_INDEX" 1 # 1 for yes (mute)
+        if [[ $? -ne 0 ]]; then
+            log_message "Error: pactl mute command failed."
+        else
+            log_message "Successfully muted."
+        fi
+    fi
+else
+    log_message "Warning: Sink Input for '$TARGET_APP_NAME_PATTERN' not found. No action taken."
+fi
+
+log_message "--- Audio Management Script Finished ---"
+exit 0
