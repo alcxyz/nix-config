@@ -30,7 +30,7 @@ in
   config = {
     # Conditionally add extraGroups for the user using mkAfter
     users.users.${username}.extraGroups =
-      lib.mkIf cfg.enable (lib.mkAfter [ "render" ]); # Only add "render"
+      lib.mkIf cfg.enable (lib.mkAfter [ "input" "render" ]);
 
     environment.systemPackages = lib.mkIf cfg.enable (with pkgs; [
       steam pipewire pulseaudio gnugrep gawk gnused
@@ -43,6 +43,7 @@ in
       KERNEL=="mouse*", GROUP="input", MODE="0664"
       KERNEL=="js*", GROUP="input", MODE="0664"
       SUBSYSTEM=="input", GROUP="input", MODE="0664"
+      #SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0664"
     '';
 
     programs.steam.enable = lib.mkIf cfg.enable true;
@@ -64,7 +65,7 @@ in
       
       environment = {
         HOME = "/home/${username}";
-        XDG_RUNTIME_DIR = "/run/user/1000";  # Adjust if your user ID is different
+        XDG_RUNTIME_DIR = "/run/user/1000";
       };
     };
 

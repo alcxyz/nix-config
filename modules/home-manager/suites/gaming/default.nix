@@ -82,6 +82,8 @@ in
   config = mkIf cfg.enable {
     home.packages = with pkgs; [
       gamescope emulationstation-de retroarchFull dolphin-emu pcsx2 mangohud
+      vulkan-tools
+      wayland-utils
       (pkgs.writeShellScriptBin "gamescope-steam" ''exec ${gamescope-steam}'')
       (pkgs.writeShellScriptBin "prepare-streaming-audio" ''exec ${prepare-streaming-audio}'')
       (pkgs.writeShellScriptBin "restore-default-audio" ''exec ${restore-default-audio}'')

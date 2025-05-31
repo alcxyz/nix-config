@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Gamescope Steam Launcher
-# Launches Steam in Big Picture mode via Gamescope with proper input handling
-
 SCRIPT_NAME="gamescope-steam"
 LOG_PREFIX="[$SCRIPT_NAME]"
 
@@ -13,22 +10,45 @@ log() {
 
 log "Starting Gamescope Steam session..."
 
-# Ensure proper input device access
+# NVIDIA + Wayland environment setup
 export WLR_NO_HARDWARE_CURSORS=1
-export GAMESCOPE_WAYLAND_DISPLAY=$WAYLAND_DISPLAY
+export GBM_BACKEND=nvidia-drm
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export LIBVA_DRIVER_NAME=nvidia
+export XDG_SESSION_TYPE=wayland
 
-# Log environment info
-log "Wayland display: ${WAYLAND_DISPLAY:-none}"
-log "Gaming session starting with full input control"
+# Force Wayland everywhere to reduce X11 errors
+export SDL_VIDEODRIVER=wayland
+export GDK_BACKEND=wayland
+export QT_QPA_PLATFORM=wayland
+export CLUTTER_BACKEND=wayland
+export _JAVA_AWT_WM_NONREPARENTING=1
 
-# Enhanced Gamescope flags for input handling
-exec gamescope \
+# Disable X11 completely
+export DISPLAY=""
+
+# Configure MangoHUD properly
+export MANGOHUD_DLSYM=1
+
+# Ensure we have a Wayland display
+if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+    log "Error: No Wayland display found. Are you running under Wayland?"
+    exit 1
+fi
+
+log "Wayland display: ${WAYLAND_DISPLAY}"
+log "Gaming session starting (clean mode)"
+
+# Use mangohud wrapper instead of --mangoapp
+exec mangohud gamescope \
+    --backend=wayland \
+    --hdr-debug-force-output \
+    --prefer-vk-device \
     --steam \
-    --xwayland-count 2 \
     --expose-wayland \
-    --mangoapp \
     --force-grab-cursor \
     -W 1920 -H 1080 \
+    -w 1920 -h 1080 \
     -r 60 \
     -f -b \
     -- steam -bigpicture
