@@ -19,8 +19,6 @@ in
   # either in this file's config block or within the imported modules themselves.
   imports = [
     # Paths are relative to this file (modules/nixos/default.nix)
-    ./hardware/bluetooth.nix
-    ./hardware/audio.nix
     ./fonts/default.nix
     ./env/default.nix
     ./nix/default.nix
@@ -28,9 +26,6 @@ in
   ];
 
   config = mkIf cfg.enable {
-
-    hardware.bluetooth.enable = true;
-    hardware.audio.enable = true;
 
     system.fonts.enable = true;
 

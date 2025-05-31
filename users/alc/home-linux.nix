@@ -23,6 +23,8 @@ with lib;
     ../../modules/home-manager/services/swww/default.nix
     ../../modules/home-manager/services/hypridle/default.nix
     ../../modules/home-manager/services/hyprlock/default.nix
+
+    ../../modules/home-manager/suites/gaming/default.nix
   ];
 
   # ==================== Linux-Specific Options ====================
@@ -83,4 +85,11 @@ with lib;
   services.hyprlock.enable = true;
   services.hyprlock.wallpaper.useStandardDir = true;
   services.gpg-agent.pinentry.package = pkgs.pinentry-gtk2;
+
+  suites.gaming = {
+    enable = true;
+    gamingWorkspace = "9";
+    hostBypassApps = [ "zen" "brave" "firefox" "chromium" "spotify" "discord" ];
+  };
+
 }

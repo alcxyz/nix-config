@@ -21,7 +21,7 @@ in
       brave
       chromium
       thunderbird
-      teams-for-linux
+
       rustdesk
       spotify
       vlc
@@ -38,7 +38,6 @@ in
       winetricks
       wineWowPackages.waylandFull
 
-      ghostty
       nautilus
 
       pulseaudio
