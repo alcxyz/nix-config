@@ -50,6 +50,39 @@ in
       default = {};
       description = "Sunshine streaming configuration";
     };
+
+    emulation = mkOption {
+      type = submodule {
+        options = {
+          enable = mkOption {
+            type = bool;
+            default = false;
+            description = "Enable emulation gaming suite with EmulationStation-DE";
+          };
+          
+          retroarch = mkOption {
+            type = bool;
+            default = true;
+            description = "Enable RetroArch for retro gaming";
+          };
+          
+          dolphin = mkOption {
+            type = bool;
+            default = true;
+            description = "Enable Dolphin for GameCube/Wii emulation";
+          };
+          
+          pcsx2 = mkOption {
+            type = bool;
+            default = true;
+            description = "Enable PCSX2 for PlayStation 2 emulation";
+          };
+        };
+      };
+      default = {};
+      description = "Emulation gaming configuration";
+    };
+
   };
 
   config = mkIf cfg.enable {
@@ -63,6 +96,7 @@ in
       pipewire # For pw-cli used in sink scripts
       pulseaudio # For pactl if any script still uses it (should transition to pw-*)
       gnugrep gawk gnused # For script utilities
+
     ] ++ optionals cfg.steam.enable [
       # Steam-specific packages
       steam
@@ -72,6 +106,14 @@ in
       (pkgs.writeTextDir "share/udev/rules.d/99-sunshine-uinput.rules" ''
         KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", GROUP="${config.users.users.${username}.group}"
       '')
+    ] ++ optionals cfg.emulation.enable [
+      emulationstation-de  # Always included with emulation.enable
+    ] ++ optionals (cfg.emulation.enable && cfg.emulation.retroarch) [
+      retroarchFull
+    ] ++ optionals (cfg.emulation.enable && cfg.emulation.dolphin) [
+      dolphin-emu
+    ] ++ optionals (cfg.emulation.enable && cfg.emulation.pcsx2) [
+      pcsx2
     ];
 
     services.udev.extraRules = ''

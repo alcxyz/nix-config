@@ -89,7 +89,8 @@ in
   config = mkIf cfg.enable {
     home.packages = with pkgs; [
       # Gaming applications
-      gamescope emulationstation-de retroarchFull dolphin-emu pcsx2 mangohud
+      gamescope
+      mangohud
       vulkan-tools
       wayland-utils
       

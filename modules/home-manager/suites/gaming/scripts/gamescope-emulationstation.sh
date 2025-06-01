@@ -39,7 +39,7 @@ fi
 log "Wayland display: ${WAYLAND_DISPLAY}"
 log "EmulationStation gaming session starting"
 
-# Launch EmulationStation in gamescope
+# Launch EmulationStation in gamescope - use the correct executable name
 exec mangohud gamescope \
     --backend=wayland \
     --hdr-debug-force-output \
@@ -50,4 +50,4 @@ exec mangohud gamescope \
     -w 1920 -h 1080 \
     -r 60 \
     -f -b \
-    -- emulationstation-de
+    -- es-de

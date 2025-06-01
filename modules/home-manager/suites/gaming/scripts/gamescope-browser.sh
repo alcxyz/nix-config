@@ -10,41 +10,31 @@ log() {
 
 log "Starting Gamescope Browser session..."
 
-# NVIDIA + Wayland environment setup
-export WLR_NO_HARDWARE_CURSORS=1
+# Basic NVIDIA setup
 export GBM_BACKEND=nvidia-drm
 export __GLX_VENDOR_LIBRARY_NAME=nvidia
-export LIBVA_DRIVER_NAME=nvidia
-export XDG_SESSION_TYPE=wayland
 
-# Force Wayland everywhere
-export SDL_VIDEODRIVER=wayland
-export GDK_BACKEND=wayland
-export QT_QPA_PLATFORM=wayland
-export CLUTTER_BACKEND=wayland
-export _JAVA_AWT_WM_NONREPARENTING=1
+log "Browser session starting in gamescope"
 
-# Disable X11 completely
-export DISPLAY=""
-
-# Ensure we have a Wayland display
-if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
-    log "Error: No Wayland display found. Are you running under Wayland?"
-    exit 1
-fi
-
-log "Wayland display: ${WAYLAND_DISPLAY}"
-log "Browser streaming session starting"
-
-# Launch browser in gamescope (good for streaming web games, media, etc.)
+# Launch Chromium optimized for gaming/streaming
 exec gamescope \
-    --backend=wayland \
-    --hdr-debug-force-output \
     --prefer-vk-device \
-    --expose-wayland \
-    --force-grab-cursor \
     -W 1920 -H 1080 \
     -w 1920 -h 1080 \
     -r 60 \
     -f -b \
-    -- chromium --new-window
+    -- chromium \
+        --new-window \
+        --start-fullscreen \
+        --disable-features=UseOzonePlatform \
+        --disable-gpu-sandbox \
+        --no-sandbox \
+        --disable-dev-shm-usage \
+        --disable-web-security \
+        --disable-background-timer-throttling \
+        --disable-backgrounding-occluded-windows \
+        --disable-renderer-backgrounding \
+        --enable-features=VaapiVideoDecoder \
+        --use-gl=desktop \
+        --enable-gpu-rasterization \
+        --enable-zero-copy

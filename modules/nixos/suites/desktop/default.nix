@@ -34,7 +34,6 @@ in
       cameractrls-gtk4
       gparted
       discord
-      lutris
       winetricks
       wineWowPackages.waylandFull
 
