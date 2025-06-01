@@ -15,6 +15,17 @@ with lib;
     # This is the macOS-specific part of extraConfig.
   # It will be concatenated AFTER the common part from shell/default.nix.
   programs.nushell.extraConfig = ''
+    # Common PATH setup (Nix, User, System base)
+    # Platform-specific configs will MODIFY $env.PATH after this.
+    let nix_paths = [
+        $"($env.HOME)/.nix-profile/bin",
+        "/run/current-system/sw/bin",
+        "/nix/var/nix/profiles/default/bin"
+    ]
+    #let user_paths = [ $"($env.HOME)/.cargo/bin", $"($env.HOME)/.local/bin" ]
+    let system_paths = [ "/usr/bin", "/bin", "/usr/sbin", "/sbin" ]
+    #$env.PATH = ($nix_paths ++ $user_paths ++ $system_paths | where {|p| ($p | path exists)} | uniq)
+    $env.PATH = ($nix_paths ++ $system_paths | where {|p| ($p | path exists)} | uniq)
     # --- macOS-Specific Nushell Additions (Part 2) ---
     # Prepend Homebrew paths to $env.PATH
     let homebrew_bin_paths = [ "/opt/homebrew/bin", "/usr/local/bin" ]
@@ -23,11 +34,11 @@ with lib;
     $env.PATH = ($env.PATH | prepend $existing_homebrew_paths | uniq) # Modifies PATH from common
 
     # macOS clipboard function (uses built-in pbcopy/pbpaste)
-    def clipboard [action: string] {
-        if $action == "copy" { pbcopy }
-        else if $action == "paste" { pbpaste }
-        else { print "Usage: clipboard <copy|paste>" }
-    }
+    #def clipboard [action: string] {
+    #    if $action == "copy" { pbcopy }
+    #    else if $action == "paste" { pbpaste }
+    #    else { print "Usage: clipboard <copy|paste>" }
+    #}
     # --- End macOS-Specific Nushell Additions (Part 2) ---
   '';
 
