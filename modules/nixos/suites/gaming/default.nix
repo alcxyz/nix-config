@@ -94,15 +94,16 @@ in
       source = "${pkgs.sunshine}/bin/sunshine";
     };
 
+    # Systemd service that uses the security wrapper
     systemd.user.services.sunshine = mkIf cfg.sunshine.enable {
       description = "Sunshine game streaming server";
       wantedBy = [ "graphical-session.target" ];
       partOf = [ "graphical-session.target" ];
-      after = [ "graphical-session.target" "pipewire.service" "pipewire-pulse.service" "pipewire-game-sink.service" ]; # Depend on game sink
+      after = [ "graphical-session.target" "pipewire.service" "pipewire-pulse.service" "pipewire-game-sink.service" ];
       
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${config.security.wrappers.sunshine.program}";
+        ExecStart = "/run/wrappers/bin/sunshine";
         Restart = "on-failure";
         RestartSec = "5s";
       };
