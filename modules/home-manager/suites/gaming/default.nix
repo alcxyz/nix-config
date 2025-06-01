@@ -4,10 +4,17 @@ with lib;
 let
   cfg = config.suites.gaming;
 
-  # Script definitions - clean approach with dynamic sink detection
+  # Gamescope launcher scripts using separate files
   gamescope-steam = pkgs.writeShellScript "gamescope-steam" 
     (builtins.readFile ./scripts/gamescope-steam.sh);
 
+  gamescope-emulationstation = pkgs.writeShellScript "gamescope-emulationstation" 
+    (builtins.readFile ./scripts/gamescope-emulationstation.sh);
+
+  gamescope-browser = pkgs.writeShellScript "gamescope-browser" 
+    (builtins.readFile ./scripts/gamescope-browser.sh);
+
+  # Audio management scripts using template substitution
   prepare-streaming-audio = pkgs.replaceVars ./scripts/prepare-streaming-audio.sh {
     gameApps = concatStringsSep "|" cfg.gameApps;
     hostBypassApps = concatStringsSep "|" cfg.hostBypassApps;
@@ -81,15 +88,23 @@ in
 
   config = mkIf cfg.enable {
     home.packages = with pkgs; [
+      # Gaming applications
       gamescope emulationstation-de retroarchFull dolphin-emu pcsx2 mangohud
       vulkan-tools
       wayland-utils
+      
+      # Gamescope launcher scripts
       (pkgs.writeShellScriptBin "gamescope-steam" ''exec ${gamescope-steam}'')
+      (pkgs.writeShellScriptBin "gamescope-emulationstation" ''exec ${gamescope-emulationstation}'')
+      (pkgs.writeShellScriptBin "gamescope-browser" ''exec ${gamescope-browser}'')
+      
+      # Audio management scripts
       (pkgs.writeShellScriptBin "prepare-streaming-audio" ''exec ${prepare-streaming-audio}'')
       (pkgs.writeShellScriptBin "restore-default-audio" ''exec ${restore-default-audio}'')
       (pkgs.writeShellScriptBin "manage-game-audio-routing" ''exec ${manage-game-audio-routing} "$@"'')
     ];
 
+    # WirePlumber configuration for automatic audio routing
     xdg.configFile."wireplumber/wireplumber.conf.d/52-user-game-audio-routing.conf" = {
       text = pkgs.lib.generators.toJSON {} wireplumberConfContent;
     };

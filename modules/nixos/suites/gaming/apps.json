@@ -1,0 +1,33 @@
+{
+  "env": {
+    "PATH": "$(PATH)"
+  },
+  "apps": [
+    {
+      "name": "Gaming Session",
+      "output": "",
+      "cmd": [
+        "sh", "-c", 
+        "hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-steam"
+      ],
+      "exclude-global-prep-cmd": false,
+      "elevated": false,
+      "auto-detach": true,
+      "wait-all": false,
+      "exit-timeout": 5
+    },
+    {
+      "name": "Desktop",
+      "output": "",
+      "cmd": [
+        "sh", "-c",
+        "restore-default-audio"
+      ],
+      "exclude-global-prep-cmd": false,
+      "elevated": false,
+      "auto-detach": true,
+      "wait-all": false,
+      "exit-timeout": 5
+    }
+  ]
+}

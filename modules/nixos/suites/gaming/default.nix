@@ -3,13 +3,38 @@
 with lib;
 let
   cfg = config.suites.gaming;
+
+  # Script for creating the game sink (now from a separate file)
+  createGameSinkScript = pkgs.writeShellScriptBin "create-game-sink" (
+    builtins.readFile ./scripts/create-game-sink.sh
+  );
+
+  # Script for removing the game sink (now from a separate file)
+  removeGameSinkScript = pkgs.writeShellScriptBin "remove-game-sink" (
+    builtins.readFile ./scripts/remove-game-sink.sh
+  );
+
 in
 {
   options.suites.gaming = with types; {
     enable = mkOption {
       type = bool;
       default = false;
-      description = "Enable system-level gaming support (audio sink, permissions, Steam, firewall for Sunshine). User-specific setup is handled by Home Manager.";
+      description = "Enable system-level gaming support (audio sink, permissions, etc.)";
+    };
+
+    steam = mkOption {
+      type = submodule {
+        options = {
+          enable = mkOption {
+            type = bool;
+            default = true;
+            description = "Enable Steam and related gaming features";
+          };
+        };
+      };
+      default = {};
+      description = "Steam gaming configuration";
     };
 
     sunshine = mkOption {
@@ -17,7 +42,7 @@ in
         options = {
           enable = mkOption {
             type = bool;
-            default = true;
+            default = false;
             description = "Enable Sunshine game streaming server";
           };
         };
@@ -27,101 +52,117 @@ in
     };
   };
 
-  config = {
-    # Conditionally add extraGroups for the user using mkAfter
-    users.users.${username}.extraGroups =
-      lib.mkIf cfg.enable (lib.mkAfter [ "input" "render" ]);
+  config = mkIf cfg.enable {
+    # Base gaming system setup
+    users.users.${username}.extraGroups = lib.mkAfter (
+      [ "input" "render" ] ++ lib.optionals cfg.sunshine.enable [ "video" "input" ] # Ensure 'input' for uinput
+    );
 
-    environment.systemPackages = lib.mkIf cfg.enable (with pkgs; [
-      steam pipewire pulseaudio gnugrep gawk gnused
-      # Note: pipewire and pulseaudio packages here are for tools like pw-cli, pactl.
-      # The actual services are managed by services.pipewire in NixOS config.
-    ] ++ optionals cfg.sunshine.enable [ sunshine ]);
+    environment.systemPackages = with pkgs; [
+      # Base gaming tools
+      pipewire # For pw-cli used in sink scripts
+      pulseaudio # For pactl if any script still uses it (should transition to pw-*)
+      gnugrep gawk gnused # For script utilities
+    ] ++ optionals cfg.steam.enable [
+      # Steam-specific packages
+      steam
+    ] ++ optionals cfg.sunshine.enable [
+      # Streaming-specific packages
+      sunshine
+      (pkgs.writeTextDir "share/udev/rules.d/99-sunshine-uinput.rules" ''
+        KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", GROUP="${config.users.users.${username}.group}"
+      '')
+    ];
 
-    services.udev.extraRules = lib.mkIf cfg.enable ''
+    services.udev.extraRules = ''
       KERNEL=="event*", GROUP="input", MODE="0664"
       KERNEL=="mouse*", GROUP="input", MODE="0664"
       KERNEL=="js*", GROUP="input", MODE="0664"
       SUBSYSTEM=="input", GROUP="input", MODE="0664"
-      #SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0664"
+      SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0664"
     '';
 
-    programs.steam.enable = lib.mkIf cfg.enable true;
-    programs.steam.remotePlay.openFirewall = lib.mkIf cfg.enable true;
+    # Steam configuration
+    programs.steam.enable = lib.mkIf cfg.steam.enable true;
+    programs.steam.remotePlay.openFirewall = lib.mkIf cfg.steam.enable true;
 
-    # Add Sunshine service configuration
-    systemd.user.services.sunshine = mkIf (cfg.enable && cfg.sunshine.enable) {
+    # Sunshine configuration
+    security.wrappers.sunshine = mkIf cfg.sunshine.enable {
+      owner = "root";
+      group = "root";
+      capabilities = "cap_sys_admin+p"; # For KMS
+      source = "${pkgs.sunshine}/bin/sunshine";
+    };
+
+    systemd.user.services.sunshine = mkIf cfg.sunshine.enable {
       description = "Sunshine game streaming server";
       wantedBy = [ "graphical-session.target" ];
       partOf = [ "graphical-session.target" ];
-      after = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" "pipewire.service" "pipewire-pulse.service" "pipewire-game-sink.service" ]; # Depend on game sink
       
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${pkgs.sunshine}/bin/sunshine";
+        ExecStart = "${config.security.wrappers.sunshine.program}";
         Restart = "on-failure";
         RestartSec = "5s";
       };
       
       environment = {
         HOME = "/home/${username}";
-        XDG_RUNTIME_DIR = "/run/user/1000";
+        XDG_RUNTIME_DIR = "/run/user/${toString config.users.users.${username}.uid}";
+        GBM_BACKEND = "nvidia-drm";
+        __GLX_VENDOR_LIBRARY_NAME = "nvidia";
       };
     };
 
-    # Copy Sunshine configuration file
-    system.activationScripts.sunshine-config = mkIf (cfg.enable && cfg.sunshine.enable) ''
-      mkdir -p /home/${username}/.config/sunshine
-      chown ${username}:users /home/${username}/.config/sunshine
-      
-      # Copy the sunshine.conf from the module directory
-      cp ${./sunshine.conf} /home/${username}/.config/sunshine/sunshine.conf
-      chown ${username}:users /home/${username}/.config/sunshine/sunshine.conf
-    '';
+    # Copy Sunshine configuration files
+    system.activationScripts.sunshine-config = mkIf cfg.sunshine.enable {
+      text = 
+        let
+          sunshineConf = pkgs.replaceVars ./sunshine.conf { inherit username; };
+          # apps.json doesn't need username substitution, so use it directly
+          appsJson = ./apps.json;
+        in ''
+        USER_HOME="/home/${username}"
+        CONFIG_DIR="$USER_HOME/.config/sunshine"
+        USER_GROUP="${config.users.users.${username}.group}"
 
-    systemd.user.services.pipewire-game-sink = lib.mkIf cfg.enable {
+        echo "Ensuring Sunshine config directory exists and has correct ownership for user ${username} (group $USER_GROUP)..."
+        mkdir -p "$CONFIG_DIR"
+        chown "${username}:$USER_GROUP" "$USER_HOME/.config" || echo "Warning: Could not chown $USER_HOME/.config (might be okay if already correct/accessible)"
+        chown -R "${username}:$USER_GROUP" "$CONFIG_DIR"
+        
+        echo "Copying Sunshine configuration files..."
+        cp "${sunshineConf}" "$CONFIG_DIR/sunshine.conf"
+        cp "${appsJson}" "$CONFIG_DIR/apps.json"
+        
+        echo "Setting ownership and permissions for Sunshine config files..."
+        chown "${username}:$USER_GROUP" "$CONFIG_DIR/sunshine.conf"
+        chown "${username}:$USER_GROUP" "$CONFIG_DIR/apps.json"
+        chmod 640 "$CONFIG_DIR/sunshine.conf"
+        chmod 640 "$CONFIG_DIR/apps.json"
+        echo "Sunshine configuration script finished."
+      '';
+      deps = [ "users" ];
+    };
+
+    # Gaming audio sink (now using separate scripts)
+    systemd.user.services.pipewire-game-sink = {
       description = "Create persistent PipeWire game audio sink";
-      wantedBy = [ "pipewire.service" ];
+      wantedBy = [ "pipewire.service" ]; # Ensures it starts with PipeWire
       after = [ "pipewire.service" "wireplumber.service" ];
+      before = [ "sunshine.service" ]; 
+
       serviceConfig = {
         Type = "oneshot";
-        RemainAfterExit = true;
-        Restart = "on-failure";
-        RestartSec = "5s";
-        ExecStart = let
-          createSinkScript = pkgs.writeShellScript "create-game-sink" ''
-            set -e
-            echo "[pipewire-game-sink] Waiting for PipeWire..."
-            timeout=30
-            while [ $timeout -gt 0 ]; do
-              if ${pkgs.pipewire}/bin/pw-cli info &>/dev/null; then
-                echo "[pipewire-game-sink] PipeWire is ready."
-                break
-              fi
-              sleep 2; timeout=$((timeout - 2))
-            done
-            if [ $timeout -le 0 ]; then echo "[pipewire-game-sink] PipeWire not ready." >&2; exit 1; fi
-            
-            if ${pkgs.pipewire}/bin/pw-cli ls Node | ${pkgs.gnugrep}/bin/grep -q 'node.name = "GameAudioSink"'; then
-              echo "[pipewire-game-sink] GameAudioSink already exists."
-              exit 0
-            fi
-            echo "[pipewire-game-sink] Creating GameAudioSink..."
-            ${pkgs.pipewire}/bin/pw-cli create-node adapter '{ factory.name="support.null-audio-sink", node.name="GameAudioSink", node.description="Virtual_Sink_for_Games", media.class="Audio/Sink", audio.channels=2, audio.position="[FL,FR]", object.linger=true, node.dont-remix=true, node.pause-on-idle=false }'
-            echo "[pipewire-game-sink] GameAudioSink created."
-          '';
-        in "${createSinkScript}";
-        ExecStop = let
-          removeSinkScript = pkgs.writeShellScript "remove-game-sink" ''
-            set -e; echo "[pipewire-game-sink] Removing GameAudioSink..."
-            SINK_ID=$(${pkgs.pipewire}/bin/pw-cli ls Node | ${pkgs.gnugrep}/bin/grep -B2 'node.name = "GameAudioSink"' | ${pkgs.gnugrep}/bin/grep 'id:' | ${pkgs.gawk}/bin/awk '{print $2}' | ${pkgs.gnused}/bin/sed 's/,//' | head -n 1)
-            if [ -n "$SINK_ID" ]; then ${pkgs.pipewire}/bin/pw-cli destroy "$SINK_ID"; echo "[pipewire-game-sink] GameAudioSink (ID: $SINK_ID) removed."; else echo "[pipewire-game-sink] GameAudioSink not found."; fi
-          '';
-        in "${removeSinkScript}";
+        RemainAfterExit = true; 
+        ExecStart = "${createGameSinkScript}/bin/create-game-sink"; 
+        ExecStop = "${removeGameSinkScript}/bin/remove-game-sink";  
       };
     };
     
-    networking.firewall.allowedTCPPorts = lib.mkIf cfg.enable [ 47984 47989 48010 ];
-    networking.firewall.allowedUDPPorts = lib.mkIf cfg.enable [ 47998 47999 48000 48002 48010 ];
+    # Firewall rules
+    networking.firewall.allowedTCPPorts = lib.optionals cfg.sunshine.enable [ 47984 47989 48010 ];
+    networking.firewall.allowedUDPPorts = lib.optionals cfg.sunshine.enable [ 47998 47999 48000 48002 48010 ];
   };
 }

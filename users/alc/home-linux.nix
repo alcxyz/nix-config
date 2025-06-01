@@ -89,7 +89,7 @@ with lib;
   suites.gaming = {
     enable = true;
     gamingWorkspace = "9";
-    hostBypassApps = [ "zen" "brave" "firefox" "chromium" "spotify" "discord" ];
+    hostBypassApps = [ "zen" "brave" "firefox" "spotify" "discord" "vlc" ];
   };
 
 }
