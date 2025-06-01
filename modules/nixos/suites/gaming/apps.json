@@ -1,37 +1,59 @@
 {
   "env": {
-    "PATH": "$(PATH):$(HOME)/.local/bin"
+    "PATH": "$(PATH):$(HOME)/.local/bin:$(HOME)/.nix-profile/bin"
   },
   "apps": [
     {
-      "name": "Desktop",
-      "image-path": "desktop.png",
-      "prep-cmd": [
-        {
-          "do": "restore-default-audio && hyprctl dispatch workspace 1"
-        }
-      ]
-    },
-    {
       "name": "Steam Gaming",
-      "detached": [
-        "sh -c 'hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-steam'"
+      "output": "",
+      "cmd": [
+        "sh", "-c", 
+        "hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-steam"
       ],
-      "image-path": "steam.png"
+      "exclude-global-prep-cmd": false,
+      "elevated": false,
+      "auto-detach": true,
+      "wait-all": false,
+      "exit-timeout": 5
     },
     {
-      "name": "Retro Gaming", 
-      "detached": [
-        "sh -c 'hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-emulationstation'"
+      "name": "Retro Gaming (EmulationStation)",
+      "output": "",
+      "cmd": [
+        "sh", "-c", 
+        "hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-emulationstation"
       ],
-      "image-path": "gamepad.png"
+      "exclude-global-prep-cmd": false,
+      "elevated": false,
+      "auto-detach": true,
+      "wait-all": false,
+      "exit-timeout": 5
     },
     {
       "name": "Browser Gaming",
-      "detached": [
-        "sh -c 'hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-browser'"
+      "output": "",
+      "cmd": [
+        "sh", "-c", 
+        "hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-browser"
       ],
-      "image-path": "browser.png"
+      "exclude-global-prep-cmd": false,
+      "elevated": false,
+      "auto-detach": true,
+      "wait-all": false,
+      "exit-timeout": 5
+    },
+    {
+      "name": "Desktop",
+      "output": "",
+      "cmd": [
+        "sh", "-c",
+        "restore-default-audio && hyprctl dispatch workspace 1"
+      ],
+      "exclude-global-prep-cmd": false,
+      "elevated": false,
+      "auto-detach": true,
+      "wait-all": false,
+      "exit-timeout": 5
     }
   ]
 }
