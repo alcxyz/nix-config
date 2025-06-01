@@ -79,7 +79,7 @@ in
       KERNEL=="mouse*", GROUP="input", MODE="0664"
       KERNEL=="js*", GROUP="input", MODE="0664"
       SUBSYSTEM=="input", GROUP="input", MODE="0664"
-      SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0664"
+      #SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0664"
     '';
 
     # Steam configuration

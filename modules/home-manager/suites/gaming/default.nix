@@ -81,7 +81,7 @@ in
     
     gameApps = mkOption {
       type = listOf str;
-      default = [ "steamwebhelper" "steam_app_.*" "Celeste\\.bin\\.x86_64" "retroarch" ".*\\.bin\\.x86_64" "dolphin-emu" "pcsx2" "emulationstation-de" ];
+      default = [ "steamwebhelper" "steam_app_.*" "retroarch" ".*\\.bin\\.x86_64" "dolphin-emu" "pcsx2" "emulationstation-de" ];
       description = "List of application process binary REGEX patterns for game applications.";
     };
   };
