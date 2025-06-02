@@ -103,6 +103,7 @@ in
       vim
       glow
       sshs
+      python3
     ];
 
     shells = with pkgs; [ bash zsh ];

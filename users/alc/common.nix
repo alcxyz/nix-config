@@ -61,6 +61,7 @@ with lib;
     htop
     btop
     bat
+    ranger
   ];
 
   # ==================== Files ====================

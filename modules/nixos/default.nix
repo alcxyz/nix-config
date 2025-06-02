@@ -44,7 +44,6 @@ in
       atuin
       vagrant
       chezmoi
-      ranger
       bunster
       portal
       sops
