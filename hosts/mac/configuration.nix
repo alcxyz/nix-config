@@ -94,8 +94,6 @@ in
       git
       curl
       wget
-      htop
-      btop
       fd
       ripgrep
       fzf

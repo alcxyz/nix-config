@@ -73,7 +73,6 @@ in
       killall
       gptfdisk
       sshfs
-      btop
       ffmpeg
       python3
       python3Packages.rencode
