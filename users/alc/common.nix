@@ -60,6 +60,7 @@ with lib;
     neofetch
     htop
     btop
+    bat
   ];
 
   # ==================== Files ====================

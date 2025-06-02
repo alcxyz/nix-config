@@ -37,7 +37,6 @@ in
     };
 
     environment.systemPackages = with pkgs; [
-      stash
       neovim
       tmux
       tree
@@ -56,7 +55,6 @@ in
       git
       git-remote-gcrypt
       lazygit
-      bat
       fzf
       fd
       jq
