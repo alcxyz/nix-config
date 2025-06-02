@@ -19,7 +19,6 @@ in
 
       vivaldi
       brave
-      chromium
       thunderbird
 
       rustdesk

@@ -73,7 +73,6 @@ in
       killall
       gptfdisk
       sshfs
-      htop
       btop
       ffmpeg
       python3
