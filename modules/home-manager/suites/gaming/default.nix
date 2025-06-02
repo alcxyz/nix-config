@@ -1,3 +1,4 @@
+# modules/home-manager/suites/gaming/default.nix
 { options, config, lib, pkgs, ... }:
 
 with lib;
@@ -13,50 +14,6 @@ let
 
   gamescope-browser = pkgs.writeShellScript "gamescope-browser" 
     (builtins.readFile ./scripts/gamescope-browser.sh);
-
-  # Audio management scripts using template substitution
-  prepare-streaming-audio = pkgs.replaceVars ./scripts/prepare-streaming-audio.sh {
-    gameApps = concatStringsSep "|" cfg.gameApps;
-    hostBypassApps = concatStringsSep "|" cfg.hostBypassApps;
-    inherit (pkgs) pulseaudio gnugrep gawk;
-  };
-
-  restore-default-audio = pkgs.replaceVars ./scripts/restore-default-audio.sh {
-    gameApps = concatStringsSep "|" cfg.gameApps;
-    inherit (pkgs) pulseaudio gnugrep gawk;
-  };
-
-  manage-game-audio-routing = pkgs.replaceVars ./scripts/manage-game-audio-routing.sh {
-    gamingWorkspace = cfg.gamingWorkspace;
-    gameApps = concatStringsSep "|" cfg.gameApps;
-    inherit (pkgs) pulseaudio gnugrep gawk procps;
-  };
-
-  # WirePlumber rules for audio routing
-  hostBypassWirePlumberRules = map (appPattern: {
-    matches = [ { "application.process.binary" = "~${appPattern}"; } ]; 
-    actions.update-props = { "node.target" = "@DEFAULT_SINK@"; };
-  }) cfg.hostBypassApps;
-
-  gameAppWirePlumberRules = map (appPattern: {
-    matches = [ { "application.process.binary" = "~${appPattern}"; } ];
-    actions.update-props = { "node.target" = "GameAudioSink"; };
-  }) cfg.gameApps;
-
-  wireplumberConfContent = {
-    "monitor.alsa.rules" = [
-      {
-        matches = [ { "node.name" = "~alsa_output.*"; } ]; 
-        actions.update-props = {
-          "node.nick" = "Physical Speakers"; 
-          "priority.driver" = 1000; 
-        };
-      }
-    ];
-    "monitor.pipewire.rules" = lib.mkIf (cfg.hostBypassApps != [] || cfg.gameApps != []) (
-      hostBypassWirePlumberRules ++ gameAppWirePlumberRules
-    );
-  };
 
 in
 {
@@ -75,13 +32,13 @@ in
     
     hostBypassApps = mkOption {
       type = listOf str;
-      default = [ "zen" "brave" "firefox" "chromium" "spotify" "discord" ];
+      default = [ "zen" "brave" "firefox" "chromium" "spotify" "discord" "vlc" ];
       description = "List of application process binary REGEX patterns that should always play audio on the host's physical speakers.";
     };
     
     gameApps = mkOption {
       type = listOf str;
-      default = [ "steamwebhelper" "steam_app_.*" "retroarch" ".*\\.bin\\.x86_64" "dolphin-emu" "pcsx2" "emulationstation-de" ];
+      default = [ "steam" "steamwebhelper" "steam_app_.*" "retroarch" ".*\\.bin\\.x86_64" "dolphin-emu" "pcsx2" "emulationstation-de" "es-de" ];
       description = "List of application process binary REGEX patterns for game applications.";
     };
   };
@@ -99,15 +56,56 @@ in
       (pkgs.writeShellScriptBin "gamescope-emulationstation" ''exec ${gamescope-emulationstation}'')
       (pkgs.writeShellScriptBin "gamescope-browser" ''exec ${gamescope-browser}'')
       
-      # Audio management scripts
-      (pkgs.writeShellScriptBin "prepare-streaming-audio" ''exec ${prepare-streaming-audio}'')
-      (pkgs.writeShellScriptBin "restore-default-audio" ''exec ${restore-default-audio}'')
-      (pkgs.writeShellScriptBin "manage-game-audio-routing" ''exec ${manage-game-audio-routing} "$@"'')
+      # Workspace audio monitor
+      (pkgs.writeShellScriptBin "workspace-audio-monitor" 
+        (builtins.readFile ./scripts/monitor-workspace-audio.sh))
     ];
 
-    # WirePlumber configuration for automatic audio routing
-    xdg.configFile."wireplumber/wireplumber.conf.d/52-user-game-audio-routing.conf" = {
-      text = pkgs.lib.generators.toJSON {} wireplumberConfContent;
+    # WirePlumber auto-routing rules
+    xdg.configFile."wireplumber/wireplumber.conf.d/51-game-audio-routing.conf" = {
+      text = builtins.toJSON {
+        "monitor.pipewire.rules" = [
+          # Route game applications to GameAudioSink
+          {
+            matches = [
+              { "application.process.binary" = "~(${concatStringsSep "|" cfg.gameApps})"; }
+            ];
+            actions.update-props = {
+              "node.target" = "GameAudioSink";
+            };
+          }
+          # Keep host applications on default sink (explicit rule for clarity)
+          {
+            matches = [
+              { "application.process.binary" = "~(${concatStringsSep "|" cfg.hostBypassApps})"; }
+            ];
+            actions.update-props = {
+              "node.target" = "@DEFAULT_SINK@";
+            };
+          }
+        ];
+      };
+    };
+
+    # Start workspace audio monitor with session
+    systemd.user.services.workspace-audio-monitor = {
+      Unit = {
+        Description = "Monitor workspace changes for game audio";
+        After = [ "graphical-session.target" "pipewire-game-sink.service" ];
+        PartOf = [ "graphical-session.target" ];
+      };
+      
+      Service = {
+        Type = "simple";
+        ExecStart = "${pkgs.writeShellScript "workspace-audio-monitor" (builtins.readFile ./scripts/monitor-workspace-audio.sh)}";
+        Restart = "on-failure";
+        RestartSec = "3s";
+        Environment = [
+          "GAMING_WORKSPACE=${cfg.gamingWorkspace}"
+        ];
+      };
+      
+      Install.WantedBy = [ "graphical-session.target" ];
     };
   };
 }

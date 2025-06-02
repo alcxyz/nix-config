@@ -62,6 +62,7 @@ with lib;
     btop
     bat
     ranger
+    youtube-music
   ];
 
   # ==================== Files ====================

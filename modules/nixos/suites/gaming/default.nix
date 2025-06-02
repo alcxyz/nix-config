@@ -1,19 +1,9 @@
+# modules/nixos/suites/gaming/default.nix
 { options, config, lib, pkgs, username, ... }:
 
 with lib;
 let
   cfg = config.suites.gaming;
-
-  # Script for creating the game sink (now from a separate file)
-  createGameSinkScript = pkgs.writeShellScriptBin "create-game-sink" (
-    builtins.readFile ./scripts/create-game-sink.sh
-  );
-
-  # Script for removing the game sink (now from a separate file)
-  removeGameSinkScript = pkgs.writeShellScriptBin "remove-game-sink" (
-    builtins.readFile ./scripts/remove-game-sink.sh
-  );
-
 in
 {
   options.suites.gaming = with types; {
@@ -82,32 +72,34 @@ in
       default = {};
       description = "Emulation gaming configuration";
     };
-
   };
 
   config = mkIf cfg.enable {
     # Base gaming system setup
     users.users.${username}.extraGroups = lib.mkAfter (
-      [ "input" "render" ] ++ lib.optionals cfg.sunshine.enable [ "video" "input" ] # Ensure 'input' for uinput
+      [ "input" "render" ] ++ lib.optionals cfg.sunshine.enable [ "video" "input" ]
     );
 
     environment.systemPackages = with pkgs; [
       # Base gaming tools
-      pipewire # For pw-cli used in sink scripts
-      pulseaudio # For pactl if any script still uses it (should transition to pw-*)
-      gnugrep gawk gnused # For script utilities
+      pipewire
+      pulseaudio # For pactl compatibility
+      gnugrep gawk gnused
+      # Simple audio management scripts
+      (pkgs.writeShellScriptBin "create-game-sink" 
+        (builtins.readFile ./scripts/create-game-sink.sh))
+      (pkgs.writeShellScriptBin "monitor-workspace-audio" 
+        (builtins.readFile ./scripts/monitor-workspace-audio.sh))
 
     ] ++ optionals cfg.steam.enable [
-      # Steam-specific packages
       steam
     ] ++ optionals cfg.sunshine.enable [
-      # Streaming-specific packages
       sunshine
       (pkgs.writeTextDir "share/udev/rules.d/99-sunshine-uinput.rules" ''
         KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", GROUP="${config.users.users.${username}.group}"
       '')
     ] ++ optionals cfg.emulation.enable [
-      emulationstation-de  # Always included with emulation.enable
+      emulationstation-de
     ] ++ optionals (cfg.emulation.enable && cfg.emulation.retroarch) [
       retroarchFull
     ] ++ optionals (cfg.emulation.enable && cfg.emulation.dolphin) [
@@ -121,7 +113,6 @@ in
       KERNEL=="mouse*", GROUP="input", MODE="0664"
       KERNEL=="js*", GROUP="input", MODE="0664"
       SUBSYSTEM=="input", GROUP="input", MODE="0664"
-      #SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0664"
     '';
 
     # Steam configuration
@@ -132,11 +123,10 @@ in
     security.wrappers.sunshine = mkIf cfg.sunshine.enable {
       owner = "root";
       group = "root";
-      capabilities = "cap_sys_admin+p"; # For KMS
+      capabilities = "cap_sys_admin+p";
       source = "${pkgs.sunshine}/bin/sunshine";
     };
 
-    # Systemd service that uses the security wrapper
     systemd.user.services.sunshine = mkIf cfg.sunshine.enable {
       description = "Sunshine game streaming server";
       wantedBy = [ "graphical-session.target" ];
@@ -163,7 +153,6 @@ in
       text = 
         let
           sunshineConf = pkgs.replaceVars ./sunshine.conf { inherit username; };
-          # apps.json doesn't need username substitution, so use it directly
           appsJson = ./apps.json;
         in ''
         USER_HOME="/home/${username}"
@@ -189,18 +178,25 @@ in
       deps = [ "users" ];
     };
 
-    # Gaming audio sink (now using separate scripts)
+    # Gaming audio sink service
     systemd.user.services.pipewire-game-sink = {
-      description = "Create persistent PipeWire game audio sink";
-      wantedBy = [ "pipewire.service" ]; # Ensures it starts with PipeWire
+      description = "Create GameAudioSink for gaming and streaming";
+      wantedBy = [ "pipewire.service" ];
       after = [ "pipewire.service" "wireplumber.service" ];
-      before = [ "sunshine.service" ]; 
+      partOf = [ "pipewire.service" ];
+      before = [ "sunshine.service" ];
 
       serviceConfig = {
         Type = "oneshot";
-        RemainAfterExit = true; 
-        ExecStart = "${createGameSinkScript}/bin/create-game-sink"; 
-        ExecStop = "${removeGameSinkScript}/bin/remove-game-sink";  
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.writeShellScript "create-game-sink" (builtins.readFile ./scripts/create-game-sink.sh)}";
+        ExecStop = "${pkgs.writeShellScript "remove-game-sink" ''
+          SINK_ID=$(pw-cli list-objects | grep -B5 "node.name.*GameAudioSink" | grep -m1 "id:" | awk '{print $2}' | tr -d ',')
+          if [[ -n "$SINK_ID" ]]; then
+            echo "[audio] Removing GameAudioSink"
+            pw-cli destroy "$SINK_ID"
+          fi
+        ''}";
       };
     };
     
