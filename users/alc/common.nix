@@ -59,7 +59,6 @@ with lib;
     # Packages that are available and desired on both OSes
     neofetch
     htop
-    ncspot
   ];
 
   # ==================== Files ====================
@@ -112,4 +111,6 @@ with lib;
       # '';
     };
   };
+
+  programs.ncspot.enable = true;
 }
