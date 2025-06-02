@@ -105,7 +105,6 @@ in
       vim
       glow
       sshs
-      neofetch
     ];
 
     shells = with pkgs; [ bash zsh ];

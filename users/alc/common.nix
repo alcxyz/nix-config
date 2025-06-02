@@ -57,9 +57,9 @@ with lib;
   # ==================== Packages ====================
   home.packages = with pkgs; [
     # Packages that are available and desired on both OSes
-    # neofetch
-    # htop
-    # Add any other common CLI tools here
+    neofetch
+    htop
+    ncspot
   ];
 
   # ==================== Files ====================

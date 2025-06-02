@@ -8,7 +8,6 @@ with lib;
   home.packages = with pkgs; [
     mas
     #darwin.system_cmds # If needed for `defaults` in other HM modules, but avoid in shell
-    #neofetch
   ];
   programs.atuin.daemon.enable = false;
 
