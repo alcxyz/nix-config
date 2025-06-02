@@ -1,12 +1,12 @@
-# modules/nixos/default.nix
+# modules/nixos/packages/default.nix
 { options, config, lib, pkgs, username, ... }:
 
 with lib;
 let
-  cfg = config.nixosBase;
+  cfg = config.packages.managed;
 in
 {
-  options.nixosBase = with types; {
+  options.packages.managed = with types; {
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -15,26 +15,13 @@ in
   };
 
   # These imports are now unconditional within this file.
-  # The decision to enable them or their contents can be handled by config.nixosBase.enable
+  # The decision to enable them or their contents can be handled by config.packages.managed.enable
   # either in this file's config block or within the imported modules themselves.
-  imports = [
-    # Paths are relative to this file (modules/nixos/default.nix)
-    ./fonts/default.nix
-    ./env/default.nix
-    ./nix/default.nix
-    ./services/ssh/default.nix
-  ];
+  #imports = [
+  #  # Paths are relative to this file (modules/nixos/default.nix)
+  #];
 
   config = mkIf cfg.enable {
-
-    system.fonts.enable = true;
-
-    services.ssh.enable = true;
-
-    environment.variables = {
-      EDITOR = "nvim";
-      VISUAL = "nvim";
-    };
 
     environment.systemPackages = with pkgs; [
       neovim
