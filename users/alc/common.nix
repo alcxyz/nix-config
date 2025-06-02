@@ -113,5 +113,4 @@ with lib;
   };
 
   programs.ncspot.enable = true;
-  programs.chromium.enable = true;
 }

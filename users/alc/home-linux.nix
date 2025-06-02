@@ -72,6 +72,7 @@ with lib;
   };
 
   # Enable Linux-specific programs
+  programs.chromium.enable = true;
   programs.foot.enable = true;
   programs.hyprland.managed.enable = true;
   programs.waybar.managed.enable = true;
