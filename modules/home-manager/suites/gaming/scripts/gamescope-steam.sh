@@ -47,8 +47,8 @@ exec mangohud gamescope \
     --steam \
     --expose-wayland \
     --force-grab-cursor \
-    -W 1920 -H 1080 \
-    -w 1920 -h 1080 \
+    -W 2560 -H 1440 \
+    -w 2560 -h 1440 \
     -r 60 \
     -f -b \
     -- steam -bigpicture
