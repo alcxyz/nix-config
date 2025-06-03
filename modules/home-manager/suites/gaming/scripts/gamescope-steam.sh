@@ -1,3 +1,4 @@
+# modules/home-manager/suites/gaming/scripts/gamescope-steam.sh
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -8,6 +9,9 @@ log() {
     echo "$LOG_PREFIX $1" >&2
 }
 
+# Ensure game sink exists
+ensure-game-sink
+
 log "Starting Gamescope Steam session..."
 
 # NVIDIA + Wayland environment setup
@@ -17,7 +21,7 @@ export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export LIBVA_DRIVER_NAME=nvidia
 export XDG_SESSION_TYPE=wayland
 
-# Force Wayland everywhere to reduce X11 errors
+# Force Wayland everywhere
 export SDL_VIDEODRIVER=wayland
 export GDK_BACKEND=wayland
 export QT_QPA_PLATFORM=wayland
@@ -37,9 +41,12 @@ if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
 fi
 
 log "Wayland display: ${WAYLAND_DISPLAY}"
-log "Gaming session starting (clean mode)"
+log "Gaming session starting"
 
-# Use mangohud wrapper instead of --mangoapp
+# Trigger audio management for gaming workspace
+manage-game-audio workspace 1 &
+
+# Launch Steam in gamescope
 exec mangohud gamescope \
     --backend=wayland \
     --hdr-debug-force-output \

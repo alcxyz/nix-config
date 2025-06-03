@@ -4,17 +4,6 @@
 with lib;
 let
   cfg = config.suites.gaming;
-
-  # Gamescope launcher scripts using separate files
-  gamescope-steam = pkgs.writeShellScript "gamescope-steam" 
-    (builtins.readFile ./scripts/gamescope-steam.sh);
-
-  gamescope-emulationstation = pkgs.writeShellScript "gamescope-emulationstation" 
-    (builtins.readFile ./scripts/gamescope-emulationstation.sh);
-
-  gamescope-browser = pkgs.writeShellScript "gamescope-browser" 
-    (builtins.readFile ./scripts/gamescope-browser.sh);
-
 in
 {
   options.suites.gaming = with types; {
@@ -26,7 +15,7 @@ in
     
     gamingWorkspace = mkOption { 
       type = str; 
-      default = "9"; 
+      default = "1"; 
       description = "The Hyprland workspace number for gaming."; 
     };
     
@@ -38,7 +27,7 @@ in
     
     gameApps = mkOption {
       type = listOf str;
-      default = [ "steam" "steamwebhelper" "steam_app_.*" "retroarch" ".*\\.bin\\.x86_64" "dolphin-emu" "pcsx2" "emulationstation-de" "es-de" ];
+      default = [ "steam" "steamwebhelper" "steam_app_.*" "retroarch" ".*\\.bin\\.x86_64" "dolphin-emu" "pcsx2" "emulationstation-de" "es-de" "gamescope" ];
       description = "List of application process binary REGEX patterns for game applications.";
     };
   };
@@ -51,74 +40,34 @@ in
       vulkan-tools
       wayland-utils
       
-      # Gamescope launcher scripts
-      (pkgs.writeShellScriptBin "gamescope-steam" ''exec ${gamescope-steam}'')
-      (pkgs.writeShellScriptBin "gamescope-emulationstation" ''exec ${gamescope-emulationstation}'')
-      (pkgs.writeShellScriptBin "gamescope-browser" ''exec ${gamescope-browser}'')
+      # Audio management scripts
+      (pkgs.writeShellScriptBin "ensure-game-sink" 
+        (builtins.readFile ./scripts/ensure-game-sink.sh))
       
-      # Workspace audio monitor (standalone script, no service)
-      (pkgs.writeShellScriptBin "workspace-audio-monitor" 
-        (builtins.readFile ./scripts/monitor-workspace-audio.sh))
-        
-      # Game sink creation script  
-      (pkgs.writeShellScriptBin "ensure-game-sink" ''
+      # Audio management script with gaming workspace parameter
+      (pkgs.writeShellScriptBin "manage-game-audio" ''
         #!/usr/bin/env bash
+        set -euo pipefail
+
         SINK_NAME="GameAudioSink"
-        
-        # Check if sink already exists
-        if pactl list short sinks | grep -q "$SINK_NAME"; then
-          exit 0
-        fi
-        
-        # Create the sink
-        if command -v pactl >/dev/null && pactl info >/dev/null 2>&1; then
-          pactl load-module module-null-sink \
-            sink_name="$SINK_NAME" \
-            sink_properties="device.description='Virtual Sink for Games and Streaming'" \
-            rate=48000 \
-            channels=2 >/dev/null 2>&1
-        fi
+        LOOPBACK_NAME="GameAudioLoopback"
+        GAMING_WORKSPACE="${cfg.gamingWorkspace}"
+
+        ${builtins.readFile ./scripts/manage-game-audio.sh}
       '')
+
+      # Gamescope launcher scripts
+      (pkgs.writeShellScriptBin "gamescope-steam" 
+        (builtins.readFile ./scripts/gamescope-steam.sh))
+      
+      (pkgs.writeShellScriptBin "gamescope-emulationstation" 
+        (builtins.readFile ./scripts/gamescope-emulationstation.sh))
+      
+      (pkgs.writeShellScriptBin "gamescope-browser" 
+        (builtins.readFile ./scripts/gamescope-browser.sh))
     ];
 
-    # Keep the simple game sink service (this one works)
-    systemd.user.services.ensure-game-sink = {
-      Unit = {
-        Description = "Ensure GameAudioSink exists";
-        After = [ "pipewire.service" "pipewire-pulse.service" ];
-      };
-      
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${pkgs.writeShellScript "ensure-game-sink" ''
-          #!/usr/bin/env bash
-          SINK_NAME="GameAudioSink"
-          
-          # Wait a moment for audio system
-          sleep 2
-          
-          # Check if sink already exists
-          if pactl list short sinks | grep -q "$SINK_NAME"; then
-            echo "GameAudioSink already exists"
-            exit 0
-          fi
-          
-          # Create the sink
-          if command -v pactl >/dev/null && pactl info >/dev/null 2>&1; then
-            echo "Creating GameAudioSink"
-            pactl load-module module-null-sink \
-              sink_name="$SINK_NAME" \
-              sink_properties="device.description='Virtual Sink for Games and Streaming'" \
-              rate=48000 \
-              channels=2
-          fi
-        ''}";
-      };
-      
-      Install.WantedBy = [ "default.target" ];
-    };
-
-    # WirePlumber auto-routing rules (unchanged)
+    # WirePlumber configuration for automatic routing
     xdg.configFile."wireplumber/wireplumber.conf.d/51-game-audio-routing.conf" = {
       text = builtins.toJSON {
         "monitor.pipewire.rules" = [
@@ -141,7 +90,5 @@ in
         ];
       };
     };
-
   };
-
 }

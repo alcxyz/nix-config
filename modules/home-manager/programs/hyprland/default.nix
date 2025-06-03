@@ -96,7 +96,11 @@ in
 
     xdg.configFile = {
       "hypr/launch".source = ./launch;
-      "hypr/hyprland.conf".source = ./hyprland.conf;
+      "hypr/hyprland.conf" = {
+        source = pkgs.replaceVars ./hyprland.conf {
+          gamingWorkspace = config.suites.gaming.gamingWorkspace or "1";
+        };
+      };
       "hypr/colors.conf" = {
         text = ''
           general {
