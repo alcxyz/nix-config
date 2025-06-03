@@ -40,11 +40,7 @@ in
       vulkan-tools
       wayland-utils
       
-      # Audio management scripts
-      (pkgs.writeShellScriptBin "ensure-game-sink" 
-        (builtins.readFile ./scripts/ensure-game-sink.sh))
-      
-      # Audio management script with gaming workspace parameter
+      # Audio management script - clean approach
       (pkgs.writeShellScriptBin "manage-game-audio" ''
         #!/usr/bin/env bash
         set -euo pipefail

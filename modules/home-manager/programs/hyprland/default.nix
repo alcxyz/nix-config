@@ -96,10 +96,27 @@ in
 
     xdg.configFile = {
       "hypr/launch".source = ./launch;
-      "hypr/hyprland.conf" = {
-        source = pkgs.replaceVars ./hyprland.conf {
-          gamingWorkspace = config.suites.gaming.gamingWorkspace or "1";
-        };
+      "hypr/hyprland.conf".source = ./hyprland.conf;
+      "hypr/gaming.conf" = {
+        text = ''
+          # Gaming Suite Configuration
+          $ws_gaming = ${config.suites.gaming.gamingWorkspace or "1"}
+
+          # Gaming workspace setup with audio management
+          bind = SUPER, G, exec, gamescope-steam
+          bind = SUPER, G, workspace, $ws_gaming
+
+          # Window rules for Gamescope
+          windowrulev2 = workspace $ws_gaming silent,class:^(gamescope)$
+          windowrulev2 = fullscreen,class:^(gamescope)$
+          windowrulev2 = noborder,class:^(gamescope)$
+          windowrulev2 = noshadow,class:^(gamescope)$
+          windowrulev2 = immediate,class:^(gamescope)$
+          windowrulev2 = immediate,class:^(steam_app_).*
+
+          # Initialize game audio on startup
+          exec-once = manage-game-audio init
+        '';
       };
       "hypr/colors.conf" = {
         text = ''
@@ -110,5 +127,6 @@ in
         '';
       };
     };
+
   };
 }
