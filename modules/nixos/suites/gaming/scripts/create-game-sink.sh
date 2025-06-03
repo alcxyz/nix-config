@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# scripts/create-game-sink.sh
 set -euo pipefail
 
 SINK_NAME="GameAudioSink"
@@ -7,15 +6,29 @@ SINK_DESC="Virtual Sink for Games and Streaming"
 
 echo "[audio] Creating $SINK_NAME..."
 
-# Wait for PipeWire to be ready
-timeout=10
-while [ $timeout -gt 0 ] && ! pw-cli info &>/dev/null; do
-    sleep 1
-    timeout=$((timeout - 1))
-done
+# Better PipeWire readiness check
+wait_for_pipewire() {
+    local timeout=30
+    while [ $timeout -gt 0 ]; do
+        # Check multiple conditions for PipeWire readiness
+        if command -v pw-cli >/dev/null && \
+           pw-cli info >/dev/null 2>&1 && \
+           pw-cli list-objects >/dev/null 2>&1 && \
+           pactl info >/dev/null 2>&1; then
+            echo "[audio] PipeWire is ready"
+            return 0
+        fi
+        echo "[audio] Waiting for PipeWire... ($timeout)"
+        sleep 2
+        timeout=$((timeout - 2))
+    done
+    echo "[audio] Timeout waiting for PipeWire"
+    return 1
+}
 
-if [ $timeout -le 0 ]; then
-    echo "[audio] Error: PipeWire not ready"
+# Wait for PipeWire
+if ! wait_for_pipewire; then
+    echo "[audio] Error: PipeWire not ready after waiting"
     exit 1
 fi
 
@@ -25,8 +38,10 @@ if pw-cli list-objects | grep -q "node.name.*$SINK_NAME"; then
     exit 0
 fi
 
+echo "[audio] Creating $SINK_NAME..."
+
 # Create the game audio sink
-pw-cli create-node adapter '{
+if pw-cli create-node adapter '{
     factory.name="support.null-audio-sink"
     node.name="'$SINK_NAME'"
     node.description="'$SINK_DESC'"
@@ -36,6 +51,17 @@ pw-cli create-node adapter '{
     object.linger=true
     node.dont-remix=true
     node.pause-on-idle=false
-}'
+}'; then
+    echo "[audio] $SINK_NAME created successfully"
+else
+    echo "[audio] Failed to create $SINK_NAME"
+    exit 1
+fi
 
-echo "[audio] $SINK_NAME created successfully"
+# Verify creation
+sleep 2
+if pw-cli list-objects | grep -q "node.name.*$SINK_NAME"; then
+    echo "[audio] $SINK_NAME verified"
+else
+    echo "[audio] Warning: $SINK_NAME creation could not be verified"
+fi

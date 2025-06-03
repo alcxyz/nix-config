@@ -85,11 +85,9 @@ in
       pipewire
       pulseaudio # For pactl compatibility
       gnugrep gawk gnused
-      # Simple audio management scripts
+      # Only the game sink creation script (NOT the monitor script)
       (pkgs.writeShellScriptBin "create-game-sink" 
         (builtins.readFile ./scripts/create-game-sink.sh))
-      (pkgs.writeShellScriptBin "monitor-workspace-audio" 
-        (builtins.readFile ./scripts/monitor-workspace-audio.sh))
 
     ] ++ optionals cfg.steam.enable [
       steam
@@ -181,22 +179,26 @@ in
     # Gaming audio sink service
     systemd.user.services.pipewire-game-sink = {
       description = "Create GameAudioSink for gaming and streaming";
-      wantedBy = [ "pipewire.service" ];
-      after = [ "pipewire.service" "wireplumber.service" ];
-      partOf = [ "pipewire.service" ];
-      before = [ "sunshine.service" ];
+      wantedBy = [ "graphical-session.target" ];
+      after = [ "pipewire.service" "pipewire-pulse.service" "wireplumber.service" ];
+      wants = [ "pipewire.service" "wireplumber.service" ];
+      partOf = [ "graphical-session.target" ];
 
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
         ExecStart = "${pkgs.writeShellScript "create-game-sink" (builtins.readFile ./scripts/create-game-sink.sh)}";
         ExecStop = "${pkgs.writeShellScript "remove-game-sink" ''
-          SINK_ID=$(pw-cli list-objects | grep -B5 "node.name.*GameAudioSink" | grep -m1 "id:" | awk '{print $2}' | tr -d ',')
+          echo "[audio] Removing GameAudioSink..."
+          SINK_ID=$(pw-cli list-objects 2>/dev/null | grep -B5 "node.name.*GameAudioSink" | grep -m1 "id:" | awk '{print $2}' | tr -d ',' || echo "")
           if [[ -n "$SINK_ID" ]]; then
-            echo "[audio] Removing GameAudioSink"
-            pw-cli destroy "$SINK_ID"
+            echo "[audio] Removing GameAudioSink (ID: $SINK_ID)"
+            pw-cli destroy "$SINK_ID" || echo "[audio] Failed to destroy GameAudioSink"
+          else
+            echo "[audio] GameAudioSink not found for removal"
           fi
         ''}";
+        ExecStartPre = "${pkgs.coreutils}/bin/sleep 3";
       };
     };
     

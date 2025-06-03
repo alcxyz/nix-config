@@ -92,6 +92,7 @@ in
       Unit = {
         Description = "Monitor workspace changes for game audio";
         After = [ "graphical-session.target" "pipewire-game-sink.service" ];
+        Wants = [ "pipewire-game-sink.service" ];
         PartOf = [ "graphical-session.target" ];
       };
       
@@ -99,7 +100,9 @@ in
         Type = "simple";
         ExecStart = "${pkgs.writeShellScript "workspace-audio-monitor" (builtins.readFile ./scripts/monitor-workspace-audio.sh)}";
         Restart = "on-failure";
-        RestartSec = "3s";
+        RestartSec = "5s";
+        # Add startup delay to ensure everything is ready
+        ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
         Environment = [
           "GAMING_WORKSPACE=${cfg.gamingWorkspace}"
         ];
@@ -107,5 +110,6 @@ in
       
       Install.WantedBy = [ "graphical-session.target" ];
     };
+
   };
 }
