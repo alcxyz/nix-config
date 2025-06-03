@@ -85,9 +85,6 @@ in
       pipewire
       pulseaudio # For pactl compatibility
       gnugrep gawk gnused
-      # Only the game sink creation script (NOT the monitor script)
-      (pkgs.writeShellScriptBin "create-game-sink" 
-        (builtins.readFile ./scripts/create-game-sink.sh))
 
     ] ++ optionals cfg.steam.enable [
       steam
@@ -129,7 +126,7 @@ in
       description = "Sunshine game streaming server";
       wantedBy = [ "graphical-session.target" ];
       partOf = [ "graphical-session.target" ];
-      after = [ "graphical-session.target" "pipewire.service" "pipewire-pulse.service" "pipewire-game-sink.service" ];
+      after = [ "graphical-session.target" "pipewire.service" "pipewire-pulse.service" ];
       
       serviceConfig = {
         Type = "simple";
@@ -150,8 +147,8 @@ in
     system.activationScripts.sunshine-config = mkIf cfg.sunshine.enable {
       text = 
         let
-          sunshineConf = pkgs.replaceVars ./config/sunshine.conf { inherit username; };
-          appsJson = ./config/apps.json;
+          sunshineConf = pkgs.replaceVars ./sunshine.conf { inherit username; };
+          appsJson = ./apps.json;
         in ''
         USER_HOME="/home/${username}"
         CONFIG_DIR="$USER_HOME/.config/sunshine"
@@ -174,32 +171,6 @@ in
         echo "Sunshine configuration script finished."
       '';
       deps = [ "users" ];
-    };
-
-    # Gaming audio sink service
-    systemd.user.services.pipewire-game-sink = {
-      description = "Create GameAudioSink for gaming and streaming";
-      wantedBy = [ "graphical-session.target" ];
-      after = [ "pipewire.service" "pipewire-pulse.service" "wireplumber.service" ];
-      wants = [ "pipewire.service" "wireplumber.service" ];
-      partOf = [ "graphical-session.target" ];
-
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = "${pkgs.writeShellScript "create-game-sink" (builtins.readFile ./scripts/create-game-sink.sh)}";
-        ExecStop = "${pkgs.writeShellScript "remove-game-sink" ''
-          echo "[audio] Removing GameAudioSink..."
-          SINK_ID=$(pw-cli list-objects 2>/dev/null | grep -B5 "node.name.*GameAudioSink" | grep -m1 "id:" | awk '{print $2}' | tr -d ',' || echo "")
-          if [[ -n "$SINK_ID" ]]; then
-            echo "[audio] Removing GameAudioSink (ID: $SINK_ID)"
-            pw-cli destroy "$SINK_ID" || echo "[audio] Failed to destroy GameAudioSink"
-          else
-            echo "[audio] GameAudioSink not found for removal"
-          fi
-        ''}";
-        ExecStartPre = "${pkgs.coreutils}/bin/sleep 3";
-      };
     };
     
     # Firewall rules

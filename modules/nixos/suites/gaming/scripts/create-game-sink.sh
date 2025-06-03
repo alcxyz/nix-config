@@ -6,52 +6,34 @@ SINK_DESC="Virtual Sink for Games and Streaming"
 
 echo "[audio] Creating $SINK_NAME..."
 
-# Better PipeWire readiness check
-wait_for_pipewire() {
-    local timeout=30
-    while [ $timeout -gt 0 ]; do
-        # Check multiple conditions for PipeWire readiness
-        if command -v pw-cli >/dev/null && \
-           pw-cli info >/dev/null 2>&1 && \
-           pw-cli list-objects >/dev/null 2>&1 && \
-           pactl info >/dev/null 2>&1; then
-            echo "[audio] PipeWire is ready"
-            return 0
-        fi
-        echo "[audio] Waiting for PipeWire... ($timeout)"
-        sleep 2
-        timeout=$((timeout - 2))
-    done
-    echo "[audio] Timeout waiting for PipeWire"
-    return 1
-}
+# Simple wait - just check if we can list sinks
+wait_count=0
+while ! pactl list short sinks >/dev/null 2>&1; do
+    if [ $wait_count -gt 15 ]; then
+        echo "[audio] Error: Cannot access PulseAudio/PipeWire after 30 seconds"
+        exit 1
+    fi
+    echo "[audio] Waiting for audio system... ($wait_count)"
+    sleep 2
+    wait_count=$((wait_count + 1))
+done
 
-# Wait for PipeWire
-if ! wait_for_pipewire; then
-    echo "[audio] Error: PipeWire not ready after waiting"
-    exit 1
-fi
+echo "[audio] Audio system ready"
 
-# Check if sink already exists
-if pw-cli list-objects | grep -q "node.name.*$SINK_NAME"; then
+# Check if sink already exists (using pactl since it's more reliable)
+if pactl list short sinks | grep -q "$SINK_NAME"; then
     echo "[audio] $SINK_NAME already exists"
     exit 0
 fi
 
 echo "[audio] Creating $SINK_NAME..."
 
-# Create the game audio sink
-if pw-cli create-node adapter '{
-    factory.name="support.null-audio-sink"
-    node.name="'$SINK_NAME'"
-    node.description="'$SINK_DESC'"
-    media.class="Audio/Sink"
-    audio.channels=2
-    audio.position="[FL,FR]"
-    object.linger=true
-    node.dont-remix=true
-    node.pause-on-idle=false
-}'; then
+# Create using pactl (more reliable than pw-cli for this)
+if pactl load-module module-null-sink \
+    sink_name="$SINK_NAME" \
+    sink_properties="device.description='$SINK_DESC'" \
+    rate=48000 \
+    channels=2; then
     echo "[audio] $SINK_NAME created successfully"
 else
     echo "[audio] Failed to create $SINK_NAME"
@@ -59,8 +41,8 @@ else
 fi
 
 # Verify creation
-sleep 2
-if pw-cli list-objects | grep -q "node.name.*$SINK_NAME"; then
+sleep 1
+if pactl list short sinks | grep -q "$SINK_NAME"; then
     echo "[audio] $SINK_NAME verified"
 else
     echo "[audio] Warning: $SINK_NAME creation could not be verified"
