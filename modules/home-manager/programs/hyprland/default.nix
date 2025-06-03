@@ -97,12 +97,13 @@ in
     xdg.configFile = {
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;
+
       "hypr/gaming.conf" = {
         text = ''
           # Gaming Suite Configuration
           $ws_gaming = ${config.suites.gaming.gamingWorkspace or "1"}
 
-          # Gaming workspace setup with audio management
+          # Gaming workspace setup
           bind = SUPER, G, exec, gamescope-steam
           bind = SUPER, G, workspace, $ws_gaming
 
@@ -114,10 +115,11 @@ in
           windowrulev2 = immediate,class:^(gamescope)$
           windowrulev2 = immediate,class:^(steam_app_).*
 
-          # Initialize game audio on startup
-          exec-once = manage-game-audio init
+          # Start workspace audio monitor (automatic audio management)
+          exec-once = workspace-audio-monitor init
         '';
       };
+
       "hypr/colors.conf" = {
         text = ''
           general {
