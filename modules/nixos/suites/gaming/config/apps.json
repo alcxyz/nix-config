@@ -4,11 +4,11 @@
   },
   "apps": [
     {
-      "name": "Steam Gaming",
+      "name": "Steam",
       "output": "",
       "cmd": [
         "sh", "-c", 
-        "hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-steam"
+        "gamescope-steam"
       ],
       "exclude-global-prep-cmd": false,
       "elevated": false,
@@ -17,11 +17,11 @@
       "exit-timeout": 5
     },
     {
-      "name": "Retro Gaming (EmulationStation)",
+      "name": "Retro (ES-DE)",
       "output": "",
       "cmd": [
         "sh", "-c", 
-        "hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-emulationstation"
+        "gamescope-emulationstation"
       ],
       "exclude-global-prep-cmd": false,
       "elevated": false,
@@ -30,11 +30,11 @@
       "exit-timeout": 5
     },
     {
-      "name": "Browser Gaming",
+      "name": "Browser",
       "output": "",
       "cmd": [
         "sh", "-c", 
-        "hyprctl dispatch workspace 9 && prepare-streaming-audio && gamescope-browser"
+        "gamescope-browser"
       ],
       "exclude-global-prep-cmd": false,
       "elevated": false,
@@ -42,18 +42,5 @@
       "wait-all": false,
       "exit-timeout": 5
     },
-    {
-      "name": "Desktop",
-      "output": "",
-      "cmd": [
-        "sh", "-c",
-        "restore-default-audio && hyprctl dispatch workspace 1"
-      ],
-      "exclude-global-prep-cmd": false,
-      "elevated": false,
-      "auto-detach": true,
-      "wait-all": false,
-      "exit-timeout": 5
-    }
   ]
 }
