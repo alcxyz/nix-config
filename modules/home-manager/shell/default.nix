@@ -8,6 +8,7 @@ with lib;
     zoxide
     starship
     carapace
+    carapace-bridge
     atuin
     direnv
     neovim
@@ -93,6 +94,15 @@ with lib;
         # --- End Common Nushell Configuration (Part 1) ---
       '';
     };
+  };
+
+  # Configure Carapace to use various bridges.
+  # carapace-bridge provides implementations for many of these (e.g., bash, zsh).
+  home.sessionVariables = {
+    CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
+    # You can customize this list. "bash" and "zsh" are common ones
+    # that carapace-bridge would handle for tools that provide completions
+    # in those formats.
   };
 
   xdg.configFile."starship.toml".source = ./starship.toml;
