@@ -75,13 +75,24 @@ with lib;
   programs.chromium.enable = true;
   programs.foot.enable = true;
   programs.hyprland.managed.enable = true;
-  programs.waybar.managed.enable = true;
+
+  programs.waybar.managed = {
+    enable = true;
+    #variant = "alternative";
+  };
+
   programs.wofi.managed.enable = true;
-  programs.wlogout.managed.enable = true;
+
+  programs.wlogout.managed = {
+    enable = true;
+    #style = "enhanced";
+  };
+
   services.swww.managed = {
     enable = true;
     systemd.enable = true;
   };
+
   services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
   services.hyprlock.wallpaper.useStandardDir = true;

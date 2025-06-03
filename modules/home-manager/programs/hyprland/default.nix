@@ -36,47 +36,18 @@ in
       xwayland.enable = true;
       systemd.enable = true; # Consider enabling this for user service integration with UWSM
 
-      # --- Configuration directives for hyprland.conf ---
-      # These go under the 'settings' option of the built-in module.
-      # 'settings' takes an attribute set representing the configuration sections.
       settings = {
         general = {
-          # Note: Hyprland uses 0xAARRGGBB or 0xRRGGBB format.
-          # nix-colors provides RRGGBB hexadecimal strings.
-          # We prefix with 0xff for full opacity (AA=ff).
-          #"col.active_border" = "0xff${colors.base0C} 0xff${colors.base0D}"; # Gradient example
-          #"col.inactive_border" = "0xff${colors.base00}";
-
-          # Add other general settings here using the structured format
-          # like:
-          # gpus = "auto";
-          # border_size = 2;
+          "col.active_border" = "0xff${colors.base0C} 0xff${colors.base0D}";
+          "col.inactive_border" = "0xff${colors.base00}";
+          border_size = 2;
+          gaps_in = 5;
+          gaps_out = 10;
         };
-
-        # Add other sections from your hyprland.conf here, translated
-        # into the Nix attribute set structure, directly under 'settings'.
-        # Example sections:
-        # decoration = {
-        #   rounding = 10;
-        #   blur = { enabled = true; size = 3; passes = 1; };
-        #   # ... other decoration settings
-        # };
-        #
-        # animation = {
-        #   enabled = true;
-        #   # animations go here...
-        # };
-        #
-        # binds = [
-        #   "$mainMod, Q, killactive,"
-        #   "$mainMod, M, exit,"
-        #   # ... other keybinds as strings
-        # ];
-        #
-        # windowRules = [
-        #   "float,^(kitty)$"
-        #   # ... other rules as strings
-        # ];
+        decoration = {
+          rounding = 10;
+          "col.shadow" = "0xff${colors.base00}";
+        };
       };
 
       # Use extraConfig for raw lines not covered by structured options

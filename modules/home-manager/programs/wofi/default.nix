@@ -11,6 +11,29 @@ let
   cfg = config.programs.wofi.managed;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
+  
+  # Simple string replacement approach (no deprecated functions)
+  substituteColors = text: 
+    let
+      # Create substitution pairs with lowercase placeholders
+      colorPlaceholders = [
+        "@base00@" "@base01@" "@base02@" "@base03@"
+        "@base04@" "@base05@" "@base06@" "@base07@"
+        "@base08@" "@base09@" "@base0a@" "@base0b@"
+        "@base0c@" "@base0d@" "@base0e@" "@base0f@"
+      ];
+      colorValues = [
+        colors.base00 colors.base01 colors.base02 colors.base03
+        colors.base04 colors.base05 colors.base06 colors.base07
+        colors.base08 colors.base09 colors.base0A colors.base0B
+        colors.base0C colors.base0D colors.base0E colors.base0F
+      ];
+    in
+    builtins.replaceStrings colorPlaceholders colorValues text;
+    
+  # Read template and process it
+  styleTemplate = builtins.readFile ./style.css.template;
+  processedStyle = substituteColors styleTemplate;
 in
 {
   options.programs.wofi.managed = {
@@ -21,74 +44,6 @@ in
     programs.wofi.enable = true;
 
     xdg.configFile."wofi/config".source = ./config;
-    xdg.configFile."wofi/style.css".text = ''
-      window {
-          margin: 5px;
-          border: 5px solid #181926;
-          background-color: #${colors.base00};
-          border-radius: 15px;
-          font-family: "JetBrainsMono";
-          font-size: 14px;
-        }
-
-        #input {
-          all: unset;
-          min-height: 36px;
-          padding: 4px 10px;
-          margin: 4px;
-          border: none;
-          color: #${colors.base05};
-          font-weight: bold;
-          background-color: #${colors.base01};
-          outline: none;
-          border-radius: 15px;
-          margin: 10px;
-          margin-bottom: 2px;
-        }
-
-        #inner-box {
-          margin: 4px;
-          padding: 10px;
-          font-weight: bold;
-          border-radius: 15px;
-        }
-
-        #outer-box {
-          margin: 0px;
-          padding: 3px;
-          border: none;
-          border-radius: 15px;
-          border: 5px solid #${colors.base01};
-        }
-
-        #scroll {
-          margin-top: 5px;
-          border: none;
-          border-radius: 15px;
-          margin-bottom: 5px;
-        }
-
-        #text:selected {
-          color: #${colors.base01};
-          margin: 0px 0px;
-          border: none;
-          border-radius: 15px;
-        }
-
-        #entry {
-          margin: 0px 0px;
-          border: none;
-          border-radius: 15px;
-          background-color: transparent;
-        }
-
-        #entry:selected {
-          margin: 0px 0px;
-          border: none;
-          border-radius: 15px;
-          background: #${colors.base0D};
-          background-size: 400% 400%;
-        }
-    '';
+    xdg.configFile."wofi/style.css".text = processedStyle;
   };
 }
