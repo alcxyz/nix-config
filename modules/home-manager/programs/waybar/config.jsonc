@@ -41,7 +41,7 @@
   },
   
   "clock": {
-    "timezone": "Europe/London",
+    "timezone": "Europe/Oslo",
     "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
     "format": "{:%H:%M}",
     "format-alt": "{:%Y-%m-%d}"
