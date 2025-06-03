@@ -56,11 +56,11 @@ in
       (pkgs.writeShellScriptBin "gamescope-emulationstation" ''exec ${gamescope-emulationstation}'')
       (pkgs.writeShellScriptBin "gamescope-browser" ''exec ${gamescope-browser}'')
       
-      # Workspace audio monitor
+      # Workspace audio monitor (standalone script, no service)
       (pkgs.writeShellScriptBin "workspace-audio-monitor" 
         (builtins.readFile ./scripts/monitor-workspace-audio.sh))
         
-      # Game sink creation script
+      # Game sink creation script  
       (pkgs.writeShellScriptBin "ensure-game-sink" ''
         #!/usr/bin/env bash
         SINK_NAME="GameAudioSink"
@@ -81,7 +81,7 @@ in
       '')
     ];
 
-    # Create GameAudioSink at session start
+    # Keep the simple game sink service (this one works)
     systemd.user.services.ensure-game-sink = {
       Unit = {
         Description = "Ensure GameAudioSink exists";
@@ -140,39 +140,6 @@ in
           }
         ];
       };
-    };
-
-    # Start workspace audio monitor
-    systemd.user.services.workspace-audio-monitor = {
-      Unit = {
-        Description = "Monitor workspace changes for game audio";
-        After = [ "graphical-session.target" "ensure-game-sink.service" ];
-        Wants = [ "ensure-game-sink.service" ];
-        PartOf = [ "graphical-session.target" ];
-      };
-      
-      Service = {
-        Type = "simple";
-        ExecStart = "${pkgs.writeShellScript "workspace-audio-monitor-service" ''
-          #!/usr/bin/env bash
-          
-          # Wait for Hyprland to be ready
-          while ! command -v hyprctl >/dev/null || ! hyprctl version >/dev/null 2>&1; do
-            echo "[workspace-audio] Waiting for Hyprland..."
-            sleep 3
-          done
-          
-          echo "[workspace-audio] Starting workspace monitor..."
-          exec ${pkgs.writeShellScript "workspace-audio-monitor" (builtins.readFile ./scripts/monitor-workspace-audio.sh)}
-        ''}";
-        Restart = "on-failure";
-        RestartSec = "10s";  # Longer restart delay
-        Environment = [
-          "GAMING_WORKSPACE=${cfg.gamingWorkspace}"
-        ];
-      };
-      
-      Install.WantedBy = [ "graphical-session.target" ];
     };
 
   };
