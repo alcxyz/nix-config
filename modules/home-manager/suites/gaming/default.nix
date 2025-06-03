@@ -21,7 +21,7 @@ in
     
     hostBypassApps = mkOption {
       type = listOf str;
-      default = [ "zen" "brave" "firefox" "chromium" "spotify" "discord" "vlc" ];
+      default = [ "zen" "brave" "firefox" "spotify" "discord" "vlc" ];
       description = "List of application process binary REGEX patterns that should always play audio on the host's physical speakers.";
     };
     
@@ -40,7 +40,11 @@ in
       vulkan-tools
       wayland-utils
       
-      # Audio management script - clean approach
+      # Ensure game sink script
+      (pkgs.writeShellScriptBin "ensure-game-sink" 
+        (builtins.readFile ./scripts/ensure-game-sink.sh))
+      
+      # Audio management script with gaming workspace parameter
       (pkgs.writeShellScriptBin "manage-game-audio" ''
         #!/usr/bin/env bash
         set -euo pipefail
@@ -51,7 +55,7 @@ in
 
         ${builtins.readFile ./scripts/manage-game-audio.sh}
       '')
-
+      
       # Gamescope launcher scripts
       (pkgs.writeShellScriptBin "gamescope-steam" 
         (builtins.readFile ./scripts/gamescope-steam.sh))
