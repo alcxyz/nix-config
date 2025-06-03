@@ -152,8 +152,8 @@ in
     system.activationScripts.sunshine-config = mkIf cfg.sunshine.enable {
       text = 
         let
-          sunshineConf = pkgs.replaceVars ./sunshine.conf { inherit username; };
-          appsJson = ./apps.json;
+          sunshineConf = pkgs.replaceVars ./config/sunshine.conf { inherit username; };
+          appsJson = ./config/apps.json;
         in ''
         USER_HOME="/home/${username}"
         CONFIG_DIR="$USER_HOME/.config/sunshine"
