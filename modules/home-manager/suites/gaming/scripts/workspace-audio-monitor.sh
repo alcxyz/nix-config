@@ -1,11 +1,6 @@
 # modules/home-manager/suites/gaming/scripts/workspace-audio-monitor.sh
 #!/usr/bin/env bash
-set -euo pipefail
-
-SCRIPT_NAME="workspace-audio-monitor"
-SINK_NAME="GameAudioSink"
-GAMING_WORKSPACE="@GAMING_WORKSPACE@"  # Will be replaced by Nix
-SOCKET_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+# Note: GAMING_WORKSPACE, SINK_NAME, etc. are set by the Nix wrapper
 
 log() {
     echo "[$SCRIPT_NAME] $1" >&2
@@ -28,7 +23,51 @@ ensure_sink() {
 }
 
 get_active_workspace() {
-    hyprctl activewindow -j 2>/dev/null | jq -r '.workspace.id // "0"' || echo "0"
+    # Try multiple methods to get the active workspace
+    local workspace
+    
+    # Method 1: Try activewindow (works when there's a focused window)
+    workspace=$(hyprctl activewindow -j 2>/dev/null | jq -r '.workspace.id // empty' 2>/dev/null || true)
+    
+    # Method 2: If that fails, try activeworkspace (works even on empty workspaces)
+    if [[ -z "$workspace" ]]; then
+        workspace=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // empty' 2>/dev/null || true)
+    fi
+    
+    # Method 3: If both fail, try monitors (get workspace of active monitor)
+    if [[ -z "$workspace" ]]; then
+        workspace=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .activeWorkspace.id // empty' 2>/dev/null || true)
+    fi
+    
+    # Fallback
+    echo "${workspace:-0}"
+}
+
+get_focused_monitor_workspace() {
+    # Get the workspace that's currently shown on the focused monitor
+    hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .activeWorkspace.id // "0"' 2>/dev/null || echo "0"
+}
+
+is_gaming_workspace_visible() {
+    # Check if gaming workspace is visible on ANY monitor (for multi-monitor setups)
+    local visible_workspaces
+    visible_workspaces=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].activeWorkspace.id' 2>/dev/null || true)
+    
+    if [[ -n "$visible_workspaces" ]]; then
+        echo "$visible_workspaces" | grep -q "^${GAMING_WORKSPACE}$"
+    else
+        # Fallback to single monitor check
+        local current_workspace
+        current_workspace=$(get_active_workspace)
+        [[ "$current_workspace" == "$GAMING_WORKSPACE" ]]
+    fi
+}
+
+is_gaming_workspace_focused() {
+    # Check if gaming workspace is on the currently focused monitor
+    local focused_workspace
+    focused_workspace=$(get_focused_monitor_workspace)
+    [[ "$focused_workspace" == "$GAMING_WORKSPACE" ]]
 }
 
 create_loopback() {
@@ -64,19 +103,23 @@ remove_loopback() {
     fi
 }
 
-handle_workspace_change() {
-    local workspace="$1"
-    
-    log "Workspace changed to: $workspace"
+handle_focus_change() {
+    local event_type="$1"
     
     # Ensure sink always exists
     ensure_sink
     
-    if [[ "$workspace" == "$GAMING_WORKSPACE" ]]; then
-        log "Gaming workspace active - enabling local audio"
+    # Get current state
+    local focused_workspace
+    focused_workspace=$(get_focused_monitor_workspace)
+    
+    log "Focus change ($event_type) - focused monitor shows workspace: $focused_workspace (gaming workspace: $GAMING_WORKSPACE)"
+    
+    if is_gaming_workspace_focused; then
+        log "Gaming workspace is focused - enabling local audio"
         create_loopback
     else
-        log "Non-gaming workspace active - disabling local audio"
+        log "Gaming workspace is not focused - disabling local audio"
         remove_loopback
     fi
 }
@@ -85,11 +128,7 @@ monitor_workspace_events() {
     log "Starting workspace monitor (gaming workspace: $GAMING_WORKSPACE)"
     
     # Set initial state
-    local current_workspace
-    current_workspace=$(get_active_workspace)
-    if [[ -n "$current_workspace" ]]; then
-        handle_workspace_change "$current_workspace"
-    fi
+    handle_focus_change "initial"
     
     # Check if Hyprland socket exists
     if [[ ! -S "$SOCKET_PATH" ]]; then
@@ -100,17 +139,36 @@ monitor_workspace_events() {
     
     log "Monitoring Hyprland events at $SOCKET_PATH"
     
-    # Monitor workspace changes
+    # Monitor workspace and focus changes
     while IFS= read -r line; do
-        if [[ "$line" =~ ^workspace\>\>(.+) ]]; then
-            workspace="${BASH_REMATCH[1]}"
-            handle_workspace_change "$workspace"
-        elif [[ "$line" =~ ^focusedmon\>\>(.+) ]]; then
-            # Handle monitor focus changes (might switch workspace)
-            sleep 0.1  # Small delay to let workspace change complete
-            current_workspace=$(get_active_workspace)
-            handle_workspace_change "$current_workspace"
-        fi
+        case "$line" in
+            workspace\>\>*)
+                # Workspace changed
+                if [[ "$line" =~ ^workspace\>\>(.+) ]]; then
+                    workspace="${BASH_REMATCH[1]}"
+                    log "Workspace changed to: $workspace"
+                    handle_focus_change "workspace"
+                fi
+                ;;
+            focusedmon\>\>*)
+                # Monitor focus changed
+                if [[ "$line" =~ ^focusedmon\>\>(.+) ]]; then
+                    monitor_info="${BASH_REMATCH[1]}"
+                    log "Monitor focus changed: $monitor_info"
+                    # Small delay to ensure monitor state is updated
+                    sleep 0.1
+                    handle_focus_change "monitor"
+                fi
+                ;;
+            activespecial\>\>*)
+                # Special workspace (scratchpad) changed
+                log "Special workspace event detected"
+                handle_focus_change "special"
+                ;;
+            *)
+                # Ignore other events
+                ;;
+        esac
     done < <(socat -u UNIX-CONNECT:"$SOCKET_PATH" -)
 }
 
@@ -129,17 +187,26 @@ case "${1:-monitor}" in
         monitor_workspace_events
         ;;
     "check")
-        current_workspace=$(get_active_workspace)
-        handle_workspace_change "$current_workspace"
+        handle_focus_change "manual"
         ;;
     "init")
         log "Initializing audio system"
         ensure_sink
-        current_workspace=$(get_active_workspace)
-        handle_workspace_change "$current_workspace"
+        handle_focus_change "init"
+        ;;
+    "debug")
+        # Debug mode to test workspace detection methods
+        log "Debug mode - testing workspace detection methods"
+        log "Gaming workspace: $GAMING_WORKSPACE"
+        log "Method 1 (activewindow): $(hyprctl activewindow -j 2>/dev/null | jq -r '.workspace.id // "failed"' 2>/dev/null || echo "failed")"
+        log "Method 2 (activeworkspace): $(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // "failed"' 2>/dev/null || echo "failed")"
+        log "Method 3 (focused monitor): $(get_focused_monitor_workspace)"
+        log "All monitor workspaces: $(hyprctl monitors -j 2>/dev/null | jq -r '.[].activeWorkspace.id' 2>/dev/null | tr '\n' ' ')"
+        log "Gaming workspace visible: $(is_gaming_workspace_visible && echo "yes" || echo "no")"
+        log "Gaming workspace focused: $(is_gaming_workspace_focused && echo "yes" || echo "no")"
         ;;
     *)
-        log "Usage: $0 [monitor|check|init]"
+        log "Usage: $0 [monitor|check|init|debug]"
         exit 1
         ;;
 esac

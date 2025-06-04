@@ -58,7 +58,7 @@ in
         ${builtins.readFile ./scripts/manage-game-audio.sh}
       '')
       
-      # Workspace audio monitor
+      # Workspace audio monitor - inject the gaming workspace value
       (pkgs.writeShellScriptBin "workspace-audio-monitor" ''
         #!/usr/bin/env bash
         set -euo pipefail
