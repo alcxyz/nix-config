@@ -61,6 +61,7 @@ in
       # plugins = [ pkgs.hyprland-plugins.hyprbars ];
       # package = pkgs.hyprland.override { ... };
       # portalPackage = pkgs.xdg-desktop-portal-hyprland.override { hyprland = pkgs.hyprland; };
+      portalPackage = pkgs.xdg-desktop-portal-hyprland;
 
     }; # End of wayland.windowManager.hyprland block
 

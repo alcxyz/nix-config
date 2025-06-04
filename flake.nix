@@ -41,6 +41,7 @@
     pkgsFor = forAllSystems (system: import nixpkgs {
       inherit system;
       config.allowUnfree = true;
+      config.cudaSupport = true;
       config.permittedInsecurePackages = [
         "freeimage-3.18.0-unstable-2024-04-18"
         # If other insecure packages pop up, add them here.

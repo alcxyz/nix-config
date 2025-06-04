@@ -138,9 +138,20 @@ in
       environment = {
         HOME = "/home/${username}";
         XDG_RUNTIME_DIR = "/run/user/${toString config.users.users.${username}.uid}";
+
+        # --- Add/Ensure these for Wayland ---
+        WAYLAND_DISPLAY = "wayland-0"; # Hyprland typically uses wayland-0. Verify if different.
+        XDG_SESSION_TYPE = "wayland";
+
+        # These might help Sunshine and its dependencies correctly identify the GPU/rendering environment
         GBM_BACKEND = "nvidia-drm";
-        __GLX_VENDOR_LIBRARY_NAME = "nvidia";
+        __GLX_VENDOR_LIBRARY_NAME = "nvidia"; # For any Xwayland components
+        LIBVA_DRIVER_NAME = "nvidia";      # For VAAPI if NVENC fails
+
+        # If Sunshine or its UI components use Qt
+        QT_QPA_PLATFORM = "wayland;xcb"; # Prioritize Wayland, fallback to XCB for Xwayland
       };
+
     };
 
     # Copy Sunshine configuration files

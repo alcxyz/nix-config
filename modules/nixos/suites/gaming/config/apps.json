@@ -1,6 +1,6 @@
 {
   "env": {
-    "PATH": "$(PATH):$(HOME)/.local/bin:$(HOME)/.nix-profile/bin"
+    "PATH": "$(PATH)"
   },
   "apps": [
     {
@@ -41,6 +41,6 @@
       "auto-detach": true,
       "wait-all": false,
       "exit-timeout": 5
-    },
+    }
   ]
 }
