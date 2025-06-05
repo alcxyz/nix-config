@@ -87,7 +87,7 @@ in
       gnugrep gawk gnused
 
     ] ++ optionals cfg.steam.enable [
-        #steam
+      steam
     ] ++ optionals cfg.sunshine.enable [
       sunshine
       (pkgs.writeTextDir "share/udev/rules.d/99-sunshine-uinput.rules" ''
@@ -111,8 +111,8 @@ in
     '';
 
     # Steam configuration
-    #programs.steam.enable = lib.mkIf cfg.steam.enable true;
-    #programs.steam.remotePlay.openFirewall = lib.mkIf cfg.steam.enable true;
+    programs.steam.enable = lib.mkIf cfg.steam.enable true;
+    programs.steam.remotePlay.openFirewall = lib.mkIf cfg.steam.enable true;
 
     # Sunshine configuration
     security.wrappers.sunshine = mkIf cfg.sunshine.enable {

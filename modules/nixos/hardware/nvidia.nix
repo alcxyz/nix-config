@@ -51,8 +51,8 @@ in
         cairo
         # Also add these Wayland decoration packages
         wayland-protocols
-        xdg-desktop-portal
-        xdg-desktop-portal-wlr
+        #xdg-desktop-portal
+        #xdg-desktop-portal-wlr
         # Lutris specific
         nvidia-vaapi-driver
       ];
