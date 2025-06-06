@@ -10,42 +10,21 @@ log() {
     echo "$LOG_PREFIX $1" >&2
 }
 
-# This is still useful to ensure the sink exists before launch
+# We can still ensure the sink exists, this is harmless.
 ensure-game-sink
 
-log "Starting Gamescope Steam session (Flatpak)..."
+log "Starting Gamescope Steam session (Flatpak - Simplified)..."
 
-# All these environment variables are for the NATIVE Gamescope wrapper,
-# so they are still correct and necessary.
-export WLR_NO_HARDWARE_CURSORS=1
-export GBM_BACKEND=nvidia-drm
-export __GLX_VENDOR_LIBRARY_NAME=nvidia
-export LIBVA_DRIVER_NAME=nvidia
-export XDG_SESSION_TYPE=wayland
-export SDL_VIDEODRIVER=wayland
-export GDK_BACKEND=wayland
-export QT_QPA_PLATFORM=wayland
-export CLUTTER_BACKEND=wayland
-export _JAVA_AWT_WM_NONREPARENTING=1
-export DISPLAY=""
-export MANGOHUD_DLSYM=1
+# We are REMOVING all the export commands.
+# The Flatpak runtime will set up its own environment.
+# Our native Gamescope will still use the correct backend automatically.
 
-if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
-    log "Error: No Wayland display found. Are you running under Wayland?"
-    exit 1
-fi
-
-log "Wayland display: ${WAYLAND_DISPLAY}"
-log "Launching Flatpak Steam in Gamescope"
-
-# THE ONLY CHANGE IS HERE:
-# We replace `steam -bigpicture` with `flatpak run ...`
 exec mangohud gamescope \
     --backend=wayland \
     --hdr-debug-force-output \
     --prefer-vk-device \
     --expose-wayland \
-    --grab-keyboard \
+    --force-grab-cursor \
     -W 2560 -H 1440 \
     -w 2560 -h 1440 \
     -r 60 \

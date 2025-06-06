@@ -67,6 +67,7 @@ in
     boot.kernelParams = [
       "nvidia-drm.modeset=1"
       "nvidia-drm.fbdev=1"
+      "NVreg_PreserveVideoMemoryAllocations=1"
     ];
 
     environment.variables = {
