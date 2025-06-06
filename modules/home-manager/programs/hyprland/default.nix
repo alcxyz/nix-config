@@ -104,20 +104,28 @@ in
           # Gaming Suite Configuration
           $ws_gaming = ${config.suites.gaming.gamingWorkspace or "1"}
 
-          # Gaming workspace setup
-          bind = SUPER, G, exec, gamescope-steam
-          bind = SUPER, G, workspace, $ws_gaming
+          # --- THIS BINDING IS NOW SIMPLE ---
+          # It's only job is to launch the process. The window rules below will handle placement.
+          bind = SUPER, G, exec, flatpak run com.valvesoftware.Steam -bigpicture
 
-          # Window rules for Gamescope
+          # --- ROBUST WINDOW RULES ---
+          # These rules will catch all relevant windows and dispatch them correctly.
+
+          # Rule 1: Catch the initial Steam window (class 'steam') and move it.
+          windowrulev2 = workspace $ws_gaming silent,class:^(steam)$
+
+          # Rule 2: Catch the final Gamescope window and ensure it's on the correct workspace and fullscreen.
+          # This is still important as it takes over from the initial window.
           windowrulev2 = workspace $ws_gaming silent,class:^(gamescope)$
           windowrulev2 = fullscreen,class:^(gamescope)$
-          windowrulev2 = noborder,class:^(gamescope)$
-          windowrulev2 = noshadow,class:^(gamescope)$
-          windowrulev2 = immediate,class:^(gamescope)$
-          windowrulev2 = immediate,class:^(steam_app_).*
 
-          # Start workspace audio monitor (automatic audio management)
-          exec-once = workspace-audio-monitor init
+          # --- Specific Rules for the HEADLESS STREAMING Session ---
+          # These rules remain the same and are still correct.
+          windowrulev2 = nofocus, title:^(GamescopeStream)$
+          windowrulev2 = noinitialfocus, title:^(GamescopeStream)$
+
+          # Start the audio monitor automatically on login.
+          exec-once = workspace-audio-monitor monitor
         '';
       };
 

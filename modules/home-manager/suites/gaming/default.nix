@@ -71,9 +71,11 @@ in
         ${builtins.readFile ./scripts/workspace-audio-monitor.sh}
       '')
       
-      # Gamescope launcher scripts (unchanged)
       (pkgs.writeShellScriptBin "gamescope-steam" 
         (builtins.readFile ./scripts/gamescope-steam.sh))
+
+      (pkgs.writeShellScriptBin "gamescope-stream"
+        (builtins.readFile ./scripts/gamescope-stream.sh))
       
       (pkgs.writeShellScriptBin "gamescope-emulationstation" 
         (builtins.readFile ./scripts/gamescope-emulationstation.sh))

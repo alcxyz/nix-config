@@ -19,7 +19,7 @@ log "Starting Gamescope Steam session (Flatpak - Simplified)..."
 # The Flatpak runtime will set up its own environment.
 # Our native Gamescope will still use the correct backend automatically.
 
-exec mangohud gamescope \
+exec gamescope \
     --backend=wayland \
     --hdr-debug-force-output \
     --prefer-vk-device \

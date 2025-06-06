@@ -22,7 +22,6 @@ in
       thunderbird
 
       rustdesk
-      spotify
       vlc
       obsidian
       obs-studio
@@ -32,7 +31,6 @@ in
       cameractrls
       cameractrls-gtk4
       gparted
-      discord
       winetricks
       wineWowPackages.waylandFull
 
