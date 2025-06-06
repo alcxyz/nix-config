@@ -15,7 +15,7 @@ in
 
   config = mkIf cfg.enable { 
     environment.systemPackages = with pkgs; [
-      inputs.zen-browser.packages.x86_64-linux.default
+      #inputs.zen-browser.packages.x86_64-linux.default
 
       vivaldi
       brave
