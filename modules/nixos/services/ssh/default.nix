@@ -14,6 +14,7 @@ let
   cfg = config.services.ssh;
 
   publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@AM-VYH2F56CR6";
+  iphoneKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0";
   yikzinKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIAhSQvuNQAtvN+ibnJ23+WnqTdENXVyrRJ538sBKUfx ZIN";
 in
 {
@@ -48,6 +49,7 @@ in
 
       ${username}.openssh.authorizedKeys.keys = [
         publicKey
+        iphoneKey
       ];
 
       yikzin.openssh.authorizedKeys.keys = [
