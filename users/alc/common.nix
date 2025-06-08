@@ -119,5 +119,11 @@ with lib;
     };
   };
 
+  programs.gpg.scdaemonSettings = {
+    # This tells scdaemon to not take an exclusive lock on the card reader,
+    # resolving the conflict with other services like PIV.
+    "pcsc-shared" = true;
+  };
+
   programs.ncspot.enable = true;
 }
