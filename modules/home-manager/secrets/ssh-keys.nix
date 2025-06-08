@@ -134,6 +134,12 @@ in
           echo "✓ SSH private key $PRIVATE_KEY_PATH already exists, skipping gopass fetch"
           chmod 600 "$PRIVATE_KEY_PATH"  # Ensure correct permissions
         fi
+
+	# Load private key into SSH agent (if agent is running)
+        if [[ -n "$SSH_AUTH_SOCK" ]] && command -v ssh-add >/dev/null 2>&1; then
+          echo "Adding SSH key to agent..."
+          ssh-add "$PRIVATE_KEY_PATH" 2>/dev/null || echo "Note: Could not add key to SSH agent (agent may not be running)"
+        fi
         
         # Deploy public key (if needed or forced)
         if [[ "$FORCE_REFRESH" == "true" ]] || [[ ! -f "$PUBLIC_KEY_PATH" ]]; then

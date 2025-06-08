@@ -62,6 +62,13 @@ with lib;
     '';
   };
   
+  # Configure SSH agent for macOS
+  home.sessionVariables = {
+    # macOS has its own SSH agent, but we can still configure it
+    SSH_AUTH_SOCK = "$HOME/.ssh/ssh-agent.socket";
+  };
+
+  # Set GPG pinentry for macOS  
   programs.gpg.managed.agent.pinentryPackage = pkgs.pinentry_mac;
 
   # Configure git signing

@@ -8,7 +8,6 @@
 with lib;
 
 {
-  # This module now ONLY configures the SSH client.
   config = mkIf config.programs.ssh.enable {
     programs.ssh = {
       matchBlocks = {
@@ -22,7 +21,6 @@ with lib;
           user = "root";
         };
         "*" = {
-          # Use the standardized key name that we deploy
           identityFile = "~/.ssh/id_ed25519";
           extraOptions = {
             AddKeysToAgent = "yes";
@@ -41,6 +39,12 @@ with lib;
         ServerAliveInterval 60
         ServerAliveCountMax 3
         HashKnownHosts yes
+        AddKeysToAgent yes
+        
+        ${optionalString pkgs.stdenv.isDarwin ''
+        # macOS keychain integration
+        UseKeychain yes
+        ''}
       '';
     };
   };

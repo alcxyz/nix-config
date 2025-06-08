@@ -74,6 +74,17 @@ with lib;
 
   # Enable Linux-specific programs
 
+  # Configure SSH agent (separate from GPG agent)
+  services.ssh-agent.enable = true;
+
+  # Set GPG pinentry for Linux
+  services.gpg-agent.pinentry.package = pkgs.pinentry-gtk2;
+
+  # SSH agent environment
+  home.sessionVariables = {
+    SSH_AUTH_SOCK = "$XDG_RUNTIME_DIR/ssh-agent.socket";
+  };
+
   # Deploy SSH key pair using the convenience option
   secrets.ssh.keyPair = 
     if hostName == "xyz" then {
@@ -126,7 +137,6 @@ with lib;
   services.hypridle.managed.enable = true;
   services.hyprlock.enable = true;
   services.hyprlock.wallpaper.useStandardDir = true;
-  services.gpg-agent.pinentry.package = pkgs.pinentry-gtk2;
 
   suites.gaming = {
     enable = true;
