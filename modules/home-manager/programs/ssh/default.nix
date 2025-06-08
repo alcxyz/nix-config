@@ -41,9 +41,9 @@ with lib;
         HashKnownHosts yes
         AddKeysToAgent yes
         
-        ${optionalString pkgs.stdenv.isDarwin ''
+        #${optionalString pkgs.stdenv.isDarwin ''
         # macOS keychain integration
-        UseKeychain yes
+        #UseKeychain yes
         ''}
       '';
     };

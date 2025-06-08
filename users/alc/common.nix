@@ -64,6 +64,7 @@ with lib;
     bat
     ranger
     gopass
+    yubico-piv-tool
     youtube-music
   ];
 
