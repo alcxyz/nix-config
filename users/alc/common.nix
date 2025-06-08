@@ -98,7 +98,7 @@ with lib;
     #defaultKey = "YOUR_GPG_KEY_ID_HERE"; # Optional: your GPG key ID
 
     agent = {
-      enableSshSupport = true;
+      #enableSshSupport = true;
 
       # --- For macOS ---
       #pinentryPackage = pkgs.pinentry_mac;
