@@ -1,5 +1,5 @@
 # users/alc/home-darwin.nix
-{ config, pkgs, lib, username, inputs, ... }:
+{ config, pkgs, lib, username, inputs, hostName, ... }:
 
 with lib;
 {
@@ -45,6 +45,13 @@ with lib;
     nixmac = "darwin-rebuild switch --flake .#mac";
   };
 
+  # Deploy SSH key pair for macOS
+  secrets.ssh.keyPair = {
+    enable = true;
+    baseName = "mac_id_ed25519";
+    forceRefresh = false;
+  };
+
   programs.zsh = { # Keep Zsh minimal if Nushell is primary
     enable = true;
     initContent = ''
@@ -57,13 +64,13 @@ with lib;
   
   programs.gpg.managed.agent.pinentryPackage = pkgs.pinentry_mac;
 
+  # Configure git signing
   programs.git.managed = {
     userName = "alcxyz";
     userEmail = "me@alc.no";
-    signingKey = "${config.home.homeDirectory}/.ssh/id_ed25519.pub";
+    signingKey = "${config.home.homeDirectory}/.ssh/id_ed25519.pub";  # Use the deployed public key
     signByDefault = true;
 
-    # Other global extra configs
     extraConfig = {
       core = { editor = "nvim"; };
       gpg.format = "ssh";

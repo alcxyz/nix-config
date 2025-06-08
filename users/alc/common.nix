@@ -23,6 +23,7 @@ with lib;
     # Consider if gnupg and ssh need platform-specific tweaks, but often they are largely common
     ../../modules/home-manager/programs/gpg/default.nix
     ../../modules/home-manager/programs/ssh/default.nix
+    ../../modules/home-manager/secrets/ssh-keys.nix
     #../../modules/home-manager/programs/rclone/default.nix
 
     # Direnv is a great example of a common program

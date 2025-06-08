@@ -5,6 +5,7 @@
   lib,
   username,
   inputs,
+  hostName,
   ...
 }:
 
@@ -72,7 +73,35 @@ with lib;
   };
 
   # Enable Linux-specific programs
-  programs.git.managed.signingKey = "~/.ssh/id_xyz.pub";
+
+  # Deploy SSH key pair using the convenience option
+  secrets.ssh.keyPair = 
+    if hostName == "xyz" then {
+      enable = true;
+      baseName = "xyz_id_ed25519";
+      forceRefresh = false;
+      # Uses default file names: id_ed25519 and id_ed25519.pub
+    } else if hostName == "nuc" then {
+      enable = true;
+      baseName = "nuc_id_ed25519";
+      forceRefresh = false;
+    } else {
+      enable = false;
+    };
+
+  # Configure git signing key to use the deployed public key
+  programs.git.managed = {
+    signingKey = "${config.home.homeDirectory}/.ssh/id_ed25519.pub";
+    
+    # You can also set up conditional configs for different projects if needed
+    conditionalSigningConfigs = {
+      # Example: Use a different key for work projects
+      # "gitdir:~/work/" = {
+      #   "user.signingkey" = "${config.home.homeDirectory}/.ssh/id_work.pub";
+      # };
+    };
+  };
+
   programs.chromium.enable = true;
   programs.foot.enable = true;
   programs.hyprland.managed.enable = true;

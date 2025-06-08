@@ -1,4 +1,3 @@
-# modules/home-manager/programs/ssh/default.nix
 {
   config,
   lib,
@@ -12,7 +11,6 @@ with lib;
   # This module now ONLY configures the SSH client.
   config = mkIf config.programs.ssh.enable {
     programs.ssh = {
-      #enable = true;
       matchBlocks = {
         "rpi*" = { user = "root"; };
         "github" = {
@@ -24,18 +22,26 @@ with lib;
           user = "root";
         };
         "*" = {
-          identityFile = "~/.ssh/id_xyz";
+          # Use the standardized key name that we deploy
+          identityFile = "~/.ssh/id_ed25519";
           extraOptions = {
             AddKeysToAgent = "yes";
           };
         };
       };
       extraConfig = ''
+        # Primary key (deployed by our secrets module)
         IdentityFile ~/.ssh/id_ed25519
+        
+        # Hardware security keys (if you have them)
         IdentityFile ~/.ssh/id_ed25519_sk
         IdentityFile ~/.ssh/id_ed25519_sk_rk
+        
+        # SSH client configuration
+        ServerAliveInterval 60
+        ServerAliveCountMax 3
+        HashKnownHosts yes
       '';
     };
-
   };
 }

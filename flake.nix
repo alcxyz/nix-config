@@ -106,36 +106,33 @@
       darwinHosts;
 
     # Helper function to create Home Manager configuration
-    mkHomeConfiguration = system: homeConfigPath:
+    # In flake.nix, update the mkHomeConfiguration function:
+    mkHomeConfiguration = system: homeConfigPath: hostName:
       home-manager.lib.homeManagerConfiguration {
         pkgs = pkgsFor.${system};
         extraSpecialArgs = {
-          inherit inputs username system;
+          inherit inputs username system hostName;
           configDir = self;
           pkgs = pkgsFor.${system};
         };
         modules = [
           homeConfigPath
           inputs.nix-colors.homeManagerModules.default
-          # Add any shared home-manager modules here
-          # self.modules.home-manager
         ];
       };
 
-    # Create home configurations
+    # Then update the homeConfigurations calls:
     homeConfigurations =
       let
-        # NixOS home configs
         nixosHomeConfigs = lib.mapAttrs' (hostName: hostAttrs:
           lib.nameValuePair "${username}-${hostName}" (
-            mkHomeConfiguration hostAttrs.system ./users/${username}/home-linux.nix
+            mkHomeConfiguration hostAttrs.system ./users/${username}/home-linux.nix hostName
           )
         ) nixosHosts;
 
-        # Darwin home configs  
         darwinHomeConfigs = lib.mapAttrs' (hostName: hostAttrs:
           lib.nameValuePair "${username}-${hostName}" (
-            mkHomeConfiguration hostAttrs.system ./users/${username}/home-darwin.nix
+            mkHomeConfiguration hostAttrs.system ./users/${username}/home-darwin.nix hostName
           )
         ) darwinHosts;
       in
