@@ -16,7 +16,7 @@ let
   defaultUserEmail = "me@alc.no";
   # Path for the global default signing key
   defaultGlobalSigningKeyPath =
-    "${config.home.homeDirectory}/.ssh/key.pub";
+    "${config.home.homeDirectory}/.ssh/id_ed25519.pub";
 
   defaultAliases = { };
 

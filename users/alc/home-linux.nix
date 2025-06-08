@@ -72,6 +72,7 @@ with lib;
   };
 
   # Enable Linux-specific programs
+  programs.git.managed.signingKey = "~/.ssh/id_xyz.pub";
   programs.chromium.enable = true;
   programs.foot.enable = true;
   programs.hyprland.managed.enable = true;

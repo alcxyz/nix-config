@@ -62,6 +62,7 @@ with lib;
     btop
     bat
     ranger
+    gopass
     youtube-music
   ];
 
