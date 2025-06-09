@@ -82,16 +82,9 @@ in
       kubernetes-helm
       kubeswitch
       k9s
-      lens
-      termshark
-      atac
-      azure-cli
-      google-cloud-sdk
-      devbox
       cockpit
       podman-compose
       lima
-      wemux
     ];
   };
 }

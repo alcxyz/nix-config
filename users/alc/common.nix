@@ -66,6 +66,11 @@ with lib;
     gopass
     yubico-piv-tool
     youtube-music
+    azure-cli
+    google-cloud-sdk
+    devbox
+    atac
+    termshark
   ];
 
   # ==================== Files ====================

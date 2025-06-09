@@ -34,6 +34,8 @@ in
       winetricks
       wineWowPackages.waylandFull
 
+      lens
+
       nautilus
 
       pulseaudio
