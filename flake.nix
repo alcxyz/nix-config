@@ -54,9 +54,9 @@
         system = "x86_64-linux";
         configuration = ./hosts/xyz/configuration.nix; 
       };
-      nuc = { 
+      nux = { 
         system = "x86_64-linux";
-        configuration = ./hosts/nuc/configuration.nix; 
+        configuration = ./hosts/nux/configuration.nix; 
       };
     };
 

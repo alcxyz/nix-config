@@ -92,9 +92,9 @@ with lib;
       baseName = "xyz_id_ed25519";
       forceRefresh = false;
       # Uses default file names: id_ed25519 and id_ed25519.pub
-    } else if hostName == "nuc" then {
+    } else if hostName == "nux" then {
       enable = true;
-      baseName = "nuc_id_ed25519";
+      baseName = "nux_id_ed25519";
       forceRefresh = false;
     } else {
       enable = false;
