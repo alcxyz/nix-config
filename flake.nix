@@ -121,17 +121,20 @@
         ];
       };
 
-    # Then update the homeConfigurations calls:
     homeConfigurations =
       let
         nixosHomeConfigs = lib.mapAttrs' (hostName: hostAttrs:
           lib.nameValuePair "${username}-${hostName}" (
-            mkHomeConfiguration hostAttrs.system ./users/${username}/home-linux.nix hostName
+            # CHANGE THIS LINE:
+            # From: ./users/${username}/home-linux.nix
+            # To:   ./users/${username}/linux/${hostName}.nix
+            mkHomeConfiguration hostAttrs.system ./users/${username}/linux/${hostName}.nix hostName
           )
         ) nixosHosts;
 
         darwinHomeConfigs = lib.mapAttrs' (hostName: hostAttrs:
           lib.nameValuePair "${username}-${hostName}" (
+            # You could apply the same pattern for Darwin if you add more Macs
             mkHomeConfiguration hostAttrs.system ./users/${username}/home-darwin.nix hostName
           )
         ) darwinHosts;
