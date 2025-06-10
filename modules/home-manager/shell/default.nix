@@ -1,5 +1,5 @@
 # modules/home-manager/shell/default.nix
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, osIcon ? "🐧", ... }:
 
 with lib;
 {
@@ -42,7 +42,6 @@ with lib;
       environmentVariables = {
         KUBECONFIG = "${config.home.homeDirectory}/.kube/config";
       };
-      # This is the COMMON part of extraConfig, primarily for PATH and common functions.
       extraConfig = ''
         # --- Common Nushell Configuration (Part 1) ---
         $env.config = {
@@ -55,57 +54,27 @@ with lib;
             completions: { case_sensitive: false, quick: true, partial: true, algorithm: "prefix" },
         }
 
-        # Common PATH setup (Nix, User, System base)
-        # Platform-specific configs will MODIFY $env.PATH after this.
-        #let nix_paths = [
-        #    $"($env.HOME)/.nix-profile/bin",
-        #    "/run/current-system/sw/bin",
-        #    "/nix/var/nix/profiles/default/bin"
-        #]
-        #let user_paths = [ $"($env.HOME)/.cargo/bin", $"($env.HOME)/.local/bin" ]
-        #let system_paths = [ "/usr/bin", "/bin", "/usr/sbin", "/sbin" ]
-        #$env.PATH = ($nix_paths ++ $user_paths ++ $system_paths | where {|p| ($p | path exists)} | uniq)
-
         # In your nushell extraConfig, IF NEEDED:
         let custom_paths = [
             $"($env.HOME)/.cargo/bin",
             $"($env.HOME)/.local/bin"
         ]
         $env.PATH = ($env.PATH | append $custom_paths | uniq | where {|p| ($p | path exists) })
-
-        # Common Custom Nushell functions
-        #def , [...packages] { nix shell ($packages | each {|s| $"nixpkgs#($s)"}) }
-        #def la [] { ls -la | sort-by type name }
-        #def .. [] { cd .. }
-        #def ... [] { cd ../.. }
-        #def gs [] { git status --short }
-
-        # Debugging tool check
-        #def check-tools [] {
-        #    let tools = ["nvim", "git", "starship", "zoxide", "direnv", "atuin"]
-        #    $tools | each {|tool|
-        #        {
-        #            tool: $tool,
-        #            available: (which $tool | is-not-empty),
-        #            path: (which $tool | get path.0? | default "not found")
-        #        }
-        #    }
-        #}
-        # --- End Common Nushell Configuration (Part 1) ---
       '';
     };
   };
 
   # Configure Carapace to use various bridges.
-  # carapace-bridge provides implementations for many of these (e.g., bash, zsh).
   home.sessionVariables = {
     CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
-    # You can customize this list. "bash" and "zsh" are common ones
-    # that carapace-bridge would handle for tools that provide completions
-    # in those formats.
   };
 
-  xdg.configFile."starship.toml".source = ./starship.toml;
+  # Read the starship.toml file, substitute the placeholder, and set the content.
+  xdg.configFile."starship.toml".text =
+    let
+      template = builtins.readFile ./starship.toml;
+    in lib.replaceStrings [ "@osIcon@" ] [ osIcon ] template;
+
 
   home.shellAliases = {
     hmxyz = "home-manager switch --flake .#alc-xyz";

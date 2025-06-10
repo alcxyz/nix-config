@@ -4,27 +4,27 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    
+
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    
+
     home-manager = {
       url = "github:nix-community/home-manager/release-25.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    
+
     zen-browser = {
       url = "github:0xc000022070/zen-browser-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    
+
     hyprpanel = {
       url = "github:Jas-SinghFSU/HyprPanel";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    
+
     nix-colors.url = "github:misterio77/nix-colors";
   };
 
@@ -35,7 +35,7 @@
 
     # Define systems
     supportedSystems = [ "x86_64-linux" "aarch64-darwin" ];
-    
+
     # Create pkgs for each system
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
     pkgsFor = forAllSystems (system: import nixpkgs {
@@ -48,22 +48,25 @@
       ];
     });
 
-    # Host definitions
+    # Host definitions with new osIcon attribute
     nixosHosts = {
-      xyz = { 
+      xyz = {
         system = "x86_64-linux";
-        configuration = ./hosts/xyz/configuration.nix; 
+        configuration = ./hosts/xyz/configuration.nix;
+        osIcon = ""; # NixOS Icon
       };
-      nux = { 
+      nux = {
         system = "x86_64-linux";
-        configuration = ./hosts/nux/configuration.nix; 
+        configuration = ./hosts/nux/configuration.nix;
+        osIcon = ""; # NixOS Icon
       };
     };
 
     darwinHosts = {
-      mac = { 
+      mac = {
         system = "aarch64-darwin";
-        configuration = ./hosts/mac/configuration.nix; 
+        configuration = ./hosts/mac/configuration.nix;
+        osIcon = ""; # Apple Icon
       };
     };
 
@@ -107,11 +110,11 @@
 
     # Helper function to create Home Manager configuration
     # In flake.nix, update the mkHomeConfiguration function:
-    mkHomeConfiguration = system: homeConfigPath: hostName:
+    mkHomeConfiguration = system: homeConfigPath: hostName: osIcon:
       home-manager.lib.homeManagerConfiguration {
         pkgs = pkgsFor.${system};
         extraSpecialArgs = {
-          inherit inputs username system hostName;
+          inherit inputs username system hostName osIcon;
           configDir = self;
           pkgs = pkgsFor.${system};
         };
@@ -125,17 +128,21 @@
       let
         nixosHomeConfigs = lib.mapAttrs' (hostName: hostAttrs:
           lib.nameValuePair "${username}-${hostName}" (
-            # CHANGE THIS LINE:
-            # From: ./users/${username}/home-linux.nix
-            # To:   ./users/${username}/linux/${hostName}.nix
-            mkHomeConfiguration hostAttrs.system ./users/${username}/linux/${hostName}.nix hostName
+            mkHomeConfiguration
+              hostAttrs.system
+              ./users/${username}/linux/${hostName}.nix
+              hostName
+              hostAttrs.osIcon
           )
         ) nixosHosts;
 
         darwinHomeConfigs = lib.mapAttrs' (hostName: hostAttrs:
           lib.nameValuePair "${username}-${hostName}" (
-            # You could apply the same pattern for Darwin if you add more Macs
-            mkHomeConfiguration hostAttrs.system ./users/${username}/home-darwin.nix hostName
+            mkHomeConfiguration
+              hostAttrs.system
+              ./users/${username}/home-darwin.nix
+              hostName
+              hostAttrs.osIcon
           )
         ) darwinHosts;
       in
@@ -146,10 +153,10 @@
     # System configurations
     nixosConfigurations = allNixosSystems;
     darwinConfigurations = allDarwinSystems;
-    
+
     # Home Manager configurations
     homeConfigurations = homeConfigurations;
-    
+
     # Development shells
     devShells = forAllSystems (system: {
       default = import ./shells/default.nix {
@@ -163,7 +170,7 @@
               then import ./modules/nixos/default.nix
               else {};
       darwin = if builtins.pathExists ./modules/darwin/default.nix
-               then import ./modules/darwin/default.nix  
+               then import ./modules/darwin/default.nix
                else {};
       home-manager = if builtins.pathExists ./modules/home-manager/default.nix
                      then import ./modules/home-manager/default.nix

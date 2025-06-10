@@ -1,75 +1,81 @@
+# modules/home-manager/shell/starship.toml
+
+# Main prompt format
+format = """
+$username\
+$hostname\
+$directory\
+$git_branch\
+$git_state\
+$git_status\
+$nix_shell\
+$cmd_duration\
+$line_break\
+$character\
+"""
+
+[username]
+style_user = "white"
+format = "[$user]($style_user)"
+show_always = true
+
+[hostname]
+format = "[([@](#40a02b)[$hostname](white)) @osIcon@](#40a02b) "
+ssh_only = false
+disabled = false
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+
+# --- All your other module settings ---
 [aws]
 symbol = "  "
-
 [buf]
 symbol = " "
-
 [c]
 symbol = " "
-
 [dart]
 symbol = " "
-
 [directory]
 read_only = " "
-
 [docker_context]
 symbol = " "
-
 [elixir]
 symbol = " "
-
 [elm]
 symbol = " "
-
 [git_branch]
 symbol = " "
-
 [golang]
 symbol = " "
-
 [haskell]
 symbol = " "
-
 [hg_branch]
 symbol = " "
-
 [java]
 symbol = " "
-
 [julia]
 symbol = " "
-
 [lua]
 symbol = " "
-
 [memory_usage]
 symbol = "󰘚 "
-
 [nim]
 symbol = " "
-
 [nix_shell]
-symbol = "  "
-
+symbol = " "
 [nodejs]
 symbol = " "
-
 [package]
 symbol = "󰏗 "
-
 [python]
 symbol = " "
-
 [rlang]
 symbol = " "
-
 [ruby]
 symbol = " "
-
 [rust]
 symbol = " "
-
 [scala]
 symbol = " "
-
