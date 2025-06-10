@@ -71,6 +71,7 @@ with lib;
     devbox
     atac
     termshark
+    openldap
   ];
 
   # ==================== Files ====================
