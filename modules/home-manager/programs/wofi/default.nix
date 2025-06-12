@@ -138,9 +138,10 @@ in {
       bitwarden = {
         prefix = "bw";
         description = "PWs";
-        packages = with pkgs; [ rbw rofi-rbw ];
+        packages = with pkgs; [ rofi-rbw ];
         command =
-          ''${pkgs.rofi-rbw}/bin/rofi-rbw --rofi-args "-filter $sub_query"'';
+          #''${pkgs.rofi-rbw}/bin/rofi-rbw --rofi-args "-filter $sub_query"'';
+          ''${pkgs.rofi-rbw}/bin/rofi-rbw --action copy'';
       };
       web-search = {
         prefix = "?";
