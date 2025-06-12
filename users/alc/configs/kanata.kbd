@@ -4,8 +4,8 @@
 
 ;; Define timeout values
 (defvar
-  tap-timeout 200
-  hold-timeout 150
+  tap-timeout 100
+  hold-timeout 100
 )
 
 ;; Define custom aliases for tap-hold behaviors
