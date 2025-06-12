@@ -21,7 +21,6 @@ with lib;
     ../../modules/home-manager/programs/git/default.nix
     ../../modules/home-manager/programs/lazygit/default.nix
     # Consider if gnupg and ssh need platform-specific tweaks, but often they are largely common
-    #../../modules/home-manager/programs/gpg/default.nix
     ../../modules/home-manager/programs/ssh/default.nix
     ../../modules/home-manager/secrets/ssh-keys.nix
     #../../modules/home-manager/programs/rclone/default.nix
@@ -114,7 +113,7 @@ with lib;
                        then pkgs.pinentry_mac
                        else pkgs.pinentry-gtk2;
   };
-  # 3. Keep your scdaemon settings as they are
+  # 3. Keep scdaemon settings as they are
   programs.gpg.scdaemonSettings = {
     "pcsc-shared" = true;
   };
