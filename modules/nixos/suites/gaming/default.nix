@@ -186,6 +186,6 @@ in
     
     # Firewall rules
     networking.firewall.allowedTCPPorts = lib.optionals cfg.sunshine.enable [ 47984 47989 48010 ];
-    networking.firewall.allowedUDPPorts = lib.optionals cfg.sunshine.enable [ 47998 47999 48000 48002 48010 ];
+    networking.firewall.allowedUDPPorts = lib.optionals cfg.sunshine.enable [ 47998 47999 48000 48002 48010 27031 27032 27033 27034 27035 27036 ];
   };
 }

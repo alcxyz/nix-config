@@ -68,9 +68,6 @@ with lib;
     SSH_AUTH_SOCK = "$HOME/.ssh/ssh-agent.socket";
   };
 
-  # Set GPG pinentry for macOS  
-  programs.gpg.managed.agent.pinentryPackage = pkgs.pinentry_mac;
-
   # Configure git signing
   programs.git.managed = {
     userName = "alcxyz";

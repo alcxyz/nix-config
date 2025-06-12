@@ -21,7 +21,7 @@ with lib;
     ../../modules/home-manager/programs/git/default.nix
     ../../modules/home-manager/programs/lazygit/default.nix
     # Consider if gnupg and ssh need platform-specific tweaks, but often they are largely common
-    ../../modules/home-manager/programs/gpg/default.nix
+    #../../modules/home-manager/programs/gpg/default.nix
     ../../modules/home-manager/programs/ssh/default.nix
     ../../modules/home-manager/secrets/ssh-keys.nix
     #../../modules/home-manager/programs/rclone/default.nix
@@ -100,34 +100,22 @@ with lib;
   programs.lazygit.managed.enable = true;
   programs.ssh.enable = true;
 
-  programs.gpg.managed = {
+  # 1. Enable the base GPG program
+  programs.gpg.enable = true;
+  # 2. Configure the GPG Agent service directly
+  services.gpg-agent = {
     enable = true;
-    #defaultKey = "YOUR_GPG_KEY_ID_HERE"; # Optional: your GPG key ID
-
-    agent = {
-      enableSshSupport = false;
-
-      # --- For macOS ---
-      #pinentryPackage = pkgs.pinentry_mac;
-
-      # --- For Linux (example with Qt pinentry) ---
-      # pinentryPackage = pkgs.pinentry-qt;
-      # --- Or for GTK ---
-      # pinentryPackage = pkgs.pinentry-gtk2;
-      # --- Or for curses (terminal) ---
-      # pinentryPackage = pkgs.pinentry-curses;
-
-      defaultCacheTtl = 3600; # 1 hour
-      maxCacheTtl = 7200;   # 2 hours
-      # extraConfig = ''
-      #   debug-level guru
-      # '';
-    };
+    enableSshSupport = false;
+    defaultCacheTtl = 3600;
+    maxCacheTtl = 7200;
+    # This is the core logic: set the pinentry package based on the OS.
+    # This directly configures the standard `services.gpg-agent` module.
+    pinentry.package = if pkgs.stdenv.isDarwin
+                       then pkgs.pinentry_mac
+                       else pkgs.pinentry-gtk2;
   };
-
+  # 3. Keep your scdaemon settings as they are
   programs.gpg.scdaemonSettings = {
-    # This tells scdaemon to not take an exclusive lock on the card reader,
-    # resolving the conflict with other services like PIV.
     "pcsc-shared" = true;
   };
 
