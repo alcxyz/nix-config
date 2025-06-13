@@ -13,6 +13,11 @@ in
       description = "Domain to host the Paperless-ngx web UI on.";
       example = "paperless.nux.local";
     };
+
+    passwordFile = mkOption {
+      type = types.path;
+      description = "Path to a file containing the initial admin user password.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -26,7 +31,8 @@ in
       url = "httpss://${cfg.domain}";
       listenAddress = "127.0.0.1";
       port = 8000;
-      initialUser.passwordFile = config.sops.secrets.paperless_password.path;
+
+      initialUser.passwordFile = cfg.passwordFile;
       settings = {
         PAPERLESS_TIME_ZONE = config.time.timeZone;
         PAPERLESS_OCR_LANGUAGE = "eng+deu";
@@ -34,7 +40,7 @@ in
       };
     };
 
-    # --- Traefik Integration ---
+    # Traefik integration remains the same...
     services.traefik.dynamicConfigOptions.http = {
       routers.paperless = {
         rule = "Host(`${cfg.domain}`)";

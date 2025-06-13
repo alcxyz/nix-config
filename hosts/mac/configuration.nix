@@ -248,7 +248,7 @@ in
   sops = {
     defaultSopsFile = "${configDir}/secrets/secrets.yaml";
     # Note: nix-darwin uses `keyFile` (string) instead of `sshKeyPaths` (list)
-    age.keyFile = "${home}/.ssh/id_ed25519";
+    age.keyFile = [ "/etc/ssh/ssh_host_ed25519_key" ];
     secrets = {
       # Define any secrets needed for your mac user here
       # For example:

@@ -109,7 +109,7 @@
             hostAttrs.configuration
             # Add any shared Darwin modules here
             # self.modules.darwin
-            sops-nix.nixosModules.sops
+            sops-nix.darwinModules.sops
           ];
         }
       )
@@ -127,7 +127,7 @@
         modules = [
           homeConfigPath
           inputs.nix-colors.homeManagerModules.default
-          sops-nix.nixosModules.sops
+          sops-nix.homeManagerModules.sops
         ];
       };
 
