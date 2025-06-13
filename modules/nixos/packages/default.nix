@@ -14,13 +14,6 @@ in
     };
   };
 
-  # These imports are now unconditional within this file.
-  # The decision to enable them or their contents can be handled by config.packages.managed.enable
-  # either in this file's config block or within the imported modules themselves.
-  #imports = [
-  #  # Paths are relative to this file (modules/nixos/default.nix)
-  #];
-
   config = mkIf cfg.enable {
 
     environment.systemPackages = with pkgs; [
@@ -28,7 +21,6 @@ in
       tmux
       tree
       wget
-      atuin
       vagrant
       chezmoi
       bunster
