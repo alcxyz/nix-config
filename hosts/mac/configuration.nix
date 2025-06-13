@@ -245,6 +245,17 @@ in
     Defaults secure_path="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/run/current-system/sw/bin"
   '';
 
+  sops = {
+    defaultSopsFile = "${configDir}/secrets/secrets.yaml";
+    # Note: nix-darwin uses `keyFile` (string) instead of `sshKeyPaths` (list)
+    age.keyFile = "${home}/.ssh/id_ed25519";
+    secrets = {
+      # Define any secrets needed for your mac user here
+      # For example:
+      # home_manager_api_key = {};
+    };
+  };
+
   # ============================================================================
   # Fonts
   # ============================================================================

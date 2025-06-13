@@ -20,6 +20,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    sops-nix = {
+      url = "github:Mic92/sops-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     hyprpanel = {
       url = "github:Jas-SinghFSU/HyprPanel";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -28,7 +33,7 @@
     nix-colors.url = "github:misterio77/nix-colors";
   };
 
-  outputs = { self, nixpkgs, darwin, home-manager, nix-colors, ... }@inputs:
+  outputs = { self, nixpkgs, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
   let
     username = "alc";
     lib = nixpkgs.lib;
@@ -84,6 +89,7 @@
             hostAttrs.configuration
             # Add any shared NixOS modules here
             # self.modules.nixos
+            sops-nix.nixosModules.sops
           ];
         }
       )
@@ -103,13 +109,13 @@
             hostAttrs.configuration
             # Add any shared Darwin modules here
             # self.modules.darwin
+            sops-nix.nixosModules.sops
           ];
         }
       )
       darwinHosts;
 
-    # Helper function to create Home Manager configuration
-    # In flake.nix, update the mkHomeConfiguration function:
+    # Create Home Manager configuration
     mkHomeConfiguration = system: homeConfigPath: hostName: osIcon:
       home-manager.lib.homeManagerConfiguration {
         pkgs = pkgsFor.${system};
@@ -121,6 +127,7 @@
         modules = [
           homeConfigPath
           inputs.nix-colors.homeManagerModules.default
+          sops-nix.nixosModules.sops
         ];
       };
 
