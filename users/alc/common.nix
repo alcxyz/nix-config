@@ -20,7 +20,6 @@ with lib;
     ../../modules/home-manager/programs/wezterm/default.nix
     ../../modules/home-manager/programs/git/default.nix
     ../../modules/home-manager/programs/lazygit/default.nix
-    # Consider if gnupg and ssh need platform-specific tweaks, but often they are largely common
     ../../modules/home-manager/programs/ssh/default.nix
     ../../modules/home-manager/secrets/ssh-keys.nix
     #../../modules/home-manager/programs/rclone/default.nix
