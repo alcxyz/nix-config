@@ -2,6 +2,6 @@ creation_rules:
   - path_regex: secrets/secrets\.yaml$
     pgp: FBC02C9931EB32B81344C9D20385794DEDBC06E6
     age: >-
-      age1we76zf9km9ywc3x923h8nnnljwne6v20mjuxztk7g78v7paxd4lqskc4h4,
-      age12sctca0a24au8pnttvttzendzug876nact90tsksxlkqu6njqv3quf3wtw,
-      age14ap6lr44lnejcp4awyczehsljgnw9t7x2rz6paqy4gj9l94q5f8s3aa0mz
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEztyNrJk03TzMyLgwYd0BmUtUR5acWpgJf8obeGG1bS root@xyz,
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHDD69n8CTSvA2av9tqMSfas5Q5C7gBuQVq/Vm94lSUk root@nux,
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFMxqPLr4h1HMAAUK51moYwun4SHXFPzpQempcnlV4aZ root@mac
