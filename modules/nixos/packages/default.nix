@@ -27,6 +27,7 @@ in
       portal
       sops
       age
+      ssh-to-age
       sshs
 
       # Development
