@@ -29,7 +29,7 @@
       rule = "Host(`paperless.nux.local`)";
       entryPoints = [ "websecure" ];
       service = "paperless";
-      tls.certResolver = "letsencrypt";
+      tls = true;
     };
     services.paperless = {
       loadBalancer.servers = [{ url = "http://localhost:8000"; }];

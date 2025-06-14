@@ -14,7 +14,7 @@
       rule = "Host(`unifi.nux.local`)";
       entryPoints = [ "websecure" ];
       service = "unifi";
-      tls.certResolver = "letsencrypt";
+      tls = true;
     };
     services.unifi = {
       loadBalancer.servers = [{

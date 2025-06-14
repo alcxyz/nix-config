@@ -35,7 +35,7 @@
       rule = "Host(`ldap.nux.local`)";
       entryPoints = [ "websecure" ];
       service = "lldap";
-      tls.certResolver = "letsencrypt";
+      tls = true;
     };
     services.lldap = {
       loadBalancer.servers = [{ url = "http://localhost:17170"; }];
