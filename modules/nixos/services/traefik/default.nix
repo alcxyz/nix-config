@@ -14,7 +14,12 @@
         email = "post@alc.no";
         storage = "/var/lib/traefik/acme.json";
         tlsChallenge = true;
+        # Use a reliable public DNS to prevent startup loops with Pi-hole
+        dnsChallenge.resolvers = [ "1.1.1.1:53" "8.8.8.8:53" ];
       };
+      # --- AND THIS ---
+      # Enable the API so the dashboard router can use it
+      api.dashboard = true;
     };
     dynamicConfigOptions = {
       http = {
@@ -34,11 +39,12 @@
           rule = "HostRegexp(`{host:.+}`)";
           entryPoints = [ "web" ];
           middlewares = [ "https-redirect" ];
+          # A router must have a service, even if it's just for redirection.
+          service = "noop@internal";
         };
       };
     };
   };
 
-  # Open firewall ports
   networking.firewall.allowedTCPPorts = [ 80 443 ];
 }
