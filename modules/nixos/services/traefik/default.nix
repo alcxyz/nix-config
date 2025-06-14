@@ -27,7 +27,7 @@ in
     # Enable the Traefik service
     services.traefik = {
       # This is the main enable flag for the built-in NixOS module
-      enable = true;
+      #enable = true;
       staticConfigOptions = {
         # Define entry points: http (for redirects) and https (for traffic)
         entryPoints = {
