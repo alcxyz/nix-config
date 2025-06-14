@@ -3,17 +3,16 @@
 
 with lib;
 let
-  cfg = config.services.lldap;
+  cfg = config.services.lldap-traefik;
 in
 {
-  options.services.lldap = {
-    enable = mkEnableOption "LLDAP (Lightweight LDAP)";
+  options.services.lldap-traefik = {
+    enable = mkEnableOption "LLDAP with Traefik integration";
     domain = mkOption {
       type = types.str;
       description = "Domain to host the LLDAP web UI on.";
       example = "ldap.nux.local";
     };
-    # <-- ADD THESE OPTIONS
     jwtSecretFile = mkOption {
       type = types.path;
       description = "Path to a file containing the JWT secret key.";
@@ -25,18 +24,17 @@ in
   };
 
   config = mkIf cfg.enable {
-    # --- LLDAP Service ---
+    # Use the built-in LLDAP service
     services.lldap = {
       enable = true;
       settings = {
-        web_listen_url = "httpss://${cfg.domain}";
-        # <-- USE THE OPTIONS HERE
+        http_url = "https://${cfg.domain}";
         jwt_secret_file = toString cfg.jwtSecretFile;
         ldap_user_pass_file = toString cfg.ldapUserPassFile;
       };
     };
 
-    # Traefik integration remains the same...
+    # Add Traefik integration
     services.traefik.dynamicConfigOptions.http = {
       routers.lldap = {
         rule = "Host(`${cfg.domain}`)";

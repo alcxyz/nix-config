@@ -1,19 +1,18 @@
-# /modules/nixos/programs/paperless/default.nix
+# /modules/nixos/services/paperless/default.nix
 { config, lib, pkgs, ... }:
 
 with lib;
 let
-  cfg = config.services.paperless;
+  cfg = config.services.paperless-traefik;
 in
 {
-  options.services.paperless = {
-    enable = mkEnableOption "Paperless-ngx document management system";
+  options.services.paperless-traefik = {
+    enable = mkEnableOption "Paperless-ngx with Traefik integration";
     domain = mkOption {
       type = types.str;
       description = "Domain to host the Paperless-ngx web UI on.";
       example = "paperless.nux.local";
     };
-
     passwordFile = mkOption {
       type = types.path;
       description = "Path to a file containing the initial admin user password.";
@@ -21,26 +20,25 @@ in
   };
 
   config = mkIf cfg.enable {
-    # --- Dependencies ---
+    # Dependencies
     services.postgresql.enable = true;
-    services.redis.enable = true;
+    services.redis.servers."".enable = true;
 
-    # --- Paperless-ngx Service ---
-    services.paperless-ngx = {
+    # Use the built-in Paperless service
+    services.paperless = {
       enable = true;
-      url = "httpss://${cfg.domain}";
-      listenAddress = "127.0.0.1";
+      address = "127.0.0.1";
       port = 8000;
-
-      initialUser.passwordFile = cfg.passwordFile;
+      passwordFile = cfg.passwordFile;
       settings = {
+        PAPERLESS_URL = "https://${cfg.domain}";
         PAPERLESS_TIME_ZONE = config.time.timeZone;
         PAPERLESS_OCR_LANGUAGE = "eng+deu";
         PAPERLESS_TRUSTED_PROXIES = [ "127.0.0.1" ];
       };
     };
 
-    # Traefik integration remains the same...
+    # Add Traefik integration
     services.traefik.dynamicConfigOptions.http = {
       routers.paperless = {
         rule = "Host(`${cfg.domain}`)";
