@@ -22,7 +22,10 @@ in
   config = mkIf cfg.enable {
     # Dependencies
     services.postgresql.enable = true;
-    services.redis.servers."".enable = true;
+    services.redis.servers."paperless" = {
+      enable = true;
+      port = 6379;
+    };
 
     # Use the built-in Paperless service
     services.paperless = {
