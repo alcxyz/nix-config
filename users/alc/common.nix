@@ -101,10 +101,10 @@ with lib;
   programs.ssh.enable = true;
 
   # 1. Enable the base GPG program
-  programs.gpg.enable = true;
+  programs.gpg.enable = false;
   # 2. Configure the GPG Agent service directly
   services.gpg-agent = {
-    enable = true;
+    enable = false;
     enableSshSupport = false;
     #defaultCacheTtl = 3600;
     #maxCacheTtl = 7200;
