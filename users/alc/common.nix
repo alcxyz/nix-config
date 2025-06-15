@@ -63,6 +63,8 @@ with lib;
     ranger
     gopass
     yubico-piv-tool
+    age
+    age-plugin-yubikey
     youtube-music
     azure-cli
     google-cloud-sdk
@@ -104,18 +106,19 @@ with lib;
   services.gpg-agent = {
     enable = true;
     enableSshSupport = false;
-    defaultCacheTtl = 3600;
-    maxCacheTtl = 7200;
+    #defaultCacheTtl = 3600;
+    #maxCacheTtl = 7200;
     # This is the core logic: set the pinentry package based on the OS.
     # This directly configures the standard `services.gpg-agent` module.
     pinentry.package = if pkgs.stdenv.isDarwin
                        then pkgs.pinentry_mac
                        else pkgs.pinentry-gtk2;
   };
+
   # 3. Keep scdaemon settings as they are
-  programs.gpg.scdaemonSettings = {
-    "pcsc-shared" = true;
-  };
+  #programs.gpg.scdaemonSettings = {
+  #  "pcsc-shared" = true;
+  #};
 
   programs.ncspot.enable = true;
 }

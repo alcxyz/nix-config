@@ -25,7 +25,7 @@ in
     environment.systemPackages = [ pkgs.zfs ];
     boot.supportedFilesystems = [ "zfs" ];
     boot.zfs.devNodes = "/dev/disk/by-id";
-    boot.zfs.extraPools = [ "hyperdisk" "zpool" ];
+    boot.zfs.extraPools = [ "hyperdisk" ];
 
     # Systemd services to import ZFS pools on boot (commented out)
     # systemd.services."zfs-import-hyperdisk" = {

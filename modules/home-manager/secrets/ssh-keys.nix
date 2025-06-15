@@ -135,12 +135,16 @@ in
           chmod 600 "$PRIVATE_KEY_PATH"  # Ensure correct permissions
         fi
 
-	# Load private key into SSH agent (if agent is running)
-        if [[ -n "$SSH_AUTH_SOCK" ]] && command -v ssh-add >/dev/null 2>&1; then
-          echo "Adding SSH key to agent..."
-          ssh-add "$PRIVATE_KEY_PATH" 2>/dev/null || echo "Note: Could not add key to SSH agent (agent may not be running)"
+        # Load private key into SSH agent ONLY if the agent is running
+        # The ''${SSH_AUTH_SOCK-} syntax is Nix's way of escaping a shell variable expansion.
+        if [[ -n "''${SSH_AUTH_SOCK-}" ]] && command -v ssh-add >/dev/null 2>&1; then
+          echo "✓ SSH Agent found, attempting to add key..."
+          # The `|| true` prevents the script from failing if the key is already added.
+          ssh-add "$PRIVATE_KEY_PATH" 2>/dev/null || true
+        else
+          echo "ℹ SSH Agent not found during activation, skipping ssh-add. Key will be added on next login."
         fi
-        
+
         # Deploy public key (if needed or forced)
         if [[ "$FORCE_REFRESH" == "true" ]] || [[ ! -f "$PUBLIC_KEY_PATH" ]]; then
           deploy_public_key
