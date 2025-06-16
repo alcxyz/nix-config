@@ -132,6 +132,7 @@ in
     NSGlobalDomain = {
       AppleInterfaceStyle = "Dark";
       AppleShowAllExtensions = true;
+      AppleICUForce24HourTime = true;
       KeyRepeat = 2;
       InitialKeyRepeat = 15;
       PMPrintingExpandedStateForPrint = true;
@@ -198,7 +199,7 @@ in
 
     loginwindow = {
       GuestEnabled = false;
-      SHOWFULLNAME = false;
+      SHOWFULLNAME = true;
       LoginwindowText = "Those who would give up essential Liberty, to purchase a little temporary Safety, deserve neither Liberty nor Safety.";
     };
 
@@ -246,7 +247,7 @@ in
   '';
 
   sops = {
-    defaultSopsFile = "${configDir}/secrets/secrets.yaml";
+    defaultSopsFile = inputs.nix-secrets + "/secrets.yaml";
     # Note: nix-darwin uses `keyFile` (string) instead of `sshKeyPaths` (list)
     age.keyFile = [ "/etc/ssh/ssh_host_ed25519_key" ];
     secrets = {
