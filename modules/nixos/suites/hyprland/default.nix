@@ -31,7 +31,6 @@ with lib;
       wlogout
       hypridle
       hyprlock
-      #hyprpanel # Assuming this is available in pkgs, possibly via an overlay from the input
       swaynotificationcenter
       libnotify
 

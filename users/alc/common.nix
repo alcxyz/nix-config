@@ -101,6 +101,8 @@ with lib;
   programs.lazygit.managed.enable = true;
   programs.ssh.enable = true;
 
+  programs.ncspot.enable = true;
+
   # 1. Enable the base GPG program
   programs.gpg.enable = false;
   # 2. Configure the GPG Agent service directly
@@ -121,5 +123,4 @@ with lib;
   #  "pcsc-shared" = true;
   #};
 
-  programs.ncspot.enable = true;
 }
