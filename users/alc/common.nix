@@ -65,6 +65,7 @@ with lib;
     yubico-piv-tool
     age
     age-plugin-yubikey
+    yq
     youtube-music
     azure-cli
     google-cloud-sdk

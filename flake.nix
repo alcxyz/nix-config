@@ -5,6 +5,13 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
 
+    nix-secrets = {
+      # Use the SSH URL for private repositories
+      url = "git+ssh://git@github.com/alcxyz/nix-secrets.git";
+      # This tells Nix that this flake input doesn't provide packages itself
+      flake = false;
+    };
+
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -33,7 +40,7 @@
     nix-colors.url = "github:misterio77/nix-colors";
   };
 
-  outputs = { self, nixpkgs, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
+  outputs = { self, nixpkgs, nix-secrets, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
   let
     username = "alc";
     lib = nixpkgs.lib;
