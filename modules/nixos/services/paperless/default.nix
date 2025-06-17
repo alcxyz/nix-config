@@ -23,16 +23,4 @@
     };
   };
 
-  # Add Paperless to Traefik
-  services.traefik.dynamicConfigOptions.http = {
-    routers.paperless = {
-      rule = "Host(`paperless.nux.local`)";
-      entryPoints = [ "websecure" ];
-      service = "paperless";
-      tls = true;
-    };
-    services.paperless = {
-      loadBalancer.servers = [{ url = "http://localhost:8000"; }];
-    };
-  };
 }

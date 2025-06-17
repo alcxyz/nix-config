@@ -29,16 +29,4 @@
     };
   };
 
-  # Add LLDAP to Traefik
-  services.traefik.dynamicConfigOptions.http = {
-    routers.lldap = {
-      rule = "Host(`ldap.nux.local`)";
-      entryPoints = [ "websecure" ];
-      service = "lldap";
-      tls = true;
-    };
-    services.lldap = {
-      loadBalancer.servers = [{ url = "http://localhost:17170"; }];
-    };
-  };
 }
