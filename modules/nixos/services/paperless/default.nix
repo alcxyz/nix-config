@@ -3,7 +3,6 @@
 
 {
   # Dependencies
-  services.postgresql.enable = true;
   services.redis.servers."paperless" = {
     enable = true;
     port = 6379;
@@ -18,7 +17,7 @@
     settings = {
       PAPERLESS_URL = "https://paperless.nux.local";
       PAPERLESS_TIME_ZONE = config.time.timeZone;
-      PAPERLESS_OCR_LANGUAGE = "eng+deu";
+      PAPERLESS_OCR_LANGUAGE = "eng+nor";
       PAPERLESS_TRUSTED_PROXIES = [ "127.0.0.1" ];
     };
   };

@@ -82,6 +82,17 @@
         services.paperless = {
           loadBalancer.servers = [{ url = "http://localhost:8000"; }];
         };
+
+        # --- Add Seafile Router & Service ---
+        routers.seafile = {
+          rule = "Host(`seafile.nux.local`)";
+          entryPoints = [ "websecure" ];
+          service = "seafile";
+          tls = true;
+        };
+        services.seafile = {
+          loadBalancer.servers = [{ url = "http://localhost:8000"; }]; # Point to native Seahub
+        };
       };
     };
   };
