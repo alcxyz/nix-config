@@ -4,6 +4,7 @@
 {
   services.traefik = {
     enable = true;
+
     staticConfigOptions = {
       entryPoints = {
         web.address = ":80";
@@ -11,8 +12,7 @@
       };
       api.dashboard = true;
     };
-    
-    # Consolidate ALL dynamic config here
+
     dynamicConfigOptions = {
       http = {
         # Traefik Dashboard
@@ -22,7 +22,7 @@
           service = "api@internal";
           tls = true;
         };
-        
+
         # HTTPS Redirect
         middlewares.https-redirect.redirectScheme = {
           scheme = "https";
@@ -43,7 +43,7 @@
           tls = true;
         };
         services.pihole = {
-          loadBalancer.servers = [{ url = "http://localhost:8081"; }]; # Fixed port
+          loadBalancer.servers = [{ url = "http://localhost:8081"; }];
         };
 
         # UniFi
@@ -86,5 +86,6 @@
     };
   };
 
+  # Open firewall ports for Traefik
   networking.firewall.allowedTCPPorts = [ 80 443 ];
 }

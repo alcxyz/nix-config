@@ -16,25 +16,10 @@ in
     };
   };
 
-  # Options previously in lab/config.nix, now part of the suite's options
-  # We namespace them under 'lab' to match how they were accessed in the old config.nix
-  options.lab = with types; {
-    enable = mkOption {
-      type = types.bool;
-      default = false; # Usually, if suites.lab.enable is true, this would also be true.
-      description = "Enable specific lab system configurations (services, virtualization, firewall).";
-    };
-  };
-
-  # Removed imports of config.nix and packages.nix
-
-  config = mkIf cfg.enable { # This is suites.lab.enable
-    # === Configurations previously in lab/config.nix ===
-    # The mkIf config.lab.enable from the old config.nix is implicitly handled
-    # if we assume that when suites.lab.enable is true, then lab.enable (the inner one) should also be true.
+  config = mkIf cfg.enable {
 
     services.k3s = {
-      enable = true;
+      enable = false;
       role = "server";
       extraFlags = toString [
         #"--flannel-iface=br0" # Crucial: Tells Flannel (default CNI) to use br0.
