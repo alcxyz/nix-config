@@ -2,6 +2,16 @@
 { config, lib, pkgs, ... }:
 
 {
+  # Enable PostgreSQL with Paperless database
+  services.postgresql = {
+    enable = true;
+    ensureDatabases = [ "paperless" ];
+    ensureUsers = [{
+      name = "paperless";
+      ensureDBOwnership = true;
+    }];
+  };
+
   # Redis for Paperless
   services.redis.servers."paperless" = {
     enable = true;
@@ -12,7 +22,7 @@
   services.paperless = {
     enable = true;
     address = "127.0.0.1";
-    port = 8001; # Changed from 8000 to avoid conflict with Seafile
+    port = 8001; # Different from Seafile's 8000
     passwordFile = config.sops.secrets.paperless_password.path;
     
     settings = {
@@ -27,25 +37,13 @@
       PAPERLESS_DBUSER = "paperless";
       PAPERLESS_DBHOST = "localhost";
       PAPERLESS_DBPORT = "5432";
-      # No password needed with peer authentication
     };
   };
 
   # Ensure PostgreSQL starts before Paperless
-  systemd.services.paperless-scheduler = {
-    after = [ "postgresql.service" ];
-    requires = [ "postgresql.service" ];
-  };
-  
-  systemd.services.paperless-consumer = {
-    after = [ "postgresql.service" ];
-    requires = [ "postgresql.service" ];
-  };
-  
-  systemd.services.paperless-web = {
-    after = [ "postgresql.service" ];
-    requires = [ "postgresql.service" ];
-  };
+  systemd.services.paperless-scheduler.after = [ "postgresql.service" ];
+  systemd.services.paperless-consumer.after = [ "postgresql.service" ];
+  systemd.services.paperless-web.after = [ "postgresql.service" ];
 
   # Open port for Traefik
   networking.firewall.allowedTCPPorts = [ 8001 ];

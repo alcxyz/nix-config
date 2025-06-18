@@ -2,6 +2,16 @@
 { config, lib, pkgs, ... }:
 
 {
+  # Add Seafile database to PostgreSQL (this will merge with Paperless config)
+  services.postgresql = {
+    enable = true;
+    ensureDatabases = [ "seafile" ];
+    ensureUsers = [{
+      name = "seafile";
+      ensureDBOwnership = true;
+    }];
+  };
+
   # Memcached for Seafile
   services.memcached.enable = true;
 
@@ -25,7 +35,6 @@
         port = 5432;
         name = "seafile";
         user = "seafile";
-        # No password needed with peer authentication
       };
     };
     
@@ -37,10 +46,7 @@
   };
 
   # Ensure PostgreSQL starts before Seafile
-  systemd.services.seafile = {
-    after = [ "postgresql.service" ];
-    requires = [ "postgresql.service" ];
-  };
+  systemd.services.seafile.after = [ "postgresql.service" ];
 
   # Open port for Traefik
   networking.firewall.allowedTCPPorts = [ 8000 ];
