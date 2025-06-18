@@ -38,7 +38,7 @@
     ensureUsers = [{
       name = "seafile_user";
       # This allows Seafile (or other applications) to manage their own schema/migrations within their database.
-      ensureDBOwnership = true;
+      #ensureDBOwnership = true;
     }];
 
     # PostgreSQL server settings.
@@ -47,7 +47,7 @@
       # This is secure as it only accepts connections from the same host.
       # Other services (like Seafile, Paperless) running natively on Nux, or Docker containers
       # routing through the host's network stack, can connect to this.
-      listen_addresses = "127.0.0.1";
+      listen_addresses = lib.mkDefault "127.0.0.1";
 
       # Enable logging for connections and disconnections. Useful for auditing.
       log_connections = true;
@@ -77,8 +77,8 @@
 
     # The PostgreSQL service runs under its own system user and group,
     # which NixOS creates automatically. This is for reference.
-    user = "postgres";
-    group = "postgres";
+    #user = "postgres";
+    #group = "postgres";
   };
 
   # Define systemd-tmpfiles rules to ensure the PostgreSQL data directory exists
