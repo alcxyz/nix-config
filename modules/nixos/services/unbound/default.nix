@@ -8,8 +8,8 @@
     settings = {
       server = {
         # Listen only on localhost, on port 5335
-        interface = [ "127.0.0.1@5335" ];
-        access-control = [ "127.0.0.1/32 allow" ];
+        interface = [ "0.0.0.0@5335" ];
+        access-control = [ "127.0.0.1/32 allow" "172.17.0.0/16 allow" "172.18.0.0/16 allow" ];
 
         # DNSSEC validation and performance
         harden-dnssec-stripped = "yes";
@@ -27,5 +27,13 @@
         num-threads = 5;
       };
     };
+  };
+  networking.firewall = {
+    enable = true;
+    # ... other rules ...
+    allowedUDPPorts = [
+      53
+      5335
+    ];
   };
 }
