@@ -18,8 +18,7 @@
     
     # Admin setup
     adminEmail = "post@alc.no";
-    initialAdminPassword = "temp123";
-    #initialAdminPassword = config.sops.secrets.seafile_admin_password.path;
+    initialAdminPassword = config.sops.secrets.seafile_admin_password.path;
     
     # External URL
     ccnetSettings.General.SERVICE_URL = "https://seahub.nux.local";
