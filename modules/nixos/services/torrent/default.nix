@@ -1,26 +1,29 @@
-# modules/nixos/services/deluge/default.nix
+# modules/nixos/services/torrent/default.nix
 { config, lib, pkgs, ... }:
 
 {
-  services.deluge = {
+  services.rtorrent = {
     enable = true;
-    #user = "deluge";
-    #group = "deluge";
-    #dataDir = "/vault/deluge";
+    downloadDir = "/downloads";
     openFirewall = true;
-    web.enable = true;
-    #web.port = 8112;
+    port = 51413;
+  };
+  
+  services.flood = {
+    enable = true;
+    openFirewall = true;
+    port = 8112;
   };
 
-  # Traefik Routes for Deluge
+  # Traefik Routes for Flood
   services.traefik.dynamicConfigOptions.http = {
-    routers.delugeweb = {
+    routers.flood = {
       rule = "Host(`deluge.xyz.local`)";
       entryPoints = [ "websecure" ];
-      service = "delugeweb";
+      service = "flood";
       tls = true;
     };
-    services.delugeweb = {
+    services.flood = {
       loadBalancer.servers = [{ url = "http://localhost:8112"; }];
     };
   };
