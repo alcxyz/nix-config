@@ -8,4 +8,22 @@
     openFirewall = true;
   };
 
+  # Traefik Routes for Unifi
+  services.traefik.dynamicConfigOptions.http = {
+    routers.unifi = {
+      rule = "Host(`unifi.nux.local`)";
+      entryPoints = [ "websecure" ];
+      service = "unifi";
+      tls = true;
+    };
+
+    services.unifi = {
+      loadBalancer.servers = [{ url = "https://localhost:8443"; }];
+      loadBalancer.serversTransport = "unifi-transport";
+    };
+    serversTransports.unifi-transport = {
+      insecureSkipVerify = true;
+    };
+  };
+
 }

@@ -77,7 +77,4 @@
   systemd.services.seaf-server.after = [ "mysql.service" ];
   systemd.services.seahub.after = [ "mysql.service" ];
 
-  #networking.firewall.allowedTCPPorts = [ 8000 ];
-  # We only need to open Traefik's ports, not Seafile's internal ones.
-  # This is likely already done in your main traefik module.
 }

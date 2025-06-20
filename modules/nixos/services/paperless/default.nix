@@ -24,6 +24,17 @@
     };
   };
 
-  # Open port for Traefik
-  networking.firewall.allowedTCPPorts = [ 8001 ];
+  # Traefik Routes for Paperless
+  services.traefik.dynamicConfigOptions.http = {
+    routers.paperless = {
+      rule = "Host(`paperless.nux.local`)";
+      entryPoints = [ "websecure" ];
+      service = "paperless";
+      tls = true;
+    };
+    services.paperless = {
+      loadBalancer.servers = [{ url = "http://localhost:8001"; }];
+    };
+  };
+
 }

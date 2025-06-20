@@ -35,54 +35,6 @@
           service = "noop@internal";
         };
 
-        # Pi-hole
-        routers.pihole = {
-          rule = "Host(`pihole.nux.local`)";
-          entryPoints = [ "websecure" ];
-          service = "pihole";
-          tls = true;
-        };
-        services.pihole = {
-          loadBalancer.servers = [{ url = "http://localhost:8081"; }];
-        };
-
-        # UniFi
-        routers.unifi = {
-          rule = "Host(`unifi.nux.local`)";
-          entryPoints = [ "websecure" ];
-          service = "unifi";
-          tls = true;
-        };
-        services.unifi = {
-          loadBalancer.servers = [{ url = "https://localhost:8443"; }];
-          loadBalancer.serversTransport = "unifi-transport";
-        };
-        serversTransports.unifi-transport = {
-          insecureSkipVerify = true;
-        };
-
-        # LLDAP
-        routers.lldap = {
-          rule = "Host(`ldap.nux.local`)";
-          entryPoints = [ "websecure" ];
-          service = "lldap";
-          tls = true;
-        };
-        services.lldap = {
-          loadBalancer.servers = [{ url = "http://localhost:17170"; }];
-        };
-
-        # Paperless
-        routers.paperless = {
-          rule = "Host(`paperless.nux.local`)";
-          entryPoints = [ "websecure" ];
-          service = "paperless";
-          tls = true;
-        };
-        services.paperless = {
-          loadBalancer.servers = [{ url = "http://localhost:8001"; }];
-        };
-
       };
     };
   };
