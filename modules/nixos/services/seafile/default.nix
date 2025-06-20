@@ -18,15 +18,14 @@
 
     adminEmail = "post@alc.no";
     # You can remove this line after the first successful setup
-    #initialAdminPassword = "a-temporary-password";
+    initialAdminPassword = config.sops.secrets.seafile_admin_password.path;
 
     # This is the single, public-facing URL for your Seafile instance.
     # Clients will use this URL for both the web UI and file syncing.
     ccnetSettings.General.SERVICE_URL = "https://seafile.nux.local";
 
     # Bind Seahub (web UI) to localhost:8000
-    seahubAddress = "127.0.0.1";
-    seahubPort = 8000;
+    seahubAddress = "[127.0.0.1]:8000";
 
     # The file server (seaf-server) will automatically bind to localhost:8082
     # We don't need to configure it here, just know the port.
@@ -78,6 +77,7 @@
   systemd.services.seaf-server.after = [ "mysql.service" ];
   systemd.services.seahub.after = [ "mysql.service" ];
 
+  #networking.firewall.allowedTCPPorts = [ 8000 ];
   # We only need to open Traefik's ports, not Seafile's internal ones.
   # This is likely already done in your main traefik module.
 }
