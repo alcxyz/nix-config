@@ -22,7 +22,7 @@
 
     # This is the single, public-facing URL for your Seafile instance.
     # Clients will use this URL for both the web UI and file syncing.
-    ccnetSettings.General.SERVICE_URL = "https://seafile.nux.local";
+    ccnetSettings.General.SERVICE_URL = "https://seahub.nux.local";
 
     # Bind Seahub (web UI) to localhost:8000
     seahubAddress = "[127.0.0.1]:8000";
@@ -43,7 +43,7 @@
     routers.seafile-http = {
       # This rule is more specific, so it gets higher priority
       priority = 11;
-      rule = "Host(`seafile.nux.local`) && PathPrefix(`/seafhttp`)";
+      rule = "Host(`seahub.nux.local`) && PathPrefix(`/seafhttp`)";
       entryPoints = [ "websecure" ];
       service = "seafile-http";
       middlewares = [ "seafile-stripprefix" ];
@@ -53,7 +53,7 @@
     # Router for the web UI (everything else)
     routers.seafile-web = {
       priority = 10;
-      rule = "Host(`seafile.nux.local`)";
+      rule = "Host(`seahub.nux.local`)";
       entryPoints = [ "websecure" ];
       service = "seafile-web";
       tls = true;
