@@ -1,5 +1,5 @@
 # /modules/nixos/services/traefik/default.nix
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, hostName, ... }:
 
 {
   services.traefik = {
@@ -17,7 +17,7 @@
       http = {
         # Traefik Dashboard
         routers.api = {
-          rule = "Host(`traefik.nux.local`)";
+          rule = "Host(`traefik.${hostName}.local`)";
           entryPoints = [ "websecure" ];
           service = "api@internal";
           tls = true;
