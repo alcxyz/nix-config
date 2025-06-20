@@ -83,15 +83,6 @@
           loadBalancer.servers = [{ url = "http://localhost:8001"; }];
         };
 
-        routers.seahub = {
-          rule = "Host(`seahub.nux.local`)";
-          entryPoints = [ "websecure" ];
-          service = "seahub";
-          tls = true;
-        };
-        services.seahub = {
-          loadBalancer.servers = [{ url = "http://localhost:8000"; }];
-        };
       };
     };
   };
