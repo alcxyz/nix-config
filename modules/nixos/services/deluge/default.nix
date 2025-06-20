@@ -56,4 +56,17 @@ with lib; # Ensure lib is in scope for mkForce
     #  "d '${config.services.deluge.dataDir}' 0750 ${config.services.deluge.user} ${config.services.deluge.group} - -"
     #];
   };
+
+  # Traefik Routes for Deluge
+  services.traefik.dynamicConfigOptions.http = {
+    routers.delugeweb = {
+      rule = "Host(`deluge.xyz.local`)";
+      entryPoints = [ "websecure" ];
+      service = "deluge-web";
+      tls = true;
+    };
+    services.delugeweb = {
+      loadBalancer.servers = [{ url = "http://localhost:8112"; }];
+    };
+  };
 }
