@@ -1,5 +1,5 @@
 # /modules/nixos/services/paperless/default.nix
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, hostName, ... }:
 
 {
   # Redis for Paperless (still needed for task queue and caching)
@@ -16,7 +16,7 @@
     passwordFile = config.sops.secrets.paperless_password.path;
     
     settings = {
-      PAPERLESS_URL = "https://paperless.nux.local";
+      PAPERLESS_URL = "https://paperless.${hostName}.local";
       PAPERLESS_TIME_ZONE = config.time.timeZone;
       PAPERLESS_OCR_LANGUAGE = "eng+nor";
       PAPERLESS_TRUSTED_PROXIES = [ "127.0.0.1" ];
@@ -27,7 +27,7 @@
   # Traefik Routes for Paperless
   services.traefik.dynamicConfigOptions.http = {
     routers.paperless = {
-      rule = "Host(`paperless.nux.local`)";
+      rule = "Host(`paperless.${hostName}.local`)";
       entryPoints = [ "websecure" ];
       service = "paperless";
       tls = true;

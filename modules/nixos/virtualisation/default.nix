@@ -26,7 +26,10 @@ in
       rootless.setSocketVariable = true;
     };
 
+
+    users.users.${username}.extraGroups = [ "docker" ]; 
+
     # Add other virtualization related tools
-    environment.systemPackages = with pkgs; [ podman-compose lima ];
+    environment.systemPackages = with pkgs; [ lima ];
   };
 }

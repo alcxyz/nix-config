@@ -1,5 +1,5 @@
 # /modules/nixos/services/lldap/default.nix
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, hostName, ... }:
 
 {
   # Use the built-in LLDAP service
@@ -32,7 +32,7 @@
   # Traefik Routes for LLDAP
   services.traefik.dynamicConfigOptions.http = {
     routers.lldap = {
-      rule = "Host(`ldap.nux.local`)";
+      rule = "Host(`ldap.${hostName}.local`)";
       entryPoints = [ "websecure" ];
       service = "lldap";
       tls = true;

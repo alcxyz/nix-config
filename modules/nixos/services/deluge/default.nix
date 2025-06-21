@@ -1,5 +1,5 @@
 # modules/nixos/services/deluge/default.nix
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, hostName, ... }:
 
 {
   services.deluge = {
@@ -15,7 +15,7 @@
   # Traefik Routes for Deluge
   services.traefik.dynamicConfigOptions.http = {
     routers.delugeweb = {
-      rule = "Host(`deluge.xyz.local`)";
+      rule = "Host(`deluge.${hostName}.local`)";
       entryPoints = [ "websecure" ];
       service = "delugeweb";
       tls = true;

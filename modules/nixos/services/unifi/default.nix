@@ -1,5 +1,5 @@
 # /modules/nixos/services/unifi/default.nix
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, hostName, ... }:
 
 {
   # Use the built-in UniFi service
@@ -11,7 +11,7 @@
   # Traefik Routes for Unifi
   services.traefik.dynamicConfigOptions.http = {
     routers.unifi = {
-      rule = "Host(`unifi.nux.local`)";
+      rule = "Host(`unifi.${hostName}.local`)";
       entryPoints = [ "websecure" ];
       service = "unifi";
       tls = true;
