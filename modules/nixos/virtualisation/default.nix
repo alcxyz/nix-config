@@ -1,5 +1,5 @@
 # modules/nixos/virtualisation/default.nix
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, username, ... }:
 
 with lib;
 
