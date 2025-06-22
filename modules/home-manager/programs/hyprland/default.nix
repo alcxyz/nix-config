@@ -34,49 +34,20 @@ in
 
       # Configure the built-in module options found via home-manager search:
       xwayland.enable = true;
-      # systemd.enable = true; # Consider enabling this for user service integration with UWSM
+      systemd.enable = true; # Consider enabling this for user service integration with UWSM
 
-      # --- Configuration directives for hyprland.conf ---
-      # These go under the 'settings' option of the built-in module.
-      # 'settings' takes an attribute set representing the configuration sections.
       settings = {
         general = {
-          # Note: Hyprland uses 0xAARRGGBB or 0xRRGGBB format.
-          # nix-colors provides RRGGBB hexadecimal strings.
-          # We prefix with 0xff for full opacity (AA=ff).
-          #"col.active_border" = "0xff${colors.base0C} 0xff${colors.base0D}"; # Gradient example
-          #"col.inactive_border" = "0xff${colors.base00}";
-
-          # Add other general settings here using the structured format
-          # like:
-          # gpus = "auto";
-          # border_size = 2;
+          "col.active_border" = "0xff${colors.base0C} 0xff${colors.base0D}";
+          "col.inactive_border" = "0xff${colors.base00}";
+          border_size = 2;
+          gaps_in = 5;
+          gaps_out = 10;
         };
-
-        # Add other sections from your hyprland.conf here, translated
-        # into the Nix attribute set structure, directly under 'settings'.
-        # Example sections:
-        # decoration = {
-        #   rounding = 10;
-        #   blur = { enabled = true; size = 3; passes = 1; };
-        #   # ... other decoration settings
-        # };
-        #
-        # animation = {
-        #   enabled = true;
-        #   # animations go here...
-        # };
-        #
-        # binds = [
-        #   "$mainMod, Q, killactive,"
-        #   "$mainMod, M, exit,"
-        #   # ... other keybinds as strings
-        # ];
-        #
-        # windowRules = [
-        #   "float,^(kitty)$"
-        #   # ... other rules as strings
-        # ];
+        decoration = {
+          rounding = 10;
+          "col.shadow" = "0xff${colors.base00}";
+        };
       };
 
       # Use extraConfig for raw lines not covered by structured options
@@ -90,6 +61,7 @@ in
       # plugins = [ pkgs.hyprland-plugins.hyprbars ];
       # package = pkgs.hyprland.override { ... };
       # portalPackage = pkgs.xdg-desktop-portal-hyprland.override { hyprland = pkgs.hyprland; };
+      #portalPackage = pkgs.xdg-desktop-portal-hyprland;
 
     }; # End of wayland.windowManager.hyprland block
 
@@ -118,9 +90,45 @@ in
     # This session variable is correctly placed here.
     home.sessionVariables.NIXOS_OZONE_WL = "1";
 
+    home.file.".config/hypr/scripts/fkey_handler.sh" = {
+      source = ./scripts/fkey_handler.sh;
+      executable = true;
+    };
+
     xdg.configFile = {
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;
+
+      "hypr/gaming.conf" = {
+        text = ''
+          # Gaming Suite Configuration
+          $ws_gaming = ${config.suites.gaming.gamingWorkspace or "1"}
+
+          # --- THIS BINDING IS NOW SIMPLE ---
+          # It's only job is to launch the process. The window rules below will handle placement.
+          bind = SUPER, G, exec, flatpak run com.valvesoftware.Steam -bigpicture
+
+          # --- ROBUST WINDOW RULES ---
+          # These rules will catch all relevant windows and dispatch them correctly.
+
+          # Rule 1: Catch the initial Steam window (class 'steam') and move it.
+          windowrulev2 = workspace $ws_gaming silent,class:^(steam)$
+
+          # Rule 2: Catch the final Gamescope window and ensure it's on the correct workspace and fullscreen.
+          # This is still important as it takes over from the initial window.
+          windowrulev2 = workspace $ws_gaming silent,class:^(gamescope)$
+          windowrulev2 = fullscreen,class:^(gamescope)$
+
+          # --- Specific Rules for the HEADLESS STREAMING Session ---
+          # These rules remain the same and are still correct.
+          windowrulev2 = nofocus, title:^(GamescopeStream)$
+          windowrulev2 = noinitialfocus, title:^(GamescopeStream)$
+
+          # Start the audio monitor automatically on login.
+          exec-once = workspace-audio-monitor monitor
+        '';
+      };
+
       "hypr/colors.conf" = {
         text = ''
           general {
@@ -130,5 +138,6 @@ in
         '';
       };
     };
+
   };
 }

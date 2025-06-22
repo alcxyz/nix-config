@@ -15,15 +15,9 @@ in
 
   config = mkIf cfg.enable { 
     environment.systemPackages = with pkgs; [
-      inputs.zen-browser.packages.x86_64-linux.default
+      #inputs.zen-browser.packages.x86_64-linux.default
 
-      vivaldi
-      brave
-      chromium
-      thunderbird
-      teams-for-linux
       rustdesk
-      spotify
       vlc
       obsidian
       obs-studio
@@ -33,12 +27,11 @@ in
       cameractrls
       cameractrls-gtk4
       gparted
-      discord
-      lutris
       winetricks
       wineWowPackages.waylandFull
 
-      ghostty
+      lens
+
       nautilus
 
       pulseaudio

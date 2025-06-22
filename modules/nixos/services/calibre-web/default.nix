@@ -1,4 +1,4 @@
-{ options, config, lib, pkgs, username, ... }:
+{ options, config, lib, pkgs, username, hostName, ... }:
 with lib;
 {
   # Removed options.services.calibre-web.enable definition
@@ -24,5 +24,18 @@ with lib;
       calibre
       calibre-web
     ];
+
+    # Traefik Routes for calibre-web
+    services.traefik.dynamicConfigOptions.http = {
+      routers.calibre-web = {
+        rule = "Host(`calibre-web.${hostName}.local`)";
+        entryPoints = [ "websecure" ];
+        service = "calibre-web";
+        tls = true;
+      };
+      services.calibre-web = {
+        loadBalancer.servers = [{ url = "http://localhost:8083"; }];
+      };
+    };
   };
 }

@@ -29,6 +29,11 @@ in
     };
     services.pulseaudio.enable = false;
 
+    #environment.etc."wireplumber/wireplumber.conf.d/51-create-game-sink.conf" = {
+    #  source = ./config/51-create-game-sink.conf; # Path relative to audio.nix
+    #  mode = "0444";
+    #};
+
     #environment.systemPackages = with pkgs; [
     #];
     #programs.noisetorch.enable = true;

@@ -1,72 +1,41 @@
 # modules/nixos/services/ssh/default.nix
+
 {
-  options,
   config,
   lib,
-  pkgs,    # pkgs for the current system, passed by nixosSystem
-  username, # Passed from specialArgs in flake.nix (e.g., "alc")
+  username,
   ...
 }:
 
 with lib;
 
 let
-  # cfg accesses the custom option defined in this module
-  cfg = config.services.ssh;
-
-  # publicKey is hardcoded. This is fine for a personal configuration.
-  # For a more generic module, this could be an option itself.
-  publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@AM-VYH2F56CR6";
-  yikzinKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIAhSQvuNQAtvN+ibnJ23+WnqTdENXVyrRJ538sBKUfx ZIN";
+  cfg = config.services.openssh;
+  alc_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM9g7HJbiqvmCZRZF5z5g9J/VLI91p7RpXipA9eWHX2q alc@xyz";
+  alc_mac_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@mac";
+  alc_iphone_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0";
+  alc_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
 in
 {
-  # Define the custom option for enabling this SSH server configuration
-  options.services.ssh = with types; {
-    enable = mkOption {
-      type = types.bool;
-      default = false; # Default to false, enabled by host config or base system module
-      description = "Enable the system-wide OpenSSH server with specific key-based authentication.";
-    };
-  };
-
-  # Apply the configuration if this module is enabled (services.ssh.enable = true)
   config = mkIf cfg.enable {
-    # Configure the standard NixOS OpenSSH service
     services.openssh = {
-      enable = true; # This actually enables the sshd service
+      #enable = true;
       ports = [ 22 ];
-
-      # It's good practice to be explicit about PermitRootLogin.
-      # "prohibit-password" is the default if PasswordAuthentication is false,
-      # but explicitly setting it improves clarity.
-      # If you never want root to log in via SSH, even with a key, use "no".
-      settings.PermitRootLogin = "prohibit-password"; # Or "no" if preferred
-
-      settings.PasswordAuthentication = false; # Disable password authentication
-      openFirewall = true; # Automatically open the firewall for the specified ports
+      settings.PermitRootLogin = "prohibit-password";
+      settings.PasswordAuthentication = false;
+      openFirewall = true;
+      settings.PubkeyAuthentication = true;
     };
 
-    # Configure authorized SSH keys for system users
+    # This is the correct, idiomatic way to do this in NixOS.
     users.users = {
-      # Add the public key for the root user
-      root.openssh.authorizedKeys.keys = [
-        publicKey
-      ];
-
-      # Add the public key for the main user (passed as 'username' argument)
-      # This dynamically uses the 'username' from specialArgs.
+      root.openssh.authorizedKeys.keys = [ alc_mac_key ];
       ${username}.openssh.authorizedKeys.keys = [
-        publicKey
-      ];
-
-      yikzin.openssh.authorizedKeys.keys = [
-        #yikzinKey
+        alc_xyz_key
+        alc_mac_key
+        alc_iphone_key
+        alc_nux_key
       ];
     };
-
-    # Comment confirming scope:
-    # The SSH client configuration (e.g., ~/.ssh/config) is correctly
-    # handled in a Home Manager module, not here.
   };
 }
-

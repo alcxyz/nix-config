@@ -1,0 +1,145 @@
+{ 
+  "position": "top",
+  "exclusive": true,
+  "passthrough": false,
+  "gtk-layer-shell": true,
+  "margin-top": 10,
+  "margin-left": 10,
+  "margin-right": 10,
+  "height": 41,
+  "modules-left": [
+    "custom/weather",
+    "cpu",
+    "memory",
+    "disk"
+  ],
+  "modules-center": [
+    "hyprland/workspaces"
+  ],
+  "modules-right": [
+    "hyprland/language",
+    "pulseaudio",
+    "pulseaudio#microphone", 
+    "clock",
+    "separator",
+    "tray"
+  ],
+
+  "tray": {
+    "icon-size": 16,
+    "icon-theme": "Papirus",
+    "spacing": 2
+  },
+
+  "custom/spacer": {
+    "format": " ",
+    "tooltip": false
+  },
+
+  "separator": {
+    "format": " | "
+  },
+
+  "hyprland/window": {
+    "format": "{}",
+    "max-length": 35,
+    "rewrite": {
+      "": "Desktop"
+    },
+    "separate-outputs": true
+  },
+
+  "hyprland/workspaces": {
+    "format": "{icon}",
+    "on-click": "activate",
+    "format-icons": {
+      "1": "",
+      "2": "",
+      "3": "",
+      "4": "",
+      "5": "",
+      "6": "",
+      "7": "",
+      "8": "",
+      "9": "",
+      "active": "",
+      "urgent": "",
+      "persistent": "",
+      "focused": "",
+      "default": ""
+    },
+    "sort-by-number": true,
+    "persistent-workspaces": {
+      "*": 9,
+      "DP-1": 9
+    }
+  },
+
+  "clock": {
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+    "format": "<span color='#@base0d@'>󰥔 </span><span color='#@base05@'>{:%H:%M | %a %d %b}</span>",
+    "format-alt": "{:%Y-%m-%d}"
+  },
+
+  "cpu": {
+    "format": "<span color='#@base0d@'>󰍛</span> <span color='#@base05@'>{usage}%</span>",
+    "interval": 1,
+    "format-alt-click": "click",
+    "format-alt": "<span color='#@base0b@'>{icon0}{icon1}{icon2}{icon3}</span> <span color='#@base05@'>{usage:>2}%</span> <span color='#@base0b@'>󰍛</span>",
+    "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
+    "on-click": "gnome-system-monitor"
+  },
+
+  "memory": {
+    "interval": 3,
+    "format": "<span color='#@base08@'> </span> <span color='#@base05@'>{used:0.1f}G</span>"
+  },
+
+  "custom/weather": {
+    "exec": "~/.config/hypr/scripts/weather.sh",
+    "return-type": "json",
+    "interval": 600,
+    "format": "{text}"
+  },
+
+  "pulseaudio": {
+    "format": "<span color='#@base0b@'>{icon} </span><span color='#@base05@'>{volume}%</span>",
+    "format-bluetooth": "<span color='#@base0b@'>{icon}</span>  <span color='#@base05@'>{volume}%</span>",
+    "tooltip": false,
+    "format-muted": "<span color='#@base08@'>󰝟</span>",
+    "on-click": "wpctl set-mute @DEFAULT_SINK@ toggle",
+    "on-scroll-up": "wpctl set-volume @DEFAULT_SINK@ 10%+",
+    "on-scroll-down": "wpctl set-volume @DEFAULT_SINK@ 10%-",
+    "format-icons": {
+      "headphone": "",
+      "hands-free": "",
+      "headset": "",
+      "phone": "",
+      "portable": "",
+      "car": "",
+      "default": ["", "", ""]
+    }
+  },
+
+  "pulseaudio#microphone": {
+    "format": "{format_source}",
+    "format-source": "<span color='#@base08@'> </span><span color='#@base05@'>{volume}%</span>",
+    "format-source-muted": "",
+    "on-click": "wpctl set-mute @DEFAULT_SOURCE@ toggle",
+    "on-scroll-up": "wpctl set-volume @DEFAULT_SOURCE@ 5%+",
+    "on-scroll-down": "wpctl set-volume @DEFAULT_SOURCE@ 5%-"
+  },
+
+  "hyprland/language": {
+    "format": "<span color='#@base0a@'>󰌌</span> <span color='#@base05@'>{}</span>",
+    "format-ar": "ara",
+    "format-en": "eng"
+  },
+
+  "disk": {
+    "interval": 3,
+    "path": "/home",
+    "format": "<span color='#@base0b@'> </span><span color='#@base05@'>{free}</span>",
+    "unit": "GB"
+  }
+}

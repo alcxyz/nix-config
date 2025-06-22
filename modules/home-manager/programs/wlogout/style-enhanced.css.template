@@ -1,0 +1,70 @@
+* {
+  all: unset;
+  font-family: "JetBrains Mono Nerd Font";
+  font-size: 16px;
+}
+
+window {
+  background-color: #@base00@;
+  /* Removed the invalid rgba() line that was causing issues */
+}
+
+button {
+  color: #@base05@;
+  font-size: 48px;
+  background-color: #@base01@;
+  border: 2px solid #@base02@;
+  border-radius: 12px;
+  outline-style: none;
+  margin: 10px;
+  min-width: 120px;
+  min-height: 120px;
+  transition: all 0.3s ease;
+}
+
+button:focus, button:active, button:hover {
+  color: #@base00@;
+  background-color: #@base0d@;
+  border-color: #@base0d@;
+  transform: scale(1.05);
+}
+
+#lock {
+  color: #@base0a@;
+}
+
+#lock:hover {
+  background-color: #@base0a@;
+  border-color: #@base0a@;
+  color: #@base00@;
+}
+
+#logout {
+  color: #@base0e@;
+}
+
+#logout:hover {
+  background-color: #@base0e@;
+  border-color: #@base0e@;
+  color: #@base00@;
+}
+
+#shutdown {
+  color: #@base08@;
+}
+
+#shutdown:hover {
+  background-color: #@base08@;
+  border-color: #@base08@;
+  color: #@base00@;
+}
+
+#reboot {
+  color: #@base09@;
+}
+
+#reboot:hover {
+  background-color: #@base09@;
+  border-color: #@base09@;
+  color: #@base00@;
+}

@@ -1,7 +1,10 @@
+# modules/home-manager/programs/wofi/config
+# This file now only contains universal settings.
+# The 'show' property is now controlled by our script.
+
 width=900
 height=600
 location=center
-show=drun
 prompt=Search...
 filter_rate=100
 allow_markup=true

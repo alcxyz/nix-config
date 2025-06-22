@@ -12,213 +12,61 @@ let
   cfg = config.programs.waybar.managed; 
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
+  
+  # Simple string replacement approach (same as wofi)
+  substituteColors = text: 
+    let
+      colorPlaceholders = [
+        "@base00@" "@base01@" "@base02@" "@base03@"
+        "@base04@" "@base05@" "@base06@" "@base07@"
+        "@base08@" "@base09@" "@base0a@" "@base0b@"
+        "@base0c@" "@base0d@" "@base0e@" "@base0f@"
+      ];
+      colorValues = [
+        colors.base00 colors.base01 colors.base02 colors.base03
+        colors.base04 colors.base05 colors.base06 colors.base07
+        colors.base08 colors.base09 colors.base0A colors.base0B
+        colors.base0C colors.base0D colors.base0E colors.base0F
+      ];
+    in
+    builtins.replaceStrings colorPlaceholders colorValues text;
+    
+  # Choose config and style based on variant
+  configFile = if cfg.variant == "alternative" then ./config-alt.jsonc else ./config.jsonc;
+  styleFile = if cfg.variant == "alternative" then ./style-alt.css.template else ./style.css.template;
+  
+  # Read template and process it
+  styleTemplate = builtins.readFile styleFile;
+  processedStyle = substituteColors styleTemplate;
 in
 {
   options.programs.waybar.managed = {
     enable = mkEnableOption "Waybar status bar";
+    
+    variant = mkOption {
+      type = types.enum [ "default" "alternative" ];
+      default = "default";
+      description = ''
+        Waybar configuration variant to use:
+        - default: Original configuration
+        - alternative: Compact horizontal layout with colored icons
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
     programs.waybar.enable = true;
 
+    # Static config file (variant-dependent)
     xdg.configFile."waybar/config.jsonc" = {
-      source = ./config.jsonc; # Path relative to this module
-      onChange = ''
-        ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
-      '';
+      source = configFile;
+      onChange = ''${pkgs.busybox}/bin/pkill -SIGUSR2 waybar'';
     };
+    
+    # Dynamic CSS with color substitution (variant-dependent)
     xdg.configFile."waybar/style.css" = {
-      text = ''
-        * {
-          /* `otf-font-awesome` is required to be installed for icons */
-          font-family: JetBrainsMono Nerd Font;
-          font-size: 13px;
-          border-radius: 10px;
-        }
-
-        #clock,
-        #custom-notification,
-        #custom-launcher,
-        #custom-power-menu,
-        /*#custom-colorpicker,*/
-        #custom-window,
-        #memory,
-        #disk,
-        #network,
-        #battery,
-        #custom-spotify,
-        #pulseaudio,
-        #window,
-        #tray {
-          padding: 5 15px;
-          border-radius: 12px;
-          background: #${colors.base00};
-          color: #${colors.base07};
-          margin-top: 8px;
-          margin-bottom: 8px;
-          margin-right: 2px;
-          margin-left: 2px;
-          transition: all 0.3s ease;
-        }
-
-        #window {
-          background-color: transparent;
-          box-shadow: none;
-        }
-
-        window#waybar {
-          background-color: rgba(0, 0, 0, 0.096);
-          border-radius: 17px;
-        }
-
-        window * {
-          background-color: transparent;
-          border-radius: 0px;
-        }
-
-        #workspaces button label {
-          color: #${colors.base07};
-        }
-
-        #workspaces button.active label {
-          color: #${colors.base00};
-          font-weight: bolder;
-        }
-
-        #workspaces button:hover {
-          box-shadow: #${colors.base07} 0 0 0 1.5px;
-          background-color: #${colors.base00};
-          min-width: 50px;
-        }
-
-        #workspaces {
-          background-color: transparent;
-          border-radius: 17px;
-          padding: 5 0px;
-          margin-top: 3px;
-          margin-bottom: 3px;
-        }
-
-        #workspaces button {
-          background-color: #${colors.base00};
-          border-radius: 12px;
-          margin-left: 10px;
-
-          transition: all 0.3s ease;
-        }
-
-        #workspaces button.active {
-          min-width: 50px;
-          box-shadow: rgba(0, 0, 0, 0.288) 2 2 5 2px;
-          background-color: #${colors.base0F};
-          background-size: 400% 400%;
-          transition: all 0.3s ease;
-          background: linear-gradient(
-            58deg,
-            #${colors.base0E},
-            #${colors.base0E},
-            #${colors.base0E},
-            #${colors.base0D},
-            #${colors.base0D},
-            #${colors.base0E},
-            #${colors.base08}
-          );
-          background-size: 300% 300%;
-          animation: colored-gradient 20s ease infinite;
-        }
-
-        @keyframes colored-gradient {
-          0% {
-            background-position: 71% 0%;
-          }
-          50% {
-            background-position: 30% 100%;
-          }
-          100% {
-            background-position: 71% 0%;
-          }
-        }
-
-        #custom-power-menu {
-          margin-right: 10px;
-          padding-left: 12px;
-          padding-right: 15px;
-          padding-top: 3px;
-        }
-
-        #custom-spotify {
-          margin-left: 5px;
-          padding-left: 15px;
-          padding-right: 15px;
-          padding-top: 3px;
-          color: #${colors.base07};
-          background-color: #${colors.base00};
-          transition: all 0.3s ease;
-        }
-
-        #custom-spotify.playing {
-          color: rgb(180, 190, 254);
-          background: rgba(30, 30, 46, 0.6);
-          background: linear-gradient(
-            90deg,
-            #${colors.base02},
-            #${colors.base00},
-            #${colors.base00},
-            #${colors.base00},
-            #${colors.base00},
-            #${colors.base02}
-          );
-          background-size: 400% 100%;
-          animation: grey-gradient 3s linear infinite;
-          transition: all 0.3s ease;
-        }
-
-        @keyframes grey-gradient {
-          0% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: -33% 50%;
-          }
-        }
-
-        #tray menu {
-          background-color: #${colors.base00};
-          opacity: 0.8;
-        }
-
-        #pulseaudio.muted {
-          color: #${colors.base08};
-          padding-right: 16px;
-        }
-
-        #custom-notification.collapsed,
-        #custom-notification.waiting_done {
-          min-width: 12px;
-          padding-right: 17px;
-        }
-
-        #custom-notification.waiting_start,
-        #custom-notification.expanded {
-          background-color: transparent;
-          background: linear-gradient(
-            90deg,
-            #${colors.base02},
-            #${colors.base00},
-            #${colors.base00},
-            #${colors.base00},
-            #${colors.base00},
-            #${colors.base02}
-          );
-          background-size: 400% 100%;
-          animation: grey-gradient 3s linear infinite;
-          min-width: 500px;
-          border-radius: 17px;
-        }
-      '';
-      onChange = ''
-        ${pkgs.busybox}/bin/pkill -SIGUSR2 waybar
-      '';
+      text = processedStyle;
+      onChange = ''${pkgs.busybox}/bin/pkill -SIGUSR2 waybar'';
     };
   };
 }

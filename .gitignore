@@ -1,0 +1,6 @@
+# .gitignore
+.direnv/
+result
+result-*
+
+secrets/secrets.yaml
