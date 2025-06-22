@@ -33,7 +33,6 @@ in
       # Development
       git
       git-remote-gcrypt
-      lazygit
       fzf
       fd
       jq

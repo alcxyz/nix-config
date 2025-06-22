@@ -42,7 +42,7 @@ with lib;
   '';
 
   home.shellAliases = {
-    nixmac = "darwin-rebuild switch --flake .#mac";
+    nxsw = "darwin-rebuild switch --flake .#mac";
   };
 
   # Deploy SSH key pair for macOS

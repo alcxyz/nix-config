@@ -39,7 +39,6 @@ in
       git
       git-remote-gcrypt
       gh
-      lazygit
       commitizen
     ];
   };
