@@ -202,11 +202,11 @@ in {
     services.traefik.dynamicConfigOptions.http.routers.flood = {
       rule = "Host(`flood.${hostName}.local`)";
       entryPoints = [ "websecure" ];
-      service = "rtorrent-flood";
+      service = "flood";
       tls = true;
     };
     services.traefik.dynamicConfigOptions.http.services.flood = {
-      loadBalancer.servers = [ { url = "http://127.0.0.1:3001"; } ];
+      loadBalancer.servers = [ { url = "http://127.0.0.1:8112"; } ];
     };
   };
 }
