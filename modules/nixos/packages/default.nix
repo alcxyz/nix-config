@@ -22,7 +22,6 @@ in
       tree
       wget
       vagrant
-      chezmoi
       bunster
       portal
       sops
@@ -44,6 +43,7 @@ in
       nodejs_22
 
       # Util
+      uutils-coreutils-noprefix
       ripgrep
       openssl
       killall
