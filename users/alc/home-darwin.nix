@@ -42,7 +42,7 @@ with lib;
   '';
 
   home.shellAliases = {
-    nxsw = "darwin-rebuild switch --flake .#mac";
+    nxsw = "sudo /run/current-system/sw/bin/darwin-rebuild switch --flake .#mac";
   };
 
   # Deploy SSH key pair for macOS
