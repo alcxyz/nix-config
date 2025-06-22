@@ -1,3 +1,4 @@
+# modules/nixos/services/torrent/single-container.nix
 { config, lib, pkgs, hostName, username, ... }:
 
 with lib;
@@ -8,6 +9,7 @@ let
   serviceGroup = config.services.torrent.serviceGroup or "rtorrent";
   uid          = config.services.torrent.uid or 986;
   gid          = config.services.torrent.gid or 980;
+  mediaGid     = config.services.torrent.mediaGid or 983;
   configDir    = config.services.torrent.configDir or "/var/lib/rtorrent";
   dataDir      = config.services.torrent.dataDir or "/zpool/downloads";
   extraShares  = config.services.torrent.extraShares or [];
@@ -16,6 +18,10 @@ let
   extraVolumesLines = lib.concatStringsSep "\n" (map (share:
     "          - \"" + share.hostPath + ":" + share.containerPath + "\""
   ) extraShares);
+
+  # Build allowedPaths list: starting with /data and appending container paths.
+  allowedPaths = lib.concatStringsSep "," ([ "/data" ]
+    ++ (map (share: share.containerPath) extraShares));
 
   # Generate a basic rTorrent configuration file.
   # Note: Flood does not accept arguments to pass to rTorrent, so we must use a .rtorrent.rc.
@@ -66,7 +72,7 @@ let
         hostname: rtorrent-flood
         user: "${toString uid}:${toString gid}"
         group_add: 
-          - "983"
+          - "${toString mediaGid}"
         environment:
           HOME: /config
         volumes:
@@ -76,7 +82,7 @@ ${if extraVolumesLines == "" then "" else "\n" + extraVolumesLines}
         ports:
           - "127.0.0.1:8112:3001"
           - "0.0.0.0:51413:6881"
-        command: --port 3001 --allowedpath /data
+        command: --port 3001 --allowedpath ${allowedPaths}
         restart: unless-stopped
         stop_grace_period: 1m
   '';
@@ -91,13 +97,18 @@ in {
     enable = mkEnableOption "Torrent services (rTorrent-Flood single container)";
     uid = mkOption {
       type = types.int;
-      default = 1000;
+      default = 986;
       description = "UID to run the container and for file ownership.";
     };
     gid = mkOption {
       type = types.int;
-      default = 1001;
+      default = 980;
       description = "GID to run the container and for file ownership.";
+    };
+    mediaGid = mkOption {
+      type = types.int;
+      default = 983;
+      description = "GID of the media group on the host.";
     };
     serviceUser = mkOption {
       type = types.str;
@@ -186,8 +197,8 @@ in {
     ##############################
     # Firewall and Traefik
     ##############################
-    networking.firewall.allowedTCPPorts = [ 6881 3001 ];
-    networking.firewall.allowedUDPPorts = [ 6881 3001 ];
+    networking.firewall.allowedTCPPorts = [ 51413 8112 ];
+    networking.firewall.allowedUDPPorts = [ 51413 ];
     services.traefik.dynamicConfigOptions.http.routers.flood = {
       rule = "Host(`flood.${hostName}.local`)";
       entryPoints = [ "websecure" ];
