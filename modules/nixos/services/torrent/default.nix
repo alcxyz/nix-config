@@ -1,4 +1,4 @@
-{ config, lib, pkgs, hostName, username, ... }:
+{ config, lib, pkgs, username, hostName, ... }:
 
 with lib;
 
@@ -13,6 +13,10 @@ with lib;
       "L+ /downloads - - - - /zpool/downloads"
       "d /zpool/downloads 0755 rtorrent rtorrent -"
       "d /zpool/downloads/watch 0755 rtorrent rtorrent -"
+      "d /zpool/downloads/completed 0755 rtorrent rtorrent -"
+      "d /var/lib/rtorrent 0755 rtorrent rtorrent -"
+      "d /var/lib/rtorrent/session 0755 rtorrent rtorrent -"
+      "d /var/lib/flood 0755 flood flood -"
     ];
 
     # rtorrent configuration
@@ -23,49 +27,52 @@ with lib;
       dataDir = "/var/lib/rtorrent";
       user = "rtorrent";
       group = "rtorrent";
-      openFirewall = false; # Using traefik
-      # rpcSocket is read-only, uses default: /run/rtorrent/rpc.sock
+      openFirewall = false;
       
       configText = ''
         # Network settings
         network.port_range.set = 51413-51413
         network.port_random.set = no
         
-        # Connection settings
-        throttle.max_uploads.set = 100
+        # Enable DHT and PEX (overriding NixOS defaults)
+        dht.mode.set = auto
+        protocol.pex.set = yes
+        trackers.use_udp.set = yes
+        
+        # Basic limits
         throttle.max_downloads.global.set = 200
+        throttle.max_uploads.global.set = 100
+        
+        # Peer limits
         throttle.min_peers.normal.set = 20
         throttle.max_peers.normal.set = 60
         throttle.min_peers.seed.set = 30
         throttle.max_peers.seed.set = 80
         
-        # Memory settings
+        # Memory limit
         pieces.memory.max.set = 512M
-        
-        # Logging
-        log.add_output = "info", "rtorrent.log"
-        
-        # Watch directory for auto-loading torrents
-        schedule2 = watch_directory, 5, 5, ((load.start_verbose, (cat, "/downloads/watch/*.torrent")))
-        
-        # DHT
-        dht.mode.set = auto
-        dht.port.set = 6881
-        protocol.pex.set = yes
         
         # Encryption
         protocol.encryption.set = allow_incoming,try_outgoing,enable_retry
+        
+        # Watch directory for torrents
+        schedule2 = watch_directory, 5, 5, "load.start=/downloads/watch/*.torrent"
+        
+        # Move completed downloads
+        method.insert = d.get_finished_dir, simple, "cat=/downloads/completed/,$d.name="
+        method.insert = d.move_to_complete, simple, "d.directory.set=$argument.1=; execute=mkdir,-p,$argument.1=; execute=mv,-u,$argument.0=,$argument.1=; d.save_full_session="
+        method.set_key = event.download.finished,move_complete,"d.move_to_complete=$d.data_path=,$d.get_finished_dir="
       '';
     };
 
-    # flood configuration
+    # flood configuration - simplified
     services.flood = {
       enable = true;
-      port = 8112;
-      host = "127.0.0.1"; # Only local access, traefik handles external
-      openFirewall = false; # Using traefik
+      openFirewall = false;
       extraArgs = [
-        "--rthost=unix:///run/rtorrent/rpc.sock"  # Use NixOS default socket path
+        "--host=127.0.0.1"
+        "--port=8112"
+        "--rthost=unix:///run/rtorrent/rpc.sock"
         "--allowedpath=/downloads"
       ];
     };
@@ -73,6 +80,7 @@ with lib;
     # Ensure flood can access rtorrent socket
     systemd.services.flood = {
       after = [ "rtorrent.service" ];
+      wants = [ "rtorrent.service" ];
       serviceConfig = {
         SupplementaryGroups = [ "rtorrent" ];
       };
@@ -96,6 +104,6 @@ with lib;
 
     # Open firewall for torrent port
     networking.firewall.allowedTCPPorts = [ 51413 ];
-    networking.firewall.allowedUDPPorts = [ 51413 6881 ]; # DHT port
+    networking.firewall.allowedUDPPorts = [ 51413 6881 ];
   };
 }

@@ -19,13 +19,10 @@ in
     # Enable general container support
     virtualisation.containers.enable = true;
 
-    # Configure Docker, including rootless mode
+    # Configure Docker (system-level, not rootless)
     virtualisation.docker = {
       enable = true;
-      rootless.enable = true;
-      rootless.setSocketVariable = true;
     };
-
 
     users.users.${username}.extraGroups = [ "docker" ]; 
 
