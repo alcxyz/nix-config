@@ -154,7 +154,7 @@
           lib.nameValuePair "${username}-${hostName}" (
             mkHomeConfiguration
               hostAttrs.system
-              ./users/${username}/home-darwin.nix
+              ./users/${username}/darwin/${hostName}.nix
               hostName
               hostAttrs.osIcon
           )
