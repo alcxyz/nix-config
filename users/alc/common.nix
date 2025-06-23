@@ -61,7 +61,12 @@ with lib;
     btop
     bat
     gitui
+    xh
+    dua
     ranger
+    yazi
+    ripgrep-all
+    wiki-tui
     gopass
     yubico-piv-tool
     age
