@@ -1,208 +1,133 @@
 # modules/nixos/services/torrent/qbittorrent-flood.nix
 { config, lib, pkgs, hostName, username, ... }:
 
-with lib;
-
+# Define core configuration variables outside the module's 'let' block
+# for maximum isolation from parsing quirks within options.
 let
-  svc          = config.services.torrent;
-  uid          = svc.uid or 986;
-  gid          = svc.gid or 980;
-  mediaGid     = svc.mediaGid or 983;
-  serviceUser  = svc.serviceUser or "rtorrent";
-  serviceGroup = svc.serviceGroup or "rtorrent";
-  qbConfigDir  = svc.qbittorrentConfigDir or "/var/lib/qbittorrent";
-  dataDir      = svc.dataDir or "/zpool/downloads";
-  extraShares  = svc.extraShares or [];
+  # --- Hardcoded Service Configuration Values ---
+  # These values are set here directly.
 
-  # Ports used in the setup:
-  #
-  # - qbWebUIPort: qbittorrent-nox built-in web UI port. You can use this
-  #   to interact directly with qbittorrent-nox if needed. (Default: 8080)
-  # - floodPort: Flood's web interface port. (Default: 8112)
-  # - torrentPort: The port used for bittorrent protocol connections. (Default: 51413)
-  qbWebUIPort  = svc.qbWebUIPort or 8080;
-  floodPort    = svc.floodPort or 8112;
-  torrentPort  = svc.torrentPort or 51413;
+  # Torrent service user and group names.
+  serviceUser      = "rtorrent";
+  serviceGroup     = "rtorrent";
 
-  # Optional: Generate tmpfiles rules for any extra share directories.
-  extraShareRules =
-    map (share: "d " + share.hostPath + " 0755 " + serviceUser + " " +
-                  serviceGroup + " -") extraShares;
+  # Directories for qBittorrent configuration and downloads.
+  qbConfigDir      = "/var/lib/qbittorrent";
+  dataDir          = "/zpool/downloads";
+
+  # Ports for the services.
+  qbWebUIPort      = 8080; # qBittorrent-nox's built-in WebUI/API port.
+  floodPort        = 8112; # Flood’s own web interface port.
+  torrentPort      = 51413; # Port for incoming BitTorrent connections.
+
+  # Flood's connection details for the qBittorrent Web API.
+  qbUrl            = "";   # If empty, defaults to http://127.0.0.1:<qbWebUIPort>.
+  qbUser           = "";
+  qbPass           = "";
+
+  # Derived URL for Flood to connect to qBittorrent.
+  finalQbUrl = if qbUrl == "" then "http://127.0.0.1:" + toString qbWebUIPort else qbUrl;
+
+  # Define each Flood extra argument string as a completely separate variable.
+  # This makes each string an unambiguous, pre-evaluated literal for the list.
+  floodExtraArg1 = "--qburl=" + finalQbUrl;
+  floodExtraArg2 = "--qbuser=" + qbUser;
+  floodExtraArg3 = "--qbpass=" + qbPass;
+
+  # List of directories to be created via systemd-tmpfiles.
+  baseDirs = [ qbConfigDir dataDir (dataDir + "/watch") (dataDir + "/completed") ];
+  tmpfilesRules = map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") baseDirs;
+
 in {
-  options.services.torrent = {
-    enable = mkEnableOption "Torrent services (qbittorrent-nox + Flood)";
+  # The only option exposed for this module: enable/disable the whole setup.
+  options.services.torrent.enable = lib.mkEnableOption "Torrent services (qbittorrent-nox + Flood)";
 
-    uid = mkOption {
-      type = types.int;
-      default = 986;
-      description = "UID for the torrent service (qbittorrent‑nox).";
-    };
-
-    gid = mkOption {
-      type = types.int;
-      default = 980;
-      description = "GID for the torrent service (qbittorrent‑nox).";
-    };
-
-    mediaGid = mkOption {
-      type = types.int;
-      default = 983;
-      description = "GID of the host's media group.";
-    };
-
-    serviceUser = mkOption {
-      type = types.str;
-      default = "rtorrent";
-      description =
-        "Name of the dedicated service user for torrent services (used by both qbittorrent‑nox and Flood).";
-    };
-
-    serviceGroup = mkOption {
-      type = types.str;
-      default = "rtorrent";
-      description = "Name of the group for torrent services.";
-    };
-
-    qbittorrentConfigDir = mkOption {
-      type = types.str;
-      default = "/var/lib/qbittorrent";
-      description =
-        "Directory to store qbittorrent‑nox configuration and runtime data.";
-    };
-
-    dataDir = mkOption {
-      type = types.str;
-      default = "/zpool/downloads";
-      description =
-        "Directory where qbittorrent‑nox saves torrent downloads.";
-    };
-
-    extraShares = mkOption {
-      type = types.listOf (types.attrsOf types.str);
-      default = [];
-      description =
-        "Extra share mount points. Each element should provide keys 'hostPath' and 'containerPath'.";
-    };
-
-    qbWebUIPort = mkOption {
-      type = types.int;
-      default = 8080;
-      description =
-        "Port at which qbittorrent‑nox's built‑in web UI is exposed.";
-    };
-
-    floodPort = mkOption {
-      type = types.int;
-      default = 8112;
-      description =
-        "Port at which Flood's web interface is exposed.";
-    };
-
-    torrentPort = mkOption {
-      type = types.int;
-      default = 51413;
-      description =
-        "Port for torrent protocol traffic (incoming connections for qbittorrent‑nox).";
-    };
-  };
-
-  config = mkIf config.services.torrent.enable {
+  config = lib.mkIf config.services.torrent.enable {
     ######################################################################
     # Install Necessary Packages
     ######################################################################
     environment.systemPackages = with pkgs; [
       qbittorrent-nox
       qbittorrent-cli
+      flood
     ];
 
     ######################################################################
-    # User and Group Setup
+    # Set Up Service Users and Groups
     ######################################################################
-    users.groups.${serviceGroup} = { gid = gid; };
-
+    # Define the service group for qBittorrent-nox.
+    users.groups.${serviceGroup} = { };
+    # Define the service user for qBittorrent-nox and add to 'media' group.
     users.users.${serviceUser} = {
       isSystemUser = true;
-      uid = uid;
       group = serviceGroup;
-      extraGroups = [ "media" ];
+      extraGroups = [ "media" "stash" ]; # Essential for accessing seeded files.
       createHome = true;
       home = qbConfigDir;
     };
+    # Ensure your primary user (from configuration.nix) is in the torrent service group.
+    users.users.${username}.extraGroups = [ serviceGroup ];
 
-    # Optionally, add your primary user to the torrent service group.
-    users.users.${username}.extraGroups =
-      mkIf (username != serviceUser) [ serviceGroup ];
-
-    ######################################################################
-    # Set Up Directories via tmpfiles
-    ######################################################################
-    systemd.tmpfiles.rules =
-      [
-        # qbittorrent configuration directory.
-        "d " + qbConfigDir + " 0755 " + serviceUser + " " + serviceGroup + " -"
-        # Download directory and its subdirectories.
-        "d " + dataDir + " 0755 " + serviceUser + " " + serviceGroup + " -"
-        "d " + dataDir + "/watch 0755 " + serviceUser + " " + serviceGroup + " -"
-        "d " + dataDir + "/completed 0755 " + serviceUser + " " + serviceGroup + " -"
-      ]
-      ++ extraShareRules;
+    # Define the Flood user (created by the Flood service) and add to 'media' group.
+    users.groups.flood = { };
+    users.users.flood = {
+      isSystemUser = true;
+      group = "flood";
+      extraGroups = [ "media" "stash" ]; # Essential for accessing seeded files.
+    };
 
     ######################################################################
-    # qbittorrent-nox Service
-    #
-    # qbittorrent‑nox will run with its built‑in web UI bound to qbWebUIPort
-    # (default: 8080) and its torrent port set to torrentPort.
-    #
-    # Flood will then connect to qbittorrent‑nox on qbWebUIPort.
+    # Create Necessary Directories via systemd-tmpfiles.
+    # Directories are created with specified ownership and permissions.
+    ######################################################################
+    systemd.tmpfiles.rules = tmpfilesRules;
+
+    ######################################################################
+    # qBittorrent-nox Service Configuration
+    # This runs the headless qBittorrent client.
     ######################################################################
     systemd.services.qbittorrent-nox = {
       description = "qBittorrent-nox torrent engine";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       serviceConfig = {
-        ExecStart =
-          "${pkgs.qbittorrent-nox}/bin/qbittorrent-nox " +
-          "--webui-port=" + toString qbWebUIPort +
-          " --profile=" + qbConfigDir +
-          " --connection-port=" + toString torrentPort;
+        ExecStart = ''
+          ${pkgs.qbittorrent-nox}/bin/qbittorrent-nox \
+            --webui-port=${toString qbWebUIPort} \
+            --torrenting-port=${toString torrentPort} \
+            --profile=${qbConfigDir}
+        '';
         User = serviceUser;
         Group = serviceGroup;
         Restart = "on-failure";
       };
-      install = {
-        WantedBy = [ "multi-user.target" ];
-      };
+      wantedBy = [ "multi-user.target" ];
     };
 
     ######################################################################
-    # Flood Service Setup
-    #
-    # Flood is configured to connect to qbittorrent-nox at 127.0.0.1 on qbWebUIPort.
-    # Its own external UI is bound to floodPort.
+    # Flood Service Configuration
+    # This runs the web UI that interfaces with qBittorrent-nox.
     ######################################################################
     services.flood.enable = true;
     services.flood.package = pkgs.flood;
     services.flood.port = floodPort;
     services.flood.host = "127.0.0.1";
-    services.flood.extraArgs =
-      "--torrentProvider=qbittorrent --torrentHost=127.0.0.1 --torrentPort=" +
-      toString qbWebUIPort;
-
-    # Ensure Flood starts after qbittorrent‑nox.
+    # Refer to the pre-defined argument variables.
+    services.flood.extraArgs = [
+      floodExtraArg1
+      floodExtraArg2
+      floodExtraArg3
+    ];
+    # Ensure Flood starts only after qBittorrent-nox is ready.
     systemd.services.flood.after = [ "qbittorrent-nox.service" ];
 
     ######################################################################
-    # Firewall and Traefik Configuration
-    #
-    # Allow access to the torrent port (for inbound BT connections),
-    # qbittorrent-nox's web UI (qbWebUIPort) and Flood's UI (floodPort).
+    # Firewall and Traefik Proxy Configuration
+    # Ports are opened for torrenting, qBittorrent's API, and Flood's UI.
     ######################################################################
-    networking.firewall.allowedTCPPorts =
-      mkIf (config.services.flood.openFirewall or false)
-        [ floodPort qbWebUIPort torrentPort ];
-    networking.firewall.allowedUDPPorts =
-      mkIf (config.services.flood.openFirewall or false)
-        [ torrentPort ];
+    # By default, open these ports as the module is designed to be a functional setup.
+    networking.firewall.allowedTCPPorts = [ floodPort qbWebUIPort torrentPort ];
+    networking.firewall.allowedUDPPorts = [ torrentPort ];
 
     services.traefik.dynamicConfigOptions.http.routers.flood = {
       rule = "Host(`flood.${hostName}.local`)";
@@ -211,7 +136,8 @@ in {
       tls = true;
     };
     services.traefik.dynamicConfigOptions.http.services.flood = {
-      loadBalancer.servers = [ { url = "http://127.0.0.1:" + toString floodPort; } ];
+      loadBalancer.servers =
+        [ { url = "http://127.0.0.1:${toString floodPort}"; } ];
     };
   };
 }
