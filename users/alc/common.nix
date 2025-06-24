@@ -56,6 +56,7 @@ with lib;
   # ==================== Packages ====================
   home.packages = with pkgs; [
     # Packages that are available and desired on both OSes
+    tree
     neofetch
     htop
     btop
