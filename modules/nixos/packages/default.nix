@@ -41,6 +41,7 @@ in
       gopls
       lua-language-server
       nodejs_22
+      node2nix
 
       # Util
       uutils-coreutils-noprefix
