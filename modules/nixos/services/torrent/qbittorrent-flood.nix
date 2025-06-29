@@ -12,10 +12,12 @@ let
 
   # Directories with legacy ownership
   stashDir      = "/zpool/stash";   # owned by stash:stash
+  stash2Dir      = "/ypool/stash";   # owned by stash:stash
   mediaDir      = "/zpool/media";   # owned by media:media
 
   # Overlay mount points for qBittorrent operations, now under dataDir:
   stashOverlayDir = "${dataDir}/stash_rtorrent";
+  stash2OverlayDir = "${dataDir}/stash2_rtorrent";
   mediaOverlayDir = "${dataDir}/media_rtorrent";
 
   # Ports for the services.
@@ -40,6 +42,7 @@ let
     (dataDir + "/watch")
     (dataDir + "/completed")
     stashOverlayDir # Now includes the new location
+    stash2OverlayDir # Now includes the new location
     mediaOverlayDir # Now includes the new location
   ];
   tmpfilesRules = map (d:
@@ -163,6 +166,18 @@ in {
           "Bind mount /zpool/media to ${mediaOverlayDir} with remapped ownership";
         what = mediaDir;
         where = mediaOverlayDir; # This is now under /zpool/downloads
+        type = "fuse.bindfs";
+        options =
+          "force-user=" + serviceUser +
+          ",force-group=" + serviceGroup +
+          ",perms=770";
+        wantedBy = [ "multi-user.target" ];
+      }
+      {
+        description =
+          "Bind mount /ypool/stash2 to ${stash2OverlayDir} with remapped ownership";
+        what = stash2Dir;
+        where = stash2OverlayDir; # This is now under /zpool/downloads
         type = "fuse.bindfs";
         options =
           "force-user=" + serviceUser +
