@@ -64,7 +64,6 @@ with lib;
     gitui
     xh
     dua
-    ranger
     yazi
     ripgrep-all
     wiki-tui
