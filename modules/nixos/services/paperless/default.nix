@@ -37,4 +37,6 @@
     };
   };
 
+  networking.firewall.allowedTCPPorts = [ 8001 ];
+
 }
