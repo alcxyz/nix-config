@@ -79,6 +79,9 @@ with lib;
     atac
     termshark
     openldap
+    jrnl
+    croc
+    xh
   ];
 
   # ==================== Files ====================

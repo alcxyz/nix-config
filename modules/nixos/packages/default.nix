@@ -50,7 +50,7 @@ in
       killall
       gptfdisk
       sshfs
-      ffmpeg
+      #ffmpeg
       python3
       python3Packages.rencode
 

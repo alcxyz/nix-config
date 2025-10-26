@@ -148,43 +148,39 @@ in {
     ######################################################################
     # Bindfs Mounts for Overlaying Directories
     ######################################################################
-    systemd.mounts = [
-      {
-        description =
-          "Bind mount /zpool/stash to ${stashOverlayDir} with remapped ownership";
-        what = stashDir;
-        where = stashOverlayDir; # This is now under /zpool/downloads
-        type = "fuse.bindfs";
-        options =
-          "force-user=" + serviceUser +
-          ",force-group=" + serviceGroup +
-          ",perms=770";
-        wantedBy = [ "multi-user.target" ];
-      }
-      {
-        description =
-          "Bind mount /zpool/media to ${mediaOverlayDir} with remapped ownership";
-        what = mediaDir;
-        where = mediaOverlayDir; # This is now under /zpool/downloads
-        type = "fuse.bindfs";
-        options =
-          "force-user=" + serviceUser +
-          ",force-group=" + serviceGroup +
-          ",perms=770";
-        wantedBy = [ "multi-user.target" ];
-      }
-      {
-        description =
-          "Bind mount /ypool/stash2 to ${stash2OverlayDir} with remapped ownership";
-        what = stash2Dir;
-        where = stash2OverlayDir; # This is now under /zpool/downloads
-        type = "fuse.bindfs";
-        options =
-          "force-user=" + serviceUser +
-          ",force-group=" + serviceGroup +
-          ",perms=770";
-        wantedBy = [ "multi-user.target" ];
-      }
-    ];
+    fileSystems = {
+      # stash → /zpool/downloads/stash_rtorrent
+      "${stashOverlayDir}" = {
+        device  = stashDir;
+        fsType  = "fuse.bindfs";
+        options = [
+          "force-user=${serviceUser}"
+          "force-group=${serviceGroup}"
+          "perms=770"
+        ];
+      };
+
+      # stash2 → /zpool/downloads/stash2_rtorrent
+      "${stash2OverlayDir}" = {
+        device  = stash2Dir;
+        fsType  = "fuse.bindfs";
+        options = [
+          "force-user=${serviceUser}"
+          "force-group=${serviceGroup}"
+          "perms=770"
+        ];
+      };
+
+      # media → /zpool/downloads/media_rtorrent
+      "${mediaOverlayDir}" = {
+        device  = mediaDir;
+        fsType  = "fuse.bindfs";
+        options = [
+          "force-user=${serviceUser}"
+          "force-group=${serviceGroup}"
+          "perms=770"
+        ];
+      };
+    };
   };
 }

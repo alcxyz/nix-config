@@ -55,7 +55,7 @@
       config.allowUnfree = true;
       config.cudaSupport = true;
       config.permittedInsecurePackages = [
-        "freeimage-3.18.0-unstable-2024-04-18"
+        "freeimage-3.18.0-unstable-2024-04-18" # Used by Sunshine
         # If other insecure packages pop up, add them here.
       ];
     });
