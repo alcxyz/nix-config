@@ -28,6 +28,7 @@ in
       age
       ssh-to-age
       sshs
+      carapace-bridge
 
       # Development
       git

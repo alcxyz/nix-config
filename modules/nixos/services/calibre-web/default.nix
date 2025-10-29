@@ -1,12 +1,10 @@
+# modules/nixos/services/calibre-web/default.nix
 { options, config, lib, pkgs, username, hostName, ... }:
 with lib;
 {
-  # Removed options.services.calibre-web.enable definition
-
   config = mkIf config.services.calibre-web.enable {
     services.calibre-web = {
-      # enable = true; # REMOVED: This was causing recursion.
-      user = "${username}"; 
+      user = "${username}";
       dataDir = "/zpool/vault/calibre/calibre_web/config";
       options.calibreLibrary = "/zpool/vault/calibre/calibre/config/libraries/Main";
       listen = {
@@ -16,7 +14,9 @@ with lib;
       openFirewall = true;
     };
 
+    # HARD dependency: require zfs-mount.service to succeed
     systemd.services.calibre-web = {
+      requires = [ "zfs-mount.service" ];
       after = [ "zfs-mount.service" ];
     };
 
@@ -25,7 +25,6 @@ with lib;
       calibre-web
     ];
 
-    # Traefik Routes for calibre-web
     services.traefik.dynamicConfigOptions.http = {
       routers.calibre-web = {
         rule = "Host(`calibre-web.${hostName}.local`)";

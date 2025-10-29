@@ -82,6 +82,7 @@ with lib;
     jrnl
     croc
     xh
+    minikube
   ];
 
   # ==================== Files ====================

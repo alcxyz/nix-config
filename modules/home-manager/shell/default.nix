@@ -7,8 +7,6 @@ with lib;
     nushell
     zoxide
     starship
-    carapace
-    carapace-bridge
     atuin
     direnv
     neovim

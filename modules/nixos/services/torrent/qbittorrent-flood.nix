@@ -22,7 +22,7 @@ let
 
   # Ports for the services.
   qbWebUIPort   = 8080;  # qBittorrent-nox's built-in WebUI/API port.
-  floodPort     = 8112;  # Flood’s own web interface port.
+  floodPort     = 8112;  # Flood's own web interface port.
   torrentPort   = 51413; # BitTorrent incoming connections port.
 
   # Flood's connection details for the qBittorrent Web API.
@@ -41,9 +41,6 @@ let
     dataDir
     (dataDir + "/watch")
     (dataDir + "/completed")
-    stashOverlayDir # Now includes the new location
-    stash2OverlayDir # Now includes the new location
-    mediaOverlayDir # Now includes the new location
   ];
   tmpfilesRules = map (d:
     "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -"
@@ -95,7 +92,16 @@ in {
     ######################################################################
     systemd.services.qbittorrent-nox = {
       description = "qBittorrent-nox torrent engine";
-      after = [ "network-online.target" ];
+      # Hard dependencies on ZFS and bind mounts being ready
+      requires = [ "zfs-mount.service" ];
+      after = [ 
+        "network-online.target" 
+        "zfs-mount.service"
+        # Wait for all bindfs mounts to complete
+        "zpool-downloads-stash_rtorrent.mount"
+        "zpool-downloads-stash2_rtorrent.mount"
+        "zpool-downloads-media_rtorrent.mount"
+      ];
       wants = [ "network-online.target" ];
       serviceConfig = {
         ExecStart = ''
@@ -147,42 +153,57 @@ in {
 
     ######################################################################
     # Bindfs Mounts for Overlaying Directories
-      ######################################################################
+    # IMPORTANT: These mounts REQUIRE zfs-mount.service to complete first.
+    ######################################################################
     systemd.mounts = [
       {
         description =
           "Bind mount /zpool/stash to ${stashOverlayDir} with remapped ownership";
         what = stashDir;
-        where = stashOverlayDir; # This is now under /zpool/downloads
+        where = stashOverlayDir;
         type = "fuse.bindfs";
         options =
           "force-user=" + serviceUser +
           ",force-group=" + serviceGroup +
-          ",perms=770";
+          ",perms=770" +
+          ",x-systemd.makemountpoint=yes"; # Ensure target directory is created
+        # Hard dependency and ordering: wait for ZFS pools to be mounted
+        requires = [ "zfs-mount.service" ];
+        after = [ "zfs-mount.service" ];
+        # But finish before multi-user.target so services can depend on these mounts
+        before = [ "multi-user.target" ];
         wantedBy = [ "multi-user.target" ];
       }
       {
         description =
           "Bind mount /zpool/media to ${mediaOverlayDir} with remapped ownership";
         what = mediaDir;
-        where = mediaOverlayDir; # This is now under /zpool/downloads
+        where = mediaOverlayDir;
         type = "fuse.bindfs";
         options =
           "force-user=" + serviceUser +
           ",force-group=" + serviceGroup +
-          ",perms=770";
+          ",perms=770" +
+          ",x-systemd.makemountpoint=yes";
+        requires = [ "zfs-mount.service" ];
+        after = [ "zfs-mount.service" ];
+        before = [ "multi-user.target" ];
         wantedBy = [ "multi-user.target" ];
       }
       {
         description =
-          "Bind mount /ypool/stash2 to ${stash2OverlayDir} with remapped ownership";
+          "Bind mount /ypool/stash to ${stash2OverlayDir} with remapped ownership";
         what = stash2Dir;
-        where = stash2OverlayDir; # This is now under /zpool/downloads
+        where = stash2OverlayDir;
         type = "fuse.bindfs";
         options =
           "force-user=" + serviceUser +
           ",force-group=" + serviceGroup +
-          ",perms=770";
+          ",perms=770" +
+          ",x-systemd.makemountpoint=yes";
+        requires = [ "zfs-mount.service" ];
+        after = [ "zfs-mount.service" ];
+        before = [ "multi-user.target" ];
         wantedBy = [ "multi-user.target" ];
       }
     ];
