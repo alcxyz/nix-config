@@ -39,7 +39,6 @@ with lib;
 
   # ==================== User Environment ====================
   home.sessionVariables = {
-    EDITOR = "nvim";
     DIRENV_LOG_FORMAT = "";
     # FLAKE path still needs to be conditional, as it's an absolute path
     # relative to the OS's file system root

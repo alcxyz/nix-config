@@ -37,10 +37,18 @@ with lib;
 
     nushell = {
       enable = true;
+      
       environmentVariables = {
         KUBECONFIG = "${config.home.homeDirectory}/.kube/config";
+        CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
+
+        EDITOR = "nvim";
       };
+      
       extraConfig = ''
+        # Set SSH_AUTH_SOCK at runtime so $XDG_RUNTIME_DIR is properly expanded
+        $env.SSH_AUTH_SOCK = ($env.XDG_RUNTIME_DIR | path join "ssh-agent")
+
         # --- Common Nushell Configuration (Part 1) ---
         $env.config = {
             show_banner: false,
@@ -52,7 +60,6 @@ with lib;
             completions: { case_sensitive: false, quick: true, partial: true, algorithm: "prefix" },
         }
 
-        # In your nushell extraConfig, IF NEEDED:
         let custom_paths = [
             $"($env.HOME)/.cargo/bin",
             $"($env.HOME)/.local/bin"
@@ -60,11 +67,6 @@ with lib;
         $env.PATH = ($env.PATH | append $custom_paths | uniq | where {|p| ($p | path exists) })
       '';
     };
-  };
-
-  # Configure Carapace to use various bridges.
-  home.sessionVariables = {
-    CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
   };
 
   # Read the starship.toml file, substitute the placeholder, and set the content.
