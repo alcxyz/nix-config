@@ -2,6 +2,7 @@
 {
   config,
   pkgs,
+  pkgs-unstable,
   lib,
   username,
   hostName,
@@ -109,6 +110,21 @@ with lib;
   programs.git.managed.enable = true;
   programs.ssh.enable = true;
 
-  programs.ncspot.enable = true;
+  programs.ncspot = {
+    enable = true;
+    package = pkgs-unstable.ncspot;
+  };
+
+  
+  # ==================== Sops with age over ssh ====================
+
+  # Generate and manage the age key file
+  home.activation.setupSopsAgeKey = config.lib.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p $HOME/.config/sops/age
+    if [ ! -f "$HOME/.config/sops/age/keys.txt" ]; then
+      ${pkgs.ssh-to-age}/bin/ssh-to-age -private-key < $HOME/.ssh/id_ed25519 > $HOME/.config/sops/age/keys.txt
+      chmod 600 $HOME/.config/sops/age/keys.txt
+    fi
+  '';
 
 }

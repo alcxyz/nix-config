@@ -4,6 +4,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     nix-secrets = {
       # Use the SSH URL for private repositories
@@ -40,7 +41,7 @@
     nix-colors.url = "github:misterio77/nix-colors";
   };
 
-  outputs = { self, nixpkgs, nix-secrets, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
+  outputs = { self, nixpkgs, nixpkgs-unstable, nix-secrets, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
   let
     username = "alc";
     lib = nixpkgs.lib;
@@ -58,6 +59,13 @@
         "freeimage-3.18.0-unstable-2024-04-18" # Used by Sunshine
         # If other insecure packages pop up, add them here.
       ];
+    });
+
+    # Create unstable pkgs for each system
+    pkgsUnstableFor = forAllSystems (system: import nixpkgs-unstable {
+      inherit system;
+      config.allowUnfree = true;
+      config.cudaSupport = true;
     });
 
     # Host definitions with new osIcon attribute
@@ -91,6 +99,7 @@
             inherit inputs hostName username;
             configDir = self;
             pkgs = pkgsFor.${hostAttrs.system};
+            pkgs-unstable = pkgsUnstableFor.${hostAttrs.system};
           };
           modules = [
             hostAttrs.configuration
@@ -111,6 +120,7 @@
             inherit inputs hostName username;
             configDir = self;
             pkgs = pkgsFor.${hostAttrs.system};
+            pkgs-unstable = pkgsUnstableFor.${hostAttrs.system};
           };
           modules = [
             hostAttrs.configuration
@@ -130,6 +140,7 @@
           inherit inputs username system hostName osIcon;
           configDir = self;
           pkgs = pkgsFor.${system};
+          pkgs-unstable = pkgsUnstableFor.${system};
         };
         modules = [
           homeConfigPath
