@@ -1,5 +1,5 @@
 # modules/nixos/packages/default.nix
-{ options, config, lib, pkgs, username, ... }:
+{ options, config, lib, pkgs, pkgs-unstable, username, ... }:
 
 with lib;
 let
@@ -28,7 +28,7 @@ in
       age
       ssh-to-age
       sshs
-      carapace-bridge
+      #carapace-bridge
 
       # Development
       git
@@ -70,9 +70,13 @@ in
       ntfs3g
       pandoc
 
+      networkmanagerapplet
       bluetuith
       pavucontrol
-    ];
+    ] ++ (with pkgs-unstable; [
+        carapace
+        carapace-bridge
+    ]);
 
   };
 }

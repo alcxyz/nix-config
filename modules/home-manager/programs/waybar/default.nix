@@ -68,5 +68,16 @@ in
       text = processedStyle;
       onChange = ''${pkgs.busybox}/bin/pkill -SIGUSR2 waybar'';
     };
+
+    # Install scripts
+    xdg.configFile."waybar/scripts/system-cycle.sh" = {
+      source = ./scripts/system-cycle.sh;
+      executable = true;
+    };
+    
+    xdg.configFile."waybar/scripts/dual-clock.sh" = {
+      source = ./scripts/dual-clock.sh;
+      executable = true;
+    };
   };
 }

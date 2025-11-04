@@ -1,185 +1,98 @@
 * {
-    border: none;
-    border-radius: 10px;
-    font-family: "JetBrainsMono Nerd Font";
-    font-weight: bold;
-    font-size: 12px;
-    min-height: 0;
+  background-color: #@base00@;
+  color: #@base05@;
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  font-family: 'JetBrainsMono Nerd Font';
+  font-size: 12px;
 }
 
-window#waybar {
-    background: rgba(21, 18, 27, 0);
-    color: #@base05@;
+.modules-left {
+  margin-left: 8px;
 }
 
-tooltip {
-    background: #@base00@;
-    border-radius: 7px;
-    border-width: 2.5px;
-    border-style: solid;
-    border-color: #@base0d@;
-    padding-right: 5px;
-    padding-left: 5px;
-    padding-top: 5px;
-    padding-bottom: 5px;
+.modules-right {
+  margin-right: 8px;
 }
 
 #workspaces button {
-    color: #@base02@;
-    margin-right: 5px;
-    padding-right: 0px;
-    padding-left: 0px;
-}
-
-#workspaces button.active {
-    color: #@base0d@;
-}
-
-#workspaces button.focused {
-    color: #@base04@;
-    background: #@base08@;
-    border-radius: 13px;
-}
-
-#workspaces button.persistent {
-    color: #@base0a@;
+  all: initial;
+  padding: 0 6px;
+  margin: 0 1.5px;
+  min-width: 9px;
+  color: #@base05@;
 }
 
 #workspaces button.empty {
-    color: #@base02@;
+  opacity: 0.5;
 }
 
-#workspaces button.active,
-#workspaces button.visible {
-    color: #@base0d@;
-    box-shadow: inset 0 -1px #@base00@;
+#workspaces button.active {
+  color: #@base0d@;
 }
 
-#workspaces button.urgent {
-    color: #@base08@;
-}
-
-#custom-weather,
-#language,
-#cpu,
-#window,
-#clock,
+#custom-system-cycle,
+#battery,
 #pulseaudio,
-#pulseaudio.microphone,
-#workspaces,
-#tray,
-#memory,
-#disk,
+#custom-nixlogo {
+  min-width: 12px;
+  margin: 0 7.5px;
+}
+
 #tray {
-    background: #@base00@;
-    opacity: 1.0;
-    padding: 1.5px 7px 1.5px 7px;
-    margin-top: 5px;
-    margin-bottom: 5px;
-    border-radius: 13px;
-    margin-right: 5px;
-    margin-left: 5px;
-}
-
-#workspaces {
-    background: #@base00@;
-    border-radius: 13px;
-    margin-left: 5px;
-    padding-right: 0px;
-}
-
-#window {
-    border-radius: 7px;
-    margin-left: 60px;
-    margin-right: 60px;
-}
-
-#clock {
-    color: #@base0b@;
-    border-radius: 0px 13px 13px 0px;
-    margin-right: 0px;
-    margin-left: 0px;
-}
-
-#network {
-    color: #@base0a@;
-    border-radius: 7px 7px 7px 7px;
-    margin-right: 5px;
-}
-
-#custom-notifications {
-    color: #@base0a@;
-    border-radius: 7px 7px 7px 7px;
-    padding-left: 9px;
-    padding-right: 15px;
-    margin-left:  2px;
-    margin-right: 2px;
-}
-
-#custom-updates {
-    color: #@base0d@;
-    border-radius: 7px 7px 7px 7px;
-    border-left:  0px;
-    border-right: 0px;
-    margin-left:  2px;
-    margin-right: 2px;
-}
-
-#custom-player {
-    color: #@base0e@;
-    border-radius: 7px 7px 7px 7px;
-    padding-left: 4px;
-    margin-left:  5px;
-    margin-right: 5px;
-}
-
-#memory {
-    color: #@base0d@;
-    border-radius: 0px 0px 0px 0px;
-    margin-left: 0px;
-    margin-right:0px;
-}
-
-#disk {
-    color: #@base0a@;
-    border-radius: 0px 13px 13px 0px;
-    margin-left: 0px;
+  margin-right: 16px;
 }
 
 #bluetooth {
-    color: #@base0d@;
-    border-radius: 0px 13px 13px 0px;
-    margin-left: 5px;
-    margin-right: 5px;
-} 
-
-#pulseaudio {
-    color: #@base0d@;
-    border-radius: 0px 0px 0px 0px;
-    margin-right: 0px;
-    margin-left: 0px;
+  margin-right: 17px;
 }
 
-#pulseaudio.microphone {
-    color: #@base0e@;
-    border-radius: 0px 0px 0px 0px;
-    margin-left: 0px;
-    margin-right: 0px;
+#network {
+  margin-right: 13px;
 }
 
-#language {
-    border-radius: 13px 0px 0px 13px;
-    margin-right:0px;
+#custom-expand-icon {
+  margin-right: 20px;
 }
 
-#cpu {
-    border-radius: 13px 0px 0px 13px;
-    padding-left:10px;
-    margin-right:0px;
-    margin-left: 0px;
+tooltip {
+  padding: 10px;
+  background-color: #@base00@;
+  border: 1px solid #@base03@;
+  border-radius: 8px;
 }
 
-#custom-weather {
-    border-radius: 13px 13px 13px 13px;
-    margin-right: 0px;
+tooltip * {
+  font-size: 14px;
+  background-color: transparent;
+}
+
+#custom-dual-clock {
+  margin-left: 8.75px;
+}
+
+.hidden {
+  opacity: 0;
+}
+
+#battery.warning {
+  color: #@base0a@;
+}
+
+#battery.critical {
+  color: #@base08@;
+}
+
+#pulseaudio.muted {
+  color: #@base08@;
+}
+
+#network.disconnected {
+  color: #@base08@;
+}
+
+#custom-nixlogo {
+  color: #@base0d@;
+  font-size: 14px;
 }

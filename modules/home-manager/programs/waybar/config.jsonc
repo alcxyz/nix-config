@@ -8,11 +8,9 @@
   "modules-right": [
     "custom/spotify",
     "pulseaudio",
-    "network", 
-    "memory",
-    "disk",
+    "custom/system-cycle",
     "battery",
-    "clock",
+    "custom/dual-clock",
     "custom/notification",
     "tray",
     "custom/power-menu"
@@ -42,11 +40,27 @@
   
   "clock": {
     "timezone": "Europe/Oslo",
-    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><big>{calendar}</big></tt>",
     "format": "{:%H:%M}",
     "format-alt": "{:%Y-%m-%d}"
   },
-  
+
+  "custom/dual-clock": {
+    "exec": "$HOME/.config/waybar/scripts/dual-clock.sh",
+    "interval": 10,
+    "return-type": "json",
+    "format": "{}",
+    "on-click": "STATE_FILE=/tmp/dual-clock-state; [[ $(cat $STATE_FILE) == 'time' ]] && echo 'date' > $STATE_FILE || echo 'time' > $STATE_FILE",
+    "tooltip": true
+  },
+
+  "custom/system-cycle": {
+    "exec": "$HOME/.config/waybar/scripts/system-cycle.sh",
+    "interval": 5,
+    "return-type": "json",
+    "on-click": "echo $(( ($(cat /tmp/waybar-system-state) + 1) % 3 )) > /tmp/waybar-system-state"
+  },
+
   "pulseaudio": {
     "format": "{volume}% {icon} {format_source}",
     "format-bluetooth": "{volume}% {icon} {format_source}",
