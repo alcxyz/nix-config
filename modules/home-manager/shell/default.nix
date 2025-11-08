@@ -46,9 +46,6 @@ with lib;
       };
       
       extraConfig = ''
-        # Set SSH_AUTH_SOCK at runtime so $XDG_RUNTIME_DIR is properly expanded
-        $env.SSH_AUTH_SOCK = ($env.XDG_RUNTIME_DIR | path join "ssh-agent")
-
         # --- Common Nushell Configuration (Part 1) ---
         $env.config = {
             show_banner: false,
