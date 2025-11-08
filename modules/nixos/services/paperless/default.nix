@@ -24,18 +24,9 @@
     };
   };
 
-  # Traefik Routes for Paperless
-  services.traefik.dynamicConfigOptions.http = {
-    routers.paperless = {
-      rule = "Host(`paperless.${hostName}.local`)";
-      entryPoints = [ "websecure" ];
-      service = "paperless";
-      tls = true;
-    };
-    services.paperless = {
-      loadBalancer.servers = [{ url = "http://localhost:8001"; }];
-    };
-  };
+  
+  # Traefik routing is now in Docker traefik file provider
+  # Routes defined in: /nuc/traefik/traefik-config/systemd-services.yml.tpl
 
   networking.firewall.allowedTCPPorts = [ 8001 ];
 

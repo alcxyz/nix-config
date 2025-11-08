@@ -2,16 +2,16 @@
 { config, lib, pkgs, hostName, ... }:
 
 {
-  # 1. Seafile's Database
+  # Seafile's Database
   services.mysql = {
     enable = true;
     package = pkgs.mariadb;
   };
 
-  # 2. Seafile's Cache
+  # Seafile's Cache
   services.memcached.enable = true;
 
-  # 3. The Seafile Service Itself
+  # The Seafile Service Itself
   services.seafile = {
     enable = true;
     dataDir = "/var/lib/seafile";
@@ -36,43 +36,10 @@
     '';
   };
 
-  # 4. Traefik Routes for Seafile
-  services.traefik.dynamicConfigOptions.http = {
-    # Router for the file sync server (/seafhttp)
-    routers.seafile-http = {
-      # This rule is more specific, so it gets higher priority
-      priority = 11;
-      rule = "Host(`seafile.${hostName}.local`) && PathPrefix(`/seafhttp`)";
-      entryPoints = [ "websecure" ];
-      service = "seafile-http";
-      middlewares = [ "seafile-stripprefix" ];
-      tls = true;
-    };
+  # Traefik routing is now in Docker traefik file provider
+  # Routes defined in: /nuc/traefik/traefik-config/systemd-services.yml.tpl
 
-    # Router for the web UI (everything else)
-    routers.seafile-web = {
-      priority = 10;
-      rule = "Host(`seafile.${hostName}.local`)";
-      entryPoints = [ "websecure" ];
-      service = "seafile-web";
-      tls = true;
-    };
-
-    # Service pointing to the file sync backend (port 8082)
-    services.seafile-http.loadBalancer.servers = [{
-      url = "http://127.0.0.1:8082";
-    }];
-
-    # Service pointing to the web UI backend (port 8000)
-    services.seafile-web.loadBalancer.servers = [{
-      url = "http://127.0.0.1:8000";
-    }];
-
-    # Middleware to strip the /seafhttp prefix before sending to the backend
-    middlewares.seafile-stripprefix.stripPrefix.prefixes = [ "/seafhttp" ];
-  };
-
-  # 5. Systemd Dependencies and Firewall
+  # Systemd Dependencies and Firewall
   systemd.services.seaf-server.after = [ "mysql.service" ];
   systemd.services.seahub.after = [ "mysql.service" ];
 

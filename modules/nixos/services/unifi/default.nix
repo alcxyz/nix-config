@@ -8,23 +8,8 @@
     openFirewall = true;
   };
 
-  # Traefik Routes for Unifi
-  services.traefik.dynamicConfigOptions.http = {
-    routers.unifi = {
-      rule = "Host(`unifi.${hostName}.local`)";
-      entryPoints = [ "websecure" ];
-      service = "unifi";
-      tls = true;
-    };
-
-    services.unifi = {
-      loadBalancer.servers = [{ url = "https://localhost:8443"; }];
-      loadBalancer.serversTransport = "unifi-transport";
-    };
-    serversTransports.unifi-transport = {
-      insecureSkipVerify = true;
-    };
-  };
+  # Traefik routing is now in Docker traefik file provider
+  # Routes defined in: /nuc/traefik/traefik-config/systemd-services.yml.tpl
 
   networking.firewall.allowedTCPPorts = [ 8443 ];
 
