@@ -11,7 +11,7 @@
   # Paperless with SQLite (default)
   services.paperless = {
     enable = true;
-    address = "127.0.0.1";
+    address = "0.0.0.0";
     port = 8001;
     passwordFile = config.sops.secrets.paperless_password.path;
     
@@ -19,7 +19,7 @@
       PAPERLESS_URL = "https://paperless.${hostName}.local";
       PAPERLESS_TIME_ZONE = config.time.timeZone;
       PAPERLESS_OCR_LANGUAGE = "eng+nor";
-      PAPERLESS_TRUSTED_PROXIES = [ "127.0.0.1" ];
+      PAPERLESS_TRUSTED_PROXIES = [ "0.0.0.0" ];
       # No database settings = defaults to SQLite
     };
   };

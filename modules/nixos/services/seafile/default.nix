@@ -24,7 +24,7 @@
     ccnetSettings.General.SERVICE_URL = "https://seafile.${hostName}.local";
 
     # Bind Seahub (web UI) to localhost:8000
-    seahubAddress = "[127.0.0.1]:8000";
+    seahubAddress = "[0.0.0.0]:8000";
 
     # The file server (seaf-server) will automatically bind to localhost:8082
     # We don't need to configure it here, just know the port.
