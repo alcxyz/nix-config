@@ -106,7 +106,7 @@ in
       python3
     ];
 
-    shells = with pkgs; [ bash zsh ];
+    shells = with pkgs; [ bash zsh nushell ];
 
     variables = {
       EDITOR = "nvim";
