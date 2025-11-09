@@ -10,7 +10,7 @@
       Type = "oneshot";
       User = "root";
       Group = "root";
-      ExecStart = "${pkgs.bash}/bin/bash -c 'export PIHOLE_ADMIN_PASSWORD=$(cat ${config.sops.secrets.pihole_admin_password.path}); /path/to/pihole-sync -config /path/to/config.toml'";
+      ExecStart = "${pkgs.bash}/bin/bash -c 'export PIHOLE_ADMIN_PASSWORD=$(cat ${config.sops.secrets.pihole_secret_key.path}); /path/to/pihole-sync -config /path/to/config.toml'";
     };
   };
 
