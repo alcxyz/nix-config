@@ -20,7 +20,7 @@
       PAPERLESS_TIME_ZONE = config.time.timeZone;
       PAPERLESS_OCR_LANGUAGE = "eng+nor";
       PAPERLESS_TRUSTED_PROXIES = [ "0.0.0.0" ];
-      # No database settings = defaults to SQLite
+      PAPERLESS_PROXY_SSL_HEADER = "HTTP_X_FORWARDED_PROTO";
     };
   };
 
