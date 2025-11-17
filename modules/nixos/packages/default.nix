@@ -73,6 +73,7 @@ in
       networkmanagerapplet
       bluetuith
       pavucontrol
+      easyeffects
     ] ++ (with pkgs-unstable; [
         carapace
         carapace-bridge
