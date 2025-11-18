@@ -3,6 +3,7 @@
   config,
   lib,
   pkgs,
+  inputs,
   ...
 }:
 with lib;
@@ -28,6 +29,9 @@ with lib;
 
       hypridle
       hyprlock
+
+      # ndrop from custom-packages flake
+      (inputs.custom-packages.packages.${pkgs.system}.ndrop)
 
       grim
       slurp

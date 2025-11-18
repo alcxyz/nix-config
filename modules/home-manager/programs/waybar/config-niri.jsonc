@@ -1,16 +1,17 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 30,
-  "spacing": 4,
+  "height": 20,
+  "spacing": 10,
   "modules-left": [],
-  "modules-center": [],
-  "modules-right": [
+  "modules-center": [
     "custom/spotify",
     "pulseaudio",
+    "custom/dual-clock"
+  ],
+  "modules-right": [
     "custom/system-cycle",
     "battery",
-    "custom/dual-clock",
     "custom/notification",
     "tray",
     "custom/power-menu"

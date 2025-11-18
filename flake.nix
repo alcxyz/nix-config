@@ -13,6 +13,11 @@
       flake = false;
     };
 
+    custom-packages = {
+      url = "github:alcxyz/nix-packages";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     darwin = {
       url = "github:lnl7/nix-darwin/nix-darwin-25.05";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -41,7 +46,7 @@
     nix-colors.url = "github:misterio77/nix-colors";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-unstable, nix-secrets, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
+  outputs = { self, nixpkgs, nixpkgs-unstable, custom-packages, nix-secrets, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
   let
     username = "alc";
     lib = nixpkgs.lib;

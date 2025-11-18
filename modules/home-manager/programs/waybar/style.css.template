@@ -1,47 +1,12 @@
 * {
-  /* `otf-font-awesome` is required to be installed for icons */
   font-family: JetBrainsMono Nerd Font;
-  font-size: 13px;
-  border-radius: 10px;
+  font-size: 12px;          /* reduced from 13px */
+  border-radius: 0px;       /* removed rounding */
 }
 
-window#waybar.DP-2 * {
-  font-size: 11px;
-}
-
-window#waybar.DP-2 #custom-dual-clock tooltip {
-  font-size: 11px;
-}
 #clock,
 #custom-system-cycle,
-#custom-dual-clock {
-  padding: 5px 15px;
-  border-radius: 12px;
-  background: #@base00@;
-  color: #@base07@;
-  margin-top: 8px;
-  margin-bottom: 8px;
-  margin-right: 2px;
-  margin-left: 2px;
-  transition: all 0.3s ease;
-}
-#custom-dual-clock tooltip {
-  font-family: "JetBrainsMono Nerd Font Mono";
-  font-size: 13px;
-  padding: 20px;
-}
-
-tooltip {
-  background-color: #@base00@;
-  border: 1px solid #@base04@;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-tooltip * {
-  font-size: 16px;
-  font-family: "JetBrainsMono Nerd Font Mono";
-}
+#custom-dual-clock,
 #custom-notification,
 #custom-launcher,
 #custom-power-menu,
@@ -54,109 +19,38 @@ tooltip * {
 #pulseaudio,
 #window,
 #tray {
-  padding: 5px 15px;
-  border-radius: 12px;
+  padding: 0px 8px;         /* minimal padding */
+  margin: 0px 1px;          /* minimal margin */
+  transition: all 0.3s ease;
   background: #@base00@;
   color: #@base07@;
-  margin-top: 8px;
-  margin-bottom: 8px;
-  margin-right: 2px;
-  margin-left: 2px;
-  transition: all 0.3s ease;
-}
-
-#window {
-  background-color: transparent;
-  box-shadow: none;
 }
 
 window#waybar {
-  background-color: rgba(0, 0, 0, 0.096);
-  border-radius: 17px;
-}
-
-window * {
-  background-color: transparent;
-  border-radius: 0px;
-}
-
-#workspaces button label {
-  color: #@base07@;
-}
-
-#workspaces button.active label {
-  color: #@base00@;
-  font-weight: bolder;
-}
-
-#workspaces button:hover {
-  box-shadow: #@base07@ 0 0 0 1.5px;
   background-color: #@base00@;
-  min-width: 50px;
 }
 
 #workspaces {
   background-color: transparent;
-  border-radius: 17px;
-  padding: 5px 0px;
-  margin-top: 3px;
-  margin-bottom: 3px;
+  padding: 0px;
+  margin: 0px;
 }
 
 #workspaces button {
-  background-color: #@base00@;
-  border-radius: 12px;
-  margin-left: 10px;
+  padding: 0px 4px;
+  margin-left: 2px;
   transition: all 0.3s ease;
-}
-
-#workspaces button.active {
-  min-width: 50px;
-  box-shadow: rgba(0, 0, 0, 0.288) 2px 2px 5px 2px;
-  background-color: #@base0f@;
-  background-size: 400% 400%;
-  transition: all 0.3s ease;
-  background: linear-gradient(
-    58deg,
-    #@base0e@,
-    #@base0e@,
-    #@base0e@,
-    #@base0d@,
-    #@base0d@,
-    #@base0e@,
-    #@base08@
-  );
-  background-size: 300% 300%;
-  animation: colored-gradient 20s ease infinite;
-}
-
-@keyframes colored-gradient {
-  0% {
-    background-position: 71% 0%;
-  }
-  50% {
-    background-position: 30% 100%;
-  }
-  100% {
-    background-position: 71% 0%;
-  }
 }
 
 #custom-power-menu {
-  margin-right: 10px;
-  padding-left: 12px;
-  padding-right: 15px;
-  padding-top: 3px;
+  margin-right: 4px;
+  padding-right: 10px;
 }
 
 #custom-spotify {
-  margin-left: 5px;
-  padding-left: 15px;
-  padding-right: 15px;
-  padding-top: 3px;
-  color: #@base07@;
-  background-color: #@base00@;
-  transition: all 0.3s ease;
+  margin-left: 2px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 #custom-spotify.playing {
@@ -186,7 +80,6 @@ window * {
 }
 
 #tray menu {
-  background-color: #@base00@;
   opacity: 0.8;
 }
 
