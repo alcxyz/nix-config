@@ -13,7 +13,7 @@ let
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
   
-  # Simple string replacement approach (same as wofi)
+  # Simple string replacement approach
   substituteColors = text: 
     let
       colorPlaceholders = [
@@ -31,8 +31,9 @@ let
     in
     builtins.replaceStrings colorPlaceholders colorValues text;
     
-  # Choose config and style based on variant
-  configFile = if cfg.variant == "alternative" then ./config-alt.jsonc else ./config.jsonc;
+  # Choose config files based on variant and WM
+  configFileHyprland = if cfg.variant == "alternative" then ./config-hyprland-alt.jsonc else ./config-hyprland.jsonc;
+  configFileNiri = if cfg.variant == "alternative" then ./config-niri-alt.jsonc else ./config-niri.jsonc;
   styleFile = if cfg.variant == "alternative" then ./style-alt.css.template else ./style.css.template;
   
   # Read template and process it
@@ -57,19 +58,30 @@ in
   config = mkIf cfg.enable {
     programs.waybar.enable = true;
 
-    # Static config file (variant-dependent)
-    xdg.configFile."waybar/config.jsonc" = {
-      source = configFile;
+    # WM-specific config files
+    xdg.configFile."waybar/config-hyprland.jsonc" = {
+      source = configFileHyprland;
+      onChange = ''${pkgs.busybox}/bin/pkill -SIGUSR2 waybar'';
+    };
+
+    xdg.configFile."waybar/config-niri.jsonc" = {
+      source = configFileNiri;
       onChange = ''${pkgs.busybox}/bin/pkill -SIGUSR2 waybar'';
     };
     
-    # Dynamic CSS with color substitution (variant-dependent)
+    # Dynamic CSS with color substitution
     xdg.configFile."waybar/style.css" = {
       text = processedStyle;
       onChange = ''${pkgs.busybox}/bin/pkill -SIGUSR2 waybar'';
     };
 
-    # Install scripts
+    # Install launcher script
+    xdg.configFile."waybar/launch.sh" = {
+      source = ./scripts/launch.sh;
+      executable = true;
+    };
+
+    # Install helper scripts
     xdg.configFile."waybar/scripts/system-cycle.sh" = {
       source = ./scripts/system-cycle.sh;
       executable = true;

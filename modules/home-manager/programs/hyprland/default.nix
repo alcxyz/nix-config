@@ -95,11 +95,6 @@ in
       executable = true;
     };
 
-    home.file.".config/hypr/scripts/arrange-3col-dwindle.sh" = {
-      source = ./scripts/arrange-3col-dwindle.sh;
-      executable = true;
-    };
-
     xdg.configFile = {
       "hypr/launch".source = ./launch;
       "hypr/hyprland.conf".source = ./hyprland.conf;

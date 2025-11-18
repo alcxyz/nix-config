@@ -7,7 +7,7 @@
 }:
 with lib;
 {
-  options.suites.hyprland = with types; {
+  options.suites.wayland-desktop= with types; {
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -22,6 +22,7 @@ with lib;
       swww
       wofi
       wlogout
+      swayidle
       swaynotificationcenter
       libnotify
 
