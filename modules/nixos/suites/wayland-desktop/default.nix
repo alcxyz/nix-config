@@ -32,6 +32,7 @@ with lib;
 
       # ndrop from custom-packages flake
       (inputs.custom-packages.packages.${pkgs.system}.ndrop)
+      xwayland-satellite
 
       grim
       slurp
