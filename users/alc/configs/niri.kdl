@@ -1,0 +1,230 @@
+// Niri config based on your Hyprland setup
+// This config is in the KDL format: https://kdl.dev
+
+input {
+    keyboard {
+        xkb {
+            layout "us,no"
+            options "grp:alt_shift_toggle"
+        }
+        numlock
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+    }
+
+    mouse {
+
+    }
+}
+
+// Configure your monitors (based on your Hyprland setup)
+output "DP-1" {
+    mode "5120x1440"
+    position x=0 y=0
+}
+
+// output "DP-1" {
+//     mode "2560x1440"
+//     position x=2560 y=0
+// }
+// 
+// output "HDMI-A-1" {
+//     mode "2560x1440" 
+//     position x=0 y=0
+// }
+
+layout {
+    gaps 10
+    center-focused-column "never"
+    
+    preset-column-widths {
+        // 25-50-25 distribution
+        proportion 0.25
+        proportion 0.5
+        
+        // Original defaults
+        // proportion 0.33333
+        // proportion 0.5
+        // proportion 0.66667
+    }
+    
+    default-column-width { proportion 0.5; }
+
+    focus-ring {
+        width 2
+        active-color "#7fc8ff"
+        inactive-color "#505050"
+    }
+}
+
+// Add this at the root level, after layout block
+prefer-no-csd
+
+// Launch waybar like in your Hyprland setup
+spawn-at-startup "~/.config/waybar/launch.sh"
+// Add other startup apps from your hyprland launch script as needed
+// spawn-at-startup "swww-daemon"
+
+spawn-at-startup "swayidle -w timeout 300 'niri msg action power-off-monitors' resume 'niri msg action power-off-monitors'"
+
+hotkey-overlay {
+    // You can enable this for learning
+    skip-at-startup
+}
+
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+animations {
+    // Your Hyprland has animations disabled, so match that
+    off
+}
+
+// Add a scratchpad workspace for ndrop
+workspace "ndrop"
+
+window-rule {
+    match app-id=r#"^scratchpad-term$"#
+    open-floating true
+    opacity 0.9
+}
+
+window-rule {
+    match app-id=r#"^scratchpad-browser$"#
+    open-floating true
+}
+
+// Window rules to match your Hyprland setup
+window-rule {
+    match app-id=r#"^foot$"#
+    opacity 0.9
+}
+ 
+// Gaming-related rules (workspace assignment not directly supported in window rules)
+// You can use binds or manually organize windows instead
+
+binds {
+    // === CORE PHILOSOPHY ===
+    // Mod alone:        Focus/Navigate (read-only movement)
+    // Mod+Shift:        Move/Transfer (relocating things)  
+    // Mod+Ctrl:         Fine control / extremes
+    // Mod+Alt:          Resize/Adjust properties
+    // Alt alone:        Quick access (apps, launchers)
+
+    // === HELP & SESSION ===
+    Mod+Shift+Slash { show-hotkey-overlay; }
+    Mod+Shift+Escape { quit; }
+    Mod+Shift+Q { spawn "hyprlock"; }
+    Mod+Backspace { spawn "wlogout" "-b" "1"; }
+
+    // === QUICK ACCESS (Alt prefix for speed) ===
+    Alt+Space { spawn "foot"; }
+    Alt+Return { spawn "foot"; }
+    Alt+D { spawn "wofi-intelligent-runner"; }
+    Alt+Escape { spawn "ndrop" "foot" "-a" "scratchpad-term"; }
+    Alt+B { spawn "ndrop" "zen" "--class" "scratchpad-browser"; }
+
+    // === APPLICATIONS (Mod + single letter, left-hand accessible) ===
+    Mod+B { spawn "zen"; }
+    Mod+G { spawn "thunderbird"; }
+    Mod+F { spawn "nautilus"; }
+
+    // === WINDOW MANAGEMENT (Mod + action keys) ===
+    Mod+W { close-window; }
+    Mod+T { toggle-window-floating; }
+    Mod+Return { fullscreen-window; }
+    Mod+O { toggle-overview; }
+
+    // === PRIMARY NAVIGATION (Mod alone) ===
+    // Focus to extremes
+    Mod+N { focus-column-first; }
+    Mod+Period { focus-column-last; }
+    
+    // Horizontal: Columns (primary on ultrawide)
+    Mod+H { focus-column-left; }
+    Mod+L { focus-column-right; }
+    Mod+Left { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    
+    // Vertical: Workspaces (secondary but important)
+    Mod+J { focus-workspace-down; }
+    Mod+K { focus-workspace-up; }
+    Mod+Down { focus-workspace-down; }
+    Mod+Up { focus-workspace-up; }
+    
+    // Workspace cycling
+    Mod+Tab { focus-workspace-previous; }
+
+    // === PRIMARY MOVE OPERATIONS (Mod+Shift) ===
+    // Horizontal column movement
+    Mod+Shift+H { move-column-left; }
+    Mod+Shift+L { move-column-right; }
+    Mod+Shift+Left { move-column-left; }
+    Mod+Shift+Right { move-column-right; }
+    
+    // Vertical workspace transfers
+    Mod+Shift+J { move-column-to-workspace-down; }
+    Mod+Shift+K { move-column-to-workspace-up; }
+    Mod+Shift+Down { move-column-to-workspace-down; }
+    Mod+Shift+Up { move-column-to-workspace-up; }
+
+    // === FINE CONTROL / EXTREMES (Mod+Ctrl) ===
+    // Position to first/last
+    Mod+Ctrl+N { move-column-to-first; }
+    Mod+Ctrl+Period { move-column-to-last; }
+    
+    // Window manipulation within column (lower priority on ultrawide)
+    Mod+Ctrl+J { focus-window-down; }
+    Mod+Ctrl+K { focus-window-up; }
+    Mod+Ctrl+BracketLeft { consume-window-into-column; }
+    Mod+Ctrl+BracketRight { expel-window-from-column; }
+
+    // === RESIZE/ADJUST (Mod+Alt) ===
+    Mod+Alt+H { set-column-width "-5%"; }
+    Mod+Alt+L { set-column-width "+5%"; }
+    Mod+Alt+Left { set-column-width "-5%"; }
+    Mod+Alt+Right { set-column-width "+5%"; }
+    Mod+Alt+Comma { switch-preset-column-width; }
+    Mod+Alt+M { center-column; }
+
+    // === WORKSPACES (F-keys for direct access) ===
+    F1 { focus-workspace 1; }
+    F2 { focus-workspace 2; }
+    F3 { focus-workspace 3; }
+    F4 { focus-workspace 4; }
+    F5 { focus-workspace 5; }
+    F6 { focus-workspace 6; }
+
+    Mod+Shift+F1 { move-column-to-workspace 1; }
+    Mod+Shift+F2 { move-column-to-workspace 2; }
+    Mod+Shift+F3 { move-column-to-workspace 3; }
+    Mod+Shift+F4 { move-column-to-workspace 4; }
+    Mod+Shift+F5 { move-column-to-workspace 5; }
+    Mod+Shift+F6 { move-column-to-workspace 6; }
+
+    // === SYSTEM ACTIONS ===
+    Mod+Shift+N { spawn "swaync-client" "-t" "-sw"; }
+    Mod+Shift+C { spawn "wallpaper"; }
+    Mod+Shift+R { spawn-sh "pkill waybar || ~/.config/waybar/launch.sh"; }
+
+    // === MEDIA & SCREENSHOTS ===
+    Print { screenshot; }
+    Mod+Print { spawn "screenshot-edit"; }
+    
+    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ +5%"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ -5%"; }
+    XF86AudioMute allow-when-locked=true { spawn-sh "pactl set-sink-mute @DEFAULT_SINK@ toggle"; }
+    F10 { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ +5%"; }
+    F9 { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ -5%"; }
+    F8 { spawn-sh "pactl set-sink-mute @DEFAULT_SINK@ toggle"; }
+
+    // === MOUSE INTEGRATION ===
+    Mod+WheelScrollLeft cooldown-ms=150 { focus-column-left; }
+    Mod+WheelScrollRight cooldown-ms=150 { focus-column-right; }
+    Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
+    Mod+WheelScrollUp cooldown-ms=150 { focus-workspace-up; }
+    Mod+Alt+WheelScrollLeft cooldown-ms=150 { set-column-width "-5%"; }
+    Mod+Alt+WheelScrollRight cooldown-ms=150 { set-column-width "+5%"; }
+}

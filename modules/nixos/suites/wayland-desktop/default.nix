@@ -3,6 +3,7 @@
   config,
   lib,
   pkgs,
+  pkgs-unstable,
   inputs,
   ...
 }:
@@ -47,5 +48,8 @@ with lib;
       '')
     ];
 
+    ++ (with pkgs-unstable; [
+      mangowc
+    ]);
   };
 }

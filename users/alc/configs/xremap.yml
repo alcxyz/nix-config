@@ -1,0 +1,19 @@
+keymap:
+  - name: mouse_layers
+    # optional: restrict to your Niri session apps; omit initially
+    # application:
+    #   only: ["niri"]
+    remap:
+      BTN_SIDE:
+        alone: BTN_SIDE
+        held:
+          remap:
+            REL_WHEELUP:   { key: "Super-Right" }
+            REL_WHEELDOWN: { key: "Super-Left" }
+
+      BTN_EXTRA:
+        alone: BTN_EXTRA
+        held:
+          remap:
+            REL_WHEELUP:   { key: "Super-Up" }
+            REL_WHEELDOWN: { key: "Super-Down" }

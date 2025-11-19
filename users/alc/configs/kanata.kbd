@@ -6,6 +6,8 @@
 (defvar
   tap-timeout 150
   hold-timeout 150
+  tap-timeout-c 220
+  hold-timeout-c 120
 )
 
 ;; Define custom aliases for tap-hold behaviors
@@ -29,7 +31,7 @@
   rce (tap-hold $tap-timeout $hold-timeout ret rmeta)
 
   ;; C as C when tapped, activate nav layer when held
-  c_nav (tap-hold $tap-timeout $hold-timeout c (layer-toggle nav))
+  c_nav (tap-hold $tap-timeout-c $hold-timeout-c c (layer-toggle nav))
 )
 
 ;; Define base layer source keys
