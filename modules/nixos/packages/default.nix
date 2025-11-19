@@ -28,7 +28,6 @@ in
       age
       ssh-to-age
       sshs
-      #carapace-bridge
 
       # Development
       git
@@ -80,12 +79,11 @@ in
       # Use your custom packages instead of unstable
       (inputs.custom-packages.packages.${pkgs.system}.carapace)
       (inputs.custom-packages.packages.${pkgs.system}.carapace-bridge)
-    ];
+    ]
 
-      #    ++ (with pkgs-unstable; [
-      #      carapace
-      #      carapace-bridge
-      #    ]);
+    ++ (with pkgs-unstable; [
+      lima
+    ]);
 
   };
 }

@@ -1,5 +1,5 @@
 # modules/home-manager/shell/default.nix
-{ config, lib, pkgs, osIcon ? "🐧", ... }:
+{ config, lib, pkgs, inputs, osIcon ? "🐧", ... }:
 
 with lib;
 {
@@ -10,6 +10,7 @@ with lib;
     atuin
     direnv
     neovim
+    (inputs.custom-packages.packages.${pkgs.system}.carapace-bridge)
   ];
 
   programs = {
@@ -23,6 +24,7 @@ with lib;
     };
     carapace = {
       enable = true;
+      package = (inputs.custom-packages.packages.${pkgs.system}.carapace);
       enableNushellIntegration = true;
     };
     atuin = {
