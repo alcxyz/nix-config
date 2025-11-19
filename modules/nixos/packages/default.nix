@@ -1,5 +1,5 @@
 # modules/nixos/packages/default.nix
-{ options, config, lib, pkgs, pkgs-unstable, username, ... }:
+{ options, config, lib, pkgs, pkgs-unstable, inputs, username, ... }:
 
 with lib;
 let
@@ -74,10 +74,18 @@ in
       bluetuith
       pavucontrol
       easyeffects
-    ] ++ (with pkgs-unstable; [
-        carapace
-        carapace-bridge
-    ]);
+    ] 
+
+    ++ [
+      # Use your custom packages instead of unstable
+      (inputs.custom-packages.packages.${pkgs.system}.carapace)
+      (inputs.custom-packages.packages.${pkgs.system}.carapace-bridge)
+    ];
+
+      #    ++ (with pkgs-unstable; [
+      #      carapace
+      #      carapace-bridge
+      #    ]);
 
   };
 }
