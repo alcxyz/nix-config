@@ -178,16 +178,16 @@ binds {
     // Window manipulation within column (lower priority on ultrawide)
     Mod+Ctrl+J { focus-window-down; }
     Mod+Ctrl+K { focus-window-up; }
-    Mod+Ctrl+BracketLeft { consume-window-into-column; }
-    Mod+Ctrl+BracketRight { expel-window-from-column; }
+    Mod+Ctrl+Y { consume-window-into-column; }
+    Mod+Ctrl+U { expel-window-from-column; }
+    Mod+Ctrl+Comma { switch-preset-column-width; }
+    Mod+Ctrl+M { center-column; }
 
     // === RESIZE/ADJUST (Mod+Alt) ===
     Mod+Alt+H { set-column-width "-5%"; }
     Mod+Alt+L { set-column-width "+5%"; }
     Mod+Alt+Left { set-column-width "-5%"; }
     Mod+Alt+Right { set-column-width "+5%"; }
-    Mod+Alt+Comma { switch-preset-column-width; }
-    Mod+Alt+M { center-column; }
 
     // === WORKSPACES (F-keys for direct access) ===
     F1 { focus-workspace 1; }
@@ -220,11 +220,20 @@ binds {
     F9 { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ -5%"; }
     F8 { spawn-sh "pactl set-sink-mute @DEFAULT_SINK@ toggle"; }
 
-    // === MOUSE INTEGRATION ===
-    Mod+WheelScrollLeft cooldown-ms=150 { focus-column-left; }
-    Mod+WheelScrollRight cooldown-ms=150 { focus-column-right; }
-    Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
-    Mod+WheelScrollUp cooldown-ms=150 { focus-workspace-up; }
-    Mod+Alt+WheelScrollLeft cooldown-ms=150 { set-column-width "-5%"; }
-    Mod+Alt+WheelScrollRight cooldown-ms=150 { set-column-width "+5%"; }
+    // === MOUSE INTEGRATION (vertical wheel only) ===
+    // Column navigation (primary - Mod alone)
+    Mod+WheelScrollUp cooldown-ms=150 { focus-column-left; }
+    Mod+WheelScrollDown cooldown-ms=150 { focus-column-right; }
+    
+    // Workspace navigation (fine control - Mod+Ctrl)
+    Mod+Ctrl+WheelScrollUp cooldown-ms=150 { focus-workspace-up; }
+    Mod+Ctrl+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
+    
+    // Column width resize (properties - Mod+Alt)
+    Mod+Alt+WheelScrollUp cooldown-ms=150 { set-column-width "-5%"; }
+    Mod+Alt+WheelScrollDown cooldown-ms=150 { set-column-width "+5%"; }
+    
+    // Move column to workspace (transfer - Mod+Shift)
+    Mod+Shift+WheelScrollUp cooldown-ms=150 { move-column-to-workspace-up; }
+    Mod+Shift+WheelScrollDown cooldown-ms=150 { move-column-to-workspace-down; }
 }

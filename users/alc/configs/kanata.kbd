@@ -6,8 +6,8 @@
 (defvar
   tap-timeout 150
   hold-timeout 150
-  tap-timeout-c 220
-  hold-timeout-c 120
+  tap-timeout-lalt 100
+  hold-timeout-lalt 100
 )
 
 ;; Define custom aliases for tap-hold behaviors
@@ -18,8 +18,8 @@
   ;; Caps as Escape when tapped, Super when held
   ce (tap-hold $tap-timeout $hold-timeout esc lmeta)
 
-  ;; Left Alt as Backspace when tapped
-  lab (tap-hold $tap-timeout $hold-timeout bspc lalt)
+  ;; Left Alt as lalt when tapped, toggle nav layer when held
+  lalt_nav (tap-hold $tap-timeout-lalt $hold-timeout-lalt lalt (layer-toggle nav))
 
   ;; Left Meta/Cmd as Backspace when tapped
   lcb (tap-hold $tap-timeout $hold-timeout bspc lmeta)
@@ -29,9 +29,6 @@
 
   ;; Right Meta/Cmd as Enter when tapped
   rce (tap-hold $tap-timeout $hold-timeout ret rmeta)
-
-  ;; C as C when tapped, activate nav layer when held
-  c_nav (tap-hold $tap-timeout-c $hold-timeout-c c (layer-toggle nav))
 )
 
 ;; Define base layer source keys
@@ -42,8 +39,8 @@
 
 ;; Define the main layer
 (deflayer base
-  @tc   @ce   @lab  @lcb  @rae  @rce
-  @c_nav h j k l
+  @tc   @ce   @lalt_nav  @lcb  @rae  @rce
+  c h j k l
 )
 
 ;; Define the navigation layer
@@ -51,4 +48,3 @@
   _    _    _    _    _    _
   _ left down up right
 )
-
