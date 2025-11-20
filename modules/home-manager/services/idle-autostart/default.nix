@@ -98,10 +98,10 @@ EOF
         else
           # wlroots path: niri, mangowc, sway, etc.
           exec ${inhibit} ${swayidle} -w \
-            timeout "$LOCK_T" bash -lc '${hyprlock}' \
-            timeout "$DPMS_T" bash -lc '${cfg.dpmsOffCommand}' \
-            resume          bash -lc '${cfg.dpmsOnCommand}' \
-            before-sleep    bash -lc '${hyprlock}'
+            timeout "$LOCK_T" '${hyprlock}' \
+            timeout "$DPMS_T" '${cfg.dpmsOffCommand}' \
+            resume            '${cfg.dpmsOnCommand}' \
+            before-sleep      '${hyprlock}'
         fi
       '';
     };
