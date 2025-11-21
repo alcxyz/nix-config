@@ -28,9 +28,6 @@ with lib;
       swaynotificationcenter
       libnotify
 
-      hypridle
-      hyprlock
-
       # ndrop from custom-packages flake
       (inputs.custom-packages.packages.${pkgs.system}.ndrop)
       xwayland-satellite

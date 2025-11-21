@@ -1,16 +1,14 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 30,
-  "spacing": 4,
-  "modules-left": ["hyprland/workspaces"],
-  "modules-center": ["hyprland/window"],
+  "height": 20,
+  "spacing": 10,
+  "modules-left": ["custom/nixlogo", "hyprland/workspaces", "hyprland/window"],
+  "modules-center": ["pulseaudio", "custom/dual-clock"],
   "modules-right": [
     "custom/spotify",
-    "pulseaudio",
     "custom/system-cycle",
     "battery",
-    "custom/dual-clock",
     "custom/notification",
     "tray",
     "custom/power-menu"
@@ -27,9 +25,21 @@
       "4": "4",
       "5": "5",
       "6": "6",
+      "7": "7",
+      "8": "8",
+      "9": "9",
+      "active": "󱓻",
       "urgent": "",
       "focused": "",
-      "default": ""
+      "default": ""
+    },
+    "persistent-workspaces": {
+      "1": [],
+      "2": [],
+      "3": [],
+      "4": [],
+      "5": [],
+      "6": []
     }
   },
 
@@ -43,6 +53,12 @@
     "tooltip-format": "<big>{:%Y %B}</big>\n<tt><big>{calendar}</big></tt>",
     "format": "{:%H:%M}",
     "format-alt": "{:%Y-%m-%d}"
+  },
+
+  "custom/nixlogo": {
+    "format": "",
+    "on-click": "wofi --show drun",
+    "tooltip-format": "Application Launcher"
   },
 
   "custom/dual-clock": {
