@@ -55,6 +55,17 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    dgop = {
+      url = "github:AvengeMedia/dgop";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    dankMaterialShell = {
+      url = "github:AvengeMedia/DankMaterialShell";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.dgop.follows = "dgop";
+    };
+
     #hyprpanel = {
     #  url = "github:Jas-SinghFSU/HyprPanel";
     #  inputs.nixpkgs.follows = "nixpkgs";
