@@ -2,7 +2,6 @@
 {
   config,
   pkgs,
-  pkgs-unstable,
   lib,
   username,
   hostName,
@@ -106,15 +105,12 @@ with lib;
     nix-direnv.enable = true;
   };
 
-  programs.wezterm.enable = true;
   programs.git.managed.enable = true;
+
+  programs.wezterm.enable = true;
   programs.ssh.enable = true;
 
-  programs.ncspot = {
-    enable = true;
-    package = pkgs-unstable.ncspot;
-  };
-
+  programs.ncspot.enable = true;
   
   # ==================== Sops with age over ssh ====================
 

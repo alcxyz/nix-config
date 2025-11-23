@@ -27,6 +27,6 @@ in
     users.users.${username}.extraGroups = [ "docker" ]; 
 
     # Add other virtualization related tools
-    environment.systemPackages = with pkgs; [ ];
+    environment.systemPackages = with pkgs; [ lima ];
   };
 }

@@ -3,7 +3,6 @@
   config,
   lib,
   pkgs,
-  pkgs-unstable,
   inputs,
   ...
 }:
@@ -43,10 +42,6 @@ with lib;
       (writeShellScriptBin "screenshot-edit" ''
         wl-paste | swappy -f -
       '')
-    ]
-
-    ++ (with pkgs-unstable; [
-      mangowc
-    ]);
+    ];
   };
 }
