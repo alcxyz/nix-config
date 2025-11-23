@@ -4,10 +4,9 @@
   "height": 20,
   "spacing": 10,
   "modules-left": ["custom/nixlogo", "hyprland/workspaces", "hyprland/window"],
-  "modules-center": ["pulseaudio", "custom/dual-clock"],
+  "modules-center": ["pulseaudio", "custom/system-cycle", "custom/dual-clock"],
   "modules-right": [
     "custom/spotify",
-    "custom/system-cycle",
     "battery",
     "custom/notification",
     "tray",
