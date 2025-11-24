@@ -78,9 +78,8 @@ with lib;
     atac
     termshark
     openldap
-    jrnl
+    #jrnl
     croc
-    xh
     minikube
   ];
 
