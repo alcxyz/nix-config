@@ -2,4 +2,5 @@
 
 #rm -rf $XDG_RUNTIME_DIR/swww.socket
 
-swww init & xwaylandvideobridge
+#swww init & 
+xwaylandvideobridge
