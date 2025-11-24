@@ -157,7 +157,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-    home.packages = [ lockScript ];
+    home.packages = [ lockScript hyprlockPkg ];
     
     # Dynamic config with color and configuration substitution
     xdg.configFile."hypr/hyprlock.conf".text = processedConfig;
