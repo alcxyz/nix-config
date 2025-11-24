@@ -70,7 +70,7 @@ in
       ntfs3g
       pandoc
 
-      networkmanagerapplet
+      #networkmanagerapplet
       bluetuith
       pavucontrol
       easyeffects

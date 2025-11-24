@@ -74,7 +74,8 @@ in
 
     systemd.services."stash" = {
       description = "Stash.managed Application Service";
-      after = [ "network.target" ];
+      requires = [ "zfs-mount.service" ];
+      after = [ "zfs-mount.service" ];
       unitConfig = {
         RequiresMountsFor = [
           cfg.dataDir
