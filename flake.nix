@@ -3,6 +3,17 @@
   description = "NixOS and Nix-Darwin configurations for multiple hosts with \
                 standalone Home Manager (all on nixos-unstable)";
 
+  #nixConfig = {
+  #  extra-substituters = [
+  #    "https://nix-community.cachix.org"
+  #    "https://cuda-maintainers.cachix.org"
+  #  ];
+  #  extra-trusted-public-keys = [
+  #    "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+  #    "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
+  #  ];
+  #};
+
   # ---- Inputs -----------------------------------------------------------
   inputs = {
     # Use unstable as the single source of nixpkgs for everything here.
@@ -102,7 +113,7 @@
         # Allow unfree if you use browser binaries or such
         config.allowUnfree = true;
         # GPU / CUDA support as needed
-        config.cudaSupport = true;
+          #config.cudaSupport = true;
         # If you need to permit specific insecure packages, list them here
         config.permittedInsecurePackages = [
           "freeimage-3.18.0-unstable-2024-04-18" # used by Sunshine

@@ -39,7 +39,8 @@ in
         libva
         libva-utils
         egl-wayland
-        glxinfo
+        mesa-demos
+        #glxinfo
         SDL2
         wayland
         wayland-protocols
@@ -101,7 +102,7 @@ in
       libva
       libva-utils
       egl-wayland
-      glxinfo
+      #glxinfo
     ];
   };
 }
