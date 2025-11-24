@@ -19,13 +19,13 @@ with lib;
   config = mkIf config.suites.wayland-desktop.enable {
 
     environment.systemPackages = with pkgs; [
-      waybar
-      swww
-      wofi
-      wlogout
-      swayidle
-      swaynotificationcenter
-      libnotify
+      #waybar
+      #swww
+      #wofi
+      #wlogout
+      #swayidle
+      #swaynotificationcenter
+      #libnotify
 
       # ndrop from custom-packages flake
       (inputs.custom-packages.packages.${pkgs.system}.ndrop)
