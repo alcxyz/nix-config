@@ -4,8 +4,8 @@ with lib;
 
 let
   cfg = config.services.hypridle.managed;
-  hypridlePkg = inputs.hypridle.packages.${pkgs.system}.default;
-  hyprlockPkg = inputs.hyprlock.packages.${pkgs.system}.default;
+  hypridlePkg = inputs.hypridle.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  hyprlockPkg = inputs.hyprlock.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in {
   options.services.hypridle.managed = {
     enable = mkEnableOption "hypridle idle daemon (via managed service module)";

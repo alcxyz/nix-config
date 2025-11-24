@@ -11,7 +11,7 @@ with lib;
 
 let
   cfg = config.services.hyprlock;
-  hyprlockPkg = inputs.hyprlock.packages.${pkgs.system}.default;
+  hyprlockPkg = inputs.hyprlock.packages.${pkgs.stdenv.hostPlatform.system}.default;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 

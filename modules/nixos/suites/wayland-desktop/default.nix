@@ -22,7 +22,7 @@ with lib;
       #swaynotificationcenter
 
       # ndrop from custom-packages flake
-      (inputs.custom-packages.packages.${pkgs.system}.ndrop)
+      (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.ndrop)
       xwayland-satellite
 
       grim

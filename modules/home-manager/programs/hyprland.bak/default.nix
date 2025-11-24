@@ -37,17 +37,17 @@ in
       systemd.enable = true;
 
       # Use the same pinned Hyprland build
-      package = inputs.hyprland.packages.${pkgs.system}.hyprland;
+      package = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.hyprland;
 
       # Use the matching portal build (keeps ABI aligned)
       portalPackage =
-        inputs.hyprland.packages.${pkgs.system}.xdg-desktop-portal-hyprland;
+        inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
 
       # Enable plugins from the pinned hyprland-plugins flake
       plugins = [
-        inputs.hyprland-plugins.packages.${pkgs.system}.hyprexpo
-        inputs.hyprland-plugins.packages.${pkgs.system}.hyprscrolling
-        # inputs.hyprland-plugins.packages.${pkgs.system}.hyprfocus
+        inputs.hyprland-plugins.packages.${pkgs.stdenv.hostPlatform.system}.hyprexpo
+        inputs.hyprland-plugins.packages.${pkgs.stdenv.hostPlatform.system}.hyprscrolling
+        # inputs.hyprland-plugins.packages.${pkgs.stdenv.hostPlatform.system}.hyprfocus
       ];
 
       settings = {

@@ -10,7 +10,7 @@ with lib;
     atuin
     direnv
     neovim
-    (inputs.custom-packages.packages.${pkgs.system}.carapace-bridge)
+    (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace-bridge)
   ];
 
   programs = {
@@ -24,7 +24,7 @@ with lib;
     };
     carapace = {
       enable = true;
-      package = (inputs.custom-packages.packages.${pkgs.system}.carapace);
+      package = (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace);
       enableNushellIntegration = true;
     };
     atuin = {

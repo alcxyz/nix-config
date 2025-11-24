@@ -77,8 +77,8 @@ in
     ] 
     ++ [
       # Use your custom packages instead of unstable
-      (inputs.custom-packages.packages.${pkgs.system}.carapace)
-      (inputs.custom-packages.packages.${pkgs.system}.carapace-bridge)
+        #(inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace)
+        #(inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace-bridge)
     ];
 
   };
