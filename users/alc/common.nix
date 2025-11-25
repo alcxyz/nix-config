@@ -65,6 +65,7 @@ with lib;
     dua
     yazi
     portal
+    ripgrep
     ripgrep-all
     gopass
     yubico-piv-tool

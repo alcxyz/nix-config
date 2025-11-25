@@ -77,6 +77,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    quickshell = {
+      # add ?ref=<tag> to track a tag
+      url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # dgop / DankMaterialShell (DMS) follow unstable as they expect newer pkgs
     dgop = {
       url = "github:AvengeMedia/dgop";
@@ -87,6 +93,16 @@
       url = "github:AvengeMedia/DankMaterialShell";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.dgop.follows = "dgop";
+    };
+
+    opencode = {
+      url = "github:sst/opencode";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    goose = {
+      url = "github:block/goose";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # color schemes, small extras
