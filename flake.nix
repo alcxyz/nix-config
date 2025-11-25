@@ -19,6 +19,8 @@
     # Use unstable as the single source of nixpkgs for everything here.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    nixpkgs-master.url = "github:NixOS/nixpkgs/master";
+
     # Secrets repo (private) — flake=false means it won't be treated as a
     # package-providing flake; you probably use it only for fetching sops/age.
     nix-secrets = {
@@ -123,18 +125,45 @@
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
     # Create a pkgs set for each supported system using the same nixpkgs-unstable
+      #pkgsFor = forAllSystems (system:
+      #  import nixpkgs {
+      #    inherit system;
+      #    # Allow unfree if you use browser binaries or such
+      #    config.allowUnfree = true;
+      #    # GPU / CUDA support as needed
+      #    # config.cudaSupport = true;
+      #    # If you need to permit specific insecure packages, list them here
+      #    config.permittedInsecurePackages = [
+      #      "freeimage-3.18.0-unstable-2024-04-18" # used by Sunshine
+      #    ];
+      #  });
+
     pkgsFor = forAllSystems (system:
-      import nixpkgs {
-        inherit system;
-        # Allow unfree if you use browser binaries or such
-        config.allowUnfree = true;
-        # GPU / CUDA support as needed
-        # config.cudaSupport = true;
-        # If you need to permit specific insecure packages, list them here
-        config.permittedInsecurePackages = [
-          "freeimage-3.18.0-unstable-2024-04-18" # used by Sunshine
-        ];
-      });
+      let
+        # Base: unstable pkgs (what you use everywhere now)
+        pkgsUnstable = import nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+          config.permittedInsecurePackages = [
+            "freeimage-3.18.0-unstable-2024-04-18"
+          ];
+        };
+
+        # Only import master for Linux, because that’s where MongoDB is needed
+        pkgsMaster =
+          if system == "x86_64-linux" then
+            import inputs.nixpkgs-master {
+              inherit system;
+              config.allowUnfree = true;
+            }
+          else
+            pkgsUnstable;
+      in
+      # Use unstable everywhere, but override mongodb on Linux with the master version
+      pkgsUnstable // (if system == "x86_64-linux" then {
+        mongodb = pkgsMaster.mongodb;
+      } else {})
+    );
 
     # ----- Host definitions ------------------------------------------------
     # Add / remove hosts here; each host points to its NixOS config file.
