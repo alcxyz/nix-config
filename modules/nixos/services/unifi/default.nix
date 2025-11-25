@@ -6,6 +6,7 @@
   services.unifi = {
     enable = true;
     openFirewall = true;
+    mongodbPackage = pkgs.mongodb;
   };
 
   # Traefik routing is now in Docker traefik file provider
