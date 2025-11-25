@@ -113,7 +113,7 @@
         # Allow unfree if you use browser binaries or such
         config.allowUnfree = true;
         # GPU / CUDA support as needed
-          #config.cudaSupport = true;
+        # config.cudaSupport = true;
         # If you need to permit specific insecure packages, list them here
         config.permittedInsecurePackages = [
           "freeimage-3.18.0-unstable-2024-04-18" # used by Sunshine
