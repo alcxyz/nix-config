@@ -21,9 +21,6 @@ in
       tmux
       tree
       wget
-      vagrant
-      bunster
-      portal
       sops
       age
       ssh-to-age
@@ -33,9 +30,6 @@ in
       # Development
       git
       git-remote-gcrypt
-      fzf
-      fd
-      jq
       rustc
       cargo
       go
@@ -46,7 +40,6 @@ in
 
       # Util
       uutils-coreutils-noprefix
-      ripgrep
       openssl
       killall
       gptfdisk
@@ -72,8 +65,8 @@ in
 
       #networkmanagerapplet
       bluetuith
-      pavucontrol
-      easyeffects
+      #pavucontrol
+      #easyeffects
     ] 
     ++ [
       # Use your custom packages instead of unstable

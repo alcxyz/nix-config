@@ -64,22 +64,22 @@ with lib;
     xh
     dua
     yazi
+    portal
     ripgrep-all
-    wiki-tui
     gopass
     yubico-piv-tool
     age
     age-plugin-yubikey
+    fzf
+    fd
+    jq
     yq
-    youtube-music
     azure-cli
     google-cloud-sdk
     devbox
     atac
     termshark
     openldap
-    #jrnl
-    croc
     minikube
   ];
 
