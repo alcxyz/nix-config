@@ -9,14 +9,20 @@ in
     lib.mkEnableOption "Enable DankMaterialShell suite";
 
   imports = [
+    inputs.dsearch.homeModules.default
     inputs.dankMaterialShell.homeModules.dankMaterialShell.default
   ];
 
   config = lib.mkIf cfg.enable {
+    programs.dsearch = {
+      enable = true;
+    };
+
     programs.dankMaterialShell = {
       enable = true;
 
       #quickshell.package = pkgs.quickshell;
+      quickshell.package = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
       systemd.enable = true;
       systemd.restartIfChanged = true;
