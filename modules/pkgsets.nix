@@ -55,7 +55,6 @@ rec {
       swappy
       imagemagick
     ] ++ lib.optionals (ndropPkg != null) [ ndropPkg ];
-   };
   };
 
   /* Ready-to-use system presets (use in environment.systemPackages) */
@@ -105,10 +104,10 @@ rec {
       glow
 
       /* Archives & media */
-      unzip
-      unrar
-      rar
-      ffmpeg
+      #unzip
+      #unrar
+      #rar
+      #ffmpeg
 
       /* Secrets & smartcard / age tooling */
       gopass

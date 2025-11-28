@@ -55,6 +55,7 @@ in
   config = mkIf cfg.enable {
     environment.systemPackages = [
       cfg.package
+      pkgs.ffmpeg-full
     ];
 
     users.users.${cfg.user} = {
@@ -72,34 +73,86 @@ in
       "d '${cfg.mediaDir}' 0775 ${cfg.user} ${cfg.group} - -"
     ];
 
-    systemd.services."stash" = {
+    systemd.services.stash = {
       description = "Stash.managed Application Service";
-      requires = [ "zfs-mount.service" ];
-      after = [ "zfs-mount.service" ];
-      unitConfig = {
-        RequiresMountsFor = [
-          cfg.dataDir
-          cfg.mediaDir
-        ];
-      };
+
+      # Ensure ZFS mounts are ready and ordered
+      requires = [
+        "zfs-import.target"
+        "zfs-mount.service"
+      ];
+      after = [
+        "zfs-import.target"
+        "zfs-mount.service"
+      ];
+
+      # This ensures systemd pulls in the mount units for these paths and waits
+      unitConfig.RequiresMountsFor = [
+        cfg.dataDir
+        cfg.mediaDir
+      ];
+
       serviceConfig = {
         Type = "simple";
         User = cfg.user;
         Group = cfg.group;
         WorkingDirectory = cfg.dataDir;
-        ExecStart = ''
-          ${stashBinary}
-        '';
-        Path = [ pkgs.coreutils pkgs.ffmpeg-full ];
+
+        # Optional preflight check: make sure mediaDir exists and is readable
+        ExecStartPre = [
+          "${pkgs.coreutils}/bin/test -d ${cfg.dataDir}"
+          "${pkgs.coreutils}/bin/test -d ${cfg.mediaDir}"
+        ];
+
+        # Use absolute path; stashBinary is already absolute
+        ExecStart = "${stashBinary}";
+
+        # Do NOT use 'Path' here; not a valid systemd key. If you need PATH:
+        Environment = [
+          "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.ffmpeg-full ]}"
+        ];
+
         Restart = "on-failure";
         RestartSec = "10s";
+
+        # Hardening (adjust if Stash needs write under /usr)
         ProtectSystem = "full";
         PrivateTmp = true;
         ProtectHome = true;
         NoNewPrivileges = true;
       };
-      wantedBy = if cfg.autoStart then [ "multi-user.target" ] else [];
+
+      wantedBy = lib.mkIf cfg.autoStart [ "multi-user.target" ];
     };
+
+    #systemd.services."stash" = {
+    #  description = "Stash.managed Application Service";
+    #  requires = [ "zfs-mount.service" ];
+    #  after = [ "zfs-mount.service" ];
+    #  unitConfig = {
+    #    RequiresMountsFor = [
+    #      cfg.dataDir
+    #      cfg.mediaDir
+    #    ];
+    #  };
+    #  serviceConfig = {
+    #    Type = "simple";
+    #    User = cfg.user;
+    #    Group = cfg.group;
+    #    WorkingDirectory = cfg.dataDir;
+    #    ExecStart = ''
+    #      ${stashBinary}
+    #    '';
+    #    Path = [ pkgs.coreutils pkgs.ffmpeg-full ];
+    #    Restart = "on-failure";
+    #    RestartSec = "10s";
+    #    ProtectSystem = "full";
+    #    PrivateTmp = true;
+    #    ProtectHome = true;
+    #    NoNewPrivileges = true;
+    #  };
+    #  wantedBy = if cfg.autoStart then [ "multi-user.target" ] else [];
+    #};
 
     services.traefik.dynamicConfigOptions.http.routers.stash = {
       rule = "Host(`stash.${hostName}.local`)";

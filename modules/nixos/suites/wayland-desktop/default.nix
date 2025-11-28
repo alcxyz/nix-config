@@ -1,7 +1,7 @@
 { options, config, lib, pkgs, inputs, ... }:
 with lib;
 let
-  pkgsets = import ../../pkgsets.nix { inherit pkgs inputs; };
+  pkgsets = import ../../../pkgsets.nix { inherit pkgs inputs; };
 in {
   options.suites.wayland-desktop = with types; {
     enable = mkOption {
