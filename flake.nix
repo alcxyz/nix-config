@@ -38,7 +38,7 @@
     # nix-darwin: you may keep a pinned release; left as-is but following
     # the same nixpkgs for consistency.
     darwin = {
-      url = "github:lnl7/nix-darwin/nix-darwin-25.05";
+      url = "github:nix-darwin/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

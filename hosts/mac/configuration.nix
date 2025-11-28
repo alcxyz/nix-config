@@ -93,11 +93,6 @@ in
     systemPackages = with pkgs; [
       git
       curl
-      wget
-      fd
-      ripgrep
-      fzf
-      tmux
       zsh
       direnv
       vim

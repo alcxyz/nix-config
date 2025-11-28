@@ -18,8 +18,6 @@ in
 
     environment.systemPackages = with pkgs; [
       neovim
-      tmux
-      tree
       wget
       sops
       age

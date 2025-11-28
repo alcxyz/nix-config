@@ -60,7 +60,9 @@ with lib;
     htop
     btop
     bat
-    gitui
+    tmux
+    wget
+    #gitui
     xh
     dua
     yazi
@@ -75,6 +77,7 @@ with lib;
     fd
     jq
     yq
+    gh
     azure-cli
     google-cloud-sdk
     devbox

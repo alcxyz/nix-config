@@ -57,11 +57,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1763517106,
-        "narHash": "sha256-hfzT09UyZySNUsUx0NhPSGbCOGbIx2LBo3ic/M2rwNM=",
+        "lastModified": 1764279375,
+        "narHash": "sha256-Zot0oHgk+K9Gr5VC2moDcAUYY20coMCOb6uxKqda/b8=",
         "owner": "alcxyz",
         "repo": "nix-packages",
-        "rev": "0792ab787eaac4dc8aaf92123ea2f1235ce3eaa7",
+        "rev": "1ae1a7d89d31bce5ce735a9dbf1afee0d1ab36f2",
         "type": "github"
       },
       "original": {
@@ -100,16 +100,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1762912391,
-        "narHash": "sha256-4hpBE7bGd24SfD28rzMdUGXsLsNEYxCCrTipFdoqoNM=",
-        "owner": "lnl7",
+        "lastModified": 1764161084,
+        "narHash": "sha256-HN84sByg9FhJnojkGGDSrcjcbeioFWoNXfuyYfJ1kBE=",
+        "owner": "nix-darwin",
         "repo": "nix-darwin",
-        "rev": "d76299b2cd01837c4c271a7b5186e3d5d8ebd126",
+        "rev": "e95de00a471d07435e0527ff4db092c84998698e",
         "type": "github"
       },
       "original": {
-        "owner": "lnl7",
-        "ref": "nix-darwin-25.05",
+        "owner": "nix-darwin",
+        "ref": "master",
         "repo": "nix-darwin",
         "type": "github"
       }
