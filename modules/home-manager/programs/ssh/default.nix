@@ -30,7 +30,7 @@ in {
               }
               // optionalAttrs pkgs.stdenv.isDarwin {
                 # macOS keychain integration
-                UseKeychain = "yes";
+                #UseKeychain = "yes";
               };
           };
 
