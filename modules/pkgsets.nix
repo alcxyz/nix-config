@@ -186,7 +186,7 @@ rec {
     workstationExtras =
       (with pkgs; [
         rbw
-        thunderbird-bin
+        thunderbird
         brave
         bitwarden-cli
         pinentry-gtk2

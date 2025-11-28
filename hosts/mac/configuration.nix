@@ -178,7 +178,7 @@ in
 
     menuExtraClock = {
       Show24Hour = true;
-      ShowSeconds = false;
+      ShowSeconds = true;
     };
 
     loginwindow = {
