@@ -33,6 +33,8 @@ let
     # TrackpadThreeFingerTapGesture = 2; # Look up & data detectors
     # TrackpadFourFingerTapGesture = 0; # Off
   };
+ 
+  pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
 in
 {
   # ============================================================================
@@ -90,22 +92,9 @@ in
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = with pkgs; [
-      git
-      curl
-      zsh
-      direnv
-      vim
-      glow
-      sshs
-      python3
-    ];
-
+    systemPackages = pkgsets.system.mac;
     shells = with pkgs; [ bash zsh nushell ];
-
-    variables = {
-      EDITOR = "nvim";
-    };
+    variables = { EDITOR = "nvim"; };
   };
 
   # ============================================================================

@@ -10,6 +10,10 @@
   ...
 }:
 
+let
+  pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
+in
+
 with lib;
 
 {
@@ -53,39 +57,7 @@ with lib;
   };
 
   # ==================== Packages ====================
-  home.packages = with pkgs; [
-    # Packages that are available and desired on both OSes
-    tree
-    neofetch
-    htop
-    btop
-    bat
-    tmux
-    wget
-    #gitui
-    xh
-    dua
-    yazi
-    portal
-    ripgrep
-    ripgrep-all
-    gopass
-    yubico-piv-tool
-    age
-    age-plugin-yubikey
-    fzf
-    fd
-    jq
-    yq
-    gh
-    azure-cli
-    google-cloud-sdk
-    devbox
-    atac
-    termshark
-    openldap
-    minikube
-  ];
+  home.packages = pkgsets.hm.base;
 
   # ==================== Files ====================
   home.file = {
