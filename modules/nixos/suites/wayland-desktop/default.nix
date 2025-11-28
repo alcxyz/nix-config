@@ -1,14 +1,9 @@
-{
-  options,
-  config,
-  lib,
-  pkgs,
-  inputs,
-  ...
-}:
+{ options, config, lib, pkgs, inputs, ... }:
 with lib;
-{
-  options.suites.wayland-desktop= with types; {
+let
+  pkgsets = import ../../pkgsets.nix { inherit pkgs inputs; };
+in {
+  options.suites.wayland-desktop = with types; {
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -17,25 +12,16 @@ with lib;
   };
 
   config = mkIf config.suites.wayland-desktop.enable {
-
-    environment.systemPackages = with pkgs; [
-      #swaynotificationcenter
-
-      # ndrop from custom-packages flake
-      (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.ndrop)
-      xwayland-satellite
-
-      grim
-      slurp
-      swappy
-      imagemagick
-
-      (writeShellScriptBin "screenshot" ''
-        grim -g "$(slurp)" - | convert - -shave 1x1 PNG:- | wl-copy
-      '')
-      (writeShellScriptBin "screenshot-edit" ''
-        wl-paste | swappy -f -
-      '')
-    ];
+    # Use centralized system package set for the Wayland desktop helpers.
+    environment.systemPackages = pkgsets.sys.waylandDesktop
+      ++ [
+        # Keep the helper convenience wrappers local to this module
+        (pkgs.writeShellScriptBin "screenshot" ''
+          grim -g "$(slurp)" - | ${pkgs.imagemagick}/bin/convert - -shave 1x1 PNG:- | ${pkgs.wl-clipboard}/bin/wl-copy
+        '')
+        (pkgs.writeShellScriptBin "screenshot-edit" ''
+          ${pkgs.wl-clipboard}/bin/wl-paste | ${pkgs.swappy}/bin/swappy -f -
+        '')
+      ];
   };
 }

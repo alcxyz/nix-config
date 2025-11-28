@@ -14,6 +14,12 @@ let
     if inputs != null && inputs ? zen-browser
     then inputs.zen-browser.packages.${system}.default
     else null;
+
+  /* Optional external ndrop from your custom-packages input (used on xyz) */
+  ndropPkg =
+    if inputs != null && inputs ? custom-packages
+    then inputs.custom-packages.packages.${system}.ndrop
+    else null;
 in
 
 rec {
@@ -40,11 +46,21 @@ rec {
       ntfs3g
       sshfs
     ];
+
+    /* Wayland desktop specific system packages (grabs, slurp, etc.) */
+    waylandDesktop = with pkgs; [
+      xwayland-satellite
+      grim
+      slurp
+      swappy
+      imagemagick
+    ] ++ lib.optionals (ndropPkg != null) [ ndropPkg ];
+   };
   };
 
   /* Ready-to-use system presets (use in environment.systemPackages) */
   system = {
-    workstation = sys.base ++ sys.linux ++ sys.linuxDesktop;
+    workstation = sys.base ++ sys.linux ++ sys.linuxDesktop ++ sys.waylandDesktop;
     server = sys.base ++ sys.linux;
     mac = sys.base;
   };
