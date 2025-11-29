@@ -1,8 +1,14 @@
 # modules/pkgsets.nix
-# Centralized package sets for system and home-manager usage with commented groupings for readability.
-# Import with: let pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
-# Then use pkgsets.system.<role> for environment.systemPackages and
-# pkgsets.home.<role> for home.packages.
+# Centralized package sets for system and home-manager usage with commented
+# groupings for readability.
+#
+# Import with:
+#   let pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
+#
+# Then use:
+#   - pkgsets.system.<role>     for environment.systemPackages
+#   - pkgsets.home.<role>       for home.packages
+#   - pkgsets.sys.* / pkgsets.hm.* for finer-grained sets
 { pkgs, inputs ? null }:
 
 let
@@ -23,9 +29,9 @@ let
 in
 
 rec {
-  # -----------------------
+  # =======================================================================
   # System (global) packages
-  # -----------------------
+  # =======================================================================
   sys = {
     /* Shared across all machines (NixOS + nix-darwin) */
     base = with pkgs; [
@@ -47,7 +53,7 @@ rec {
       sshfs
     ];
 
-    /* Wayland desktop specific system packages (grabs, slurp, etc.) */
+    /* Wayland desktop specific system packages (grim, slurp, etc.) */
     waylandDesktop = with pkgs; [
       xwayland-satellite
       grim
@@ -64,17 +70,19 @@ rec {
     mac = sys.base;
   };
 
-  # -----------------------
-  # Home-manager package sets (with inline headings)
-  # -----------------------
-  hm = {
-    /* ---------------------------------------------------------------------
-       Base: core user tools & daily CLI utilities (cross-platform)
-       --------------------------------------------------------------------- */
+  # =======================================================================
+  # Home-manager package sets
+  # =======================================================================
+  hm = rec {
+    /* -------------------------------------------------------------------
+       CLI / non-GUI base: cross-platform
+       ------------------------------------------------------------------- */
     base = with pkgs; [
-      /* Editors & UI */
+      /* Editors & UI-ish TUI */
       neovim
       neofetch
+      tree
+      bat
 
       /* Monitoring / top-like tools */
       htop
@@ -93,17 +101,17 @@ rec {
       fzf
       xh
       portal
+      croc
       dua
       yazi
 
       /* Text processing, viewers & docs */
-      bat
       jq
       yq
       pandoc
       glow
 
-      /* Archives & media */
+      /* Archives & media (CLI use of ffmpeg, etc.) */
       #unzip
       #unrar
       #rar
@@ -119,8 +127,9 @@ rec {
       sshs
 
       /* Git & auth / cloud CLI */
-      gh
+      git
       git-remote-gcrypt
+      gh
       azure-cli
       google-cloud-sdk
 
@@ -132,18 +141,20 @@ rec {
       minikube
     ];
 
-    /* Small linux-only user additions you had scattered */
+    /* Linux-only CLI additions */
     linux = with pkgs; [
       nitch
       gitui
     ];
 
-    /* macOS-only additions */
+    /* macOS-only CLI additions */
     mac = with pkgs; [
       mas
     ];
 
-    /* Developer toolchains and language servers */
+    /* -------------------------------------------------------------------
+       Dev / IaC / K8s (CLI tooling)
+       ------------------------------------------------------------------- */
     dev = with pkgs; [
       rustc
       cargo
@@ -156,6 +167,9 @@ rec {
       python3Packages.rencode
       gnumake
       gcc
+
+      # Dev helper
+      commitizen
     ];
 
     /* Infrastructure-as-Code */
@@ -173,7 +187,50 @@ rec {
       kubeswitch
     ];
 
-    /* Linux desktop/user utilities */
+    /* -------------------------------------------------------------------
+       Desktop / GUI apps
+       We split into:
+       - desktopCommon      (intended for both Linux + mac where supported)
+       - desktopLinuxOnly   (Linux-specific or very Linux-centric)
+       - desktopMacOnly     (mac-specific, currently empty placeholder)
+       ------------------------------------------------------------------- */
+
+    # Common desktop apps you might want on both Linux and macOS
+    desktopCommon = with pkgs; [
+      vlc
+      obsidian
+      obs-studio
+      libreoffice
+      calibre
+      rustdesk
+      thunderbird
+      brave
+      # Add more truly cross‑platform desktop apps here later
+    ];
+
+    # Linux-only (or strongly Linux-oriented) desktop apps
+    desktopLinuxOnly = with pkgs; [
+      gimp3-with-plugins
+      cameractrls
+      cameractrls-gtk4
+      gparted
+      winetricks
+      wineWowPackages.waylandFull
+      lens
+      nautilus
+      pulseaudio
+    ];
+
+    # macOS-only desktop apps (ready for future use)
+    desktopMacOnly = with pkgs; [
+      # e.g. rectangle, monitorcontrol, etc. when you add them
+    ];
+
+    # Convenience combined sets
+    desktopLinux = desktopCommon ++ desktopLinuxOnly;
+    desktopMac = desktopCommon ++ desktopMacOnly;
+
+    /* Linux desktop/user utilities (Wayland/X11 helpers etc.) */
     linuxExtras = with pkgs; [
       wl-clipboard
       xarchiver
@@ -186,24 +243,29 @@ rec {
     workstationExtras =
       (with pkgs; [
         rbw
-        thunderbird
-        brave
+        #thunderbird
+        #brave
         bitwarden-cli
+        signal-cli
         pinentry-gtk2
         seafile-client
         celeste
-        signal-cli
         texlive.combined.scheme-full
+
         jrnl
-        croc
         youtube-music
         wiki-tui
       ])
       ++ lib.optionals (zenPkg != null) [ zenPkg ];
   };
 
-  /* Ready-to-use home-manager presets (use in home.packages) */
+  # =======================================================================
+  # Home-manager role presets (aggregate of hm.* sets)
+  # =======================================================================
   home = {
+    # Workstation: CLI base + linux-specific + dev/IaC/K8s +
+    # linux desktop helpers + workstation extras.
+    # (Desktop GUI apps themselves are pulled via NixOS desktop suite.)
     workstation =
       hm.base
       ++ hm.linux
@@ -211,10 +273,23 @@ rec {
       ++ hm.iac
       ++ hm.k8s
       ++ hm.linuxExtras
-      ++ hm.workstationExtras;
+      ++ hm.workstationExtras
+      ++ hm.desktopLinux;
 
-    server = hm.base ++ hm.linux;
+    # Server: CLI base + linux-specific only.
+    server = 
+      hm.base 
+      ++ hm.linux 
+      ++ hm.dev;
 
-    mac = hm.base ++ hm.mac ++ hm.dev ++ hm.iac ++ hm.k8s;
+    # mac laptop: CLI base + mac-specific + dev/IaC/K8s.
+    # (Desktop GUI apps for mac can be added via hm.desktopCommon/desktopMac.)
+    mac = 
+      hm.base 
+      ++ hm.mac 
+      ++ hm.dev 
+      ++ hm.iac 
+      ++ hm.k8s
+      ++ hm.desktopMac;
   };
 }
