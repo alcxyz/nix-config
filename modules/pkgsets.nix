@@ -156,8 +156,7 @@ rec {
        Dev / IaC / K8s (CLI tooling)
        ------------------------------------------------------------------- */
     dev = with pkgs; [
-      rustc
-      cargo
+      rustup
       go
       gopls
       lua-language-server
@@ -197,12 +196,7 @@ rec {
 
     # Common desktop apps you might want on both Linux and macOS
     desktopCommon = with pkgs; [
-      vlc
       obsidian
-      obs-studio
-      libreoffice
-      calibre
-      rustdesk
       thunderbird
       brave
       # Add more truly cross‑platform desktop apps here later
@@ -210,6 +204,11 @@ rec {
 
     # Linux-only (or strongly Linux-oriented) desktop apps
     desktopLinuxOnly = with pkgs; [
+      vlc
+      obs-studio
+      libreoffice
+      calibre
+      rustdesk
       gimp3-with-plugins
       cameractrls
       cameractrls-gtk4
