@@ -36,6 +36,13 @@ in
       enableAudioWavelength = true;
       enableCalendarEvents = true;
       enableSystemSound = true;
+
+      plugins = {
+        WorldClock = {
+          enable = true;
+          src = plugins/WorldClock;
+        };
+      };
     };
   };
 }
