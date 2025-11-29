@@ -1,5 +1,5 @@
 # users/alc/linux/nux.nix
-{ ... }:
+{ inputs, ... }:
 
 let
   pkgsets = import ../../../modules/pkgsets.nix { inherit pkgs inputs; };
