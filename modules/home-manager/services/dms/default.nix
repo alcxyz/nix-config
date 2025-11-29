@@ -24,13 +24,15 @@ in
       #quickshell.package = pkgs.quickshell;
       quickshell.package = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
-      systemd.enable = true;
-      systemd.restartIfChanged = true;
+      systemd = {
+        enable = false;
+        restartIfChanged = true;
+      };
 
       enableSystemMonitoring = true;
       enableClipboard = true;
       enableVPN = true;
-      enableBrightnessControl = true;
+      enableBrightnessControl = false;
       enableColorPicker = true;
       enableDynamicTheming = true;
       enableAudioWavelength = true;
