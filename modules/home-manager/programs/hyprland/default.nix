@@ -12,8 +12,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-    # NOTE: we NO LONGER manage wayland.windowManager.hyprland here.
-    # NixOS handles Hyprland itself.
 
     home.pointerCursor = {
       gtk.enable = true;
@@ -46,8 +44,5 @@ in {
       }
     '';
 
-    # IMPORTANT: do NOT manage hyprland.conf here anymore.
-    # Remove this:
-    # xdg.configFile."hypr/hyprland.conf".source = ./hyprland.conf;
   };
 }
