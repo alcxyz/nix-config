@@ -75,15 +75,13 @@ with lib;
   };
 
   # ==================== Program Enabling for Common Programs ====================
-  programs.direnv = {
-    enable = true;
-    nix-direnv.enable = true;
-  };
+  programs.ssh.enable = true;
 
   programs.git.managed.enable = true;
 
+  programs.neovim.enable = true;
+
   programs.wezterm.enable = true;
-  programs.ssh.enable = true;
 
   programs.ncspot.enable = true;
   

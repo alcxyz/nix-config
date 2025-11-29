@@ -8,8 +8,6 @@ with lib;
     zoxide
     starship
     atuin
-    direnv
-    neovim
     (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace-bridge)
   ];
 
@@ -34,6 +32,7 @@ with lib;
     };
     direnv = {
       enable = true;
+      nix-direnv.enable = true;
       enableNushellIntegration = true;
     };
 
