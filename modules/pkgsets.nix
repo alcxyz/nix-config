@@ -51,10 +51,6 @@ rec {
     linuxDesktop = with pkgs; [
       ntfs3g
       sshfs
-    ];
-
-    /* Wayland desktop specific system packages (grim, slurp, etc.) */
-    waylandDesktop = with pkgs; [
       xwayland-satellite
       grim
       slurp
@@ -65,7 +61,7 @@ rec {
 
   /* Ready-to-use system presets (use in environment.systemPackages) */
   system = {
-    workstation = sys.base ++ sys.linux ++ sys.linuxDesktop ++ sys.waylandDesktop;
+    workstation = sys.base ++ sys.linux ++ sys.linuxDesktop;
     server = sys.base ++ sys.linux;
     mac = sys.base;
   };

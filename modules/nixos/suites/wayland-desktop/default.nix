@@ -12,9 +12,8 @@ in {
   };
 
   config = mkIf config.suites.wayland-desktop.enable {
-    # Use centralized system package set for the Wayland desktop helpers.
-    environment.systemPackages = pkgsets.sys.waylandDesktop
-      ++ [
+
+    environment.systemPackages = [
         # Keep the helper convenience wrappers local to this module
         (pkgs.writeShellScriptBin "screenshot" ''
           grim -g "$(slurp)" - | ${pkgs.imagemagick}/bin/convert - -shave 1x1 PNG:- | ${pkgs.wl-clipboard}/bin/wl-copy

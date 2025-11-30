@@ -44,6 +44,10 @@ in
           enable = true;
           src = plugins/WorldClock;
         };
+        DankCalculator = {
+          enable = true;
+          src = plugins/DankCalculator;
+        };
       };
     };
   };
