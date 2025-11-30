@@ -22,6 +22,7 @@ in
     # Configure Docker (system-level, not rootless)
     virtualisation.docker = {
       enable = true;
+      enableNvidia = true;
     };
 
     users.users.${username}.extraGroups = [ "docker" ]; 

@@ -25,16 +25,16 @@ with lib;
       calibre-web
     ];
 
-    services.traefik.dynamicConfigOptions.http = {
-      routers.calibre-web = {
-        rule = "Host(`calibre-web.${hostName}.local`)";
-        entryPoints = [ "websecure" ];
-        service = "calibre-web";
-        tls = true;
-      };
-      services.calibre-web = {
-        loadBalancer.servers = [{ url = "http://localhost:8083"; }];
-      };
-    };
+    #services.traefik.dynamicConfigOptions.http = {
+    #  routers.calibre-web = {
+    #    rule = "Host(`calibre-web.${hostName}.local`)";
+    #    entryPoints = [ "websecure" ];
+    #    service = "calibre-web";
+    #    tls = true;
+    #  };
+    #  services.calibre-web = {
+    #    loadBalancer.servers = [{ url = "http://localhost:8083"; }];
+    #  };
+    #};
   };
 }
