@@ -157,7 +157,7 @@ in {
       spotify = {
         prefix = "sp";
         description = "Spotify Search";
-        packages = with pkgs; [ ncspot wtype ];
+        packages = with pkgs; [ wtype ];
         command = ''
           # Launch ncspot in the background
           ${cfg.terminal} ${pkgs.ncspot}/bin/ncspot &

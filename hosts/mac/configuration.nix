@@ -33,6 +33,8 @@ let
     # TrackpadThreeFingerTapGesture = 2; # Look up & data detectors
     # TrackpadFourFingerTapGesture = 0; # Off
   };
+ 
+  pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
 in
 {
   # ============================================================================
@@ -90,27 +92,9 @@ in
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = with pkgs; [
-      git
-      curl
-      wget
-      fd
-      ripgrep
-      fzf
-      tmux
-      zsh
-      direnv
-      vim
-      glow
-      sshs
-      python3
-    ];
-
-    shells = with pkgs; [ bash zsh ];
-
-    variables = {
-      EDITOR = "nvim";
-    };
+    systemPackages = pkgsets.system.mac;
+    shells = with pkgs; [ bash zsh nushell ];
+    variables = { EDITOR = "nvim"; };
   };
 
   # ============================================================================
@@ -194,7 +178,7 @@ in
 
     menuExtraClock = {
       Show24Hour = true;
-      ShowSeconds = false;
+      ShowSeconds = true;
     };
 
     loginwindow = {

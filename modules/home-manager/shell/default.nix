@@ -1,5 +1,5 @@
 # modules/home-manager/shell/default.nix
-{ config, lib, pkgs, osIcon ? "🐧", ... }:
+{ config, lib, pkgs, inputs, osIcon ? "🐧", ... }:
 
 with lib;
 {
@@ -7,11 +7,8 @@ with lib;
     nushell
     zoxide
     starship
-    carapace
-    carapace-bridge
     atuin
-    direnv
-    neovim
+    (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace-bridge)
   ];
 
   programs = {
@@ -25,6 +22,7 @@ with lib;
     };
     carapace = {
       enable = true;
+      package = (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace);
       enableNushellIntegration = true;
     };
     atuin = {
@@ -34,14 +32,20 @@ with lib;
     };
     direnv = {
       enable = true;
+      nix-direnv.enable = true;
       enableNushellIntegration = true;
     };
 
     nushell = {
       enable = true;
+      
       environmentVariables = {
         KUBECONFIG = "${config.home.homeDirectory}/.kube/config";
+        CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
+
+        EDITOR = "nvim";
       };
+      
       extraConfig = ''
         # --- Common Nushell Configuration (Part 1) ---
         $env.config = {
@@ -54,7 +58,6 @@ with lib;
             completions: { case_sensitive: false, quick: true, partial: true, algorithm: "prefix" },
         }
 
-        # In your nushell extraConfig, IF NEEDED:
         let custom_paths = [
             $"($env.HOME)/.cargo/bin",
             $"($env.HOME)/.local/bin"
@@ -62,11 +65,6 @@ with lib;
         $env.PATH = ($env.PATH | append $custom_paths | uniq | where {|p| ($p | path exists) })
       '';
     };
-  };
-
-  # Configure Carapace to use various bridges.
-  home.sessionVariables = {
-    CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
   };
 
   # Read the starship.toml file, substitute the placeholder, and set the content.
@@ -77,15 +75,12 @@ with lib;
 
 
   home.shellAliases = {
-    hmxyz = "home-manager switch --flake .#alc-xyz";
-    hmmac = "home-manager switch --flake .#alc-mac";
-    nixyz = "sudo nixos-rebuild switch --flake .#xyz";
     k = "kubectl"; ka = "kubectl apply -f"; kg = "kubectl get"; kd = "kubectl describe";
     kdel = "kubectl delete"; kgpo = "kubectl get pod"; kgd = "kubectl get deployments";
     kc = "switcher"; kns = "switcher ns"; kl = "kubectl logs -f"; ke = "kubectl exec -it";
     tf = "terraform"; v = "nvim"; d = "docker"; l = "ls -all"; ll = "ls -la";
     c = "clear"; cd = "z";
-    g = "lazygit"; gc = "git commit -m"; gca = "git commit -am"; gps = "git push";
+    g = "gitui"; gc = "git commit -m"; gca = "git commit -am"; gps = "git push";
     gpl = "git pull"; gst = "git status";
     glog = "git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
     t = "tmux"; ta = "tmux a";

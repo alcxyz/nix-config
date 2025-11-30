@@ -11,6 +11,7 @@ with lib;
 
 let
   cfg = config.services.hyprlock;
+  hyprlockPkg = inputs.hyprlock.packages.${pkgs.stdenv.hostPlatform.system}.default;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 
@@ -81,7 +82,7 @@ in {
     enable = mkEnableOption "Hyprlock screen locker";
     package = mkOption {
       type = types.package;
-      default = pkgs.hyprlock;
+      default = hyprlockPkg;
       description = "The hyprlock package to use";
     };
     turnOffDisplaysOnLock = mkOption {
@@ -156,7 +157,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-    home.packages = [ lockScript ];
+    home.packages = [ lockScript hyprlockPkg ];
     
     # Dynamic config with color and configuration substitution
     xdg.configFile."hypr/hyprlock.conf".text = processedConfig;

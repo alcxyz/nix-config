@@ -96,7 +96,7 @@ in
     ] ++ optionals cfg.emulation.enable [
       emulationstation-de
     ] ++ optionals (cfg.emulation.enable && cfg.emulation.retroarch) [
-      retroarchFull
+      retroarch-full
     ] ++ optionals (cfg.emulation.enable && cfg.emulation.dolphin) [
       dolphin-emu
     ] ++ optionals (cfg.emulation.enable && cfg.emulation.pcsx2) [

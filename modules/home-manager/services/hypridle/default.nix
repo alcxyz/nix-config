@@ -1,14 +1,12 @@
 # modules/home-manager/services/hypridle/default.nix
-{
-  options, config, lib, pkgs, ...
-}:
+{ options, config, lib, pkgs, inputs, ... }:
 with lib;
+
 let
-  # cfg now refers to your module's specific, namespaced options
   cfg = config.services.hypridle.managed;
-in
-{
-  # These are the options your module EXPOSES for configuration
+  hypridlePkg = inputs.hypridle.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  hyprlockPkg = inputs.hyprlock.packages.${pkgs.stdenv.hostPlatform.system}.default;
+in {
   options.services.hypridle.managed = {
     enable = mkEnableOption "hypridle idle daemon (via managed service module)";
 
@@ -24,23 +22,23 @@ in
     };
     lockCommand = mkOption {
       type = types.str;
-      default = "${pkgs.hyprlock}/bin/hyprlock"; # Assumes hyprlock is available
+      # Use pinned hyprlock binary by default
+      default = "${hyprlockPkg}/bin/hyprlock";
       description = "Command to run to lock the screen.";
     };
     hyprctlCommand = mkOption {
       type = types.str;
-      default = "${pkgs.hyprland}/bin/hyprctl"; # Assumes hyprland is available
+      # Safer to rely on PATH, which will be the Hyprland flake
+      default = "hyprctl";
       description = "Path to hyprctl command.";
     };
   };
 
-  # This section applies the configuration if your managed module is enabled
   config = mkIf cfg.enable {
-    # Enable and configure the *standard* Home Manager hypridle service
     services.hypridle = {
-      enable = true; # This enables the built-in HM service for hypridle
+      enable = true;
+      package = hypridlePkg;
 
-      # Construct the 'settings' attrset as expected by the standard hypridle module
       settings = {
         general = {
           lock_cmd = cfg.lockCommand;
@@ -49,22 +47,16 @@ in
         };
         listener = [
           {
-            timeout = toString cfg.lockTimeout; # Values in INI are strings
+            timeout = toString cfg.lockTimeout;
             on-timeout = cfg.lockCommand;
           }
           {
-            timeout = toString cfg.dpmsTimeout; # Values in INI are strings
+            timeout = toString cfg.dpmsTimeout;
             on-timeout = "${cfg.hyprctlCommand} dispatch dpms off";
             on-resume = "${cfg.hyprctlCommand} dispatch dpms on";
           }
         ];
       };
     };
-
-    # The standard services.hypridle module handles:
-    # - Adding pkgs.hypridle to home.packages
-    # - Creating home.configFile."hypr/hypridle.conf"
-    # - Creating and managing the systemd.user.services.hypridle unit
   };
 }
-

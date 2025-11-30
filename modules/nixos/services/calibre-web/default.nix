@@ -1,14 +1,12 @@
+# modules/nixos/services/calibre-web/default.nix
 { options, config, lib, pkgs, username, hostName, ... }:
 with lib;
 {
-  # Removed options.services.calibre-web.enable definition
-
   config = mkIf config.services.calibre-web.enable {
     services.calibre-web = {
-      # enable = true; # REMOVED: This was causing recursion.
-      user = "${username}"; 
-      dataDir = "/hyperdisk/vault/calibre/calibre_web/config";
-      options.calibreLibrary = "/hyperdisk/vault/calibre/calibre/config/libraries/Main";
+      user = "${username}";
+      dataDir = "/zpool/vault/calibre/calibre_web/config";
+      options.calibreLibrary = "/zpool/vault/calibre/calibre/config/libraries/Main";
       listen = {
         ip = "0.0.0.0";
         port = 8083;
@@ -16,7 +14,9 @@ with lib;
       openFirewall = true;
     };
 
+    # HARD dependency: require zfs-mount.service to succeed
     systemd.services.calibre-web = {
+      requires = [ "zfs-mount.service" ];
       after = [ "zfs-mount.service" ];
     };
 
@@ -25,17 +25,16 @@ with lib;
       calibre-web
     ];
 
-    # Traefik Routes for calibre-web
-    services.traefik.dynamicConfigOptions.http = {
-      routers.calibre-web = {
-        rule = "Host(`calibre-web.${hostName}.local`)";
-        entryPoints = [ "websecure" ];
-        service = "calibre-web";
-        tls = true;
-      };
-      services.calibre-web = {
-        loadBalancer.servers = [{ url = "http://localhost:8083"; }];
-      };
-    };
+    #services.traefik.dynamicConfigOptions.http = {
+    #  routers.calibre-web = {
+    #    rule = "Host(`calibre-web.${hostName}.local`)";
+    #    entryPoints = [ "websecure" ];
+    #    service = "calibre-web";
+    #    tls = true;
+    #  };
+    #  services.calibre-web = {
+    #    loadBalancer.servers = [{ url = "http://localhost:8083"; }];
+    #  };
+    #};
   };
 }
