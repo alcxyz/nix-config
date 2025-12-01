@@ -237,13 +237,10 @@ rec {
     workstationExtras =
       (with pkgs; [
         rbw
-        #thunderbird
-        #brave
         bitwarden-cli
         signal-cli
         pinentry-gtk2
         seafile-client
-        celeste
         texlive.combined.scheme-full
 
         jrnl
