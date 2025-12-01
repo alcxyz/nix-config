@@ -212,7 +212,6 @@ rec {
       wineWowPackages.waylandFull
       lens
       nautilus
-      pulseaudio
     ];
 
     # macOS-only desktop apps (ready for future use)
@@ -237,10 +236,9 @@ rec {
     workstationExtras =
       (with pkgs; [
         rbw
-        bitwarden-cli
-        signal-cli
+        #bitwarden-cli
+        #signal-cli
         pinentry-gtk2
-        seafile-client
         texlive.combined.scheme-full
 
         jrnl

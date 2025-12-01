@@ -1,9 +1,5 @@
-{ options
-, config
-, lib
-, pkgs
-, ...
-}:
+# modules/nixos/hardware/audio.nix
+{ options, config, lib, pkgs, ...}:
 with lib;
 let
   cfg = config.hardware.audio;
@@ -24,7 +20,7 @@ in
       alsa.enable = true;
       alsa.support32Bit = true;
       wireplumber.enable = true;
-      jack.enable = false;
+      #jack.enable = false;
       pulse.enable = true;
     };
     services.pulseaudio.enable = false;

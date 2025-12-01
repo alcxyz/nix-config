@@ -1,13 +1,13 @@
+# modules/nixos/hardware/bluetooth.nix
 { options, config, lib, pkgs, ... }:
 with lib;
 {
   # Removed options.hardware.bluetooth definition
 
   config = mkIf config.hardware.bluetooth.enable {
-    services.blueman.enable = true;
+    #services.blueman.enable = true;
 
     hardware.bluetooth = {
-      # enable = true; # REMOVED: This was causing recursion.
       powerOnBoot = true;
       settings = {
         General = {
