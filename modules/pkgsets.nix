@@ -236,6 +236,7 @@ rec {
     workstationExtras =
       (with pkgs; [
         rbw
+        bitwarden-desktop
         #bitwarden-cli
         #signal-cli
         pinentry-gtk2
