@@ -45,6 +45,7 @@ rec {
     linux = with pkgs; [
       nfs-utils
       gptfdisk
+      lima
     ];
 
     /* Linux desktop-specific system packages */
