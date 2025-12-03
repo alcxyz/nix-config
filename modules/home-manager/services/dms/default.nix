@@ -1,11 +1,11 @@
-# modules/home-manager/suites/dms/default.nix
+# modules/home-manager/services/dms/default.nix
 { lib, config, inputs, pkgs, ... }:
 
 let
-  cfg = config.suites.dms;
+  cfg = config.services.dms;
 in
 {
-  options.suites.dms.enable =
+  options.services.dms.enable =
     lib.mkEnableOption "Enable DankMaterialShell suite";
 
   imports = [
