@@ -61,6 +61,7 @@ with lib;
         let custom_paths = [
             $"($env.HOME)/.cargo/bin",
             $"($env.HOME)/.local/bin"
+            $"($env.HOME)/go/bin"
         ]
         $env.PATH = ($env.PATH | append $custom_paths | uniq | where {|p| ($p | path exists) })
       '';

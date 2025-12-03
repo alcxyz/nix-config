@@ -200,5 +200,10 @@ in
             })
           cfg.conditionalSigningConfigs;
     };
+    
+    programs.delta = {
+      enable = true;
+      enableGitIntegration = true;
+    };
   };
 }

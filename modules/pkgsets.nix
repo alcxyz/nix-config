@@ -87,7 +87,6 @@ rec {
       /* Shell & portability helpers */
       tmux
       wget
-      uutils-coreutils-noprefix
       killall
 
       /* Search & fuzzy / file utilities */
@@ -111,7 +110,7 @@ rec {
       #unzip
       #unrar
       #rar
-      #ffmpeg
+      ffmpeg
 
       /* Secrets & smartcard / age tooling */
       gopass
@@ -128,6 +127,7 @@ rec {
       gh
       azure-cli
       google-cloud-sdk
+      cloudflared
 
       /* Misc / infra helpers */
       devbox
