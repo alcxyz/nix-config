@@ -165,6 +165,7 @@ rec {
 
       # Dev helper
       commitizen
+      devbox
     ];
 
     /* Infrastructure-as-Code */
