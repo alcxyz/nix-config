@@ -124,7 +124,7 @@
     lib = nixpkgs.lib;
 
     # Systems we support in this flake (add more if needed)
-    supportedSystems = [ "x86_64-linux" "aarch64-darwin" ];
+    supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
 
     # genAttrs helper to create per-system pkgs attrs
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
@@ -149,6 +149,7 @@
         pkgsUnstable = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
+          config.allowUnsupportedSystem = true;
           config.permittedInsecurePackages = [
             "freeimage-3.18.0-unstable-2024-04-18"
           ];
@@ -183,6 +184,11 @@
         configuration = ./hosts/nux/configuration.nix;
         osIcon = "";
       };
+      rpi0 = {
+        system = "aarch64-linux";
+        configuration = ./hosts/rpi0/configuration.nix;
+        osIcon = "";
+      };
     };
 
     darwinHosts = {
@@ -205,6 +211,7 @@
             pkgs = pkgsFor.${hostAttrs.system};
           };
           modules = [
+            nixpkgs.nixosModules.readOnlyPkgs
             hostAttrs.configuration
             # sops-nix module used for secrets handling system-wide
             sops-nix.nixosModules.sops
@@ -225,6 +232,7 @@
             pkgs = pkgsFor.${hostAttrs.system};
           };
           modules = [
+            nixpkgs.darwinModules.readOnlyPkgs
             hostAttrs.configuration
             sops-nix.darwinModules.sops
             # add shared darwin modules here
@@ -249,6 +257,7 @@
 
         # Load the host-specific home config and some shared HM modules
         modules = [
+          nixpkgs.homeManagerModules.readOnlyPkgs
           homeConfigPath
           inputs.nix-colors.homeManagerModules.default
           sops-nix.homeManagerModules.sops
@@ -308,10 +317,28 @@
                      else {};
     };
 
-    # Packages: export nothing special by default, but keep the attrset to
-    # extend later if needed.
-    packages = forAllSystems (system: {
-      # e.g. myOwn = pkgsFor.${system}.callPackage ./pkgs/myOwn { };
-    });
+    # Packages: add cross-build helpers for Rock Pi 4 (build on xyz).
+    packages = forAllSystems (system:
+      let
+        pkgs = pkgsFor.${system};
+      in
+      if system == "x86_64-linux" then {
+        # Cross-compiled U-Boot for Rock Pi 4 (RK3399).
+        rpi0-uboot = pkgs.pkgsCross.aarch64-multiplatform.ubootRockPi4;
+
+        # Convenience derivation that collects the two files you need to copy.
+        rpi0-uboot-files = pkgs.runCommand "rpi0-uboot-files" { } ''
+          set -e
+          outdir="$out/share/rockpi4"
+          mkdir -p "$outdir"
+          cp ${pkgs.pkgsCross.aarch64-multiplatform.ubootRockPi4}/idbloader.img "$outdir/"
+          cp ${pkgs.pkgsCross.aarch64-multiplatform.ubootRockPi4}/u-boot.itb "$outdir/"
+          echo "Wrote Rock Pi 4 boot files to $outdir"
+        '';
+      } else (
+        {}
+      )
+    );
+
   };
 }

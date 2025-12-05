@@ -34,7 +34,11 @@ in {
               };
           };
 
-          "rpi*" = {
+          "rpi1" = {
+            user = "root";
+          };
+
+          "rpi2" = {
             user = "root";
           };
 
