@@ -1,17 +1,23 @@
 { config, pkgs, inputs, username, hostName, configDir, lib, ... }:
 
 let
-  pkgsets = import ../pkgsets.nix { inherit pkgs inputs; };
+  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+    inherit pkgs inputs;
+  };
 
-  alc_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM9g7HJbiqvmCZRZF5z5g9J/VLI91p7RpXipA9eWHX2q alc@xyz";
-  alc_mac_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@mac";
-  alc_iphone_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0";
-  alc_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
-  root_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICmkdBBUyxWpdARfACmw6+P3yOfo0RKfK3JfRJMX+NYW root@nux";
-  docker_app_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT";
+  alc_xyz_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM9g7HJbiqvmCZRZF5z5g9J/VLI91p7RpXipA9eWHX2q alc@xyz";
+  alc_mac_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@mac";
+  alc_iphone_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0";
+  alc_nux_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
+  root_nux_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICmkdBBUyxWpdARfACmw6+P3yOfo0RKfK3JfRJMX+NYW root@nux";
+  docker_app_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT";
 in {
-
-{
   # ==================== Nix Configuration ====================
   nix = {
     settings = {
@@ -50,15 +56,31 @@ in {
   boot.loader.efi.canTouchEfiVariables = true;
   boot.initrd.systemd.enable = true;
 
-  # ==================== Users and Shells ====================
-  users.users.${username} = {
-    isNormalUser = true;
-    home = "/home/${username}";
-    createHome = true;
-  };
+  # ==================== Users & Shells ========================
+  users = {
+    users = {
+      ${username} = {
+        isNormalUser = true;
+        home = "/home/${username}";
+        createHome = true;
+        shell = pkgs.nushell;
 
-  users.users.root.shell = pkgs.bashInteractive;
-  users.defaultUserShell = pkgs.nushell;
+        openssh.authorizedKeys.keys = [
+          alc_xyz_key
+          alc_mac_key
+          alc_iphone_key
+          alc_nux_key
+          root_nux_key
+          docker_app_key
+        ];
+      };
+
+      root = {
+        shell = pkgs.bashInteractive;
+        openssh.authorizedKeys.keys = [ alc_mac_key ];
+      };
+    };
+  };
 
   # ==================== Fonts ====================
   fonts.packages = with pkgs; [
@@ -67,14 +89,6 @@ in {
     noto-fonts-cjk-serif
     noto-fonts-color-emoji
     nerd-fonts.jetbrains-mono
-  ];
-
-  environment.systemPackages = with pkgs; [
-    font-manager
-    nil
-    nixfmt-classic
-    nix-index
-    nix-prefetch-git
   ];
 
   environment.variables = {
@@ -92,7 +106,6 @@ in {
 
   # ==================== Security ====================
   security.sudo.enable = true;
-  services.openssh.enable = true;
   services.pcscd.enable = true;
   services.udev.packages = [ pkgs.libfido2 ];
 
@@ -100,7 +113,7 @@ in {
   networking.networkmanager.enable = true;
   networking.firewall.enable = true;
 
-  # ==================== Virtualization ====================
+  # ==================== Virtualisation ====================
   virtualisation.containers.enable = true;
   virtualisation.docker.enable = true;
 
@@ -110,7 +123,7 @@ in {
     age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
   };
 
-  # ==================== SSH Configuration (centralized) ====================
+  # ==================== SSH ====================
   services.openssh = {
     enable = true;
     ports = [ 22 ];
@@ -122,13 +135,28 @@ in {
     };
   };
 
-  users.users.root.openssh.authorizedKeys.keys = [ alc_mac_key ];
-  users.users.${username}.openssh.authorizedKeys.keys = [
-    alc_xyz_key
-    alc_mac_key
-    alc_iphone_key
-    alc_nux_key
-    root_nux_key
-    docker_app_key
-  ];
+  # ==================== Audio ====================
+  security.rtkit.enable = true;
+  services.pipewire = {
+    enable = true;
+    alsa.enable = true;
+    alsa.support32Bit = true;
+    wireplumber.enable = true;
+    pulse.enable = true;
+  };
+  services.pulseaudio.enable = false;
+
+  # ==================== Bluetooth ====================
+  hardware.bluetooth = {
+    enable = true;
+    powerOnBoot = true;
+    settings = {
+      General = {
+        FastConnectable = true;
+        JustWorksRepairing = "always";
+        Privacy = "device";
+      };
+      Policy.AutoEnable = true;
+    };
+  };
 }

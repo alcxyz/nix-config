@@ -2,7 +2,9 @@
 { inputs, pkgs, ... }:
 
 let
-  pkgsets = import ../../../modules/pkgsets.nix { inherit pkgs inputs; };
+  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+    inherit pkgs inputs;
+  };
 in
 
 {

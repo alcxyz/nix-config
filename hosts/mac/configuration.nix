@@ -2,6 +2,10 @@
 { config, pkgs, lib, inputs, username, ... }:
 
 let
+  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+    inherit pkgs inputs;
+  };
+
   # Define common trackpad settings using actual plist key names
   customTrackpadSettings = {
     # --- General ---
@@ -33,8 +37,6 @@ let
     # TrackpadThreeFingerTapGesture = 2; # Look up & data detectors
     # TrackpadFourFingerTapGesture = 0; # Off
   };
- 
-  pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
 in
 {
   # ============================================================================

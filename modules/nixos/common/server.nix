@@ -1,7 +1,9 @@
 { config, pkgs, inputs, username, configDir, lib, ... }:
 
 let
-  pkgsets = import ../pkgsets.nix { inherit pkgs inputs; };
+  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+    inherit pkgs inputs;
+  };
 in
 
 {
