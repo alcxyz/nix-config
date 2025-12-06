@@ -1,14 +1,5 @@
 # users/alc/common.nix
-{
-  config,
-  pkgs,
-  lib,
-  username,
-  hostName,
-  inputs,
-  system,
-  ...
-}:
+{ config, pkgs, lib, username, hostName, inputs, system, ... }:
 
 let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
@@ -23,11 +14,11 @@ with lib;
   imports = [
     # These are modules that are guaranteed to work on both OSes
     # or handle their own platform differences internally if needed
-    ../../modules/home-manager/shell/default.nix
-    ../../modules/home-manager/programs/wezterm/default.nix
-    ../../modules/home-manager/programs/git/default.nix
-    ../../modules/home-manager/programs/ssh/default.nix
-    ../../modules/home-manager/secrets/ssh-keys.nix
+    "${configDir}/modules/home-manager/shell/default.nix"
+    "${configDir}/modules/home-manager/programs/wezterm/default.nix"
+    "${configDir}/modules/home-manager/programs/git/default.nix"
+    "${configDir}/modules/home-manager/programs/ssh/default.nix"
+    #../../modules/home-manager/secrets/ssh-keys.nix
   ];
 
   # ==================== Home Manager Core Settings ====================
@@ -88,6 +79,23 @@ with lib;
   programs.ncspot.enable = true;
   
   # ==================== Sops with age over ssh ====================
+    # Deploy user-level SSH keypair from sops
+  sops.secrets = {
+    "ssh.{hostName}.private" = {
+      sopsFile = assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+      key = "ssh.id_ed25519";
+      path = ".ssh/id_ed25519";
+      owner = config.home.username;
+      mode = "0600";
+    };
+    "ssh.${hostName}.public" = {
+      sopsFile = assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+      key = "ssh.id_ed25519.pub";
+      path = ".ssh/id_ed25519.pub";
+      owner = config.home.username;
+      mode = "0644";
+    };
+  };
 
   # Generate and manage the age key file
   home.activation.setupSopsAgeKey = config.lib.dag.entryAfter [ "writeBoundary" ] ''

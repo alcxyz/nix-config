@@ -13,8 +13,12 @@ let
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0";
   alc_nux_key =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
+  alc_rpi0_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
   root_nux_key =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICmkdBBUyxWpdARfACmw6+P3yOfo0RKfK3JfRJMX+NYW root@nux";
+  root_rpi0_key =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJVd1nv+YyjgKEkwJYfVSf6kf99CMLPJqnerw9IRbqB root@rpi0";
   docker_app_key =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT";
 in {
@@ -70,7 +74,9 @@ in {
           alc_mac_key
           alc_iphone_key
           alc_nux_key
+          alc_rpi0_key
           root_nux_key
+          root_rpi0_key
           docker_app_key
         ];
       };
@@ -119,7 +125,8 @@ in {
 
   # ==================== sops/secrets ====================
   sops = {
-    defaultSopsFile = inputs.nix-secrets + "/secrets.yaml";
+    defaultSopsFile = "${inputs.nix-secrets.secrets.files.shared}";
+    secretsFiles = [ "${inputs.nix-secrets.secrets.files.hosts.${hostName}}" ];
     age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
   };
 

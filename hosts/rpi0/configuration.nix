@@ -5,7 +5,6 @@
     ./hardware-configuration.nix
     "${config.configDir}/modules/nixos/common/default.nix"
     "${config.configDir}/modules/nixos/common/server.nix"
-    inputs.sops-nix.nixosModules.sops
   ];
 
   nixpkgs.config.allowUnfree = true;
