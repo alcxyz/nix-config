@@ -211,7 +211,6 @@
             pkgs = pkgsFor.${hostAttrs.system};
           };
           modules = [
-            nixpkgs.nixosModules.readOnlyPkgs
             hostAttrs.configuration
             # sops-nix module used for secrets handling system-wide
             sops-nix.nixosModules.sops
@@ -232,7 +231,6 @@
             pkgs = pkgsFor.${hostAttrs.system};
           };
           modules = [
-            nixpkgs.darwinModules.readOnlyPkgs
             hostAttrs.configuration
             sops-nix.darwinModules.sops
             # add shared darwin modules here
@@ -257,7 +255,6 @@
 
         # Load the host-specific home config and some shared HM modules
         modules = [
-          nixpkgs.homeManagerModules.readOnlyPkgs
           homeConfigPath
           inputs.nix-colors.homeManagerModules.default
           sops-nix.homeManagerModules.sops
