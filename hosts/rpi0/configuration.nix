@@ -1,3 +1,4 @@
+# nix-config/hosts/rpi0/configuration.nix
 { config, pkgs, inputs, username, lib, ... }:
 
 {

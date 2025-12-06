@@ -1,3 +1,4 @@
+# nix-config/modules/nixos/common/default.nix
 { config, pkgs, inputs, username, hostName, configDir, lib, ... }:
 
 let
@@ -125,9 +126,12 @@ in {
 
   # ==================== sops/secrets ====================
   sops = {
-    defaultSopsFile = "${inputs.nix-secrets.secrets.files.shared}";
-    secretsFiles = [ "${inputs.nix-secrets.secrets.files.hosts.${hostName}}" ];
+    defaultSopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
     age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
+    #secrets = {
+    #  from_shared= { sopsFile = "${inputs.nix-secrets.secrets.files.shared.${hostName}}"; };
+    #  from_host = { sopsFile = "${inputs.nix-secrets.secrets.files.hosts.${hostName}}"; };
+    #};
   };
 
   # ==================== SSH ====================
