@@ -87,6 +87,8 @@ in {
         openssh.authorizedKeys.keys = [ 
           root_nux_key
           root_rpi0_key
+          alc_nux_key
+          alc_rpi0_key
           alc_mac_key
         ];
       };
