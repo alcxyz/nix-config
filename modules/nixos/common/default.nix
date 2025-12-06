@@ -84,7 +84,11 @@ in {
 
       root = {
         shell = pkgs.bashInteractive;
-        openssh.authorizedKeys.keys = [ alc_mac_key ];
+        openssh.authorizedKeys.keys = [ 
+          root_nux_key
+          root_rpi0_key
+          alc_mac_key
+        ];
       };
     };
   };
