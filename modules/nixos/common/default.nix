@@ -126,7 +126,7 @@ in {
 
   # ==================== sops/secrets ====================
   sops = {
-    defaultSopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
+    defaultSopsFile = "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
     age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
     #secrets = {
     #  from_shared= { sopsFile = "${inputs.nix-secrets.secrets.files.shared.${hostName}}"; };

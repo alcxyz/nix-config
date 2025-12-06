@@ -63,7 +63,7 @@ in
   config = lib.mkIf cfg.enable {
     # ---- Secret Integration (via sops-nix) ----
     sops.secrets.pihole_admin_password = {
-      sopsFile = "${inputs.nix-secrets}/hosts/nux/secrets.yaml";
+      sopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
       owner = cfg.user;
       group = "root";
       mode = "0400";
