@@ -9,7 +9,7 @@ in
 
 {
   # Import the common Linux configuration.
-  imports = [ "${configDir}/users/alc/common.nix" ];
+  imports = [ "${configDir}/users/alc/linux/common.nix" ];
 
   home.packages = pkgsets.home.server;
   # That's it!
