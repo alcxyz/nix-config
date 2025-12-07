@@ -904,11 +904,11 @@
     "nix-secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1765100281,
-        "narHash": "sha256-TZDcagag3MylqTGwSBETtcEBCYyFSRjUY2JhJ4w1DKw=",
+        "lastModified": 1765108137,
+        "narHash": "sha256-PAHCiAfiCrIq7o2CVvmKiRsiDg9OqQfn53HLlq67L4c=",
         "ref": "refs/heads/main",
-        "rev": "424b6e3a932a82f4016171d76d54ac745427282f",
-        "revCount": 13,
+        "rev": "3a1cc20d841f274272ea6d2d197924e1aacddf3c",
+        "revCount": 14,
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/nix-secrets.git"
       },
