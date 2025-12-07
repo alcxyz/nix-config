@@ -5,7 +5,7 @@ let
   cfg = config.services.pihole-sync;
 
   # Full path to prebuilt binary
-  binaryPath = "${inputs.self}/scripts/pihole-sync/pihole-sync/pihole-sync";
+  binaryPath = "${inputs.self}/scripts/pihole-sync/pihole-sync";
 
   # Wrapper script — reads sops secret and calls the binary
   wrapper = pkgs.writeShellScript "pihole-sync-wrapper" ''
@@ -60,11 +60,22 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
 
+      preStart = ''
+        mkdir -p /var/lib/pihole-sync
+        cp ${inputs.self}/scripts/pihole-sync/config.toml /var/lib/pihole-sync/config.toml
+      '';
+
       serviceConfig = {
         Type = "oneshot";
         User = cfg.user;
         Group = "root";
-        ExecStart = wrapper;
+        ExecStart = pkgs.writeShellScript "pihole-sync-wrapper" ''
+          set -euo pipefail
+          export PIHOLE_ADMIN_PASSWORD="$(cat ${config.sops.secrets.pihole_secret_key.path})"
+          exec ${binaryPath} \
+            -config /var/lib/pihole-sync/config.toml \
+            ${lib.optionalString cfg.verbose "-verbose"}
+        '';
         WorkingDirectory = "/var/lib/pihole-sync";
         StandardOutput = "journal";
         StandardError = "journal";
@@ -74,7 +85,7 @@ in
 
     # ---- timer ----
     systemd.timers.pihole-sync = {
-      description = "Timer to run pihole-sync on schedule";
+      description = "Timer to run pihole-sync on schedule.";
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnCalendar = cfg.schedule;

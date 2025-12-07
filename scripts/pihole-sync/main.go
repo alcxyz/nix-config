@@ -10,7 +10,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -212,8 +211,7 @@ func main() {
 	flag.Parse()
 
 	if *configPath == "" {
-		exe, _ := os.Executable()
-		*configPath = filepath.Join(filepath.Dir(exe), "config.toml")
+		log.Fatal("Missing required -config argument")
 	}
 
 	var cfg Config
