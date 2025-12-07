@@ -79,27 +79,30 @@ with lib;
   programs.ncspot.enable = true;
   
   # ==================== Sops with age over ssh ====================
-    # Deploy user-level SSH keypair from sops
-  sops.secrets = {
-    "ssh.${hostName}.private" = {
-      sopsFile = (
-        assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
-        "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
-      );
-      key = "ssh.id_ed25519";
-      path = ".ssh/id_ed25519";
-      owner = config.home.username;
-      mode = "0600";
-    };
-    "ssh.${hostName}.public" = {
-      sopsFile = (
-        assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
-        "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
-      );
-      key = "ssh.id_ed25519.pub";
-      path = ".ssh/id_ed25519.pub";
-      owner = config.home.username;
-      mode = "0644";
+  # Deploy user-level SSH keypair from sops
+  sops = {
+    age.keyFile = "${config.home.homeDirectory}/.config/sops/age/keys.txt";
+    # optionally, fallback to SSH keys if you like:
+    # age.sshKeyPaths = [ "${config.home.homeDirectory}/.ssh/id_ed25519" ];
+    secrets = {
+      "ssh.${hostName}.private" = {
+        sopsFile = (
+          assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+          "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
+        );
+        key = "ssh_id_ed25519";
+        path = ".ssh/id_ed25519";
+        mode = "0600";
+      };
+      "ssh.${hostName}.public" = {
+        sopsFile = (
+          assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+          "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
+        );
+        key = "ssh_id_ed25519.pub";
+        path = ".ssh/id_ed25519.pub";
+        mode = "0644";
+      };
     };
   };
 

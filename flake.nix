@@ -24,6 +24,7 @@
     # Secrets repo (private) — flake=false means it won't be treated as a
     # package-providing flake; you probably use it only for fetching sops/age.
     nix-secrets = {
+      #url = "path:/home/alc/nix-secrets";
       url = "git+ssh://git@github.com/alcxyz/nix-secrets.git";
       flake = false;
     };
