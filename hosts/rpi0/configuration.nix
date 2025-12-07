@@ -1,11 +1,11 @@
 # nix-config/hosts/rpi0/configuration.nix
-{ config, pkgs, inputs, username, lib, ... }:
+{ config, pkgs, inputs, username, lib, configDir, ... }:
 
 {
   imports = [
     ./hardware-configuration.nix
-    "${config.configDir}/modules/nixos/common/default.nix"
-    "${config.configDir}/modules/nixos/common/server.nix"
+    "${configDir}/modules/nixos/common/default.nix"
+    "${configDir}/modules/nixos/common/server.nix"
   ];
 
   nixpkgs.config.allowUnfree = true;
@@ -14,6 +14,8 @@
   boot.loader.generic-extlinux-compatible.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  nix.settings.require-sigs = false;
+
   services.journald.extraConfig = ''
     Storage=persistent
     SystemMaxUse=200M
@@ -21,8 +23,12 @@
 
   zramSwap.enable = true;
 
-  sops = {
-    defaultSopsFile = inputs.nix-secrets + "/secrets.yaml";
-    age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
+  sops.secrets = {
+    #pihole_secret_key = {
+    #  sopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
+    #  owner = "root";
+    #  group = "root";
+    #};
   };
+
 }
