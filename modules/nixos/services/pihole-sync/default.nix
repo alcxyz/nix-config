@@ -4,29 +4,14 @@
 let
   cfg = config.services.pihole-sync;
 
-  # ---- Source ----
-  # Path to your local Go project (inside nix-config)
-  srcPath = "${inputs.self}/scripts/pihole-sync/pihole-sync";
+  # Full path to prebuilt binary
+  binaryPath = "${inputs.self}/scripts/pihole-sync/pihole-sync/pihole-sync";
 
-  # ---- Build ----
-  piholeSyncPkg = pkgs.buildGoModule {
-    pname = "pihole-sync";
-    version = "0.1.0";
-    src = srcPath;
-
-    # For reproducibility, lock vendor deps later:
-    vendorHash = null;
-
-    subPackages = [ "." ];
-  };
-
-  # ---- Wrapper ----
-  # Reads secret and passes it as env var to Go program
+  # Wrapper script — reads sops secret and calls the binary
   wrapper = pkgs.writeShellScript "pihole-sync-wrapper" ''
     set -euo pipefail
-    export PIHOLE_ADMIN_PASSWORD="$(cat ${config.sops.secrets.pihole_admin_password.path})"
-
-    exec ${piholeSyncPkg}/bin/pihole-sync \
+    export PIHOLE_ADMIN_PASSWORD="$(cat ${config.sops.secrets.pihole_secret_key.path})"
+    exec ${binaryPath} \
       -config ${cfg.configFile} \
       ${lib.optionalString cfg.verbose "-verbose"}
   '';
@@ -43,35 +28,35 @@ in
 
     configFile = lib.mkOption {
       type = lib.types.path;
-      default = "${srcPath}/config.toml";
-      description = "Path to the Pi-hole sync TOML configuration file.";
+      default = "${inputs.self}/scripts/pihole-sync/pihole-sync/config.toml";
+      description = "Path to pihole-sync config.toml";
     };
 
     schedule = lib.mkOption {
       type = lib.types.str;
       default = "hourly";
-      description = "Systemd timer schedule (e.g., 'hourly' or '*-*-* 02:00:00')";
+      description = "Systemd timer schedule (e.g. 'hourly' or '*-*-* 02:00:00')";
     };
 
     verbose = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Enable verbose logging output.";
+      description = "Enable verbose logging from the sync process.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    # ---- Secret Integration (via sops-nix) ----
-    sops.secrets.pihole_admin_password = {
+    # ---- sops secret ----
+    sops.secrets.pihole_secret_key = {
       sopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
       owner = cfg.user;
       group = "root";
       mode = "0400";
     };
 
-    # ---- Systemd Service ----
+    # ---- systemd service ----
     systemd.services.pihole-sync = {
-      description = "Pi-hole Teleporter Sync Service";
+      description = "Pi-hole Teleporter Sync Service (prebuilt binary)";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
 
@@ -87,9 +72,9 @@ in
       };
     };
 
-    # ---- Systemd Timer ----
+    # ---- timer ----
     systemd.timers.pihole-sync = {
-      description = "Timer to periodically run pihole-sync";
+      description = "Timer to run pihole-sync on schedule";
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnCalendar = cfg.schedule;
@@ -97,7 +82,5 @@ in
         Unit = "pihole-sync.service";
       };
     };
-
-    environment.systemPackages = [ piholeSyncPkg ];
   };
 }

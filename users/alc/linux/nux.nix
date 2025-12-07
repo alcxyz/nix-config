@@ -1,5 +1,5 @@
 # users/alc/linux/nux.nix
-{ inputs, pkgs, ... }:
+{ inputs, configDir, pkgs, ... }:
 
 let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {

@@ -31,7 +31,7 @@ in
         maxJobs = 8;
         speedFactor = 2;
         supportedFeatures = [ "big-parallel" "kvm" ];
-        protocol = "ssh-ng";
+        protocol = "ssh";
       }
     ];
     settings."builders-use-substitutes" = true;
