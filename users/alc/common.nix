@@ -81,15 +81,21 @@ with lib;
   # ==================== Sops with age over ssh ====================
     # Deploy user-level SSH keypair from sops
   sops.secrets = {
-    "ssh.{hostName}.private" = {
-      sopsFile = assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+    "ssh.${hostName}.private" = {
+      sopsFile = (
+        assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+        "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
+      );
       key = "ssh.id_ed25519";
       path = ".ssh/id_ed25519";
       owner = config.home.username;
       mode = "0600";
     };
     "ssh.${hostName}.public" = {
-      sopsFile = assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+      sopsFile = (
+        assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+        "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
+      );
       key = "ssh.id_ed25519.pub";
       path = ".ssh/id_ed25519.pub";
       owner = config.home.username;
