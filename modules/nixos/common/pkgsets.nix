@@ -46,6 +46,13 @@ rec {
       nfs-utils
       gptfdisk
       lima
+
+      # nix env related
+      font-manager
+      nil
+      nixfmt-classic
+      nix-index
+      nix-prefetch-git
     ];
 
     /* Linux desktop-specific system packages */

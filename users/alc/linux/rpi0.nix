@@ -1,4 +1,4 @@
-# users/alc/linux/nux.nix
+# users/alc/linux/rpi0.nix
 { inputs, configDir, pkgs, ... }:
 
 let

@@ -2,6 +2,10 @@
 { config, pkgs, lib, inputs, username, ... }:
 
 let
+  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+    inherit pkgs inputs;
+  };
+
   # Define common trackpad settings using actual plist key names
   customTrackpadSettings = {
     # --- General ---
@@ -33,9 +37,8 @@ let
     # TrackpadThreeFingerTapGesture = 2; # Look up & data detectors
     # TrackpadFourFingerTapGesture = 0; # Off
   };
- 
-  pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
 in
+
 {
   # ============================================================================
   # Nix Configuration
@@ -231,13 +234,21 @@ in
   '';
 
   sops = {
-    defaultSopsFile = inputs.nix-secrets + "/secrets.yaml";
-    # Note: nix-darwin uses `keyFile` (string) instead of `sshKeyPaths` (list)
-    age.keyFile = [ "/etc/ssh/ssh_host_ed25519_key" ];
+    # Default: common secrets for all hosts
+    defaultSopsFile = "${inputs.nix-secrets.secrets.files.shared}";
+
+    # Add host‑specific secrets file
+    secretsFiles = [ "${inputs.nix-secrets.secrets.files.hosts.mac}" ];
+
+    # On macOS, sops-nix expects a single key path
+    age.keyFile = "/etc/ssh/ssh_host_ed25519_key";
+
+    # Define system secrets (example)
     secrets = {
-      # Define any secrets needed for your mac user here
-      # For example:
-      # home_manager_api_key = {};
+      # sample placeholder
+      # home_manager_api_key = {
+      #   owner = "alc";
+      # };
     };
   };
 
