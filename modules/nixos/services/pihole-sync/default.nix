@@ -69,6 +69,7 @@ in
         Type = "oneshot";
         User = cfg.user;
         Group = "root";
+        ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p /var/lib/pihole-sync/logs";
         ExecStart = pkgs.writeShellScript "pihole-sync-wrapper" ''
           set -euo pipefail
           export PIHOLE_ADMIN_PASSWORD="$(cat ${config.sops.secrets.pihole_secret_key.path})"
