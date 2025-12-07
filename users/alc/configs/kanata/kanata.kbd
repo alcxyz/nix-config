@@ -30,20 +30,20 @@
   ;; Right Meta/Cmd as Enter when tapped
   rce (tap-hold $tap-timeout $hold-timeout ret rmeta)
 
-  ;; Z as Z when tapped, activate nav layer when held
-  z_nav (tap-hold $tap-timeout-c $hold-timeout-c z (layer-toggle nav))
+  ;; ` as ` when tapped, activate nav layer when held
+  `_nav (tap-hold $tap-timeout-c $hold-timeout-c ` (layer-toggle nav))
 )
 
 ;; Define base layer source keys
 (defsrc
   tab  caps lalt lmeta ralt rmeta
-  z h j k l
+  ` h j k l
 )
 
 ;; Define the main layer
 (deflayer base
   @tc   @ce   @lab  @lcb  @rae  @rce
-  @z_nav h j k l
+  @`_nav h j k l
 )
 
 ;; Define the navigation layer
