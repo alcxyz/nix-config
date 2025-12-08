@@ -13,9 +13,6 @@ in
 
   # ==================== Users ====================
   users.users.${username}.extraGroups = [
-    "networkmanager"
-    "wheel"
-    "docker"
   ];
 
   # ==================== System Packages ====================

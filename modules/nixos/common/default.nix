@@ -22,7 +22,14 @@ let
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJVd1nv+YyjgKEkwJYfVSf6kf99CMLPJqnerw9IRbqB root@rpi0";
   docker_app_key =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT";
-in {
+in
+
+{
+  # ==================== Imports ====================
+  imports = [
+    #"${configDir}/modules/nixos/services/xremap/default.nix"
+  ];
+
   # ==================== Nix Configuration ====================
   nix = {
     settings = {
@@ -77,15 +84,26 @@ in {
         home = "/home/${username}";
         createHome = true;
         shell = pkgs.nushell;
+        extraGroups = [
+          "networkmanager"
+          "wheel"
+          "audio"
+          "sound"
+          "input"
+          "tty"
+          "rtkit"
+          "pcscd"
+          "docker"
+        ];
 
         openssh.authorizedKeys.keys = [
-          alc_xyz_key
-          alc_mac_key
-          alc_iphone_key
-          alc_nux_key
-          alc_rpi0_key
           root_nux_key
           root_rpi0_key
+          alc_xyz_key
+          alc_nux_key
+          alc_rpi0_key
+          alc_mac_key
+          alc_iphone_key
           docker_app_key
         ];
       };
@@ -184,4 +202,17 @@ in {
       Policy.AutoEnable = true;
     };
   };
+
+  services.kanata = {
+    enable = true;
+    package = pkgs.kanata;
+
+    keyboards.main = {
+      configFile = "${configDir}/users/${username}/configs/kanata/kanata.kbd";
+      # Optional extras:
+      # devices = [ "/dev/input/by-id/...keyboard" ];
+      # extraArgs = [ "--no-detach" ];
+    };
+  };
+
 }
