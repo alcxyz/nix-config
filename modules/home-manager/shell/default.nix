@@ -8,7 +8,7 @@ with lib;
     zoxide
     starship
     atuin
-    (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace-bridge)
+    (inputs.nix-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace-bridge)
   ];
 
   programs = {
@@ -22,7 +22,7 @@ with lib;
     };
     carapace = {
       enable = true;
-      package = (inputs.custom-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace);
+      package = (inputs.nix-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace);
       enableNushellIntegration = true;
     };
     atuin = {

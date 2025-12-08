@@ -30,7 +30,7 @@
     };
 
     # Your custom packages flake (callPackage of custom derivations).
-    custom-packages = {
+    nix-packages = {
       url = "github:alcxyz/nix-packages";
       # follow the same nixpkgs as the main flake so packages are consistent
       inputs.nixpkgs.follows = "nixpkgs";
@@ -90,7 +90,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # dgop / DankMaterialShell (DMS) follow unstable as they expect newer pkgs
     dgop = {
       url = "github:AvengeMedia/dgop";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -122,7 +121,7 @@
   };
 
   # ---- Outputs ----------------------------------------------------------
-  outputs = { self, nixpkgs, custom-packages, nix-secrets, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
+  outputs = { self, nixpkgs, nix-packages, nix-secrets, darwin, home-manager, nix-colors, sops-nix, ... }@inputs:
   let
     # Basic identity values
     username = "alc";
@@ -150,9 +149,18 @@
 
     pkgsFor = forAllSystems (system:
       let
+        overlays = [
+          (final: prev: {
+            ndrop = nix-packages.packages.${final.system}.ndrop;
+            carapace = nix-packages.packages.${final.system}.carapace;
+            carapace-bridge = nix-packages.packages.${final.system}.carapace-bridge;
+            zfs-auto-unlock = nix-packages.packages.${final.system}.zfs-auto-unlock;
+          })
+        ];
+
         # Base: unstable pkgs (what you use everywhere now)
         pkgsUnstable = import nixpkgs {
-          inherit system;
+          inherit system overlays;
           config.allowUnfree = true;
           config.allowUnsupportedSystem = true;
           config.permittedInsecurePackages = [

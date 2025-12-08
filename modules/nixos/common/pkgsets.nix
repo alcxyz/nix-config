@@ -21,10 +21,10 @@ let
     then inputs.zen-browser.packages.${system}.default
     else null;
 
-  /* Optional external ndrop from your custom-packages input (used on xyz) */
+  /* Optional external ndrop from your nix-packages input (used on xyz) */
   ndropPkg =
-    if inputs != null && inputs ? custom-packages
-    then inputs.custom-packages.packages.${system}.ndrop
+    if inputs != null && inputs ? nix-packages
+    then inputs.nix-packages.packages.${system}.ndrop
     else null;
 in
 
