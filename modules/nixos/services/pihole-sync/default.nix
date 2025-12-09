@@ -1,20 +1,8 @@
 # nix-config/modules/nixos/services/pihole-sync/default.nix
-{ config, pkgs, inputs, lib, ... }:
+{ config, pkgs, inputs, lib, username, configDir, ... }:
 
 let
   cfg = config.services.pihole-sync;
-
-  # Full path to prebuilt binary
-  binaryPath = "${inputs.self}/scripts/pihole-sync/pihole-sync";
-
-  # Wrapper script — reads sops secret and calls the binary
-  wrapper = pkgs.writeShellScript "pihole-sync-wrapper" ''
-    set -euo pipefail
-    export PIHOLE_ADMIN_PASSWORD="$(cat ${config.sops.secrets.pihole_secret_key.path})"
-    exec ${binaryPath} \
-      -config ${cfg.configFile} \
-      ${lib.optionalString cfg.verbose "-verbose"}
-  '';
 in
 {
   options.services.pihole-sync = {
@@ -23,19 +11,27 @@ in
     user = lib.mkOption {
       type = lib.types.str;
       default = "root";
-      description = "User to run the service as";
+      description = "User to run the service as.";
     };
 
     configFile = lib.mkOption {
       type = lib.types.path;
-      default = "${inputs.self}/scripts/pihole-sync/pihole-sync/config.toml";
-      description = "Path to pihole-sync config.toml";
+      default = "${configDir}/users/${username}/configs/pihole-sync/config.toml";
+      description = ''
+        Path (in the Nix store) to the pihole-sync config.toml.
+
+        Default points at your repo's:
+        users/${username}/configs/pihole-sync/config.toml
+      '';
+      example = "/nix/store/...-source/users/alc/configs/pihole-sync/config.toml";
     };
 
     schedule = lib.mkOption {
       type = lib.types.str;
+      # systemd OnCalendar expression; 'hourly' is reasonable default
       default = "hourly";
-      description = "Systemd timer schedule (e.g. 'hourly' or '*-*-* 02:00:00')";
+      description = "Systemd timer schedule (OnCalendar value).";
+      example = "*-*-* 02:00:00";
     };
 
     verbose = lib.mkOption {
@@ -46,7 +42,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # ---- sops secret ----
+
+    # ---------- sops secret ----------
     sops.secrets.pihole_secret_key = {
       sopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
       owner = cfg.user;
@@ -54,37 +51,46 @@ in
       mode = "0400";
     };
 
-    # ---- systemd service ----
+    # ---------- systemd service ----------
     systemd.services.pihole-sync = {
-      description = "Pi-hole Teleporter Sync Service (prebuilt binary)";
+      description = "Pi-hole Teleporter Sync Service (Go binary from nix-packages)";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
-
-      preStart = ''
-        mkdir -p /var/lib/pihole-sync
-        cp ${inputs.self}/scripts/pihole-sync/config.toml /var/lib/pihole-sync/config.toml
-      '';
 
       serviceConfig = {
         Type = "oneshot";
         User = cfg.user;
         Group = "root";
-        ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p /var/lib/pihole-sync/logs";
+
+        # Work in /var/lib/pihole-sync so that the relative log path
+        # "./logs/pihole-sync.log" in config.toml ends up there.
+        WorkingDirectory = "/var/lib/pihole-sync";
+
+        # Create working dir + logs dir, and copy the config.toml
+        ExecStartPre = lib.concatStringsSep " " [
+          "${pkgs.coreutils}/bin/mkdir -p /var/lib/pihole-sync/logs"
+          "&&"
+          "${pkgs.coreutils}/bin/cp"
+          cfg.configFile
+          "/var/lib/pihole-sync/config.toml"
+        ];
+
+        # Wrap the Go binary to inject the secret and run with the copied config
         ExecStart = pkgs.writeShellScript "pihole-sync-wrapper" ''
           set -euo pipefail
-          export PIHOLE_ADMIN_PASSWORD="$(cat ${config.sops.secrets.pihole_secret_key.path})"
-          exec ${binaryPath} \
+          export PIHOLE_ADMIN_PASSWORD="$(${pkgs.coreutils}/bin/cat ${config.sops.secrets.pihole_secret_key.path})"
+          exec ${pkgs.pihole-sync}/bin/pihole-sync \
             -config /var/lib/pihole-sync/config.toml \
             ${lib.optionalString cfg.verbose "-verbose"}
         '';
-        WorkingDirectory = "/var/lib/pihole-sync";
+
         StandardOutput = "journal";
         StandardError = "journal";
         SyslogIdentifier = "pihole-sync";
       };
     };
 
-    # ---- timer ----
+    # ---------- timer ----------
     systemd.timers.pihole-sync = {
       description = "Timer to run pihole-sync on schedule.";
       wantedBy = [ "timers.target" ];
