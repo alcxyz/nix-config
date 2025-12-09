@@ -1,5 +1,5 @@
 # nix-config/modules/nixos/services/pihole-sync/default.nix
-{ config, pkgs, inputs, lib, configDir, ... }:
+{ config, pkgs, inputs, lib, username, configDir, ... }:
 
 let
   cfg = config.services.pihole-sync;
@@ -16,12 +16,12 @@ in
 
     configFile = lib.mkOption {
       type = lib.types.path;
-      default = "${configDir}/users/alc/configs/pihole-sync/config.toml";
+      default = "${configDir}/users/${username}/configs/pihole-sync/config.toml";
       description = ''
         Path (in the Nix store) to the pihole-sync config.toml.
 
         Default points at your repo's:
-        users/alc/configs/pihole-sync/config.toml
+        users/${username}/configs/pihole-sync/config.toml
       '';
       example = "/nix/store/...-source/users/alc/configs/pihole-sync/config.toml";
     };
