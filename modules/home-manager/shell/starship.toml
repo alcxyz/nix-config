@@ -8,6 +8,7 @@ $kubernetes\
 $aws\
 $gcloud\
 $azure\
+$nix_shell\
 $line_break\
 $username\
 $hostname\
@@ -15,21 +16,22 @@ $directory\
 $git_branch\
 $git_state\
 $git_status\
-$nix_shell\
 $cmd_duration\
 $line_break\
 $character\
 """
 
 [username]
-style_user = "white"
-format = "[$user]($style_user)"
+style_user = "yellow"
+style_root = "red"
+format = "[$user]($style)"
 show_always = true
 
 [hostname]
-format = "[([@](#40a02b)[$hostname](white)) @osIcon@](#40a02b) "
+format = "[@$hostname]($style) in "
 ssh_only = false
 disabled = false
+style = "white dimmed"
 
 [character]
 success_symbol = "[❯](bold green)"
@@ -38,38 +40,46 @@ error_symbol = "[❯](bold red)"
 # --- All your other module settings ---
 [time]
 disabled = false
-format = "[$time]($style)"
-time_format = "[ %H:%M:%S] "
+format = "[@osIcon@](bold white) [$time]($style) "
+time_format = "[ %H:%M:%S]"
 utc_time_offset = "local"
-style = "dimmed"
+style = "white dimmed"
 
 [docker_context]
 symbol = " "
-format = "[\\[$symbol($context)\\]](cyan) "
+format = "[\\[$symbol($context)\\]]($style) "
 only_with_files = false
 disabled = false
-style = "dimmed"
+style = "cyan dimmed"
 
 [kubernetes]
 symbol = "⎈ "
-format = "[\\[$symbol$context(::$namespace)\\]](blue) "
-disabled = false
-style = "dimmed"
+format = "[\\[$symbol$context(::$namespace)\\]]($style) "
+disabled = true
+style = "blue dimmed"
 
 [aws]
 symbol = " "
-format = "[\\[$symbol$profile(::$region)\\]](yellow) "
+format = "[\\[$symbol$profile(::$region)\\]]($style) "
 disabled = false
+style = "bold yello dimmed"
 
 [gcloud]
 symbol = " "
-format = "[\\[$symbol$active(::$region)\\]](bold blue) "
+format = "[\\[$symbol$active(::$region)\\]]($style) "
 disabled = false
+style = "bold blue dimmed"
 
 [azure]
 symbol = " "
-format = "[\\[$symbol$subscription\\]](bold cyan) "
+format = "[\\[$symbol$subscription\\]]($style) "
 disabled = false
+style = "bold cyan dimmed"
+
+[nix_shell]
+symbol = " "
+format = "[\\[$symbol$state\\]]($style)"
+style = "blue dimmed"
 
 [buf]
 symbol = " "
@@ -101,8 +111,6 @@ symbol = " "
 symbol = "󰘚 "
 [nim]
 symbol = " "
-[nix_shell]
-symbol = " "
 [nodejs]
 symbol = " "
 [package]
