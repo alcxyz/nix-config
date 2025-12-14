@@ -2,12 +2,12 @@
 
 # Main prompt format
 format = """
+$time\
 $docker_context\
 $kubernetes\
 $aws\
 $gcloud\
 $azure\
-$time\
 $line_break\
 $username\
 $hostname\
@@ -39,7 +39,7 @@ error_symbol = "[❯](bold red)"
 [time]
 disabled = false
 format = "[$time]($style)"
-time_format = " [%d/%m-%y | %H:%M:%S] "
+time_format = "[ %H:%M:%S] "
 utc_time_offset = "local"
 style = "dimmed"
 
