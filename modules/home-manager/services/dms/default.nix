@@ -30,14 +30,14 @@ in
       };
 
       enableSystemMonitoring = true;
-      enableClipboard = true;
+      #enableClipboard = true;
       enableVPN = true;
-      enableBrightnessControl = false;
-      enableColorPicker = true;
+      #enableBrightnessControl = false;
+      #enableColorPicker = true;
       enableDynamicTheming = true;
       enableAudioWavelength = true;
       enableCalendarEvents = true;
-      enableSystemSound = true;
+      #enableSystemSound = true;
 
       plugins = {
         WorldClock = {

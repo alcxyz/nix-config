@@ -2,6 +2,13 @@
 
 # Main prompt format
 format = """
+$docker_context\
+$kubernetes\
+$aws\
+$gcloud\
+$azure\
+$time\
+$line_break\
 $username\
 $hostname\
 $directory\
@@ -29,8 +36,41 @@ success_symbol = "[❯](bold green)"
 error_symbol = "[❯](bold red)"
 
 # --- All your other module settings ---
+[time]
+disabled = false
+format = "[$time]($style)"
+time_format = " [%d/%m-%y | %H:%M:%S] "
+utc_time_offset = "local"
+style = "dimmed"
+
+[docker_context]
+symbol = " "
+format = "[\\[$symbol($context)\\]](cyan) "
+only_with_files = false
+disabled = false
+style = "dimmed"
+
+[kubernetes]
+symbol = "⎈ "
+format = "[\\[$symbol$context(::$namespace)\\]](blue) "
+disabled = false
+style = "dimmed"
+
 [aws]
-symbol = "  "
+symbol = " "
+format = "[\\[$symbol$profile(::$region)\\]](yellow) "
+disabled = false
+
+[gcloud]
+symbol = " "
+format = "[\\[$symbol$active(::$region)\\]](bold blue) "
+disabled = false
+
+[azure]
+symbol = " "
+format = "[\\[$symbol$subscription\\]](bold cyan) "
+disabled = false
+
 [buf]
 symbol = " "
 [c]
@@ -39,8 +79,6 @@ symbol = " "
 symbol = " "
 [directory]
 read_only = " "
-[docker_context]
-symbol = " "
 [elixir]
 symbol = " "
 [elm]
