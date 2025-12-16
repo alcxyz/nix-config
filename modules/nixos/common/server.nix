@@ -38,8 +38,6 @@ in
   # ==================== Services ====================
   services.xserver.enable = false;
 
-  virtualisation.docker.enableNvidia = false;
-
   # ==================== Networking ====================
   networking.resolvconf.enable = true;
 }
