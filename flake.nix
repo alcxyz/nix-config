@@ -310,8 +310,12 @@
 
     # Dev shells (per-system)
     devShells = forAllSystems (system: {
-      default = import ./shells/default.nix {
-        pkgs = pkgsFor.${system};
+      default = pkgsFor.${system}.mkShell {
+        nativeBuildInputs = with pkgsFor.${system}; [
+          treefmt
+          alejandra
+          shfmt
+        ];
       };
     });
 

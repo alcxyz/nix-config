@@ -142,6 +142,7 @@ rec {
       termshark
       openldap
       minikube
+      lazydocker
     ];
 
     /* Linux-only CLI additions */
