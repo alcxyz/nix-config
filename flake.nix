@@ -16,41 +16,32 @@
 
   # ---- Inputs -----------------------------------------------------------
   inputs = {
-    # Use unstable as the single source of nixpkgs for everything here.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     nixpkgs-master.url = "github:NixOS/nixpkgs/master";
 
-    # Secrets repo (private) — flake=false means it won't be treated as a
-    # package-providing flake; you probably use it only for fetching sops/age.
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
       url = "git+ssh://git@github.com/alcxyz/nix-secrets.git";
       flake = false;
     };
 
-    # Your custom packages flake (callPackage of custom derivations).
     nix-packages = {
       url = "github:alcxyz/nix-packages";
-      # follow the same nixpkgs as the main flake so packages are consistent
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # nix-darwin: you may keep a pinned release; left as-is but following
-    # the same nixpkgs for consistency.
     darwin = {
       url = "github:nix-darwin/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Use Home Manager master (latest) to ensure compatibility with
-    # modern home-manager modules. It follows the same nixpkgs (unstable).
     home-manager = {
       url = "github:nix-community/home-manager/master";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Third-party flakes and helper flakes you use in configs
+    # Third-party flakes and helper flakes
     zen-browser = {
       url = "github:youwen5/zen-browser-flake";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -61,8 +52,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Hyprland and related repositories. Keep them as explicit inputs so you
-    # can take their flake packages rather than the distro packages.
     hyprland.url = "github:hyprwm/Hyprland";
 
     hyprland-plugins = {
@@ -80,10 +69,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    /*
     xremap-flake = {
       url = "github:xremap/nix-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    */
 
     quickshell = {
       url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
@@ -133,20 +124,6 @@
     # genAttrs helper to create per-system pkgs attrs
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
-    # Create a pkgs set for each supported system using the same nixpkgs-unstable
-      #pkgsFor = forAllSystems (system:
-      #  import nixpkgs {
-      #    inherit system;
-      #    # Allow unfree if you use browser binaries or such
-      #    config.allowUnfree = true;
-      #    # GPU / CUDA support as needed
-      #    # config.cudaSupport = true;
-      #    # If you need to permit specific insecure packages, list them here
-      #    config.permittedInsecurePackages = [
-      #      "freeimage-3.18.0-unstable-2024-04-18" # used by Sunshine
-      #    ];
-      #  });
-
     pkgsFor = forAllSystems (system:
       let
         overlays = [
@@ -191,7 +168,7 @@
       xyz = {
         system = "x86_64-linux";
         configuration = ./hosts/xyz/configuration.nix;
-        osIcon = ""; # NixOS glyph for prompts
+        osIcon = "";
       };
       nux = {
         system = "x86_64-linux";
