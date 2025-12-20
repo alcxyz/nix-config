@@ -1,4 +1,4 @@
-# modules/home-manager/suites/gaming/default.nix
+# nix-config/modules/home-manager/suites/gaming/default.nix
 { options, config, lib, pkgs, ... }:
 
 with lib;

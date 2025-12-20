@@ -31,6 +31,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # color schemes, small extras
+    nix-colors.url = "github:misterio77/nix-colors";
+
     darwin = {
       url = "github:nix-darwin/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -59,23 +62,6 @@
       inputs.hyprland.follows = "hyprland";
     };
 
-    hypridle = {
-      url = "github:hyprwm/hypridle";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    hyprlock = {
-      url = "github:hyprwm/hyprlock";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    /*
-    xremap-flake = {
-      url = "github:xremap/nix-flake";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    */
-
     quickshell = {
       url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -97,6 +83,7 @@
       inputs.dgop.follows = "dgop";
     };
 
+    /*
     opencode = {
       url = "github:sst/opencode";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -107,8 +94,22 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # color schemes, small extras
-    nix-colors.url = "github:misterio77/nix-colors";
+    xremap-flake = {
+      url = "github:xremap/nix-flake";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    hypridle = {
+      url = "github:hyprwm/hypridle";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    hyprlock = {
+      url = "github:hyprwm/hyprlock";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    */
+
   };
 
   # ---- Outputs ----------------------------------------------------------

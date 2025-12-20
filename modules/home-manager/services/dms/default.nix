@@ -10,7 +10,7 @@ in
 
   imports = [
     inputs.dsearch.homeModules.default
-    inputs.dankMaterialShell.homeModules.dankMaterialShell.default
+    inputs.dankMaterialShell.homeModules.dank-material-shell
   ];
 
   config = lib.mkIf cfg.enable {
@@ -18,7 +18,7 @@ in
       enable = true;
     };
 
-    programs.dankMaterialShell = {
+    programs.dank-material-shell = {
       enable = true;
 
       #quickshell.package = pkgs.quickshell;

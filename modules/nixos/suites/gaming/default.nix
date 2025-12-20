@@ -1,4 +1,4 @@
-# modules/nixos/suites/gaming/default.nix
+# nix-config/modules/nixos/suites/gaming/default.nix
 { options, config, lib, pkgs, username, ... }:
 
 with lib;

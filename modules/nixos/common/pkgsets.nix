@@ -57,6 +57,7 @@ rec {
 
     /* Linux desktop-specific system packages */
     linuxDesktop = with pkgs; [
+      gparted
       ntfs3g
       sshfs
       xwayland-satellite
@@ -191,6 +192,14 @@ rec {
       kubeswitch
     ];
 
+    ai = with pkgs; [
+      gemini-cli
+      goose-cli
+      opencode
+      #cursor-cli
+      code-cursor
+    ];
+
     /* -------------------------------------------------------------------
        Desktop / GUI apps
        We split into:
@@ -211,13 +220,13 @@ rec {
     desktopLinuxOnly = with pkgs; [
       vlc
       obs-studio
+      kdePackages.kdenlive
       libreoffice
       calibre
       rustdesk
       gimp3-with-plugins
       cameractrls
       cameractrls-gtk4
-      gparted
       winetricks
       wineWowPackages.waylandFull
       lens
@@ -247,8 +256,6 @@ rec {
       (with pkgs; [
         rbw
         bitwarden-desktop
-        #bitwarden-cli
-        #signal-cli
         pinentry-gtk2
         texlive.combined.scheme-full
 
@@ -274,7 +281,8 @@ rec {
       ++ hm.k8s
       ++ hm.linuxExtras
       ++ hm.workstationExtras
-      ++ hm.desktopLinux;
+      ++ hm.desktopLinux
+      ++ hm.ai;
 
     # Server: CLI base + linux-specific only.
     server = 
