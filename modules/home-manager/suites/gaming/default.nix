@@ -2,80 +2,88 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.suites.gaming;
-  gameAppsRegex = "steam|steamwebhelper|steam_app_.*|retrodeck|retroarch|dolphin-emu|pcsx2|rpcs3|sunshine|gamescope";
+  sunshineConfigPath = ".config/sunshine";
+
+  stream-tool = pkgs.buildGoModule {
+    pname = "stream-tool";
+    version = "0.1.0";
+    src = ./src; 
+    vendorHash = null; 
+  };
 in {
+  imports = [
+    ./audio.nix
+  ];
+
   options.suites.gaming = {
     enable = lib.mkEnableOption "Gaming Suite";
     gamingWorkspace = lib.mkOption { 
       type = lib.types.str; 
-      default = "9"; 
+      default = "1"; 
     };
   };
 
   config = lib.mkIf cfg.enable {
-    # Scripts added to your PATH
-    home.packages = with pkgs; [
-      socat jq pulseaudio gamescope mangohud
+    home.packages = with pkgs; [ 
+      stream-tool
+      gamescope 
+      mangohud
       
-      # Launcher for Sunshine to call
       (writeShellScriptBin "launch-steam" ''
         gamescope -W 2560 -H 1440 -r 60 -f -b -- flatpak run com.valvesoftware.Steam -bigpicture
       '')
-
       (writeShellScriptBin "launch-retrodeck" ''
         gamescope -W 1920 -H 1080 -r 60 -f -b -- flatpak run net.retrodeck.retrodeck
       '')
     ];
 
-    # Audio Routing Rules
-    xdg.configFile."wireplumber/wireplumber.conf.d/51-game-audio-routing.conf".text = builtins.toJSON {
-      "monitor.pipewire.rules" = [
-        {
-          matches = [ { "application.process.binary" = "~(${gameAppsRegex})"; } ];
-          actions.update-props = { "node.target" = "GameAudioSink"; };
-        }
-      ];
-    };
-
-    # Virtual Sink
-    systemd.user.services.game-audio-sink = {
-      Unit = { Description = "Virtual Gaming Audio Sink"; After = [ "pipewire.service" ]; };
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${pkgs.pulseaudio}/bin/pactl load-module module-null-sink sink_name=GameAudioSink sink_properties='device.description=\"Virtual Game Sink\"'";
-        RemainAfterExit = true;
-      };
-      Install.WantedBy = [ "default.target" ];
-    };
-
-    # Audio Monitor Logic
-    systemd.user.services.workspace-audio-monitor = {
-      Unit = { Description = "Game Audio Loopback Toggle"; After = [ "graphical-session.target" ]; };
-      Service = {
-        ExecStart = pkgs.writeShellScript "audio-monitor" ''
-          SOCKET_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
-          
-          # Wait for socket
-          while [ ! -S "$SOCKET_PATH" ]; do sleep 1; done
-
-          handle_audio() {
-            focused_ws=$(hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.focused == true) | .activeWorkspace.id')
-            if [ "$focused_ws" == "${cfg.gamingWorkspace}" ]; then
-              ${pkgs.pulseaudio}/bin/pactl load-module module-loopback source="GameAudioSink.monitor" sink="@DEFAULT_SINK@" media.name="GameLoopback"
-            else
-              mod_id=$(${pkgs.pulseaudio}/bin/pactl list short modules | grep "GameLoopback" | cut -f1)
-              [ -n "$mod_id" ] && ${pkgs.pulseaudio}/bin/pactl unload-module "$mod_id"
-            fi
+    # Combined Sunshine Config Definitions
+    home.file."${sunshineConfigPath}/apps.json" = {
+      force = true;
+      text = builtins.toJSON {
+        env = { PATH = "$(PATH)"; };
+        apps = [
+          {
+            name = "Steam";
+            cmd = [ "flatpak" "run" "com.valvesoftware.Steam" "-gamepadui" ];
           }
-
-          ${pkgs.socat}/bin/socat -u UNIX-CONNECT:"$SOCKET_PATH" - | while read -r line; do
-            case "$line" in workspace>>*|focusedmon>>*) handle_audio ;; esac
-          done
-        '';
-        Restart = "always";
-        RestartSec = "5s";
+          {
+            name = "RetroDECK";
+            cmd = [ "flatpak" "run" "net.retrodeck.retrodeck" ];
+          }
+          {
+            name = "Stream Mode (Toggle)";
+            cmd = [ "stream-tool" "toggle" ];
+          }
+        ];
       };
-      Install.WantedBy = [ "graphical-session.target" ];
     };
+
+    # Force delete the state file to ensure it picks up the .conf monitor settings
+    #home.file."${sunshineConfigPath}/sunshine_state.json".force = true;
+    #home.file."${sunshineConfigPath}/sunshine_state.json".text = "{}";
+
+    home.file."${sunshineConfigPath}/sunshine.conf" = {
+      force = true;
+      text = ''
+        sunshine_name = xyz
+        min_log_level = info
+        origin_web_ui_allowed = pc
+        external_ip = 192.168.1.10
+
+        # Target HDMI-A-3 (Index 1)
+        #output_name = HDMI-A-3
+        output_index = 1
+        output_name = 1
+
+        # Priority Hardware
+        adapter_name = 1
+        encoder = nvenc
+        nvenc_preset = p1
+
+        audio_sink = GameAudioSink.monitor
+      '';
+    };
+
   };
 }
