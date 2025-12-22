@@ -193,11 +193,17 @@ rec {
     ];
 
     ai = with pkgs; [
-      gemini-cli
+      #gemini-cli
       goose-cli
-      opencode
-      #cursor-cli
+      #opencode
+      cursor-cli
       code-cursor
+    ];
+
+    gaming = with pkgs; [
+      gamescope
+      mangohud
+      helvum
     ];
 
     /* -------------------------------------------------------------------
@@ -282,7 +288,8 @@ rec {
       ++ hm.linuxExtras
       ++ hm.workstationExtras
       ++ hm.desktopLinux
-      ++ hm.ai;
+      ++ hm.ai
+      ++ hm.gaming;
 
     # Server: CLI base + linux-specific only.
     server = 

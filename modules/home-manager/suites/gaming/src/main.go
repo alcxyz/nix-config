@@ -41,28 +41,29 @@ func run(name string, args ...string) error {
 }
 
 func streamOn() {
-	res := "1920x1080@60"
-	fmt.Printf("Activating Stream Mode: %s on %s\n", res, Dongle)
-	run("hyprctl", "keyword", "monitor", fmt.Sprintf("%s, %s, auto, 1", Dongle, res))
+	res := "2560x1440@60" // Target streaming resolution
+	fmt.Printf("Bringing %s into focus at %s\n", Dongle, res)
+	// Position it at 5120x0 (directly to the right of your ultrawide)
+	run("hyprctl", "keyword", "monitor", fmt.Sprintf("%s, %s, 5120x0, 1", Dongle, res))
 	run("hyprctl", "keyword", "workspace", fmt.Sprintf("%s, monitor:%s, default:true", GameWS, Dongle))
+}
+
+func streamOff() {
+	fmt.Println("Parking the streaming monitor...")
+	// Move it back to the void at a low resolution
+	run("hyprctl", "keyword", "monitor", fmt.Sprintf("%s, 2560x1440@60, 10000x10000, 1", Dongle))
+	run("hyprctl", "keyword", "workspace", fmt.Sprintf("%s, monitor:%s, default:true", GameWS, Ultrawide))
+	// GUARD: Only load if NOT already loaded
+	if !isLoopbackLoaded("GameLoopbackLocal") {
+		fmt.Println("Enabling local audio loopback...")
+		run("pactl", "load-module", "module-loopback", "source=GameAudioSink.monitor", "sink=@DEFAULT_SINK@", "media.name=GameLoopbackLocal")
+	}
 }
 
 func isLoopbackLoaded(name string) bool {
 	// Grep return code 0 means found
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("pactl list short modules | grep -q 'media.name=%s'", name))
 	return cmd.Run() == nil
-}
-
-func streamOff() {
-	fmt.Println("Deactivating Stream Mode...")
-	run("hyprctl", "keyword", "monitor", fmt.Sprintf("%s, disable", Dongle))
-	run("hyprctl", "keyword", "workspace", fmt.Sprintf("%s, monitor:%s, default:true", GameWS, Ultrawide))
-
-	// GUARD: Only load if NOT already loaded
-	if !isLoopbackLoaded("GameLoopbackLocal") {
-		fmt.Println("Enabling local audio loopback...")
-		run("pactl", "load-module", "module-loopback", "source=GameAudioSink.monitor", "sink=@DEFAULT_SINK@", "media.name=GameLoopbackLocal")
-	}
 }
 
 func main() {
