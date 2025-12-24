@@ -17,7 +17,7 @@ in {
     services.sunshine = {
       enable = true;
       package = sunshinePatched;
-      autoStart = false;
+      autoStart = true;
       capSysAdmin = true;
       settings = {
         sunshine_name = "xyz";
@@ -43,17 +43,23 @@ in {
       ];
     };
 
-    systemd.user.services.sunshine = {
-      requires = [ "gaming-kiosk-base.service" ];
-      after = [ "gaming-kiosk-base.service" ];
-      serviceConfig.Environment = lib.mkForce [
-        "XDG_RUNTIME_DIR=/run/user/1000"
-        "WAYLAND_DISPLAY=wayland-gaming" # Sunshine uses this for cursor tracking
-        "LD_LIBRARY_PATH=/run/opengl-driver/lib:/run/opengl-driver-32/lib"
-        "WLR_DRM_DEVICES=/dev/dri/by-path/pci-0000:01:00.0-card" # Point to NVIDIA
-        "__GLX_VENDOR_LIBRARY_NAME=nvidia"
+    # Don't enable at boot (you can still `systemctl start sunshine`)
+    systemd.services.sunshine.wantedBy = lib.mkForce [ ];
+
+    systemd.services.sunshine.serviceConfig = {
+      User = "alc";
+      PAMName = "sunshine-kiosk";
+      Environment = [
+        "XDG_SEAT=seat-gaming"
+        "XDG_SESSION_TYPE=wayland"
+        "XDG_SESSION_CLASS=user"
+        "XDG_RUNTIME_DIR=/run/user/%U"
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus"
+        "PULSE_SERVER=unix:/run/user/%U/pulse/native"
       ];
     };
+
+
 
   };
 }
