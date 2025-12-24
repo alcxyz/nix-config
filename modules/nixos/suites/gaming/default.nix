@@ -15,7 +15,7 @@
 
   config = lib.mkIf config.suites.gaming.enable {
     # Hardware permissions for the isolated dGPU session
-    users.users.${username}.extraGroups = [ "video" "render" "input" "seat" ];
+    users.users.${username}.extraGroups = [ "video" "render" "input" "uinput" "seat" ];
 
     # We want logind multiseat (simultaneous), not seatd (VT-bound behavior).
     services.seatd.enable = false;
@@ -35,6 +35,9 @@
       # Dedicated local input for the kiosk: Logitech Unifying Receiver 046d:c52b
       # (Matches input devices whose parent USB device is the receiver)
       #SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c52b", ENV{ID_SEAT}="seat-gaming"
+
+      KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input"
+      KERNEL=="uhid",   SUBSYSTEM=="misc", MODE="0660", GROUP="input"
     '';
 
     boot.kernelModules = [ "uinput" "nvidia_uvm" ];

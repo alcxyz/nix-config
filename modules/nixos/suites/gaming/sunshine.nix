@@ -1,6 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, username ? "alc", ... }:
 
 let
+  user = username;
   nvidiaLib = "${config.hardware.nvidia.package}/lib";
 
   sunshinePatched = pkgs.sunshine.overrideAttrs (old: {
@@ -14,26 +15,14 @@ let
 
   appsJson = pkgs.writeText "sunshine-apps.json" (builtins.toJSON {
     apps = [
-      {
-        name = "Steam Deck";
-        cmd = "flatpak run com.valvesoftware.Steam -gamepadui";
-      }
-      {
-        name = "RetroDECK";
-        cmd = "flatpak run net.retrodeck.retrodeck";
-      }
-      {
-        name = "Heroic";
-        cmd = "flatpak run com.heroicgameslauncher.hgl";
-      }
+      # Keep Sunshine from launching Steam; Steam is already running in the kiosk.
+      { name = "Kiosk"; cmd = "${pkgs.coreutils}/bin/sleep infinity"; }
     ];
   });
 
   sunshineConf = pkgs.writeText "sunshine.conf" ''
     sunshine_name = xyz
-    capture = kms
-    adapter_name = /dev/dri/by-path/pci-0000:01:00.0-card
-    output_name = HDMI-A-3
+    capture = wlroots
     encoder = nvenc
     audio_sink = GameAudioSink.monitor
     file_apps = ${appsJson}
@@ -42,44 +31,42 @@ let
 in
 {
   config = lib.mkIf config.suites.gaming.enable {
-    # Ensure Sunshine can create virtual input devices later
-    services.udev.extraRules = ''
-      KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", TAG+="uaccess"
-    '';
-
-    # IMPORTANT: stop using the user unit (it binds Sunshine to your Hyprland/Wayland session)
+    # Do NOT run Sunshine as a user unit (it will attach to your Hyprland display).
     systemd.user.services.sunshine.enable = lib.mkForce false;
 
     systemd.services.sunshine-kiosk = {
-      description = "Sunshine (seat-gaming, NVIDIA KMS HDMI-A-3)";
+      description = "Sunshine (wlroots capture from gamescope, seat-gaming)";
       after = [ "systemd-logind.service" "network-online.target" "gaming-kiosk.service" ];
       wants = [ "network-online.target" "gaming-kiosk.service" ];
       requires = [ "systemd-logind.service" ];
 
-      # manual start by default (you can enable later)
+      # manual start by default
       wantedBy = [ ];
 
       serviceConfig = {
-        User = "alc";
+        User = user;
         Group = "users";
-        SupplementaryGroups = [ "video" "render" "input" ];
+        SupplementaryGroups = [ "video" "render" "input" "uinput" ];
 
         PAMName = "sunshine-kiosk";
 
         Environment = [
-          "PATH=/run/current-system/sw/bin:${pkgs.coreutils}/bin:${pkgs.flatpak}/bin"
           "XDG_SEAT=seat-gaming"
           "XDG_SESSION_TYPE=wayland"
           "XDG_SESSION_CLASS=user"
+
+          # IMPORTANT: talk to gamescope, not Hyprland
           "XDG_RUNTIME_DIR=/run/user/%U"
-          "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus"
+          "WAYLAND_DISPLAY=gamescope-0"
+          "PIPEWIRE_REMOTE=pipewire-0"
           "PULSE_SERVER=unix:/run/user/%U/pulse/native"
         ];
 
-        # Sunshine needs KMS access -> CAP_SYS_ADMIN
-        CapabilityBoundingSet = "CAP_SYS_ADMIN";
-        AmbientCapabilities = "CAP_SYS_ADMIN";
-        NoNewPrivileges = false;
+        # No CAP_SYS_ADMIN needed for wlroots capture.
+        CapabilityBoundingSet = "";
+        AmbientCapabilities = "";
+        NoNewPrivileges = true;
+        RestrictNamespaces = false;
 
         ExecStart = "${sunshinePatched}/bin/sunshine ${sunshineConf}";
         Restart = "on-failure";
