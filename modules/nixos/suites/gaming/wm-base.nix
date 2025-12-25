@@ -3,12 +3,11 @@
 
 let
   swayConfig = pkgs.writeText "sway-gaming-headless.conf" ''
-    xwayland disable
+    xwayland enable
     output HEADLESS-1 enable
     output HEADLESS-1 mode 1920x1080@60Hz
 
-    # Force a background color to ensure the compositor renders frames
-    # and the output is advertised to Wayland clients.
+    # Simple background so you always see *something*
     exec "${pkgs.swaybg}/bin/swaybg -c '#000000'"
   '';
 
@@ -52,7 +51,10 @@ let
 in
 {
   config = lib.mkIf config.suites.gaming.enable {
-    environment.systemPackages = with pkgs; [ sway ];
+    environment.systemPackages = with pkgs; [
+      sway
+      xwayland
+    ];
 
     systemd.user.services.gaming-wm = {
       description = "Gaming WM (Sway headless) - user service";
