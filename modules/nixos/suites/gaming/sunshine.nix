@@ -3,6 +3,19 @@
 
 let
   sunshineWrapped = "/run/wrappers/bin/sunshine-kiosk";
+  startSunshine = pkgs.writeShellScript "start-sunshine-kiosk" ''
+    set -euo pipefail
+
+    # Force Sunshine to read the HM-managed config (or your real file if you
+    # later switch it to a non-HM-managed path).
+    : "''${HOME:?HOME must be set}"
+    : "''${XDG_CONFIG_HOME:=$HOME/.config}"
+
+    # Make libcuda visible for NVENC on NixOS (driver libs live outside the store).
+    export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+    exec ${sunshineWrapped} "$XDG_CONFIG_HOME/sunshine/sunshine.conf"
+  '';
 in
 {
   config = lib.mkIf config.suites.gaming.enable {
@@ -26,6 +39,21 @@ in
         Type = "simple";
 
         Environment = [
+          "HOME=%h"
+          "XDG_CONFIG_HOME=%h/.config"
+          "LD_LIBRARY_PATH=/run/opengl-driver/lib"
+          "XDG_RUNTIME_DIR=%t"
+          "WAYLAND_DISPLAY=gaming-wm/wayland-1"
+          "SWAYSOCK=%t/gaming-wm/sway-gaming.sock"
+        ];
+
+        ExecStart =
+          "${pkgs.sunshine}/bin/sunshine %h/.config/sunshine/sunshine.conf";
+
+        /*
+        Environment = [
+          "HOME=%h"
+          "XDG_CONFIG_HOME=%h/.config"
           "XDG_RUNTIME_DIR=%t"
           "WAYLAND_DISPLAY=gaming-wm/wayland-1"
           "SWAYSOCK=%t/gaming-wm/sway-gaming.sock"
@@ -33,8 +61,8 @@ in
           "PIPEWIRE_REMOTE=pipewire-0"
         ];
 
-        # FORCE the config file Sunshine must read
-        ExecStart = "${sunshineWrapped} %h/.config/sunshine/sunshine.conf";
+        ExecStart = "${startSunshine}";
+        */
 
         Restart = "on-failure";
         RestartSec = 2;

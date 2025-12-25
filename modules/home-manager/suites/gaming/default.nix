@@ -56,6 +56,7 @@ let
     sunshine_name = xyz
     capture = wlr
     port = 47989
+    encoder = vaapi
 
     # Make this actually visible in logs if it's being read:
     min_log_level = info
