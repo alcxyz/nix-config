@@ -19,11 +19,19 @@
       extraGroups = [
         "video"
         "render"
+        "input"
+        "uinput"
       ];
     };
 
-    # Headless wlroots: no seatd, no DRM/KMS -> won't VT-switch you
-    services.seatd.enable = false;
+    # Make sure uinput exists.
+    boot.kernelModules = lib.mkAfter [ "uinput" ];
+
+    # Ensure correct permissions on /dev/uinput and /dev/uhid.
+    services.udev.extraRules = lib.mkAfter ''
+      KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", MODE="0660", GROUP="uinput"
+      KERNEL=="uhid",   SUBSYSTEM=="misc", MODE="0660", GROUP="input"
+    '';
 
     environment.systemPackages = with pkgs; [
       #gamescope
