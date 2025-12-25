@@ -1,76 +1,60 @@
+# nix-config/modules/nixos/suites/gaming/sunshine.nix
 { config, lib, pkgs, username ? "alc", ... }:
 
 let
-  user = username;
-  nvidiaLib = "${config.hardware.nvidia.package}/lib";
-
-  sunshinePatched = pkgs.sunshine.overrideAttrs (old: {
-    nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.patchelf];
-    postFixup =
-      (old.postFixup or "")
-      + ''
-        patchelf --add-rpath "${nvidiaLib}" $out/bin/sunshine
-      '';
-  });
-
-  appsJson = pkgs.writeText "sunshine-apps.json" (builtins.toJSON {
-    apps = [
-      # Keep Sunshine from launching Steam; Steam is already running in the kiosk.
-      { name = "Kiosk"; cmd = "${pkgs.coreutils}/bin/sleep infinity"; }
-    ];
-  });
+  sunshineWrapped = "/run/wrappers/bin/sunshine-kiosk";
 
   sunshineConf = pkgs.writeText "sunshine.conf" ''
     sunshine_name = xyz
-    capture = wlroots
-    encoder = nvenc
-    audio_sink = GameAudioSink.monitor
-    file_apps = ${appsJson}
+    capture = wlr
     port = 47989
+    min_log_level = debug
+    system_tray = disabled
+  '';
+
+  startSunshine = pkgs.writeShellScript "start-sunshine-gaming" ''
+    set -euo pipefail
+
+    : "''${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must be set by systemd}"
+    export WAYLAND_DISPLAY="wayland-1"
+
+    test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+
+    exec ${sunshineWrapped} ${sunshineConf}
   '';
 in
 {
   config = lib.mkIf config.suites.gaming.enable {
-    # Do NOT run Sunshine as a user unit (it will attach to your Hyprland display).
-    systemd.user.services.sunshine.enable = lib.mkForce false;
+    security.wrappers.sunshine-kiosk = {
+      source = "${pkgs.sunshine}/bin/sunshine";
+      owner = "root";
+      group = "root";
+      capabilities = "cap_sys_admin+ep";
+    };
 
-    systemd.services.sunshine-kiosk = {
-      description = "Sunshine (wlroots capture from gamescope, seat-gaming)";
-      after = [ "systemd-logind.service" "network-online.target" "gaming-kiosk.service" ];
-      wants = [ "network-online.target" "gaming-kiosk.service" ];
-      requires = [ "systemd-logind.service" ];
+    networking.firewall.allowedTCPPorts = [ 47984 47989 47990 ];
+    networking.firewall.allowedUDPPorts = [ 47998 47999 48000 48010 ];
 
-      # manual start by default
-      wantedBy = [ ];
+    # IMPORTANT: this is a *user* unit
+    systemd.user.services.sunshine-kiosk = {
+      description = "Sunshine (wlr capture from headless sway)";
+      after = [ "gaming-wm.service" ];
+      requires = [ "gaming-wm.service" ];
+      wantedBy = [ "default.target" ];
 
       serviceConfig = {
-        User = user;
-        Group = "users";
-        SupplementaryGroups = [ "video" "render" "input" "uinput" ];
+        Type = "simple";
 
-        PAMName = "sunshine-kiosk";
+        # Must match gaming-wm’s runtime dir (%t == /run/user/$UID for user units)
+        Environment = [ "XDG_RUNTIME_DIR=%t/gaming-wm" ];
 
-        Environment = [
-          "XDG_SEAT=seat-gaming"
-          "XDG_SESSION_TYPE=wayland"
-          "XDG_SESSION_CLASS=user"
+        ExecStart = "${startSunshine}";
 
-          # IMPORTANT: talk to gamescope, not Hyprland
-          "XDG_RUNTIME_DIR=/run/user/%U"
-          "WAYLAND_DISPLAY=gamescope-0"
-          "PIPEWIRE_REMOTE=pipewire-0"
-          "PULSE_SERVER=unix:/run/user/%U/pulse/native"
-        ];
-
-        # No CAP_SYS_ADMIN needed for wlroots capture.
-        CapabilityBoundingSet = "";
-        AmbientCapabilities = "";
-        NoNewPrivileges = true;
-        RestrictNamespaces = false;
-
-        ExecStart = "${sunshinePatched}/bin/sunshine ${sunshineConf}";
         Restart = "on-failure";
         RestartSec = 2;
+
+        StandardOutput = "journal";
+        StandardError = "journal";
       };
     };
   };
