@@ -21,7 +21,18 @@ let
       "''${w}x''${h}@''${f}Hz"
   '';
 
-  appsJson = builtins.toJSON {
+  flatpakNvidia = appId: extraArgs:
+    lib.concatStringsSep " " ([
+      "${pkgs.flatpak}/bin/flatpak"
+      "run"
+      "--env=__NV_PRIME_RENDER_OFFLOAD=1"
+      "--env=__GLX_VENDOR_LIBRARY_NAME=nvidia"
+      "--env=__VK_LAYER_NV_optimus=NVIDIA_only"
+      "--env=PULSE_SINK=GameAudioSink"
+      appId
+    ] ++ extraArgs);
+
+  appsJsonText = builtins.toJSON {
     apps = [
       {
         name = "Desktop (Headless)";
@@ -30,27 +41,28 @@ let
       }
       {
         name = "Steam Big Picture";
-        cmd =
-          "${pkgs.flatpak}/bin/flatpak run com.valvesoftware.Steam -gamepadui";
+        cmd = flatpakNvidia "com.valvesoftware.Steam" [ "-gamepadui" ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
       {
         name = "RetroDECK";
-        cmd = "${pkgs.flatpak}/bin/flatpak run net.retrodeck.retrodeck";
+        cmd = flatpakNvidia "net.retrodeck.retrodeck" [ ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
       {
         name = "Heroic";
-        cmd = "${pkgs.flatpak}/bin/flatpak run com.heroicgameslauncher.hgl";
+        cmd = flatpakNvidia "com.heroicgameslauncher.hgl" [ ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
       {
         name = "Lutris";
-        cmd = "${pkgs.flatpak}/bin/flatpak run net.lutris.Lutris";
+        cmd = flatpakNvidia "net.lutris.Lutris" [ ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
     ];
   };
+
+  appsJsonFile = pkgs.writeText "sunshine-apps.json" appsJsonText;
 
   sunshineConf = ''
     sunshine_name = xyz
@@ -58,7 +70,6 @@ let
     port = 47989
     encoder = vaapi
 
-    # Make this actually visible in logs if it's being read:
     min_log_level = info
     system_tray = enabled
 
@@ -76,7 +87,26 @@ in
       helvum
     ];
 
+    # Keep sunshine.conf HM-managed (read-only is fine here)
     xdg.configFile."sunshine/sunshine.conf".text = sunshineConf;
-    xdg.configFile."sunshine/apps.json".text = appsJson;
+
+    # Make apps.json a *real writable file*, not a /nix/store symlink
+    home.activation.sunshineAppsJson = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      set -euo pipefail
+      dir="$HOME/.config/sunshine"
+      target="$dir/apps.json"
+
+      ${pkgs.coreutils}/bin/mkdir -p "$dir"
+
+      # Replace HM symlink with a real file
+      if [ -L "$target" ]; then
+        ${pkgs.coreutils}/bin/rm -f "$target"
+      fi
+
+      ${pkgs.coreutils}/bin/install -m 0644 ${appsJsonFile} "$target"
+
+      # Ensure Sunshine can write updates if it wants
+      ${pkgs.coreutils}/bin/chmod u+w "$target"
+    '';
   };
 }

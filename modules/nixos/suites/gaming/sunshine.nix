@@ -45,24 +45,14 @@ in
           "XDG_RUNTIME_DIR=%t"
           "WAYLAND_DISPLAY=gaming-wm/wayland-1"
           "SWAYSOCK=%t/gaming-wm/sway-gaming.sock"
+          "LIBVA_DRIVER_NAME=radeonsi"
+          "VAAPI_DEVICE=/dev/dri/renderD128"
         ];
+
+        WorkingDirectory = "%h/.config/sunshine";
 
         ExecStart =
           "${pkgs.sunshine}/bin/sunshine %h/.config/sunshine/sunshine.conf";
-
-        /*
-        Environment = [
-          "HOME=%h"
-          "XDG_CONFIG_HOME=%h/.config"
-          "XDG_RUNTIME_DIR=%t"
-          "WAYLAND_DISPLAY=gaming-wm/wayland-1"
-          "SWAYSOCK=%t/gaming-wm/sway-gaming.sock"
-          "PULSE_SERVER=unix:%t/pulse/native"
-          "PIPEWIRE_REMOTE=pipewire-0"
-        ];
-
-        ExecStart = "${startSunshine}";
-        */
 
         Restart = "on-failure";
         RestartSec = 2;
