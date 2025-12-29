@@ -26,7 +26,7 @@ in
       capabilities = "cap_sys_admin+ep";
     };
 
-    networking.firewall.allowedTCPPorts = [ 47984 47989 47990 ];
+    networking.firewall.allowedTCPPorts = [ 47984 47989 47990 48010 ];
     networking.firewall.allowedUDPPorts = [ 47998 47999 48000 48010 ];
 
     systemd.user.services.sunshine-kiosk = {
@@ -37,6 +37,11 @@ in
 
       serviceConfig = {
         Type = "simple";
+
+        UnsetEnvironment = [
+          "DISPLAY"
+          "XAUTHORITY"
+        ];
 
         Environment = [
           "HOME=%h"

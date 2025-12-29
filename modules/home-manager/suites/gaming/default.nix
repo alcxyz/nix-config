@@ -21,42 +21,80 @@ let
       "''${w}x''${h}@''${f}Hz"
   '';
 
-  flatpakNvidia = appId: extraArgs:
-    lib.concatStringsSep " " ([
-      "${pkgs.flatpak}/bin/flatpak"
-      "run"
-      "--env=__NV_PRIME_RENDER_OFFLOAD=1"
-      "--env=__GLX_VENDOR_LIBRARY_NAME=nvidia"
-      "--env=__VK_LAYER_NV_optimus=NVIDIA_only"
-      "--env=PULSE_SINK=GameAudioSink"
-      appId
-    ] ++ extraArgs);
+  mkFlatpakDetached = name: appId: extraArgs:
+    pkgs.writeShellScript "sunshine-launch-${name}" ''
+      set -euo pipefail
+
+      uid="$(${pkgs.coreutils}/bin/id -u)"
+      sock="/run/user/$uid/gaming-wm/sway-gaming.sock"
+
+      # Build the exact command we want Sway to run
+      cmd="${
+        lib.escapeShellArg
+        (lib.concatStringsSep " " ([
+            "${pkgs.flatpak}/bin/flatpak"
+            "run"
+            "--filesystem=xdg-run/gaming-wm"
+            "--env=WAYLAND_DISPLAY=gaming-wm/wayland-1"
+            "--env=__NV_PRIME_RENDER_OFFLOAD=1"
+            "--env=__GLX_VENDOR_LIBRARY_NAME=nvidia"
+            "--env=__VK_LAYER_NV_optimus=NVIDIA_only"
+            "--env=PULSE_SINK=GameAudioSink"
+            appId
+          ]
+          ++ extraArgs))
+      }"
+
+      exec ${pkgs.sway}/bin/swaymsg -s "$sock" exec "$cmd"
+    '';
+
+  steamScript = mkFlatpakDetached "steam-bp" "com.valvesoftware.Steam" [
+    "-gamepadui"
+  ];
+
+  retrodeckScript =
+    mkFlatpakDetached "retrodeck" "net.retrodeck.retrodeck" [ ];
+
+  heroicScript =
+    mkFlatpakDetached "heroic" "com.heroicgameslauncher.hgl" [ ];
+
+  lutrisScript = mkFlatpakDetached "lutris" "net.lutris.Lutris" [ ];
 
   appsJsonText = builtins.toJSON {
+    env = {
+      PATH = "$(PATH):$(HOME)/.local/bin";
+    };
+
     apps = [
+      # IMPORTANT: keep this exact "Desktop" entry. Moonlight expects it.
       {
-        name = "Desktop (Headless)";
-        cmd = "${pkgs.coreutils}/bin/sleep infinity";
+        name = "Desktop";
+        "image-path" = "desktop.png";
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
+
       {
         name = "Steam Big Picture";
-        cmd = flatpakNvidia "com.valvesoftware.Steam" [ "-gamepadui" ];
+        "image-path" = "steam.png";
+        detached = [ "${steamScript}" ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
+
       {
         name = "RetroDECK";
-        cmd = flatpakNvidia "net.retrodeck.retrodeck" [ ];
+        detached = [ "${retrodeckScript}" ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
+
       {
         name = "Heroic";
-        cmd = flatpakNvidia "com.heroicgameslauncher.hgl" [ ];
+        detached = [ "${heroicScript}" ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
+
       {
         name = "Lutris";
-        cmd = flatpakNvidia "net.lutris.Lutris" [ ];
+        detached = [ "${lutrisScript}" ];
         "prep-cmd" = [{ do = "${resizeScript}"; undo = ""; }];
       }
     ];
@@ -87,26 +125,17 @@ in
       helvum
     ];
 
-    # Keep sunshine.conf HM-managed (read-only is fine here)
     xdg.configFile."sunshine/sunshine.conf".text = sunshineConf;
 
-    # Make apps.json a *real writable file*, not a /nix/store symlink
+    # Make apps.json a real writable file (not a /nix/store symlink)
     home.activation.sunshineAppsJson = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       set -euo pipefail
       dir="$HOME/.config/sunshine"
       target="$dir/apps.json"
 
       ${pkgs.coreutils}/bin/mkdir -p "$dir"
-
-      # Replace HM symlink with a real file
-      if [ -L "$target" ]; then
-        ${pkgs.coreutils}/bin/rm -f "$target"
-      fi
-
+      ${pkgs.coreutils}/bin/rm -f "$target"
       ${pkgs.coreutils}/bin/install -m 0644 ${appsJsonFile} "$target"
-
-      # Ensure Sunshine can write updates if it wants
-      ${pkgs.coreutils}/bin/chmod u+w "$target"
     '';
   };
 }

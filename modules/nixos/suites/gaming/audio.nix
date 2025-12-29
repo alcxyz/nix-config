@@ -65,6 +65,21 @@ in
           }
         ];
       };
+
+      wireplumber.extraConfig."52-demote-sunshine-sink" = {
+        "monitor.pipewire.rules" = [
+          {
+            matches = [
+              { "node.name" = "sink-sunshine-stereo"; }
+            ];
+            actions.update-props = {
+              "priority.session" = 1;
+              "priority.driver" = 1;
+            };
+          }
+        ];
+      };
+
     };
   };
 }
