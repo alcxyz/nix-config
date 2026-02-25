@@ -1,5 +1,5 @@
 # hosts/mac/configuration.nix
-{ config, pkgs, lib, inputs, username, ... }:
+{ config, pkgs, lib, inputs, configDir, username, ... }:
 
 let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
@@ -235,13 +235,13 @@ in
 
   sops = {
     # Default: common secrets for all hosts
-    defaultSopsFile = "${inputs.nix-secrets.secrets.files.shared}";
+    #defaultSopsFile = "${inputs.nix-secrets.secrets.files.shared}";
 
     # Add host‑specific secrets file
-    secretsFiles = [ "${inputs.nix-secrets.secrets.files.hosts.mac}" ];
+    #secretsFiles = [ "${inputs.nix-secrets.secrets.files.hosts.mac}" ];
 
     # On macOS, sops-nix expects a single key path
-    age.keyFile = "/etc/ssh/ssh_host_ed25519_key";
+    #age.keyFile = "/etc/ssh/ssh_host_ed25519_key";
 
     # Define system secrets (example)
     secrets = {
