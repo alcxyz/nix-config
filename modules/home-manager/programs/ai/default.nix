@@ -18,6 +18,10 @@ in
         theme = "opencode";
       };
     };
+
+    programs.gemini-cli = {
+      enable = true;
+    };
   };
 
 }

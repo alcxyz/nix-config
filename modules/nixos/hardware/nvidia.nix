@@ -1,72 +1,32 @@
+# nix-config/modules/nixos/hardware/nvidia.nix
 { options, config, lib, pkgs, ... }:
 
 with lib;
-
-let
-  cfg = config.hardware.nvidia;
-in
+let cfg = config.hardware.nvidia; in
 {
-  options.hardware.nvidia.enable = mkOption {
-    type = types.bool;
-    default = false;
-    description = "Enable NVIDIA driver and GPU acceleration.";
-  };
+  options.hardware.nvidia.enable = mkEnableOption "Nvidia Hardware Support";
 
   config = mkIf cfg.enable {
-    # Use the proprietary NVIDIA driver for Xorg / Wayland
     services.xserver.videoDrivers = [ "nvidia" ];
-
+    
     hardware.nvidia = {
       modesetting.enable = true;
-      open = false; # proprietary driver (better for gaming)
+      open = false;
       nvidiaSettings = true;
       package = config.boot.kernelPackages.nvidiaPackages.production;
-
-      powerManagement.enable = true;
-      powerManagement.finegrained = false;
     };
 
-    # OpenGL / Vulkan and 32‑bit support for Proton/Wine
     hardware.graphics = {
       enable = true;
       enable32Bit = true;
-
-      extraPackages = with pkgs; [
-        vulkan-tools
-        libva
-        libva-utils
-        egl-wayland
-        mesa-demos
-      ];
-
-      extraPackages32 = with pkgs.pkgsi686Linux; [
-        vulkan-loader
-      ];
+      extraPackages = with pkgs; [ libva-utils egl-wayland nvidia-vaapi-driver ];
     };
 
-    # Basic kernel param needed for modesetting
-    boot.kernelParams = [
-      "nvidia-drm.modeset=1"
-    ];
+    boot.kernelParams = [ "nvidia-drm.modeset=1" "nvidia-drm.fbdev=1" ];
 
-    # Safe, minimal env tweaks
     environment.variables = {
-      # Harmless CUDA cache location; does NOT require global cudaSupport
-      CUDA_CACHE_PATH = "$XDG_CACHE_HOME/nv";
+      #GBM_BACKEND = "nvidia-drm";
+      #__GLX_VENDOR_LIBRARY_NAME = "nvidia";
     };
-
-    # Session-level hints for Wayland apps
-    environment.sessionVariables = {
-      NIXOS_OZONE_WL = "1";        # Prefer Wayland for Electron/Chromium
-      MOZ_ENABLE_WAYLAND = "1";    # Firefox on Wayland
-      QT_QPA_PLATFORM = "wayland;xcb";
-    };
-
-    # Handy tools
-    environment.systemPackages = with pkgs; [
-      vulkan-tools
-      libva-utils
-      egl-wayland
-    ];
   };
 }

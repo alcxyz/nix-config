@@ -79,7 +79,7 @@ with lib;
     k = "kubectl"; ka = "kubectl apply -f"; kg = "kubectl get"; kd = "kubectl describe";
     kdel = "kubectl delete"; kgpo = "kubectl get pod"; kgd = "kubectl get deployments";
     kc = "switcher"; kns = "switcher ns"; kl = "kubectl logs -f"; ke = "kubectl exec -it";
-    tf = "terraform"; v = "nvim"; d = "docker"; l = "ls -all"; ll = "ls -la";
+    tf = "terraform"; v = "nvim"; d = "docker"; dcd = "docker compose down"; dcu = "docker compose up -d"; l = "ls -all"; ll = "ls -la";
     c = "clear"; cd = "z";
     g = "gitui"; gc = "git commit -m"; gca = "git commit -am"; gps = "git push";
     gpl = "git pull"; gst = "git status";

@@ -193,11 +193,18 @@ rec {
     ];
 
     ai = with pkgs; [
-      gemini-cli
+      #gemini-cli
       goose-cli
-      opencode
-      #cursor-cli
+      #opencode
+      cursor-cli
       code-cursor
+    ];
+
+    gaming = with pkgs; [
+      gamescope
+      mangohud
+      helvum
+      moonlight-qt
     ];
 
     /* -------------------------------------------------------------------
@@ -213,6 +220,7 @@ rec {
       obsidian
       thunderbird
       brave
+      helium
       # Add more truly cross‑platform desktop apps here later
     ];
 
@@ -282,7 +290,8 @@ rec {
       ++ hm.linuxExtras
       ++ hm.workstationExtras
       ++ hm.desktopLinux
-      ++ hm.ai;
+      ++ hm.ai
+      ++ hm.gaming;
 
     # Server: CLI base + linux-specific only.
     server = 
