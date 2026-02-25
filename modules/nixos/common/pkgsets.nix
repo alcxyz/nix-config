@@ -220,6 +220,7 @@ rec {
       obsidian
       thunderbird
       brave
+      helium
       # Add more truly cross‑platform desktop apps here later
     ];
 
