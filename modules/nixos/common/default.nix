@@ -147,6 +147,12 @@ in
   # ==================== Security ====================
   security.sudo.enable = true;
   services.pcscd.enable = true;
+  
+  # libfido2 ships udev rules that reference the traditional "plugdev" group.
+  # We keep libfido2 for FIDO2/YubiKey support and create the group to avoid
+  # udev warnings on NixOS.
+  users.groups.plugdev = {};
+
   services.udev.packages = [ pkgs.libfido2 ];
 
   # ==================== Networking ====================

@@ -50,7 +50,7 @@ rec {
       # nix env related
       font-manager
       nil
-      nixfmt-classic
+      nixfmt
       nix-index
       nix-prefetch-git
     ];
@@ -84,7 +84,7 @@ rec {
        ------------------------------------------------------------------- */
     base = with pkgs; [
       /* Editors & UI-ish TUI */
-      neofetch
+      #neofetch
       tree
       bat
 
@@ -168,7 +168,7 @@ rec {
       gopls
       lua-language-server
       nodejs_22
-      node2nix
+      #node2nix
       python3
       python3Packages.rencode
       gnumake
@@ -205,7 +205,7 @@ rec {
     gaming = with pkgs; [
       gamescope
       mangohud
-      helvum
+      crosspipe
       moonlight-qt
     ];
 
@@ -238,7 +238,7 @@ rec {
       cameractrls
       cameractrls-gtk4
       winetricks
-      wineWowPackages.waylandFull
+      wineWow64Packages.waylandFull
       lens
       nautilus
     ];
@@ -270,7 +270,7 @@ rec {
         texlive.combined.scheme-full
 
         jrnl
-        youtube-music
+        pear-desktop
         wiki-tui
       ])
       ++ lib.optionals (zenPkg != null) [ zenPkg ];
