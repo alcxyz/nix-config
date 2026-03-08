@@ -133,6 +133,8 @@ rec {
       git
       git-remote-gcrypt
       gh
+      gh-dash
+      diffnav
       azure-cli
       google-cloud-sdk
       cloudflared

@@ -15,7 +15,7 @@ with lib;
     # These are modules that are guaranteed to work on both OSes
     # or handle their own platform differences internally if needed
     "${configDir}/modules/home-manager/shell/default.nix"
-    "${configDir}/modules/home-manager/programs/wezterm/default.nix"
+    #"${configDir}/modules/home-manager/programs/wezterm/default.nix"
     "${configDir}/modules/home-manager/programs/git/default.nix"
     "${configDir}/modules/home-manager/programs/ssh/default.nix"
     #../../modules/home-manager/secrets/ssh-keys.nix
@@ -74,7 +74,7 @@ with lib;
 
   programs.neovim.enable = true;
 
-  programs.wezterm.enable = true;
+  #programs.wezterm.enable = true;
 
   programs.ncspot.enable = true;
   
