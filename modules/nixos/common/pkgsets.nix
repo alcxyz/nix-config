@@ -198,6 +198,8 @@ rec {
       #gemini-cli
       goose-cli
       #opencode
+      #opencode-desktop
+      #claude-code
       cursor-cli
       code-cursor
     ];
