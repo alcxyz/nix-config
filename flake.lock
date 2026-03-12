@@ -426,6 +426,26 @@
         "type": "github"
       }
     },
+    "hyprscratch": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1772913112,
+        "narHash": "sha256-9qYYIUQOWw5dv7ak/2uhocDYXud+7exF9DbehIB+j/Y=",
+        "owner": "sashetophizika",
+        "repo": "hyprscratch",
+        "rev": "4d0d9ca6c404812106fb02eb717a05a64d916f00",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sashetophizika",
+        "repo": "hyprscratch",
+        "type": "github"
+      }
+    },
     "hyprtoolkit": {
       "inputs": {
         "aquamarine": [
@@ -750,6 +770,7 @@
         "home-manager": "home-manager",
         "hyprland": "hyprland",
         "hyprland-plugins": "hyprland-plugins",
+        "hyprscratch": "hyprscratch",
         "nix-colors": "nix-colors",
         "nix-packages": "nix-packages",
         "nix-secrets": "nix-secrets",

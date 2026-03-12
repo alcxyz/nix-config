@@ -83,6 +83,11 @@
       inputs.dgop.follows = "dgop";
     };
 
+    hyprscratch = {
+      url = "github:sashetophizika/hyprscratch";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     /*
     opencode = {
       url = "github:sst/opencode";
