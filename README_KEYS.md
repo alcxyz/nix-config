@@ -1,3 +1,5 @@
+This file is deprecated.
+
 # My Declarative System: Setup & Bootstrapping Guide
 
 This repository contains the complete declarative configuration for my NixOS and macOS systems. It uses [Nix Flakes](https://nixos.wiki/wiki/Flakes) to manage system packages, services, and user dotfiles via [Home Manager](https://github.com/nix-community/home-manager).
