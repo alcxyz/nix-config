@@ -138,6 +138,7 @@ rec {
       azure-cli
       google-cloud-sdk
       cloudflared
+      shopify-cli
 
       /* Misc / infra helpers */
       devbox
@@ -196,15 +197,17 @@ rec {
 
     ai = with pkgs; [
       #gemini-cli
-      goose-cli
-      #opencode
+      #goose-cli
+      opencode
       #opencode-desktop
-      #claude-code
-      cursor-cli
-      code-cursor
+      claude-code
+      codex
+      #cursor-cli
+      #code-cursor
     ];
 
     gaming = with pkgs; [
+      heroic
       gamescope
       mangohud
       crosspipe
