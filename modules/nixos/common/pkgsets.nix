@@ -227,12 +227,12 @@ rec {
       obsidian
       thunderbird
       brave
-      helium
       # Add more truly cross‑platform desktop apps here later
     ];
 
     # Linux-only (or strongly Linux-oriented) desktop apps
     desktopLinuxOnly = with pkgs; [
+      helium
       vlc
       obs-studio
       kdePackages.kdenlive
