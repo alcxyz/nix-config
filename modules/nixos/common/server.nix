@@ -25,7 +25,7 @@ in
       {
         hostName = "xyz";
         sshUser = username;
-        system = "x86_64-linux";
+        systems = [ "x86_64-linux" "aarch64-linux" ];
         maxJobs = 8;
         speedFactor = 2;
         supportedFeatures = [ "big-parallel" "kvm" ];
