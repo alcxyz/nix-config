@@ -204,6 +204,7 @@ rec {
       codex
       #cursor-cli
       #code-cursor
+      t3code
     ];
 
     gaming = with pkgs; [
@@ -315,5 +316,6 @@ rec {
       ++ hm.iac 
       ++ hm.k8s
       ++ hm.desktopMac;
+      ++ hm.ai;
   };
 }
