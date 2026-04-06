@@ -141,7 +141,6 @@ rec {
       shopify-cli
 
       /* Misc / infra helpers */
-      devbox
       atac
       termshark
       openldap

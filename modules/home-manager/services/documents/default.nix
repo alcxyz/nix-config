@@ -80,7 +80,7 @@ let
 
   ingestScript = pkgs.writeShellApplication {
     name = "documents-ingest";
-    runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils pkgs.libnotify ];
+    runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils pkgs.libnotify pkgs.gnugrep ];
     text = ''
       DOCUMENTS_DIR="$1"
       INGEST_DIR="$2"
@@ -124,9 +124,9 @@ let
           esac
 
           # Skip files in /misc/ subtree
-          if printf '%s' "$filepath" | grep -q '/misc/'; then
-            continue
-          fi
+          case "$filepath" in
+            */misc/*) continue ;;
+          esac
 
           # Get relative path from documentsDir
           rel_path="''${filepath#"$DOCUMENTS_DIR"/}"

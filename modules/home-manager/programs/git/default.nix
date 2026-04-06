@@ -46,7 +46,6 @@ let
       clean    = "git-lfs clean -- %f";
       smudge   = "git-lfs smudge -- %f";
     };
-    gpg.format = "ssh";
   };
 in
 {
@@ -173,6 +172,12 @@ in
     programs.git = {
       enable = true;
 
+      signing = {
+        format = "ssh";
+        key = cfg.signingKey;
+        signByDefault = cfg.signByDefault;
+      };
+
       # All current Git settings go under `settings`, which directly maps
       # to git‑config keys and sections.
       settings =
@@ -181,8 +186,6 @@ in
           # Identity and signing defaults.
           user.name       = cfg.userName;
           user.email      = cfg.userEmail;
-          user.signingkey = cfg.signingKey;
-          commit.gpgsign  = cfg.signByDefault;
           alias           = cfg.aliases;
         }
         # Add includeIf rules that reference the files we generated above.

@@ -14,7 +14,7 @@ in
   config = mkIf cfg.enable {
     programs.opencode = {
       enable = true;
-      settings = {
+      tui = {
         theme = "opencode";
       };
     };
