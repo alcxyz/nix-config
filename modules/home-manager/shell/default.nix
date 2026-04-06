@@ -8,6 +8,7 @@ let
   # e>| redirects only stderr into the pipe, so ATUIN_HISTORY_ID is always empty
   # and history end never records. Replace e>| with | to restore correct behaviour.
   atuinNuFixed = pkgs.runCommand "atuin-nushell-config-fixed.nu" { } ''
+    export HOME=$(mktemp -d)
     ${pkgs.atuin}/bin/atuin init nu \
       | ${pkgs.gnused}/bin/sed 's/e>| complete | get stdout/| complete | get stdout/g' \
       > $out
