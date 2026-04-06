@@ -27,7 +27,6 @@ in
 {
   # ==================== Imports ====================
   imports = [
-    #"${configDir}/modules/nixos/services/xremap/default.nix"
   ];
 
   # ==================== Nix Configuration ====================

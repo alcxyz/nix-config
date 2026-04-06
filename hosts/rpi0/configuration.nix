@@ -8,8 +8,6 @@
     "${configDir}/modules/nixos/common/server.nix"
   ];
 
-  nixpkgs.config.allowUnfree = true;
-
   boot.loader.grub.enable = false;
   boot.loader.generic-extlinux-compatible.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
