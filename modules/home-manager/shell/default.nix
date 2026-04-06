@@ -2,6 +2,17 @@
 { config, lib, pkgs, inputs, osIcon ? "🐧", ... }:
 
 with lib;
+let
+  # Patch atuin's nushell integration: fixes the e>| stdout-drop bug introduced
+  # in 18.13.0 (atuinsh/atuin PR#3358, merged but unreleased as of 18.13.6).
+  # e>| redirects only stderr into the pipe, so ATUIN_HISTORY_ID is always empty
+  # and history end never records. Replace e>| with | to restore correct behaviour.
+  atuinNuFixed = pkgs.runCommand "atuin-nushell-config-fixed.nu" { } ''
+    ${pkgs.atuin}/bin/atuin init nu \
+      | ${pkgs.gnused}/bin/sed 's/e>| complete | get stdout/| complete | get stdout/g' \
+      > $out
+  '';
+in
 {
   home.packages = with pkgs; [
     nushell
@@ -27,7 +38,7 @@ with lib;
     };
     atuin = {
       enable = true;
-      enableNushellIntegration = true;
+      enableNushellIntegration = false; # sourced manually below with patch applied
       #daemon.enable = true;
     };
     direnv = {
@@ -64,6 +75,8 @@ with lib;
             $"($env.HOME)/go/bin"
         ]
         $env.PATH = ($env.PATH | append $custom_paths | uniq | where {|p| ($p | path exists) })
+
+        source ${atuinNuFixed}
       '';
     };
   };
