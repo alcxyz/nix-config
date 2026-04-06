@@ -3,22 +3,9 @@
   description = "NixOS and Nix-Darwin configurations for multiple hosts with \
                 standalone Home Manager (all on nixos-unstable)";
 
-  #nixConfig = {
-  #  extra-substituters = [
-  #    "https://nix-community.cachix.org"
-  #    "https://cuda-maintainers.cachix.org"
-  #  ];
-  #  extra-trusted-public-keys = [
-  #    "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-  #    "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
-  #  ];
-  #};
-
   # ---- Inputs -----------------------------------------------------------
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
-    nixpkgs-master.url = "github:NixOS/nixpkgs/master";
 
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
@@ -67,11 +54,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dgop = {
-      url = "github:AvengeMedia/dgop";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     dsearch = {
       url = "github:AvengeMedia/danksearch";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -80,40 +62,12 @@
     dankMaterialShell = {
       url = "github:AvengeMedia/DankMaterialShell";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.dgop.follows = "dgop";
     };
 
     hyprscratch = {
       url = "github:sashetophizika/hyprscratch";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    /*
-    opencode = {
-      url = "github:sst/opencode";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    goose = {
-      url = "github:block/goose";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    xremap-flake = {
-      url = "github:xremap/nix-flake";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    hypridle = {
-      url = "github:hyprwm/hypridle";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    hyprlock = {
-      url = "github:hyprwm/hyprlock";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    */
 
   };
 
@@ -142,30 +96,12 @@
           })
         ];
 
-        # Base: unstable pkgs (what you use everywhere now)
-        pkgsUnstable = import nixpkgs {
-          inherit system overlays;
-          config.allowUnfree = true;
-          config.allowUnsupportedSystem = true;
-          config.permittedInsecurePackages = [
-            "freeimage-3.18.0-unstable-2024-04-18"
-          ];
-        };
-
-        # Only import master for Linux, because that’s where MongoDB is needed
-        pkgsMaster =
-          if system == "x86_64-linux" then
-            import inputs.nixpkgs-master {
-              inherit system;
-              config.allowUnfree = true;
-            }
-          else
-            pkgsUnstable;
       in
-      # Use unstable everywhere, but override mongodb on Linux with the master version
-      pkgsUnstable // (if system == "x86_64-linux" then {
-        mongodb = pkgsMaster.mongodb;
-      } else {})
+      import nixpkgs {
+        inherit system overlays;
+        config.allowUnfree = true;
+        config.allowUnsupportedSystem = true;
+      }
     );
 
     # ----- Host definitions ------------------------------------------------
@@ -200,18 +136,16 @@
     allNixosSystems = builtins.mapAttrs
       (hostName: hostAttrs:
         nixpkgs.lib.nixosSystem {
-          system = hostAttrs.system;
           # Provide host-specific specialArgs; pass pkgs for that system
           specialArgs = {
             inherit inputs hostName username;
             configDir = self;
-            pkgs = pkgsFor.${hostAttrs.system};
           };
           modules = [
+            nixpkgs.nixosModules.readOnlyPkgs
+            { nixpkgs.pkgs = pkgsFor.${hostAttrs.system}; }
             hostAttrs.configuration
-            # sops-nix module used for secrets handling system-wide
             sops-nix.nixosModules.sops
-            # add shared NixOS modules here if needed
           ];
         }
       )
@@ -221,16 +155,15 @@
     allDarwinSystems = builtins.mapAttrs
       (hostName: hostAttrs:
         darwin.lib.darwinSystem {
-          system = hostAttrs.system;
           specialArgs = {
             inherit inputs hostName username;
             configDir = self;
             pkgs = pkgsFor.${hostAttrs.system};
           };
           modules = [
+            { nixpkgs.hostPlatform = hostAttrs.system; }
             hostAttrs.configuration
             sops-nix.darwinModules.sops
-            # add shared darwin modules here
           ];
         }
       )
@@ -247,7 +180,6 @@
           # make inputs and some helper values available inside HM modules
           inherit inputs username system hostName osIcon;
           configDir = self;
-          pkgs = pkgsFor.${system};
         };
 
         # Load the host-specific home config and some shared HM modules
@@ -301,19 +233,6 @@
         ];
       };
     });
-
-    # Shared modules bundles (if present) are exposed under self.modules.*
-    modules = {
-      nixos = if builtins.pathExists ./modules/nixos/default.nix
-              then import ./modules/nixos/default.nix
-              else {};
-      darwin = if builtins.pathExists ./modules/darwin/default.nix
-               then import ./modules/darwin/default.nix
-               else {};
-      home-manager = if builtins.pathExists ./modules/home-manager/default.nix
-                     then import ./modules/home-manager/default.nix
-                     else {};
-    };
 
     # Packages: add cross-build helpers for Rock Pi 4 (build on xyz).
     packages = forAllSystems (system:
