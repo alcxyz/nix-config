@@ -1,0 +1,12 @@
+[keybindings]
+"Space" = "playpause"
+"Shift+p" = "queue"
+
+# Replace F2/F3/F4 with an adjacent home-row-style cluster
+#"Alt+h" = "focus library"
+#"Alt+j" = "focus search"
+#"Alt+k" = "focus queue"
+
+"Alt+1" = "focus library"
+"Alt+2" = "focus search"
+"Alt+3" = "focus queue"
