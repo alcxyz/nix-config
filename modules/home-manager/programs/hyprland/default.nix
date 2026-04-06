@@ -1,5 +1,5 @@
 # modules/home-manager/programs/hyprland/default.nix
-{ options, config, lib, pkgs, inputs, ... }:
+{ options, config, lib, pkgs, inputs, username, ... }:
 with lib;
 
 let
@@ -35,6 +35,13 @@ in {
       source = ./scripts/fkey_handler.sh;
       executable = true;
     };
+
+    # Symlink hyprland configs directly to the repo checkout so edits take
+    # effect immediately without a home-manager rebuild.
+    xdg.configFile."hypr/hyprland.conf".source = config.lib.file.mkOutOfStoreSymlink
+      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/hypr/hyprland.conf";
+    xdg.configFile."hypr/binds.conf".source = config.lib.file.mkOutOfStoreSymlink
+      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/hypr/binds.conf";
 
     # Keep colors.conf generated from nix-colors
     xdg.configFile."hypr/colors.conf".text = ''
