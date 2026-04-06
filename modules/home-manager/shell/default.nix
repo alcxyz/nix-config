@@ -20,7 +20,7 @@ in
     zoxide
     starship
     atuin
-    (inputs.nix-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace-bridge)
+    carapace-bridge
   ];
 
   programs = {
@@ -34,7 +34,6 @@ in
     };
     carapace = {
       enable = true;
-      package = (inputs.nix-packages.packages.${pkgs.stdenv.hostPlatform.system}.carapace);
       enableNushellIntegration = true;
     };
     atuin = {

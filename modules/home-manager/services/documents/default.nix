@@ -8,13 +8,13 @@ let
 
   organizerScript = pkgs.writeShellApplication {
     name = "documents-organizer";
-    runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils ];
+    runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils pkgs.libnotify ];
     text = ''
       DOCUMENTS_DIR="$1"
 
       echo "documents-organizer: watching $DOCUMENTS_DIR"
 
-      inotifywait -m -e IN_CLOSE_WRITE,IN_MOVED_TO \
+      inotifywait -m -e close_write,moved_to \
         --format '%f' \
         "$DOCUMENTS_DIR" \
       | while IFS= read -r filename; do
@@ -27,6 +27,11 @@ let
 
           # Skip if file no longer exists
           if [ ! -f "$filepath" ]; then
+            continue
+          fi
+
+          # Skip dotfiles and empty files
+          if [ "''${filename:0:1}" = "." ] || [ ! -s "$filepath" ]; then
             continue
           fi
 
@@ -68,20 +73,21 @@ let
 
           echo "documents-organizer: moving $filename -> $bucket/$year/$month/"
           mv "$filepath" "$dest_dir/$filename"
+          notify-send -a "Documents" "Sorted" "$filename → $bucket/$year/$month/"
         done
     '';
   };
 
   ingestScript = pkgs.writeShellApplication {
     name = "documents-ingest";
-    runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils ];
+    runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils pkgs.libnotify ];
     text = ''
       DOCUMENTS_DIR="$1"
       INGEST_DIR="$2"
 
       echo "documents-ingest: watching $DOCUMENTS_DIR recursively, ingesting to $INGEST_DIR"
 
-      inotifywait -m -r -e IN_CLOSE_WRITE,IN_MOVED_TO \
+      inotifywait -m -r -e close_write,moved_to \
         --format '%w%f' \
         "$DOCUMENTS_DIR" \
       | while IFS= read -r filepath; do
@@ -132,6 +138,7 @@ let
 
           echo "documents-ingest: copying $rel_path -> $INGEST_DIR/$rel_dir/"
           cp "$filepath" "$dest_dir/$filename"
+          notify-send -a "Paperless" "Ingesting" "$rel_path"
         done
     '';
   };

@@ -135,8 +135,6 @@
         overlays = [
           (final: prev: {
             ndrop = nix-packages.packages.${final.system}.ndrop;
-            carapace = nix-packages.packages.${final.system}.carapace;
-            carapace-bridge = nix-packages.packages.${final.system}.carapace-bridge;
             zfs-auto-unlock = nix-packages.packages.${final.system}.zfs-auto-unlock;
             pihole-sync = nix-packages.packages.${final.system}.pihole-sync;
             helium = nix-packages.packages.${final.system}.helium;

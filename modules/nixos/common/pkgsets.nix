@@ -315,7 +315,7 @@ rec {
       ++ hm.dev 
       ++ hm.iac 
       ++ hm.k8s
+      ++ hm.ai
       ++ hm.desktopMac;
-      ++ hm.ai;
   };
 }
