@@ -87,15 +87,13 @@
     pkgsFor = forAllSystems (system:
       let
         overlays = [
-          (final: prev: {
-            ndrop = nix-packages.packages.${final.system}.ndrop;
-            zfs-auto-unlock = nix-packages.packages.${final.system}.zfs-auto-unlock;
-            pihole-sync = nix-packages.packages.${final.system}.pihole-sync;
-            helium = nix-packages.packages.${final.system}.helium;
-            t3code = nix-packages.packages.${final.system}.t3code;
-            claude-code = nix-packages.packages.${final.system}.claude-code;
-            paperless-review = nix-packages.packages.${final.system}.paperless-review;
-          })
+          (_final: _prev:
+            let
+              np = nix-packages.packages.${system};
+              wanted = [ "ndrop" "zfs-auto-unlock" "pihole-sync" "helium" "t3code" "claude-code" "paperless-review" ];
+            in
+              nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np
+          )
         ];
 
       in
