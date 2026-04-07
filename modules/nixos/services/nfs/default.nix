@@ -6,9 +6,12 @@ with lib;
 let
   cfg = config.services.nfs.managed;
 
-  # Build export lines from the shares list
+  # Build export lines — one per share per allowed client
   exportLines = concatMapStringsSep "\n" (s:
-    "${s.path}  ${cfg.allowedSubnet}(rw,nohide,insecure,no_subtree_check,all_squash,anonuid=${toString s.anonuid},anongid=${toString s.anongid})"
+    let clients = concatMapStringsSep " " (ip:
+      "${ip}(rw,nohide,insecure,no_subtree_check,all_squash,anonuid=${toString s.anonuid},anongid=${toString s.anongid})"
+    ) cfg.allowedClients;
+    in "${s.path}  ${clients}"
   ) cfg.shares;
 
   # Build Avahi service XML entries for Finder discovery
@@ -30,10 +33,10 @@ in
   options.services.nfs.managed = {
     enable = mkEnableOption "NFS file sharing with Avahi discovery";
 
-    allowedSubnet = mkOption {
-      type = types.str;
-      default = "192.168.1.0/24";
-      description = "Subnet allowed to access NFS shares.";
+    allowedClients = mkOption {
+      type = types.listOf types.str;
+      default = [];
+      description = "List of IPs or subnets allowed to mount NFS shares.";
     };
 
     shares = mkOption {
@@ -66,8 +69,10 @@ in
       exports = exportLines;
     };
 
-    # NFS firewall
-    networking.firewall.allowedTCPPorts = [ 2049 ];
+    # Firewall — only allow NFS from whitelisted clients
+    networking.firewall.extraCommands = concatMapStringsSep "\n" (ip:
+      "iptables -A nixos-fw -p tcp --dport 2049 -s ${ip} -j nixos-fw-accept"
+    ) cfg.allowedClients;
 
     # Avahi for mDNS/Bonjour discovery
     services.avahi = {
