@@ -13,6 +13,7 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   nix.settings.require-sigs = false;
+  nix.settings.max-jobs = 0; # always offload builds to xyz
 
   services.journald.extraConfig = ''
     Storage=persistent
