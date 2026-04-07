@@ -23,10 +23,5 @@ let cfg = config.hardware.nvidia; in
     };
 
     boot.kernelParams = [ "nvidia-drm.modeset=1" "nvidia-drm.fbdev=1" ];
-
-    environment.variables = {
-      #GBM_BACKEND = "nvidia-drm";
-      #__GLX_VENDOR_LIBRARY_NAME = "nvidia";
-    };
   };
 }

@@ -23,6 +23,7 @@ in {
 
     gtk = {
       enable = true;
+      gtk4.theme = null; # adopt new HM default (no gtk4 theme override)
       iconTheme = {
         name = "Papirus-Dark";
         package = pkgs.papirus-icon-theme;
