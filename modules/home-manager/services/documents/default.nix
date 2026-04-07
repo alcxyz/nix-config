@@ -5,13 +5,40 @@ with lib;
 
 let
   cfg = config.services.documents;
+  isDarwin = pkgs.stdenv.isDarwin;
 
-  organizerScript = pkgs.writeShellApplication {
+  # Shared bucket logic as a shell function
+  bucketFunction = ''
+    get_bucket() {
+      local ext="$1"
+      case "$ext" in
+        pdf) echo "pdf" ;;
+        jpg|jpeg|png|gif|webp|tiff|tif) echo "images" ;;
+        docx|doc|odt|rtf) echo "docx" ;;
+        xlsx|xls|ods) echo "xlsx" ;;
+        *) echo "misc" ;;
+      esac
+    }
+
+    is_ingestible() {
+      local ext="$1"
+      case "$ext" in
+        pdf|jpg|jpeg|png|gif|webp|tiff|tif|docx|odt|xlsx) return 0 ;;
+        *) return 1 ;;
+      esac
+    }
+  '';
+
+  # --- Organizer scripts (platform-specific watcher, shared sort logic) ---
+
+  organizerScriptLinux = pkgs.writeShellApplication {
     name = "documents-organizer";
     runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils pkgs.libnotify ];
     text = ''
       DOCUMENTS_DIR="$1"
       INGEST_DIR="$2"
+
+      ${bucketFunction}
 
       echo "documents-organizer: watching $DOCUMENTS_DIR"
 
@@ -21,58 +48,24 @@ let
       | while IFS= read -r filename; do
           filepath="$DOCUMENTS_DIR/$filename"
 
-          # Skip directories
-          if [ -d "$filepath" ]; then
-            continue
-          fi
+          [ -d "$filepath" ] && continue
+          [ ! -f "$filepath" ] && continue
+          [ "''${filename:0:1}" = "." ] || [ ! -s "$filepath" ] && continue
 
-          # Skip if file no longer exists
-          if [ ! -f "$filepath" ]; then
-            continue
-          fi
-
-          # Skip dotfiles and empty files
-          if [ "''${filename:0:1}" = "." ] || [ ! -s "$filepath" ]; then
-            continue
-          fi
-
-          # Get lowercase extension
           ext="''${filename##*.}"
           ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
-
-          # If no extension (no dot, or dot is first char), treat as misc
           basename_noext="''${filename%.*}"
           if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
             ext=""
           fi
 
-          # Determine bucket
-          case "$ext" in
-            pdf)
-              bucket="pdf"
-              ;;
-            jpg|jpeg|png|gif|webp|tiff|tif)
-              bucket="images"
-              ;;
-            docx|doc|odt|rtf)
-              bucket="docx"
-              ;;
-            xlsx|xls|ods)
-              bucket="xlsx"
-              ;;
-            *)
-              bucket="misc"
-              ;;
-          esac
-
-          # Get year and month from file modification time
+          bucket="$(get_bucket "$ext")"
           year="$(date -r "$filepath" +%Y)"
           month="$(date -r "$filepath" +%m)"
 
           dest_dir="$DOCUMENTS_DIR/$bucket/$year/$month"
           mkdir -p "$dest_dir"
 
-          # Avoid overwriting existing files — append timestamp if collision
           dest="$dest_dir/$filename"
           if [ -e "$dest" ]; then
             stamp="$(date +%s)"
@@ -89,29 +82,90 @@ let
           mv "$filepath" "$dest"
           notify-send -a "Documents" "Sorted" "$filename → $bucket/$year/$month/"
 
-          # Copy ingest-eligible files to Paperless ingest dir
-          case "$ext" in
-            pdf|jpg|jpeg|png|gif|webp|tiff|tif|docx|odt|xlsx)
-              mkdir -p "$INGEST_DIR"
-              ingest_dest="$INGEST_DIR/$filename"
-              if [ -e "$ingest_dest" ]; then
-                stamp="$(date +%s)"
-                ingest_dest="$INGEST_DIR/''${basename_noext}_$stamp.$ext"
-              fi
-              cp "$dest" "$ingest_dest"
-              echo "documents-organizer: queued $filename for Paperless ingest"
-              ;;
-          esac
+          if is_ingestible "$ext"; then
+            mkdir -p "$INGEST_DIR"
+            ingest_dest="$INGEST_DIR/$filename"
+            if [ -e "$ingest_dest" ]; then
+              stamp="$(date +%s)"
+              ingest_dest="$INGEST_DIR/''${basename_noext}_$stamp.$ext"
+            fi
+            cp "$dest" "$ingest_dest"
+            echo "documents-organizer: queued $filename for Paperless ingest"
+          fi
         done
     '';
   };
 
-  ingestScript = pkgs.writeShellApplication {
+  organizerScriptDarwin = pkgs.writeShellApplication {
+    name = "documents-organizer";
+    runtimeInputs = [ pkgs.fswatch pkgs.coreutils ];
+    text = ''
+      DOCUMENTS_DIR="$1"
+
+      ${bucketFunction}
+
+      echo "documents-organizer: watching $DOCUMENTS_DIR"
+
+      fswatch -0 --event Created --event Updated --event MovedTo \
+        --exclude '.*/' \
+        "$DOCUMENTS_DIR" \
+      | while IFS= read -r -d "" filepath; do
+          [ -d "$filepath" ] && continue
+          [ ! -f "$filepath" ] && continue
+
+          filename="$(basename "$filepath")"
+          [ "''${filename:0:1}" = "." ] && continue
+          [ ! -s "$filepath" ] && continue
+
+          # Only process files at the root of Documents
+          parent="$(dirname "$filepath")"
+          if [ "$parent" != "$DOCUMENTS_DIR" ]; then
+            continue
+          fi
+
+          ext="''${filename##*.}"
+          ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+          basename_noext="''${filename%.*}"
+          if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
+            ext=""
+          fi
+
+          bucket="$(get_bucket "$ext")"
+          year="$(stat -f '%Sm' -t '%Y' "$filepath")"
+          month="$(stat -f '%Sm' -t '%m' "$filepath")"
+
+          dest_dir="$DOCUMENTS_DIR/$bucket/$year/$month"
+          mkdir -p "$dest_dir"
+
+          dest="$dest_dir/$filename"
+          if [ -e "$dest" ]; then
+            stamp="$(date +%s)"
+            if [ -n "$ext" ]; then
+              dest="$dest_dir/''${basename_noext}_$stamp.$ext"
+              filename="''${basename_noext}_$stamp.$ext"
+            else
+              dest="$dest_dir/''${filename}_$stamp"
+              filename="''${filename}_$stamp"
+            fi
+          fi
+
+          echo "documents-organizer: moving $filename -> $bucket/$year/$month/"
+          mv "$filepath" "$dest"
+          osascript -e "display notification \"$filename → $bucket/$year/$month/\" with title \"Documents\" subtitle \"Sorted\""
+        done
+    '';
+  };
+
+  # --- Ingest scripts ---
+
+  ingestScriptLinux = pkgs.writeShellApplication {
     name = "documents-ingest";
     runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils pkgs.libnotify pkgs.gnugrep ];
     text = ''
       DOCUMENTS_DIR="$1"
       INGEST_DIR="$2"
+
+      ${bucketFunction}
 
       echo "documents-ingest: watching $DOCUMENTS_DIR recursively, ingesting to $INGEST_DIR"
 
@@ -119,52 +173,26 @@ let
         --format '%w%f' \
         "$DOCUMENTS_DIR" \
       | while IFS= read -r filepath; do
-
-          # Skip directories
-          if [ -d "$filepath" ]; then
-            continue
-          fi
-
-          # Skip if file no longer exists
-          if [ ! -f "$filepath" ]; then
-            continue
-          fi
+          [ -d "$filepath" ] && continue
+          [ ! -f "$filepath" ] && continue
 
           filename="$(basename "$filepath")"
-
-          # Get lowercase extension
           ext="''${filename##*.}"
           ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
-
-          # If no extension, skip
           basename_noext="''${filename%.*}"
           if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
             continue
           fi
 
-          # Only proceed for ingest-eligible extensions
-          case "$ext" in
-            pdf|jpg|jpeg|png|gif|webp|tiff|tif|docx|odt|xlsx)
-              ;;
-            *)
-              continue
-              ;;
-          esac
+          is_ingestible "$ext" || continue
 
-          # Skip files in /misc/ subtree
-          case "$filepath" in
-            */misc/*) continue ;;
-          esac
+          case "$filepath" in */misc/*) continue ;; esac
 
-          # Get relative path from documentsDir
           rel_path="''${filepath#"$DOCUMENTS_DIR"/}"
           rel_dir="$(dirname "$rel_path")"
-
-          # Create destination directory preserving relative path
           dest_dir="$INGEST_DIR/$rel_dir"
           mkdir -p "$dest_dir"
 
-          # Avoid overwriting existing files
           ingest_dest="$dest_dir/$filename"
           if [ -e "$ingest_dest" ]; then
             stamp="$(date +%s)"
@@ -178,6 +206,58 @@ let
     '';
   };
 
+  ingestScriptDarwin = pkgs.writeShellApplication {
+    name = "documents-ingest";
+    runtimeInputs = [ pkgs.fswatch pkgs.coreutils pkgs.curl ];
+    text = ''
+      DOCUMENTS_DIR="$1"
+      PAPERLESS_URL="$2"
+      TOKEN_FILE="$3"
+
+      ${bucketFunction}
+
+      TOKEN="$(cat "$TOKEN_FILE")"
+
+      echo "documents-ingest: watching $DOCUMENTS_DIR recursively, uploading to $PAPERLESS_URL"
+
+      fswatch -0 -r --event Created --event Updated --event MovedTo \
+        "$DOCUMENTS_DIR" \
+      | while IFS= read -r -d "" filepath; do
+          [ -d "$filepath" ] && continue
+          [ ! -f "$filepath" ] && continue
+
+          filename="$(basename "$filepath")"
+          [ "''${filename:0:1}" = "." ] && continue
+
+          ext="''${filename##*.}"
+          ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+          basename_noext="''${filename%.*}"
+          if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
+            continue
+          fi
+
+          is_ingestible "$ext" || continue
+
+          case "$filepath" in */misc/*) continue ;; esac
+
+          echo "documents-ingest: uploading $filename to Paperless"
+          response="$(curl -s -w '%{http_code}' -o /dev/null \
+            -X POST "$PAPERLESS_URL/api/documents/post_document/" \
+            -H "Authorization: Token $TOKEN" \
+            -F "document=@$filepath" \
+            -F "title=$basename_noext")"
+
+          if [ "$response" = "200" ]; then
+            echo "documents-ingest: uploaded $filename"
+            osascript -e "display notification \"$filename\" with title \"Paperless\" subtitle \"Uploaded\""
+          else
+            echo "documents-ingest: FAILED to upload $filename (HTTP $response)"
+            osascript -e "display notification \"$filename (HTTP $response)\" with title \"Paperless\" subtitle \"Upload Failed\""
+          fi
+        done
+    '';
+  };
+
 in
 {
   options.services.documents = {
@@ -186,51 +266,97 @@ in
     documentsDir = mkOption {
       type = types.str;
       default = "${config.home.homeDirectory}/Documents";
-      description = "Path to the documents directory to watch and organise";
+      description = "Path to the documents directory to watch and organise.";
     };
 
     ingestDir = mkOption {
       type = types.str;
       default = "${config.home.homeDirectory}/paperless-ingest";
-      description = "Path to the Paperless ingest directory";
+      description = "Path to the Paperless ingest directory (Linux only).";
+    };
+
+    paperlessUrl = mkOption {
+      type = types.str;
+      default = "";
+      description = "Paperless-ngx base URL for API uploads (Darwin only).";
+    };
+
+    paperlessTokenFile = mkOption {
+      type = types.str;
+      default = "";
+      description = "Path to file containing the Paperless API token (Darwin only).";
     };
   };
 
-  config = mkIf cfg.enable {
-    systemd.user.tmpfiles.rules = [
-      "d ${cfg.ingestDir} 0755 - - -"
-    ];
+  config = mkIf cfg.enable (mkMerge [
+    # ---- Linux (systemd + inotifywait) ----
+    (mkIf (!isDarwin) {
+      systemd.user.tmpfiles.rules = [
+        "d ${cfg.ingestDir} 0755 - - -"
+      ];
 
-    systemd.user.services = {
-      documents-organizer = {
-        Unit = {
-          Description = "Watch Documents root and sort files into typed subdirectories";
+      systemd.user.services = {
+        documents-organizer = {
+          Unit.Description = "Watch Documents root and sort files into typed subdirectories";
+          Service = {
+            Type = "simple";
+            ExecStart = "${organizerScriptLinux}/bin/documents-organizer ${cfg.documentsDir} ${cfg.ingestDir}";
+            Restart = "on-failure";
+            RestartSec = "5s";
+            StandardOutput = "journal";
+            StandardError = "journal";
+          };
+          Install.WantedBy = [ "default.target" ];
         };
-        Service = {
-          Type = "simple";
-          ExecStart = "${organizerScript}/bin/documents-organizer ${cfg.documentsDir} ${cfg.ingestDir}";
-          Restart = "on-failure";
-          RestartSec = "5s";
-          StandardOutput = "journal";
-          StandardError = "journal";
-        };
-        Install.WantedBy = [ "default.target" ];
-      };
 
-      documents-ingest = {
-        Unit = {
-          Description = "Watch Documents recursively and copy ingest-eligible files to Paperless";
+        documents-ingest = {
+          Unit.Description = "Watch Documents recursively and copy ingest-eligible files to Paperless";
+          Service = {
+            Type = "simple";
+            ExecStart = "${ingestScriptLinux}/bin/documents-ingest ${cfg.documentsDir} ${cfg.ingestDir}";
+            Restart = "on-failure";
+            RestartSec = "5s";
+            StandardOutput = "journal";
+            StandardError = "journal";
+          };
+          Install.WantedBy = [ "default.target" ];
         };
-        Service = {
-          Type = "simple";
-          ExecStart = "${ingestScript}/bin/documents-ingest ${cfg.documentsDir} ${cfg.ingestDir}";
-          Restart = "on-failure";
-          RestartSec = "5s";
-          StandardOutput = "journal";
-          StandardError = "journal";
-        };
-        Install.WantedBy = [ "default.target" ];
       };
-    };
-  };
+    })
+
+    # ---- Darwin (launchd + fswatch) ----
+    (mkIf isDarwin {
+      launchd.agents = {
+        documents-organizer = {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${organizerScriptDarwin}/bin/documents-organizer"
+              cfg.documentsDir
+            ];
+            RunAtLoad = true;
+            KeepAlive = true;
+            StandardOutPath = "${config.home.homeDirectory}/Library/Logs/documents-organizer.log";
+            StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/documents-organizer.log";
+          };
+        };
+
+        documents-ingest = mkIf (cfg.paperlessUrl != "") {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${ingestScriptDarwin}/bin/documents-ingest"
+              cfg.documentsDir
+              cfg.paperlessUrl
+              cfg.paperlessTokenFile
+            ];
+            RunAtLoad = true;
+            KeepAlive = true;
+            StandardOutPath = "${config.home.homeDirectory}/Library/Logs/documents-ingest.log";
+            StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/documents-ingest.log";
+          };
+        };
+      };
+    })
+  ]);
 }
