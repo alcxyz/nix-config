@@ -11,6 +11,7 @@ let
     runtimeInputs = [ pkgs.inotify-tools pkgs.coreutils pkgs.libnotify ];
     text = ''
       DOCUMENTS_DIR="$1"
+      INGEST_DIR="$2"
 
       echo "documents-organizer: watching $DOCUMENTS_DIR"
 
@@ -71,9 +72,36 @@ let
           dest_dir="$DOCUMENTS_DIR/$bucket/$year/$month"
           mkdir -p "$dest_dir"
 
+          # Avoid overwriting existing files — append timestamp if collision
+          dest="$dest_dir/$filename"
+          if [ -e "$dest" ]; then
+            stamp="$(date +%s)"
+            if [ -n "$ext" ]; then
+              dest="$dest_dir/''${basename_noext}_$stamp.$ext"
+              filename="''${basename_noext}_$stamp.$ext"
+            else
+              dest="$dest_dir/''${filename}_$stamp"
+              filename="''${filename}_$stamp"
+            fi
+          fi
+
           echo "documents-organizer: moving $filename -> $bucket/$year/$month/"
-          mv "$filepath" "$dest_dir/$filename"
+          mv "$filepath" "$dest"
           notify-send -a "Documents" "Sorted" "$filename → $bucket/$year/$month/"
+
+          # Copy ingest-eligible files to Paperless ingest dir
+          case "$ext" in
+            pdf|jpg|jpeg|png|gif|webp|tiff|tif|docx|odt|xlsx)
+              mkdir -p "$INGEST_DIR"
+              ingest_dest="$INGEST_DIR/$filename"
+              if [ -e "$ingest_dest" ]; then
+                stamp="$(date +%s)"
+                ingest_dest="$INGEST_DIR/''${basename_noext}_$stamp.$ext"
+              fi
+              cp "$dest" "$ingest_dest"
+              echo "documents-organizer: queued $filename for Paperless ingest"
+              ;;
+          esac
         done
     '';
   };
@@ -136,8 +164,15 @@ let
           dest_dir="$INGEST_DIR/$rel_dir"
           mkdir -p "$dest_dir"
 
+          # Avoid overwriting existing files
+          ingest_dest="$dest_dir/$filename"
+          if [ -e "$ingest_dest" ]; then
+            stamp="$(date +%s)"
+            ingest_dest="$dest_dir/''${basename_noext}_$stamp.$ext"
+          fi
+
           echo "documents-ingest: copying $rel_path -> $INGEST_DIR/$rel_dir/"
-          cp "$filepath" "$dest_dir/$filename"
+          cp "$filepath" "$ingest_dest"
           notify-send -a "Paperless" "Ingesting" "$rel_path"
         done
     '';
@@ -173,7 +208,7 @@ in
         };
         Service = {
           Type = "simple";
-          ExecStart = "${organizerScript}/bin/documents-organizer ${cfg.documentsDir}";
+          ExecStart = "${organizerScript}/bin/documents-organizer ${cfg.documentsDir} ${cfg.ingestDir}";
           Restart = "on-failure";
           RestartSec = "5s";
           StandardOutput = "journal";

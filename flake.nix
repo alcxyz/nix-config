@@ -93,6 +93,8 @@
             pihole-sync = nix-packages.packages.${final.system}.pihole-sync;
             helium = nix-packages.packages.${final.system}.helium;
             t3code = nix-packages.packages.${final.system}.t3code;
+            claude-code = nix-packages.packages.${final.system}.claude-code;
+            paperless-review = nix-packages.packages.${final.system}.paperless-review;
           })
         ];
 
