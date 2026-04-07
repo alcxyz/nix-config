@@ -24,7 +24,8 @@ in
     buildMachines = [
       {
         hostName = "xyz";
-        sshUser = username;
+        sshUser = "root";
+        sshKey = "/root/.ssh/id_buildhost_xyz";
         systems = [ "x86_64-linux" "aarch64-linux" ];
         maxJobs = 8;
         speedFactor = 2;
