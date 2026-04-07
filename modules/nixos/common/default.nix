@@ -209,16 +209,4 @@ in
     };
   };
 
-  services.kanata = {
-    enable = true;
-    package = pkgs.kanata;
-
-    keyboards.main = {
-      configFile = "${configDir}/users/${username}/configs/kanata/kanata.kbd";
-      # Optional extras:
-      # devices = [ "/dev/input/by-id/...keyboard" ];
-      # extraArgs = [ "--no-detach" ];
-    };
-  };
-
 }
