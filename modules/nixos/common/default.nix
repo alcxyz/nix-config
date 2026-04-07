@@ -19,7 +19,7 @@ let
   root_nux_key =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICmkdBBUyxWpdARfACmw6+P3yOfo0RKfK3JfRJMX+NYW root@nux";
   root_rpi0_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJVd1nv+YyjgKEkwJYfVSf6kf99CMLPJqnerw9IRbqB root@rpi0";
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzVGF4OpgIzykRlY6jK4Qw9VIauCBd3aECraqvBntv9 root@rpi0";
   docker_app_key =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
 in
