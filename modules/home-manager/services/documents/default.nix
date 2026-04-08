@@ -42,57 +42,78 @@ let
 
       echo "documents-organizer: watching $DOCUMENTS_DIR"
 
+      flush_batch() {
+        if [ "''${#sorted_batch[@]}" -eq 0 ]; then return; fi
+        local count="''${#sorted_batch[@]}"
+        if [ "$count" -eq 1 ]; then
+          notify-send -a "Documents" "Sorted" "''${sorted_batch[0]}"
+        else
+          notify-send -a "Documents" "Sorted $count files" "$(printf '%s\n' "''${sorted_batch[@]}")"
+        fi
+        sorted_batch=()
+      }
+
+      sorted_batch=()
+
       inotifywait -m -e close_write,moved_to \
         --format '%f' \
         "$DOCUMENTS_DIR" \
-      | while IFS= read -r filename; do
-          filepath="$DOCUMENTS_DIR/$filename"
+      | {
+        while true; do
+          if IFS= read -r -t 3 filename; then
+            filepath="$DOCUMENTS_DIR/$filename"
 
-          [ -d "$filepath" ] && continue
-          [ ! -f "$filepath" ] && continue
-          [ "''${filename:0:1}" = "." ] || [ ! -s "$filepath" ] && continue
+            [ -d "$filepath" ] && continue
+            [ ! -f "$filepath" ] && continue
+            [ "''${filename:0:1}" = "." ] || [ ! -s "$filepath" ] && continue
 
-          ext="''${filename##*.}"
-          ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
-          basename_noext="''${filename%.*}"
-          if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
-            ext=""
-          fi
-
-          bucket="$(get_bucket "$ext")"
-          year="$(date -r "$filepath" +%Y)"
-          month="$(date -r "$filepath" +%m)"
-
-          dest_dir="$DOCUMENTS_DIR/$bucket/$year/$month"
-          mkdir -p "$dest_dir"
-
-          dest="$dest_dir/$filename"
-          if [ -e "$dest" ]; then
-            stamp="$(date +%s)"
-            if [ -n "$ext" ]; then
-              dest="$dest_dir/''${basename_noext}_$stamp.$ext"
-              filename="''${basename_noext}_$stamp.$ext"
-            else
-              dest="$dest_dir/''${filename}_$stamp"
-              filename="''${filename}_$stamp"
+            ext="''${filename##*.}"
+            ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+            basename_noext="''${filename%.*}"
+            if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
+              ext=""
             fi
-          fi
 
-          echo "documents-organizer: moving $filename -> $bucket/$year/$month/"
-          mv "$filepath" "$dest"
-          notify-send -a "Documents" "Sorted" "$filename → $bucket/$year/$month/"
+            bucket="$(get_bucket "$ext")"
+            year="$(date -r "$filepath" +%Y)"
+            month="$(date -r "$filepath" +%m)"
 
-          if is_ingestible "$ext"; then
-            mkdir -p "$INGEST_DIR"
-            ingest_dest="$INGEST_DIR/$filename"
-            if [ -e "$ingest_dest" ]; then
+            dest_dir="$DOCUMENTS_DIR/$bucket/$year/$month"
+            mkdir -p "$dest_dir"
+
+            dest="$dest_dir/$filename"
+            if [ -e "$dest" ]; then
               stamp="$(date +%s)"
-              ingest_dest="$INGEST_DIR/''${basename_noext}_$stamp.$ext"
+              if [ -n "$ext" ]; then
+                dest="$dest_dir/''${basename_noext}_$stamp.$ext"
+                filename="''${basename_noext}_$stamp.$ext"
+              else
+                dest="$dest_dir/''${filename}_$stamp"
+                filename="''${filename}_$stamp"
+              fi
             fi
-            cp "$dest" "$ingest_dest"
-            echo "documents-organizer: queued $filename for Paperless ingest"
+
+            echo "documents-organizer: moving $filename -> $bucket/$year/$month/"
+            mv "$filepath" "$dest"
+            sorted_batch+=("$filename → $bucket/$year/$month/")
+
+            if is_ingestible "$ext"; then
+              mkdir -p "$INGEST_DIR"
+              ingest_dest="$INGEST_DIR/$filename"
+              if [ -e "$ingest_dest" ]; then
+                stamp="$(date +%s)"
+                ingest_dest="$INGEST_DIR/''${basename_noext}_$stamp.$ext"
+              fi
+              cp "$dest" "$ingest_dest"
+              echo "documents-organizer: queued $filename for Paperless ingest"
+            fi
+          else
+            rc=$?
+            flush_batch
+            [ "$rc" -le 128 ] && break
           fi
         done
+      }
     '';
   };
 
@@ -169,40 +190,61 @@ let
 
       echo "documents-ingest: watching $DOCUMENTS_DIR recursively, ingesting to $INGEST_DIR"
 
+      flush_batch() {
+        if [ "''${#ingest_batch[@]}" -eq 0 ]; then return; fi
+        local count="''${#ingest_batch[@]}"
+        if [ "$count" -eq 1 ]; then
+          notify-send -a "Paperless" "Ingesting" "''${ingest_batch[0]}"
+        else
+          notify-send -a "Paperless" "Ingesting $count files" "$(printf '%s\n' "''${ingest_batch[@]}")"
+        fi
+        ingest_batch=()
+      }
+
+      ingest_batch=()
+
       inotifywait -m -r -e close_write,moved_to \
         --format '%w%f' \
         "$DOCUMENTS_DIR" \
-      | while IFS= read -r filepath; do
-          [ -d "$filepath" ] && continue
-          [ ! -f "$filepath" ] && continue
+      | {
+        while true; do
+          if IFS= read -r -t 3 filepath; then
+            [ -d "$filepath" ] && continue
+            [ ! -f "$filepath" ] && continue
 
-          filename="$(basename "$filepath")"
-          ext="''${filename##*.}"
-          ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
-          basename_noext="''${filename%.*}"
-          if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
-            continue
+            filename="$(basename "$filepath")"
+            ext="''${filename##*.}"
+            ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+            basename_noext="''${filename%.*}"
+            if [ "$basename_noext" = "$filename" ] || [ -z "$ext" ]; then
+              continue
+            fi
+
+            is_ingestible "$ext" || continue
+
+            case "$filepath" in */misc/*) continue ;; esac
+
+            rel_path="''${filepath#"$DOCUMENTS_DIR"/}"
+            rel_dir="$(dirname "$rel_path")"
+            dest_dir="$INGEST_DIR/$rel_dir"
+            mkdir -p "$dest_dir"
+
+            ingest_dest="$dest_dir/$filename"
+            if [ -e "$ingest_dest" ]; then
+              stamp="$(date +%s)"
+              ingest_dest="$dest_dir/''${basename_noext}_$stamp.$ext"
+            fi
+
+            echo "documents-ingest: copying $rel_path -> $INGEST_DIR/$rel_dir/"
+            cp "$filepath" "$ingest_dest"
+            ingest_batch+=("$rel_path")
+          else
+            rc=$?
+            flush_batch
+            [ "$rc" -le 128 ] && break
           fi
-
-          is_ingestible "$ext" || continue
-
-          case "$filepath" in */misc/*) continue ;; esac
-
-          rel_path="''${filepath#"$DOCUMENTS_DIR"/}"
-          rel_dir="$(dirname "$rel_path")"
-          dest_dir="$INGEST_DIR/$rel_dir"
-          mkdir -p "$dest_dir"
-
-          ingest_dest="$dest_dir/$filename"
-          if [ -e "$ingest_dest" ]; then
-            stamp="$(date +%s)"
-            ingest_dest="$dest_dir/''${basename_noext}_$stamp.$ext"
-          fi
-
-          echo "documents-ingest: copying $rel_path -> $INGEST_DIR/$rel_dir/"
-          cp "$filepath" "$ingest_dest"
-          notify-send -a "Paperless" "Ingesting" "$rel_path"
         done
+      }
     '';
   };
 
