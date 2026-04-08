@@ -8,7 +8,7 @@ let
 in
 {
   options.services.cloud-sync = {
-    enable = mkEnableOption "Cloud Drive Sync (Google Drive & Dropbox)";
+    enable = mkEnableOption "Cloud Drive Sync (Google Drive, Dropbox & Nextcloud)";
     
     syncInterval = mkOption {
       type = types.str;
@@ -61,6 +61,29 @@ in
       };
       default = {};
     };
+
+    nextcloud = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkEnableOption "Nextcloud sync";
+          remote = mkOption {
+            type = types.str;
+            default = "nextcloud";
+            description = "rclone remote name for Nextcloud";
+          };
+          localPath = mkOption {
+            type = types.path;
+            description = "Local path to sync";
+          };
+          syncArgs = mkOption {
+            type = types.str;
+            default = "--filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            description = "Additional rclone sync arguments";
+          };
+        };
+      };
+      default = {};
+    };
   };
 
   config = mkIf cfg.enable {
@@ -76,7 +99,7 @@ in
           };
           Service = {
             Type = "oneshot";
-            ExecStart = "${pkgs.rclone}/bin/rclone sync ${cfg.googleDrive.remote}: ${toString cfg.googleDrive.localPath} ${cfg.googleDrive.syncArgs}";
+            ExecStart = "${pkgs.rclone}/bin/rclone bisync ${cfg.googleDrive.remote}: ${toString cfg.googleDrive.localPath} ${cfg.googleDrive.syncArgs}";
             StandardOutput = "journal";
             StandardError = "journal";
           };
@@ -92,7 +115,23 @@ in
           };
           Service = {
             Type = "oneshot";
-            ExecStart = "${pkgs.rclone}/bin/rclone sync ${cfg.dropbox.remote}: ${toString cfg.dropbox.localPath} ${cfg.dropbox.syncArgs}";
+            ExecStart = "${pkgs.rclone}/bin/rclone bisync ${cfg.dropbox.remote}: ${toString cfg.dropbox.localPath} ${cfg.dropbox.syncArgs}";
+            StandardOutput = "journal";
+            StandardError = "journal";
+          };
+        };
+      })
+      //
+      (mkIf cfg.nextcloud.enable {
+        cloud-sync-nextcloud = {
+          Unit = {
+            Description = "Sync Nextcloud with rclone";
+            After = [ "network-online.target" ];
+            Wants = [ "network-online.target" ];
+          };
+          Service = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.rclone}/bin/rclone bisync ${cfg.nextcloud.remote}: ${toString cfg.nextcloud.localPath} ${cfg.nextcloud.syncArgs}";
             StandardOutput = "journal";
             StandardError = "journal";
           };
@@ -117,6 +156,18 @@ in
           Unit.Description = "Run Dropbox sync";
           Timer = {
             OnBootSec = "10min";
+            OnUnitActiveSec = cfg.syncInterval;
+            Persistent = true;
+          };
+          Install.WantedBy = [ "timers.target" ];
+        };
+      })
+      //
+      (mkIf cfg.nextcloud.enable {
+        cloud-sync-nextcloud = {
+          Unit.Description = "Run Nextcloud sync";
+          Timer = {
+            OnBootSec = "15min";
             OnUnitActiveSec = cfg.syncInterval;
             Persistent = true;
           };
