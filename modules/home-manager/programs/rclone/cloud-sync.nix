@@ -89,7 +89,7 @@ in
   config = mkIf cfg.enable {
     home.packages = [ pkgs.rclone ];
 
-    systemd.user.services = 
+    systemd.user.services = mkMerge [
       (mkIf cfg.googleDrive.enable {
         cloud-sync-gdrive = {
           Unit = {
@@ -105,7 +105,6 @@ in
           };
         };
       })
-      //
       (mkIf cfg.dropbox.enable {
         cloud-sync-dropbox = {
           Unit = {
@@ -121,7 +120,6 @@ in
           };
         };
       })
-      //
       (mkIf cfg.nextcloud.enable {
         cloud-sync-nextcloud = {
           Unit = {
@@ -136,9 +134,10 @@ in
             StandardError = "journal";
           };
         };
-      });
+      })
+    ];
 
-    systemd.user.timers =
+    systemd.user.timers = mkMerge [
       (mkIf cfg.googleDrive.enable {
         cloud-sync-gdrive = {
           Unit.Description = "Run Google Drive sync";
@@ -150,7 +149,6 @@ in
           Install.WantedBy = [ "timers.target" ];
         };
       })
-      //
       (mkIf cfg.dropbox.enable {
         cloud-sync-dropbox = {
           Unit.Description = "Run Dropbox sync";
@@ -162,7 +160,6 @@ in
           Install.WantedBy = [ "timers.target" ];
         };
       })
-      //
       (mkIf cfg.nextcloud.enable {
         cloud-sync-nextcloud = {
           Unit.Description = "Run Nextcloud sync";
@@ -173,6 +170,7 @@ in
           };
           Install.WantedBy = [ "timers.target" ];
         };
-      });
+      })
+    ];
   };
 }
