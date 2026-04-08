@@ -20,6 +20,7 @@ in
     zoxide
     starship
     atuin
+    sesh
     carapace-bridge
   ];
 
