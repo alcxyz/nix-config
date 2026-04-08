@@ -69,6 +69,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    paperflow = {
+      url = "github:alcxyz/paperflow";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
   # ---- Outputs ----------------------------------------------------------
