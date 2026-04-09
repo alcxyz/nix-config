@@ -1,0 +1,18 @@
+[source]
+command = [
+  "sesh list --icons",
+  "sesh list -t --icons",
+  "sesh list -c --icons",
+  "sesh list -z --icons",
+  "fd -H -d 2 -t d -E .Trash . ~",
+]
+
+[preview]
+command = "echo {}"
+
+[actions.connect]
+command = "sesh connect '{strip_ansi|split: :1..|join: }'"
+mode = "execute"
+
+[actions.kill_session]
+command = "tmux kill-session -t '{strip_ansi|split: :1..|join: }'"

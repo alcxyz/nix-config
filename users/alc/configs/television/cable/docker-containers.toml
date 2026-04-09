@@ -1,0 +1,25 @@
+[source]
+command = "docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}'"
+
+[preview]
+command = "docker logs --tail 50 '{split:\t:0}'"
+
+[actions.logs]
+command = "docker logs -f '{split:\t:0}'"
+mode = "execute"
+
+[actions.exec]
+command = "docker exec -it '{split:\t:0}' /bin/sh"
+mode = "execute"
+
+[actions.stop]
+command = "docker stop '{split:\t:0}'"
+
+[actions.start]
+command = "docker start '{split:\t:0}'"
+
+[actions.restart]
+command = "docker restart '{split:\t:0}'"
+
+[actions.remove]
+command = "docker rm -f '{split:\t:0}'"

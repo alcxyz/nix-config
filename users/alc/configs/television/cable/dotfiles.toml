@@ -1,0 +1,12 @@
+[source]
+command = "fd -H -t f -E .git -E node_modules . ~/.config"
+
+[preview]
+command = "bat --color=always --style=numbers --line-range=:100 '{}'"
+
+[actions.edit]
+command = "nvim '{}'"
+mode = "execute"
+
+[actions.copy_path]
+command = "echo -n '{}' | wl-copy"

@@ -21,6 +21,7 @@ in
     starship
     atuin
     sesh
+    television
     carapace-bridge
   ];
 

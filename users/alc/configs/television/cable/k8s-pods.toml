@@ -1,0 +1,19 @@
+[source]
+command = [
+  "kubectl get pods -o wide --no-headers",
+  "kubectl get pods -A -o wide --no-headers",
+]
+
+[preview]
+command = "kubectl describe pod {0}"
+
+[actions.logs]
+command = "kubectl logs -f {0}"
+mode = "execute"
+
+[actions.exec]
+command = "kubectl exec -it {0} -- /bin/sh"
+mode = "execute"
+
+[actions.delete]
+command = "kubectl delete pod {0}"

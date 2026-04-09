@@ -1,0 +1,53 @@
+[ui]
+theme = "catppuccin"
+ui_scale = 100
+border = "rounded"
+input_bar_position = "top"
+preview_panel_position = "right"
+preview_panel_width_percent = 65
+
+[history]
+max_entries = 200
+scope = "channel"
+
+[keybindings]
+quit = ["esc", "ctrl-c"]
+select_entry = ["enter"]
+select_next_entry = ["ctrl-n", "ctrl-j", "down"]
+select_prev_entry = ["ctrl-p", "ctrl-k", "up"]
+toggle_remote_control = ["ctrl-r"]
+toggle_action_picker = ["ctrl-x"]
+toggle_preview_panel = ["ctrl-o"]
+toggle_ui_layout = ["ctrl-t"]
+cycle_source = ["ctrl-s"]
+copy_entry_to_clipboard = ["ctrl-y"]
+
+[shell_integration]
+keybindings.smart_autocomplete = "ctrl-t"
+
+[shell_integration.commands]
+"cd" = "dirs"
+"z" = "dirs"
+"ls" = "files"
+"cat" = "files"
+"bat" = "files"
+"vim" = "files"
+"nvim" = "files"
+"v" = "files"
+"cp" = "files"
+"mv" = "files"
+"rm" = "files"
+"git checkout" = "git-branch"
+"git branch -d" = "git-branch"
+"git merge" = "git-branch"
+"git rebase" = "git-branch"
+"git switch" = "git-branch"
+"git add" = "git-diff"
+"git restore" = "git-diff"
+"git log" = "git-log"
+"git show" = "git-log"
+"docker run" = "docker-images"
+"k exec" = "cable:k8s-pods"
+"ke" = "cable:k8s-pods"
+"nvim" = "cable:git-repos"
+"git clone" = "cable:git-repos"

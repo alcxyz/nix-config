@@ -1,0 +1,13 @@
+[source]
+command = "fd -H -t d '^.git$' ~ --max-depth 4 -x echo {//}"
+
+[preview]
+command = "git -C '{}' log --oneline -20"
+
+[actions.open]
+command = "cd '{}' && nvim"
+mode = "execute"
+
+[actions.cd]
+command = "cd '{}'"
+mode = "execute"
