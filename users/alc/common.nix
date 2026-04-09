@@ -39,9 +39,7 @@ with lib;
     DIRENV_LOG_FORMAT = "";
     # FLAKE path still needs to be conditional, as it's an absolute path
     # relative to the OS's file system root
-    FLAKE = if pkgs.stdenv.isDarwin
-            then "/Users/${username}/nix-config"
-            else "/home/${username}/nix-config";
+    FLAKE = "${config.home.homeDirectory}/nix/nix-config";
   };
 
   # Swtich aliases
