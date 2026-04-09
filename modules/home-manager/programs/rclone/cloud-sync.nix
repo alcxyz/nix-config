@@ -31,14 +31,14 @@ in
           };
           syncArgs = mkOption {
             type = types.str;
-            default = "--filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            default = "--force --filter-from ${config.xdg.configHome}/rclone/filters.txt";
             description = "Additional rclone sync arguments";
           };
         };
       };
       default = {};
     };
-    
+
     dropbox = mkOption {
       type = types.submodule {
         options = {
@@ -54,7 +54,7 @@ in
           };
           syncArgs = mkOption {
             type = types.str;
-            default = "--filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            default = "--force --filter-from ${config.xdg.configHome}/rclone/filters.txt";
             description = "Additional rclone sync arguments";
           };
         };
@@ -77,7 +77,7 @@ in
           };
           syncArgs = mkOption {
             type = types.str;
-            default = "--filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            default = "--force --filter-from ${config.xdg.configHome}/rclone/filters.txt";
             description = "Additional rclone sync arguments";
           };
         };
