@@ -686,11 +686,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775718381,
-        "narHash": "sha256-Lkow7xACtoDKaxANXOF5EUhcBsful9RVULjyEBB2TJg=",
+        "lastModified": 1775722345,
+        "narHash": "sha256-sDt8CPCN6+XFX+Ru6rEl/sQyGcWEUWaREEeDPSILN4E=",
         "owner": "alcxyz",
         "repo": "paperflow",
-        "rev": "43d9b7072f963a3a9dee8ea6591f9536695e2f12",
+        "rev": "2ff2a3b772c9c2bb13fd9ac79d9be45de88cb835",
         "type": "github"
       },
       "original": {
