@@ -583,13 +583,13 @@
       "locked": {
         "lastModified": 1707825078,
         "narHash": "sha256-hTfge2J2W+42SZ7VHXkf4kjU+qzFqPeC9k66jAUBMHk=",
-        "owner": "misterio77",
+        "owner": "alcxyz",
         "repo": "nix-colors",
         "rev": "b01f024090d2c4fc3152cd0cf12027a7b8453ba1",
         "type": "github"
       },
       "original": {
-        "owner": "misterio77",
+        "owner": "alcxyz",
         "repo": "nix-colors",
         "type": "github"
       }
@@ -602,11 +602,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775655517,
-        "narHash": "sha256-Rh7iuKlXG0VVv9pP0n6750OhNcNxHiCgDNaC3YkaMyo=",
+        "lastModified": 1775744608,
+        "narHash": "sha256-GePFZO7GU9mdCuxocjW0v/WYx1KdhJ6MgmTzdKuS68o=",
         "owner": "alcxyz",
         "repo": "nix-packages",
-        "rev": "e8706e36ce46207c8fa2ec85cf8d19f2f8a342a4",
+        "rev": "31d1984810b7f70dff9e8a5206393b9c9375b9eb",
         "type": "github"
       },
       "original": {

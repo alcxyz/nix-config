@@ -19,7 +19,7 @@
     };
 
     # color schemes, small extras
-    nix-colors.url = "github:misterio77/nix-colors";
+    nix-colors.url = "github:alcxyz/nix-colors";
 
     darwin = {
       url = "github:nix-darwin/nix-darwin/master";
