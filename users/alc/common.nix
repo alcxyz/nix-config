@@ -116,6 +116,10 @@ EOF
     '')
   ];
 
+  # ==================== Symlinked configs (live editing, all hosts) ====================
+  xdg.configFile."television".source = config.lib.file.mkOutOfStoreSymlink
+    "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/television";
+
   # ==================== Files ====================
   home.file = {
     "Documents/.keep".text = "";
