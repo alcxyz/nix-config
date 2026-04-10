@@ -115,7 +115,7 @@ rec {
       glow
 
       /* Archives & media (CLI use of ffmpeg, etc.) */
-      #unzip
+      unzip
       #unrar
       #rar
       ffmpeg
