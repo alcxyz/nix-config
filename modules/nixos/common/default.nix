@@ -143,6 +143,10 @@ in
     VISUAL = "nvim";
   };
 
+  # ==================== Nix-ld ====================
+  # Provides the missing dynamic linker for pre-built binaries (Mason, npm, AppImages, etc.)
+  programs.nix-ld.enable = true;
+
   # ==================== Security ====================
   security.sudo.enable = true;
   services.pcscd.enable = true;

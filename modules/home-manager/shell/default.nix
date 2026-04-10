@@ -23,6 +23,16 @@ in
     sesh
     television
     carapace-bridge
+    # nixd is the only LSP not in Mason's registry
+    nixd
+
+    # Formatters/linters on PATH for CLI, CI, and Claude Code
+    nixfmt
+    shellcheck
+    prettier
+    shfmt
+    ruff
+    stylua
   ];
 
   programs = {
