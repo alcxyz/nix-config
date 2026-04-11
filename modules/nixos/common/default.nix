@@ -146,6 +146,9 @@ in
   # ==================== Nix-ld ====================
   # Provides the missing dynamic linker for pre-built binaries (Mason, npm, AppImages, etc.)
   programs.nix-ld.enable = true;
+  programs.nix-ld.libraries = with pkgs; [
+    icu
+  ];
 
   # ==================== Security ====================
   security.sudo.enable = true;
