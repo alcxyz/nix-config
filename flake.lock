@@ -602,11 +602,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775956836,
-        "narHash": "sha256-U91dSJRLCNPhVsdMFnAZjBdoP5ioyN2Wg0zCHc04wkU=",
+        "lastModified": 1775957241,
+        "narHash": "sha256-Vdus2+lHV2JbiVP/IDZZ9+5cuaFfv29TwHa522X9ASI=",
         "owner": "alcxyz",
         "repo": "nix-packages",
-        "rev": "8e8ac0ef20f72a166913d665c30e29287ae7dd33",
+        "rev": "8e1aa98dc1e2fbe968036d282e4587c8328c00f0",
         "type": "github"
       },
       "original": {
