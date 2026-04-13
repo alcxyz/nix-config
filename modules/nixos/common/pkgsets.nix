@@ -174,6 +174,7 @@ rec {
       python3Packages.rencode
       gnumake
       gcc
+      pkg-config
 
       # Dev helper
       commitizen

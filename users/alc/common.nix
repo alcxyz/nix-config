@@ -37,6 +37,7 @@ with lib;
   # ==================== User Environment ====================
   home.sessionVariables = {
     DIRENV_LOG_FORMAT = "";
+    CGO_ENABLED = "1";
     # FLAKE path still needs to be conditional, as it's an absolute path
     # relative to the OS's file system root
     FLAKE = "${config.home.homeDirectory}/nix/nix-config";
