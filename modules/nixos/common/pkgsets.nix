@@ -113,6 +113,7 @@ rec {
       yq
       pandoc
       glow
+      sqlite
 
       /* Archives & media (CLI use of ffmpeg, etc.) */
       unzip
