@@ -262,6 +262,14 @@ in
   ];
 
   # ============================================================================
+  # Spotlight
+  # ============================================================================
+  # Disable Spotlight entirely — using Raycast as a replacement.
+  system.activationScripts.postActivation.text = ''
+    mdutil -a -i off 2>/dev/null || true
+  '';
+
+  # ============================================================================
   # System State Version
   # ============================================================================
   system.stateVersion = 4;

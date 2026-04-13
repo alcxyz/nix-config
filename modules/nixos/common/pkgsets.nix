@@ -250,7 +250,7 @@ rec {
 
     # macOS-only desktop apps (ready for future use)
     desktopMacOnly = with pkgs; [
-      # e.g. rectangle, monitorcontrol, etc. when you add them
+      raycast
     ];
 
     # Convenience combined sets
