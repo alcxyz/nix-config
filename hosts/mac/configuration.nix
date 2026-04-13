@@ -206,6 +206,15 @@ in
       */
 
       # Your existing Finder preferences (consider merging into the main `finder` block above)
+      # Disable Spotlight keyboard shortcut so Raycast can use Cmd+Space
+      "com.apple.symbolichotkeys" = {
+        AppleSymbolicHotKeys = {
+          # 64 = Spotlight search, 65 = Finder search window
+          "64" = { enabled = false; };
+          "65" = { enabled = false; };
+        };
+      };
+
       "com.apple.finder" = {
         FXDesktopExtFoldersOnDesktop = false;
         FXDesktopCdRemovableDisksOnDesktop = false;
