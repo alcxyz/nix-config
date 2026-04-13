@@ -32,22 +32,28 @@
 
   ;; ` as ` when tapped, activate nav layer when held
   `_nav (tap-hold $tap-timeout-c $hold-timeout-c ` (layer-toggle nav))
+
+  ;; Accented characters (shift-aware)
+  ea (fork (unicode é) (unicode É) (lsft rsft))
+  oa (fork (unicode ø) (unicode Ø) (lsft rsft))
+  aa (fork (unicode æ) (unicode Æ) (lsft rsft))
+  aaa (fork (unicode å) (unicode Å) (lsft rsft))
 )
 
 ;; Define base layer source keys
 (defsrc
   tab  caps lalt lmeta ralt rmeta
-  ` h j k l
+  ` h j k l e - ' ;
 )
 
 ;; Define the main layer
 (deflayer base
   @tc   @ce   @lab  @lcb  @rae  @rce
-  @`_nav h j k l
+  @`_nav h j k l e - ' ;
 )
 
 ;; Define the navigation layer
 (deflayer nav
   _    _    _    _    _    _
-  _ left down up right
+  _ left down up right @ea @oa @aa @aaa
 )
