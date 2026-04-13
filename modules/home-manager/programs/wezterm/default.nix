@@ -9,9 +9,7 @@ let
   colors = colorscheme.palette;
 
   # Define a color scheme based on the nix-colors palette
-  # The key "PaletteScheme" is the name you give this scheme
   paletteColorScheme = {
-    # ANSI colors (standard 0-7)
     ansi = [
       colors.base00 # black
       colors.base08 # red
@@ -23,27 +21,24 @@ let
       colors.base05 # white
     ];
 
-    # Bright ANSI colors (bright 0-7)
     brights = [
       colors.base03 # bright black
-      colors.base08 # bright red (often same)
-      colors.base0B # bright green (often same)
-      colors.base0A # bright yellow (often same)
-      colors.base0D # bright blue (often same)
-      colors.base0E # bright magenta (often same)
-      colors.base0C # bright cyan (often same)
+      colors.base08 # bright red
+      colors.base0B # bright green
+      colors.base0A # bright yellow
+      colors.base0D # bright blue
+      colors.base0E # bright magenta
+      colors.base0C # bright cyan
       colors.base07 # bright white
     ];
 
     background = colors.base00;
     foreground = colors.base05;
 
-    # Cursor colors (example mapping)
     cursor_bg = colors.base05;
     cursor_border = colors.base05;
     cursor_fg = colors.base00;
 
-    # Selection colors (example mapping)
     selection_bg = colors.base03;
     selection_fg = colors.base05;
   };
@@ -51,28 +46,28 @@ let
 in
 {
   config = mkIf cfg.enable {
-    # The built-in programs.wezterm module is enabled in users/alc/home.nix.
-    # No need to set programs.wezterm.enable = true here.
-
-    # Define the color scheme using the programs.wezterm.colorSchemes option
     programs.wezterm.colorSchemes = {
       "PaletteScheme" = paletteColorScheme;
     };
 
-    # Provide additional Lua configuration via programs.wezterm.extraConfig
     programs.wezterm.extraConfig = ''
-      -- Set the active color scheme by name
       config.color_scheme = "PaletteScheme"
 
-      -- Add other WezTerm configuration settings here using Lua syntax
       config.font = wezterm.font("JetBrains Mono Nerd Font", { weight = "Regular" })
-      config.font_size = 12.0
+      config.font_size = 14.0
 
-      -- config.initial_rows = 24
-      -- config.initial_cols = 80
+      -- Window appearance
+      config.window_background_opacity = 0.85
+      config.macos_window_background_blur = 20
+      config.window_decorations = "RESIZE"
+      config.window_padding = { left = 8, right = 8, top = 8, bottom = 8 }
+      config.window_close_confirmation = "NeverPrompt"
 
-      -- Add any other configuration variables from your WezTerm config
+      -- No tab bar for clean look
+      config.enable_tab_bar = false
+
+      -- Native fullscreen is slower (animates), use non-native
+      config.native_macos_fullscreen_mode = false
     '';
-
   };
 }

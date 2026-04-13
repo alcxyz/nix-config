@@ -1,0 +1,2 @@
+# Quake-style WezTerm toggle
+alt - space : ~/.config/skhd/toggle-wezterm.sh

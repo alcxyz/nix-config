@@ -248,9 +248,10 @@ rec {
       nautilus
     ];
 
-    # macOS-only desktop apps (ready for future use)
+    # macOS-only desktop apps
     desktopMacOnly = with pkgs; [
       raycast
+      skhd
     ];
 
     # Convenience combined sets
