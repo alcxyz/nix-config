@@ -106,6 +106,9 @@ in
     kc = "switcher"; kns = "switcher ns"; kl = "kubectl logs -f"; ke = "kubectl exec -it";
     tf = "terraform"; v = "nvim"; d = "docker"; dcd = "docker compose down"; dcu = "docker compose up -d"; l = "ls -all"; ll = "ls -la";
     c = "clear"; cd = "z";
+    "," = "z";
+    ",," = "z -";
+    ";" = "nix-shell -p";
     g = "gitui"; gc = "git commit -m"; gca = "git commit -am"; gps = "git push";
     gpl = "git pull"; gst = "git status";
     glog = "git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
