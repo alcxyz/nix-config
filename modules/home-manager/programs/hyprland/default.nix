@@ -37,6 +37,11 @@ in {
       executable = true;
     };
 
+    home.file.".config/hypr/scripts/dms_resume_watcher.sh" = {
+      source = ./scripts/dms_resume_watcher.sh;
+      executable = true;
+    };
+
     # Symlink hyprland configs directly to the repo checkout so edits take
     # effect immediately without a home-manager rebuild.
     xdg.configFile."hypr/hyprland.conf".source = config.lib.file.mkOutOfStoreSymlink
