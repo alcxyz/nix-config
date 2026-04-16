@@ -145,16 +145,20 @@ rec {
       git-remote-gcrypt
       gh
       gh-dash
+      lazygit
       diffnav
       google-cloud-sdk
       cloudflared
       shopify-cli
 
-      (azure-cli.withExtensions (with azure-cli.extensions; [
-        ssh
-        fzf
-        azure-devops
-      ]))
+      (azure-cli.withExtensions (
+        with azure-cli.extensions;
+        [
+          ssh
+          fzf
+          azure-devops
+        ]
+      ))
 
       # Misc / infra helpers
       atac
