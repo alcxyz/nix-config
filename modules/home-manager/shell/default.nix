@@ -74,6 +74,10 @@ in
         CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
 
         EDITOR = "nvim";
+
+        # Ensure UTF-8 locale for SSH sessions (macOS doesn't set these by default)
+        LANG = "en_US.UTF-8";
+        LC_ALL = "en_US.UTF-8";
       };
 
       extraConfig = ''
