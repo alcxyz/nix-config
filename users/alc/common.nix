@@ -52,6 +52,7 @@ with lib;
   home.packages =
     pkgsets.hm.base
     ++ [
+    inputs.grove.packages.${pkgs.system}.default
     (pkgs.writeShellScriptBin "claude-work" ''
       export CLAUDE_CONFIG_DIR="$HOME/.claude-work"
       exec claude "$@"

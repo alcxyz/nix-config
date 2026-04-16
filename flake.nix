@@ -74,6 +74,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    grove = {
+      url = "github:alcxyz/grove";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
   # ---- Outputs ----------------------------------------------------------
