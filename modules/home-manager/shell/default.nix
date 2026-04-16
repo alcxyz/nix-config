@@ -1,5 +1,12 @@
 # modules/home-manager/shell/default.nix
-{ config, lib, pkgs, inputs, osIcon ? "🐧", ... }:
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  osIcon ? "🐧",
+  ...
+}:
 
 with lib;
 let
@@ -61,14 +68,14 @@ in
 
     nushell = {
       enable = true;
-      
+
       environmentVariables = {
         KUBECONFIG = "${config.home.homeDirectory}/.kube/config";
         CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
 
         EDITOR = "nvim";
       };
-      
+
       extraConfig = ''
         # --- Common Nushell Configuration (Part 1) ---
         $env.config = {
@@ -88,6 +95,37 @@ in
         ]
         $env.PATH = ($env.PATH | append $custom_paths | uniq | where {|p| ($p | path exists) })
 
+        def colorize-name [] {
+          $in | update name {|r|
+            if $r.type == "dir" { $"(ansi blue_bold)($r.name)(ansi reset)" } else if $r.type == "symlink" { $"(ansi cyan_italic)($r.name)(ansi reset)" } else if ($r.mode | str starts-with "-rwx") { $"(ansi red_bold)($r.name)(ansi reset)" } else { $r.name }
+          }
+        }
+
+        def drop-empty-target [] {
+          let result = $in
+          if ($result | columns | any {|c| $c == "target"}) and ($result.target | all {|t| $t == null}) {
+            $result | reject target
+          } else {
+            $result
+          }
+        }
+
+        def lll [pattern?: glob] {
+          if ($pattern == null) {
+            ls -la | reject inode readonly | rename -c { num_links: lnk } | colorize-name | drop-empty-target
+          } else {
+            ls -la $pattern | reject inode readonly | rename -c { num_links: lnk } | colorize-name | drop-empty-target
+          }
+        }
+
+        def ll [pattern?: glob] {
+          if ($pattern == null) {
+            ls -la | reject inode readonly created accessed | rename -c { num_links: lnk } | colorize-name | drop-empty-target
+          } else {
+            ls -la $pattern | reject inode readonly created accessed | rename -c { num_links: lnk } | colorize-name | drop-empty-target
+          }
+        }
+
         source ${atuinNuFixed}
       '';
     };
@@ -97,21 +135,40 @@ in
   xdg.configFile."starship.toml".text =
     let
       template = builtins.readFile ./starship.toml;
-    in lib.replaceStrings [ "@osIcon@" ] [ osIcon ] template;
-
+    in
+    lib.replaceStrings [ "@osIcon@" ] [ osIcon ] template;
 
   home.shellAliases = {
-    k = "kubectl"; ka = "kubectl apply -f"; kg = "kubectl get"; kd = "kubectl describe";
-    kdel = "kubectl delete"; kgpo = "kubectl get pod"; kgd = "kubectl get deployments";
-    kc = "switcher"; kns = "switcher ns"; kl = "kubectl logs -f"; ke = "kubectl exec -it";
-    tf = "terraform"; v = "nvim"; d = "docker"; dcd = "docker compose down"; dcu = "docker compose up -d"; l = "ls -all"; ll = "ls -la";
-    c = "clear"; cd = "z";
+    k = "kubectl";
+    ka = "kubectl apply -f";
+    kg = "kubectl get";
+    kd = "kubectl describe";
+    kdel = "kubectl delete";
+    kgpo = "kubectl get pod";
+    kgd = "kubectl get deployments";
+    kc = "switcher";
+    kns = "switcher ns";
+    kl = "kubectl logs -f";
+    ke = "kubectl exec -it";
+    tf = "terraform";
+    v = "nvim";
+    d = "docker";
+    dcd = "docker compose down";
+    dcu = "docker compose up -d";
+    l = "ls -a";
+    c = "clear";
+    cd = "z";
     "," = "z";
     ",," = "z -";
-    ";" = "nix-shell -p";
-    g = "gitui"; gc = "git commit -m"; gca = "git commit -am"; gps = "git push";
-    gpl = "git pull"; gst = "git status";
+    ":" = "nix-shell -p";
+    g = "gitui";
+    gc = "git commit -m";
+    gca = "git commit -am";
+    gps = "git push";
+    gpl = "git pull";
+    gst = "git status";
     glog = "git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
-    t = "tmux"; ta = "tmux a";
+    t = "tmux";
+    ta = "tmux a";
   };
 }

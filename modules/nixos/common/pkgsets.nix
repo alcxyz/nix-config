@@ -9,23 +9,28 @@
 #   - pkgsets.system.<role>     for environment.systemPackages
 #   - pkgsets.home.<role>       for home.packages
 #   - pkgsets.sys.* / pkgsets.hm.* for finer-grained sets
-{ pkgs, inputs ? null }:
+{
+  pkgs,
+  inputs ? null,
+}:
 
 let
   lib = pkgs.lib;
   system = pkgs.stdenv.hostPlatform.system;
 
-  /* Optional external package (zen browser) from inputs if provided */
+  # Optional external package (zen browser) from inputs if provided
   zenPkg =
-    if inputs != null && inputs ? zen-browser
-    then inputs.zen-browser.packages.${system}.default
-    else null;
+    if inputs != null && inputs ? zen-browser then
+      inputs.zen-browser.packages.${system}.default
+    else
+      null;
 
-  /* Optional external ndrop from your nix-packages input (used on xyz) */
+  # Optional external ndrop from your nix-packages input (used on xyz)
   ndropPkg =
-    if inputs != null && inputs ? nix-packages
-    then inputs.nix-packages.packages.${system}.ndrop
-    else null;
+    if inputs != null && inputs ? nix-packages then
+      inputs.nix-packages.packages.${system}.ndrop
+    else
+      null;
 in
 
 rec {
@@ -33,7 +38,7 @@ rec {
   # System (global) packages
   # =======================================================================
   sys = {
-    /* Shared across all machines (NixOS + nix-darwin) */
+    # Shared across all machines (NixOS + nix-darwin)
     base = with pkgs; [
       home-manager
       openssl
@@ -41,7 +46,7 @@ rec {
       dig
     ];
 
-    /* Linux-only system bits (keep in systemPackages) */
+    # Linux-only system bits (keep in systemPackages)
     linux = with pkgs; [
       nfs-utils
       gptfdisk
@@ -55,20 +60,23 @@ rec {
       nix-prefetch-git
     ];
 
-    /* Linux desktop-specific system packages */
-    linuxDesktop = with pkgs; [
-      gparted
-      ntfs3g
-      sshfs
-      xwayland-satellite
-      grim
-      slurp
-      swappy
-      imagemagick
-    ] ++ lib.optionals (ndropPkg != null) [ ndropPkg ];
+    # Linux desktop-specific system packages
+    linuxDesktop =
+      with pkgs;
+      [
+        gparted
+        ntfs3g
+        sshfs
+        xwayland-satellite
+        grim
+        slurp
+        swappy
+        imagemagick
+      ]
+      ++ lib.optionals (ndropPkg != null) [ ndropPkg ];
   };
 
-  /* Ready-to-use system presets (use in environment.systemPackages) */
+  # Ready-to-use system presets (use in environment.systemPackages)
   system = {
     workstation = sys.base ++ sys.linux ++ sys.linuxDesktop;
     server = sys.base ++ sys.linux;
@@ -79,25 +87,27 @@ rec {
   # Home-manager package sets
   # =======================================================================
   hm = rec {
-    /* -------------------------------------------------------------------
-       CLI / non-GUI base: cross-platform
-       ------------------------------------------------------------------- */
+    /*
+      -------------------------------------------------------------------
+      CLI / non-GUI base: cross-platform
+      -------------------------------------------------------------------
+    */
     base = with pkgs; [
-      /* Editors & UI-ish TUI */
+      # Editors & UI-ish TUI
       #neofetch
       tree
       bat
 
-      /* Monitoring / top-like tools */
+      # Monitoring / top-like tools
       htop
       btop
 
-      /* Shell & portability helpers */
+      # Shell & portability helpers
       tmux
       wget
       killall
 
-      /* Search & fuzzy / file utilities */
+      # Search & fuzzy / file utilities
       ripgrep
       ripgrep-all
       fd
@@ -108,20 +118,20 @@ rec {
       dua
       yazi
 
-      /* Text processing, viewers & docs */
+      # Text processing, viewers & docs
       jq
       yq
       pandoc
       glow
       sqlite
 
-      /* Archives & media (CLI use of ffmpeg, etc.) */
+      # Archives & media (CLI use of ffmpeg, etc.)
       unzip
       #unrar
       #rar
       ffmpeg
 
-      /* Secrets & smartcard / age tooling */
+      # Secrets & smartcard / age tooling
       gopass
       yubico-piv-tool
       sops
@@ -130,18 +140,23 @@ rec {
       ssh-to-age
       sshs
 
-      /* Git & auth / cloud CLI */
+      # Git & auth / cloud CLI
       git
       git-remote-gcrypt
       gh
       gh-dash
       diffnav
-      azure-cli
       google-cloud-sdk
       cloudflared
       shopify-cli
 
-      /* Misc / infra helpers */
+      (azure-cli.withExtensions (with azure-cli.extensions; [
+        ssh
+        fzf
+        azure-devops
+      ]))
+
+      # Misc / infra helpers
       atac
       termshark
       openldap
@@ -149,20 +164,22 @@ rec {
       lazydocker
     ];
 
-    /* Linux-only CLI additions */
+    # Linux-only CLI additions
     linux = with pkgs; [
       nitch
       gitui
     ];
 
-    /* macOS-only CLI additions */
+    # macOS-only CLI additions
     mac = with pkgs; [
       mas
     ];
 
-    /* -------------------------------------------------------------------
-       Dev / IaC / K8s (CLI tooling)
-       ------------------------------------------------------------------- */
+    /*
+      -------------------------------------------------------------------
+      Dev / IaC / K8s (CLI tooling)
+      -------------------------------------------------------------------
+    */
     dev = with pkgs; [
       rustup
       go
@@ -181,14 +198,14 @@ rec {
       devbox
     ];
 
-    /* Infrastructure-as-Code */
+    # Infrastructure-as-Code
     iac = with pkgs; [
       terraform
       opentofu
       ansible
     ];
 
-    /* Kubernetes / cloud-native CLI tools */
+    # Kubernetes / cloud-native CLI tools
     k8s = with pkgs; [
       kubectl
       kubernetes-helm
@@ -216,13 +233,15 @@ rec {
       moonlight-qt
     ];
 
-    /* -------------------------------------------------------------------
-       Desktop / GUI apps
-       We split into:
-       - desktopCommon      (intended for both Linux + mac where supported)
-       - desktopLinuxOnly   (Linux-specific or very Linux-centric)
-       - desktopMacOnly     (mac-specific, currently empty placeholder)
-       ------------------------------------------------------------------- */
+    /*
+      -------------------------------------------------------------------
+      Desktop / GUI apps
+      We split into:
+      - desktopCommon      (intended for both Linux + mac where supported)
+      - desktopLinuxOnly   (Linux-specific or very Linux-centric)
+      - desktopMacOnly     (mac-specific, currently empty placeholder)
+      -------------------------------------------------------------------
+    */
 
     # Common desktop apps you might want on both Linux and macOS
     desktopCommon = with pkgs; [
@@ -260,7 +279,7 @@ rec {
     desktopLinux = desktopCommon ++ desktopLinuxOnly;
     desktopMac = desktopCommon ++ desktopMacOnly;
 
-    /* Linux desktop/user utilities (Wayland/X11 helpers etc.) */
+    # Linux desktop/user utilities (Wayland/X11 helpers etc.)
     linuxExtras = with pkgs; [
       wl-clipboard
       xarchiver
@@ -268,8 +287,10 @@ rec {
       xclip
     ];
 
-    /* Workstation (xyz) GUI / desktop extras (user-level)
-       — includes the GUI apps you had scattered under xyz.nix */
+    /*
+      Workstation (xyz) GUI / desktop extras (user-level)
+      — includes the GUI apps you had scattered under xyz.nix
+    */
     workstationExtras =
       (with pkgs; [
         rbw
@@ -304,20 +325,10 @@ rec {
       ++ hm.gaming;
 
     # Server: CLI base + linux-specific only.
-    server = 
-      hm.base 
-      ++ hm.linux 
-      ++ hm.dev;
+    server = hm.base ++ hm.linux ++ hm.dev;
 
     # mac laptop: CLI base + mac-specific + dev/IaC/K8s.
     # (Desktop GUI apps for mac can be added via hm.desktopCommon/desktopMac.)
-    mac = 
-      hm.base 
-      ++ hm.mac 
-      ++ hm.dev 
-      ++ hm.iac 
-      ++ hm.k8s
-      ++ hm.ai
-      ++ hm.desktopMac;
+    mac = hm.base ++ hm.mac ++ hm.dev ++ hm.iac ++ hm.k8s ++ hm.ai ++ hm.desktopMac;
   };
 }

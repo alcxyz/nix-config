@@ -84,6 +84,8 @@ in
     localHostName = "mac";
   };
 
+  services.openssh.enable = true;
+
   time.timeZone = "Europe/Oslo";
 
   # ============================================================================
