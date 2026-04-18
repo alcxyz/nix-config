@@ -300,11 +300,32 @@ in
   system.activationScripts.postActivation.text = ''
     mdutil -a -i off 2>/dev/null || true
 
-    # Sync Kanata.app bundle with nix store binary for stable Input Monitoring.
-    # Only updates when binary changes (kanata version bump).
-    # After a version bump, re-approve Kanata in Input Monitoring.
+    # ── Kanata.app bundle for stable TCC (Input Monitoring) approval ──
+    # Uses a self-signed certificate so TCC approval persists across kanata
+    # version bumps. The certificate is created once and stored in the system
+    # keychain. Subsequent rebuilds reuse it — no manual re-approval needed.
+    KANATA_CERT="Kanata Code Signing"
     KANATA_SRC="${pkgs.kanata}/bin/kanata"
     KANATA_DST="/Applications/Kanata.app/Contents/MacOS/kanata"
+
+    # Create self-signed code signing certificate if it doesn't exist.
+    # Trust level doesn't matter — TCC tracks the signing identity hash,
+    # not whether the cert is CA-trusted.
+    if ! security find-identity -p codesigning /Library/Keychains/System.keychain | grep -q "$KANATA_CERT"; then
+      echo "Creating self-signed certificate: $KANATA_CERT"
+      ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
+        -keyout /tmp/kanata-key.pem -out /tmp/kanata-cert.pem \
+        -days 3650 -nodes -subj "/CN=$KANATA_CERT" \
+        -addext "keyUsage=digitalSignature" \
+        -addext "extendedKeyUsage=codeSigning"
+      security import /tmp/kanata-key.pem \
+        -k /Library/Keychains/System.keychain -T /usr/bin/codesign
+      security import /tmp/kanata-cert.pem \
+        -k /Library/Keychains/System.keychain -T /usr/bin/codesign
+      rm -f /tmp/kanata-key.pem /tmp/kanata-cert.pem
+    fi
+
+    # Update binary only when it changes
     if ! cmp -s "$KANATA_SRC" "$KANATA_DST" 2>/dev/null; then
       mkdir -p /Applications/Kanata.app/Contents/MacOS
       cp "$KANATA_SRC" "$KANATA_DST"
@@ -322,8 +343,8 @@ in
 </dict>
 </plist>
 PLIST
-      codesign --force --sign - /Applications/Kanata.app
-      echo "*** Kanata.app updated — re-approve in Input Monitoring if needed ***"
+      codesign --force --sign "$KANATA_CERT" --keychain /Library/Keychains/System.keychain /Applications/Kanata.app
+      echo "Kanata.app updated and signed with '$KANATA_CERT'"
     fi
 
     # Link kanata daemon to Kanata.app TCC permissions

@@ -173,6 +173,7 @@ rec {
     linux = with pkgs; [
       nitch
       gitui
+      ghostty
     ];
 
     # macOS-only CLI additions

@@ -1,59 +1,67 @@
-;; Mac built-in keyboard remapping (Norwegian layout)
-;; Ported from Karabiner Elements config — see ADR-0011
+;; Mac built-in keyboard remapping (US layout with Norwegian chars)
+;; See ADR-0011
 
 (defcfg
   process-unmapped-keys yes
   macos-dev-names-include ("Apple Internal Keyboard / Trackpad")
 )
 
-;; Timeout values (matching Karabiner's 150ms threshold)
 (defvar
   tap-timeout 150
   hold-timeout 150
+  tap-timeout-c 100
+  hold-timeout-c 100
 )
 
 (defalias
-  ;; Caps Lock: tap = Escape, hold = nav layer (Karabiner rule 1)
-  ce (tap-hold $tap-timeout $hold-timeout esc (layer-toggle nav))
+  ;; Caps Lock: tap = Escape, hold = Left Control
+  ce (tap-hold $tap-timeout $hold-timeout esc lctrl)
 
-  ;; Tab: tap = Tab, hold = Right Control (Karabiner rule 3)
-  tc (tap-hold-press $tap-timeout $hold-timeout tab rctrl)
+  ;; Tab: tap = Tab, hold = Left Alt/Option
+  ta (tap-hold $tap-timeout $hold-timeout tab lalt)
 
-  ;; Left Cmd: tap = Backspace, hold = Left Cmd (Karabiner rule 3)
-  lcb (tap-hold-press $tap-timeout $hold-timeout bspc lmeta)
+  ;; Backtick: tap = `, hold = nav layer (same as Glove80)
+  `_nav (tap-hold $tap-timeout-c $hold-timeout-c ` (layer-toggle nav))
 
-  ;; Right Cmd: tap = Enter, hold = Right Cmd (Karabiner rule 3)
-  rce (tap-hold-press $tap-timeout $hold-timeout ret rmeta)
+  ;; ISO < key (between left shift and z): same nav layer trigger
+  ;; On Norwegian layout this key is < — same physical position as ` on US ANSI
+  <_nav (tap-hold $tap-timeout-c $hold-timeout-c lsgt (layer-toggle nav))
 
-  ;; Home row mods — left hand (Karabiner rule 2)
-  ha (tap-hold $tap-timeout $hold-timeout a lctrl)
+  ;; Home row mods — left hand
+  ha (tap-hold $tap-timeout $hold-timeout a (multi lctrl lsft lmeta lalt))  ;; Hyper
   hs (tap-hold $tap-timeout $hold-timeout s lalt)
-  hd (tap-hold $tap-timeout $hold-timeout d lmeta)
+  hd (tap-hold $tap-timeout $hold-timeout d lctrl)
   hf (tap-hold $tap-timeout $hold-timeout f lsft)
 
-  ;; Home row mods — right hand (Karabiner rule 2)
+  ;; Home row mods — right hand (mirrored)
   hj (tap-hold $tap-timeout $hold-timeout j rsft)
-  hk (tap-hold $tap-timeout $hold-timeout k rmeta)
+  hk (tap-hold $tap-timeout $hold-timeout k rctrl)
   hl (tap-hold $tap-timeout $hold-timeout l ralt)
-  h; (tap-hold $tap-timeout $hold-timeout ; rctrl)
+  h; (tap-hold $tap-timeout $hold-timeout ; (multi rctrl rsft rmeta ralt))  ;; Hyper
+
+  ;; Accented characters (shift-aware)
+  ea (fork (unicode é) (unicode É) (lsft rsft))
+  oa (fork (unicode ø) (unicode Ø) (lsft rsft))
+  aa (fork (unicode æ) (unicode Æ) (lsft rsft))
+  aaa (fork (unicode å) (unicode Å) (lsft rsft))
 )
 
 (defsrc
-  tab  caps
+  `    tab  caps lsgt
   a    s    d    f    h    j    k    l    ;
-  lmeta rmeta
+  e    -    '
 )
 
 (deflayer base
-  @tc  @ce
+  @`_nav @ta  @ce  @<_nav
   @ha  @hs  @hd  @hf  h    @hj  @hk  @hl  @h;
-  @lcb @rce
+  e    -    '
 )
 
-;; Navigation layer (activated by holding Caps Lock)
-;; Modifiers pass through naturally (e.g. shift+caps+j = shift+down)
+;; Navigation layer (activated by holding backtick or ISO < key)
+;; Matches Glove80 layout: hjkl=arrows, Norwegian chars on e/-/'/;
 (deflayer nav
-  _    _
-  _    _    _    _    left down up   right _
-  _    _
+  _    _    _    _
+  _    _    _    _    left down up   right @aaa
+  @ea  @oa  @aa
 )
