@@ -1,0 +1,349 @@
+version = 4
+
+# ═══════════════════════════════════════════════════════════
+# OmniWM config — matching Hyprland scrolling layout
+# ═══════════════════════════════════════════════════════════
+
+[general]
+hotkeysEnabled = true
+defaultLayoutType = "niri"
+animationsEnabled = true
+preventSleepEnabled = false
+ipcEnabled = true
+
+[focus]
+followsMouse = true
+moveMouseToFocusedWindow = false
+
+# ── Gaps (matching Hyprland gaps_in=2, gaps_out=2) ──
+[gaps]
+size = 4.0
+[gaps.outer]
+left = 4.0
+right = 4.0
+top = 4.0
+bottom = 4.0
+
+# ── Niri scrolling layout ──
+[niri]
+maxWindowsPerColumn = 3
+maxVisibleColumns = 2
+infiniteLoop = false
+centerFocusedColumn = "onOverflow"
+alwaysCenterSingleColumn = true
+singleWindowAspectRatio = "fill"
+# Match Hyprland explicit_column_widths = 0.166,0.25,0.333,0.5,0.666,1
+columnWidthPresets = [0.25, 0.333333, 0.5, 0.666, 1.0]
+
+# ── Borders (matching Hyprland border_size=2) ──
+[borders]
+enabled = true
+width = 2.0
+
+# ── Workspace bar ──
+[workspaceBar]
+enabled = true
+showLabels = true
+showFloatingWindows = false
+position = "overlappingMenuBar"
+hideEmptyWorkspaces = false
+height = 24.0
+backgroundOpacity = 0.1
+
+# ── Trackpad gestures for scrolling ──
+[gestures]
+scrollEnabled = true
+scrollSensitivity = 5.0
+scrollModifierKey = "optionShift"
+fingerCount = 3
+invertDirection = true
+
+# ── Quake terminal (replaces WezTerm toggle) ──
+[quakeTerminal]
+enabled = true
+position = "top"
+widthPercent = 100.0
+heightPercent = 50.0
+animationDuration = 0.15
+autoHide = false
+opacity = 0.90
+monitorMode = "focusedWindow"
+
+[appearance]
+mode = "dark"
+
+# ═══════════════════════════════════════════════════════════
+# Hotkeys — matching Hyprland binds.conf
+# Using Option as primary modifier (pending hyper key decision, see #18)
+# ═══════════════════════════════════════════════════════════
+
+# ── Focus (Option + HJKL / arrows) ──
+[[hotkeys]]
+id = "focus.left"
+binding = "Option+H"
+
+[[hotkeys]]
+id = "focus.down"
+binding = "Option+J"
+
+[[hotkeys]]
+id = "focus.up"
+binding = "Option+K"
+
+[[hotkeys]]
+id = "focus.right"
+binding = "Option+L"
+
+# ── Move windows (Option + Shift + HJKL) ──
+[[hotkeys]]
+id = "move.left"
+binding = "Option+Shift+H"
+
+[[hotkeys]]
+id = "move.down"
+binding = "Option+Shift+J"
+
+[[hotkeys]]
+id = "move.up"
+binding = "Option+Shift+K"
+
+[[hotkeys]]
+id = "move.right"
+binding = "Option+Shift+L"
+
+# ── Move columns (Ctrl + Option + Shift + arrows) ──
+[[hotkeys]]
+id = "moveColumn.left"
+binding = "Control+Option+Shift+Left Arrow"
+
+[[hotkeys]]
+id = "moveColumn.right"
+binding = "Control+Option+Shift+Right Arrow"
+
+# ── Fullscreen (Option + Return, like Hyprland SUPER+Return) ──
+[[hotkeys]]
+id = "toggleFullscreen"
+binding = "Option+Return"
+
+# ── Float toggle ──
+[[hotkeys]]
+id = "toggleFocusedWindowFloating"
+binding = "Option+Shift+Space"
+
+# ── Column width cycle (Option + comma/period, like Hyprland) ──
+[[hotkeys]]
+id = "cycleColumnWidthForward"
+binding = "Option+."
+
+[[hotkeys]]
+id = "cycleColumnWidthBackward"
+binding = "Option+,"
+
+# ── Column full width ──
+[[hotkeys]]
+id = "toggleColumnFullWidth"
+binding = "Option+Shift+F"
+
+# ── Column tabbed mode ──
+[[hotkeys]]
+id = "toggleColumnTabbed"
+binding = "Option+T"
+
+# ── Balance ──
+[[hotkeys]]
+id = "balanceSizes"
+binding = "Option+Shift+B"
+
+# ── Workspaces (Option + 1-9, like Hyprland SUPER + 1-9) ──
+[[hotkeys]]
+id = "switchWorkspace.0"
+binding = "Option+1"
+
+[[hotkeys]]
+id = "switchWorkspace.1"
+binding = "Option+2"
+
+[[hotkeys]]
+id = "switchWorkspace.2"
+binding = "Option+3"
+
+[[hotkeys]]
+id = "switchWorkspace.3"
+binding = "Option+4"
+
+[[hotkeys]]
+id = "switchWorkspace.4"
+binding = "Option+5"
+
+[[hotkeys]]
+id = "switchWorkspace.5"
+binding = "Option+6"
+
+[[hotkeys]]
+id = "switchWorkspace.6"
+binding = "Option+7"
+
+[[hotkeys]]
+id = "switchWorkspace.7"
+binding = "Option+8"
+
+[[hotkeys]]
+id = "switchWorkspace.8"
+binding = "Option+9"
+
+# ── Move to workspace (Option + Shift + 1-9) ──
+[[hotkeys]]
+id = "moveToWorkspace.0"
+binding = "Option+Shift+1"
+
+[[hotkeys]]
+id = "moveToWorkspace.1"
+binding = "Option+Shift+2"
+
+[[hotkeys]]
+id = "moveToWorkspace.2"
+binding = "Option+Shift+3"
+
+[[hotkeys]]
+id = "moveToWorkspace.3"
+binding = "Option+Shift+4"
+
+[[hotkeys]]
+id = "moveToWorkspace.4"
+binding = "Option+Shift+5"
+
+[[hotkeys]]
+id = "moveToWorkspace.5"
+binding = "Option+Shift+6"
+
+[[hotkeys]]
+id = "moveToWorkspace.6"
+binding = "Option+Shift+7"
+
+[[hotkeys]]
+id = "moveToWorkspace.7"
+binding = "Option+Shift+8"
+
+[[hotkeys]]
+id = "moveToWorkspace.8"
+binding = "Option+Shift+9"
+
+# ── Previous workspace (like Hyprland SUPER+TAB) ──
+[[hotkeys]]
+id = "workspaceBackAndForth"
+binding = "Option+Tab"
+
+# ── Overview (like Hyprland SUPER+O) ──
+[[hotkeys]]
+id = "toggleOverview"
+binding = "Option+O"
+
+# ── Command palette ──
+[[hotkeys]]
+id = "openCommandPalette"
+binding = "Control+Option+Space"
+
+# ── Quake terminal (Option + Space) ──
+[[hotkeys]]
+id = "toggleQuakeTerminal"
+binding = "Option+Space"
+
+# ── Scratchpad ──
+[[hotkeys]]
+id = "toggleScratchpadWindow"
+binding = "Option+Escape"
+
+[[hotkeys]]
+id = "assignFocusedWindowToScratchpad"
+binding = "Option+Shift+Escape"
+
+# ═══════════════════════════════════════════════════════════
+# Workspaces
+# ═══════════════════════════════════════════════════════════
+
+[[workspaces]]
+id = "ws-1"
+name = "1"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-2"
+name = "2"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-3"
+name = "3"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-4"
+name = "4"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-5"
+name = "5"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-6"
+name = "6"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-7"
+name = "7"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-8"
+name = "8"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+[[workspaces]]
+id = "ws-9"
+name = "9"
+layoutType = "niri"
+[workspaces.monitorAssignment]
+type = "main"
+
+# ═══════════════════════════════════════════════════════════
+# App Rules — float apps that shouldn't tile
+# ═══════════════════════════════════════════════════════════
+
+[[appRules]]
+id = "rule-system-settings"
+bundleId = "com.apple.systempreferences"
+layout = "float"
+
+[[appRules]]
+id = "rule-calculator"
+bundleId = "com.apple.calculator"
+layout = "float"
+
+[[appRules]]
+id = "rule-activity-monitor"
+bundleId = "com.apple.ActivityMonitor"
+layout = "float"
+
+[[appRules]]
+id = "rule-raycast"
+bundleId = "com.raycast.macos"
+layout = "float"
