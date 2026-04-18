@@ -92,7 +92,7 @@ in
   launchd.daemons.kanata-mac-builtin = {
     serviceConfig = {
       ProgramArguments = [
-        "${pkgs.kanata}/bin/kanata"
+        "/Applications/Kanata.app/Contents/MacOS/kanata"
         "--cfg"
         "${configDir}/users/${username}/configs/kanata/kanata-mac-builtin.kbd"
       ];
@@ -298,6 +298,38 @@ in
   system.activationScripts.postActivation.text = ''
     mdutil -a -i off 2>/dev/null || true
 
+    # Sync Kanata.app bundle with nix store binary for stable Input Monitoring.
+    # Only updates when binary changes (kanata version bump).
+    # After a version bump, re-approve Kanata in Input Monitoring.
+    KANATA_SRC="${pkgs.kanata}/bin/kanata"
+    KANATA_DST="/Applications/Kanata.app/Contents/MacOS/kanata"
+    if ! cmp -s "$KANATA_SRC" "$KANATA_DST" 2>/dev/null; then
+      mkdir -p /Applications/Kanata.app/Contents/MacOS
+      cp "$KANATA_SRC" "$KANATA_DST"
+      cat > /Applications/Kanata.app/Contents/Info.plist << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>org.kanata.daemon</string>
+    <key>CFBundleName</key>
+    <string>Kanata</string>
+    <key>CFBundleExecutable</key>
+    <string>kanata</string>
+</dict>
+</plist>
+PLIST
+      codesign --force --sign - /Applications/Kanata.app
+      echo "*** Kanata.app updated — re-approve in Input Monitoring if needed ***"
+    fi
+
+    # Link kanata daemon to Kanata.app TCC permissions
+    KANATA_PLIST="/Library/LaunchDaemons/org.nixos.kanata-mac-builtin.plist"
+    if [ -f "$KANATA_PLIST" ] && ! /usr/libexec/PlistBuddy -c "Print :AssociatedBundleIdentifiers" "$KANATA_PLIST" &>/dev/null; then
+      /usr/libexec/PlistBuddy -c "Add :AssociatedBundleIdentifiers array" "$KANATA_PLIST"
+      /usr/libexec/PlistBuddy -c "Add :AssociatedBundleIdentifiers:0 string org.kanata.daemon" "$KANATA_PLIST"
+    fi
   '';
 
   # ============================================================================
