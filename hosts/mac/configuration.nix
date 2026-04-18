@@ -64,7 +64,9 @@ in
     gc = {
       automatic = true;
       interval = { Weekday = 0; Hour = 2; Minute = 0; };
-      options = "--delete-older-than 30d";
+      # Only free space, never delete profile generations.
+      # Profile generations are managed explicitly via: nix-env --delete-generations +5
+      options = "--max-freed 10G";
     };
 
     optimise = {
