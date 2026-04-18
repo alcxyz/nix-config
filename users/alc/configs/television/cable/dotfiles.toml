@@ -1,3 +1,8 @@
+[metadata]
+name = "dotfiles"
+description = "Browse and edit dotfiles"
+requirements = ["fd", "bat"]
+
 [source]
 command = "fd -H -t f -E .git -E node_modules . ~/.config"
 
@@ -5,8 +10,10 @@ command = "fd -H -t f -E .git -E node_modules . ~/.config"
 command = "bat --color=always --style=numbers --line-range=:100 '{}'"
 
 [actions.edit]
+description = "Edit in nvim"
 command = "nvim '{}'"
 mode = "execute"
 
 [actions.copy_path]
+description = "Copy path to clipboard"
 command = "echo -n '{}' | wl-copy"

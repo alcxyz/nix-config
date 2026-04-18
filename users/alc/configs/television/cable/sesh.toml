@@ -1,3 +1,8 @@
+[metadata]
+name = "sesh"
+description = "Tmux session picker via sesh"
+requirements = ["sesh"]
+
 [source]
 command = [
   "sesh list --icons",
@@ -11,8 +16,10 @@ command = [
 command = "echo {}"
 
 [actions.connect]
+description = "Connect to session"
 command = "sesh connect '{strip_ansi|split: :1..|join: }'"
 mode = "execute"
 
 [actions.kill_session]
+description = "Kill tmux session"
 command = "tmux kill-session -t '{strip_ansi|split: :1..|join: }'"

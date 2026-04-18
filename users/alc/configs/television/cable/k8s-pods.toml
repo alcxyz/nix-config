@@ -1,3 +1,8 @@
+[metadata]
+name = "k8s-pods"
+description = "Manage Kubernetes pods"
+requirements = ["kubectl"]
+
 [source]
 command = [
   "kubectl get pods -o wide --no-headers",
@@ -8,12 +13,15 @@ command = [
 command = "kubectl describe pod {0}"
 
 [actions.logs]
+description = "Follow pod logs"
 command = "kubectl logs -f {0}"
 mode = "execute"
 
 [actions.exec]
+description = "Exec into pod"
 command = "kubectl exec -it {0} -- /bin/sh"
 mode = "execute"
 
 [actions.delete]
+description = "Delete pod"
 command = "kubectl delete pod {0}"

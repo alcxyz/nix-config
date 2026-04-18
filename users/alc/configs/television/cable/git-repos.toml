@@ -1,3 +1,8 @@
+[metadata]
+name = "git-repos"
+description = "Find and open git repositories"
+requirements = ["fd", "git"]
+
 [source]
 command = "fd -H -t d '^.git$' ~ --max-depth 4 -x echo {//}"
 
@@ -5,9 +10,11 @@ command = "fd -H -t d '^.git$' ~ --max-depth 4 -x echo {//}"
 command = "git -C '{}' log --oneline -20"
 
 [actions.open]
+description = "Open in nvim"
 command = "cd '{}' && nvim"
 mode = "execute"
 
 [actions.cd]
+description = "Change directory"
 command = "cd '{}'"
 mode = "execute"

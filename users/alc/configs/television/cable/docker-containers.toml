@@ -1,3 +1,8 @@
+[metadata]
+name = "docker-containers"
+description = "Manage Docker containers"
+requirements = ["docker"]
+
 [source]
 command = "docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}'"
 
@@ -5,21 +10,27 @@ command = "docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}'"
 command = "docker logs --tail 50 '{split:\t:0}'"
 
 [actions.logs]
+description = "Follow logs"
 command = "docker logs -f '{split:\t:0}'"
 mode = "execute"
 
 [actions.exec]
+description = "Exec into container"
 command = "docker exec -it '{split:\t:0}' /bin/sh"
 mode = "execute"
 
 [actions.stop]
+description = "Stop container"
 command = "docker stop '{split:\t:0}'"
 
 [actions.start]
+description = "Start container"
 command = "docker start '{split:\t:0}'"
 
 [actions.restart]
+description = "Restart container"
 command = "docker restart '{split:\t:0}'"
 
 [actions.remove]
+description = "Remove container"
 command = "docker rm -f '{split:\t:0}'"
