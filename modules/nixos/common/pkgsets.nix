@@ -71,7 +71,6 @@ rec {
         grim
         slurp
         swappy
-        imagemagick
       ]
       ++ lib.optionals (ndropPkg != null) [ ndropPkg ];
   };
@@ -106,6 +105,7 @@ rec {
       tmux
       wget
       killall
+      kanata
 
       # Search & fuzzy / file utilities
       ripgrep
@@ -127,9 +127,11 @@ rec {
 
       # Archives & media (CLI use of ffmpeg, etc.)
       unzip
+      p7zip
       #unrar
       #rar
       ffmpeg
+      imagemagick
 
       # Secrets & smartcard / age tooling
       gopass
