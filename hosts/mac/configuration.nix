@@ -104,22 +104,6 @@ in
     };
   };
 
-  # ============================================================================
-  # Window Management (OmniWM) — niri-style scrolling layout
-  # ============================================================================
-  # Installed via Homebrew cask; config managed via home-manager symlink
-  # at ~/.config/omniwm/settings.toml
-
-  # ============================================================================
-  # Homebrew
-  # ============================================================================
-  homebrew = {
-    enable = true;
-    onActivation.cleanup = "zap";
-    taps = [ "BarutSRB/tap" ];
-    casks = [ "omniwm" ];
-  };
-
   time.timeZone = "Europe/Oslo";
 
   # ============================================================================

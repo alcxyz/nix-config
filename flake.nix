@@ -100,7 +100,7 @@
           (_final: _prev:
             let
               np = nix-packages.packages.${system};
-              wanted = [ "ndrop" "zfs-auto-unlock" "pihole-sync" "helium" "t3code" "claude-code" "paperless-review" "paperless-filetype-index" "leantime-tidy" ];
+              wanted = [ "ndrop" "zfs-auto-unlock" "pihole-sync" "helium" "t3code" "claude-code" "paperless-review" "paperless-filetype-index" "leantime-tidy" "omniwm" ];
             in
               nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np
           )
