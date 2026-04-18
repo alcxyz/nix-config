@@ -120,6 +120,9 @@ EOF
   xdg.configFile."television".source = config.lib.file.mkOutOfStoreSymlink
     "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/television";
 
+  home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink
+    "${config.home.homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";
+
   # ==================== Files ====================
   home.file = {
     "Documents/.keep".text = "";
