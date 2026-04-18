@@ -1,15 +1,15 @@
 import Cocoa
 
-let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.github.wez.wezterm")
-    .first
+let bundleID = "com.github.wez.wezterm"
 
-if let app = app {
-    if app.isActive {
-        app.hide()
-    } else {
-        app.unhide()
-        app.activate()
-    }
-} else {
+guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
     NSWorkspace.shared.open(URL(fileURLWithPath: "/Users/alc/Applications/Home Manager Apps/WezTerm.app"))
+    exit(0)
+}
+
+if app.isActive {
+    app.hide()
+} else {
+    app.unhide()
+    app.activate()
 }

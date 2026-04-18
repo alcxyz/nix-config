@@ -68,16 +68,6 @@ in
       -- No tab bar for clean look
       config.enable_tab_bar = false
 
-      -- Native fullscreen is slower (animates), use non-native
-      config.native_macos_fullscreen_mode = false
-
-      -- Start maximized for quake-style usage
-      local mux = wezterm.mux
-      wezterm.on('gui-startup', function(cmd)
-        local _, _, window = mux.spawn_window(cmd or {})
-        window:gui_window():toggle_fullscreen()
-      end)
-
       return config
     '';
   };
