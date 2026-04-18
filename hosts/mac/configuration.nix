@@ -86,6 +86,127 @@ in
 
   services.openssh.enable = true;
 
+  # ============================================================================
+  # Keyboard Remapping (kanata) — see ADR-0011
+  # ============================================================================
+  launchd.daemons.kanata-mac-builtin = {
+    serviceConfig = {
+      ProgramArguments = [
+        "${pkgs.kanata}/bin/kanata"
+        "--cfg"
+        "${configDir}/users/${username}/configs/kanata/kanata-mac-builtin.kbd"
+      ];
+      RunAtLoad = true;
+      KeepAlive = true;
+      ThrottleInterval = 10;
+      StandardOutPath = "/var/log/kanata-mac-builtin.log";
+      StandardErrorPath = "/var/log/kanata-mac-builtin.log";
+    };
+  };
+
+  # ============================================================================
+  # Window Management (yabai + skhd)
+  # ============================================================================
+  services.yabai = {
+    enable = true;
+    config = {
+      layout = "bsp";
+      window_placement = "second_child";
+
+      top_padding    = 8;
+      bottom_padding = 8;
+      left_padding   = 8;
+      right_padding  = 8;
+      window_gap     = 8;
+
+      mouse_follows_focus = "on";
+      mouse_modifier      = "cmd";
+      mouse_action1       = "move";
+      mouse_action2       = "resize";
+      mouse_drop_action   = "swap";
+
+      auto_balance = "off";
+      split_ratio  = 0.5;
+    };
+    extraConfig = ''
+      # Float rules — apps that shouldn't tile
+      yabai -m rule --add app="^System Settings$" manage=off
+      yabai -m rule --add app="^Calculator$" manage=off
+      yabai -m rule --add app="^Activity Monitor$" manage=off
+      yabai -m rule --add app="^Raycast$" manage=off
+      yabai -m rule --add app="^Finder$" title="(Copy|Bin|Trash|Connect)" manage=off
+    '';
+  };
+
+  services.skhd = {
+    enable = true;
+    skhdConfig = ''
+      # ═══════════════════════════════════════════════════════════
+      # skhd bindings — matching Hyprland (SUPER = cmd)
+      # ═══════════════════════════════════════════════════════════
+
+      # ── Focus windows (SUPER + hjkl) ──
+      cmd - h : yabai -m window --focus west
+      cmd - j : yabai -m window --focus south
+      cmd - k : yabai -m window --focus north
+      cmd - l : yabai -m window --focus east
+
+      # ── Swap windows (SUPER + SHIFT + hjkl) ──
+      shift + cmd - h : yabai -m window --swap west
+      shift + cmd - j : yabai -m window --swap south
+      shift + cmd - k : yabai -m window --swap north
+      shift + cmd - l : yabai -m window --swap east
+
+      # ── Resize (SUPER + ALT + hjkl) ──
+      cmd + alt - h : yabai -m window --resize left:-50:0
+      cmd + alt - j : yabai -m window --resize bottom:0:50
+      cmd + alt - k : yabai -m window --resize top:0:-50
+      cmd + alt - l : yabai -m window --resize right:50:0
+
+      # ── Window actions ──
+      cmd - w : yabai -m window --close
+      cmd - t : yabai -m window --toggle float --grid 4:4:1:1:2:2
+      cmd - return : yabai -m window --toggle zoom-fullscreen
+
+      # ── Focus space (SUPER + number) ──
+      cmd - 1 : yabai -m space --focus 1
+      cmd - 2 : yabai -m space --focus 2
+      cmd - 3 : yabai -m space --focus 3
+      cmd - 4 : yabai -m space --focus 4
+      cmd - 5 : yabai -m space --focus 5
+      cmd - 6 : yabai -m space --focus 6
+      cmd - 7 : yabai -m space --focus 7
+      cmd - 8 : yabai -m space --focus 8
+      cmd - 9 : yabai -m space --focus 9
+
+      # ── Move window to space (SUPER + CTRL + number) ──
+      ctrl + cmd - 1 : yabai -m window --space 1; yabai -m space --focus 1
+      ctrl + cmd - 2 : yabai -m window --space 2; yabai -m space --focus 2
+      ctrl + cmd - 3 : yabai -m window --space 3; yabai -m space --focus 3
+      ctrl + cmd - 4 : yabai -m window --space 4; yabai -m space --focus 4
+      ctrl + cmd - 5 : yabai -m window --space 5; yabai -m space --focus 5
+      ctrl + cmd - 6 : yabai -m window --space 6; yabai -m space --focus 6
+      ctrl + cmd - 7 : yabai -m window --space 7; yabai -m space --focus 7
+      ctrl + cmd - 8 : yabai -m window --space 8; yabai -m space --focus 8
+      ctrl + cmd - 9 : yabai -m window --space 9; yabai -m space --focus 9
+
+      # ── Previous space (SUPER + TAB) ──
+      cmd - tab : yabai -m space --focus recent
+
+      # ── Balance layout ──
+      shift + cmd - 0 : yabai -m space --balance
+
+      # ── Mouse: move/resize (SUPER + drag) ──
+      # (handled by yabai config mouse_modifier = cmd)
+
+      # ── Quake-style WezTerm toggle ──
+      alt - space : ~/nix/nix-config/users/alc/configs/skhd/toggle-wezterm
+
+      # ── Terminal (ALT + RETURN, like Hyprland) ──
+      alt - return : open -a WezTerm
+    '';
+  };
+
   time.timeZone = "Europe/Oslo";
 
   # ============================================================================

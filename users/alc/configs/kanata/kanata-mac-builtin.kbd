@@ -1,0 +1,59 @@
+;; Mac built-in keyboard remapping (Norwegian layout)
+;; Ported from Karabiner Elements config — see ADR-0011
+
+(defcfg
+  process-unmapped-keys yes
+  macos-dev-names-include ("Apple Internal Keyboard / Trackpad")
+)
+
+;; Timeout values (matching Karabiner's 150ms threshold)
+(defvar
+  tap-timeout 150
+  hold-timeout 150
+)
+
+(defalias
+  ;; Caps Lock: tap = Escape, hold = nav layer (Karabiner rule 1)
+  ce (tap-hold $tap-timeout $hold-timeout esc (layer-toggle nav))
+
+  ;; Tab: tap = Tab, hold = Right Control (Karabiner rule 3)
+  tc (tap-hold-press $tap-timeout $hold-timeout tab rctrl)
+
+  ;; Left Cmd: tap = Backspace, hold = Left Cmd (Karabiner rule 3)
+  lcb (tap-hold-press $tap-timeout $hold-timeout bspc lmeta)
+
+  ;; Right Cmd: tap = Enter, hold = Right Cmd (Karabiner rule 3)
+  rce (tap-hold-press $tap-timeout $hold-timeout ret rmeta)
+
+  ;; Home row mods — left hand (Karabiner rule 2)
+  ha (tap-hold $tap-timeout $hold-timeout a lctrl)
+  hs (tap-hold $tap-timeout $hold-timeout s lalt)
+  hd (tap-hold $tap-timeout $hold-timeout d lmeta)
+  hf (tap-hold $tap-timeout $hold-timeout f lsft)
+
+  ;; Home row mods — right hand (Karabiner rule 2)
+  hj (tap-hold $tap-timeout $hold-timeout j rsft)
+  hk (tap-hold $tap-timeout $hold-timeout k rmeta)
+  hl (tap-hold $tap-timeout $hold-timeout l ralt)
+  h; (tap-hold $tap-timeout $hold-timeout ; rctrl)
+)
+
+(defsrc
+  tab  caps
+  a    s    d    f    h    j    k    l    ;
+  lmeta rmeta
+)
+
+(deflayer base
+  @tc  @ce
+  @ha  @hs  @hd  @hf  h    @hj  @hk  @hl  @h;
+  @lcb @rce
+)
+
+;; Navigation layer (activated by holding Caps Lock)
+;; Modifiers pass through naturally (e.g. shift+caps+j = shift+down)
+(deflayer nav
+  _    _
+  _    _    _    _    left down up   right _
+  _    _
+)

@@ -79,7 +79,7 @@ rec {
   system = {
     workstation = sys.base ++ sys.linux ++ sys.linuxDesktop;
     server = sys.base ++ sys.linux;
-    mac = sys.base;
+    mac = sys.base ++ [ pkgs.kanata ];
   };
 
   # =======================================================================
@@ -105,7 +105,6 @@ rec {
       tmux
       wget
       killall
-      kanata
 
       # Search & fuzzy / file utilities
       ripgrep
@@ -274,7 +273,6 @@ rec {
     # macOS-only desktop apps
     desktopMacOnly = with pkgs; [
       raycast
-      skhd
     ];
 
     # Convenience combined sets
