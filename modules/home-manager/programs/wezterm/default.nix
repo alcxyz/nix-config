@@ -51,6 +51,8 @@ in
     };
 
     programs.wezterm.extraConfig = ''
+      local config = wezterm.config_builder()
+
       config.color_scheme = "PaletteScheme"
 
       config.font = wezterm.font("JetBrains Mono Nerd Font", { weight = "Regular" })
@@ -68,6 +70,8 @@ in
 
       -- Native fullscreen is slower (animates), use non-native
       config.native_macos_fullscreen_mode = false
+
+      return config
     '';
   };
 }

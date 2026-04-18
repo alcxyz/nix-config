@@ -226,7 +226,6 @@ rec {
       codex
       #cursor-cli
       #code-cursor
-      t3code
     ];
 
     gaming = with pkgs; [
@@ -257,6 +256,7 @@ rec {
 
     # Linux-only (or strongly Linux-oriented) desktop apps
     desktopLinuxOnly = with pkgs; [
+      t3code
       helium
       vlc
       obs-studio
