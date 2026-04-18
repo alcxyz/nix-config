@@ -55,7 +55,7 @@ in
 
       config.color_scheme = "PaletteScheme"
 
-      config.font = wezterm.font("JetBrains Mono Nerd Font", { weight = "Regular" })
+      config.font = wezterm.font("JetBrainsMono Nerd Font", { weight = "Regular" })
       config.font_size = 14.0
 
       -- Window appearance
@@ -70,6 +70,13 @@ in
 
       -- Native fullscreen is slower (animates), use non-native
       config.native_macos_fullscreen_mode = false
+
+      -- Start maximized for quake-style usage
+      local mux = wezterm.mux
+      wezterm.on('gui-startup', function(cmd)
+        local _, _, window = mux.spawn_window(cmd or {})
+        window:gui_window():toggle_fullscreen()
+      end)
 
       return config
     '';
