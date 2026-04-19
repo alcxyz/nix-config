@@ -55,6 +55,21 @@ in {
       };
     }
 
+    # SSH refuses the nix store symlink (world-readable). On each activation:
+    # home-manager recreates the symlink (force=true allows it to overwrite our copy),
+    # then the hook replaces it with a chmod 600 copy.
+    {
+      home.file.".ssh/config".force = true;
+      home.activation.fixSshConfigPermissions = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        if [ -L "$HOME/.ssh/config" ]; then
+          _target=$(readlink "$HOME/.ssh/config")
+          rm "$HOME/.ssh/config"
+          cp "$_target" "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+        fi
+      '';
+    }
+
     # User-level ssh-agent only on Linux; macOS uses its own agent.
     (mkIf pkgs.stdenv.isLinux {
       services.ssh-agent.enable = true;
