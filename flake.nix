@@ -80,8 +80,8 @@
     };
 
     nix-codebox = {
-      #url = "path:/home/alc/nix/nix-codebox";
-      url = "github:alcxyz/nix-codebox";
+      url = "path:/home/alc/nix/nix-codebox";
+      #url = "github:alcxyz/nix-codebox";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

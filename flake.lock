@@ -641,17 +641,14 @@
         ]
       },
       "locked": {
-        "lastModified": 1776537428,
-        "narHash": "sha256-yKKZ8AEqusnfZh8pUtDZKuq3LrE0cxTHJgi7dRJiyN8=",
-        "owner": "alcxyz",
-        "repo": "nix-codebox",
-        "rev": "9426d76475d573941ca5ca78ab13ed28ceaac2cd",
-        "type": "github"
+        "lastModified": 1776556050,
+        "narHash": "sha256-r5pEH3MIA7I7iry0oZUAzbGqIZvwBO7OC2nLqitaogU=",
+        "path": "/home/alc/nix/nix-codebox",
+        "type": "path"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "nix-codebox",
-        "type": "github"
+        "path": "/home/alc/nix/nix-codebox",
+        "type": "path"
       }
     },
     "nix-colors": {
