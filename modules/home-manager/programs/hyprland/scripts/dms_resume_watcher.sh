@@ -1,26 +1,37 @@
 #!/usr/bin/env bash
 
-# Watch for monitor DPMS wake events and restart DMS
-# to fix layer surfaces (OSD overlays) not surviving display sleep.
+# Restart DMS after display wakes from DPMS sleep to restore OSD overlays.
 #
-# Uses Hyprland's socket2 event stream which emits dpms>>on,MONITORNAME
-# when a monitor wakes from DPMS sleep. This covers both idle-timeout
-# display sleep and wake-from-system-suspend scenarios.
-# (PrepareForSleep D-Bus signal is NOT emitted for plain DPMS sleep.)
+# Hyprland does NOT emit dpms>> events on socket2. Instead, it emits
+# closelayer>>dms:bar when the display sleeps and openlayer>>dms:bar
+# when it wakes. We use a state machine to avoid restarting on initial
+# DMS startup (which also fires openlayer>>dms:bar).
+#
+# Uses process substitution (< <(...)) instead of a pipe so the while
+# loop runs in the main shell and the went_to_sleep variable persists.
 
 SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 
+went_to_sleep=0
+
 while true; do
-  socat -U - UNIX-CONNECT:"$SOCKET" 2>/dev/null | while IFS= read -r line; do
+  while IFS= read -r line; do
     case "$line" in
-      dpms\>\>on*)
-        sleep 2
-        pkill -f "dms run" 2>/dev/null || true
-        sleep 1
-        dms run &
+      "closelayer>>dms:bar")
+        went_to_sleep=1
+        ;;
+      "openlayer>>dms:bar")
+        if [[ $went_to_sleep -eq 1 ]]; then
+          went_to_sleep=0
+          sleep 2
+          pkill -f "dms run" 2>/dev/null || true
+          sleep 1
+          dms run &
+        fi
         ;;
     esac
-  done
-  # If socat exits (e.g. socket briefly unavailable after system resume), retry
+  done < <(socat -U - UNIX-CONNECT:"$SOCKET" 2>/dev/null)
+  # socat exited (socket temporarily unavailable) — reset state and retry
+  went_to_sleep=0
   sleep 3
 done
