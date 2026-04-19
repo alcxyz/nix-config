@@ -49,6 +49,15 @@ in {
     xdg.configFile."hypr/binds.conf".source = config.lib.file.mkOutOfStoreSymlink
       "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/hypr/binds.conf";
 
+    # DMS user-editable configs — live symlinks so edits take effect immediately.
+    # colors.conf and layout.conf are excluded: DMS generates them at runtime.
+    xdg.configFile."hypr/dms/cursor.conf".source = config.lib.file.mkOutOfStoreSymlink
+      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/cursor.conf";
+    xdg.configFile."hypr/dms/windowrules.conf".source = config.lib.file.mkOutOfStoreSymlink
+      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/windowrules.conf";
+    xdg.configFile."hypr/dms/outputs.conf".source = config.lib.file.mkOutOfStoreSymlink
+      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/outputs.conf";
+
     # Keep colors.conf generated from nix-colors
     xdg.configFile."hypr/colors.conf".text = ''
       general {

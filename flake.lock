@@ -91,6 +91,38 @@
         "type": "github"
       }
     },
+    "dms-plugin-calculator": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1770921929,
+        "narHash": "sha256-bhV22bL38CJp58Y8tCY8sEBRYxmuk671fEymmdg0Yuk=",
+        "owner": "alcxyz",
+        "repo": "DankCalculator",
+        "rev": "07d7c123a5aee9ac4fd4347bbae36d5957b021f9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "DankCalculator",
+        "type": "github"
+      }
+    },
+    "dms-plugin-worldclock": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1772134198,
+        "narHash": "sha256-g1MB9gzYQYvn0LuGSbwAzqParC6XOKJK8PtttsdwF14=",
+        "owner": "alcxyz",
+        "repo": "WorldClock",
+        "rev": "061752535b5b38f8290edb7108a25cb5f779d405",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "WorldClock",
+        "type": "github"
+      }
+    },
     "dsearch": {
       "inputs": {
         "nixpkgs": [
@@ -903,6 +935,8 @@
       "inputs": {
         "dankMaterialShell": "dankMaterialShell",
         "darwin": "darwin",
+        "dms-plugin-calculator": "dms-plugin-calculator",
+        "dms-plugin-worldclock": "dms-plugin-worldclock",
         "dsearch": "dsearch",
         "grove": "grove",
         "home-manager": "home-manager",

@@ -1,5 +1,5 @@
 # modules/home-manager/services/dms/default.nix
-{ lib, config, inputs, pkgs, ... }:
+{ lib, config, inputs, pkgs, username, ... }:
 
 let
   cfg = config.services.dms;
@@ -14,6 +14,10 @@ in
   ];
 
   config = lib.mkIf cfg.enable {
+    xdg.configFile."DankMaterialShell/plugin_settings.json".source =
+      config.lib.file.mkOutOfStoreSymlink
+        "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/plugin_settings.json";
+
     programs.dsearch = {
       enable = true;
     };
@@ -38,11 +42,11 @@ in
       plugins = {
         WorldClock = {
           enable = true;
-          src = plugins/WorldClock;
+          src = inputs.dms-plugin-worldclock;
         };
         DankCalculator = {
           enable = true;
-          src = plugins/DankCalculator;
+          src = inputs.dms-plugin-calculator;
         };
       };
     };

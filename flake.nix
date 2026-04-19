@@ -85,6 +85,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    dms-plugin-worldclock = {
+      url = "github:alcxyz/WorldClock";
+      flake = false;
+    };
+
+    dms-plugin-calculator = {
+      url = "github:alcxyz/DankCalculator";
+      flake = false;
+    };
+
   };
 
   # ---- Outputs ----------------------------------------------------------

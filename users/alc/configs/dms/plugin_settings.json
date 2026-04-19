@@ -1,0 +1,32 @@
+{
+  "worldClock": {
+    "enabled": true,
+    "timezones": [
+      {
+        "timezone": "America/Los_Angeles",
+        "label": "LA"
+      },
+      {
+        "timezone": "America/New_York",
+        "label": "NYC"
+      },
+      {
+        "timezone": "America/Sao_Paulo",
+        "label": "SP"
+      },
+      {
+        "timezone": "Europe/Moscow",
+        "label": "MSK"
+      },
+      {
+        "timezone": "Asia/Hong_Kong",
+        "label": "HK"
+      }
+    ]
+  },
+  "calculator": {
+    "enabled": true,
+    "trigger": "=",
+    "noTrigger": false
+  }
+}
