@@ -93,6 +93,7 @@ rec {
     */
     base = with pkgs; [
       # Editors & UI-ish TUI
+      neovim
       #neofetch
       tree
       bat

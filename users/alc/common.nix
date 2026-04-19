@@ -143,11 +143,6 @@ EOF
 
   programs.git.managed.enable = true;
 
-  programs.neovim = {
-    enable = true;
-    withRuby = false;
-    withPython3 = false;
-  };
 
   #programs.wezterm.enable = true;
 
