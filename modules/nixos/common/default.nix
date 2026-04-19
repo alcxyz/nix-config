@@ -62,7 +62,7 @@ in
   i18n.defaultLocale = "en_US.UTF-8";
   time.timeZone = "Europe/Oslo";
   console.useXkbConfig = true;
-  services.xserver.xkb = { layout = "no"; };
+  services.xserver.xkb = { layout = "us"; };
 
   # ==================== Boot Configuration ====================
   boot.loader = if pkgs.stdenv.isAarch64 then {
