@@ -79,12 +79,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nix-codebox = {
-      url = "path:/home/alc/nix/nix-codebox";
-      #url = "github:alcxyz/nix-codebox";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     dms-plugin-worldclock = {
       url = "github:alcxyz/WorldClock";
       flake = false;
