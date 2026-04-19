@@ -89,6 +89,29 @@ in
   services.openssh.enable = true;
 
   # ============================================================================
+  # Netbird — mesh VPN client
+  # ============================================================================
+  environment.systemPackages = [ pkgs.netbird ];
+
+  launchd.daemons.netbird = {
+    serviceConfig = {
+      ProgramArguments = [
+        "${pkgs.netbird}/bin/netbird"
+        "service"
+        "run"
+      ];
+      RunAtLoad = true;
+      KeepAlive = true;
+      StandardOutPath = "/var/log/netbird.log";
+      StandardErrorPath = "/var/log/netbird.log";
+      EnvironmentVariables = {
+        NB_CONFIG = "/var/lib/netbird/config.json";
+        NB_LOG_FILE = "console";
+      };
+    };
+  };
+
+  # ============================================================================
   # Keyboard Remapping (kanata) — see ADR-0011
   # ============================================================================
   launchd.daemons.kanata-mac-builtin = {
