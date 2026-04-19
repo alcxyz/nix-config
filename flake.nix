@@ -74,6 +74,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    paperless-tools = {
+      url = "github:alcxyz/paperless-tools";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     grove = {
       url = "github:alcxyz/grove";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -110,9 +115,11 @@
           (_final: _prev:
             let
               np = nix-packages.packages.${system};
-              wanted = [ "ndrop" "zfs-auto-unlock" "pihole-sync" "helium" "t3code" "claude-code" "paperless-review" "paperless-filetype-index" "leantime-tidy" "omniwm" ];
+              wanted = [ "ndrop" "zfs-auto-unlock" "pihole-sync" "helium" "t3code" "claude-code" "leantime-tidy" "omniwm" ];
+              pt = inputs.paperless-tools.packages.${system} or {};
             in
-              nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np
+              (nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np)
+              // (nixpkgs.lib.filterAttrs (n: _: builtins.elem n [ "paperless-review" "paperless-filetype-index" ]) pt)
           )
         ];
 
