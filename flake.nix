@@ -75,7 +75,7 @@
     };
 
     paperless-tools = {
-      url = "github:alcxyz/paperless-tools";
+      url = "git+ssh://git@github.com/alcxyz/paperless-tools.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
