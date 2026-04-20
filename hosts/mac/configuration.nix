@@ -91,8 +91,6 @@ in
   # ============================================================================
   # Netbird — mesh VPN client
   # ============================================================================
-  environment.systemPackages = [ pkgs.netbird ];
-
   launchd.daemons.netbird = {
     serviceConfig = {
       ProgramArguments = [
@@ -125,7 +123,7 @@ in
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = pkgsets.system.mac;
+    systemPackages = pkgsets.system.mac ++ [ pkgs.netbird ];
     shells = with pkgs; [ bash zsh nushell ];
     variables = { EDITOR = "nvim"; };
   };
