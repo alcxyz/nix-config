@@ -109,8 +109,8 @@ in
     };
   };
 
-  # Keyboard remapping (kanata) — installed via Homebrew, see ADR-0011.
-  # Launchd service managed outside nix-darwin (brew services).
+  # Keyboard remapping: Karabiner Elements (brew cask), config managed
+  # declaratively via home-manager — see ADR-0011.
 
   time.timeZone = "Europe/Oslo";
 
