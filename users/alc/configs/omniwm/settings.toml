@@ -74,188 +74,189 @@ mode = "dark"
 
 # ═══════════════════════════════════════════════════════════
 # Hotkeys — matching Hyprland binds.conf
-# Using Hyper (Ctrl+Option+Command+Shift) as primary modifier via home row mod (a hold)
+# F13 = Super (via 'a' hold in Karabiner), mirroring SUPER on Hyprland
+# F13+Shift for secondary actions (move), like SUPER+Shift on Hyprland
 # ═══════════════════════════════════════════════════════════
 
-# ── Focus (Hyper + HJKL) — hold 'a' + hjkl ──
+# ── Focus (Super + HJKL) ──
 [[hotkeys]]
 id = "focus.left"
-binding = "Control+Option+Command+Shift+H"
+binding = "F13+H"
 
 [[hotkeys]]
 id = "focus.down"
-binding = "Control+Option+Command+Shift+J"
+binding = "F13+J"
 
 [[hotkeys]]
 id = "focus.up"
-binding = "Control+Option+Command+Shift+K"
+binding = "F13+K"
 
 [[hotkeys]]
 id = "focus.right"
-binding = "Control+Option+Command+Shift+L"
+binding = "F13+L"
 
-# ── Move windows (Meh + HJKL) — hold ';' + hjkl ──
+# ── Move windows (Super + Shift + HJKL) ──
 [[hotkeys]]
 id = "move.left"
-binding = "Control+Option+Shift+H"
+binding = "F13+Shift+H"
 
 [[hotkeys]]
 id = "move.down"
-binding = "Control+Option+Shift+J"
+binding = "F13+Shift+J"
 
 [[hotkeys]]
 id = "move.up"
-binding = "Control+Option+Shift+K"
+binding = "F13+Shift+K"
 
 [[hotkeys]]
 id = "move.right"
-binding = "Control+Option+Shift+L"
+binding = "F13+Shift+L"
 
-# ── Move columns (Meh + arrows) ──
+# ── Move columns (Super + Shift + arrows) ──
 [[hotkeys]]
 id = "moveColumn.left"
-binding = "Control+Option+Shift+Left Arrow"
+binding = "F13+Shift+Left Arrow"
 
 [[hotkeys]]
 id = "moveColumn.right"
-binding = "Control+Option+Shift+Right Arrow"
+binding = "F13+Shift+Right Arrow"
 
-# ── Fullscreen (Hyper + Return) ──
+# ── Fullscreen (Super + Return) ──
 [[hotkeys]]
 id = "toggleFullscreen"
-binding = "Control+Option+Command+Shift+Return"
+binding = "F13+Return"
 
-# ── Float toggle (Meh + Space) ──
+# ── Float toggle (Super + Shift + Space) ──
 [[hotkeys]]
 id = "toggleFocusedWindowFloating"
-binding = "Control+Option+Shift+Space"
+binding = "F13+Shift+Space"
 
-# ── Column width cycle (Hyper + comma/period) ──
+# ── Column width cycle (Super + comma/period) ──
 [[hotkeys]]
 id = "cycleColumnWidthForward"
-binding = "Control+Option+Command+Shift+."
+binding = "F13+."
 
 [[hotkeys]]
 id = "cycleColumnWidthBackward"
-binding = "Control+Option+Command+Shift+,"
+binding = "F13+,"
 
-# ── Column full width (Meh + F) ──
+# ── Column full width (Super + Shift + F) ──
 [[hotkeys]]
 id = "toggleColumnFullWidth"
-binding = "Control+Option+Shift+F"
+binding = "F13+Shift+F"
 
-# ── Column tabbed mode (Hyper + T) ──
+# ── Column tabbed mode (Super + T) ──
 [[hotkeys]]
 id = "toggleColumnTabbed"
-binding = "Control+Option+Command+Shift+T"
+binding = "F13+T"
 
-# ── Balance (Meh + B) ──
+# ── Balance (Super + Shift + B) ──
 [[hotkeys]]
 id = "balanceSizes"
-binding = "Control+Option+Shift+B"
+binding = "F13+Shift+B"
 
-# ── Workspaces (Hyper + 1-9) — hold 'a' + number ──
+# ── Workspaces (Super + 1-9) ──
 [[hotkeys]]
 id = "switchWorkspace.0"
-binding = "Control+Option+Command+Shift+1"
+binding = "F13+1"
 
 [[hotkeys]]
 id = "switchWorkspace.1"
-binding = "Control+Option+Command+Shift+2"
+binding = "F13+2"
 
 [[hotkeys]]
 id = "switchWorkspace.2"
-binding = "Control+Option+Command+Shift+3"
+binding = "F13+3"
 
 [[hotkeys]]
 id = "switchWorkspace.3"
-binding = "Control+Option+Command+Shift+4"
+binding = "F13+4"
 
 [[hotkeys]]
 id = "switchWorkspace.4"
-binding = "Control+Option+Command+Shift+5"
+binding = "F13+5"
 
 [[hotkeys]]
 id = "switchWorkspace.5"
-binding = "Control+Option+Command+Shift+6"
+binding = "F13+6"
 
 [[hotkeys]]
 id = "switchWorkspace.6"
-binding = "Control+Option+Command+Shift+7"
+binding = "F13+7"
 
 [[hotkeys]]
 id = "switchWorkspace.7"
-binding = "Control+Option+Command+Shift+8"
+binding = "F13+8"
 
 [[hotkeys]]
 id = "switchWorkspace.8"
-binding = "Control+Option+Command+Shift+9"
+binding = "F13+9"
 
-# ── Move to workspace (Meh + 1-9) — hold ';' + number ──
+# ── Move to workspace (Super + Shift + 1-9) ──
 [[hotkeys]]
 id = "moveToWorkspace.0"
-binding = "Control+Option+Shift+1"
+binding = "F13+Shift+1"
 
 [[hotkeys]]
 id = "moveToWorkspace.1"
-binding = "Control+Option+Shift+2"
+binding = "F13+Shift+2"
 
 [[hotkeys]]
 id = "moveToWorkspace.2"
-binding = "Control+Option+Shift+3"
+binding = "F13+Shift+3"
 
 [[hotkeys]]
 id = "moveToWorkspace.3"
-binding = "Control+Option+Shift+4"
+binding = "F13+Shift+4"
 
 [[hotkeys]]
 id = "moveToWorkspace.4"
-binding = "Control+Option+Shift+5"
+binding = "F13+Shift+5"
 
 [[hotkeys]]
 id = "moveToWorkspace.5"
-binding = "Control+Option+Shift+6"
+binding = "F13+Shift+6"
 
 [[hotkeys]]
 id = "moveToWorkspace.6"
-binding = "Control+Option+Shift+7"
+binding = "F13+Shift+7"
 
 [[hotkeys]]
 id = "moveToWorkspace.7"
-binding = "Control+Option+Shift+8"
+binding = "F13+Shift+8"
 
 [[hotkeys]]
 id = "moveToWorkspace.8"
-binding = "Control+Option+Shift+9"
+binding = "F13+Shift+9"
 
-# ── Previous workspace (Hyper + Tab) ──
+# ── Previous workspace (Super + Tab) ──
 [[hotkeys]]
 id = "workspaceBackAndForth"
-binding = "Control+Option+Command+Shift+Tab"
+binding = "F13+Tab"
 
-# ── Overview (Hyper + O) ──
+# ── Overview (Super + O) ──
 [[hotkeys]]
 id = "toggleOverview"
-binding = "Control+Option+Command+Shift+O"
+binding = "F13+O"
 
-# ── Command palette (Hyper + P) ──
+# ── Command palette (Super + P) ──
 [[hotkeys]]
 id = "openCommandPalette"
-binding = "Control+Option+Command+Shift+P"
+binding = "F13+P"
 
-# ── Quake terminal (Hyper + Space) ──
+# ── Quake terminal (Super + Space) ──
 [[hotkeys]]
 id = "toggleQuakeTerminal"
-binding = "Control+Option+Command+Shift+Space"
+binding = "F13+Space"
 
 # ── Scratchpad ──
 [[hotkeys]]
 id = "toggleScratchpadWindow"
-binding = "Control+Option+Command+Shift+Escape"
+binding = "F13+Escape"
 
 [[hotkeys]]
 id = "assignFocusedWindowToScratchpad"
-binding = "Control+Option+Shift+Escape"
+binding = "F13+Shift+Escape"
 
 # ═══════════════════════════════════════════════════════════
 # Workspaces

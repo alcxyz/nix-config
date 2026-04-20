@@ -142,8 +142,7 @@ let
     {
       description = "Home row mods (left): a=Hyper s=Alt d=Ctrl f=Shift";
       manipulators = [
-        (mkTapHold { key = "a"; holdKey = "left_shift";
-                     holdMods = [ "left_control" "left_command" "left_option" ]; })  # Hyper
+        (mkTapHold { key = "a"; holdKey = "f13"; })  # F13 as Super (OmniWM trigger)
         (mkTapHold { key = "s"; holdKey = "left_option"; })
         (mkTapHold { key = "d"; holdKey = "left_control"; })
         (mkTapHold { key = "f"; holdKey = "left_shift"; })
