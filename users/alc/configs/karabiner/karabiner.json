@@ -7,7 +7,7 @@
                 },
                 "rules": [
                     {
-                        "description": "Caps Lock \u2192 Escape / Left Control",
+                        "description": "Caps Lock \u2192 Escape / Nav Layer",
                         "manipulators": [
                             {
                                 "from": {
@@ -19,11 +19,22 @@
                                     }
                                 },
                                 "parameters": {
-                                    "basic.to_if_alone_timeout_milliseconds": 150
+                                    "basic.to_if_alone_timeout_milliseconds": 100
                                 },
                                 "to": [
                                     {
-                                        "key_code": "left_control"
+                                        "set_variable": {
+                                            "name": "nav_layer",
+                                            "value": 1
+                                        }
+                                    }
+                                ],
+                                "to_after_key_up": [
+                                    {
+                                        "set_variable": {
+                                            "name": "nav_layer",
+                                            "value": 0
+                                        }
                                     }
                                 ],
                                 "to_if_alone": [
@@ -36,7 +47,7 @@
                         ]
                     },
                     {
-                        "description": "Tab \u2192 Tab / Left Option",
+                        "description": "Tab \u2192 Tab / Left Control",
                         "manipulators": [
                             {
                                 "from": {
@@ -49,12 +60,12 @@
                                 },
                                 "parameters": {
                                     "basic.to_if_alone_timeout_milliseconds": 150,
-                                    "basic.to_if_held_down_threshold_milliseconds": 150
+                                    "basic.to_if_held_down_threshold_milliseconds": 100
                                 },
                                 "to_delayed_action": {
                                     "to_if_canceled": [
                                         {
-                                            "key_code": "tab"
+                                            "key_code": "vk_none"
                                         }
                                     ],
                                     "to_if_invoked": [
@@ -71,7 +82,7 @@
                                 ],
                                 "to_if_held_down": [
                                     {
-                                        "key_code": "left_option"
+                                        "key_code": "left_control"
                                     }
                                 ],
                                 "type": "basic"
@@ -79,7 +90,7 @@
                         ]
                     },
                     {
-                        "description": "Backtick / ISO< \u2192 Nav layer toggle",
+                        "description": "Backtick / ISO< \u2192 Option (hold) / backtick (tap)",
                         "manipulators": [
                             {
                                 "from": {
@@ -91,28 +102,30 @@
                                     }
                                 },
                                 "parameters": {
-                                    "basic.to_if_alone_timeout_milliseconds": 100,
+                                    "basic.to_if_alone_timeout_milliseconds": 150,
                                     "basic.to_if_held_down_threshold_milliseconds": 100
                                 },
-                                "to": [
-                                    {
-                                        "set_variable": {
-                                            "name": "nav_layer",
-                                            "value": 1
+                                "to_delayed_action": {
+                                    "to_if_canceled": [
+                                        {
+                                            "key_code": "vk_none"
                                         }
-                                    }
-                                ],
-                                "to_after_key_up": [
-                                    {
-                                        "set_variable": {
-                                            "name": "nav_layer",
-                                            "value": 0
+                                    ],
+                                    "to_if_invoked": [
+                                        {
+                                            "key_code": "vk_none"
                                         }
-                                    }
-                                ],
+                                    ]
+                                },
                                 "to_if_alone": [
                                     {
+                                        "halt": true,
                                         "key_code": "grave_accent_and_tilde"
+                                    }
+                                ],
+                                "to_if_held_down": [
+                                    {
+                                        "key_code": "left_option"
                                     }
                                 ],
                                 "type": "basic"
@@ -127,28 +140,30 @@
                                     }
                                 },
                                 "parameters": {
-                                    "basic.to_if_alone_timeout_milliseconds": 100,
+                                    "basic.to_if_alone_timeout_milliseconds": 150,
                                     "basic.to_if_held_down_threshold_milliseconds": 100
                                 },
-                                "to": [
-                                    {
-                                        "set_variable": {
-                                            "name": "nav_layer",
-                                            "value": 1
+                                "to_delayed_action": {
+                                    "to_if_canceled": [
+                                        {
+                                            "key_code": "vk_none"
                                         }
-                                    }
-                                ],
-                                "to_after_key_up": [
-                                    {
-                                        "set_variable": {
-                                            "name": "nav_layer",
-                                            "value": 0
+                                    ],
+                                    "to_if_invoked": [
+                                        {
+                                            "key_code": "vk_none"
                                         }
-                                    }
-                                ],
+                                    ]
+                                },
                                 "to_if_alone": [
                                     {
+                                        "halt": true,
                                         "key_code": "non_us_backslash"
+                                    }
+                                ],
+                                "to_if_held_down": [
+                                    {
+                                        "key_code": "left_option"
                                     }
                                 ],
                                 "type": "basic"
@@ -798,6 +813,64 @@
                                 "to_if_held_down": [
                                     {
                                         "key_code": "right_command"
+                                    }
+                                ],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "description": "Left Cmd \u2192 Backspace (tap) / Cmd (hold)",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "left_command",
+                                    "modifiers": {
+                                        "optional": [
+                                            "any"
+                                        ]
+                                    }
+                                },
+                                "parameters": {
+                                    "basic.to_if_alone_timeout_milliseconds": 150
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "left_command"
+                                    }
+                                ],
+                                "to_if_alone": [
+                                    {
+                                        "key_code": "delete_or_backspace"
+                                    }
+                                ],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "description": "Right Cmd \u2192 Enter (tap) / Cmd (hold)",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "right_command",
+                                    "modifiers": {
+                                        "optional": [
+                                            "any"
+                                        ]
+                                    }
+                                },
+                                "parameters": {
+                                    "basic.to_if_alone_timeout_milliseconds": 150
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "right_command"
+                                    }
+                                ],
+                                "to_if_alone": [
+                                    {
+                                        "key_code": "return_or_enter"
                                     }
                                 ],
                                 "type": "basic"
