@@ -491,7 +491,7 @@
                         ]
                     },
                     {
-                        "description": "Home row mods (left): a=F13(Super) s=Alt d=Ctrl f=Shift",
+                        "description": "Home row mods (left): a=Cmd+Opt(Super) s=Alt d=Ctrl f=Shift",
                         "manipulators": [
                             {
                                 "from": {
@@ -526,7 +526,10 @@
                                 ],
                                 "to_if_held_down": [
                                     {
-                                        "key_code": "f13"
+                                        "key_code": "left_command",
+                                        "modifiers": [
+                                            "left_option"
+                                        ]
                                     }
                                 ],
                                 "type": "basic"

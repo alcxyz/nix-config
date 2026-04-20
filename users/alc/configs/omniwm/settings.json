@@ -102,168 +102,192 @@
   "hotkeysEnabled" : true,
   "hotkeyBindings" : [
     {
-      "binding" : "F13+H",
+      "binding" : "Command+Option+H",
       "id" : "focus.left"
     },
     {
-      "binding" : "F13+J",
+      "binding" : "Command+Option+J",
       "id" : "focus.down"
     },
     {
-      "binding" : "F13+K",
+      "binding" : "Command+Option+K",
       "id" : "focus.up"
     },
     {
-      "binding" : "F13+L",
+      "binding" : "Command+Option+L",
       "id" : "focus.right"
     },
     {
-      "binding" : "F13+Shift+H",
+      "binding" : "Command+Option+Shift+H",
       "id" : "move.left"
     },
     {
-      "binding" : "F13+Shift+J",
+      "binding" : "Command+Option+Shift+J",
       "id" : "move.down"
     },
     {
-      "binding" : "F13+Shift+K",
+      "binding" : "Command+Option+Shift+K",
       "id" : "move.up"
     },
     {
-      "binding" : "F13+Shift+L",
+      "binding" : "Command+Option+Shift+L",
       "id" : "move.right"
     },
     {
-      "binding" : "F13+Shift+Left Arrow",
+      "binding" : "Command+Option+Shift+Left Arrow",
       "id" : "moveColumn.left"
     },
     {
-      "binding" : "F13+Shift+Right Arrow",
+      "binding" : "Command+Option+Shift+Right Arrow",
       "id" : "moveColumn.right"
     },
     {
-      "binding" : "F13+Return",
+      "binding" : "Command+Option+Return",
       "id" : "toggleFullscreen"
     },
     {
-      "binding" : "F13+Shift+Space",
+      "binding" : "Command+Option+T",
       "id" : "toggleFocusedWindowFloating"
     },
     {
-      "binding" : "F13+.",
-      "id" : "cycleColumnWidthForward"
-    },
-    {
-      "binding" : "F13+,",
-      "id" : "cycleColumnWidthBackward"
-    },
-    {
-      "binding" : "F13+Shift+F",
-      "id" : "toggleColumnFullWidth"
-    },
-    {
-      "binding" : "F13+T",
-      "id" : "toggleColumnTabbed"
-    },
-    {
-      "binding" : "F13+Shift+B",
-      "id" : "balanceSizes"
-    },
-    {
-      "binding" : "F13+1",
-      "id" : "switchWorkspace.0"
-    },
-    {
-      "binding" : "F13+Shift+1",
-      "id" : "moveToWorkspace.0"
-    },
-    {
-      "binding" : "F13+2",
-      "id" : "switchWorkspace.1"
-    },
-    {
-      "binding" : "F13+Shift+2",
-      "id" : "moveToWorkspace.1"
-    },
-    {
-      "binding" : "F13+3",
-      "id" : "switchWorkspace.2"
-    },
-    {
-      "binding" : "F13+Shift+3",
-      "id" : "moveToWorkspace.2"
-    },
-    {
-      "binding" : "F13+4",
-      "id" : "switchWorkspace.3"
-    },
-    {
-      "binding" : "F13+Shift+4",
-      "id" : "moveToWorkspace.3"
-    },
-    {
-      "binding" : "F13+5",
-      "id" : "switchWorkspace.4"
-    },
-    {
-      "binding" : "F13+Shift+5",
-      "id" : "moveToWorkspace.4"
-    },
-    {
-      "binding" : "F13+6",
-      "id" : "switchWorkspace.5"
-    },
-    {
-      "binding" : "F13+Shift+6",
-      "id" : "moveToWorkspace.5"
-    },
-    {
-      "binding" : "F13+7",
-      "id" : "switchWorkspace.6"
-    },
-    {
-      "binding" : "F13+Shift+7",
-      "id" : "moveToWorkspace.6"
-    },
-    {
-      "binding" : "F13+8",
-      "id" : "switchWorkspace.7"
-    },
-    {
-      "binding" : "F13+Shift+8",
-      "id" : "moveToWorkspace.7"
-    },
-    {
-      "binding" : "F13+9",
-      "id" : "switchWorkspace.8"
-    },
-    {
-      "binding" : "F13+Shift+9",
-      "id" : "moveToWorkspace.8"
-    },
-    {
-      "binding" : "F13+Tab",
-      "id" : "focusPrevious"
-    },
-    {
-      "binding" : "F13+O",
+      "binding" : "Command+Option+O",
       "id" : "toggleOverview"
     },
     {
-      "binding" : "F13+P",
-      "id" : "openCommandPalette"
+      "binding" : "Command+Option+Tab",
+      "id" : "workspaceBackAndForth"
     },
     {
-      "binding" : "F13+Space",
+      "binding" : "Command+Option+Space",
       "id" : "toggleQuakeTerminal"
     },
     {
-      "binding" : "F13+Escape",
+      "binding" : "Command+Option+Escape",
       "id" : "toggleScratchpadWindow"
     },
     {
-      "binding" : "F13+Shift+Escape",
+      "binding" : "Command+Option+Shift+Escape",
       "id" : "assignFocusedWindowToScratchpad"
+    },
+    {
+      "binding" : "Command+Option+,",
+      "id" : "cycleColumnWidthBackward"
+    },
+    {
+      "binding" : "Command+Option+.",
+      "id" : "cycleColumnWidthForward"
+    },
+    {
+      "binding" : "Command+Option+Shift+F",
+      "id" : "toggleColumnFullWidth"
+    },
+    {
+      "binding" : "Command+Option+Shift+T",
+      "id" : "toggleColumnTabbed"
+    },
+    {
+      "binding" : "Command+Option+Shift+B",
+      "id" : "balanceSizes"
+    },
+    {
+      "binding" : "Command+Option+P",
+      "id" : "openCommandPalette"
+    },
+    {
+      "binding" : "Command+Option+Shift+R",
+      "id" : "raiseAllFloatingWindows"
+    },
+    {
+      "binding" : "Command+Option+1",
+      "id" : "switchWorkspace.0"
+    },
+    {
+      "binding" : "Command+Option+Shift+1",
+      "id" : "moveToWorkspace.0"
+    },
+    {
+      "binding" : "Command+Option+2",
+      "id" : "switchWorkspace.1"
+    },
+    {
+      "binding" : "Command+Option+Shift+2",
+      "id" : "moveToWorkspace.1"
+    },
+    {
+      "binding" : "Command+Option+3",
+      "id" : "switchWorkspace.2"
+    },
+    {
+      "binding" : "Command+Option+Shift+3",
+      "id" : "moveToWorkspace.2"
+    },
+    {
+      "binding" : "Command+Option+4",
+      "id" : "switchWorkspace.3"
+    },
+    {
+      "binding" : "Command+Option+Shift+4",
+      "id" : "moveToWorkspace.3"
+    },
+    {
+      "binding" : "Command+Option+5",
+      "id" : "switchWorkspace.4"
+    },
+    {
+      "binding" : "Command+Option+Shift+5",
+      "id" : "moveToWorkspace.4"
+    },
+    {
+      "binding" : "Command+Option+6",
+      "id" : "switchWorkspace.5"
+    },
+    {
+      "binding" : "Command+Option+Shift+6",
+      "id" : "moveToWorkspace.5"
+    },
+    {
+      "binding" : "Command+Option+7",
+      "id" : "switchWorkspace.6"
+    },
+    {
+      "binding" : "Command+Option+Shift+7",
+      "id" : "moveToWorkspace.6"
+    },
+    {
+      "binding" : "Command+Option+8",
+      "id" : "switchWorkspace.7"
+    },
+    {
+      "binding" : "Command+Option+Shift+8",
+      "id" : "moveToWorkspace.7"
+    },
+    {
+      "binding" : "Command+Option+9",
+      "id" : "switchWorkspace.8"
+    },
+    {
+      "binding" : "Command+Option+Shift+9",
+      "id" : "moveToWorkspace.8"
+    },
+    {
+      "binding" : "Command+Option+Shift+Up Arrow",
+      "id" : "moveWindowToWorkspaceUp"
+    },
+    {
+      "binding" : "Command+Option+Shift+Down Arrow",
+      "id" : "moveWindowToWorkspaceDown"
+    },
+    {
+      "binding" : "Control+Command+Tab",
+      "id" : "focusMonitorNext"
+    },
+    {
+      "binding" : "Control+Command+`",
+      "id" : "focusMonitorLast"
+    },
+    {
+      "binding" : "Unassigned",
+      "id" : "focusPrevious"
     },
     {
       "binding" : "Unassigned",
@@ -275,23 +299,11 @@
     },
     {
       "binding" : "Unassigned",
-      "id" : "workspaceBackAndForth"
-    },
-    {
-      "binding" : "Unassigned",
       "id" : "focusDownOrLeft"
     },
     {
       "binding" : "Unassigned",
       "id" : "focusUpOrRight"
-    },
-    {
-      "binding" : "F13+Shift+Up Arrow",
-      "id" : "moveWindowToWorkspaceUp"
-    },
-    {
-      "binding" : "F13+Shift+Down Arrow",
-      "id" : "moveWindowToWorkspaceDown"
     },
     {
       "binding" : "Unassigned",
@@ -338,27 +350,19 @@
       "id" : "moveColumnToWorkspace.8"
     },
     {
-      "binding" : "Control+Command+Tab",
-      "id" : "focusMonitorNext"
+      "binding" : "Unassigned",
+      "id" : "toggleNativeFullscreen"
     },
     {
       "binding" : "Unassigned",
       "id" : "focusMonitorPrevious"
     },
     {
-      "binding" : "Control+Command+`",
-      "id" : "focusMonitorLast"
-    },
-    {
       "binding" : "Unassigned",
-      "id" : "toggleNativeFullscreen"
-    },
-    {
-      "binding" : "F13+Home",
       "id" : "focusColumnFirst"
     },
     {
-      "binding" : "F13+End",
+      "binding" : "Unassigned",
       "id" : "focusColumnLast"
     },
     {
@@ -462,10 +466,6 @@
       "id" : "preselectClear"
     },
     {
-      "binding" : "F13+Shift+R",
-      "id" : "raiseAllFloatingWindows"
-    },
-    {
       "binding" : "Unassigned",
       "id" : "rescueOffscreenWindows"
     },
@@ -482,7 +482,7 @@
       "id" : "toggleHiddenBar"
     },
     {
-      "binding" : "F13+Shift+L",
+      "binding" : "Unassigned",
       "id" : "toggleWorkspaceLayout"
     }
   ],
