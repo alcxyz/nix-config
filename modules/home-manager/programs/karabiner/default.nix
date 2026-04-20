@@ -152,13 +152,13 @@ let
 
     # 8. Home row mods — right hand (mirrored)
     {
-      description = "Home row mods (right): j=Shift k=Ctrl l=Alt ;=Hyper";
+      description = "Home row mods (right): j=Shift k=Ctrl l=Alt ;=Meh";
       manipulators = [
         (mkTapHold { key = "j"; holdKey = "right_shift"; })
         (mkTapHold { key = "k"; holdKey = "right_control"; })
         (mkTapHold { key = "l"; holdKey = "right_option"; })
         (mkTapHold { key = "semicolon"; tapKey = "semicolon"; holdKey = "right_shift";
-                     holdMods = [ "right_control" "right_command" "right_option" ]; })  # Hyper
+                     holdMods = [ "right_control" "right_option" ]; })  # Meh (Ctrl+Shift+Alt, no Cmd)
       ];
     }
   ];
