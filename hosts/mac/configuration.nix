@@ -243,15 +243,6 @@ in
         };
       };
 
-      # Nullify NSApp menu shortcuts that conflict with OmniWM (Cmd+Option as Super).
-      # "Hide Others" = Cmd+Option+H, "Minimize All" = Cmd+Option+M.
-      # nil disables the shortcut without rebinding it.
-      "NSGlobalDomain" = {
-        NSUserKeyEquivalents = {
-          "Hide Others" = "nil";
-          "Minimize All" = "nil";
-        };
-      };
 
       "com.apple.finder" = {
         FXDesktopExtFoldersOnDesktop = false;
