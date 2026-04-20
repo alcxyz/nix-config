@@ -120,6 +120,11 @@
             in
               (nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np)
               // (nixpkgs.lib.filterAttrs (n: _: builtins.elem n [ "paperless-review" "paperless-filetype-index" ]) pt)
+              # SentinelOne kills freshly-built binaries during test phase on macOS.
+              # Skip nushell tests to avoid build failure on managed Macs.
+              // nixpkgs.lib.optionalAttrs (system == "aarch64-darwin") {
+                nushell = _prev.nushell.overrideAttrs { doCheck = false; };
+              }
           )
         ];
 
