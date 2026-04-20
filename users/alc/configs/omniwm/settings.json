@@ -170,11 +170,11 @@
       "id" : "assignFocusedWindowToScratchpad"
     },
     {
-      "binding" : "Command+Option+,",
+      "binding" : "Command+Option+[",
       "id" : "cycleColumnWidthBackward"
     },
     {
-      "binding" : "Command+Option+.",
+      "binding" : "Command+Option+]",
       "id" : "cycleColumnWidthForward"
     },
     {
