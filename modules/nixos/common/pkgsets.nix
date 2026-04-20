@@ -79,7 +79,7 @@ rec {
   system = {
     workstation = sys.base ++ sys.linux ++ sys.linuxDesktop;
     server = sys.base ++ sys.linux;
-    mac = sys.base ++ [ pkgs.kanata ];
+    mac = sys.base;
   };
 
   # =======================================================================

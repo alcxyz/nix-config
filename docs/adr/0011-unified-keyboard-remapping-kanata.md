@@ -1,6 +1,6 @@
 # ADR-0011: Unified keyboard remapping via kanata across all hosts and keyboards
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-04-20: macOS kanata moved to Homebrew)
 **Date:** 2026-04-18
 **Applies to:** `users/alc/configs/kanata/`, `modules/nixos/common/desktop.nix`, `hosts/mac/configuration.nix`
 
@@ -33,7 +33,7 @@ Device filtering directs each keyboard to its config:
 - **Linux:** `linux-dev` in `defcfg` to route Glove80 and generic Norwegian keyboards to their respective configs.
 - **macOS:** `macos-dev-names-include` in `defcfg` to route Glove80, Mac built-in, and generic keyboards.
 
-On macOS, kanata runs via launchd services (nix-darwin or home-manager managed). On Linux, the existing `services.kanata` is extended to support multiple keyboard instances.
+On macOS, kanata is installed via Homebrew (`brew install kanata`) and managed via `brew services`. This avoids the Nix store binary triggering SentinelOne quarantine and eliminates the need for self-signed code signing workarounds. On Linux, the existing `services.kanata` is extended to support multiple keyboard instances.
 
 Karabiner Elements is removed. Only the Karabiner-DriverKit-VirtualHIDDevice driver is retained, as kanata requires it on macOS for key interception.
 
@@ -48,4 +48,5 @@ Karabiner Elements is removed. Only the Karabiner-DriverKit-VirtualHIDDevice dri
 - **Easier:** One tool, one config format, fully declarative and reproducible across machines. Adding a new machine means the keyboard behavior is ready after `nixos-rebuild` or `darwin-rebuild`.
 - **Easier:** Sharing ideas between keyboard configs (e.g. porting home row mods to the Glove80 or nav layer to Norwegian keyboards) is trivial since they share the same format.
 - **Harder:** macOS kanata depends on the Karabiner virtual HID driver, which must be installed separately (not available in nixpkgs). This is a manual bootstrap step.
+- **Trade-off (macOS):** kanata is installed via Homebrew rather than Nix, breaking full declarativity on macOS. This is acceptable because the Nix store binary was repeatedly quarantined by SentinelOne, and the self-signed code signing workaround added fragile complexity. Homebrew-installed binaries are Apple-notarized and not flagged.
 - **Trade-off:** The generic Norwegian config is based on the Mac built-in config rather than being designed independently. Minor differences in physical layout between Mac and PC keyboards may surface edge cases that need adjustment.

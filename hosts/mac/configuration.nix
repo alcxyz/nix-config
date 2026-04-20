@@ -111,23 +111,8 @@ in
     };
   };
 
-  # ============================================================================
-  # Keyboard Remapping (kanata) — see ADR-0011
-  # ============================================================================
-  launchd.daemons.kanata-mac-builtin = {
-    serviceConfig = {
-      ProgramArguments = [
-        "/Applications/Kanata.app/Contents/MacOS/kanata"
-        "--cfg"
-        "${configDir}/users/${username}/configs/kanata/kanata-mac-builtin.kbd"
-      ];
-      RunAtLoad = true;
-      KeepAlive = true;
-      ThrottleInterval = 10;
-      StandardOutPath = "/var/log/kanata-mac-builtin.log";
-      StandardErrorPath = "/var/log/kanata-mac-builtin.log";
-    };
-  };
+  # Keyboard remapping (kanata) — installed via Homebrew, see ADR-0011.
+  # Launchd service managed outside nix-darwin (brew services).
 
   time.timeZone = "Europe/Oslo";
 
@@ -322,60 +307,6 @@ in
   # Disable Spotlight entirely — using Raycast as a replacement.
   system.activationScripts.postActivation.text = ''
     mdutil -a -i off 2>/dev/null || true
-
-    # ── Kanata.app bundle for stable TCC (Input Monitoring) approval ──
-    # Uses a self-signed certificate so TCC approval persists across kanata
-    # version bumps. The certificate is created once and stored in the system
-    # keychain. Subsequent rebuilds reuse it — no manual re-approval needed.
-    KANATA_CERT="Kanata Code Signing"
-    KANATA_SRC="${pkgs.kanata}/bin/kanata"
-    KANATA_DST="/Applications/Kanata.app/Contents/MacOS/kanata"
-
-    # Create self-signed code signing certificate if it doesn't exist.
-    # Trust level doesn't matter — TCC tracks the signing identity hash,
-    # not whether the cert is CA-trusted.
-    if ! security find-identity -p codesigning /Library/Keychains/System.keychain | grep -q "$KANATA_CERT"; then
-      echo "Creating self-signed certificate: $KANATA_CERT"
-      ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
-        -keyout /tmp/kanata-key.pem -out /tmp/kanata-cert.pem \
-        -days 3650 -nodes -subj "/CN=$KANATA_CERT" \
-        -addext "keyUsage=digitalSignature" \
-        -addext "extendedKeyUsage=codeSigning"
-      security import /tmp/kanata-key.pem \
-        -k /Library/Keychains/System.keychain -T /usr/bin/codesign
-      security import /tmp/kanata-cert.pem \
-        -k /Library/Keychains/System.keychain -T /usr/bin/codesign
-      rm -f /tmp/kanata-key.pem /tmp/kanata-cert.pem
-    fi
-
-    # Update binary only when it changes
-    if ! cmp -s "$KANATA_SRC" "$KANATA_DST" 2>/dev/null; then
-      mkdir -p /Applications/Kanata.app/Contents/MacOS
-      cp "$KANATA_SRC" "$KANATA_DST"
-      cat > /Applications/Kanata.app/Contents/Info.plist << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleIdentifier</key>
-    <string>org.kanata.daemon</string>
-    <key>CFBundleName</key>
-    <string>Kanata</string>
-    <key>CFBundleExecutable</key>
-    <string>kanata</string>
-</dict>
-</plist>
-PLIST
-      codesign --force --sign "$KANATA_CERT" --keychain /Library/Keychains/System.keychain /Applications/Kanata.app
-      echo "Kanata.app updated and signed with '$KANATA_CERT'"
-    fi
-
-    # Link kanata daemon to Kanata.app TCC permissions
-    KANATA_PLIST="/Library/LaunchDaemons/org.nixos.kanata-mac-builtin.plist"
-    if [ -f "$KANATA_PLIST" ] && ! /usr/libexec/PlistBuddy -c "Print :AssociatedBundleIdentifiers" "$KANATA_PLIST" &>/dev/null; then
-      /usr/libexec/PlistBuddy -c "Add :AssociatedBundleIdentifiers array" "$KANATA_PLIST"
-      /usr/libexec/PlistBuddy -c "Add :AssociatedBundleIdentifiers:0 string org.kanata.daemon" "$KANATA_PLIST"
-    fi
   '';
 
   # ============================================================================
