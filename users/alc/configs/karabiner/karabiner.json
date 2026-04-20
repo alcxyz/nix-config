@@ -329,7 +329,7 @@
                                     }
                                 ],
                                 "from": {
-                                    "key_code": "hyphen",
+                                    "key_code": "open_bracket",
                                     "modifiers": {
                                         "mandatory": [
                                             "shift"
@@ -341,7 +341,7 @@
                                 },
                                 "to": [
                                     {
-                                        "key_code": "o",
+                                        "key_code": "a",
                                         "modifiers": [
                                             "left_option",
                                             "left_shift"
@@ -359,7 +359,7 @@
                                     }
                                 ],
                                 "from": {
-                                    "key_code": "hyphen",
+                                    "key_code": "open_bracket",
                                     "modifiers": {
                                         "optional": [
                                             "any"
@@ -368,7 +368,7 @@
                                 },
                                 "to": [
                                     {
-                                        "key_code": "o",
+                                        "key_code": "a",
                                         "modifiers": [
                                             "left_option"
                                         ]
@@ -453,7 +453,7 @@
                                 },
                                 "to": [
                                     {
-                                        "key_code": "a",
+                                        "key_code": "o",
                                         "modifiers": [
                                             "left_option",
                                             "left_shift"
@@ -480,7 +480,7 @@
                                 },
                                 "to": [
                                     {
-                                        "key_code": "a",
+                                        "key_code": "o",
                                         "modifiers": [
                                             "left_option"
                                         ]
