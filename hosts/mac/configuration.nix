@@ -237,9 +237,19 @@ in
       # Disable Spotlight keyboard shortcut so Raycast can use Cmd+Space
       "com.apple.symbolichotkeys" = {
         AppleSymbolicHotKeys = {
-          # 64 = Spotlight search, 65 = Finder search window
+          # 64 = Spotlight search, 65 = Finder search window (Cmd+Option+Space)
           "64" = { enabled = false; };
           "65" = { enabled = false; };
+        };
+      };
+
+      # Nullify NSApp menu shortcuts that conflict with OmniWM (Cmd+Option as Super).
+      # "Hide Others" = Cmd+Option+H, "Minimize All" = Cmd+Option+M.
+      # nil disables the shortcut without rebinding it.
+      "NSGlobalDomain" = {
+        NSUserKeyEquivalents = {
+          "Hide Others" = "nil";
+          "Minimize All" = "nil";
         };
       };
 
