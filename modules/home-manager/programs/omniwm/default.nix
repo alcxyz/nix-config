@@ -12,8 +12,8 @@ in {
   };
 
   config = mkIf cfg.enable {
-    # Symlink settings.toml so OmniWM GUI edits propagate to the repo
-    xdg.configFile."omniwm/settings.toml".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/omniwm/settings.toml";
+    # Symlink settings.json so edits in the repo are live without rebuild
+    xdg.configFile."omniwm/settings.json".source = config.lib.file.mkOutOfStoreSymlink
+      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/omniwm/settings.json";
   };
 }
