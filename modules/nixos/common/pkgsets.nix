@@ -3,7 +3,7 @@
 # groupings for readability.
 #
 # Import with:
-#   let pkgsets = import ../../modules/pkgsets.nix { inherit pkgs inputs; };
+#   let pkgsets = import ../../modules/pkgsets.nix { inherit pkgs; };
 #
 # Then use:
 #   - pkgsets.system.<role>     for environment.systemPackages
@@ -16,14 +16,6 @@
 
 let
   lib = pkgs.lib;
-  system = pkgs.stdenv.hostPlatform.system;
-
-  # Optional external ndrop from your nix-packages input (used on xyz)
-  ndropPkg =
-    if inputs != null && inputs ? nix-packages then
-      inputs.nix-packages.packages.${system}.ndrop
-    else
-      null;
 in
 
 rec {
@@ -65,7 +57,7 @@ rec {
         slurp
         swappy
       ]
-      ++ lib.optionals (ndropPkg != null) [ ndropPkg ];
+      ++ [ ndrop ];
   };
 
   # Ready-to-use system presets (use in environment.systemPackages)
