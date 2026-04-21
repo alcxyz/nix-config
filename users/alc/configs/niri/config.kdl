@@ -1,5 +1,15 @@
-// Niri config based on your Hyprland setup
-// This config is in the KDL format: https://kdl.dev
+// ============================================================
+// NIRI CONFIGURATION
+// ============================================================
+//
+// Keybinding philosophy (matches Hyprland setup):
+//   Mod alone:     Focus / Navigate (read-only movement)
+//   Mod+Shift:     Move / Transfer (relocating things)
+//   Mod+Ctrl:      Fine control / extremes
+//   Mod+Alt:       Resize / Adjust properties
+//   Alt alone:     Quick access (apps, launchers)
+
+// ==================== INPUT ====================
 
 input {
     keyboard {
@@ -15,75 +25,84 @@ input {
         natural-scroll
     }
 
-    mouse {
-
-    }
+    mouse {}
 }
 
-// Configure your monitors (based on your Hyprland setup)
+// ==================== OUTPUT ====================
+
 output "DP-1" {
-    mode "5120x1440"
+    mode "5120x1440@240"
     position x=0 y=0
 }
 
-// output "DP-1" {
-//     mode "2560x1440"
-//     position x=2560 y=0
-// }
-// 
-// output "HDMI-A-1" {
-//     mode "2560x1440" 
-//     position x=0 y=0
+// Disable unused ports (adjust name if needed)
+// output "HDMI-A-3" {
+//     off
 // }
 
+// ==================== LAYOUT ====================
+
 layout {
-    gaps 10
+    gaps 2
     center-focused-column "never"
-    
+
+    // Column width presets — matches Hyprland explicit_column_widths
     preset-column-widths {
-        // 25-50-25 distribution
+        proportion 0.166
         proportion 0.25
+        proportion 0.333
         proportion 0.5
-        
-        // Original defaults
-        // proportion 0.33333
-        // proportion 0.5
-        // proportion 0.66667
+        proportion 0.666
+        proportion 1.0
     }
-    
-    default-column-width { proportion 0.5; }
+
+    default-column-width { proportion 0.333; }
 
     focus-ring {
         width 2
+        // TODO: integrate nix-colors for these values
         active-color "#7fc8ff"
         inactive-color "#505050"
     }
 }
 
-// Add this at the root level, after layout block
+// ==================== APPEARANCE ====================
+
 prefer-no-csd
 
-// Launch waybar like in your Hyprland setup
-spawn-at-startup "~/.config/waybar/launch.sh"
-// Add other startup apps from your hyprland launch script as needed
-// spawn-at-startup "swww-daemon"
+// ==================== STARTUP ====================
 
-// spawn-at-startup "~/.local/bin/idle-autostart.sh"
+spawn-at-startup "bash" "-c" "wl-paste --watch cliphist store &"
+spawn-at-startup "dms" "run"
+
+// ==================== MISC ====================
 
 hotkey-overlay {
-    // You can enable this for learning
-    // skip-at-startup
+    skip-at-startup
 }
 
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
 animations {
-    // Your Hyprland has animations disabled, so match that
-    off
+    // Niri default animations — remove this block or add "off" to disable
 }
 
-// Add a scratchpad workspace for ndrop
-workspace "ndrop"
+// ==================== WORKSPACES ====================
+
+workspace "scratch"
+
+// ==================== WINDOW RULES ====================
+
+window-rule {
+    match app-id=r#"^foot$"#
+    opacity 0.98
+}
+
+window-rule {
+    match app-id=r#"^dropterm$"#
+    open-floating true
+    opacity 0.9
+}
 
 window-rule {
     match app-id=r#"^scratchpad-term$"#
@@ -96,76 +115,58 @@ window-rule {
     open-floating true
 }
 
-// Window rules to match your Hyprland setup
-window-rule {
-    match app-id=r#"^foot$"#
-    opacity 0.9
-}
- 
-// Gaming-related rules (workspace assignment not directly supported in window rules)
-// You can use binds or manually organize windows instead
+// ==================== BINDINGS ====================
 
 binds {
-    // === CORE PHILOSOPHY ===
-    // Mod alone:        Focus/Navigate (read-only movement)
-    // Mod+Shift:        Move/Transfer (relocating things)  
-    // Mod+Ctrl:         Fine control / extremes
-    // Mod+Alt:          Resize/Adjust properties
-    // Alt alone:        Quick access (apps, launchers)
 
     // === HELP & SESSION ===
     Mod+Shift+Slash { show-hotkey-overlay; }
     Mod+Shift+Escape { quit; }
-    Mod+Shift+Q { spawn "hyprlock"; }
-    Mod+Backspace { spawn "wlogout" "-b" "1"; }
+    Mod+Q { spawn "dms" "ipc" "call" "lock" "lock"; }
+    Mod+Backspace { spawn "dms" "ipc" "call" "powermenu" "toggle"; }
+    Mod+Space { spawn "dms" "ipc" "call" "spotlight" "toggle"; }
 
-    // === QUICK ACCESS (Alt prefix for speed) ===
-    Alt+Space { spawn "foot"; }
+    // === QUICK ACCESS (Alt prefix) ===
     Alt+Return { spawn "foot"; }
-    Alt+D { spawn "wofi-intelligent-runner"; }
-    Alt+Escape { spawn "ndrop" "foot" "-a" "scratchpad-term"; }
-    // Alt+B { spawn "ndrop" "zen" "--class" "scratchpad-browser"; }
+    Alt+S { spawn "wofi-intelligent-runner"; }
 
-    // === APPLICATIONS (Mod + single letter, left-hand accessible) ===
-    Mod+B { spawn "zen"; }
+    // === APPLICATIONS ===
+    Mod+B { spawn "zen" "--no-remote" "-profile" "/home/alc/.zen/alcxyz"; }
     Mod+V { spawn "zen" "--no-remote" "-profile" "/home/alc/.zen/media"; }
     Mod+X { spawn "zen" "--no-remote" "-profile" "/home/alc/.zen/xyz"; }
     Mod+G { spawn "thunderbird"; }
     Mod+F { spawn "nautilus"; }
 
-    // === WINDOW MANAGEMENT (Mod + action keys) ===
+    // === WINDOW MANAGEMENT ===
     Mod+W { close-window; }
     Mod+T { toggle-window-floating; }
     Mod+Return { fullscreen-window; }
     Mod+O { toggle-overview; }
 
     // === PRIMARY NAVIGATION (Mod alone) ===
-    // Focus to extremes
-    Mod+N { focus-column-first; }
-    Mod+Period { focus-column-last; }
-    
-    // Horizontal: Columns (primary on ultrawide)
+    // Horizontal: columns
     Mod+H { focus-column-left; }
     Mod+L { focus-column-right; }
     Mod+Left { focus-column-left; }
     Mod+Right { focus-column-right; }
-    
-    // Vertical: Workspaces (secondary but important)
+
+    // Vertical: workspaces
     Mod+J { focus-workspace-down; }
     Mod+K { focus-workspace-up; }
     Mod+Down { focus-workspace-down; }
     Mod+Up { focus-workspace-up; }
-    
-    // Workspace cycling
-    Mod+Tab { focus-workspace-previous; }
 
-    // === PRIMARY MOVE OPERATIONS (Mod+Shift) ===
+    // Workspace switching
+    Mod+Tab { focus-workspace-previous; }
+    Alt+Tab { focus-window-down; }
+
+    // === PRIMARY MOVE (Mod+Shift) ===
     // Horizontal column movement
     Mod+Shift+H { move-column-left; }
     Mod+Shift+L { move-column-right; }
     Mod+Shift+Left { move-column-left; }
     Mod+Shift+Right { move-column-right; }
-    
+
     // Vertical workspace transfers
     Mod+Shift+J { move-column-to-workspace-down; }
     Mod+Shift+K { move-column-to-workspace-up; }
@@ -173,69 +174,119 @@ binds {
     Mod+Shift+Up { move-column-to-workspace-up; }
 
     // === FINE CONTROL / EXTREMES (Mod+Ctrl) ===
-    // Position to first/last
-    Mod+Ctrl+N { move-column-to-first; }
-    Mod+Ctrl+Period { move-column-to-last; }
-    
-    // Window manipulation within column (lower priority on ultrawide)
+    // Viewport positioning (niri equivalents of Hyprland fit commands)
+    Mod+Ctrl+N { focus-column-first; }
+    Mod+Ctrl+M { center-column; }
+    Mod+Ctrl+Comma { expand-column-to-available-width; }
+    Mod+Ctrl+Period { maximize-column; }
+
+    // Window manipulation within column
     Mod+Ctrl+J { focus-window-down; }
     Mod+Ctrl+K { focus-window-up; }
+
+    // Consume / Expel — structural column changes (niri-native)
     Mod+Ctrl+Y { consume-window-into-column; }
     Mod+Ctrl+U { expel-window-from-column; }
-    Mod+Ctrl+Comma { switch-preset-column-width; }
-    Mod+Ctrl+M { center-column; }
 
-    // === RESIZE/ADJUST (Mod+Alt) ===
+    // === COLUMN WIDTH PRESETS (Mod alone, comma/period) ===
+    Mod+Comma { switch-preset-column-width-back; }
+    Mod+Period { switch-preset-column-width; }
+
+    // === RESIZE / ADJUST (Mod+Alt) ===
     Mod+Alt+H { set-column-width "-5%"; }
     Mod+Alt+L { set-column-width "+5%"; }
     Mod+Alt+Left { set-column-width "-5%"; }
     Mod+Alt+Right { set-column-width "+5%"; }
 
-    // === WORKSPACES (F-keys for direct access) ===
-    F1 { focus-workspace 1; }
-    F2 { focus-workspace 2; }
-    F3 { focus-workspace 3; }
-    F4 { focus-workspace 4; }
-    F5 { focus-workspace 5; }
-    F6 { focus-workspace 6; }
+    // === WORKSPACE DIRECT ACCESS (Mod+number) ===
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+    Mod+0 { focus-workspace 10; }
 
-    Mod+Shift+F1 { move-column-to-workspace 1; }
-    Mod+Shift+F2 { move-column-to-workspace 2; }
-    Mod+Shift+F3 { move-column-to-workspace 3; }
-    Mod+Shift+F4 { move-column-to-workspace 4; }
-    Mod+Shift+F5 { move-column-to-workspace 5; }
-    Mod+Shift+F6 { move-column-to-workspace 6; }
+    // === MOVE TO NUMBERED WORKSPACES (Mod+Ctrl+number) ===
+    Mod+Ctrl+1 { move-column-to-workspace 1; }
+    Mod+Ctrl+2 { move-column-to-workspace 2; }
+    Mod+Ctrl+3 { move-column-to-workspace 3; }
+    Mod+Ctrl+4 { move-column-to-workspace 4; }
+    Mod+Ctrl+5 { move-column-to-workspace 5; }
+    Mod+Ctrl+6 { move-column-to-workspace 6; }
+    Mod+Ctrl+7 { move-column-to-workspace 7; }
+    Mod+Ctrl+8 { move-column-to-workspace 8; }
+    Mod+Ctrl+9 { move-column-to-workspace 9; }
+    Mod+Ctrl+0 { move-column-to-workspace 10; }
 
-    // === SYSTEM ACTIONS ===
-    Mod+Shift+N { spawn "swaync-client" "-t" "-sw"; }
-    Mod+Shift+C { spawn "wallpaper"; }
-    Mod+Shift+R { spawn-sh "pkill waybar || ~/.config/waybar/launch.sh"; }
+    // === F-KEYS (double-tap: workspace / scratch toggle) ===
+    F1 { spawn-sh "~/.config/niri/scripts/fkey-handler.sh F1 1"; }
+    F2 { spawn-sh "~/.config/niri/scripts/fkey-handler.sh F2 2"; }
+    F3 { spawn-sh "~/.config/niri/scripts/fkey-handler.sh F3 3"; }
+    F4 { spawn-sh "~/.config/niri/scripts/fkey-handler.sh F4 4"; }
+    F5 { spawn-sh "~/.config/niri/scripts/fkey-handler.sh F5 5"; }
+    F6 { spawn-sh "~/.config/niri/scripts/fkey-handler.sh F6 6"; }
 
-    // === MEDIA & SCREENSHOTS ===
-    Print { screenshot; }
-    Mod+Print { spawn "screenshot-edit"; }
-    
-    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ +5%"; }
-    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ -5%"; }
-    XF86AudioMute allow-when-locked=true { spawn-sh "pactl set-sink-mute @DEFAULT_SINK@ toggle"; }
-    F10 { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ +5%"; }
-    F9 { spawn-sh "pactl set-sink-volume @DEFAULT_SINK@ -5%"; }
-    F8 { spawn-sh "pactl set-sink-mute @DEFAULT_SINK@ toggle"; }
+    // === SCRATCHPAD ===
+    // Dropdown terminal (ndrop toggles by app-id, like hyprscratch on Hyprland)
+    Alt+Space { spawn-sh "ndrop -c dropterm foot -w 2400x1400 --app-id dropterm --title dropterm"; }
+    // Toggle scratch workspace
+    Mod+Escape { spawn-sh "~/.config/niri/scripts/scratch-toggle.sh"; }
+    // Move window to scratch workspace
+    Mod+Alt+Escape { move-column-to-workspace "scratch"; }
 
-    // === MOUSE INTEGRATION (vertical wheel only) ===
-    // Column navigation (primary - Mod alone)
-    Mod+WheelScrollUp cooldown-ms=150 { focus-column-left; }
+    // === SILENT MOVE VARIANTS (Mod+Alt) ===
+    // Niri does not have "silent" moves — these use regular move semantics
+    Mod+Alt+J { move-column-to-workspace-down; }
+    Mod+Alt+K { move-column-to-workspace-up; }
+    Mod+Alt+Down { move-column-to-workspace-down; }
+    Mod+Alt+Up { move-column-to-workspace-up; }
+
+    Mod+Alt+1 { move-column-to-workspace 1; }
+    Mod+Alt+2 { move-column-to-workspace 2; }
+    Mod+Alt+3 { move-column-to-workspace 3; }
+    Mod+Alt+4 { move-column-to-workspace 4; }
+    Mod+Alt+5 { move-column-to-workspace 5; }
+    Mod+Alt+6 { move-column-to-workspace 6; }
+    Mod+Alt+7 { move-column-to-workspace 7; }
+    Mod+Alt+8 { move-column-to-workspace 8; }
+    Mod+Alt+9 { move-column-to-workspace 9; }
+    Mod+Alt+0 { move-column-to-workspace 10; }
+
+    // === SYSTEM ACTIONS (DMS) ===
+    Mod+Shift+N { spawn "dms" "ipc" "call" "notifications" "open"; }
+    Mod+Shift+C { spawn "dms" "ipc" "call" "wallpaper" "next"; }
+    Mod+Shift+R { spawn "dms" "ipc" "call" "bar" "toggle" "index" "0"; }
+    Mod+N { spawn "dms" "ipc" "call" "notepad" "toggle"; }
+
+    // === MEDIA CONTROLS (DMS audio) ===
+    XF86AudioRaiseVolume allow-when-locked=true { spawn "dms" "ipc" "call" "audio" "increment" "3"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn "dms" "ipc" "call" "audio" "decrement" "3"; }
+    XF86AudioMute        allow-when-locked=true { spawn "dms" "ipc" "call" "audio" "mute"; }
+    F10 { spawn "dms" "ipc" "call" "audio" "increment" "3"; }
+    F9  { spawn "dms" "ipc" "call" "audio" "decrement" "3"; }
+    F8  { spawn "dms" "ipc" "call" "audio" "mute"; }
+
+    // === SCREENSHOTS ===
+    Mod+Shift+4 { spawn "dms" "screenshot"; }
+
+    // === MOUSE INTEGRATION ===
+    // Column navigation (Mod alone)
+    Mod+WheelScrollUp   cooldown-ms=150 { focus-column-left; }
     Mod+WheelScrollDown cooldown-ms=150 { focus-column-right; }
-    
-    // Workspace navigation (fine control - Mod+Ctrl)
-    Mod+Ctrl+WheelScrollUp cooldown-ms=150 { focus-workspace-up; }
+
+    // Workspace navigation (Mod+Ctrl)
+    Mod+Ctrl+WheelScrollUp   cooldown-ms=150 { focus-workspace-up; }
     Mod+Ctrl+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
-    
-    // Column width resize (properties - Mod+Alt)
-    Mod+Alt+WheelScrollUp cooldown-ms=150 { set-column-width "-5%"; }
+
+    // Column width resize (Mod+Alt)
+    Mod+Alt+WheelScrollUp   cooldown-ms=150 { set-column-width "-5%"; }
     Mod+Alt+WheelScrollDown cooldown-ms=150 { set-column-width "+5%"; }
-    
-    // Move column to workspace (transfer - Mod+Shift)
-    Mod+Shift+WheelScrollUp cooldown-ms=150 { move-column-to-workspace-up; }
+
+    // Move column to workspace (Mod+Shift)
+    Mod+Shift+WheelScrollUp   cooldown-ms=150 { move-column-to-workspace-up; }
     Mod+Shift+WheelScrollDown cooldown-ms=150 { move-column-to-workspace-down; }
 }

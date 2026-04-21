@@ -13,24 +13,8 @@ in {
 
   config = mkIf cfg.enable {
 
-    home.pointerCursor = {
-      gtk.enable = true;
-      enable = true;
-      package = pkgs.adwaita-icon-theme;
-      name = "Adwaita";
-      size = 24;
-    };
-
-    gtk = {
-      enable = true;
-      gtk4.theme = null; # adopt new HM default (no gtk4 theme override)
-      iconTheme = {
-        name = "Papirus-Dark";
-        package = pkgs.papirus-icon-theme;
-      };
-    };
-
-    home.sessionVariables.NIXOS_OZONE_WL = "1";
+    # Shared wayland settings (cursor, GTK, ozone)
+    programs.wayland-common.enable = true;
 
     home.file.".config/hypr/scripts/fkey_handler.sh" = {
       source = ./scripts/fkey_handler.sh;
