@@ -31,12 +31,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Third-party flakes and helper flakes
-    zen-browser = {
-      url = "github:youwen5/zen-browser-flake";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     sops-nix = {
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -115,7 +109,7 @@
           (_final: _prev:
             let
               np = nix-packages.packages.${system};
-              wanted = [ "ndrop" "zfs-auto-unlock" "pihole-sync" "helium" "t3code" "claude-code" "leantime-tidy" "omniwm" ];
+              wanted = [ "ndrop" "zfs-auto-unlock" "pihole-sync" "helium" "t3code" "claude-code" "leantime-tidy" "omniwm" "zen-browser" ];
               pt = inputs.paperless-tools.packages.${system} or {};
             in
               (nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np)

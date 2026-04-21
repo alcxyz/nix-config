@@ -18,13 +18,6 @@ let
   lib = pkgs.lib;
   system = pkgs.stdenv.hostPlatform.system;
 
-  # Optional external package (zen browser) from inputs if provided
-  zenPkg =
-    if inputs != null && inputs ? zen-browser then
-      inputs.zen-browser.packages.${system}.default
-    else
-      null;
-
   # Optional external ndrop from your nix-packages input (used on xyz)
   ndropPkg =
     if inputs != null && inputs ? nix-packages then
@@ -304,8 +297,8 @@ rec {
         jrnl
         pear-desktop
         wiki-tui
-      ])
-      ++ lib.optionals (zenPkg != null) [ zenPkg ];
+        zen-browser
+      ]);
   };
 
   # =======================================================================
