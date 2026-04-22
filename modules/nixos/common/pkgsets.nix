@@ -144,6 +144,7 @@ rec {
           ssh
           fzf
           azure-devops
+          bastion
         ]
       ))
 
@@ -279,8 +280,9 @@ rec {
       Workstation (xyz) GUI / desktop extras (user-level)
       — includes the GUI apps you had scattered under xyz.nix
     */
-    workstationExtras =
-      (with pkgs; [
+    workstationExtras = (
+      with pkgs;
+      [
         rbw
         bitwarden-desktop
         pinentry-gtk2
@@ -290,7 +292,8 @@ rec {
         pear-desktop
         wiki-tui
         zen-browser
-      ]);
+      ]
+    );
   };
 
   # =======================================================================
