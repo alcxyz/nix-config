@@ -48,6 +48,22 @@ in
           enable = true;
           src = inputs.dms-plugin-calculator;
         };
+        DankWebSearch = {
+          enable = true;
+          src = inputs.dms-plugin-websearch;
+        };
+        DankBitwarden = {
+          enable = true;
+          src = inputs.dms-plugin-bitwarden;
+        };
+        DankTranslate = {
+          enable = true;
+          src = inputs.dms-plugin-translate;
+        };
+        DankSpotify = {
+          enable = true;
+          src = inputs.dms-plugin-spotify;
+        };
       };
     };
   };

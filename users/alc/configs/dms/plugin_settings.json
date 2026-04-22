@@ -28,5 +28,26 @@
     "enabled": true,
     "trigger": "=",
     "noTrigger": false
+  },
+  "dankWebSearch": {
+    "enabled": true,
+    "trigger": "!",
+    "defaultEngine": "duckduckgo"
+  },
+  "dankBitwarden": {
+    "enabled": true,
+    "trigger": "@",
+    "defaultAction": "password"
+  },
+  "dankTranslate": {
+    "enabled": true,
+    "trigger": ">",
+    "defaultLang": "en"
+  },
+  "dankSpotify": {
+    "enabled": true,
+    "trigger": "~",
+    "playerName": "ncspot",
+    "terminal": "foot"
   }
 }

@@ -92,6 +92,22 @@
         "type": "github"
       }
     },
+    "dms-plugin-bitwarden": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776859195,
+        "narHash": "sha256-r/HaeY0faUKHQqb06vUuTkh9PScEjSCCf5/QLhnnwAU=",
+        "owner": "alcxyz",
+        "repo": "DankBitwarden",
+        "rev": "4e97cfa7264158b798f42f5b3ee1ffbea8658de6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "DankBitwarden",
+        "type": "github"
+      }
+    },
     "dms-plugin-calculator": {
       "flake": false,
       "locked": {
@@ -105,6 +121,54 @@
       "original": {
         "owner": "alcxyz",
         "repo": "DankCalculator",
+        "type": "github"
+      }
+    },
+    "dms-plugin-spotify": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776859195,
+        "narHash": "sha256-K8/6mcpTWquOCy+BJ0KTHR9pTKCmK3Le0Ou+MvddIZY=",
+        "owner": "alcxyz",
+        "repo": "DankSpotify",
+        "rev": "ade47e83db9cbd7564ae78d61ffff4da3a72df56",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "DankSpotify",
+        "type": "github"
+      }
+    },
+    "dms-plugin-translate": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776859195,
+        "narHash": "sha256-+nIjDuqlVO3UqB/eWtX/DBXzZ36BjGKX6mPYGKIjkdc=",
+        "owner": "alcxyz",
+        "repo": "DankTranslate",
+        "rev": "6cefd523ab7285771b0aeb0a02ec909adbe0d346",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "DankTranslate",
+        "type": "github"
+      }
+    },
+    "dms-plugin-websearch": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776859191,
+        "narHash": "sha256-1EK1D/0P/KajGbcS4X3m13tL/xrwteSpQFv6jyPgzTw=",
+        "owner": "alcxyz",
+        "repo": "DankWebSearch",
+        "rev": "36f280ed7f21e66a6fa83c29c93ec82fdce396df",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "DankWebSearch",
         "type": "github"
       }
     },
@@ -278,11 +342,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776467975,
-        "narHash": "sha256-qAakR7uUUvV9zCWR9KgZ8qf7OzJKhrMj8RILKj0QX4A=",
+        "lastModified": 1776842902,
+        "narHash": "sha256-T5M+lgVGQBfD3/Cy6VzC6IKCB3TP/jz0l/Lqhr0RqKM=",
         "owner": "alcxyz",
         "repo": "grove",
-        "rev": "b4e4e3f48f7bc5f4a617d1d94dd7594c7f3e1eff",
+        "rev": "211f8c89667df3bcb2a5882f389b2f187b3d0c4a",
         "type": "github"
       },
       "original": {
@@ -895,7 +959,11 @@
       "inputs": {
         "dankMaterialShell": "dankMaterialShell",
         "darwin": "darwin",
+        "dms-plugin-bitwarden": "dms-plugin-bitwarden",
         "dms-plugin-calculator": "dms-plugin-calculator",
+        "dms-plugin-spotify": "dms-plugin-spotify",
+        "dms-plugin-translate": "dms-plugin-translate",
+        "dms-plugin-websearch": "dms-plugin-websearch",
         "dms-plugin-worldclock": "dms-plugin-worldclock",
         "dsearch": "dsearch",
         "grove": "grove",

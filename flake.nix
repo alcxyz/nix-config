@@ -88,6 +88,26 @@
       flake = false;
     };
 
+    dms-plugin-websearch = {
+      url = "github:alcxyz/DankWebSearch";
+      flake = false;
+    };
+
+    dms-plugin-bitwarden = {
+      url = "github:alcxyz/DankBitwarden";
+      flake = false;
+    };
+
+    dms-plugin-translate = {
+      url = "github:alcxyz/DankTranslate";
+      flake = false;
+    };
+
+    dms-plugin-spotify = {
+      url = "github:alcxyz/DankSpotify";
+      flake = false;
+    };
+
   };
 
   # ---- Outputs ----------------------------------------------------------
