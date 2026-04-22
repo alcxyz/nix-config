@@ -29,14 +29,15 @@
     "trigger": "=",
     "noTrigger": false
   },
-  "dankWebSearch": {
+  "dankQuickSearch": {
     "enabled": true,
     "trigger": "!",
     "defaultEngine": "duckduckgo"
   },
-  "dankBitwarden": {
+  "dankVault": {
     "enabled": true,
     "trigger": "@",
+    "backend": "auto",
     "defaultAction": "password"
   },
   "dankTranslate": {

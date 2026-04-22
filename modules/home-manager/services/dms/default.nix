@@ -48,13 +48,13 @@ in
           enable = true;
           src = inputs.dms-plugin-calculator;
         };
-        DankWebSearch = {
+        DankQuickSearch = {
           enable = true;
-          src = inputs.dms-plugin-websearch;
+          src = inputs.dms-plugin-quicksearch;
         };
-        DankBitwarden = {
+        DankVault = {
           enable = true;
-          src = inputs.dms-plugin-bitwarden;
+          src = inputs.dms-plugin-vault;
         };
         DankTranslate = {
           enable = true;
