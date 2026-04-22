@@ -6,7 +6,7 @@ with lib;
 let
   cfg = config.services.paperflow;
   isDarwin = pkgs.stdenv.isDarwin;
-  paperflowPkg = inputs.paperflow.packages.${pkgs.system}.default;
+  paperflowPkg = inputs.paperflow.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in
 {
   options.services.paperflow = {
