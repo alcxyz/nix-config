@@ -46,6 +46,7 @@ let
       clean    = "git-lfs clean -- %f";
       smudge   = "git-lfs smudge -- %f";
     };
+    credential.helper = "!gh auth git-credential";
   };
 in
 {
