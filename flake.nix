@@ -78,35 +78,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dms-plugin-worldclock = {
-      url = "github:alcxyz/WorldClock";
-      flake = false;
-    };
-
-    dms-plugin-calculator = {
-      url = "github:alcxyz/DankCalculator";
-      flake = false;
-    };
-
-    dms-plugin-quicksearch = {
-      url = "github:alcxyz/DankQuickSearch";
-      flake = false;
-    };
-
-    dms-plugin-vault = {
-      url = "github:alcxyz/DankVault";
-      flake = false;
-    };
-
-    dms-plugin-translate = {
-      url = "github:alcxyz/DankTranslate";
-      flake = false;
-    };
-
-    dms-plugin-spotify = {
-      url = "github:alcxyz/DankSpotify";
-      flake = false;
-    };
+    dms-plugins.url = "github:alcxyz/dms-plugins";
 
   };
 

@@ -3,6 +3,7 @@
 
 let
   cfg = config.services.dms;
+  plugins = inputs.dms-plugins.srcs;
 in
 {
   options.services.dms.enable =
@@ -42,27 +43,27 @@ in
       plugins = {
         WorldClock = {
           enable = true;
-          src = inputs.dms-plugin-worldclock;
+          src = plugins.worldclock;
         };
         DankCalculator = {
           enable = true;
-          src = inputs.dms-plugin-calculator;
+          src = plugins.calculator;
         };
         DankQuickSearch = {
           enable = true;
-          src = inputs.dms-plugin-quicksearch;
+          src = plugins.quicksearch;
         };
         DankVault = {
           enable = true;
-          src = inputs.dms-plugin-vault;
+          src = plugins.vault;
         };
         DankTranslate = {
           enable = true;
-          src = inputs.dms-plugin-translate;
+          src = plugins.translate;
         };
         DankSpotify = {
           enable = true;
-          src = inputs.dms-plugin-spotify;
+          src = plugins.spotify;
         };
       };
     };
