@@ -70,7 +70,7 @@ in
         };
         DankCalendar = {
           enable = true;
-          src = inputs.DankCalendar;
+          src = plugins.dankcalendar;
         };
         DankDiskUsage = {
           enable = true;

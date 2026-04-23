@@ -108,6 +108,22 @@
         "type": "github"
       }
     },
+    "dankcalendar": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776960790,
+        "narHash": "sha256-74Uj46I5N3uLmpRxVE8MyFaI7BnEDJAqV/7pdi+ipps=",
+        "owner": "alcxyz",
+        "repo": "DankCalendar",
+        "rev": "1e65407b98b06cece0923ec9be1264c1ff905920",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "DankCalendar",
+        "type": "github"
+      }
+    },
     "darwin": {
       "inputs": {
         "nixpkgs": [
@@ -148,6 +164,7 @@
     "dms-plugins": {
       "inputs": {
         "calculator": "calculator",
+        "dankcalendar": "dankcalendar",
         "diskusage": "diskusage",
         "firstparty": "firstparty",
         "quicksearch": "quicksearch",
@@ -157,11 +174,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1776959532,
-        "narHash": "sha256-E1gcFqME1azNkJWx2k+piEvXkizOI0y6mAiTJEe1jTg=",
+        "lastModified": 1776961118,
+        "narHash": "sha256-WRwzMcVZqbnzBhWv7PBXbYxB24Z/KhDNRtTf2I+QVDY=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "1da762c3b617d5a3412d0e3bf733bc030e157efc",
+        "rev": "d5420f9f5bc255a2c784b37eb101d0bbd0b606a6",
         "type": "github"
       },
       "original": {
