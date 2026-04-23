@@ -68,6 +68,10 @@ in
           enable = true;
           src = plugins.spotify;
         };
+        DankCalendar = {
+          enable = true;
+          src = inputs.DankCalendar;
+        };
         DankDiskUsage = {
           enable = true;
           src = plugins.diskusage;

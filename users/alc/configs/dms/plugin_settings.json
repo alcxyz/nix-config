@@ -50,5 +50,26 @@
     "trigger": "~",
     "playerName": "ncspot",
     "terminal": "foot"
+  },
+  "dankCalendar": {
+    "enabled": true
+  },
+  "dankDiskUsage": {
+    "enabled": true
+  },
+  "dankGifSearch": {
+    "enabled": true
+  },
+  "dankLauncherKeys": {
+    "enabled": true
+  },
+  "dankNotepadModule": {
+    "enabled": true
+  },
+  "dankPomodoroTimer": {
+    "enabled": true
+  },
+  "dankStickerSearch": {
+    "enabled": true
   }
 }
