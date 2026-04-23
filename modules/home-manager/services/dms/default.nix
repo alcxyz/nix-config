@@ -65,6 +65,10 @@ in
           enable = true;
           src = plugins.spotify;
         };
+        DankDiskUsage = {
+          enable = true;
+          src = plugins.diskusage;
+        };
 
         # First-party plugins (AvengeMedia/dms-plugins monorepo)
         DankActions = {
