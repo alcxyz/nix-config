@@ -4,6 +4,7 @@
 let
   cfg = config.services.dms;
   plugins = inputs.dms-plugins.srcs;
+  dankcalendarPkg = inputs.DankCalendar.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in
 {
   options.services.dms.enable =
@@ -15,6 +16,8 @@ in
   ];
 
   config = lib.mkIf cfg.enable {
+    home.packages = [ dankcalendarPkg ];
+
     xdg.configFile."DankMaterialShell/plugin_settings.json".source =
       config.lib.file.mkOutOfStoreSymlink
         "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/plugin_settings.json";
@@ -69,7 +72,6 @@ in
           enable = true;
           src = plugins.diskusage;
         };
-
         # First-party plugins (AvengeMedia/dms-plugins monorepo)
         DankActions = {
           enable = true;
