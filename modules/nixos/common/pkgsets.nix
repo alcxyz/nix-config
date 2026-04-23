@@ -36,6 +36,7 @@ rec {
       nfs-utils
       gptfdisk
       lima
+      libsecret
 
       # nix env related
       font-manager
@@ -46,18 +47,16 @@ rec {
     ];
 
     # Linux desktop-specific system packages
-    linuxDesktop =
-      with pkgs;
-      [
-        gparted
-        ntfs3g
-        sshfs
-        xwayland-satellite
-        grim
-        slurp
-        swappy
-      ]
-      ++ [ ndrop ];
+    linuxDesktop = with pkgs; [
+      gparted
+      ntfs3g
+      sshfs
+      xwayland-satellite
+      grim
+      slurp
+      swappy
+      ndrop
+    ];
   };
 
   # Ready-to-use system presets (use in environment.systemPackages)
