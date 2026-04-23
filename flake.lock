@@ -111,6 +111,7 @@
     "dms-plugins": {
       "inputs": {
         "calculator": "calculator",
+        "firstparty": "firstparty",
         "quicksearch": "quicksearch",
         "spotify": "spotify",
         "translate": "translate",
@@ -118,11 +119,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1776897430,
-        "narHash": "sha256-NMoXZbzsqULpa3t4BhDtEnqEzEIHUza5OwkOKAPQWTo=",
+        "lastModified": 1776903961,
+        "narHash": "sha256-+OqJ7bJOFSEFbRnGuzr5XR1iKrmiERNrEFdVkcUD/wk=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "b44166fc3913e132e6a533b85dbe2660c5adc50d",
+        "rev": "c41b1d657c84ba9370eea4388aedd2b47fe4a735",
         "type": "github"
       },
       "original": {
@@ -148,6 +149,22 @@
       "original": {
         "owner": "AvengeMedia",
         "repo": "danksearch",
+        "type": "github"
+      }
+    },
+    "firstparty": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776364275,
+        "narHash": "sha256-KYx+n1stxLT4R9IDVRx3/Cl7TjCcBZjnQchbrXaBT2o=",
+        "owner": "AvengeMedia",
+        "repo": "dms-plugins",
+        "rev": "829922a8f11949b1c13ae8bd14d7176f9165b6f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "AvengeMedia",
+        "repo": "dms-plugins",
         "type": "github"
       }
     },

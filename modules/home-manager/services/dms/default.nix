@@ -65,6 +65,56 @@ in
           enable = true;
           src = plugins.spotify;
         };
+
+        # First-party plugins (AvengeMedia/dms-plugins monorepo)
+        DankActions = {
+          enable = true;
+          src = plugins.firstparty + "/DankActions";
+        };
+        DankBatteryAlerts = {
+          enable = true;
+          src = plugins.firstparty + "/DankBatteryAlerts";
+        };
+        DankClight = {
+          enable = true;
+          src = plugins.firstparty + "/DankClight";
+        };
+        DankDesktopWeather = {
+          enable = true;
+          src = plugins.firstparty + "/DankDesktopWeather";
+        };
+        DankGifSearch = {
+          enable = true;
+          src = plugins.firstparty + "/DankGifSearch";
+        };
+        DankHooks = {
+          enable = true;
+          src = plugins.firstparty + "/DankHooks";
+        };
+        DankHyprlandWindows = {
+          enable = true;
+          src = plugins.firstparty + "/DankHyprlandWindows";
+        };
+        DankKDEConnect = {
+          enable = true;
+          src = plugins.firstparty + "/DankKDEConnect";
+        };
+        DankLauncherKeys = {
+          enable = true;
+          src = plugins.firstparty + "/DankLauncherKeys";
+        };
+        DankNotepadModule = {
+          enable = true;
+          src = plugins.firstparty + "/DankNotepadModule";
+        };
+        DankPomodoroTimer = {
+          enable = true;
+          src = plugins.firstparty + "/DankPomodoroTimer";
+        };
+        DankStickerSearch = {
+          enable = true;
+          src = plugins.firstparty + "/DankStickerSearch";
+        };
       };
     };
   };
