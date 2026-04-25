@@ -1,4 +1,33 @@
 {
     "timezone": "Europe/Oslo",
-    "calendars": []
+    "calendars": [
+        {
+            "url": "https://www.google.com/calendar/dav/droydi.alc%40gmail.com/events/",
+            "username": "droydi.alc@gmail.com"
+        },
+        {
+            "url": "https://www.google.com/calendar/dav/a0076275b0ba4236eee919334e3a1d21db7377f8d7d2555cf6c38e755425b10a%40group.calendar.google.com/events/",
+            "username": "droydi.alc@gmail.com"
+        },
+        {
+            "url": "https://www.google.com/calendar/dav/c9ec3708996d0554f9ee3c48c87ffdec08e720ce095a74be5d755a0c0281b47c%40group.calendar.google.com/events/",
+            "username": "droydi.alc@gmail.com"
+        },
+        {
+            "url": "https://www.google.com/calendar/dav/c91bc020e9210be3cea39b3c5c94de643477c607834b65b6f0e001546da78923%40group.calendar.google.com/events/",
+            "username": "droydi.alc@gmail.com"
+        },
+        {
+            "url": "https://www.google.com/calendar/dav/6594jbr9487ugr4ntjji7alhio%40group.calendar.google.com/events/",
+            "username": "droydi.alc@gmail.com"
+        },
+        {
+            "url": "https://caldav.icloud.com/1324413492/calendars/4075d297-dde5-4b79-bd06-b47ea818d62d/",
+            "username": "me@alc.no"
+        },
+        {
+            "url": "https://caldav.icloud.com/1324413492/calendars/4C23F384-0552-45DB-A793-0A72821CB8A0/",
+            "username": "me@alc.no"
+        }
+    ]
 }
