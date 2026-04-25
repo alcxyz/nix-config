@@ -128,7 +128,7 @@ binds {
 
     // === QUICK ACCESS (Alt prefix) ===
     Alt+Return { spawn "foot"; }
-    Alt+S { spawn "wofi-intelligent-runner"; }
+    Alt+S { spawn "dms" "ipc" "call" "spotlight" "toggle"; }
 
     // === APPLICATIONS ===
     Mod+B { spawn "zen" "--no-remote" "-profile" "/home/alc/.zen/alcxyz"; }
