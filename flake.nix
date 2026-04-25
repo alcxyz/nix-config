@@ -124,6 +124,7 @@
               let
                 np = nix-packages.packages.${system};
                 wanted = [
+                  "forge-mirror"
                   "ndrop"
                   "zfs-auto-unlock"
                   "pihole-sync"

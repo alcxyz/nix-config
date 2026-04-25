@@ -129,6 +129,7 @@ rec {
       # Git & auth / cloud CLI
       git
       git-remote-gcrypt
+      forge-mirror
       gh
       gh-dash
       lazygit
