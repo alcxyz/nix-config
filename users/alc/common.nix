@@ -143,10 +143,8 @@ EOF
 
   programs.git.managed.enable = true;
 
-  # Forgejo credential helper (URL-specific, alongside the global gh helper)
-  programs.git.settings."credential \"https://git.alc.xyz\"" = {
-    helper = "!forge-mirror credential-helper";
-  };
+  # Forgejo credential helper — moved to linux/common.nix and darwin/mac.nix
+  # where the sops secret path is available for inline injection.
 
 
   #programs.wezterm.enable = true;
