@@ -131,6 +131,7 @@
                   "t3code"
                   "claude-code"
                   "leantime-tidy"
+                  "devlog"
                   "omniwm"
                   "zen-browser"
                 ];

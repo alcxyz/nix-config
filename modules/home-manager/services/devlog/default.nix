@@ -10,7 +10,7 @@ in
 
     schedule = lib.mkOption {
       type = lib.types.str;
-      default = "23:00";
+      default = "01:00";
       description = "Systemd timer schedule (OnCalendar value). Runs in local timezone.";
     };
 
@@ -19,32 +19,100 @@ in
       default = "${config.home.homeDirectory}/git/journal";
       description = "Path to the journal git repo.";
     };
-  };
 
-  config = lib.mkIf cfg.enable {
-    systemd.user.services.devlog = {
-      Unit.Description = "Generate daily devlog from GitHub activity";
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${cfg.repoPath}/devlog.sh";
-        StandardOutput = "journal";
-        StandardError = "journal";
-        Environment = [
-          "PATH=${lib.makeBinPath [ pkgs.git pkgs.gh pkgs.claude-code pkgs.coreutils pkgs.bash pkgs.openssh ]}"
-          "HOME=${config.home.homeDirectory}"
-          "SSH_AUTH_SOCK=%t/ssh-agent"
-        ];
+    weekly = {
+      enable = lib.mkEnableOption "Weekly devlog summary and HedgeDoc posting";
+
+      schedule = lib.mkOption {
+        type = lib.types.str;
+        default = "Mon 02:00";
+        description = "Systemd timer OnCalendar value for the weekly summary.";
+      };
+
+      hedgedoc = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Whether to post the weekly summary to HedgeDoc.";
+        };
+
+        secretsFile = lib.mkOption {
+          type = lib.types.str;
+          default = "/home/alc/gitops/tools/hedgedoc/secrets.env";
+          description = "Path to the sops-encrypted HedgeDoc secrets.env file.";
+        };
+
+        binPath = lib.mkOption {
+          type = lib.types.str;
+          default = "/home/alc/gitops/tools/hedgedoc/hedgedoc";
+          description = "Path to the hedgedoc CLI binary.";
+        };
       };
     };
-
-    systemd.user.timers.devlog = {
-      Unit.Description = "Timer for daily devlog generator";
-      Timer = {
-        OnCalendar = cfg.schedule;
-        Persistent = true;
-        Unit = "devlog.service";
-      };
-      Install.WantedBy = [ "timers.target" ];
-    };
   };
+
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      systemd.user.services.devlog = {
+        Unit.Description = "Generate daily devlog from GitHub activity";
+        Service = {
+          Type = "oneshot";
+          ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.devlog}/bin/devlog daily -repo ${cfg.repoPath} -date $(${pkgs.coreutils}/bin/date -d yesterday +%%Y-%%m-%%d)'";
+          StandardOutput = "journal";
+          StandardError = "journal";
+          Environment = [
+            "PATH=${lib.makeBinPath [ pkgs.git pkgs.gh pkgs.claude-code pkgs.coreutils pkgs.bash pkgs.openssh ]}"
+            "HOME=${config.home.homeDirectory}"
+            "SSH_AUTH_SOCK=%t/ssh-agent"
+          ];
+        };
+      };
+
+      systemd.user.timers.devlog = {
+        Unit.Description = "Timer for daily devlog generator";
+        Timer = {
+          OnCalendar = cfg.schedule;
+          Persistent = true;
+          Unit = "devlog.service";
+        };
+        Install.WantedBy = [ "timers.target" ];
+      };
+    }
+
+    (lib.mkIf cfg.weekly.enable {
+      systemd.user.services.devlog-weekly = {
+        Unit.Description = "Generate weekly devlog summary and post to HedgeDoc";
+        Service = {
+          Type = "oneshot";
+          ExecStart = "${pkgs.devlog}/bin/devlog weekly -repo ${cfg.repoPath}";
+          StandardOutput = "journal";
+          StandardError = "journal";
+          Environment = [
+            "PATH=${lib.makeBinPath ([
+              pkgs.git pkgs.claude-code pkgs.coreutils pkgs.openssh
+            ] ++ lib.optionals cfg.weekly.hedgedoc.enable [
+              pkgs.sops pkgs.age
+            ])}"
+            "HOME=${config.home.homeDirectory}"
+            "SSH_AUTH_SOCK=%t/ssh-agent"
+          ] ++ lib.optionals cfg.weekly.hedgedoc.enable [
+            "HEDGEDOC_POST=1"
+            "HEDGEDOC_SECRETS_FILE=${cfg.weekly.hedgedoc.secretsFile}"
+            "HEDGEDOC_BIN=${cfg.weekly.hedgedoc.binPath}"
+            "SOPS_AGE_KEY_FILE=${config.home.homeDirectory}/.config/sops/age/keys.txt"
+          ];
+        };
+      };
+
+      systemd.user.timers.devlog-weekly = {
+        Unit.Description = "Timer for weekly devlog summary";
+        Timer = {
+          OnCalendar = cfg.weekly.schedule;
+          Persistent = true;
+          Unit = "devlog-weekly.service";
+        };
+        Install.WantedBy = [ "timers.target" ];
+      };
+    })
+  ]);
 }
