@@ -65,6 +65,9 @@ in
             "--ingest" cfg.ingest
           ] ++ optionals (cfg.ingest == "directory") [
             "--ingest-dir" cfg.ingestDir
+          ] ++ optionals (cfg.ingest == "api") [
+            "--paperless-url" cfg.paperlessUrl
+            "--paperless-token-file" cfg.paperlessTokenFile
           ]);
           Restart = "on-failure";
           RestartSec = "5s";
