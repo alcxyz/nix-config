@@ -143,6 +143,11 @@ EOF
 
   programs.git.managed.enable = true;
 
+  # Forgejo credential helper (URL-specific, alongside the global gh helper)
+  programs.git.settings."credential \"https://git.alc.xyz\"" = {
+    helper = "!forge-mirror credential-helper";
+  };
+
 
   #programs.wezterm.enable = true;
 
