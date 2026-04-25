@@ -70,7 +70,6 @@ in
       enable = true;
 
       environmentVariables = {
-        KUBECONFIG = "${config.home.homeDirectory}/.kube/config";
         CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
 
         EDITOR = "nvim";
