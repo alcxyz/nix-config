@@ -13,9 +13,16 @@ Without a centralised approach, package lists scatter across host configs and ro
 All package sets are defined in `modules/nixos/common/pkgsets.nix`, exported as a structured attribute set consumed by role modules and per-host configs:
 
 - `sys.base` / `sys.linux` / `sys.linuxDesktop` — system-level package sets by role
-- `hm.base` / `hm.linux` / `hm.dev` / `hm.iac` / `hm.k8s` / `hm.gaming` / `hm.desktop*` / `hm.workstation*` — Home Manager sets by scope
-- `system.server` / `system.desktop` — composed presets for role modules
-- `home.server` / `home.desktop` / `home.workstation` — composed HM presets
+- `hm.base` / `hm.linux` / `hm.dev` / `hm.iac` / `hm.k8s` / `hm.gaming` / `hm.ai` / `hm.desktop*` / `hm.workstation*` — Home Manager sets by scope
+- `system.workstation` / `system.server` / `system.mac` — composed system presets for role modules
+- `home.workstation` / `home.nuc` / `home.server` / `home.embedded` / `home.mac` — composed HM presets by host class
+
+Host class mapping:
+- `workstation` — xyz (full desktop, dev, gaming)
+- `nuc` — nux and future NUCs (base + linux + k8s)
+- `server` — future dedicated server (base + linux + k8s + dev + iac)
+- `embedded` — rpi0 and similar SBCs (base + linux, minimal)
+- `mac` — mac laptop (base + cloud + mac + dev + iac + k8s + ai)
 
 Modules import pkgsets.nix with `pkgs` and `inputs` in scope:
 ```nix
