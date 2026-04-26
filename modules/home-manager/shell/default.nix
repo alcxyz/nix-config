@@ -18,6 +18,7 @@ let
     export HOME=$(mktemp -d)
     ${pkgs.atuin}/bin/atuin init nu \
       | ${pkgs.gnused}/bin/sed 's/e>| complete | get stdout/| complete | get stdout/g' \
+      | ${pkgs.gnused}/bin/sed 's/job spawn -t/job spawn -d/g' \
       > $out
   '';
 in
