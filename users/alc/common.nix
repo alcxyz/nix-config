@@ -123,6 +123,9 @@ EOF
   home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink
     "${config.home.homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";
 
+  home.file."AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink
+    "${config.home.homeDirectory}/nix/nix-secrets/shared/AGENTS.md";
+
   # ==================== Files ====================
   home.file = {
     "Documents/.keep".text = "";
