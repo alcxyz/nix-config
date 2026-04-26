@@ -135,6 +135,7 @@
                   "devlog"
                   "omniwm"
                   "zen-browser"
+                  "nix-deploy"
                 ];
                 pt = inputs.paperless-tools.packages.${system} or { };
               in

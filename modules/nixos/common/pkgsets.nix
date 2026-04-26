@@ -142,6 +142,7 @@ rec {
       # Misc
       lazydocker
       parallel
+      nix-deploy
     ];
 
     # Cloud SDKs & heavier infra tools — workstation/mac only

@@ -805,11 +805,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777170301,
-        "narHash": "sha256-ZV3O8Ebl2ZjikHce5ubYMaurfF2usPTNGYDY65Bqy3U=",
+        "lastModified": 1777219093,
+        "narHash": "sha256-L5ShvixRczkuR0gCBI1UzzTLr7t7fGAsWbvvYk5tGXo=",
         "owner": "alcxyz",
         "repo": "nix-packages",
-        "rev": "9725292f684ccc367bd090348ce4de38dd123430",
+        "rev": "12d9166676e8b52d5cef686a14591f90207a53d1",
         "type": "github"
       },
       "original": {
@@ -821,11 +821,11 @@
     "nix-secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1777209675,
-        "narHash": "sha256-bC/xO5kyz0rQxETbgvZ6kWn46VorR2PkYISHcIyc3TI=",
+        "lastModified": 1777218073,
+        "narHash": "sha256-pEu63g9lVL4WAUchHBGGW5S5pGYUYmZcHQuNQXd6xbM=",
         "ref": "refs/heads/main",
-        "rev": "caf6f024e6a9a65c60b535d79eb90b1d5ebf9e6d",
-        "revCount": 30,
+        "rev": "03a006d4980e58bf36b780c2c5f1799f2fc88f37",
+        "revCount": 31,
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/nix-secrets.git"
       },

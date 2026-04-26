@@ -53,67 +53,6 @@ with lib;
     pkgsets.hm.base
     ++ [
     inputs.grove.packages.${pkgs.stdenv.hostPlatform.system}.default
-    (pkgs.writeShellScriptBin "claude-work" ''
-      export CLAUDE_CONFIG_DIR="$HOME/.claude-work"
-      exec claude "$@"
-    '')
-    (pkgs.writeShellScriptBin "cc-handoff" ''
-      set -euo pipefail
-
-      if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
-        echo "cc-handoff: not inside a git repo" >&2
-        exit 1
-      fi
-
-      repo_root="$(git rev-parse --show-toplevel)"
-      handoff_dir="$repo_root/.claude"
-      handoff_file="$handoff_dir/handoff.md"
-      exclude_file="$repo_root/.git/info/exclude"
-
-      mkdir -p "$handoff_dir"
-      touch "$exclude_file"
-
-      if ! grep -Fxq "/.claude/handoff.md" "$exclude_file"; then
-        printf "/.claude/handoff.md\n" >> "$exclude_file"
-      fi
-
-      if [ ! -f "$handoff_file" ]; then
-        cat > "$handoff_file" <<EOF
-# Claude handoff
-
-Updated: $(date -Iseconds)
-
-## Current goal
-
-## Done so far
-
-## Files changed
-
-## Key decisions
-
-## Open questions / blockers
-
-## Exact next steps
-
-## Useful commands
-EOF
-      fi
-
-      branch="$(git -C "$repo_root" branch --show-current 2>/dev/null || true)"
-
-      printf "Handoff file: %s\n\n" "$handoff_file"
-      printf "Branch: %s\n\n" "''${branch:-detached}"
-
-      printf "Git status:\n"
-      git -C "$repo_root" status --short || true
-
-      printf "\nDiff stat:\n"
-      git -C "$repo_root" diff --stat || true
-
-      printf "\nNext step:\n"
-      printf "Ask Claude to update %s before you switch profiles.\n" \
-        "$handoff_file"
-    '')
   ];
 
   # ==================== Symlinked configs (live editing, all hosts) ====================
@@ -191,9 +130,6 @@ EOF
     fi
   '';
 
-  home.activation.claudeProfileDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p "$HOME/.claude-personal" "$HOME/.claude-work"
-  '';
 
   # Configure dual-push (GitHub + Forgejo) for repos that are mirrored on
   # Forgejo. Runs on every home-manager switch; skips silently when offline.
