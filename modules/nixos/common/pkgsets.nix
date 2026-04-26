@@ -210,6 +210,7 @@ rec {
     k8s = with pkgs; [
       kubectl
       kubernetes-helm
+      fluxcd
       k9s
       kubeswitch
     ];
