@@ -324,8 +324,14 @@ rec {
       ++ hm.ai
       ++ hm.gaming;
 
-    # Server: lean CLI base + linux-specific only (no compilers, no cloud SDKs).
-    server = hm.base ++ hm.linux;
+    # NUC server: base + linux + k8s + dev tools (runs k3s, builds containers).
+    nuc = hm.base ++ hm.linux ++ hm.k8s;
+
+    # Dedicated server: base + linux + k8s + dev + IaC (future powerful host).
+    server = hm.base ++ hm.linux ++ hm.k8s ++ hm.dev ++ hm.iac;
+
+    # Embedded/edge: minimal CLI base + linux-specific only.
+    embedded = hm.base ++ hm.linux;
 
     # mac laptop: CLI base + cloud + mac-specific + dev/IaC/K8s.
     mac = hm.base ++ hm.cloud ++ hm.mac ++ hm.dev ++ hm.iac ++ hm.k8s ++ hm.ai ++ hm.desktopMac;
