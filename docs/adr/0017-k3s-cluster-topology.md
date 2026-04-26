@@ -41,8 +41,9 @@ rpi0 is aarch64; all other nodes are x86_64. The k3s control plane is multi-arch
 **Supporting infrastructure:**
 - **Storage:** `local-path` provisioner while single-node; Longhorn for replicated PVs once NUC #2 joins
 - **Ingress:** k3s built-in Traefik ingress controller. During migration, k3s Traefik binds to high ports (8080/8443 via `HelmChartConfig`) so Docker Traefik retains 80/443 for external ingress. Docker Traefik proxies to k3s NodePorts for migrated services needing external access. After full cutover, k3s Traefik claims 80/443 and Docker Traefik is removed.
-- **Secrets:** SOPS operator or Sealed Secrets with existing age keys
-- **GitOps:** Flux or ArgoCD, deployed from Forgejo/GitHub repos
+- **Secrets:** SOPS with age encryption via Flux kustomize-controller (ADR-0020), dedicated Flux age keypair
+- **GitOps:** Flux CD v2, bootstrapped on Forgejo (ADR-0018)
+- **Object storage:** RustFS in-cluster (ADR-0021)
 - **Network infra:** Pi-hole and Cloudflare tunnel move into the cluster with rpi0 or stay as host services — decided per-service during migration
 
 ## Alternatives Considered
