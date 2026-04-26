@@ -35,7 +35,6 @@ rec {
     linux = with pkgs; [
       nfs-utils
       gptfdisk
-      lima
       libsecret
 
       # nix env related
@@ -44,6 +43,11 @@ rec {
       nixfmt
       nix-index
       nix-prefetch-git
+    ];
+
+    # Linux workstation extras (pulls in QEMU etc.)
+    linuxWorkstation = with pkgs; [
+      lima
     ];
 
     # Linux desktop-specific system packages
@@ -61,7 +65,7 @@ rec {
 
   # Ready-to-use system presets (use in environment.systemPackages)
   system = {
-    workstation = sys.base ++ sys.linux ++ sys.linuxDesktop;
+    workstation = sys.base ++ sys.linux ++ sys.linuxWorkstation ++ sys.linuxDesktop;
     server = sys.base ++ sys.linux;
     mac = sys.base;
   };
@@ -105,7 +109,6 @@ rec {
       # Text processing, viewers & docs
       jq
       yq
-      pandoc
       glow
       sqlite
 
@@ -126,7 +129,7 @@ rec {
       ssh-to-age
       sshs
 
-      # Git & auth / cloud CLI
+      # Git & version control
       git
       git-remote-gcrypt
       forge-mirror
@@ -134,9 +137,21 @@ rec {
       gh-dash
       lazygit
       diffnav
-      google-cloud-sdk
       cloudflared
+
+      # Misc
+      lazydocker
+    ];
+
+    # Cloud SDKs & heavier infra tools — workstation/mac only
+    cloud = with pkgs; [
+      google-cloud-sdk
       shopify-cli
+      pandoc
+      atac
+      termshark
+      openldap
+      minikube
 
       (azure-cli.withExtensions (
         with azure-cli.extensions;
@@ -147,13 +162,6 @@ rec {
           bastion
         ]
       ))
-
-      # Misc / infra helpers
-      atac
-      termshark
-      openldap
-      minikube
-      lazydocker
     ];
 
     # Linux-only CLI additions
@@ -300,11 +308,11 @@ rec {
   # Home-manager role presets (aggregate of hm.* sets)
   # =======================================================================
   home = {
-    # Workstation: CLI base + linux-specific + dev/IaC/K8s +
+    # Workstation: CLI base + cloud + linux-specific + dev/IaC/K8s +
     # linux desktop helpers + workstation extras.
-    # (Desktop GUI apps themselves are pulled via NixOS desktop suite.)
     workstation =
       hm.base
+      ++ hm.cloud
       ++ hm.linux
       ++ hm.dev
       ++ hm.iac
@@ -315,11 +323,10 @@ rec {
       ++ hm.ai
       ++ hm.gaming;
 
-    # Server: CLI base + linux-specific only.
-    server = hm.base ++ hm.linux ++ hm.dev;
+    # Server: lean CLI base + linux-specific only (no compilers, no cloud SDKs).
+    server = hm.base ++ hm.linux;
 
-    # mac laptop: CLI base + mac-specific + dev/IaC/K8s.
-    # (Desktop GUI apps for mac can be added via hm.desktopCommon/desktopMac.)
-    mac = hm.base ++ hm.mac ++ hm.dev ++ hm.iac ++ hm.k8s ++ hm.ai ++ hm.desktopMac;
+    # mac laptop: CLI base + cloud + mac-specific + dev/IaC/K8s.
+    mac = hm.base ++ hm.cloud ++ hm.mac ++ hm.dev ++ hm.iac ++ hm.k8s ++ hm.ai ++ hm.desktopMac;
   };
 }
