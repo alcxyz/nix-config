@@ -141,6 +141,7 @@ rec {
 
       # Misc
       lazydocker
+      parallel
     ];
 
     # Cloud SDKs & heavier infra tools — workstation/mac only
