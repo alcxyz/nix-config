@@ -73,6 +73,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    leantime-tidy = {
+      url = "git+ssh://git@github.com/alcxyz/gitops.git?dir=tools/leantime-tidy";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     grove = {
       url = "github:alcxyz/grove";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -131,13 +136,13 @@
                   "helium"
                   "t3code"
                   "claude-code"
-                  "leantime-tidy"
                   "devlog"
                   "omniwm"
                   "zen-browser"
                   "nix-deploy"
                 ];
                 pt = inputs.paperless-tools.packages.${system} or { };
+                lt = inputs.leantime-tidy.packages.${system} or { };
               in
               (nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np)
               // (nixpkgs.lib.filterAttrs (
@@ -147,6 +152,12 @@
                   "paperless-filetype-index"
                 ]
               ) pt)
+              // (nixpkgs.lib.filterAttrs (
+                n: _:
+                builtins.elem n [
+                  "leantime-tidy"
+                ]
+              ) lt)
               # SentinelOne kills freshly-built binaries during test phase on macOS.
               # Skip nushell tests to avoid build failure on managed Macs.
               // nixpkgs.lib.optionalAttrs (system == "aarch64-darwin") {
