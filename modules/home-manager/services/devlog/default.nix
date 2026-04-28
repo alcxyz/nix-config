@@ -16,7 +16,7 @@ in
 
     repoPath = lib.mkOption {
       type = lib.types.str;
-      default = "${config.home.homeDirectory}/git/journal";
+      default = "${config.home.homeDirectory}/src/personal/journal";
       description = "Path to the journal git repo.";
     };
 
@@ -38,13 +38,13 @@ in
 
         secretsFile = lib.mkOption {
           type = lib.types.str;
-          default = "/home/alc/gitops/tools/hedgedoc/secrets.env";
+          default = "/home/alc/src/infra/gitops/tools/hedgedoc/secrets.env";
           description = "Path to the sops-encrypted HedgeDoc secrets.env file.";
         };
 
         binPath = lib.mkOption {
           type = lib.types.str;
-          default = "/home/alc/gitops/tools/hedgedoc/hedgedoc";
+          default = "/home/alc/src/infra/gitops/tools/hedgedoc/hedgedoc";
           description = "Path to the hedgedoc CLI binary.";
         };
       };
