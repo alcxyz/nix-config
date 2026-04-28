@@ -1,6 +1,6 @@
 # ADR-0026: Unified source directory layout across machines
 
-**Status:** Proposed
+**Status:** Accepted (implemented on xyz)
 **Date:** 2026-04-27
 **Applies to:** all hosts (xyz, nux, mac), `home-manager`, `gitops`
 
@@ -47,6 +47,23 @@ Adopt a single `~/src/` root with purpose-based subdirectories:
 │   ├── paperless-tools/
 │   ├── regnskap/
 │   ├── digipost-sign/
+│   └── ...
+│
+├── orgs/                     # Repos owned by other GitHub/Forgejo orgs
+│   ├── alcorg/               # alcorg org repos
+│   └── bn-apps/              # bn-apps work org repos
+│
+├── forks/                    # Upstream forks (intent to contribute back)
+│   └── ...
+│
+├── clones/                   # Reference clones (read-only, no upstream PR intent)
+│   ├── JimsGarage/
+│   └── ...
+│
+├── sites/                    # Static sites and web projects
+│   └── ...
+│
+├── personal/                 # Personal repos (journal, profile, etc.)
 │   └── ...
 │
 └── lib/                      # Libraries, shared packages, experiments
