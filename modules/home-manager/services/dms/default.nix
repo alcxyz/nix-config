@@ -4,7 +4,9 @@
 let
   cfg = config.services.dms;
   plugins = inputs.dms-plugins.srcs;
-  dankcalendarPkg = inputs.DankCalendar.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
+    version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
+  };
 in
 {
   options.services.dms.enable =

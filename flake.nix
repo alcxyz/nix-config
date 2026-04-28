@@ -83,11 +83,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    DankCalendar = {
-      url = "github:alcxyz/DankCalendar";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     dms-plugins.url = "github:alcxyz/dms-plugins";
 
   };
