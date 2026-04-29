@@ -27,8 +27,8 @@ in
 
     baseDir = mkOption {
       type = types.str;
-      default = config.home.homeDirectory;
-      description = "Base directory t3code uses as the project root.";
+      default = "${config.home.homeDirectory}/.t3";
+      description = "Base directory for t3code state (userdata, logs, settings).";
     };
   };
 
