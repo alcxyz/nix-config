@@ -1,7 +1,7 @@
 # modules/home-manager/services/t3code/default.nix
 #
-# Runs t3code in headless server mode (t3 serve), listening on the Netbird
-# interface only — firewall restricts port 3773 to wt0 in the NixOS config.
+# Runs t3code in headless server mode (t3 serve), listening on all interfaces.
+# The NixOS firewall restricts the port to the Netbird (wt0) interface.
 { config, lib, pkgs, ... }:
 
 with lib;
@@ -42,6 +42,7 @@ in
       Service = {
         Type = "simple";
         ExecStart = "${pkgs.t3code}/bin/t3 serve --host ${cfg.host} --port ${toString cfg.port} --base-dir ${cfg.baseDir}";
+        Environment = "SHELL=${pkgs.bash}/bin/bash";
         Restart = "on-failure";
         RestartSec = "10s";
         StandardOutput = "journal";
