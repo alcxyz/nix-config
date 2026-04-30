@@ -71,5 +71,11 @@
   },
   "dankStickerSearch": {
     "enabled": true
+  },
+  "dankClight": {
+    "enabled": false
+  },
+  "dankHyprlandWindows": {
+    "enabled": false
   }
 }

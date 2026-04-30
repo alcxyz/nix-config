@@ -83,6 +83,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    canopy = {
+      url = "github:alcxyz/canopy";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     dms-plugins.url = "github:alcxyz/dms-plugins";
 
   };

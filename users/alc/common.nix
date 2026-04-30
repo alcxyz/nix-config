@@ -53,6 +53,7 @@ with lib;
     pkgsets.hm.base
     ++ [
     inputs.grove.packages.${pkgs.stdenv.hostPlatform.system}.default
+    inputs.canopy.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
   # ==================== Symlinked configs (live editing, all hosts) ====================
