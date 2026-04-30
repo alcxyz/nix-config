@@ -74,6 +74,7 @@ in
   };
 
   boot.initrd.systemd.enable = true;
+  boot.blacklistedKernelModules = [ "algif_aed" ];
 
   # ==================== Users & Shells ========================
   users = {
