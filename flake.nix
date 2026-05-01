@@ -69,7 +69,7 @@
     };
 
     paperless-tools = {
-      url = "git+ssh://git@github.com/alcxyz/paperless-tools.git";
+      url = "git+ssh://git@github.com/alcxyz/paperless-tools.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -149,7 +149,7 @@
               // (nixpkgs.lib.filterAttrs (
                 n: _:
                 builtins.elem n [
-                  "paperless-review"
+                  "paperweight"
                   "paperless-filetype-index"
                 ]
               ) pt)

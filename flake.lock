@@ -846,11 +846,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777566231,
-        "narHash": "sha256-AD3sS389lWEDnXBvHrl5K81fpkritCUhqQ2yShSuhRI=",
+        "lastModified": 1777661123,
+        "narHash": "sha256-/jShIY/RMArJizXw2qVb1xfqBRd6ACXFgxPKKC/DM7M=",
         "owner": "alcxyz",
         "repo": "nix-packages",
-        "rev": "74aa55e839ec35b3110dd2d87f6c5d6d3aa01f55",
+        "rev": "479056c78f92c376bc760f9a2462cc8a8f8e70f7",
         "type": "github"
       },
       "original": {
@@ -951,15 +951,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1777282063,
-        "narHash": "sha256-DdNS4TFPt9vRubBXSxYwLKHb3a+xA43a5PByfASGiL4=",
-        "ref": "refs/heads/main",
-        "rev": "78ee7bd319ff43462b95838b3a19c2d093888cd6",
-        "revCount": 12,
+        "lastModified": 1777674326,
+        "narHash": "sha256-g4vN5fuvvyC9w5wzc72HEdh3Z74hKele3vxfr1lm6Ys=",
+        "ref": "dev",
+        "rev": "33f0a8bc7c78ebcd4fd321abb68d3b7bc215ff68",
+        "revCount": 24,
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/paperless-tools.git"
       },
       "original": {
+        "ref": "dev",
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/paperless-tools.git"
       }
