@@ -256,6 +256,8 @@ rec {
       helium
       vlc
       obs-studio
+      gpu-screen-recorder
+      wcap
       kdePackages.kdenlive
       libreoffice
       calibre

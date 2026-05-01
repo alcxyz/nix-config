@@ -200,6 +200,24 @@ in
     alsa.support32Bit = true;
     wireplumber.enable = true;
     pulse.enable = true;
+
+    # Passive null sink for wcap (window capture with audio isolation).
+    # Inert by default — wcap dynamically routes streams here at recording time.
+    extraConfig.pipewire."30-wcap-sink" = {
+      "context.objects" = [
+        {
+          factory = "spa-node-factory";
+          args = {
+            "factory.name" = "support.null-audio-sink";
+            "node.name" = "wcap-sink";
+            "node.description" = "wcap recording sink";
+            "media.class" = "Audio/Sink";
+            "audio.channels" = 2;
+            "audio.position" = [ "FL" "FR" ];
+          };
+        }
+      ];
+    };
   };
   services.pulseaudio.enable = false;
 

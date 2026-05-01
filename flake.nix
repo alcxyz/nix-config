@@ -140,6 +140,7 @@
                   "omniwm"
                   "zen-browser"
                   "nix-deploy"
+                  "wcap"
                 ];
                 pt = inputs.paperless-tools.packages.${system} or { };
                 lt = inputs.leantime-tidy.packages.${system} or { };
