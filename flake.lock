@@ -804,11 +804,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777721435,
-        "narHash": "sha256-LHfCJHrFvwjx6NfUXcKTFqE5w3gH3IUSY2SbzCYt+CI=",
+        "lastModified": 1777723521,
+        "narHash": "sha256-YP75FL6XZr2xmA49CGBT9dABtyRpNNb/QafpattzMoc=",
         "ref": "refs/heads/main",
-        "rev": "91870c06dfdc176225922934133ef09f51f78576",
-        "revCount": 5,
+        "rev": "d81f40de4b94ae97b8e3fa4da7b5cfbdf040b824",
+        "revCount": 7,
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/leantime-tidy.git"
       },
@@ -844,11 +844,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777720975,
-        "narHash": "sha256-ZjhQ21+5T74lPKcePck7c4IP1Nj4qRKyp0zg0YgqRic=",
+        "lastModified": 1777723521,
+        "narHash": "sha256-KnXaI2B9WOZ7RqSCivuQydV5kJiKq60ZvyUTWtjrKwI=",
         "owner": "alcxyz",
         "repo": "nix-packages",
-        "rev": "566284b532044683c0491394b523ae2c0fcd5c71",
+        "rev": "5ed6a3654bd65c047e6d16eafb3dda5ed2bf30c9",
         "type": "github"
       },
       "original": {
@@ -949,11 +949,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777717235,
-        "narHash": "sha256-xvc6HzefIWibUNDRh+54vlO7ByHeEK02Jtf7gvmuixQ=",
+        "lastModified": 1777723521,
+        "narHash": "sha256-O/TSahbXMfyky/vhZ8Ie07J8lTF3o5VfD3Nn5DZmdnw=",
         "ref": "dev",
-        "rev": "5a6e138b48a0a27be4d3b3e3cb5110aaeb99f289",
-        "revCount": 31,
+        "rev": "6952923e8bb824c4be3ea968bbf3175d9b7c3039",
+        "revCount": 33,
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/paperless-tools.git"
       },
