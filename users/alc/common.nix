@@ -135,11 +135,11 @@ with lib;
   '';
 
 
-  # Configure dual-push (GitHub + Forgejo) for repos that are mirrored on
+  # Configure Forgejo as the local primary remote for repos that exist on
   # Forgejo. Runs on every home-manager switch; skips silently when offline.
-  home.activation.forgejoDualPush = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+  home.activation.forgejoPrimary = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     if command -v forge-mirror >/dev/null 2>&1; then
-      forge-mirror sync 2>/dev/null || true
+      forge-mirror primary 2>/dev/null || true
     fi
   '';
 
