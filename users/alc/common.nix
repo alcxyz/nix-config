@@ -60,6 +60,9 @@ with lib;
   xdg.configFile."television".source = config.lib.file.mkOutOfStoreSymlink
     "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/television";
 
+  xdg.configFile."llm/config.toml".source = config.lib.file.mkOutOfStoreSymlink
+    "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/llm/config.toml";
+
   home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink
     "${config.home.homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";
 

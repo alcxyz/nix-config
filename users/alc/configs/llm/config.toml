@@ -1,0 +1,23 @@
+[roles.fast]
+provider    = "openai"
+model       = "gpt-5.4-mini"
+transport   = "cli"
+api_key_env = "OPENAI_API_KEY"
+
+[roles.fast.backup]
+provider    = "anthropic"
+model       = "claude-haiku-4-5-20251001"
+transport   = "cli"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[roles.strong]
+provider    = "openai"
+model       = "gpt-5.4"
+transport   = "cli"
+api_key_env = "OPENAI_API_KEY"
+
+[roles.strong.backup]
+provider    = "anthropic"
+model       = "claude-sonnet-4-6-20250514"
+transport   = "cli"
+api_key_env = "ANTHROPIC_API_KEY"

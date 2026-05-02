@@ -74,6 +74,9 @@ api_key_env = "ANTHROPIC_API_KEY"
 ```
 
 A checked-in reference copy lives at `docs/llm-config.toml.example`.
+The canonical deployed user config lives at
+`users/alc/configs/llm/config.toml` and is linked into
+`~/.config/llm/config.toml` via home-manager.
 
 ### Fields
 
