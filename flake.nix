@@ -74,7 +74,7 @@
     };
 
     leantime-tidy = {
-      url = "git+ssh://git@github.com/alcxyz/gitops.git?dir=tools/leantime-tidy";
+      url = "git+ssh://git@github.com/alcxyz/leantime-tidy.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

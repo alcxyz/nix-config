@@ -804,19 +804,17 @@
         ]
       },
       "locked": {
-        "dir": "tools/leantime-tidy",
-        "lastModified": 1777331153,
-        "narHash": "sha256-Nifm1GMWYTT/YiHaP2VQNkO61kjpHpE2TZ4bopcY7v8=",
+        "lastModified": 1777717232,
+        "narHash": "sha256-Hb5Vnq0VhavvAty4XFgXzVHQMl+4mlHGfevS3WOlqHY=",
         "ref": "refs/heads/main",
-        "rev": "f34c2d06fb10eefe49374fb861c74c32b31a0636",
-        "revCount": 367,
+        "rev": "8d42fa9e45ead2fd3537909cfce8f943933c5371",
+        "revCount": 3,
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/gitops.git"
+        "url": "ssh://git@github.com/alcxyz/leantime-tidy.git"
       },
       "original": {
-        "dir": "tools/leantime-tidy",
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/gitops.git"
+        "url": "ssh://git@github.com/alcxyz/leantime-tidy.git"
       }
     },
     "nix-colors": {
@@ -951,11 +949,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777676033,
-        "narHash": "sha256-3wdZPd6qKATmgUIg0jRy0RpCNuZCjCfs4WAorgGUJ4c=",
+        "lastModified": 1777717235,
+        "narHash": "sha256-xvc6HzefIWibUNDRh+54vlO7ByHeEK02Jtf7gvmuixQ=",
         "ref": "dev",
-        "rev": "b5499b5e14e99feb01d9487b22d4685d1f80d088",
-        "revCount": 25,
+        "rev": "5a6e138b48a0a27be4d3b3e3cb5110aaeb99f289",
+        "revCount": 31,
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/paperless-tools.git"
       },

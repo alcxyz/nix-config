@@ -84,7 +84,7 @@ Remove submodules from gitops:
 - `paperless-tools`, `regnskap`, `digipost-sign` → cloned under `~/src/tools/`
 - `beautyzone`, `kjekkmann` → cloned under `~/src/apps/`
 
-The `tools/` directory inside gitops (leantime-tidy, hedgedoc, tunnel) stays — these are infrastructure tools tightly coupled to gitops, not standalone repos.
+The `tools/` directory inside gitops (tunnel) stays — these are infrastructure tools tightly coupled to gitops, not standalone repos. leantime-tidy has since been extracted to `~/src/tools/leantime-tidy/` (gitops ADR-011).
 
 ### Migration path
 
