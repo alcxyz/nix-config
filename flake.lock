@@ -73,17 +73,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1777474310,
-        "narHash": "sha256-QQGdymfj2kVFRPuREjPyvHPPsMpyy9jvE8g9H/Ylid4=",
-        "owner": "alcxyz",
-        "repo": "canopy",
-        "rev": "695736430fddb6c76a3803dcd64d17a05ade59f4",
-        "type": "github"
+        "lastModified": 1777475828,
+        "narHash": "sha256-SYfC7C3g09Qw7d7WC0Jm6M0lvcrY2H7jgk2k1sdRvL8=",
+        "ref": "refs/heads/dev",
+        "rev": "9ce48660d8f2d607935a2abd47812cfeb2ba843b",
+        "revCount": 27,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/canopy.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "canopy",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/canopy.git"
       }
     },
     "dankMaterialShell": {
@@ -111,11 +111,11 @@
     "dankcalendar": {
       "flake": false,
       "locked": {
-        "lastModified": 1777357944,
-        "narHash": "sha256-vDVOozlPJVC75Q6xIGPZp9OWjRZnIw+7we+DobtepB8=",
+        "lastModified": 1776968095,
+        "narHash": "sha256-5pT2Gqq6GjcxWI2ZPOd2NV3Jhldwl809+swS8lOhApQ=",
         "owner": "alcxyz",
         "repo": "DankCalendar",
-        "rev": "a73329b2d6610ca2b7f6d665c6e0a89a22848ab4",
+        "rev": "29bbbafaed367876cc210663c4483ebb92d2e9b8",
         "type": "github"
       },
       "original": {
@@ -148,11 +148,11 @@
     "diskusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1777358064,
-        "narHash": "sha256-QoUclB99FjxxMD+5Jy7x4+fbl1e5aALeKwa7qf2rfPE=",
+        "lastModified": 1776971848,
+        "narHash": "sha256-6OfSfywRM3V/q99aWEOiSMOKVaijlAOkqiqbwNvFbz8=",
         "owner": "alcxyz",
         "repo": "DankDiskUsage",
-        "rev": "5836d380883a9d201ff128539f547b36eaa9fcba",
+        "rev": "f7e57accb3d2ce84b0933e5d88b3fad898fcb796",
         "type": "github"
       },
       "original": {
@@ -174,17 +174,17 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1777400617,
-        "narHash": "sha256-kqRfhT/hvZLXpe8LA8qgbt+4gnEvaCYkRTc6+SeToLg=",
-        "owner": "alcxyz",
-        "repo": "dms-plugins",
-        "rev": "355de28d8145495f10fc73ab65b458fcf4902ac1",
-        "type": "github"
+        "lastModified": 1776971855,
+        "narHash": "sha256-GtbqK+lMu8TiItMTkvjQH4yymQSB2SYx+wzovy0qCz4=",
+        "ref": "refs/heads/main",
+        "rev": "baad13ef739720e799094b679dab13ed04fe6fd6",
+        "revCount": 12,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "dms-plugins",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git"
       }
     },
     "dsearch": {
@@ -210,11 +210,11 @@
     "firstparty": {
       "flake": false,
       "locked": {
-        "lastModified": 1777324456,
-        "narHash": "sha256-QgeeB6Ix8L5oaqTUCopPvGu6vr0ECsF+jO3mQIxPKIw=",
+        "lastModified": 1776364275,
+        "narHash": "sha256-KYx+n1stxLT4R9IDVRx3/Cl7TjCcBZjnQchbrXaBT2o=",
         "owner": "AvengeMedia",
         "repo": "dms-plugins",
-        "rev": "9e2752586d79a6509b93c00c6fa4be0334ae4755",
+        "rev": "829922a8f11949b1c13ae8bd14d7176f9165b6f5",
         "type": "github"
       },
       "original": {
@@ -393,17 +393,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1777473856,
+        "lastModified": 1777473280,
         "narHash": "sha256-OigVyQqBH41D0FQfZz0U5OHfk8tkWqLsBVxSxUTmT6s=",
-        "owner": "alcxyz",
-        "repo": "grove",
-        "rev": "fdfa611b087b95475b0502513915fd9e2973203c",
-        "type": "github"
+        "ref": "refs/heads/dev",
+        "rev": "b3c3aa9ccf494924bf54cef2dae0f4a37961e161",
+        "revCount": 115,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/grove.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "grove",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/grove.git"
       }
     },
     "home-manager": {
@@ -804,17 +804,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1777723521,
-        "narHash": "sha256-YP75FL6XZr2xmA49CGBT9dABtyRpNNb/QafpattzMoc=",
-        "ref": "refs/heads/main",
-        "rev": "d81f40de4b94ae97b8e3fa4da7b5cfbdf040b824",
-        "revCount": 7,
+        "lastModified": 1777725888,
+        "narHash": "sha256-akLzyukTY0X8U+Lj44UJQQsD/J3qI3z2pVwgfMsLECo=",
+        "ref": "refs/heads/dev",
+        "rev": "226e2969959082cf83421311f16398ed64264787",
+        "revCount": 9,
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/leantime-tidy.git"
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/leantime-tidy.git"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/leantime-tidy.git"
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/leantime-tidy.git"
       }
     },
     "nix-colors": {
@@ -844,33 +844,33 @@
         ]
       },
       "locked": {
-        "lastModified": 1777723521,
-        "narHash": "sha256-KnXaI2B9WOZ7RqSCivuQydV5kJiKq60ZvyUTWtjrKwI=",
-        "owner": "alcxyz",
-        "repo": "nix-packages",
-        "rev": "5ed6a3654bd65c047e6d16eafb3dda5ed2bf30c9",
-        "type": "github"
+        "lastModified": 1777741539,
+        "narHash": "sha256-lnVMYOloHU2uXrLSJ5ZNxfnS90BiVgKtQ4uVzhhe2og=",
+        "ref": "refs/heads/dev",
+        "rev": "94c2b26cffd3223de9bb846747eebc5af8005a57",
+        "revCount": 105,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "nix-packages",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       }
     },
     "nix-secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1777719988,
-        "narHash": "sha256-heUvh1LsIV5B5abyXc8Bve2Y1uoN4KJIa0BTw7O0QDA=",
+        "lastModified": 1777744543,
+        "narHash": "sha256-2RxNfoHOQOJU0QhVqwc2HgEifwzK7AA16GKMvh7N1PA=",
         "ref": "refs/heads/main",
-        "rev": "49253d9d426bdfda5df75f7635fd898db7465fd9",
-        "revCount": 35,
+        "rev": "24b483213c48ab7b5cd6e5e55dda8a7398f2f167",
+        "revCount": 38,
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/nix-secrets.git"
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/nix-secrets.git"
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       }
     },
     "nixpkgs": {
@@ -928,17 +928,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1777475558,
-        "narHash": "sha256-sEK2VSAdqpyb/lGTlIHNlYrqZW4ioZuImn7h/qyf0nc=",
-        "owner": "alcxyz",
-        "repo": "paperflow",
-        "rev": "861f00c4997e11c56581907711a7e872c3090bc9",
-        "type": "github"
+        "lastModified": 1776903935,
+        "narHash": "sha256-dNWiMzSaqL/zUn6+sWySwEkzOEgWuHPVP9q+KZhALv4=",
+        "ref": "refs/heads/dev",
+        "rev": "f7dde3c1d84d18407af8dd9e2f7b30db74975641",
+        "revCount": 34,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperflow.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "paperflow",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperflow.git"
       }
     },
     "paperless-tools": {
@@ -949,18 +949,18 @@
         ]
       },
       "locked": {
-        "lastModified": 1777723521,
-        "narHash": "sha256-O/TSahbXMfyky/vhZ8Ie07J8lTF3o5VfD3Nn5DZmdnw=",
+        "lastModified": 1777725888,
+        "narHash": "sha256-JrtAuJmN7Ihid/8XXDY+uKJCOy5Q6LJgYTLVHKH7pnc=",
         "ref": "dev",
-        "rev": "6952923e8bb824c4be3ea968bbf3175d9b7c3039",
-        "revCount": 33,
+        "rev": "e5794a6c4e067d61068f6cd14094ff6045704c2e",
+        "revCount": 35,
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/paperless-tools.git"
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       },
       "original": {
         "ref": "dev",
         "type": "git",
-        "url": "ssh://git@github.com/alcxyz/paperless-tools.git"
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       }
     },
     "pre-commit-hooks": {
@@ -989,11 +989,11 @@
     "quicksearch": {
       "flake": false,
       "locked": {
-        "lastModified": 1777358091,
-        "narHash": "sha256-qJ7sVQhb8kf6hYbgQDYbkvP+uHOLXDdPObc+BP17kVg=",
+        "lastModified": 1776887307,
+        "narHash": "sha256-rswmbfSMl0GeKAPxtv7wqwrqPkQinymACLSDK5QE4yg=",
         "owner": "alcxyz",
         "repo": "DankQuickSearch",
-        "rev": "fd5c541f966b3b49fb857abc6e4b62472e5d1df7",
+        "rev": "780bf99b715ff18fd5bafadaa66a228f4be28be4",
         "type": "github"
       },
       "original": {
@@ -1090,11 +1090,11 @@
     "spotify": {
       "flake": false,
       "locked": {
-        "lastModified": 1777358079,
-        "narHash": "sha256-coojsn6RzZRaVbrtRoyv5gAu5VQjF3/nRl+I7dsWHq4=",
+        "lastModified": 1776887309,
+        "narHash": "sha256-QQpx1+ioljVijLM4GBPHjeyPtH/joapbiJL7xDtVN+E=",
         "owner": "alcxyz",
         "repo": "DankSpotify",
-        "rev": "da1a0a79473dc72cd4969c4a37d09575533232b8",
+        "rev": "04dbe03b0192b584a17fd6b2a4ca0eef18e24f63",
         "type": "github"
       },
       "original": {
@@ -1211,11 +1211,11 @@
     "translate": {
       "flake": false,
       "locked": {
-        "lastModified": 1777358100,
-        "narHash": "sha256-CFmqfd2a4vMWgpT6EgPfLcEU/EquW2iaQ6q2wH0cc70=",
+        "lastModified": 1776887311,
+        "narHash": "sha256-ZhcuyjxRK+eaKpThEC51RGGv3jZoipZNMQ/s7VhET1g=",
         "owner": "alcxyz",
         "repo": "DankTranslate",
-        "rev": "a0892945e1e84bdcca1908ee966b3ca50f5eb8b6",
+        "rev": "cc89e7bf554c4a827775dd213767fef881c6e541",
         "type": "github"
       },
       "original": {
@@ -1227,11 +1227,11 @@
     "vault": {
       "flake": false,
       "locked": {
-        "lastModified": 1777358099,
-        "narHash": "sha256-hE1Wpp9T/ircuHLyMEZB6j7pidlbc79ij//jO5yuz0Y=",
+        "lastModified": 1776887306,
+        "narHash": "sha256-ySBoR/SEmHIjy4DXicDueJWTJ9DkRWO0fCiVbTg4KkE=",
         "owner": "alcxyz",
         "repo": "DankVault",
-        "rev": "c60ab6fa627c06d8077280f47e1ed36d823a8e9b",
+        "rev": "f81101662d0974ec2d1d9ceea09db51492ed3a16",
         "type": "github"
       },
       "original": {

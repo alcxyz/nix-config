@@ -9,12 +9,12 @@
 
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
-      url = "git+ssh://git@github.com/alcxyz/nix-secrets.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git";
       flake = false;
     };
 
     nix-packages = {
-      url = "github:alcxyz/nix-packages";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -64,31 +64,31 @@
     };
 
     paperflow = {
-      url = "github:alcxyz/paperflow";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/paperflow.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     paperless-tools = {
-      url = "git+ssh://git@github.com/alcxyz/paperless-tools.git?ref=dev";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     leantime-tidy = {
-      url = "git+ssh://git@github.com/alcxyz/leantime-tidy.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/leantime-tidy.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     grove = {
-      url = "github:alcxyz/grove";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/grove.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     canopy = {
-      url = "github:alcxyz/canopy";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/canopy.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dms-plugins.url = "github:alcxyz/dms-plugins";
+    dms-plugins.url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git";
 
   };
 
