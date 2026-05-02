@@ -73,6 +73,8 @@ transport   = "cli"
 api_key_env = "ANTHROPIC_API_KEY"
 ```
 
+A checked-in reference copy lives at `docs/llm-config.toml.example`.
+
 ### Fields
 
 - `provider`: provider identifier such as `openai` or `anthropic`
