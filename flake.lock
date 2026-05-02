@@ -804,11 +804,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777717232,
-        "narHash": "sha256-Hb5Vnq0VhavvAty4XFgXzVHQMl+4mlHGfevS3WOlqHY=",
+        "lastModified": 1777721435,
+        "narHash": "sha256-LHfCJHrFvwjx6NfUXcKTFqE5w3gH3IUSY2SbzCYt+CI=",
         "ref": "refs/heads/main",
-        "rev": "8d42fa9e45ead2fd3537909cfce8f943933c5371",
-        "revCount": 3,
+        "rev": "91870c06dfdc176225922934133ef09f51f78576",
+        "revCount": 5,
         "type": "git",
         "url": "ssh://git@github.com/alcxyz/leantime-tidy.git"
       },
