@@ -137,6 +137,7 @@
                   "t3code"
                   "claude-code"
                   "devlog"
+                  "agent-sync-check"
                   "omniwm"
                   "zen-browser"
                   "nix-deploy"

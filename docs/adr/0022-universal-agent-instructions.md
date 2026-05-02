@@ -42,8 +42,12 @@ home.file.".claude/CLAUDE.md".source = mkOutOfStoreSymlink
 ### Sync rules
 
 - AGENTS.md is the canonical source. Edits go there first.
-- CLAUDE.md duplicates all universal content plus one Claude-specific rule
-  (no Co-Authored-By trailer).
+- CLAUDE.md duplicates all universal content plus a small explicit
+  Claude-only delta.
+- The currently allowed Claude-only delta is:
+  - Anthropic-specific wording in the secrets section
+  - Claude Agent tool guidance
+  - No `Co-Authored-By` trailer
 - The secrets section is intentionally duplicated in CLAUDE.md because it is
   auto-loaded into Claude's context — a reference to an external file would
   require an explicit read action, creating a window where safety rules are
@@ -77,3 +81,5 @@ the intended relationship where universal rules come first.
 - Adding a new agent tool only requires pointing it at `~/AGENTS.md`.
 - Per-repo AGENTS.md files can be added incrementally as repos adopt the
   convention.
+- Sync enforcement is handled separately; see the follow-on ADR for the
+  packaged `check-agent-sync` tool.

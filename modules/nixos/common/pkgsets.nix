@@ -142,6 +142,7 @@ rec {
       # Misc
       lazydocker
       parallel
+      agent-sync-check
       nix-deploy
     ];
 
