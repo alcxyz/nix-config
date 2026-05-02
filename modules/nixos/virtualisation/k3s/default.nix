@@ -27,6 +27,18 @@ in
       default = [];
       description = "Extra flags to pass to the K3s server/agent binary.";
     };
+
+    serverAddr = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Server URL to join for non-bootstrap server/agent nodes.";
+    };
+
+    tokenFile = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      description = "Path to a file containing the shared k3s server token.";
+    };
   };
 
   # Apply configuration if k3s.enable is true
@@ -35,11 +47,18 @@ in
     services.rpcbind.enable = true;
 
     # Configure K3s service
-    services.k3s = {
-      enable = true;
-      role = cfg.role;
-      extraFlags = cfg.extraFlags;
-    };
+    services.k3s =
+      {
+        enable = true;
+        role = cfg.role;
+        extraFlags = cfg.extraFlags;
+      }
+      // optionalAttrs (cfg.serverAddr != null) {
+        serverAddr = cfg.serverAddr;
+      }
+      // optionalAttrs (cfg.tokenFile != null) {
+        tokenFile = cfg.tokenFile;
+      };
 
     # Configure firewall for K3s
     networking.firewall.allowedTCPPorts = [
