@@ -72,6 +72,8 @@ already happened once. A cheap automated check is justified.
 
 - The duplicate-file safety model remains intact.
 - Sync drift is detectable before or during normal editing workflows.
+- Future instruction audits have a standard manual tool to reach for:
+  `check-agent-sync`.
 - The check is available consistently across hosts once installed via the
   normal package flow.
 - The allowed Claude-only surface is now explicit and reviewable.
