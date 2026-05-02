@@ -47,6 +47,15 @@ in {
             user = "git";
           };
 
+          "ssh.git.alc.xyz" = {
+            user = "git";
+            extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
+          };
+
+          "ssh.nux.alc.xyz" = {
+            extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
+          };
+
           "vps" = {
             hostname = "46.202.150.96";
             user = "root";
