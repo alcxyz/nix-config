@@ -47,12 +47,12 @@ in {
             user = "git";
           };
 
-          "ssh.git.alc.xyz" = {
+          "git-ssh.alc.xyz" = {
             user = "git";
             extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
           };
 
-          "ssh.nux.alc.xyz" = {
+          "nux-ssh.alc.xyz" = {
             extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
           };
 
@@ -69,11 +69,17 @@ in {
     # then the hook replaces it with a chmod 600 copy.
     {
       home.file.".ssh/config".force = true;
-      home.activation.fixSshConfigPermissions = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      home.activation.fixSshConfigPermissions = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+        mkdir -p "$HOME/.ssh"
+        chmod 700 "$HOME/.ssh"
+
         if [ -L "$HOME/.ssh/config" ]; then
           _target=$(readlink "$HOME/.ssh/config")
           rm "$HOME/.ssh/config"
           cp "$_target" "$HOME/.ssh/config"
+        fi
+
+        if [ -f "$HOME/.ssh/config" ]; then
           chmod 600 "$HOME/.ssh/config"
         fi
       '';
