@@ -1,50 +1,97 @@
 #!/usr/bin/env bash
 
-# Restart DMS after display wakes from DPMS sleep to restore OSD overlays.
+# Restart DMS after display wake to restore layer-shell overlays.
 #
-# Strategy: watch Hyprland socket2 for closelayer>>dms:bar (reliable
-# signal that the display went to DPMS sleep), then poll hyprctl for
-# dpmsStatus returning to true.  This avoids the chicken-and-egg problem
-# of the old approach, which waited for openlayer>>dms:bar — an event
-# that never fires when DMS is broken after wake.
+# Hyprland/DMS has failed in a few different ways after monitor sleep:
+# sometimes socket2 emits dpms events, sometimes the reliable symptom is
+# closelayer>>dms:bar, and sometimes the overlay simply never reopens.
+# Treat sleep/wake as state from hyprctl instead of relying on one event.
 
 SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
-COOLDOWN=10  # seconds to ignore closelayer after a restart
+STATE_DIR="$XDG_RUNTIME_DIR/dms-resume-watcher"
+ARM_FILE="$STATE_DIR/armed"
+LOG_TAG="dms-resume-watcher"
+COOLDOWN=10
+
 last_restart=0
 
-restart_dms() {
-  pkill -f "dms run" 2>/dev/null || true
-  sleep 1
-  dms run &
-  last_restart=$(date +%s)
+mkdir -p "$STATE_DIR"
+
+log() {
+  logger -t "$LOG_TAG" -- "$*"
 }
 
-wait_for_dpms_on() {
-  while true; do
-    sleep 2
-    dpms=$(hyprctl monitors -j | jq -r '.[0].dpmsStatus' 2>/dev/null)
-    if [[ "$dpms" == "true" ]]; then
-      return
+mark_armed() {
+  : > "$ARM_FILE"
+}
+
+monitor_awake() {
+  hyprctl monitors -j 2>/dev/null |
+    jq -e 'length > 0 and any(.[]; (.disabled | not) and .dpmsStatus == true)' >/dev/null
+}
+
+wait_for_stable_wake() {
+  local checks=0
+
+  while (( checks < 2 )); do
+    sleep 1
+    if monitor_awake; then
+      ((checks++))
+    else
+      checks=0
     fi
   done
 }
 
+restart_dms() {
+  log "restarting DMS after display wake"
+  dms kill >/dev/null 2>&1 || true
+  pkill -f '(^|/)dms( .*)? run' 2>/dev/null || true
+  sleep 1
+  setsid -f dms run >/tmp/dms-resume-watcher.log 2>&1
+  last_restart=$(date +%s)
+}
+
+watch_socket() {
+  while true; do
+    while IFS= read -r line; do
+      case "$line" in
+        dpms\>\>off* | monitorremoved\>\>* | "closelayer>>dms:bar")
+          mark_armed
+          ;;
+      esac
+    done < <(socat -U - UNIX-CONNECT:"$SOCKET" 2>/dev/null)
+
+    sleep 3
+  done
+}
+
+watch_socket &
+socket_watcher_pid=$!
+trap 'kill "$socket_watcher_pid" 2>/dev/null || true' EXIT
+
+armed=0
+
 while true; do
-  while IFS= read -r line; do
-    case "$line" in
-      "closelayer>>dms:bar")
-        now=$(date +%s)
-        if (( now - last_restart < COOLDOWN )); then
-          # Ignore closelayer fired by our own pkill.
-          continue
-        fi
-        # Display went to sleep — poll until DPMS comes back on, then restart.
-        wait_for_dpms_on
-        sleep 2
-        restart_dms
-        ;;
-    esac
-  done < <(socat -U - UNIX-CONNECT:"$SOCKET" 2>/dev/null)
-  # socat exited (socket temporarily unavailable) — retry
-  sleep 3
+  if [[ -e "$ARM_FILE" ]]; then
+    armed=1
+    rm -f "$ARM_FILE"
+  fi
+
+  if ! monitor_awake; then
+    armed=1
+    sleep 2
+    continue
+  fi
+
+  if (( armed )); then
+    now=$(date +%s)
+    if (( now - last_restart >= COOLDOWN )); then
+      wait_for_stable_wake
+      restart_dms
+    fi
+    armed=0
+  fi
+
+  sleep 2
 done
