@@ -39,6 +39,12 @@ in
       default = null;
       description = "Path to a file containing the shared k3s server token.";
     };
+
+    clusterInit = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Initialize or migrate the cluster to embedded etcd on this server.";
+    };
   };
 
   # Apply configuration if k3s.enable is true
@@ -58,17 +64,19 @@ in
       }
       // optionalAttrs (cfg.tokenFile != null) {
         tokenFile = cfg.tokenFile;
+      }
+      // optionalAttrs cfg.clusterInit {
+        clusterInit = true;
       };
 
     # Configure firewall for K3s
     networking.firewall.allowedTCPPorts = [
       6443 # K3s API Server
-      # Optional K3s etcd ports if not using embedded etcd or for specific setups
-      # 2379 # K3s etcd client ports
-      # 2380 # K3s etcd peer ports
+      2379 # K3s etcd client port
+      2380 # K3s etcd peer port
     ];
     networking.firewall.allowedUDPPorts = [
-      # 8472 # Flannel VXLAN backend (if used, often enabled by default)
+      8472 # Flannel VXLAN backend
     ];
 
     # Ensure the k3s package is available in the system environment
