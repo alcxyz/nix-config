@@ -5,6 +5,42 @@ let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  hostSopsFile = (
+    assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
+    "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
+  );
+  operatorSshKeysFile = (
+    assert builtins.pathExists "${inputs.nix-secrets}/operators/ssh_keys.yaml";
+    "${inputs.nix-secrets}/operators/ssh_keys.yaml"
+  );
+  operatorSshKeyPairs = lib.optionals (hostName == "xyz") [
+    "aur_key"
+    "aur_paperflow"
+    "docker"
+    "github_actions_vps"
+  ];
+  operatorSshSecrets = lib.listToAttrs (
+    lib.concatMap (name: [
+      {
+        name = "ssh.operator.${name}.private";
+        value = {
+          sopsFile = operatorSshKeysFile;
+          key = "ssh_${name}";
+          path = ".ssh/${name}";
+          mode = "0600";
+        };
+      }
+      {
+        name = "ssh.operator.${name}.public";
+        value = {
+          sopsFile = operatorSshKeysFile;
+          key = "ssh_${name}.pub";
+          path = ".ssh/${name}.pub";
+          mode = "0644";
+        };
+      }
+    ]) operatorSshKeyPairs
+  );
 in
 
 with lib;
@@ -105,24 +141,18 @@ with lib;
     # age.sshKeyPaths = [ "${config.home.homeDirectory}/.ssh/id_ed25519" ];
     secrets = {
       "ssh.${hostName}.private" = {
-        sopsFile = (
-          assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
-          "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
-        );
+        sopsFile = hostSopsFile;
         key = "ssh_id_ed25519";
         path = ".ssh/id_ed25519";
         mode = "0600";
       };
       "ssh.${hostName}.public" = {
-        sopsFile = (
-          assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
-          "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
-        );
+        sopsFile = hostSopsFile;
         key = "ssh_id_ed25519.pub";
         path = ".ssh/id_ed25519.pub";
         mode = "0644";
       };
-    };
+    } // operatorSshSecrets;
   };
 
   # Generate and manage the age key file
