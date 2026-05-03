@@ -35,7 +35,7 @@
 
   sops.secrets = {
     k3s_server_token = {
-      sopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
+      sopsFile = "${inputs.nix-secrets}/cluster-bootstrap/secrets.yaml";
       key = "k3s_server_token";
       owner = "root";
       group = "root";

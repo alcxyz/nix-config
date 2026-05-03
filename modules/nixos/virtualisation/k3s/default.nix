@@ -79,6 +79,14 @@ in
       8472 # Flannel VXLAN backend
     ];
 
+    # Pod and service traffic traverses the node over the CNI bridge and
+    # flannel overlay. Treat those interfaces as trusted so cross-node
+    # cluster traffic is not filtered like regular host ingress.
+    networking.firewall.trustedInterfaces = [
+      "cni0"
+      "flannel.1"
+    ];
+
     # Ensure the k3s package is available in the system environment
     environment.systemPackages = [ pkgs.k3s ];
   };

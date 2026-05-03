@@ -45,7 +45,7 @@ in
 
     # ---------- sops secret ----------
     sops.secrets.pihole_secret_key = {
-      sopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
+      sopsFile = "${inputs.nix-secrets}/apps/secrets.yaml";
       owner = cfg.user;
       group = "root";
       mode = "0400";
