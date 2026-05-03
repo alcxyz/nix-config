@@ -262,13 +262,11 @@ rec {
       kdePackages.kdenlive
       libreoffice
       calibre
-      rustdesk
       gimp3-with-plugins
       cameractrls
       cameractrls-gtk4
       winetricks
       wineWow64Packages.waylandFull
-      lens
       nautilus
     ];
 

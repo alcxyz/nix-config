@@ -1,27 +1,28 @@
 # nix-config/modules/nixos/common/default.nix
-{ config, pkgs, inputs, username, hostName, configDir, lib, ... }:
+{
+  config,
+  pkgs,
+  inputs,
+  username,
+  hostName,
+  configDir,
+  lib,
+  ...
+}:
 
 let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
 
-  alc_xyz_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM9g7HJbiqvmCZRZF5z5g9J/VLI91p7RpXipA9eWHX2q alc@xyz";
-  alc_mac_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@mac";
-  alc_iphone_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0 terminus@iphone";
-  alc_nux_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
-  alc_rpi0_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
-  root_nux_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICmkdBBUyxWpdARfACmw6+P3yOfo0RKfK3JfRJMX+NYW root@nux";
-  root_rpi0_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzVGF4OpgIzykRlY6jK4Qw9VIauCBd3aECraqvBntv9 root@rpi0";
-  docker_app_key =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
+  alc_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM9g7HJbiqvmCZRZF5z5g9J/VLI91p7RpXipA9eWHX2q alc@xyz";
+  alc_mac_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@mac";
+  alc_iphone_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0 terminus@iphone";
+  alc_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
+  alc_rpi0_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
+  root_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICmkdBBUyxWpdARfACmw6+P3yOfo0RKfK3JfRJMX+NYW root@nux";
+  root_rpi0_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzVGF4OpgIzykRlY6jK4Qw9VIauCBd3aECraqvBntv9 root@rpi0";
+  docker_app_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
 in
 
 {
@@ -32,13 +33,22 @@ in
   # ==================== Nix Configuration ====================
   nix = {
     settings = {
-      experimental-features = [ "nix-command" "flakes" ];
+      experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
       accept-flake-config = true;
       warn-dirty = false;
       sandbox = true;
       auto-optimise-store = true;
-      trusted-users = [ "root" username ];
-      allowed-users = [ "root" username ];
+      trusted-users = [
+        "root"
+        username
+      ];
+      allowed-users = [
+        "root"
+        username
+      ];
       substituters = [
         "https://cache.nixos.org"
         "https://nix-community.cachix.org"
@@ -62,16 +72,22 @@ in
   i18n.defaultLocale = "en_US.UTF-8";
   time.timeZone = "Europe/Oslo";
   console.useXkbConfig = true;
-  services.xserver.xkb = { layout = "us"; };
+  services.xserver.xkb = {
+    layout = "us";
+  };
 
   # ==================== Boot Configuration ====================
-  boot.loader = if pkgs.stdenv.isAarch64 then {
-    systemd-boot.enable = false;
-    generic-extlinux-compatible.enable = true;
-  } else {
-    systemd-boot.enable = true;
-    efi.canTouchEfiVariables = true;
-  };
+  boot.loader =
+    if pkgs.stdenv.isAarch64 then
+      {
+        systemd-boot.enable = false;
+        generic-extlinux-compatible.enable = true;
+      }
+    else
+      {
+        systemd-boot.enable = true;
+        efi.canTouchEfiVariables = true;
+      };
 
   boot.initrd.systemd.enable = true;
 
@@ -109,7 +125,7 @@ in
 
       root = {
         shell = pkgs.bashInteractive;
-        openssh.authorizedKeys.keys = [ 
+        openssh.authorizedKeys.keys = [
           root_nux_key
           root_rpi0_key
           alc_xyz_key
@@ -153,11 +169,11 @@ in
   # ==================== Security ====================
   security.sudo.enable = true;
   services.pcscd.enable = true;
-  
+
   # libfido2 ships udev rules that reference the traditional "plugdev" group.
   # We keep libfido2 for FIDO2/YubiKey support and create the group to avoid
   # udev warnings on NixOS.
-  users.groups.plugdev = {};
+  users.groups.plugdev = { };
 
   services.udev.packages = [ pkgs.libfido2 ];
 
@@ -199,24 +215,6 @@ in
     alsa.support32Bit = true;
     wireplumber.enable = true;
     pulse.enable = true;
-
-    # Passive null sink for wcap (window capture with audio isolation).
-    # Inert by default — wcap dynamically routes streams here at recording time.
-    extraConfig.pipewire."30-wcap-sink" = {
-      "context.objects" = [
-        {
-          factory = "spa-node-factory";
-          args = {
-            "factory.name" = "support.null-audio-sink";
-            "node.name" = "wcap-sink";
-            "node.description" = "wcap recording sink";
-            "media.class" = "Audio/Sink";
-            "audio.channels" = 2;
-            "audio.position" = [ "FL" "FR" ];
-          };
-        }
-      ];
-    };
   };
   services.pulseaudio.enable = false;
 

@@ -17,7 +17,7 @@ The AMD iGPU is forced as the exclusive display and compositor GPU via environme
 
 ```nix
 environment.sessionVariables = {
-  AQ_DRM_DEVICES              = "/dev/dri/card1";  # Hyprland: use AMD DRM node only
+  AQ_DRM_DEVICES              = "/dev/dri/amd-display-card";  # Hyprland: use AMD DRM node only
   __EGL_VENDOR_LIBRARY_FILENAMES = "${pkgs.mesa.drivers}/share/glvnd/egl_vendor.d/50_mesa.json";
   __GLX_VENDOR_LIBRARY_NAME   = "mesa";             # Force Mesa over NVIDIA GLVND
   LIBVA_DRIVER_NAME           = "radeonsi";         # Force AMD VA-API driver
@@ -25,6 +25,8 @@ environment.sessionVariables = {
 ```
 
 Both `nvidia.nix` and `amd.nix` hardware modules are imported simultaneously — the NVIDIA driver remains active for CUDA and container GPU access via CDI; only the display and VA-API pipeline is locked to AMD.
+
+The `/dev/dri/amd-display-card` symlink is created by a udev rule that matches PCI slot `0000:71:00.0`, PCI ID `1002:13C0`, and the `amdgpu` driver. A `gpu-display-guard` systemd service runs before `greetd` and fails the greeter startup if that symlink is missing, resolves to another PCI device, has a different PCI ID, or is not bound to `amdgpu`.
 
 ## Alternatives Considered
 
@@ -37,5 +39,6 @@ Both `nvidia.nix` and `amd.nix` hardware modules are imported simultaneously —
 - Hyprland and the display stack remain stable during GPU passthrough — they never touch the NVIDIA device; the AMD iGPU drives the compositor at all times.
 - VA-API hardware video decoding reliably uses the AMD GPU via `radeonsi`, which is well-supported by Mesa.
 - The NVIDIA GPU is not used for display or VA-API on the host. CUDA and container GPU access still function via the NVIDIA driver and CDI.
-- `/dev/dri/card1` is assumed to be the AMD DRM node. If kernel or driver load order changes cause the node numbering to shift, Hyprland will fail to start. Verify with `ls -la /dev/dri/by-path/` if this occurs.
+- The AMD DRM node is referenced through `/dev/dri/amd-display-card`, not `/dev/dri/card*`, because card numbering can change between boots.
+- If the AMD iGPU PCI address or driver binding changes, login setup fails early with a clear `gpu-display-guard` journal error instead of letting Hyprland crash through Aquamarine.
 - Do not remove these environment variables — they are not cosmetic. Without them, Hyprland and the NVIDIA GLVND will race for the NVIDIA GPU, breaking the display when it is passed through to the VM.
