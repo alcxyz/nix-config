@@ -210,14 +210,10 @@ rec {
       ansible
     ];
 
-    # Kubernetes / cloud-native CLI tools
-    k8s = with pkgs; [
-      kubectl
-      kubernetes-helm
-      fluxcd
-      k9s
-      kubeswitch
-    ];
+    # Kubernetes / cloud-native CLI tools are installed by
+    # modules/home-manager/programs/kubernetes/default.nix so they can be
+    # wrapped with per-command KUBECONFIG handling.
+    k8s = [ ];
 
     ai = with pkgs; [
       #gemini-cli

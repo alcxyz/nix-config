@@ -143,17 +143,6 @@ in
     lib.replaceStrings [ "@osIcon@" ] [ osIcon ] template;
 
   home.shellAliases = {
-    k = "kubectl";
-    ka = "kubectl apply -f";
-    kg = "kubectl get";
-    kd = "kubectl describe";
-    kdel = "kubectl delete";
-    kgpo = "kubectl get pod";
-    kgd = "kubectl get deployments";
-    kc = "switcher";
-    kns = "switcher ns";
-    kl = "kubectl logs -f";
-    ke = "kubectl exec -it";
     tf = "terraform";
     v = "nvim";
     d = "docker";

@@ -1,5 +1,15 @@
 # users/alc/common.nix
-{ config, pkgs, lib, username, hostName, configDir, inputs, system, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  username,
+  hostName,
+  configDir,
+  inputs,
+  system,
+  ...
+}:
 
 let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
@@ -53,6 +63,7 @@ with lib;
     "${configDir}/modules/home-manager/shell/default.nix"
     #"${configDir}/modules/home-manager/programs/wezterm/default.nix"
     "${configDir}/modules/home-manager/programs/git/default.nix"
+    "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
     "${configDir}/modules/home-manager/programs/ssh/default.nix"
     #../../modules/home-manager/secrets/ssh-keys.nix
   ];
@@ -60,9 +71,7 @@ with lib;
   # ==================== Home Manager Core Settings ====================
   home.username = username;
   # This still needs a conditional, as `homeDirectory` is fundamentally different!
-  home.homeDirectory = if pkgs.stdenv.isDarwin
-                       then "/Users/${username}"
-                       else "/home/${username}";
+  home.homeDirectory = if pkgs.stdenv.isDarwin then "/Users/${username}" else "/home/${username}";
   home.stateVersion = "24.11";
 
   programs.home-manager.enable = true;
@@ -85,25 +94,23 @@ with lib;
   };
 
   # ==================== Packages ====================
-  home.packages =
-    pkgsets.hm.base
-    ++ [
+  home.packages = pkgsets.hm.base ++ [
     inputs.grove.packages.${pkgs.stdenv.hostPlatform.system}.default
     inputs.canopy.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
   # ==================== Symlinked configs (live editing, all hosts) ====================
-  xdg.configFile."television".source = config.lib.file.mkOutOfStoreSymlink
-    "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/television";
+  xdg.configFile."television".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/television";
 
-  xdg.configFile."llm/config.toml".source = config.lib.file.mkOutOfStoreSymlink
-    "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/llm/config.toml";
+  xdg.configFile."llm/config.toml".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/llm/config.toml";
 
-  home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink
-    "${config.home.homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";
+  home.file.".claude/CLAUDE.md".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";
 
-  home.file."AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink
-    "${config.home.homeDirectory}/nix/nix-secrets/shared/AGENTS.md";
+  home.file."AGENTS.md".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-secrets/shared/AGENTS.md";
 
   # ==================== Files ====================
   home.file = {
@@ -128,11 +135,10 @@ with lib;
   # Forgejo credential helper — moved to linux/common.nix and darwin/mac.nix
   # where the sops secret path is available for inline injection.
 
-
   #programs.wezterm.enable = true;
 
   programs.ncspot.enable = true;
-  
+
   # ==================== Sops with age over ssh ====================
   # Deploy user-level SSH keypair from sops
   sops = {
@@ -152,7 +158,8 @@ with lib;
         path = ".ssh/id_ed25519.pub";
         mode = "0644";
       };
-    } // operatorSshSecrets;
+    }
+    // operatorSshSecrets;
   };
 
   # Generate and manage the age key file
@@ -163,7 +170,6 @@ with lib;
       chmod 600 $HOME/.config/sops/age/keys.txt
     fi
   '';
-
 
   # Configure Forgejo as the local primary remote for repos that exist on
   # Forgejo. Runs on every home-manager switch; skips silently when offline.
