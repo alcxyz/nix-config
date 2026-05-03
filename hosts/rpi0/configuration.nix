@@ -23,6 +23,16 @@
 
   zramSwap.enable = true;
 
+  # Keep the HA join ports explicit on the host while we bring rpi0 into the
+  # embedded-etcd control plane. This avoids relying solely on shared-module
+  # firewall state during bootstrap/debug cycles.
+  networking.firewall.allowedTCPPorts = [
+    2379
+    2380
+    6443
+  ];
+  networking.firewall.allowedUDPPorts = [ 8472 ];
+
   sops.secrets = {
     k3s_server_token = {
       sopsFile = "${inputs.nix-secrets}/shared/secrets.yaml";
