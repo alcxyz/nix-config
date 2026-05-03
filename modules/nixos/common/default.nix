@@ -23,6 +23,20 @@ let
   root_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICmkdBBUyxWpdARfACmw6+P3yOfo0RKfK3JfRJMX+NYW root@nux";
   root_rpi0_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzVGF4OpgIzykRlY6jK4Qw9VIauCBd3aECraqvBntv9 root@rpi0";
   docker_app_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
+  humanLoginKeys = [
+    alc_xyz_key
+    alc_nux_key
+    alc_rpi0_key
+    alc_mac_key
+  ];
+  mobileAppKeys = [
+    alc_iphone_key
+    docker_app_key
+  ];
+  xyzDistributedBuildClientKeys = [
+    root_nux_key
+    root_rpi0_key
+  ];
 in
 
 {
@@ -112,27 +126,14 @@ in
         ];
 
         openssh.authorizedKeys.keys = [
-          root_nux_key
-          root_rpi0_key
-          alc_xyz_key
-          alc_nux_key
-          alc_rpi0_key
-          alc_mac_key
-          alc_iphone_key
-          docker_app_key
-        ];
+        ] ++ humanLoginKeys ++ mobileAppKeys;
       };
 
       root = {
         shell = pkgs.bashInteractive;
-        openssh.authorizedKeys.keys = [
-          root_nux_key
-          root_rpi0_key
-          alc_xyz_key
-          alc_nux_key
-          alc_rpi0_key
-          alc_mac_key
-        ];
+        openssh.authorizedKeys.keys =
+          humanLoginKeys
+          ++ lib.optionals (hostName == "xyz") xyzDistributedBuildClientKeys;
       };
     };
   };
