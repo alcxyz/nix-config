@@ -29,6 +29,11 @@ nix.distributedBuilds = true;
 
 A dedicated SSH key (`/root/.ssh/id_buildhost_xyz`) is used exclusively for build authentication. aarch64 support on xyz is provided via binfmt/QEMU emulation.
 
+The build-client private key is stored per server host in `nix-secrets` under
+`hosts/<host>/secrets.yaml` as `ssh_buildhost_xyz`, then deployed by
+`modules/nixos/common/server.nix` to `/root/.ssh/id_buildhost_xyz`. The matching
+public keys are authorized only for `root@xyz`.
+
 ## Alternatives Considered
 
 - **Native builds on each host** — Rejected for rpi0. Compilation of non-trivial packages on ARM takes orders of magnitude longer; a full system rebuild would be impractical.
@@ -39,5 +44,7 @@ A dedicated SSH key (`/root/.ssh/id_buildhost_xyz`) is used exclusively for buil
 
 - Deployments for nux and rpi0 are fast and practical, including full system rebuilds for rpi0.
 - Server deployments depend on xyz being online. If xyz is unreachable, builds fall back to local execution — slow on rpi0, acceptable on nux for most packages.
-- The build SSH key must be provisioned on fresh server installs before distributed builds function. There is no automated key deployment; it is a manual bootstrap step.
+- The build SSH key is declaratively deployed from each server host's SOPS file.
+  Fresh installs still need enough SOPS bootstrap material to decrypt host
+  secrets, but the build key itself is no longer a manual root dotfile.
 - xyz's own builds are local — only hosts importing `server.nix` have distributed builds configured. Do not remove `nix.distributedBuilds` from `server.nix` assuming it is inactive.

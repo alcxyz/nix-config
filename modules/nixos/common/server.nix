@@ -19,6 +19,27 @@ in
   environment.systemPackages = pkgsets.system.server;
 
   # ==================== Distributed Builds ====================
+  systemd.tmpfiles.rules = [
+    "d /root/.ssh 0700 root root - -"
+  ];
+
+  sops.secrets = {
+    buildhost_xyz_private_key = {
+      key = "ssh_buildhost_xyz";
+      path = "/root/.ssh/id_buildhost_xyz";
+      owner = "root";
+      group = "root";
+      mode = "0600";
+    };
+    buildhost_xyz_public_key = {
+      key = "ssh_buildhost_xyz.pub";
+      path = "/root/.ssh/id_buildhost_xyz.pub";
+      owner = "root";
+      group = "root";
+      mode = "0644";
+    };
+  };
+
   nix = {
     distributedBuilds = true;
     buildMachines = [
