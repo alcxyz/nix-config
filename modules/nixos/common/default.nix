@@ -20,6 +20,7 @@ let
   alc_iphone_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0 terminus@iphone";
   alc_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
   alc_rpi0_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
+  alc_yubikey_sk_key = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIMDqhZG24+O0aJzsfiRY1AbNHcb62apx2F7DPTAJf9olAAAABHNzaDo=";
   nux_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOCqmPEzDy4Nc2ZcRggLVAfYsay6dMoPJrVBR52MskrD nix-build@nux-to-xyz";
   rpi0_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBtfjE0ipO2T87jT0FB+CpMDpKPCSrehWlYmKUZN6txF nix-build@rpi0-to-xyz";
   docker_app_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
@@ -28,6 +29,7 @@ let
     alc_nux_key
     alc_rpi0_key
     alc_mac_key
+    alc_yubikey_sk_key
   ];
   mobileAppKeys = [
     alc_iphone_key
