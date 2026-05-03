@@ -61,7 +61,7 @@ in
           StandardOutput = "journal";
           StandardError = "journal";
           Environment = [
-            "PATH=${lib.makeBinPath [ pkgs.git pkgs.gh pkgs.claude-code pkgs.coreutils pkgs.bash pkgs.openssh ]}"
+            "PATH=${lib.makeBinPath [ pkgs.git pkgs.gh pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.bash pkgs.openssh ]}"
             "HOME=${config.home.homeDirectory}"
             "SSH_AUTH_SOCK=%t/ssh-agent"
           ];
@@ -89,7 +89,7 @@ in
           StandardError = "journal";
           Environment = [
             "PATH=${lib.makeBinPath ([
-              pkgs.git pkgs.claude-code pkgs.coreutils pkgs.openssh
+              pkgs.git pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.openssh
             ] ++ lib.optionals cfg.weekly.hedgedoc.enable [
               pkgs.sops pkgs.age
             ])}"
