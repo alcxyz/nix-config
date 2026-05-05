@@ -1,12 +1,19 @@
 # nix-config/hosts/rpi0/configuration.nix
-{ config, pkgs, inputs, username, lib, configDir, ... }:
-
 {
+  config,
+  pkgs,
+  inputs,
+  username,
+  lib,
+  configDir,
+  ...
+}: {
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
+    "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
   boot.loader.grub.enable = false;
@@ -23,6 +30,8 @@
 
   zramSwap.enable = true;
 
+  services.netbird.managed.enable = true;
+
   # Keep the HA join ports explicit on the host while we bring rpi0 into the
   # embedded-etcd control plane. This avoids relying solely on shared-module
   # firewall state during bootstrap/debug cycles.
@@ -31,7 +40,7 @@
     2380
     6443
   ];
-  networking.firewall.allowedUDPPorts = [ 8472 ];
+  networking.firewall.allowedUDPPorts = [8472];
 
   sops.secrets = {
     k3s_server_token = {
@@ -51,5 +60,4 @@
       "--node-taint=node-role.kubernetes.io/control-plane=true:NoSchedule"
     ];
   };
-
 }
