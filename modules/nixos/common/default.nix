@@ -17,6 +17,7 @@
   alc_mac_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@mac";
   alc_iphone_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0 terminus@iphone";
   alc_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
+  alc_nex_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIME9egqxg1z9e+Ef8M6866vlmjV7erNpfKJvSg+x/btI alc@nex";
   alc_rpi0_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
   alc_yubikey_sk_key = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIMDqhZG24+O0aJzsfiRY1AbNHcb62apx2F7DPTAJf9olAAAABHNzaDo=";
   nux_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOCqmPEzDy4Nc2ZcRggLVAfYsay6dMoPJrVBR52MskrD nix-build@nux-to-xyz";
@@ -26,6 +27,7 @@
   humanLoginKeys = [
     alc_xyz_key
     alc_nux_key
+    alc_nex_key
     alc_rpi0_key
     alc_mac_key
     alc_yubikey_sk_key

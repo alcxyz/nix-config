@@ -37,4 +37,6 @@
   services.netbird.managed.enable = true;
 
   nix.settings.max-jobs = 1; # prefer xyz for builds, but allow local fallback
+
+  networking.hosts."192.168.1.16" = ["nex"];
 }
