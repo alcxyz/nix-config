@@ -1,6 +1,7 @@
 # nix-config/hosts/nex/configuration.nix
 {
   config,
+  pkgs,
   inputs,
   configDir,
   ...
@@ -14,6 +15,7 @@
   ];
 
   boot.initrd.systemd.enable = true;
+  boot.kernelPackages = pkgs.linuxPackages_latest;
 
   sops.secrets = {
     k3s_server_token = {
