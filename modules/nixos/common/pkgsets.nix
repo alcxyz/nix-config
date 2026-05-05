@@ -133,6 +133,7 @@ rec {
       git
       git-remote-gcrypt
       forge-mirror
+      forge-cli
       gh
       gh-dash
       lazygit
