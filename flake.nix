@@ -171,38 +171,13 @@
         }
     );
 
-    # ----- Host definitions ------------------------------------------------
-    # Add / remove hosts here; each host points to its NixOS config file.
-    nixosHosts = {
-      xyz = {
-        system = "x86_64-linux";
-        configuration = ./hosts/xyz/configuration.nix;
-        osIcon = "";
-      };
-      nux = {
-        system = "x86_64-linux";
-        configuration = ./hosts/nux/configuration.nix;
-        osIcon = "";
-      };
-      nex = {
-        system = "x86_64-linux";
-        configuration = ./hosts/nex/configuration.nix;
-        osIcon = "";
-      };
-      rpi0 = {
-        system = "aarch64-linux";
-        configuration = ./hosts/rpi0/configuration.nix;
-        osIcon = "";
-      };
-    };
+    inventory = import ./inventory.nix;
+    inventoryHosts = inventory.hosts;
 
-    darwinHosts = {
-      mac = {
-        system = "aarch64-darwin";
-        configuration = ./hosts/mac/configuration.nix;
-        osIcon = "";
-      };
-    };
+    # ----- Host definitions ------------------------------------------------
+    # Add / remove hosts in inventory.nix.
+    nixosHosts = lib.filterAttrs (_: hostAttrs: hostAttrs.platform == "nixos") inventoryHosts;
+    darwinHosts = lib.filterAttrs (_: hostAttrs: hostAttrs.platform == "darwin") inventoryHosts;
 
     # ---- Build NixOS systems ------------------------------------------------
     allNixosSystems =
@@ -211,8 +186,14 @@
           nixpkgs.lib.nixosSystem {
             # Provide host-specific specialArgs; pass pkgs for that system
             specialArgs = {
-              inherit inputs hostName username;
+              inherit inputs inventory hostName username;
               configDir = self;
+              hostInventory = hostAttrs;
+              hostRole = inventory.roles.${hostAttrs.role};
+              hostK8sRole =
+                if hostAttrs.k8sRole == null
+                then null
+                else inventory.k8sRoles.${hostAttrs.k8sRole};
             };
             modules = [
               nixpkgs.nixosModules.readOnlyPkgs
@@ -230,8 +211,11 @@
         hostName: hostAttrs:
           darwin.lib.darwinSystem {
             specialArgs = {
-              inherit inputs hostName username;
+              inherit inputs inventory hostName username;
               configDir = self;
+              hostInventory = hostAttrs;
+              hostRole = inventory.roles.${hostAttrs.role};
+              hostK8sRole = null;
               pkgs = pkgsFor.${hostAttrs.system};
             };
             modules = [
@@ -245,21 +229,28 @@
 
     # ---- Home Manager configurations ---------------------------------------
     # Use the same unstable pkgs for Home Manager so user modules match packages.
-    mkHomeConfiguration = system: homeConfigPath: hostName: osIcon:
+    mkHomeConfiguration = hostName: hostAttrs: homeConfigPath:
       home-manager.lib.homeManagerConfiguration {
         # key: make Home Manager use the same pkgsFor (unstable pkgs)
-        pkgs = pkgsFor.${system};
+        pkgs = pkgsFor.${hostAttrs.system};
 
         extraSpecialArgs = {
           # make inputs and some helper values available inside HM modules
           inherit
             inputs
+            inventory
             username
-            system
             hostName
-            osIcon
             ;
           configDir = self;
+          system = hostAttrs.system;
+          osIcon = hostAttrs.osIcon;
+          hostInventory = hostAttrs;
+          hostRole = inventory.roles.${hostAttrs.role};
+          hostK8sRole =
+            if hostAttrs.k8sRole == null
+            then null
+            else inventory.k8sRoles.${hostAttrs.k8sRole};
         };
 
         # Load the host-specific home config and some shared HM modules
@@ -275,8 +266,7 @@
         lib.mapAttrs' (
           hostName: hostAttrs:
             lib.nameValuePair "${username}-${hostName}" (
-              mkHomeConfiguration hostAttrs.system ./users/${username}/linux/${hostName}.nix hostName
-              hostAttrs.osIcon
+              mkHomeConfiguration hostName hostAttrs ./users/${username}/linux/${hostName}.nix
             )
         )
         nixosHosts;
@@ -285,8 +275,7 @@
         lib.mapAttrs' (
           hostName: hostAttrs:
             lib.nameValuePair "${username}-${hostName}" (
-              mkHomeConfiguration hostAttrs.system ./users/${username}/darwin/${hostName}.nix hostName
-              hostAttrs.osIcon
+              mkHomeConfiguration hostName hostAttrs ./users/${username}/darwin/${hostName}.nix
             )
         )
         darwinHosts;

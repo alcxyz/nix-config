@@ -1,13 +1,19 @@
 # modules/nixos/virtualisation/k3s/default.nix
-{ config, pkgs, lib, ... }:
-
-with lib;
-
-let
+{
+  config,
+  pkgs,
+  lib,
+  hostK8sRole ? null,
+  ...
+}:
+with lib; let
   # Define options specifically for K3s
   cfg = config.k3s; # Using a top-level 'k3s' option for clarity
-in
-{
+  roleDefault =
+    if hostK8sRole == null
+    then "server"
+    else hostK8sRole.role;
+in {
   # Define the NixOS options for this module
   options.k3s = {
     enable = mkOption {
@@ -17,8 +23,8 @@ in
     };
 
     role = mkOption {
-      type = types.enum [ "server" "agent" ];
-      default = "server";
+      type = types.enum ["server" "agent"];
+      default = roleDefault;
       description = "The role of this node in the K3s cluster.";
     };
 
@@ -49,6 +55,11 @@ in
 
   # Apply configuration if k3s.enable is true
   config = mkIf cfg.enable {
+    assertions = optional (hostK8sRole != null) {
+      assertion = cfg.role == hostK8sRole.role;
+      message = "k3s.role for ${config.networking.hostName} must match inventory k8sRole (${hostK8sRole.role}).";
+    };
+
     # Ensure rpcbind is enabled, often a dependency for Kubernetes components
     services.rpcbind.enable = true;
 
@@ -88,6 +99,6 @@ in
     ];
 
     # Ensure the k3s package is available in the system environment
-    environment.systemPackages = [ pkgs.k3s ];
+    environment.systemPackages = [pkgs.k3s];
   };
 }

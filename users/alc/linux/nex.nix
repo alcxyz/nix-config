@@ -3,6 +3,7 @@
   inputs,
   configDir,
   pkgs,
+  hostRole,
   ...
 }: let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
@@ -11,5 +12,5 @@
 in {
   imports = ["${configDir}/users/alc/linux/common.nix"];
 
-  home.packages = pkgsets.home.nuc;
+  home.packages = pkgsets.home.${hostRole.homePackageSet};
 }

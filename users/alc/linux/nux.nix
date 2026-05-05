@@ -1,15 +1,17 @@
 # users/alc/linux/nux.nix
-{ inputs, configDir, pkgs, ... }:
-
-let
+{
+  inputs,
+  configDir,
+  pkgs,
+  hostRole,
+  ...
+}: let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
-in
-
-{
+in {
   # Import the common Linux configuration.
-  imports = [ "${configDir}/users/alc/linux/common.nix" ];
+  imports = ["${configDir}/users/alc/linux/common.nix"];
 
-  home.packages = pkgsets.home.nuc;
+  home.packages = pkgsets.home.${hostRole.homePackageSet};
 }

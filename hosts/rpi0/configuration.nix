@@ -53,7 +53,6 @@
 
   k3s = {
     enable = true;
-    role = "server";
     serverAddr = "https://192.168.1.15:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
     extraFlags = [
