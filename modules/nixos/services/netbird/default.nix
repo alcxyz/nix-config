@@ -12,6 +12,10 @@
 }:
 with lib; let
   cfg = config.services.netbird.managed;
+  setupKeyFile =
+    if cfg.setupKeyFile != null
+    then cfg.setupKeyFile
+    else config.sops.secrets.netbird_setup_key.path;
 in {
   options.services.netbird.managed = {
     enable = mkEnableOption "Netbird mesh VPN client";
@@ -39,22 +43,39 @@ in {
       group = "root";
     };
 
-    services.netbird.clients.default.login = {
-      enable = true;
-      setupKeyFile =
-        if cfg.setupKeyFile != null
-        then cfg.setupKeyFile
-        else config.sops.secrets.netbird_setup_key.path;
-      systemdDependencies = ["sops-nix.service"];
-    };
+    services.netbird.clients.default.login.enable = false;
 
-    systemd.services.netbird-login.restartTriggers = [
-      config.sops.secrets.netbird_setup_key.path
-    ];
+    systemd.services.netbird-managed-login = {
+      description = "NetBird setup-key login";
+      after = ["netbird.service" "sops-nix.service"];
+      requires = ["netbird.service" "sops-nix.service"];
+      wantedBy = ["multi-user.target"];
+      restartTriggers = [setupKeyFile];
+      path = [config.services.netbird.package pkgs.coreutils pkgs.gnugrep];
+
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+
+      script = ''
+        status="$(netbird status 2>&1 || true)"
+
+        if printf '%s\n' "$status" | grep -q ': Connected'; then
+          exit 0
+        fi
+
+        if printf '%s\n' "$status" | grep -qi 'expired'; then
+          netbird deregister || true
+        fi
+
+        netbird up --setup-key-file ${setupKeyFile}
+      '';
+    };
 
     system.activationScripts.netbird-login = lib.stringAfter ["specialfs" "users" "groups"] ''
       if [ -e /run/systemd/system ]; then
-        ${pkgs.systemd}/bin/systemctl start netbird-login.service || true
+        ${pkgs.systemd}/bin/systemctl start netbird-managed-login.service || true
       fi
     '';
   };
