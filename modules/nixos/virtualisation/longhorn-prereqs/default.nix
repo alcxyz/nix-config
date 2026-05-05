@@ -7,6 +7,8 @@
 }: let
   host = config.networking.hostName;
 in {
+  boot.kernelModules = ["dm_crypt"];
+
   services.openiscsi = {
     enable = true;
     name = "iqn.2026-05.xyz.alc:${host}";
