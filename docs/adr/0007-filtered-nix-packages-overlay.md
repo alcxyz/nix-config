@@ -6,7 +6,7 @@
 
 ## Context
 
-Several packages used in this config are not in nixpkgs: `zfs-auto-unlock`, `pihole-sync`, `ndrop`, `helium`, `t3code`, `claude-code`, `paperless-review`, `paperless-filetype-index`, `leantime-tidy`. These packages are also used outside this config (in other projects, as standalone tools, or in Docker-based workflows), making it natural to maintain them independently rather than embedding them in the config repo.
+Several packages used in this config are not in nixpkgs: `zfs-auto-unlock`, `ndrop`, `helium`, `t3code`, `claude-code`, `paperless-review`, `paperless-filetype-index`, `leantime-tidy`. These packages are also used outside this config (in other projects, as standalone tools, or in Docker-based workflows), making it natural to maintain them independently rather than embedding them in the config repo.
 
 Importing an entire external overlay risks shadowing or conflicting with nixpkgs packages under the same names — a subtle and hard-to-debug failure mode.
 
@@ -19,7 +19,6 @@ overlays = [
   (final: prev: {
     ndrop                    = inputs.nix-packages.packages.${prev.system}.ndrop;
     zfs-auto-unlock          = inputs.nix-packages.packages.${prev.system}.zfs-auto-unlock;
-    pihole-sync              = inputs.nix-packages.packages.${prev.system}.pihole-sync;
     claude-code              = inputs.nix-packages.packages.${prev.system}.claude-code;
     paperless-review         = inputs.nix-packages.packages.${prev.system}.paperless-review;
     # ... etc

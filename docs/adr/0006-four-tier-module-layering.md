@@ -16,7 +16,7 @@ Configuration is organised into four tiers, composed via explicit `imports` in e
 
 **Tier 2 — Role** (`modules/nixos/common/{desktop,server}.nix`): Applied by host function. `desktop.nix` adds Hyprland, display manager, GPU support, Docker with CDI, kanata, and desktop packages. `server.nix` adds distributed build config and server packages. Each host imports exactly one role module.
 
-**Tier 3 — Service and hardware modules** (`modules/nixos/{services,hardware,virtualisation}/`): Opt-in, imported only by hosts that need them. Each module is self-contained — it defines its own sops secrets, systemd services, and package requirements. Examples: `nvidia.nix`, `amd.nix`, `zfs-autounlock`, `pihole-sync`, `kvm/gpu-passthrough`.
+**Tier 3 — Service and hardware modules** (`modules/nixos/{services,hardware,virtualisation}/`): Opt-in, imported only by hosts that need them. Each module is self-contained — it defines its own sops secrets, systemd services, and package requirements. Examples: `nvidia.nix`, `amd.nix`, `zfs-autounlock`, `kvm/gpu-passthrough`.
 
 **Tier 4 — Per-host** (`hosts/{hostName}/configuration.nix`): Imports the applicable tiers and adds host-specific values: networking, ZFS pool names, service parameters, hardware UUIDs, tmpfiles rules.
 

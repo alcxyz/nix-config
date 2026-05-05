@@ -12,7 +12,7 @@ A weekly summary was requested to improve readability — synthesizing daily ent
 
 ## Decision
 
-1. **Go binary in nix-packages**: The devlog tool is a single Go binary (`devlog daily` / `devlog weekly`) in `nix-packages/tools/devlog/`, built with `buildGoModule` and exposed via the overlay as `pkgs.devlog`. This follows the same pattern as `pihole-sync` and `zfs-auto-unlock`.
+1. **Go binary in nix-packages**: The devlog tool is a single Go binary (`devlog daily` / `devlog weekly`) in `nix-packages/tools/devlog/`, built with `buildGoModule` and exposed via the overlay as `pkgs.devlog`. This follows the same pattern as `zfs-auto-unlock`.
 
 2. **Schedule shift**: Daily timer runs at 01:00 and generates for yesterday (not 23:00 for today), eliminating the late-night activity gap.
 

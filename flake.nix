@@ -127,7 +127,6 @@
                 "forge-mirror"
                 "ndrop"
                 "zfs-auto-unlock"
-                "pihole-sync"
                 "helium"
                 "t3code"
                 "claude-code"
