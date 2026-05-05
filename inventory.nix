@@ -3,25 +3,25 @@
     workstation = {
       homePackageSet = "workstation";
       systemPackageSet = "workstation";
-      workspaceProfile = "workstation";
+      workspaceProfiles = ["base" "infra-admin" "apps" "forks" "clones"];
     };
 
     nuc = {
       homePackageSet = "nuc";
       systemPackageSet = "server";
-      workspaceProfile = "nuc";
+      workspaceProfiles = ["base" "infra-admin"];
     };
 
     embedded = {
       homePackageSet = "embedded";
       systemPackageSet = "server";
-      workspaceProfile = "embedded";
+      workspaceProfiles = [];
     };
 
     mac = {
       homePackageSet = "mac";
       systemPackageSet = "mac";
-      workspaceProfile = "mac";
+      workspaceProfiles = ["base" "infra-admin" "apps"];
     };
   };
 
