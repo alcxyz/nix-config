@@ -47,8 +47,8 @@ in {
 
     systemd.services.netbird-managed-login = {
       description = "NetBird setup-key login";
-      after = ["netbird.service" "sops-nix.service"];
-      requires = ["netbird.service" "sops-nix.service"];
+      after = ["netbird.service"];
+      requires = ["netbird.service"];
       wantedBy = ["multi-user.target"];
       restartTriggers = [setupKeyFile];
       path = [config.services.netbird.package pkgs.coreutils pkgs.gnugrep];
@@ -73,7 +73,7 @@ in {
       '';
     };
 
-    system.activationScripts.netbird-login = lib.stringAfter ["specialfs" "users" "groups"] ''
+    system.activationScripts.netbird-login = lib.stringAfter ["setupSecrets"] ''
       if [ -e /run/systemd/system ]; then
         ${pkgs.systemd}/bin/systemctl daemon-reload || true
         ${pkgs.systemd}/bin/systemctl start netbird-managed-login.service || true
