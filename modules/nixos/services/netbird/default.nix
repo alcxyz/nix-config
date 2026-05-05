@@ -6,6 +6,7 @@
   config,
   inputs,
   lib,
+  pkgs,
   username,
   ...
 }:
@@ -44,10 +45,17 @@ in {
         if cfg.setupKeyFile != null
         then cfg.setupKeyFile
         else config.sops.secrets.netbird_setup_key.path;
+      systemdDependencies = ["sops-nix.service"];
     };
 
     systemd.services.netbird-login.restartTriggers = [
       config.sops.secrets.netbird_setup_key.path
     ];
+
+    system.activationScripts.netbird-login = lib.stringAfter ["specialfs" "users" "groups"] ''
+      if [ -e /run/systemd/system ]; then
+        ${pkgs.systemd}/bin/systemctl start netbird-login.service || true
+      fi
+    '';
   };
 }
