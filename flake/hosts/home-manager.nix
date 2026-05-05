@@ -1,0 +1,51 @@
+{
+  config,
+  inputs,
+  lib,
+  self,
+  ...
+}: let
+  inherit (config.alc) inventory pkgsFor username;
+  hostLib = import ./lib.nix {inherit config inputs self;};
+
+  nixosHosts = lib.filterAttrs (_: hostAttrs: hostAttrs.platform == "nixos") inventory.hosts;
+  darwinHosts = lib.filterAttrs (_: hostAttrs: hostAttrs.platform == "darwin") inventory.hosts;
+
+  mkHomeConfiguration = hostName: hostAttrs: homeConfigPath:
+    inputs.home-manager.lib.homeManagerConfiguration {
+      pkgs = pkgsFor.${hostAttrs.system};
+
+      extraSpecialArgs =
+        (hostLib.specialArgsFor hostName hostAttrs)
+        // {
+          system = hostAttrs.system;
+          osIcon = hostAttrs.osIcon;
+        };
+
+      modules = [
+        homeConfigPath
+        inputs.nix-colors.homeManagerModules.default
+        inputs.sops-nix.homeManagerModules.sops
+      ];
+    };
+
+  nixosHomeConfigs =
+    lib.mapAttrs' (
+      hostName: hostAttrs:
+        lib.nameValuePair "${username}-${hostName}" (
+          mkHomeConfiguration hostName hostAttrs ../../users/${username}/linux/${hostName}.nix
+        )
+    )
+    nixosHosts;
+
+  darwinHomeConfigs =
+    lib.mapAttrs' (
+      hostName: hostAttrs:
+        lib.nameValuePair "${username}-${hostName}" (
+          mkHomeConfiguration hostName hostAttrs ../../users/${username}/darwin/${hostName}.nix
+        )
+    )
+    darwinHosts;
+in {
+  flake.homeConfigurations = nixosHomeConfigs // darwinHomeConfigs;
+}
