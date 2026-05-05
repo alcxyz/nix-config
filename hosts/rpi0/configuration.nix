@@ -55,8 +55,5 @@
     enable = true;
     serverAddr = "https://192.168.1.15:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
-    extraFlags = [
-      "--node-taint=node-role.kubernetes.io/control-plane=true:NoSchedule"
-    ];
   };
 }

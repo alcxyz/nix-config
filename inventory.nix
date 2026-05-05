@@ -29,16 +29,25 @@
     agent = {
       role = "agent";
       schedulable = true;
+      extraFlags = [
+        "--node-label=workload-class=ephemeral"
+      ];
     };
 
     server-worker = {
       role = "server";
       schedulable = true;
+      extraFlags = [
+        "--node-label=workload-class=stable"
+      ];
     };
 
     server-control-plane = {
       role = "server";
       schedulable = false;
+      extraFlags = [
+        "--node-taint=node-role.kubernetes.io/control-plane=true:NoSchedule"
+      ];
     };
   };
 

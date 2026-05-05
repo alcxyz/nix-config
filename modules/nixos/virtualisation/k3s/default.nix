@@ -13,6 +13,10 @@ with lib; let
     if hostK8sRole == null
     then "server"
     else hostK8sRole.role;
+  inventoryExtraFlags =
+    if hostK8sRole == null
+    then []
+    else hostK8sRole.extraFlags or [];
 in {
   # Define the NixOS options for this module
   options.k3s = {
@@ -68,7 +72,7 @@ in {
       {
         enable = true;
         role = cfg.role;
-        extraFlags = cfg.extraFlags;
+        extraFlags = inventoryExtraFlags ++ cfg.extraFlags;
       }
       // optionalAttrs (cfg.serverAddr != null) {
         serverAddr = cfg.serverAddr;
