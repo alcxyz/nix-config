@@ -75,6 +75,7 @@ in {
 
     system.activationScripts.netbird-login = lib.stringAfter ["specialfs" "users" "groups"] ''
       if [ -e /run/systemd/system ]; then
+        ${pkgs.systemd}/bin/systemctl daemon-reload || true
         ${pkgs.systemd}/bin/systemctl start netbird-managed-login.service || true
       fi
     '';
