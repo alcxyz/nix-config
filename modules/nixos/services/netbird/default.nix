@@ -45,5 +45,9 @@ in {
         then cfg.setupKeyFile
         else config.sops.secrets.netbird_setup_key.path;
     };
+
+    systemd.services.netbird-login.restartTriggers = [
+      config.sops.secrets.netbird_setup_key.path
+    ];
   };
 }
