@@ -94,53 +94,12 @@
   };
 
   # ---- Outputs ----------------------------------------------------------
-  outputs = {
-    self,
-    nixpkgs,
-    flake-parts,
-    nix-packages,
-    nix-secrets,
-    darwin,
-    home-manager,
-    nix-colors,
-    sops-nix,
-    ...
-  } @ inputs: let
-    # Basic identity values
-    username = "alc";
-
-    # Systems we support in this flake (add more if needed)
-    supportedSystems = [
-      "x86_64-linux"
-      "aarch64-linux"
-      "aarch64-darwin"
-    ];
-
-    pkgsFor = import ./flake/pkgs.nix {
-      inherit inputs nixpkgs nix-packages supportedSystems;
-    };
-
-    inventory = import ./inventory.nix;
-  in
+  outputs = inputs @ {flake-parts, ...}:
     flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = supportedSystems;
-
       imports = [
-        ./flake/hosts.nix
+        ./flake/core.nix
+        ./flake/hosts
         ./flake/per-system.nix
       ];
-
-      _module.args = {
-        inherit
-          self
-          nixpkgs
-          darwin
-          home-manager
-          sops-nix
-          pkgsFor
-          inventory
-          username
-          ;
-      };
     };
 }

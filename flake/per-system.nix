@@ -1,6 +1,6 @@
-{pkgsFor, ...}: {
+{config, ...}: {
   perSystem = {system, ...}: let
-    pkgs = pkgsFor.${system};
+    pkgs = config.alc.pkgsFor.${system};
   in {
     devShells.default = pkgs.mkShell {
       nativeBuildInputs = with pkgs; [

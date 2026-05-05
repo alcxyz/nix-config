@@ -26,9 +26,13 @@ Use `flake-parts` as the flake output framework.
 `flake-parts.lib.mkFlake` call. Output implementation details move into
 flake-parts modules under `flake/`:
 
-- `flake/pkgs.nix` builds `pkgsFor` for each supported system and owns overlays
-- `flake/hosts.nix` exports NixOS, Darwin, and Home Manager configurations from
-  `inventory.nix` through the flake-parts `flake` option
+- `flake/core.nix` defines repo-specific flake-parts options under `alc`,
+  including the primary username, canonical inventory, and per-system package
+  set
+- `flake/pkgs.nix` builds the `alc.pkgsFor` option value for each supported
+  system and owns overlays
+- `flake/hosts/` exports NixOS, Darwin, and Home Manager configurations from
+  `inventory.nix` through separate flake-parts modules and the `flake` option
 - `flake/per-system.nix` owns per-system exports such as dev shells and packages
   through the flake-parts `perSystem` option
 
@@ -58,9 +62,12 @@ operator inventory, not flake framework configuration. Keeping them in
 
 Top-level `flake.nix` is smaller and mostly declarative.
 
+Repo-level flake data is now visible as typed flake-parts options under `alc`
+instead of being passed as loose `_module.args`.
+
 Future per-system outputs should be added in `flake/per-system.nix`.
 
-Future host output changes should be made in `flake/hosts.nix`, with host facts
+Future host output changes should be made under `flake/hosts/`, with host facts
 still added or changed in `inventory.nix`.
 
 `flake-parts` becomes part of the lockfile and must be kept current with normal
