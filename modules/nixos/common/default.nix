@@ -23,6 +23,7 @@
   nux_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOCqmPEzDy4Nc2ZcRggLVAfYsay6dMoPJrVBR52MskrD nix-build@nux-to-xyz";
   nex_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8qgxpjQ82ktYwBKBatdI0bQlfFx0UPwCpJ6maVuhQL nix-build@nex-to-xyz";
   rpi0_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBtfjE0ipO2T87jT0FB+CpMDpKPCSrehWlYmKUZN6txF nix-build@rpi0-to-xyz";
+  xyz_host_ed25519_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEztyNrJk03TzMyLgwYd0BmUtUR5acWpgJf8obeGG1bS";
   docker_app_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
   humanLoginKeys = [
     alc_xyz_key
@@ -47,6 +48,16 @@ in {
   ];
 
   # ==================== Nix Configuration ====================
+  programs.ssh.knownHosts = {
+    xyz = {
+      hostNames = [
+        "xyz"
+        "192.168.1.10"
+      ];
+      publicKey = xyz_host_ed25519_key;
+    };
+  };
+
   nix = {
     settings = {
       experimental-features = [
