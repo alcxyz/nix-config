@@ -23,17 +23,22 @@ flake should focus on wiring those facts into exported flake outputs.
 Use `flake-parts` as the flake output framework.
 
 `flake.nix` remains the entrypoint for inputs, stable shared values, and the
-`flake-parts.lib.mkFlake` call. Implementation details move into focused files
-under `flake/`:
+`flake-parts.lib.mkFlake` call. Output implementation details move into
+flake-parts modules under `flake/`:
 
 - `flake/pkgs.nix` builds `pkgsFor` for each supported system and owns overlays
-- `flake/hosts.nix` builds NixOS, Darwin, and Home Manager configurations from
-  `inventory.nix`
+- `flake/hosts.nix` exports NixOS, Darwin, and Home Manager configurations from
+  `inventory.nix` through the flake-parts `flake` option
 - `flake/per-system.nix` owns per-system exports such as dev shells and packages
+  through the flake-parts `perSystem` option
 
 `inventory.nix` remains the single source of truth for host metadata. `flake-parts`
 does not replace inventory; it gives the flake a standard structure for exporting
 the inventory-derived outputs.
+
+NixOS, Home Manager, and nix-darwin modules remain native modules for their
+respective module systems. They are consumed by flake-parts-managed outputs, but
+are not converted into flake-parts modules.
 
 ## Alternatives Considered
 

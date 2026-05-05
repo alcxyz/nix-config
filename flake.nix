@@ -121,29 +121,26 @@
     };
 
     inventory = import ./inventory.nix;
-    hostOutputs = import ./flake/hosts.nix {
-      inherit
-        self
-        inputs
-        nixpkgs
-        darwin
-        home-manager
-        sops-nix
-        pkgsFor
-        inventory
-        username
-        ;
-    };
   in
     flake-parts.lib.mkFlake {inherit inputs;} {
       systems = supportedSystems;
 
-      flake = hostOutputs;
+      imports = [
+        ./flake/hosts.nix
+        ./flake/per-system.nix
+      ];
 
-      perSystem = {system, ...}:
-        import ./flake/per-system.nix {
-          pkgs = pkgsFor.${system};
-          inherit system;
-        };
+      _module.args = {
+        inherit
+          self
+          nixpkgs
+          darwin
+          home-manager
+          sops-nix
+          pkgsFor
+          inventory
+          username
+          ;
+      };
     };
 }

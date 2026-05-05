@@ -8,6 +8,7 @@
   pkgsFor,
   inventory,
   username,
+  ...
 }: let
   lib = nixpkgs.lib;
   inventoryHosts = inventory.hosts;
@@ -99,6 +100,8 @@
     )
     darwinHosts;
 in {
-  inherit nixosConfigurations darwinConfigurations;
-  homeConfigurations = nixosHomeConfigs // darwinHomeConfigs;
+  flake = {
+    inherit nixosConfigurations darwinConfigurations;
+    homeConfigurations = nixosHomeConfigs // darwinHomeConfigs;
+  };
 }
