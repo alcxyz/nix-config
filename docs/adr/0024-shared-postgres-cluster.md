@@ -6,7 +6,7 @@
 
 ## Context
 
-The Docker Compose setup runs a separate Postgres container per service (hedgedoc-db, linkwarden-db, n8n-db, leantime-db, forgejo-db, etc.). Each is a full Postgres instance consuming ~50-100MB RAM at idle, with its own backup lifecycle.
+The Docker Compose setup runs a separate Postgres container per service (hedgedoc-db, linkwarden-db, leantime-db, forgejo-db, etc.). Each is a full Postgres instance consuming ~50-100MB RAM at idle, with its own backup lifecycle.
 
 The initial k8s migration preserves this pattern — each service's manifests include a dedicated Postgres StatefulSet. This gets the services running quickly but carries the same waste:
 - ~8 Postgres instances for ~8 services, each independently managed

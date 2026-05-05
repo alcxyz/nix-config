@@ -22,7 +22,7 @@ Group services into domain-based namespaces aligned with the Leantime project st
 
 | Namespace | Services | Domain |
 |-----------|----------|--------|
-| `platform` | forgejo, hedgedoc, linkwarden, n8n, leantime, uptime-kuma | Internal platform tools (ALC.XYZ AS — Platform) |
+| `platform` | forgejo, hedgedoc, linkwarden, leantime, uptime-kuma | Internal platform tools (ALC.XYZ AS — Platform) |
 | `infrastructure` | rustfs, cloudflared, pihole, unifi | Network and storage infrastructure |
 | `documents` | paperless-arq, paperless-arquivo | Document management (ALC.XYZ AS — Operations) |
 | `storage` | nextcloud, seafile | File storage and collaboration |
