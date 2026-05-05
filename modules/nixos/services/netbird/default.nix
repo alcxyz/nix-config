@@ -4,6 +4,7 @@
 # Keeps host configs clean: just `services.netbird.managed.enable = true;`
 {
   config,
+  inputs,
   lib,
   username,
   ...
@@ -30,9 +31,19 @@ in {
     # Netbird needs to manage routes for peers
     services.netbird.useRoutingFeatures = "client";
 
-    services.netbird.clients.default.login = mkIf (cfg.setupKeyFile != null) {
+    sops.secrets.netbird_setup_key = mkIf (cfg.setupKeyFile == null) {
+      sopsFile = "${inputs.nix-secrets}/operators/secrets.yaml";
+      key = "netbird_setup_key";
+      owner = "root";
+      group = "root";
+    };
+
+    services.netbird.clients.default.login = {
       enable = true;
-      setupKeyFile = cfg.setupKeyFile;
+      setupKeyFile =
+        if cfg.setupKeyFile != null
+        then cfg.setupKeyFile
+        else config.sops.secrets.netbird_setup_key.path;
     };
   };
 }
