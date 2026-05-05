@@ -11,6 +11,7 @@
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
+    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
