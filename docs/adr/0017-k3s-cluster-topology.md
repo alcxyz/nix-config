@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-04-26
 **Updated:** 2026-05-02
-**Applies to:** `hosts/nux`, `hosts/rpi0`, `hosts/xyz`, future `NUC #2`, infrastructure
+**Applies to:** `hosts/nux`, `hosts/rpi0`, `hosts/xyz`, future `nex`, infrastructure
 
 ## Context
 
@@ -29,8 +29,8 @@ Available hardware:
 - `nux` — x86_64 NUC, 32 GB RAM, current single-node k3s server and main workload host
 - `rpi0` — RK3399 SBC, 4 GB RAM, suitable for control-plane duty but not general workloads
 - `xyz` — Ryzen 9 workstation, 64 GB RAM, suitable as opportunistic worker capacity but not a stable quorum member
-- `NUC #2` — future x86_64 NUC, not yet installed/configured
-- `xev` — optional future worker, not part of the immediate step
+- `nex` — future x86_64 NUC, not yet installed/configured
+- `xev` — reserved for a later Ryzen 1700X machine, not part of the immediate step
 
 ## Decision
 
@@ -63,15 +63,15 @@ Notes:
 - `xyz` adds x86_64 capacity immediately but is not counted as stable HA infrastructure
 - this improves the cluster materially, but it is still not the final HA target
 
-### Cluster topology: target after NUC #2
+### Cluster topology: target after nex
 
-Once `NUC #2` is installed and added to `nix-config`, the intended stable topology is:
+Once `nex` is installed and added to `nix-config`, the intended stable topology is:
 
 | Node | Hardware | Role | Scheduling |
 |------|----------|------|------------|
 | `nux` | Intel NUC, 32 GB | `server + worker` | normal workload host |
 | `rpi0` | RK3399 SBC, 4 GB | `server` | tainted `NoSchedule` |
-| `NUC #2` | Intel NUC, 16-32 GB | `server + worker` | normal workload host |
+| `nex` | Intel NUC, 16-32 GB | `server + worker` | normal workload host |
 | `xyz` | Ryzen 9 workstation, 64 GB | `agent` | opportunistic / burst compute |
 
 At that point the cluster has the intended 3-server control plane, and can tolerate
@@ -94,8 +94,8 @@ loss of one control-plane node while keeping quorum.
 
 ### Later
 
-1. Install/configure `NUC #2`
-2. Join `NUC #2` as the third k3s server + worker
+1. Install/configure `nex`
+2. Join `nex` as the third k3s server + worker
 3. Rebalance stateful workloads and storage choices as needed
 4. Optionally add `xev` as another agent
 
@@ -111,7 +111,7 @@ while the control plane is still maturing.
 Rejected. UniFi is better treated as a host-native service until the cluster reaches
 its intended multi-server shape.
 
-### Keep `rpi0` out of k3s until NUC #2 exists
+### Keep `rpi0` out of k3s until nex exists
 
 Rejected. `rpi0` is available now and is a useful immediate control-plane member,
 even if it is not a general workload host.
@@ -121,16 +121,16 @@ even if it is not a general workload host.
 Rejected. `xyz` is a workstation and may reboot, suspend, or be busy. It is a good
 agent, not a stable quorum node.
 
-### Make `NUC #2` only a worker
+### Make nex only a worker
 
-Rejected. The whole point of the future `NUC #2` addition is to complete the
+Rejected. The whole point of the future `nex` addition is to complete the
 3-server control plane, not just add more worker capacity.
 
 ## Consequences
 
 - **Better now:** immediate improvement over a single-node cluster once `rpi0` and
   `xyz` join
-- **Still limited:** true control-plane HA still waits on `NUC #2`
+- **Still limited:** true control-plane HA still waits on `nex`
 - **Safer networking:** `Pi-hole` and `UniFi` remain independent of cluster health
 - **Mixed-role reality:** the homelab remains hybrid for a while:
   - k3s for most apps

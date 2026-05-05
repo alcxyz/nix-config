@@ -73,11 +73,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777475828,
-        "narHash": "sha256-SYfC7C3g09Qw7d7WC0Jm6M0lvcrY2H7jgk2k1sdRvL8=",
+        "lastModified": 1777828288,
+        "narHash": "sha256-c9FCyVKHoofbzm7j4pjUMMyQkWIV+/XDnZvskTekC6I=",
         "ref": "refs/heads/dev",
-        "rev": "9ce48660d8f2d607935a2abd47812cfeb2ba843b",
-        "revCount": 27,
+        "rev": "7e0125e3b0733cd6ec08dd62dbb9e8930a5e9e80",
+        "revCount": 30,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/canopy.git"
       },
@@ -393,11 +393,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777768384,
-        "narHash": "sha256-QLs/mTRViO3JseE2qgKd2QDvkjR7WeNsR23f7sTXMms=",
+        "lastModified": 1777834585,
+        "narHash": "sha256-ghfL/SUkkpnslzVk/K8JnX0nLbfYw+i1taAdKr1vw8E=",
         "ref": "refs/heads/dev",
-        "rev": "62fc6503d00f2ba43aa0eae3e25fb223df12c421",
-        "revCount": 121,
+        "rev": "904c34062a01db4c5d07e6222b1d586295257aba",
+        "revCount": 138,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/grove.git"
       },
@@ -844,11 +844,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777761245,
-        "narHash": "sha256-AQhRWFjY8DDau7rVACFu0G+fQLgWmoE+avGjYGUEOpY=",
+        "lastModified": 1777955305,
+        "narHash": "sha256-1fEU8gITVKrL31khiDaVdrinkNqsQVXWbVuMJudJkUw=",
         "ref": "refs/heads/dev",
-        "rev": "d9df20b52ecf8b90f6b62b26104f3573ce69fb8e",
-        "revCount": 106,
+        "rev": "d143a7afb30867001e82b2cf73c4173741ca3a2d",
+        "revCount": 115,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -860,11 +860,11 @@
     "nix-secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1777821833,
-        "narHash": "sha256-vkJeBlo93yDn1rdAWnepP6r76KKt/F8eQBXP58+1VGk=",
+        "lastModified": 1777955297,
+        "narHash": "sha256-crGNB6VXdYMhEWaxBs5fQa808Mrel9LSeFrhGJNEAE0=",
         "ref": "refs/heads/main",
-        "rev": "91cf710e0d52dc4a435f5175cf61f130516ba4a1",
-        "revCount": 48,
+        "rev": "77b4bb2f2bb19c02e3505755be0d81390992a8a4",
+        "revCount": 55,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },

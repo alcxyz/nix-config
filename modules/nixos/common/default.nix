@@ -8,9 +8,7 @@
   configDir,
   lib,
   ...
-}:
-
-let
+}: let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -22,6 +20,7 @@ let
   alc_rpi0_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
   alc_yubikey_sk_key = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIMDqhZG24+O0aJzsfiRY1AbNHcb62apx2F7DPTAJf9olAAAABHNzaDo=";
   nux_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOCqmPEzDy4Nc2ZcRggLVAfYsay6dMoPJrVBR52MskrD nix-build@nux-to-xyz";
+  nex_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8qgxpjQ82ktYwBKBatdI0bQlfFx0UPwCpJ6maVuhQL nix-build@nex-to-xyz";
   rpi0_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBtfjE0ipO2T87jT0FB+CpMDpKPCSrehWlYmKUZN6txF nix-build@rpi0-to-xyz";
   docker_app_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
   humanLoginKeys = [
@@ -37,11 +36,10 @@ let
   ];
   xyzDistributedBuildClientKeys = [
     nux_buildhost_xyz_key
+    nex_buildhost_xyz_key
     rpi0_buildhost_xyz_key
   ];
-in
-
-{
+in {
   # ==================== Imports ====================
   imports = [
   ];
@@ -70,7 +68,7 @@ in
         "https://nix-community.cachix.org"
         "https://cuda-maintainers.cachix.org"
       ];
-      trusted-substituters = lib.optionals (hostName != "xyz") [ "ssh://alc@xyz" ];
+      trusted-substituters = lib.optionals (hostName != "xyz") ["ssh://alc@xyz"];
       trusted-public-keys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
@@ -94,16 +92,15 @@ in
 
   # ==================== Boot Configuration ====================
   boot.loader =
-    if pkgs.stdenv.isAarch64 then
-      {
-        systemd-boot.enable = false;
-        generic-extlinux-compatible.enable = true;
-      }
-    else
-      {
-        systemd-boot.enable = true;
-        efi.canTouchEfiVariables = true;
-      };
+    if pkgs.stdenv.isAarch64
+    then {
+      systemd-boot.enable = false;
+      generic-extlinux-compatible.enable = true;
+    }
+    else {
+      systemd-boot.enable = true;
+      efi.canTouchEfiVariables = true;
+    };
 
   boot.initrd.systemd.enable = true;
 
@@ -127,8 +124,10 @@ in
           "docker"
         ];
 
-        openssh.authorizedKeys.keys = [
-        ] ++ humanLoginKeys ++ mobileAppKeys;
+        openssh.authorizedKeys.keys =
+          [
+          ]
+          ++ humanLoginKeys ++ mobileAppKeys;
       };
 
       root = {
@@ -176,9 +175,9 @@ in
   # libfido2 ships udev rules that reference the traditional "plugdev" group.
   # We keep libfido2 for FIDO2/YubiKey support and create the group to avoid
   # udev warnings on NixOS.
-  users.groups.plugdev = { };
+  users.groups.plugdev = {};
 
-  services.udev.packages = [ pkgs.libfido2 ];
+  services.udev.packages = [pkgs.libfido2];
 
   # ==================== Networking ====================
   networking.networkmanager.enable = true;
@@ -191,7 +190,7 @@ in
   # ==================== sops/secrets ====================
   sops = {
     defaultSopsFile = "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
-    age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
+    age.sshKeyPaths = ["/etc/ssh/ssh_host_ed25519_key"];
     #secrets = {
     #  from_shared= { sopsFile = "${inputs.nix-secrets.secrets.files.shared.${hostName}}"; };
     #  from_host = { sopsFile = "${inputs.nix-secrets.secrets.files.hosts.${hostName}}"; };
@@ -201,7 +200,7 @@ in
   # ==================== SSH ====================
   services.openssh = {
     enable = true;
-    ports = [ 22 ];
+    ports = [22];
     openFirewall = true;
     settings = {
       PermitRootLogin = "prohibit-password";
@@ -234,5 +233,4 @@ in
       Policy.AutoEnable = true;
     };
   };
-
 }
