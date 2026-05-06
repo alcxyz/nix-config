@@ -89,6 +89,13 @@ in {
         "xyz:qRbAg2a0Z9A7lm2G+lfdBvXXIJ/NuBtw07vhsJoxV4s="
       ];
     };
+    gc = {
+      automatic = true;
+      dates = "weekly";
+      # Only free dead store paths, never delete profile generations
+      # automatically. See docs/adr/0013-safe-nix-gc-no-generation-deletion.md.
+      options = "--max-freed 10G";
+    };
     package = pkgs.nixVersions.latest;
   };
 
