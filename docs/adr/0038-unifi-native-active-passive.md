@@ -22,8 +22,9 @@ Run UniFi through a repo-local NixOS wrapper module named
 `services.unifi-native`.
 
 - `nux` is the active controller.
-- `rpi0` is the intended fallback host, but fallback wiring will be added after
-  the `nux` native migration is verified.
+- `rpi0` is the fallback host. It has the native UniFi unit, packages, users,
+  state directories, and firewall policy declared, but the service is not wanted
+  at boot.
 - The module wraps upstream `services.unifi` rather than duplicating its
   systemd implementation.
 - The module opens the full set of local controller ports, including `8443/tcp`
@@ -52,5 +53,9 @@ renamed-option module during transition.
   because they bind the same host ports.
 - The first migration still needs an operational restore step through the UniFi
   UI/API.
-- `rpi0` fallback can be added with the same module once `nux` native runtime is
-  proven.
+- `rpi0` fallback still requires restoring a current UniFi backup before
+  starting the service.
+- Because the standby service unit exists but is not wanted at boot, failover can
+  start UniFi manually after restore without rebuilding just to create the unit.
+- The operational fallback flow is documented in
+  [`../unifi-native-fallback-runbook.md`](../unifi-native-fallback-runbook.md).

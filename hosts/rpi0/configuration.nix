@@ -13,6 +13,7 @@
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
+    "${configDir}/modules/nixos/services/unifi-native/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
@@ -91,6 +92,13 @@
     upstream = "127.0.0.1#5335";
     stateDirectory = "/var/lib/pihole/etc";
     passwordFile = config.sops.secrets.pihole_secret_key.path;
+  };
+
+  services.unifi-native = {
+    enable = true;
+    role = "standby";
+    openFirewall = true;
+    maximumJavaHeapSize = 768;
   };
 
   k3s = {
