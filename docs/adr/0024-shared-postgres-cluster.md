@@ -13,6 +13,11 @@ The initial k8s migration preserves this pattern — each service's manifests in
 - No shared connection pooling, no shared backup strategy
 - Memory overhead multiplied per instance
 
+The Longhorn migration makes this more urgent. Before adding a full set of
+database dump CronJobs, the database topology should be decided. Otherwise the
+backup implementation would cement the current per-service database model and
+duplicate schedules, credentials, restore procedures, and monitoring.
+
 ## Decision (proposed)
 
 Consolidate to a single shared Postgres cluster (e.g. CloudNativePG or a simple StatefulSet) in the `infrastructure` namespace, with one database per service. Services connect via credentials scoped to their own database.
@@ -25,6 +30,8 @@ Consolidate to a single shared Postgres cluster (e.g. CloudNativePG or a simple 
 2. Deploy shared Postgres in `infrastructure` namespace
 3. Migrate databases one at a time: pg_dump from per-service instance, pg_restore into shared cluster, update service config to point to shared cluster
 4. Remove per-service Postgres StatefulSets
+5. Add app-aware backup jobs against the chosen database topology, writing to
+   the host-level backup target from ADR-0039.
 
 ## Alternatives Considered
 
