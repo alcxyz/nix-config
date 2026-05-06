@@ -11,6 +11,7 @@
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
+    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -28,12 +29,8 @@
 
   k3s = {
     enable = true;
-    role = "server";
     serverAddr = "https://192.168.1.15:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
-    extraFlags = [
-      "--node-label=workload-class=stable"
-    ];
   };
 
   services.netbird.managed.enable = true;

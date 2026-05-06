@@ -1,12 +1,17 @@
-{ config, pkgs, inputs, username, configDir, lib, ... }:
-
-let
+{
+  config,
+  pkgs,
+  inputs,
+  username,
+  hostRole,
+  configDir,
+  lib,
+  ...
+}: let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
-in
-
-{
+in {
   # ==================== Imports ====================
   #imports = [
   #];
@@ -16,7 +21,7 @@ in
   ];
 
   # ==================== System Packages ====================
-  environment.systemPackages = pkgsets.system.server;
+  environment.systemPackages = pkgsets.system.${hostRole.systemPackageSet};
 
   # ==================== Distributed Builds ====================
   systemd.tmpfiles.rules = [
@@ -47,10 +52,10 @@ in
         hostName = "xyz";
         sshUser = "root";
         sshKey = "/root/.ssh/id_buildhost_xyz";
-        systems = [ "x86_64-linux" "aarch64-linux" ];
+        systems = ["x86_64-linux" "aarch64-linux"];
         maxJobs = 8;
         speedFactor = 2;
-        supportedFeatures = [ "big-parallel" "kvm" ];
+        supportedFeatures = ["big-parallel" "kvm"];
         protocol = "ssh";
       }
     ];

@@ -3,6 +3,15 @@
 
 let
   inherit (lib) mkIf mkMerge optionalAttrs;
+  getent = "${pkgs.getent}/bin/getent";
+  grep = "${pkgs.gnugrep}/bin/grep";
+  gitSshCloudflareFallbackMatch = pkgs.writeShellScript "git-ssh-cloudflare-fallback-match" ''
+    if ${getent} ahostsv4 "$1" | ${grep} -Fqw 192.168.1.240; then
+      exit 1
+    else
+      exit 0
+    fi
+  '';
 in {
   config = mkIf config.programs.ssh.enable (mkMerge [
     {
@@ -49,6 +58,10 @@ in {
 
           "git-ssh.alc.xyz" = {
             user = "git";
+          };
+
+          "git-ssh.alc.xyz-cloudflare-fallback" = {
+            match = ''originalhost git-ssh.alc.xyz exec "${gitSshCloudflareFallbackMatch} %h"'';
             extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
           };
 
@@ -61,6 +74,7 @@ in {
             user = "root";
           };
         };
+
       };
     }
 
