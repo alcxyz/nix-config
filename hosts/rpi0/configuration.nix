@@ -83,7 +83,7 @@
     };
   };
 
-  services.alc-pihole-native = {
+  services.pihole-native = {
     enable = true;
     listenInterface = "end0";
     hostName = "pihole.rpi0.local";
