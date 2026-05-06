@@ -206,6 +206,10 @@ in {
   # ==================== Virtualisation ====================
   virtualisation.containers.enable = true;
   virtualisation.docker.enable = true;
+  systemd.services.docker.path = with pkgs; [
+    iptables
+    nftables
+  ];
 
   # ==================== sops/secrets ====================
   sops = {
