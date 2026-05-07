@@ -4,9 +4,9 @@
   pkgs,
   ...
 }: let
-  cfg = config.services.alc-pihole-native;
+  cfg = config.services.pihole-native;
 
-  piholeStart = pkgs.writeShellScript "alc-pihole-ftl-start" ''
+  piholeStart = pkgs.writeShellScript "pihole-ftl-start" ''
     set -euo pipefail
 
     export FTLCONF_dns_interface="${cfg.listenInterface}"
@@ -31,8 +31,12 @@
     exec ${lib.getExe pkgs.pihole-ftl} no-daemon
   '';
 in {
-  options.services.alc-pihole-native = {
-    enable = lib.mkEnableOption "ALC native Pi-hole FTL service";
+  imports = [
+    (lib.mkRenamedOptionModule ["services" "alc-pihole-native"] ["services" "pihole-native"])
+  ];
+
+  options.services.pihole-native = {
+    enable = lib.mkEnableOption "native Pi-hole FTL service";
 
     listenInterface = lib.mkOption {
       type = lib.types.str;

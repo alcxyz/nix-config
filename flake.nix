@@ -70,6 +70,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    rustfs = {
+      url = "github:rustfs/rustfs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     paperless-tools = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";

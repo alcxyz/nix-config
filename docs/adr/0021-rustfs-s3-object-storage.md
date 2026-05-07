@@ -8,9 +8,12 @@
 
 The k3s cluster needs S3-compatible object storage for:
 - Forgejo container registry backend (storing container images)
-- Database backup storage
-- Longhorn backup target (when multi-node HA is set up per ADR-0017)
 - Application storage (exports, artifacts)
+
+Earlier versions of this ADR also listed database backup storage and the
+Longhorn backup target. That responsibility has moved to the host-level,
+ZFS-backed backup endpoint on `xyz`; see ADR-0039. In-cluster RustFS remains the
+application object store, but it is not the only disaster-recovery target.
 
 No object storage currently exists in the homelab infrastructure.
 
@@ -30,7 +33,10 @@ Running inside k3s was chosen over running directly on NixOS because:
 - Single-node standalone mode with hostPath storage on nux (Longhorn replicated PV when multi-node)
 - API on port 9000, web console on port 9001
 - Accessible at `s3.alc.xyz` (API) and `s3-console.alc.xyz` (web console)
-- Buckets created per use case: `forgejo`, `backups`, `longhorn`, etc.
+- Buckets created per use case: `forgejo`, `backups`, `longhorn`, etc. The
+  `longhorn` bucket is retained for compatibility/testing, but the production
+  Longhorn backup target should point at the host-level backup endpoint from
+  ADR-0039.
 - Used as Forgejo's storage backend for packages, LFS, and attachments
 
 ## Alternatives Considered
@@ -40,7 +46,7 @@ Running inside k3s was chosen over running directly on NixOS because:
 - **SeaweedFS** — Go-based, optimised for many small files. More complex architecture (master + volume + filer servers). Not S3-native, adds a translation layer.
 - **Ceph RGW** — enterprise-grade but extremely heavy for a homelab. Minimum 3 nodes recommended.
 - **Cloud S3 (Backblaze B2, Wasabi)** — recurring cost, data leaves the network. Against the self-hosted principle for primary storage.
-- **RustFS on NixOS host** — avoids k3s dependency, but becomes a single-host SPOF with no HA path. Would require manual replication setup when scaling to multiple nodes, duplicating what the k3s cluster already provides.
+- **RustFS only on a NixOS host** — rejected for application object storage because it would tie Forgejo/Nextcloud/etc. to one host and bypass k3s scheduling. A separate host-level RustFS endpoint is now accepted for backups only in ADR-0039, because backups must sit outside the Longhorn/k3s dependency path.
 
 ## Consequences
 
