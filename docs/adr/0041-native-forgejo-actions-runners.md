@@ -1,14 +1,14 @@
 # ADR-0041: Native Forgejo Actions runners
 
-**Status:** Accepted
+**Status:** Implemented
 **Date:** 2026-05-07
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/nux`, `hosts/nex`
 
 ## Context
 
-Forgejo Actions runners currently run from GitOps-managed Kubernetes
-Deployments. Those pods install Docker CLI and other tools at runtime, mount the
-host Docker socket, and then register runner labels with Forgejo.
+Forgejo Actions runners previously ran from GitOps-managed Kubernetes
+Deployments. Those pods installed Docker CLI and other tools at runtime, mounted
+the host Docker socket, and then registered runner labels with Forgejo.
 
 This has proven brittle. During a DNS outage, the `nux` and `nex` runner pods
 started but failed to install Docker CLI. They still registered Docker-capable
@@ -34,9 +34,9 @@ The NixOS module should:
 - support Docker-backed job labels for clean per-job containers
 - fail the systemd unit if required tools, sockets, or secrets are unavailable
 
-Start with `xyz` as the first Docker-capable native runner. Add `nux` and `nex`
-only after deciding whether they should run Docker-capable jobs or host-specific
-maintenance jobs.
+Run native Docker-capable runners on `xyz`, `nux`, and `nex`. Normal jobs use
+Docker-backed labels; `nux-deploy:host` is retained as the explicit trusted
+host-level exception.
 
 ## Required Properties
 
@@ -63,9 +63,8 @@ clean per-job environments. Host-level jobs should be explicit exceptions.
 
 ## Consequences
 
-- Runner implementation work moves to `nix-config`.
-- GitOps will later remove Kubernetes runner Deployments and related PVCs after
-  native runners are proven.
+- Runner implementation lives in `nix-config`.
+- GitOps removes Kubernetes runner Deployments and related PVCs.
 - CI trust improves because host capabilities are declared and checked by NixOS
   instead of discovered after pod startup.
 - Docker-capable runners remain trusted infrastructure and must not be exposed to
@@ -75,24 +74,24 @@ clean per-job environments. Host-level jobs should be explicit exceptions.
 
 Nix-config-owned work:
 
-- [alcxyz/nix-config#49](https://git.alc.xyz/alcxyz/nix-config/issues/49)
+- [x] [alcxyz/nix-config#49](https://git.alc.xyz/alcxyz/nix-config/issues/49)
   implement the native NixOS runner module.
-- [alcxyz/nix-config#50](https://git.alc.xyz/alcxyz/nix-config/issues/50)
+- [x] [alcxyz/nix-config#50](https://git.alc.xyz/alcxyz/nix-config/issues/50)
   deploy the first native Docker-capable runner on `xyz`.
-- [alcxyz/nix-config#51](https://git.alc.xyz/alcxyz/nix-config/issues/51)
+- [x] [alcxyz/nix-config#51](https://git.alc.xyz/alcxyz/nix-config/issues/51)
   decide runner roles for `nux` and `nex`.
-- [alcxyz/nix-config#52](https://git.alc.xyz/alcxyz/nix-config/issues/52)
+- [x] [alcxyz/nix-config#52](https://git.alc.xyz/alcxyz/nix-config/issues/52)
   migrate runner secrets from Kubernetes to SOPS/NixOS.
-- [alcxyz/nix-config#53](https://git.alc.xyz/alcxyz/nix-config/issues/53) add
+- [ ] [alcxyz/nix-config#53](https://git.alc.xyz/alcxyz/nix-config/issues/53) add
   rebuild QA guardrails for runner hosts.
 
 GitOps-owned coordination work:
 
-- [alcxyz/gitops#212](https://git.alc.xyz/alcxyz/gitops/issues/212) retarget
+- [ ] [alcxyz/gitops#212](https://git.alc.xyz/alcxyz/gitops/issues/212) retarget
   workflows to explicit runner labels.
-- [alcxyz/gitops#213](https://git.alc.xyz/alcxyz/gitops/issues/213) remove
+- [x] [alcxyz/gitops#213](https://git.alc.xyz/alcxyz/gitops/issues/213) remove
   Kubernetes runner deployments after native cutover.
-- [alcxyz/gitops#214](https://git.alc.xyz/alcxyz/gitops/issues/214) add a
+- [ ] [alcxyz/gitops#214](https://git.alc.xyz/alcxyz/gitops/issues/214) add a
   runner capability probe workflow.
-- [alcxyz/gitops#215](https://git.alc.xyz/alcxyz/gitops/issues/215) document
+- [x] [alcxyz/gitops#215](https://git.alc.xyz/alcxyz/gitops/issues/215) document
   the temporary Kubernetes runner deprecation plan.

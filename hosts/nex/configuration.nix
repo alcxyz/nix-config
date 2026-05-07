@@ -10,6 +10,7 @@
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
+    "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
@@ -34,6 +35,17 @@
   };
 
   services.netbird.managed.enable = true;
+
+  services.forgejo-actions-runner = {
+    enable = true;
+    name = "nex";
+    capacity = 2;
+    labels = [
+      "ubuntu-latest:docker://node:20-bookworm"
+      "nex:docker://node:20-bookworm"
+      "docker:docker://node:20-bookworm"
+    ];
+  };
 
   nix.settings.max-jobs = 1; # prefer xyz for builds, but allow local fallback
 
