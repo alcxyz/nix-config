@@ -1,5 +1,11 @@
 # modules/nixos/services/stash/default.nix
-{ config, lib, pkgs, username, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  username,
+  ...
+}:
 
 with lib;
 
@@ -34,19 +40,24 @@ in
 
   config = mkIf cfg.enable {
 
+    users.groups.media = { };
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
       home = cfg.dataDir;
-      extraGroups = [ "media" "rtorrent" ];
+      extraGroups = [
+        "media"
+        "rtorrent"
+      ];
     };
-    users.groups.${cfg.group} = {};
+    users.groups.${cfg.group} = { };
 
     users.users.${username}.extraGroups = [ cfg.group ];
 
     systemd.tmpfiles.rules = [
       "d '${cfg.dataDir}' 0750 ${cfg.user} ${cfg.group} - -"
-      "d '${cfg.mediaDir}' 0775 ${cfg.user} ${cfg.group} - -"
+      "d '${cfg.mediaDir}' 2775 - media - -"
+      "a+ '${cfg.mediaDir}' - - - - g:media:rwx,d:g:media:rwx,m::rwx,d:m::rwx"
     ];
   };
 }
