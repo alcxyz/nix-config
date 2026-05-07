@@ -89,6 +89,7 @@ in {
       6443 # K3s API Server
       2379 # K3s etcd client port
       2380 # K3s etcd peer port
+      10250 # Kubelet metrics endpoint for Metrics Server
     ];
     networking.firewall.allowedUDPPorts = [
       8472 # Flannel VXLAN backend
