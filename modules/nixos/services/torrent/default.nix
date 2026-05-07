@@ -33,6 +33,12 @@ let
     mediaDir
   ];
 
+  sharedMediaDatasets = [
+    "zpool/stash"
+    "ypool/stash"
+    "zpool/media"
+  ];
+
   tmpfilesRules =
     map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
     ++ map (d: "d " + d + " 2775 - " + sharedGroup + " -") sharedMediaDirs
@@ -70,11 +76,54 @@ in
 
     systemd.tmpfiles.rules = tmpfilesRules;
 
+    systemd.services.torrent-shared-media-zfs-properties = {
+      description = "Enable POSIX ACLs on shared media ZFS datasets";
+      wantedBy = [ "multi-user.target" ];
+      requires = [ "zfs-auto-unlock.service" ];
+      after = [ "zfs-auto-unlock.service" ];
+      before = [
+        "torrent-shared-media-permissions.service"
+        "docker.service"
+        "k3s.service"
+      ];
+      path = with pkgs; [
+        zfs
+        util-linux
+      ];
+      serviceConfig.Type = "oneshot";
+      script = ''
+        set -euo pipefail
+
+        datasets=(
+          ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDatasets}
+        )
+        mountpoints=(
+          ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDirs}
+        )
+
+        for dataset in "''${datasets[@]}"; do
+          zfs set acltype=posixacl "$dataset"
+        done
+
+        for mountpoint in "''${mountpoints[@]}"; do
+          if findmnt -no OPTIONS "$mountpoint" | tr ',' '\n' | grep -qx noacl; then
+            mount -o remount,acl "$mountpoint" || true
+          fi
+        done
+      '';
+    };
+
     systemd.services.torrent-shared-media-permissions = {
       description = "Apply shared media ACLs for torrent and media workloads";
       wantedBy = [ "multi-user.target" ];
-      requires = [ "zfs-mount.service" ];
-      after = [ "zfs-mount.service" ];
+      requires = [
+        "zfs-mount.service"
+        "torrent-shared-media-zfs-properties.service"
+      ];
+      after = [
+        "zfs-mount.service"
+        "torrent-shared-media-zfs-properties.service"
+      ];
       before = [
         "docker.service"
         "k3s.service"

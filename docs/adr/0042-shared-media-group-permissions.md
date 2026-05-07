@@ -34,6 +34,7 @@ group-writable shared media roots:
 
 - top-level directories use mode `2775`
 - the group is `media`
+- ZFS datasets have `acltype=posixacl`
 - default ACLs grant `media` read/write/search access for newly created content
 - a one-time migration applies the `media` ACL recursively to existing content
 - qBittorrent mounts the real media paths directly in k8s
