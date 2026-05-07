@@ -59,3 +59,6 @@ renamed-option module during transition.
   start UniFi manually after restore without rebuilding just to create the unit.
 - The operational fallback flow is documented in
   [`../unifi-native-fallback-runbook.md`](../unifi-native-fallback-runbook.md).
+- Automatic HA is a separate target tracked by
+  [ADR-0040](0040-unifi-automatic-ha-target.md). This ADR describes the current
+  native active/passive runtime, not the final automated failover design.
