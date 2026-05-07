@@ -294,6 +294,7 @@ rec {
       with pkgs;
       [
         rbw
+        bitwarden-cli
         bitwarden-desktop
         pinentry-gtk2
         texlive.combined.scheme-full
