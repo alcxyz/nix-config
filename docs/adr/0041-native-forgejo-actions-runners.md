@@ -35,8 +35,8 @@ The NixOS module should:
 - fail the systemd unit if required tools, sockets, or secrets are unavailable
 
 Run native Docker-capable runners on `xyz`, `nux`, and `nex`. Normal jobs use
-Docker-backed labels; `nux-deploy:host` is retained as the explicit trusted
-host-level exception.
+Docker-backed labels. No host-backed labels are exposed unless a current trusted
+infrastructure workflow needs one.
 
 ## Required Properties
 
