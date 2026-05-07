@@ -88,13 +88,6 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = cfg.role == "active" || !config.services.unifi.enable;
-        message = "services.unifi-native standby hosts must not enable services.unifi directly.";
-      }
-    ];
-
     environment.systemPackages = [
       pkgs.unifi
       pkgs.mongodb-7_0
@@ -102,13 +95,17 @@ in {
       legacyStopScript
     ];
 
-    services.unifi = lib.mkIf (cfg.role == "active") {
+    services.unifi = {
       enable = true;
       unifiPackage = pkgs.unifi;
       mongodbPackage = pkgs.mongodb-7_0;
       openFirewall = false;
       initialJavaHeapSize = cfg.initialJavaHeapSize;
       maximumJavaHeapSize = cfg.maximumJavaHeapSize;
+    };
+
+    systemd.services.unifi = lib.mkIf (cfg.role == "standby") {
+      wantedBy = lib.mkForce [];
     };
 
     networking.firewall = lib.mkIf cfg.openFirewall {
