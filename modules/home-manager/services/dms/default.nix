@@ -22,11 +22,11 @@ in
 
     xdg.configFile."DankMaterialShell/plugin_settings.json".source =
       config.lib.file.mkOutOfStoreSymlink
-        "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/plugin_settings.json";
+        "${configDir}/users/${username}/configs/dms/plugin_settings.json";
 
     xdg.configFile."dankcalendar/config.json".source =
       config.lib.file.mkOutOfStoreSymlink
-        "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dankcalendar/config.json";
+        "${configDir}/users/${username}/configs/dankcalendar/config.json";
 
     programs.dsearch = {
       enable = true;

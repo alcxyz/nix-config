@@ -1,7 +1,7 @@
 # modules/home-manager/programs/omniwm/default.nix
 # OmniWM — niri-style scrolling tiling WM for macOS
 # Installed via Homebrew cask (BarutSRB/tap); config managed here.
-{ config, lib, inputs, username, ... }:
+{ config, lib, inputs, username, configDir, ... }:
 with lib;
 
 let
@@ -14,6 +14,6 @@ in {
   config = mkIf cfg.enable {
     # Symlink settings.json so edits in the repo are live without rebuild
     xdg.configFile."omniwm/settings.json".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/omniwm/settings.json";
+      "${configDir}/users/${username}/configs/omniwm/settings.json";
   };
 }

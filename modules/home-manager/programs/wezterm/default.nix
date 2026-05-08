@@ -68,6 +68,16 @@ in
       -- No tab bar for clean look
       config.enable_tab_bar = false
 
+      -- Native fullscreen animates slowly; non-native works better for a quake terminal.
+      config.native_macos_fullscreen_mode = false
+
+      -- Start fullscreen so the global hotkey behaves like a dropdown terminal.
+      local mux = wezterm.mux
+      wezterm.on('gui-startup', function(cmd)
+        local _, _, window = mux.spawn_window(cmd or {})
+        window:gui_window():toggle_fullscreen()
+      end)
+
       return config
     '';
   };

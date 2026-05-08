@@ -4,7 +4,7 @@
 # Config is a static JSON file maintained in users/alc/configs/karabiner/,
 # symlinked here so edits are live without rebuilding (same pattern as OmniWM).
 # See ADR-0011 for context on why Karabiner instead of kanata.
-{ config, lib, username, ... }:
+{ config, lib, username, configDir, ... }:
 with lib;
 
 let
@@ -16,6 +16,6 @@ in {
 
   config = mkIf cfg.enable {
     xdg.configFile."karabiner/karabiner.json".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/karabiner/karabiner.json";
+      "${configDir}/users/${username}/configs/karabiner/karabiner.json";
   };
 }
