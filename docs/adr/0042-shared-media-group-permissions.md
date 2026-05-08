@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07
-**Applies to:** `modules/nixos/services/torrent`, `modules/nixos/services/stash`, `hosts/xyz`, `gitops/k8s/apps/qbittorrent`
+**Applies to:** `modules/nixos/services/torrent`, `modules/nixos/services/stash`, `modules/nixos/services/plex`, `modules/nixos/services/calibre-web`, `hosts/xyz`
 
 ## Context
 
@@ -37,9 +37,15 @@ group-writable shared media roots:
 - ZFS datasets have `acltype=posixacl`
 - default ACLs grant `media` read/write/search access for newly created content
 - a one-time migration applies the `media` ACL recursively to existing content
-- qBittorrent mounts the real media paths directly in k8s
-- Stash keeps using the real media paths directly in Docker
+- qBittorrent mounts the real media paths directly
+- Stash keeps using the real media paths directly
 - containers receive supplemental membership in the numeric `media` group
+
+qBittorrent, Stash, Plex, and Calibre-Web are host-pinned media services on
+`xyz`. They should run as Nix-managed Docker containers on `xyz` rather than
+Kubernetes workloads pinned back to the same host. Kubernetes may still route to
+them through explicit host endpoint services, but it should not own their
+processes or hostPath storage.
 
 Keep compatibility for existing qBittorrent save paths by replacing the old
 `/zpool/downloads/stash_rtorrent`, `/zpool/downloads/stash2_rtorrent`, and
@@ -63,8 +69,10 @@ state directories, and auditability.
 ## Consequences
 
 - FUSE bindfs is no longer required for torrent/Stash interoperability.
-- qBittorrent paths become more explicit in Kubernetes manifests.
+- qBittorrent paths become explicit host paths.
 - The shared media group becomes the durable contract for media write access.
 - Existing files need a one-time ACL migration before removing the bindfs views.
 - Containers must keep supplemental `media` group membership in addition to
   their service-specific primary UID/GID.
+- Kubernetes no longer needs hostPath PVs or host-pinned Deployments for the
+  permanently `xyz`-local media apps.

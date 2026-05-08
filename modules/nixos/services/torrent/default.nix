@@ -50,6 +50,8 @@ in
   options.services.torrent.enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
 
   config = lib.mkIf config.services.torrent.enable {
+    virtualisation.oci-containers.backend = "docker";
+
     users.groups.${sharedGroup} = { };
     users.groups.${serviceGroup} = { };
     users.users.${serviceUser} = {
@@ -75,6 +77,56 @@ in
     };
 
     systemd.tmpfiles.rules = tmpfilesRules;
+
+    networking.firewall = {
+      allowedTCPPorts = [
+        8080
+        51413
+      ];
+      allowedUDPPorts = [ 51413 ];
+    };
+
+    virtualisation.oci-containers.containers.qbittorrent = {
+      image = "lscr.io/linuxserver/qbittorrent:latest";
+      pull = "always";
+      ports = [
+        "8080:8080/tcp"
+        "51413:51413/tcp"
+        "51413:51413/udp"
+      ];
+      environment = {
+        PUID = "986";
+        PGID = "983";
+        TZ = "Europe/Oslo";
+        WEBUI_PORT = "8080";
+        TORRENTING_PORT = "51413";
+      };
+      volumes = [
+        "${qbConfigStateDir}:/config"
+        "${dataDir}:/zpool/downloads"
+        "${stashDir}:/zpool/stash"
+        "${stash2Dir}:/ypool/stash"
+        "${mediaDir}:/zpool/media"
+      ];
+      log-driver = "json-file";
+      extraOptions = [
+        "--log-opt=max-file=10"
+        "--log-opt=max-size=2m"
+      ];
+    };
+
+    systemd.services.docker-qbittorrent = {
+      requires = [
+        "zfs-mount.service"
+        "torrent-shared-media-permissions.service"
+        "torrent-legacy-media-symlinks.service"
+      ];
+      after = [
+        "zfs-mount.service"
+        "torrent-shared-media-permissions.service"
+        "torrent-legacy-media-symlinks.service"
+      ];
+    };
 
     systemd.services.torrent-shared-media-zfs-properties = {
       description = "Enable POSIX ACLs on shared media ZFS datasets";

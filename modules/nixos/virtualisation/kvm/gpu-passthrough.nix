@@ -24,6 +24,9 @@ let
 
     stop_gpu_consumers() {
       log "stopping GPU consumer containers..."
+      ${concatMapStringsSep "\n      " (service: ''
+        systemctl stop ${escapeShellArg service} || true'') cfg.gpuSystemdServices}
+
       ${concatMapStringsSep "\n      " (stack: ''
         if [ -d "${stack}" ]; then
           ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" down --timeout 30 || true
@@ -84,6 +87,9 @@ let
 
     start_gpu_consumers() {
       log "restarting GPU consumer containers..."
+      ${concatMapStringsSep "\n      " (service: ''
+        systemctl start ${escapeShellArg service} || true'') cfg.gpuSystemdServices}
+
       ${concatMapStringsSep "\n      " (stack: ''
         if [ -d "${stack}" ]; then
           ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" up -d || true
@@ -129,6 +135,12 @@ in
       type = types.listOf types.str;
       default = [];
       description = "Docker-compose directories using the GPU (stopped before passthrough).";
+    };
+
+    gpuSystemdServices = mkOption {
+      type = types.listOf types.str;
+      default = [];
+      description = "Systemd services using the GPU (stopped before passthrough).";
     };
   };
 
