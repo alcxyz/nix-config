@@ -103,11 +103,42 @@ in
 
       preStart = ''
         install -d -m 0750 -o ${cfg.user} -g ${cfg.group} \
+          ${cfg.dataDir} \
           ${cfg.dataDir}/config \
           ${cfg.dataDir}/metadata \
           ${cfg.dataDir}/cache \
           ${cfg.dataDir}/blobs \
           ${cfg.dataDir}/generated
+
+        permission_marker=${cfg.dataDir}/config/.native-permissions-v1
+        if [ ! -e "$permission_marker" ]; then
+          chown -R ${cfg.user}:${cfg.group} \
+            ${cfg.dataDir}/config \
+            ${cfg.dataDir}/metadata \
+            ${cfg.dataDir}/cache \
+            ${cfg.dataDir}/blobs \
+            ${cfg.dataDir}/generated
+
+          find \
+            ${cfg.dataDir}/config \
+            ${cfg.dataDir}/metadata \
+            ${cfg.dataDir}/cache \
+            ${cfg.dataDir}/blobs \
+            ${cfg.dataDir}/generated \
+            -type d -exec chmod 0750 {} +
+
+          find \
+            ${cfg.dataDir}/config \
+            ${cfg.dataDir}/metadata \
+            ${cfg.dataDir}/cache \
+            ${cfg.dataDir}/blobs \
+            ${cfg.dataDir}/generated \
+            -type f -exec chmod 0660 {} +
+
+          touch "$permission_marker"
+          chown ${cfg.user}:${cfg.group} "$permission_marker"
+          chmod 0640 "$permission_marker"
+        fi
 
         if [ ! -f ${cfg.dataDir}/config/config.yml ]; then
           echo "Refusing to start Stash: ${cfg.dataDir}/config/config.yml is missing." >&2
