@@ -104,6 +104,7 @@ in
       home = cfg.dataDir;
       extraGroups = [
         "media"
+        "nogroup"
         "rtorrent"
         "render"
         "video"
@@ -155,6 +156,7 @@ in
         Group = cfg.group;
         SupplementaryGroups = [
           "media"
+          "nogroup"
           "rtorrent"
           "render"
           "video"
