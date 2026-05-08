@@ -862,11 +862,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1778113399,
-        "narHash": "sha256-v9uAXHPKHvrFOmxpmar2sdQHX9b73HzGlDC/EhUBzjI=",
+        "lastModified": 1778181882,
+        "narHash": "sha256-VbSc1UPLuBXP8bu9zt7WHZuLmdWUcMSNEkopenkTmsc=",
         "ref": "refs/heads/main",
-        "rev": "3b929136df2649fd09e3d1dbed826c9dcaf34e4f",
-        "revCount": 150,
+        "rev": "0da02df7eda7c18d7962597589c4a2aa0da95934",
+        "revCount": 152,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
