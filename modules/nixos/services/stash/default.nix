@@ -1,6 +1,7 @@
 # modules/nixos/services/stash/default.nix
 {
   config,
+  inputs,
   lib,
   pkgs,
   username,
@@ -11,10 +12,18 @@ with lib;
 
 let
   cfg = config.services.stash.managed;
+  system = pkgs.stdenv.hostPlatform.system;
 in
 {
   options.services.stash.managed = {
-    enable = mkEnableOption "Stash (managed as a Docker container)";
+    enable = mkEnableOption "Stash (managed as a native systemd service)";
+
+    package = mkOption {
+      type = types.package;
+      default = inputs.nix-packages.packages.${system}.stash;
+      defaultText = literalExpression "inputs.nix-packages.packages.\${pkgs.stdenv.hostPlatform.system}.stash";
+      description = "Stash package to run.";
+    };
 
     user = mkOption {
       type = types.str;
@@ -39,8 +48,6 @@ in
   };
 
   config = mkIf cfg.enable {
-    virtualisation.oci-containers.backend = "docker";
-
     users.groups.media = { };
     users.users.${cfg.user} = {
       isSystemUser = true;
@@ -49,6 +56,8 @@ in
       extraGroups = [
         "media"
         "rtorrent"
+        "render"
+        "video"
       ];
     };
     users.groups.${cfg.group} = { };
@@ -68,47 +77,79 @@ in
 
     networking.firewall.allowedTCPPorts = [ 9999 ];
 
-    virtualisation.oci-containers.containers.stash = {
-      image = "nerethos/stash:latest";
-      pull = "always";
-      ports = [ "9999:9999/tcp" ];
-      environment = {
-        PUID = "989";
-        PGID = "984";
-        STASH_GENERATED = "/generated/";
-        STASH_METADATA = "/metadata/";
-        STASH_CACHE = "/cache/";
-        NVIDIA_VISIBLE_DEVICES = "all";
-        NVIDIA_DRIVER_CAPABILITIES = "compute,video,utility";
-      };
-      devices = [ "nvidia.com/gpu=all" ];
-      volumes = [
-        "/etc/localtime:/etc/localtime:ro"
-        "/ypool/stash:/ypool/stash"
-        "/zpool/stash:/zpool/stash"
-        "${cfg.dataDir}/config:/root/.stash"
-        "${cfg.dataDir}/metadata:/metadata"
-        "${cfg.dataDir}/cache:/cache"
-        "${cfg.dataDir}/generated:/generated"
-        "${cfg.dataDir}/blobs:/blobs"
-      ];
-      log-driver = "json-file";
-      extraOptions = [
-        "--group-add=983"
-        "--log-opt=max-file=10"
-        "--log-opt=max-size=2m"
-      ];
-    };
-
-    systemd.services.docker-stash = {
+    systemd.services.stash = {
+      description = "Stash media organizer";
+      wantedBy = [ "multi-user.target" ];
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
       ];
       after = [
+        "network.target"
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
       ];
+      conflicts = [ "docker-stash.service" ];
+
+      path = with pkgs; [
+        ffmpeg-full
+        python3
+        ruby
+      ];
+
+      environment = {
+        STASH_CONFIG_FILE = "${cfg.dataDir}/config/config.yml";
+      };
+
+      preStart = ''
+        install -d -m 0750 -o ${cfg.user} -g ${cfg.group} \
+          ${cfg.dataDir}/config \
+          ${cfg.dataDir}/metadata \
+          ${cfg.dataDir}/cache \
+          ${cfg.dataDir}/blobs \
+          ${cfg.dataDir}/generated
+
+        if [ ! -f ${cfg.dataDir}/config/config.yml ]; then
+          echo "Refusing to start Stash: ${cfg.dataDir}/config/config.yml is missing." >&2
+          exit 1
+        fi
+
+        if [ ! -f ${cfg.dataDir}/config/stash-go.sqlite ]; then
+          echo "Refusing to start Stash: ${cfg.dataDir}/config/stash-go.sqlite is missing." >&2
+          exit 1
+        fi
+      '';
+
+      serviceConfig = {
+        User = cfg.user;
+        Group = cfg.group;
+        SupplementaryGroups = [
+          "media"
+          "rtorrent"
+          "render"
+          "video"
+        ];
+        WorkingDirectory = "${cfg.dataDir}/config";
+        ExecStart = lib.getExe cfg.package;
+        Restart = "on-failure";
+        RestartSec = "10s";
+
+        BindPaths = [
+          "${cfg.dataDir}/generated:/generated"
+          "${cfg.dataDir}/metadata:/metadata"
+          "${cfg.dataDir}/cache:/cache"
+          "${cfg.dataDir}/blobs:/blobs"
+        ];
+
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ReadWritePaths = [
+          cfg.dataDir
+          "/zpool/stash"
+          "/ypool/stash"
+        ];
+      };
     };
   };
 }
