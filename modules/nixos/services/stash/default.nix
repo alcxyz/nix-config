@@ -13,7 +13,15 @@ with lib;
 let
   cfg = config.services.stash.managed;
   system = pkgs.stdenv.hostPlatform.system;
+  legacyDataDir = "/zpool/vault/stash";
   preStartScript = pkgs.writeShellScript "stash-pre-start" ''
+    if [ -d ${lib.escapeShellArg legacyDataDir} ] && [ ! -e ${
+      lib.escapeShellArg (cfg.dataDir + "/config/config.yml")
+    } ]; then
+      install -d -m 0750 -o ${cfg.user} -g ${cfg.group} ${lib.escapeShellArg cfg.dataDir}
+      cp -a ${lib.escapeShellArg (legacyDataDir + "/.")} ${lib.escapeShellArg (cfg.dataDir + "/")}
+    fi
+
     install -d -m 0750 -o ${cfg.user} -g ${cfg.group} \
       ${cfg.dataDir} \
       ${cfg.dataDir}/config \

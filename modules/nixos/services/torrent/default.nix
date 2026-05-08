@@ -11,10 +11,11 @@ let
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
   sharedGroup = "media";
-  qbConfigDir = "/var/lib/qbittorrent";
-  qbConfigStateDir = "${qbConfigDir}/qBittorrent";
+  qbConfigDir = "/zpool/appdata/qbittorrent";
+  qbConfigStateDir = "${qbConfigDir}/profile";
   qbNativeDir = "${qbConfigStateDir}/qBittorrent";
-  qbLegacyDir = "${qbConfigStateDir}/qBittorrent";
+  qbLegacyDir = "/var/lib/qbittorrent/qBittorrent/qBittorrent";
+  qbLegacyNativeDir = "/var/lib/qbittorrent/qBittorrent/qBittorrent";
   dataDir = "/zpool/downloads";
 
   stashDir = "/zpool/stash";
@@ -58,7 +59,14 @@ let
       ${lib.escapeShellArg (qbNativeDir + "/config")} \
       ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
 
-    if [ -f ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent.conf")} ] \
+    if [ -f ${lib.escapeShellArg (qbLegacyNativeDir + "/config/qBittorrent.conf")} ] \
+      && ! grep -q 'WebUI\\Password_PBKDF2' ${
+        lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")
+      } 2>/dev/null; then
+      cp -a ${lib.escapeShellArg (qbLegacyNativeDir + "/config/qBittorrent.conf")} ${
+        lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")
+      }
+    elif [ -f ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent.conf")} ] \
       && ! grep -q 'WebUI\\Password_PBKDF2' ${
         lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")
       } 2>/dev/null; then
@@ -67,13 +75,24 @@ let
       }
     fi
 
-    if [ -f ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent-data.conf")} ]; then
+    if [ -f ${lib.escapeShellArg (qbLegacyNativeDir + "/config/qBittorrent-data.conf")} ]; then
+      cp -a ${lib.escapeShellArg (qbLegacyNativeDir + "/config/qBittorrent-data.conf")} ${
+        lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")
+      }
+    elif [ -f ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent-data.conf")} ]; then
       cp -a ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent-data.conf")} ${
         lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")
       }
     fi
 
-    if [ -d ${lib.escapeShellArg (qbLegacyDir + "/BT_backup")} ] \
+    if [ -d ${lib.escapeShellArg (qbLegacyNativeDir + "/data/BT_backup")} ] \
+      && [ -z "$(${pkgs.findutils}/bin/find ${
+        lib.escapeShellArg (qbNativeDir + "/data/BT_backup")
+      } -maxdepth 1 -name '*.fastresume' -print -quit)" ]; then
+      cp -a ${lib.escapeShellArg (qbLegacyNativeDir + "/data/BT_backup/.")} ${
+        lib.escapeShellArg (qbNativeDir + "/data/BT_backup/")
+      }
+    elif [ -d ${lib.escapeShellArg (qbLegacyDir + "/BT_backup")} ] \
       && [ -z "$(${pkgs.findutils}/bin/find ${
         lib.escapeShellArg (qbNativeDir + "/data/BT_backup")
       } -maxdepth 1 -name '*.fastresume' -print -quit)" ]; then

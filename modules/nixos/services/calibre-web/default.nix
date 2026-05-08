@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   username,
   ...
 }:
@@ -9,6 +10,21 @@ with lib;
 
 let
   cfg = config.services.calibre-web.managed;
+  legacyConfigDir = "/zpool/vault/calibre/calibre_web/config";
+  calibreWebStateMigration = pkgs.writeShellScript "calibre-web-state-migration" ''
+    set -euo pipefail
+
+    install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg cfg.configDir}
+
+    if [ -d ${lib.escapeShellArg legacyConfigDir} ] \
+      && [ ! -e ${lib.escapeShellArg (toString cfg.configDir + "/app.db")} ]; then
+      cp -a ${lib.escapeShellArg (legacyConfigDir + "/.")} ${
+        lib.escapeShellArg (toString cfg.configDir + "/")
+      }
+    fi
+
+    chown -R ${lib.escapeShellArg username}:users ${lib.escapeShellArg cfg.configDir}
+  '';
 in
 {
   options.services.calibre-web.managed = {
@@ -54,6 +70,7 @@ in
       requires = [ "zfs-mount.service" ];
       after = [ "zfs-mount.service" ];
       conflicts = [ "docker-calibre-web.service" ];
+      serviceConfig.ExecStartPre = [ "+${calibreWebStateMigration}" ];
     };
   };
 }

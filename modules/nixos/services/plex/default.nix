@@ -10,6 +10,22 @@ with lib;
 let
   cfg = config.services.plex.managed;
   nativeDataDir = "${cfg.dataDir}/Library/Application Support";
+  legacyDataDir = "/var/lib/plex/Library/Application Support";
+  plexStateMigration = pkgs.writeShellScript "plex-state-migration" ''
+    set -euo pipefail
+
+    install -d -m 0770 -o media -g media ${lib.escapeShellArg nativeDataDir}
+
+    if [ -d ${lib.escapeShellArg (legacyDataDir + "/Plex Media Server")} ] \
+      && [ ! -e ${lib.escapeShellArg (nativeDataDir + "/Plex Media Server/Preferences.xml")} ]; then
+      install -d -m 0770 -o media -g media ${lib.escapeShellArg (nativeDataDir + "/Plex Media Server")}
+      cp -a ${lib.escapeShellArg (legacyDataDir + "/Plex Media Server/.")} ${
+        lib.escapeShellArg (nativeDataDir + "/Plex Media Server/")
+      }
+    fi
+
+    chown -R media:media ${lib.escapeShellArg cfg.dataDir}
+  '';
 in
 {
   options.services.plex.managed = {
@@ -71,6 +87,7 @@ in
         PLEX_MEDIA_SERVER_TMPDIR = mkForce cfg.transcodeDir;
       };
       serviceConfig = {
+        ExecStartPre = [ "+${plexStateMigration}" ];
         BindReadOnlyPaths = [ "${cfg.mediaDir}:/media" ];
         BindPaths = [ "${cfg.transcodeDir}:/transcode" ];
       };
