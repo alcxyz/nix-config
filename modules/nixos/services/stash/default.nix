@@ -22,7 +22,7 @@ let
       ${cfg.dataDir}/blobs \
       ${cfg.dataDir}/generated
 
-    permission_marker=${cfg.dataDir}/config/.native-permissions-v1
+    permission_marker=${cfg.dataDir}/config/.native-permissions-v2
     if [ ! -e "$permission_marker" ]; then
       chown -R ${cfg.user}:${cfg.group} \
         ${cfg.dataDir}/config \
@@ -166,6 +166,7 @@ in
         RestartSec = "10s";
 
         BindPaths = [
+          "${cfg.dataDir}/config:/root/.stash"
           "${cfg.dataDir}/generated:/generated"
           "${cfg.dataDir}/metadata:/metadata"
           "${cfg.dataDir}/cache:/cache"
