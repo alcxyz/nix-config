@@ -15,13 +15,6 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   legacyDataDir = "/zpool/vault/stash";
   preStartScript = pkgs.writeShellScript "stash-pre-start" ''
-    if [ -d ${lib.escapeShellArg legacyDataDir} ] && [ ! -e ${
-      lib.escapeShellArg (cfg.dataDir + "/config/config.yml")
-    } ]; then
-      install -d -m 0750 -o ${cfg.user} -g ${cfg.group} ${lib.escapeShellArg cfg.dataDir}
-      cp -a ${lib.escapeShellArg (legacyDataDir + "/.")} ${lib.escapeShellArg (cfg.dataDir + "/")}
-    fi
-
     install -d -m 0750 -o ${cfg.user} -g ${cfg.group} \
       ${cfg.dataDir} \
       ${cfg.dataDir}/config \
@@ -30,7 +23,26 @@ let
       ${cfg.dataDir}/blobs \
       ${cfg.dataDir}/generated
 
-    permission_marker=${cfg.dataDir}/config/.native-permissions-v2
+    legacy_migration_marker=${cfg.dataDir}/config/.legacy-appdata-migrated
+    if [ -d ${lib.escapeShellArg legacyDataDir} ] && [ ! -e "$legacy_migration_marker" ]; then
+      if [ -d ${lib.escapeShellArg (legacyDataDir + "/config")} ]; then
+        ${lib.getExe pkgs.rsync} -a --ignore-existing \
+          ${lib.escapeShellArg (legacyDataDir + "/config/")} \
+          ${lib.escapeShellArg (cfg.dataDir + "/config/")}
+      fi
+
+      for state_dir in metadata cache blobs generated; do
+        if [ -d ${lib.escapeShellArg legacyDataDir}/"$state_dir" ]; then
+          ${lib.getExe pkgs.rsync} -a --ignore-existing \
+            ${lib.escapeShellArg legacyDataDir}/"$state_dir"/ \
+            ${lib.escapeShellArg cfg.dataDir}/"$state_dir"/
+        fi
+      done
+
+      touch "$legacy_migration_marker"
+    fi
+
+    permission_marker=${cfg.dataDir}/config/.native-permissions-v3
     if [ ! -e "$permission_marker" ]; then
       chown -R ${cfg.user}:${cfg.group} \
         ${cfg.dataDir}/config \
@@ -70,9 +82,16 @@ let
       exit 1
     fi
 
-    if [ "$(${lib.getExe pkgs.yq-go} '.database' ${cfg.dataDir}/config/config.yml)" = "/root/.stash/stash-go.sqlite" ]; then
+    current_database="$(${lib.getExe pkgs.yq-go} '.database' ${cfg.dataDir}/config/config.yml)"
+    if [ "$current_database" = "/root/.stash/stash-go.sqlite" ] || [ "$current_database" = "${legacyDataDir}/config/stash-go.sqlite" ]; then
       cp -an ${cfg.dataDir}/config/config.yml ${cfg.dataDir}/config/config.yml.pre-native-paths
-      ${lib.getExe pkgs.yq-go} -i '.database = "${cfg.dataDir}/config/stash-go.sqlite"' ${cfg.dataDir}/config/config.yml
+      ${lib.getExe pkgs.yq-go} -i '
+        .database = "${cfg.dataDir}/config/stash-go.sqlite" |
+        .generated = "/generated" |
+        .metadata = "/metadata" |
+        .cache = "/cache" |
+        .blobs_path = "/blobs"
+      ' ${cfg.dataDir}/config/config.yml
       chown ${cfg.user}:${cfg.group} ${cfg.dataDir}/config/config.yml
       chmod 0660 ${cfg.dataDir}/config/config.yml
     fi
@@ -181,6 +200,7 @@ in
         ExecStart = lib.getExe cfg.package;
         Restart = "on-failure";
         RestartSec = "10s";
+        TimeoutStartSec = "30min";
 
         BindPaths = [
           "${cfg.dataDir}/generated:/generated"
