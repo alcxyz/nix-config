@@ -13,6 +13,8 @@ let
   sharedGroup = "media";
   qbConfigDir = "/var/lib/qbittorrent";
   qbConfigStateDir = "${qbConfigDir}/qBittorrent";
+  qbNativeDir = "${qbConfigStateDir}/qBittorrent";
+  qbLegacyDir = "${qbConfigStateDir}/qBittorrent";
   dataDir = "/zpool/downloads";
 
   stashDir = "/zpool/stash";
@@ -49,6 +51,39 @@ let
     ++ map (
       d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
     ) sharedMediaDirs;
+  qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
+    set -euo pipefail
+
+    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
+      ${lib.escapeShellArg (qbNativeDir + "/config")} \
+      ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
+
+    if [ -f ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent.conf")} ] \
+      && ! grep -q 'WebUI\\Password_PBKDF2' ${
+        lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")
+      } 2>/dev/null; then
+      cp -a ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent.conf")} ${
+        lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")
+      }
+    fi
+
+    if [ -f ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent-data.conf")} ]; then
+      cp -a ${lib.escapeShellArg (qbLegacyDir + "/qBittorrent-data.conf")} ${
+        lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")
+      }
+    fi
+
+    if [ -d ${lib.escapeShellArg (qbLegacyDir + "/BT_backup")} ] \
+      && [ -z "$(${pkgs.findutils}/bin/find ${
+        lib.escapeShellArg (qbNativeDir + "/data/BT_backup")
+      } -maxdepth 1 -name '*.fastresume' -print -quit)" ]; then
+      cp -a ${lib.escapeShellArg (qbLegacyDir + "/BT_backup/.")} ${
+        lib.escapeShellArg (qbNativeDir + "/data/BT_backup/")
+      }
+    fi
+
+    chown -R ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} ${lib.escapeShellArg qbNativeDir}
+  '';
 in
 {
   options.services.torrent.enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
@@ -108,6 +143,7 @@ in
       ];
       conflicts = [ "docker-qbittorrent.service" ];
       serviceConfig = {
+        ExecStartPre = [ "+${qbittorrentStateMigration}" ];
         PrivateUsers = lib.mkForce false;
         SupplementaryGroups = [
           serviceGroup
