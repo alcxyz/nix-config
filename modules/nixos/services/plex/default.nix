@@ -9,6 +9,7 @@ with lib;
 
 let
   cfg = config.services.plex.managed;
+  nativeDataDir = "${cfg.dataDir}/Library/Application Support";
 in
 {
   options.services.plex.managed = {
@@ -42,7 +43,7 @@ in
 
     services.plex = {
       enable = true;
-      dataDir = cfg.dataDir;
+      dataDir = nativeDataDir;
       user = "media";
       group = "media";
       openFirewall = true;
@@ -50,6 +51,7 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0770 media media - -"
+      "d ${nativeDataDir} 0770 media media - -"
       "d ${cfg.transcodeDir} 0770 media media - -"
       "d ${cfg.mediaDir} 0770 root media - -"
     ];
