@@ -18,7 +18,7 @@ in {
 
     # Symlink niri config for live editing
     xdg.configFile."niri/config.kdl".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/niri/config.kdl";
+      "${configDir}/users/${username}/configs/niri/config.kdl";
 
     # Niri-specific scripts
     home.file.".config/niri/scripts/fkey-handler.sh" = {

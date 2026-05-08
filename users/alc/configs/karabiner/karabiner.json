@@ -23,7 +23,7 @@
                                 },
                                 "to": [
                                     {
-                                        "shell_command": "/Users/alc/nix/nix-config/users/alc/configs/skhd/toggle-wezterm"
+                                        "shell_command": "/Users/alc/src/infra/nix-config/users/alc/configs/skhd/toggle-wezterm"
                                     }
                                 ],
                                 "type": "basic"

@@ -81,9 +81,7 @@ in
     home.sessionVariables = {
       DIRENV_LOG_FORMAT = "";
       CGO_ENABLED = "1";
-      # FLAKE path still needs to be conditional, as it's an absolute path
-      # relative to the OS's file system root
-      FLAKE = "${config.home.homeDirectory}/nix/nix-config";
+      FLAKE = configDir;
     };
 
     # Swtich aliases
@@ -101,10 +99,10 @@ in
 
     # ==================== Symlinked configs (live editing, all hosts) ====================
     xdg.configFile."television".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/television";
+      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/television";
 
     xdg.configFile."llm/config.toml".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-config/users/alc/configs/llm/config.toml";
+      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/llm/config.toml";
 
     home.file.".claude/CLAUDE.md".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";

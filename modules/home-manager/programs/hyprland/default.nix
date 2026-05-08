@@ -29,22 +29,22 @@ in {
     # Symlink hyprland configs directly to the repo checkout so edits take
     # effect immediately without a home-manager rebuild.
     xdg.configFile."hypr/hyprland.conf".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/hypr/hyprland.conf";
+      "${configDir}/users/${username}/configs/hypr/hyprland.conf";
     xdg.configFile."hypr/binds.conf".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/hypr/binds.conf";
+      "${configDir}/users/${username}/configs/hypr/binds.conf";
     xdg.configFile."hypr/binds-scrolling.conf".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/hypr/binds-scrolling.conf";
+      "${configDir}/users/${username}/configs/hypr/binds-scrolling.conf";
     xdg.configFile."hypr/binds-dwindle.conf".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/hypr/binds-dwindle.conf";
+      "${configDir}/users/${username}/configs/hypr/binds-dwindle.conf";
 
     # DMS user-editable configs — live symlinks so edits take effect immediately.
     # colors.conf and layout.conf are excluded: DMS generates them at runtime.
     xdg.configFile."hypr/dms/cursor.conf".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/cursor.conf";
+      "${configDir}/users/${username}/configs/dms/cursor.conf";
     xdg.configFile."hypr/dms/windowrules.conf".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/windowrules.conf";
+      "${configDir}/users/${username}/configs/dms/windowrules.conf";
     xdg.configFile."hypr/dms/outputs.conf".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/dms/outputs.conf";
+      "${configDir}/users/${username}/configs/dms/outputs.conf";
 
     # Keep colors.conf generated from nix-colors
     xdg.configFile."hypr/colors.conf".text = ''
