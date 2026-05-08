@@ -1,2 +1,2 @@
 # Quake-style WezTerm toggle
-alt - space : ~/src/infra/nix-config/users/alc/configs/skhd/toggle-wezterm
+alt - space : ~/nix/nix-config/users/alc/configs/skhd/toggle-wezterm

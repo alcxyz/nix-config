@@ -271,7 +271,6 @@ rec {
     # macOS-only desktop apps
     desktopMacOnly = with pkgs; [
       raycast
-      omniwm
     ];
 
     # Convenience combined sets
