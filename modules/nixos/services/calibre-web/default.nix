@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  username,
   ...
 }:
 
@@ -11,7 +12,7 @@ let
 in
 {
   options.services.calibre-web.managed = {
-    enable = mkEnableOption "Calibre-Web (managed as a Docker container)";
+    enable = mkEnableOption "Calibre-Web managed as a native systemd service";
 
     configDir = mkOption {
       type = types.path;
@@ -27,40 +28,32 @@ in
   };
 
   config = mkIf cfg.enable {
-    virtualisation.oci-containers.backend = "docker";
-
     networking.firewall.allowedTCPPorts = [ 8083 ];
 
     systemd.tmpfiles.rules = [
-      "d ${cfg.configDir} 0755 1000 100 - -"
-      "d ${cfg.libraryDir} 0755 1000 100 - -"
+      "d ${cfg.configDir} 0755 ${username} users - -"
+      "d ${cfg.libraryDir} 0755 ${username} users - -"
     ];
 
-    virtualisation.oci-containers.containers.calibre-web = {
-      image = "lscr.io/linuxserver/calibre-web:latest";
-      pull = "always";
-      ports = [ "8083:8083/tcp" ];
-      environment = {
-        PUID = "1000";
-        PGID = "100";
-        TZ = "Europe/Oslo";
-        DOCKER_MODS = "";
-        OAUTHLIB_RELAX_TOKEN_SCOPE = "1";
+    services.calibre-web = {
+      enable = true;
+      dataDir = toString cfg.configDir;
+      user = username;
+      group = "users";
+      listen = {
+        ip = "0.0.0.0";
+        port = 8083;
       };
-      volumes = [
-        "${cfg.configDir}:/config"
-        "${cfg.libraryDir}:/books"
-      ];
-      log-driver = "json-file";
-      extraOptions = [
-        "--log-opt=max-file=10"
-        "--log-opt=max-size=2m"
-      ];
+      options = {
+        calibreLibrary = cfg.libraryDir;
+        enableBookUploading = false;
+      };
     };
 
-    systemd.services.docker-calibre-web = {
+    systemd.services.calibre-web = {
       requires = [ "zfs-mount.service" ];
       after = [ "zfs-mount.service" ];
+      conflicts = [ "docker-calibre-web.service" ];
     };
   };
 }

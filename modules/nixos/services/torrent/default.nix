@@ -22,6 +22,9 @@ let
   torrentDirs = [
     qbConfigDir
     qbConfigStateDir
+  ];
+
+  downloadDirs = [
     dataDir
     (dataDir + "/watch")
     (dataDir + "/completed")
@@ -41,6 +44,7 @@ let
 
   tmpfilesRules =
     map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
+    ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
     ++ map (d: "d " + d + " 2775 - " + sharedGroup + " -") sharedMediaDirs
     ++ map (
       d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
@@ -50,8 +54,6 @@ in
   options.services.torrent.enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
 
   config = lib.mkIf config.services.torrent.enable {
-    virtualisation.oci-containers.backend = "docker";
-
     users.groups.${sharedGroup} = { };
     users.groups.${serviceGroup} = { };
     users.users.${serviceUser} = {
@@ -86,46 +88,32 @@ in
       allowedUDPPorts = [ 51413 ];
     };
 
-    virtualisation.oci-containers.containers.qbittorrent = {
-      image = "lscr.io/linuxserver/qbittorrent:latest";
-      pull = "always";
-      ports = [
-        "8080:8080/tcp"
-        "51413:51413/tcp"
-        "51413:51413/udp"
-      ];
-      environment = {
-        PUID = "986";
-        PGID = "983";
-        TZ = "Europe/Oslo";
-        WEBUI_PORT = "8080";
-        TORRENTING_PORT = "51413";
-      };
-      volumes = [
-        "${qbConfigStateDir}:/config"
-        "${dataDir}:/zpool/downloads"
-        "${stashDir}:/zpool/stash"
-        "${stash2Dir}:/ypool/stash"
-        "${mediaDir}:/zpool/media"
-      ];
-      log-driver = "json-file";
-      extraOptions = [
-        "--log-opt=max-file=10"
-        "--log-opt=max-size=2m"
-      ];
+    services.qbittorrent = {
+      enable = true;
+      user = serviceUser;
+      group = sharedGroup;
+      profileDir = qbConfigStateDir;
+      webuiPort = 8080;
+      torrentingPort = 51413;
     };
 
-    systemd.services.docker-qbittorrent = {
+    systemd.services.qbittorrent = {
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
-        "torrent-legacy-media-symlinks.service"
       ];
       after = [
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
-        "torrent-legacy-media-symlinks.service"
       ];
+      conflicts = [ "docker-qbittorrent.service" ];
+      serviceConfig = {
+        PrivateUsers = lib.mkForce false;
+        SupplementaryGroups = [
+          serviceGroup
+          "stash"
+        ];
+      };
     };
 
     systemd.services.torrent-shared-media-zfs-properties = {
@@ -215,55 +203,5 @@ in
       '';
     };
 
-    systemd.services.torrent-legacy-media-symlinks = {
-      description = "Replace legacy qBittorrent bindfs mountpoints with symlinks";
-      wantedBy = [ "multi-user.target" ];
-      requires = [
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
-      after = [
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
-      before = [
-        "docker.service"
-        "k3s.service"
-      ];
-      path = with pkgs; [
-        coreutils
-        util-linux
-      ];
-      serviceConfig.Type = "oneshot";
-      script = ''
-        set -euo pipefail
-
-        link_if_empty() {
-          local link=$1
-          local target=$2
-
-          if mountpoint -q "$link"; then
-            echo "$link is still a mountpoint; reboot after removing the old bindfs units before creating the compatibility symlink" >&2
-            exit 1
-          fi
-
-          if [[ -L "$link" ]]; then
-            ln -sfn "$target" "$link"
-            return
-          fi
-
-          if [[ -e "$link" ]]; then
-            rmdir "$link"
-          fi
-
-          ln -s "$target" "$link"
-        }
-
-        install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg serviceGroup} ${lib.escapeShellArg dataDir}
-        link_if_empty ${lib.escapeShellArg (dataDir + "/stash_rtorrent")} ${lib.escapeShellArg stashDir}
-        link_if_empty ${lib.escapeShellArg (dataDir + "/stash2_rtorrent")} ${lib.escapeShellArg stash2Dir}
-        link_if_empty ${lib.escapeShellArg (dataDir + "/media_rtorrent")} ${lib.escapeShellArg mediaDir}
-      '';
-    };
   };
 }

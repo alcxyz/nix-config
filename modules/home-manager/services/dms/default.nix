@@ -1,5 +1,13 @@
 # modules/home-manager/services/dms/default.nix
-{ lib, config, inputs, pkgs, username, ... }:
+{
+  lib,
+  config,
+  inputs,
+  pkgs,
+  username,
+  configDir,
+  ...
+}:
 
 let
   cfg = config.services.dms;
@@ -9,8 +17,7 @@ let
   };
 in
 {
-  options.services.dms.enable =
-    lib.mkEnableOption "Enable DankMaterialShell suite";
+  options.services.dms.enable = lib.mkEnableOption "Enable DankMaterialShell suite";
 
   imports = [
     inputs.dsearch.homeModules.default
@@ -18,15 +25,16 @@ in
   ];
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ dankcalendarPkg ];
+    home.packages = [
+      dankcalendarPkg
+      pkgs.translate-shell
+    ];
 
     xdg.configFile."DankMaterialShell/plugin_settings.json".source =
-      config.lib.file.mkOutOfStoreSymlink
-        "${configDir}/users/${username}/configs/dms/plugin_settings.json";
+      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/dms/plugin_settings.json";
 
     xdg.configFile."dankcalendar/config.json".source =
-      config.lib.file.mkOutOfStoreSymlink
-        "${configDir}/users/${username}/configs/dankcalendar/config.json";
+      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/dankcalendar/config.json";
 
     programs.dsearch = {
       enable = true;
