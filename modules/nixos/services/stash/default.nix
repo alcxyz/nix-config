@@ -61,6 +61,13 @@ let
       echo "Refusing to start Stash: ${cfg.dataDir}/config/stash-go.sqlite is missing." >&2
       exit 1
     fi
+
+    if [ "$(${lib.getExe pkgs.yq-go} '.database' ${cfg.dataDir}/config/config.yml)" = "/root/.stash/stash-go.sqlite" ]; then
+      cp -an ${cfg.dataDir}/config/config.yml ${cfg.dataDir}/config/config.yml.pre-native-paths
+      ${lib.getExe pkgs.yq-go} -i '.database = "${cfg.dataDir}/config/stash-go.sqlite"' ${cfg.dataDir}/config/config.yml
+      chown ${cfg.user}:${cfg.group} ${cfg.dataDir}/config/config.yml
+      chmod 0660 ${cfg.dataDir}/config/config.yml
+    fi
   '';
 in
 {
@@ -168,7 +175,6 @@ in
         RestartSec = "10s";
 
         BindPaths = [
-          "${cfg.dataDir}/config:/root/.stash"
           "${cfg.dataDir}/generated:/generated"
           "${cfg.dataDir}/metadata:/metadata"
           "${cfg.dataDir}/cache:/cache"
