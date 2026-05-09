@@ -54,15 +54,16 @@
       "locked": {
         "lastModified": 1770921929,
         "narHash": "sha256-bhV22bL38CJp58Y8tCY8sEBRYxmuk671fEymmdg0Yuk=",
-        "owner": "alcxyz",
-        "repo": "DankCalculator",
+        "ref": "main",
         "rev": "07d7c123a5aee9ac4fd4347bbae36d5957b021f9",
-        "type": "github"
+        "revCount": 19,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalculator.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "DankCalculator",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalculator.git"
       }
     },
     "canopy": {
@@ -111,17 +112,18 @@
     "dankcalendar": {
       "flake": false,
       "locked": {
-        "lastModified": 1776968095,
-        "narHash": "sha256-5pT2Gqq6GjcxWI2ZPOd2NV3Jhldwl809+swS8lOhApQ=",
-        "owner": "alcxyz",
-        "repo": "DankCalendar",
-        "rev": "29bbbafaed367876cc210663c4483ebb92d2e9b8",
-        "type": "github"
+        "lastModified": 1777357944,
+        "narHash": "sha256-vDVOozlPJVC75Q6xIGPZp9OWjRZnIw+7we+DobtepB8=",
+        "ref": "main",
+        "rev": "a73329b2d6610ca2b7f6d665c6e0a89a22848ab4",
+        "revCount": 27,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalendar.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "DankCalendar",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalendar.git"
       }
     },
     "darwin": {
@@ -148,17 +150,18 @@
     "diskusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1776971848,
-        "narHash": "sha256-6OfSfywRM3V/q99aWEOiSMOKVaijlAOkqiqbwNvFbz8=",
-        "owner": "alcxyz",
-        "repo": "DankDiskUsage",
-        "rev": "f7e57accb3d2ce84b0933e5d88b3fad898fcb796",
-        "type": "github"
+        "lastModified": 1777358064,
+        "narHash": "sha256-QoUclB99FjxxMD+5Jy7x4+fbl1e5aALeKwa7qf2rfPE=",
+        "ref": "main",
+        "rev": "5836d380883a9d201ff128539f547b36eaa9fcba",
+        "revCount": 10,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankDiskUsage.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "DankDiskUsage",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankDiskUsage.git"
       }
     },
     "dms-plugins": {
@@ -174,11 +177,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1776971855,
-        "narHash": "sha256-GtbqK+lMu8TiItMTkvjQH4yymQSB2SYx+wzovy0qCz4=",
+        "lastModified": 1778319346,
+        "narHash": "sha256-fa3NWFvvl2GG9Nez6tVHKWXaGQzFZyNKXqUocjjSaAk=",
         "ref": "refs/heads/main",
-        "rev": "baad13ef739720e799094b679dab13ed04fe6fd6",
-        "revCount": 12,
+        "rev": "4526ad8e3a10468e42899218edb099ab8449e4f9",
+        "revCount": 17,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git"
       },
@@ -210,11 +213,11 @@
     "firstparty": {
       "flake": false,
       "locked": {
-        "lastModified": 1776364275,
-        "narHash": "sha256-KYx+n1stxLT4R9IDVRx3/Cl7TjCcBZjnQchbrXaBT2o=",
+        "lastModified": 1777324456,
+        "narHash": "sha256-QgeeB6Ix8L5oaqTUCopPvGu6vr0ECsF+jO3mQIxPKIw=",
         "owner": "AvengeMedia",
         "repo": "dms-plugins",
-        "rev": "829922a8f11949b1c13ae8bd14d7176f9165b6f5",
+        "rev": "9e2752586d79a6509b93c00c6fa4be0334ae4755",
         "type": "github"
       },
       "original": {
@@ -1022,17 +1025,18 @@
     "quicksearch": {
       "flake": false,
       "locked": {
-        "lastModified": 1776887307,
-        "narHash": "sha256-rswmbfSMl0GeKAPxtv7wqwrqPkQinymACLSDK5QE4yg=",
-        "owner": "alcxyz",
-        "repo": "DankQuickSearch",
-        "rev": "780bf99b715ff18fd5bafadaa66a228f4be28be4",
-        "type": "github"
+        "lastModified": 1778317374,
+        "narHash": "sha256-InNv8f7T1tafoWAeaHHoB0VrLL3cE4L7xV+2HtM8YK8=",
+        "ref": "main",
+        "rev": "46d4bf2a8f50f8c1ead1625c694aae12b907896f",
+        "revCount": 15,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankQuickSearch.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "DankQuickSearch",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankQuickSearch.git"
       }
     },
     "quickshell": {
@@ -1167,17 +1171,18 @@
     "spotify": {
       "flake": false,
       "locked": {
-        "lastModified": 1776887309,
-        "narHash": "sha256-QQpx1+ioljVijLM4GBPHjeyPtH/joapbiJL7xDtVN+E=",
-        "owner": "alcxyz",
-        "repo": "DankSpotify",
-        "rev": "04dbe03b0192b584a17fd6b2a4ca0eef18e24f63",
-        "type": "github"
+        "lastModified": 1778317374,
+        "narHash": "sha256-r7Ye/jBUtvrpN54LTcv97QxJFhs4r3UCTwXpxMXVsO4=",
+        "ref": "main",
+        "rev": "df591c1b44ebb3b58ecc904e4d14162f9132d577",
+        "revCount": 13,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankSpotify.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "DankSpotify",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankSpotify.git"
       }
     },
     "systems": {
@@ -1288,33 +1293,35 @@
     "translate": {
       "flake": false,
       "locked": {
-        "lastModified": 1776887311,
-        "narHash": "sha256-ZhcuyjxRK+eaKpThEC51RGGv3jZoipZNMQ/s7VhET1g=",
-        "owner": "alcxyz",
-        "repo": "DankTranslate",
-        "rev": "cc89e7bf554c4a827775dd213767fef881c6e541",
-        "type": "github"
+        "lastModified": 1778317374,
+        "narHash": "sha256-4gu/UjGb28y0juK1sZ/Q75Ywht79l+3d8FSfGswIz+4=",
+        "ref": "main",
+        "rev": "2ffa59f25f5e0f150ca284ff1edee34378887087",
+        "revCount": 15,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankTranslate.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "DankTranslate",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankTranslate.git"
       }
     },
     "vault": {
       "flake": false,
       "locked": {
-        "lastModified": 1776887306,
-        "narHash": "sha256-ySBoR/SEmHIjy4DXicDueJWTJ9DkRWO0fCiVbTg4KkE=",
-        "owner": "alcxyz",
-        "repo": "DankVault",
-        "rev": "f81101662d0974ec2d1d9ceea09db51492ed3a16",
-        "type": "github"
+        "lastModified": 1778317374,
+        "narHash": "sha256-1qs00e+JdAAgT98iFvGt8jIITE8BFU18u3ayshdQpm0=",
+        "ref": "main",
+        "rev": "85b240439fd4d907cdb3288df1d4cab58fdc312a",
+        "revCount": 18,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankVault.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "DankVault",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankVault.git"
       }
     },
     "worldclock": {
@@ -1322,15 +1329,16 @@
       "locked": {
         "lastModified": 1772134198,
         "narHash": "sha256-g1MB9gzYQYvn0LuGSbwAzqParC6XOKJK8PtttsdwF14=",
-        "owner": "alcxyz",
-        "repo": "WorldClock",
+        "ref": "main",
         "rev": "061752535b5b38f8290edb7108a25cb5f779d405",
-        "type": "github"
+        "revCount": 9,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/WorldClock.git"
       },
       "original": {
-        "owner": "alcxyz",
-        "repo": "WorldClock",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/WorldClock.git"
       }
     },
     "xdph": {
