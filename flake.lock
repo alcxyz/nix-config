@@ -177,11 +177,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1778319470,
-        "narHash": "sha256-0Nh/5oNlaovjyCXRwmRHWeewt2sYvovTKKsxaFSSGgk=",
+        "lastModified": 1778319526,
+        "narHash": "sha256-nktyznDkuFxO1JYplC0sfTUz2patYT4wCTijopMoUhc=",
         "ref": "refs/heads/main",
-        "rev": "b88d9b5b51eb758c96da28db0174114400a52782",
-        "revCount": 18,
+        "rev": "abc1b1fe7e992292b03d085a4ba3357c55bd04ba",
+        "revCount": 19,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git"
       },
