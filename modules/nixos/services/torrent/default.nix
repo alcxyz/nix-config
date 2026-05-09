@@ -20,7 +20,7 @@ let
 
   stashDir = "/zpool/stash";
   stash2Dir = "/ypool/stash";
-  mediaDir = "/zpool/media";
+  mediaDir = "/ypool/media";
 
   torrentDirs = [
     qbConfigDir
@@ -42,7 +42,7 @@ let
   sharedMediaDatasets = [
     "zpool/stash"
     "ypool/stash"
-    "zpool/media"
+    "ypool/media"
   ];
 
   tmpfilesRules =
