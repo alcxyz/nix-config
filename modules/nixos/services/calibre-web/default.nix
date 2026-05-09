@@ -10,20 +10,37 @@ with lib;
 
 let
   cfg = config.services.calibre-web.managed;
+  appdataConfigDir = "/zpool/appdata/calibre-web/config";
   legacyConfigDir = "/zpool/vault/calibre/calibre_web/config";
+  calibreConfigDir = "/var/lib/calibre/config";
+  legacyCalibreConfigDir = "/zpool/vault/calibre/calibre/config";
   calibreWebStateMigration = pkgs.writeShellScript "calibre-web-state-migration" ''
     set -euo pipefail
 
     install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg cfg.configDir}
+    install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg calibreConfigDir}
 
-    if [ -d ${lib.escapeShellArg legacyConfigDir} ] \
+    if [ -d ${lib.escapeShellArg appdataConfigDir} ] \
       && [ ! -e ${lib.escapeShellArg (toString cfg.configDir + "/app.db")} ]; then
-      cp -a ${lib.escapeShellArg (legacyConfigDir + "/.")} ${
-        lib.escapeShellArg (toString cfg.configDir + "/")
-      }
+      ${lib.getExe pkgs.rsync} -a --ignore-existing \
+        ${lib.escapeShellArg (appdataConfigDir + "/")} \
+        ${lib.escapeShellArg (toString cfg.configDir + "/")}
+    elif [ -d ${lib.escapeShellArg legacyConfigDir} ] \
+      && [ ! -e ${lib.escapeShellArg (toString cfg.configDir + "/app.db")} ]; then
+      ${lib.getExe pkgs.rsync} -a --ignore-existing \
+        ${lib.escapeShellArg (legacyConfigDir + "/")} \
+        ${lib.escapeShellArg (toString cfg.configDir + "/")}
+    fi
+
+    if [ -d ${lib.escapeShellArg legacyCalibreConfigDir} ] \
+      && [ ! -e ${lib.escapeShellArg (calibreConfigDir + "/libraries/Main/metadata.db")} ]; then
+      ${lib.getExe pkgs.rsync} -a --ignore-existing \
+        ${lib.escapeShellArg (legacyCalibreConfigDir + "/")} \
+        ${lib.escapeShellArg (calibreConfigDir + "/")}
     fi
 
     chown -R ${lib.escapeShellArg username}:users ${lib.escapeShellArg cfg.configDir}
+    chown -R ${lib.escapeShellArg username}:users ${lib.escapeShellArg calibreConfigDir}
   '';
 in
 {
@@ -32,13 +49,13 @@ in
 
     configDir = mkOption {
       type = types.path;
-      default = "/zpool/vault/calibre/calibre_web/config";
+      default = "/var/lib/calibre-web/config";
       description = "Calibre-Web configuration directory.";
     };
 
     libraryDir = mkOption {
       type = types.path;
-      default = "/zpool/vault/calibre/calibre/config/libraries/Main";
+      default = "/var/lib/calibre/config/libraries/Main";
       description = "Calibre library directory exposed to Calibre-Web.";
     };
   };
@@ -48,6 +65,7 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${cfg.configDir} 0755 ${username} users - -"
+      "d ${calibreConfigDir} 0755 ${username} users - -"
       "d ${cfg.libraryDir} 0755 ${username} users - -"
     ];
 
@@ -67,8 +85,6 @@ in
     };
 
     systemd.services.calibre-web = {
-      requires = [ "zfs-mount.service" ];
-      after = [ "zfs-mount.service" ];
       conflicts = [ "docker-calibre-web.service" ];
       serviceConfig.ExecStartPre = [ "+${calibreWebStateMigration}" ];
     };
