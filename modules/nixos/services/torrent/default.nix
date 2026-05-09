@@ -11,18 +11,21 @@ let
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
   sharedGroup = "media";
-  qbConfigDir = "/zpool/appdata/qbittorrent";
+  qbConfigDir = "/ypool/appdata/qbittorrent";
   qbConfigStateDir = "${qbConfigDir}/profile";
   qbNativeDir = "${qbConfigStateDir}/qBittorrent";
+  qbPreviousConfigDir = "/zpool/appdata/qbittorrent";
+  qbPreviousConfigStateDir = "${qbPreviousConfigDir}/profile";
   qbLegacyDir = "/var/lib/qbittorrent/qBittorrent/qBittorrent";
   qbLegacyNativeDir = "/var/lib/qbittorrent/qBittorrent/qBittorrent";
-  dataDir = "/zpool/downloads";
+  dataDir = "/ypool/downloads";
 
   stashDir = "/zpool/stash";
   stash2Dir = "/ypool/stash";
   mediaDir = "/ypool/media";
 
   torrentDirs = [
+    "/ypool/appdata"
     qbConfigDir
     qbConfigStateDir
   ];
@@ -59,6 +62,13 @@ let
       ${lib.escapeShellArg (qbNativeDir + "/config")} \
       ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
 
+    if [ -d ${lib.escapeShellArg qbPreviousConfigStateDir} ] \
+      && [ ! -e ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")} ]; then
+      ${lib.getExe pkgs.rsync} -a --ignore-existing \
+        ${lib.escapeShellArg (qbPreviousConfigStateDir + "/")} \
+        ${lib.escapeShellArg (qbConfigStateDir + "/")}
+    fi
+
     if [ -f ${lib.escapeShellArg (qbLegacyNativeDir + "/config/qBittorrent.conf")} ] \
       && ! grep -q 'WebUI\\Password_PBKDF2' ${
         lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")
@@ -84,6 +94,15 @@ let
         lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")
       }
     fi
+
+    for config_file in \
+      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")} \
+      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")}
+    do
+      if [ -f "$config_file" ]; then
+        ${pkgs.gnused}/bin/sed -i 's#/zpool/downloads#/ypool/downloads#g' "$config_file"
+      fi
+    done
 
     if [ -d ${lib.escapeShellArg (qbLegacyNativeDir + "/data/BT_backup")} ] \
       && [ -z "$(${pkgs.findutils}/bin/find ${
