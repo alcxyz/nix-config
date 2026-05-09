@@ -78,6 +78,12 @@
     profiles = ["apps"];
   }
   {
+    path = "apps/paperflow-telegram";
+    url = "git@git-ssh.alc.xyz:alcxyz/paperflow-telegram.git";
+    branch = "dev";
+    profiles = ["apps"];
+  }
+  {
     path = "apps/telegram-bot";
     url = "git@git-ssh.alc.xyz:alcxyz/telegram-bot.git";
     branch = "dev";
