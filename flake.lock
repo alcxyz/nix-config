@@ -58,12 +58,12 @@
         "rev": "07d7c123a5aee9ac4fd4347bbae36d5957b021f9",
         "revCount": 19,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalculator.git"
+        "url": "https://git.alc.xyz/alcxyz/DankCalculator.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalculator.git"
+        "url": "https://git.alc.xyz/alcxyz/DankCalculator.git"
       }
     },
     "canopy": {
@@ -118,12 +118,12 @@
         "rev": "a73329b2d6610ca2b7f6d665c6e0a89a22848ab4",
         "revCount": 27,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalendar.git"
+        "url": "https://git.alc.xyz/alcxyz/DankCalendar.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankCalendar.git"
+        "url": "https://git.alc.xyz/alcxyz/DankCalendar.git"
       }
     },
     "darwin": {
@@ -156,12 +156,12 @@
         "rev": "5836d380883a9d201ff128539f547b36eaa9fcba",
         "revCount": 10,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankDiskUsage.git"
+        "url": "https://git.alc.xyz/alcxyz/DankDiskUsage.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankDiskUsage.git"
+        "url": "https://git.alc.xyz/alcxyz/DankDiskUsage.git"
       }
     },
     "dms-plugins": {
@@ -177,11 +177,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1778319346,
-        "narHash": "sha256-fa3NWFvvl2GG9Nez6tVHKWXaGQzFZyNKXqUocjjSaAk=",
+        "lastModified": 1778319470,
+        "narHash": "sha256-0Nh/5oNlaovjyCXRwmRHWeewt2sYvovTKKsxaFSSGgk=",
         "ref": "refs/heads/main",
-        "rev": "4526ad8e3a10468e42899218edb099ab8449e4f9",
-        "revCount": 17,
+        "rev": "b88d9b5b51eb758c96da28db0174114400a52782",
+        "revCount": 18,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git"
       },
@@ -1031,12 +1031,12 @@
         "rev": "46d4bf2a8f50f8c1ead1625c694aae12b907896f",
         "revCount": 15,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankQuickSearch.git"
+        "url": "https://git.alc.xyz/alcxyz/DankQuickSearch.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankQuickSearch.git"
+        "url": "https://git.alc.xyz/alcxyz/DankQuickSearch.git"
       }
     },
     "quickshell": {
@@ -1177,12 +1177,12 @@
         "rev": "df591c1b44ebb3b58ecc904e4d14162f9132d577",
         "revCount": 13,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankSpotify.git"
+        "url": "https://git.alc.xyz/alcxyz/DankSpotify.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankSpotify.git"
+        "url": "https://git.alc.xyz/alcxyz/DankSpotify.git"
       }
     },
     "systems": {
@@ -1299,12 +1299,12 @@
         "rev": "2ffa59f25f5e0f150ca284ff1edee34378887087",
         "revCount": 15,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankTranslate.git"
+        "url": "https://git.alc.xyz/alcxyz/DankTranslate.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankTranslate.git"
+        "url": "https://git.alc.xyz/alcxyz/DankTranslate.git"
       }
     },
     "vault": {
@@ -1316,12 +1316,12 @@
         "rev": "85b240439fd4d907cdb3288df1d4cab58fdc312a",
         "revCount": 18,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankVault.git"
+        "url": "https://git.alc.xyz/alcxyz/DankVault.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/DankVault.git"
+        "url": "https://git.alc.xyz/alcxyz/DankVault.git"
       }
     },
     "worldclock": {
@@ -1333,12 +1333,12 @@
         "rev": "061752535b5b38f8290edb7108a25cb5f779d405",
         "revCount": 9,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/WorldClock.git"
+        "url": "https://git.alc.xyz/alcxyz/WorldClock.git"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/WorldClock.git"
+        "url": "https://git.alc.xyz/alcxyz/WorldClock.git"
       }
     },
     "xdph": {
