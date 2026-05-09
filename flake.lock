@@ -177,17 +177,18 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1778320393,
-        "narHash": "sha256-jVxDfr9Zmxf94W3QzzZfS3AJFAWc63EjdXqi8WYM1fI=",
-        "ref": "refs/heads/main",
-        "rev": "c94afe3954a8bab3cc990fef1dfacdad1b5057bd",
-        "revCount": 20,
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git"
+        "lastModified": 1778324725,
+        "narHash": "sha256-seZRtp6FCUg0W32YfFJjncC7nYkP0yJhwswm9ntHWp0=",
+        "owner": "alcxyz",
+        "repo": "dms-plugins",
+        "rev": "0371596b9c0de2398a0c6b596e11a761076d8b4b",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git"
+        "owner": "alcxyz",
+        "ref": "main",
+        "repo": "dms-plugins",
+        "type": "github"
       }
     },
     "dsearch": {

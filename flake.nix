@@ -95,7 +95,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dms-plugins.url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/dms-plugins.git";
+    dms-plugins.url = "github:alcxyz/dms-plugins/main";
   };
 
   # ---- Outputs ----------------------------------------------------------
