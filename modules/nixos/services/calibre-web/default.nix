@@ -10,37 +10,12 @@ with lib;
 
 let
   cfg = config.services.calibre-web.managed;
-  appdataConfigDir = "/zpool/appdata/calibre-web/config";
-  legacyConfigDir = "/zpool/vault/calibre/calibre_web/config";
   calibreConfigDir = "/var/lib/calibre/config";
-  legacyCalibreConfigDir = "/zpool/vault/calibre/calibre/config";
-  calibreWebStateMigration = pkgs.writeShellScript "calibre-web-state-migration" ''
+  calibreWebStateSetup = pkgs.writeShellScript "calibre-web-state-setup" ''
     set -euo pipefail
 
     install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg cfg.configDir}
     install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg calibreConfigDir}
-
-    config_marker=${lib.escapeShellArg (toString cfg.configDir + "/.migrated-from-zpool")}
-    if [ ! -e "$config_marker" ]; then
-      if [ -d ${lib.escapeShellArg appdataConfigDir} ]; then
-        ${lib.getExe pkgs.rsync} -a \
-          ${lib.escapeShellArg (appdataConfigDir + "/")} \
-          ${lib.escapeShellArg (toString cfg.configDir + "/")}
-      elif [ -d ${lib.escapeShellArg legacyConfigDir} ]; then
-        ${lib.getExe pkgs.rsync} -a \
-          ${lib.escapeShellArg (legacyConfigDir + "/")} \
-          ${lib.escapeShellArg (toString cfg.configDir + "/")}
-      fi
-      touch "$config_marker"
-    fi
-
-    calibre_marker=${lib.escapeShellArg (calibreConfigDir + "/.migrated-from-zpool")}
-    if [ -d ${lib.escapeShellArg legacyCalibreConfigDir} ] && [ ! -e "$calibre_marker" ]; then
-      ${lib.getExe pkgs.rsync} -a \
-          ${lib.escapeShellArg (legacyCalibreConfigDir + "/")} \
-          ${lib.escapeShellArg (calibreConfigDir + "/")}
-      touch "$calibre_marker"
-    fi
 
     chown -R ${lib.escapeShellArg username}:users ${lib.escapeShellArg cfg.configDir}
     chown -R ${lib.escapeShellArg username}:users ${lib.escapeShellArg calibreConfigDir}
@@ -95,7 +70,7 @@ in
 
     systemd.services.calibre-web = {
       conflicts = [ "docker-calibre-web.service" ];
-      serviceConfig.ExecStartPre = lib.mkBefore [ "+${calibreWebStateMigration}" ];
+      serviceConfig.ExecStartPre = lib.mkBefore [ "+${calibreWebStateSetup}" ];
     };
   };
 }
