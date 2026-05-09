@@ -69,6 +69,12 @@ in
       "d ${cfg.libraryDir} 0755 ${username} users - -"
     ];
 
+    system.activationScripts.calibreWebStateDirs = ''
+      install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg cfg.configDir}
+      install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg calibreConfigDir}
+      install -d -m 0755 -o ${lib.escapeShellArg username} -g users ${lib.escapeShellArg cfg.libraryDir}
+    '';
+
     services.calibre-web = {
       enable = true;
       dataDir = toString cfg.configDir;
