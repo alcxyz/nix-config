@@ -10,6 +10,7 @@ with lib;
 let
   cfg = config.services.plex.managed;
   nativeDataDir = "${cfg.dataDir}/Library/Application Support";
+  nativeDataDirTmpfiles = builtins.replaceStrings [ " " ] [ "\\x20" ] nativeDataDir;
   legacyDataDir = "/var/lib/plex/Library/Application Support";
   previousZpoolDataDir = "/zpool/appdata/plex/Library/Application Support";
   plexStateMigration = pkgs.writeShellScript "plex-state-migration" ''
@@ -73,7 +74,7 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0770 media media - -"
-      "d ${nativeDataDir} 0770 media media - -"
+      "d ${nativeDataDirTmpfiles} 0770 media media - -"
       "d ${cfg.transcodeDir} 0770 media media - -"
       "d ${cfg.mediaDir} 0770 root media - -"
     ];
