@@ -44,13 +44,6 @@ let
 
     permission_marker=${cfg.dataDir}/config/.native-permissions-v3
     if [ ! -e "$permission_marker" ]; then
-      chown -R ${cfg.user}:${cfg.group} \
-        ${cfg.dataDir}/config \
-        ${cfg.dataDir}/metadata \
-        ${cfg.dataDir}/cache \
-        ${cfg.dataDir}/blobs \
-        ${cfg.dataDir}/generated
-
       find \
         ${cfg.dataDir}/config \
         ${cfg.dataDir}/metadata \
@@ -68,9 +61,15 @@ let
         -type f -exec chmod 0660 {} +
 
       touch "$permission_marker"
-      chown ${cfg.user}:${cfg.group} "$permission_marker"
       chmod 0640 "$permission_marker"
     fi
+
+    chown -R ${cfg.user}:${cfg.group} \
+      ${cfg.dataDir}/config \
+      ${cfg.dataDir}/metadata \
+      ${cfg.dataDir}/cache \
+      ${cfg.dataDir}/blobs \
+      ${cfg.dataDir}/generated
 
     if [ ! -f ${cfg.dataDir}/config/config.yml ]; then
       echo "Refusing to start Stash: ${cfg.dataDir}/config/config.yml is missing." >&2
