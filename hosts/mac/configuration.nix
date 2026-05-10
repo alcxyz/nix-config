@@ -128,6 +128,12 @@ in
     variables = { EDITOR = "nvim"; };
   };
 
+  # Homebrew is used for macOS tools that are not available in nixpkgs.
+  homebrew = {
+    enable = true;
+    brews = [ "paneru" ];
+  };
+
   # ============================================================================
   # Programs
   # ============================================================================
