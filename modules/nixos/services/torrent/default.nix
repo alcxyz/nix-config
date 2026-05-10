@@ -17,7 +17,6 @@ let
   dataDir = "/ypool/downloads";
 
   stashDir = "/zpool/stash";
-  stash2Dir = "/ypool/stash";
   mediaDir = "/ypool/media";
 
   torrentDirs = [
@@ -34,16 +33,11 @@ let
 
   sharedMediaDirs = [
     stashDir
-    stash2Dir
     mediaDir
   ];
   sharedMediaRoots = [
     {
       path = stashDir;
-      owner = "stash";
-    }
-    {
-      path = stash2Dir;
       owner = "stash";
     }
     {
@@ -54,7 +48,6 @@ let
 
   sharedMediaDatasets = [
     "zpool/stash"
-    "ypool/stash"
     "ypool/media"
   ];
 
@@ -218,7 +211,6 @@ in
         marker=/var/lib/torrent-shared-media/acl-v2
         dirs=(
           ${lib.escapeShellArg stashDir}
-          ${lib.escapeShellArg stash2Dir}
           ${lib.escapeShellArg mediaDir}
         )
 
@@ -229,8 +221,7 @@ in
         done
 
         chown ${lib.escapeShellArg "stash"}:${lib.escapeShellArg sharedGroup} \
-          ${lib.escapeShellArg stashDir} \
-          ${lib.escapeShellArg stash2Dir}
+          ${lib.escapeShellArg stashDir}
 
         if [[ ! -e "$marker" ]]; then
           for dir in "''${dirs[@]}"; do

@@ -214,7 +214,6 @@ in
         ReadWritePaths = [
           cfg.dataDir
           "/zpool/stash"
-          "/ypool/stash"
         ];
       };
     };

@@ -29,8 +29,8 @@ breaking each other's files.
 
 Use a shared host group, `media`, as the permission boundary for media datasets.
 
-The host should manage `/zpool/stash`, `/ypool/stash`, and `/zpool/media` as
-group-writable shared media roots:
+The host should manage `/zpool/stash` and `/ypool/media` as group-writable
+shared media roots:
 
 - top-level directories use mode `2775`
 - the group is `media`
@@ -42,15 +42,13 @@ group-writable shared media roots:
 - containers receive supplemental membership in the numeric `media` group
 
 qBittorrent, Stash, Plex, and Calibre-Web are host-pinned media services on
-`xyz`. They should run as Nix-managed Docker containers on `xyz` rather than
-Kubernetes workloads pinned back to the same host. Kubernetes may still route to
-them through explicit host endpoint services, but it should not own their
-processes or hostPath storage.
+`xyz`. They should run as host-managed services on `xyz` rather than Kubernetes
+workloads pinned back to the same host. Kubernetes may still route to them
+through explicit host endpoint services, but it should not own their processes
+or hostPath storage.
 
-Keep compatibility for existing qBittorrent save paths by replacing the old
-`/zpool/downloads/stash_rtorrent`, `/zpool/downloads/stash2_rtorrent`, and
-`/zpool/downloads/media_rtorrent` mountpoints with symlinks to the real media
-roots once the old bindfs mounts are gone.
+Stash media is consolidated under `/zpool/stash`; the old `/ypool/stash` split
+is retired after moving remaining files back to `zpool`.
 
 ## Alternatives Considered
 
