@@ -13,7 +13,7 @@ with lib;
 let
   cfg = config.services.stash.managed;
   system = pkgs.stdenv.hostPlatform.system;
-  legacyDataDir = "/zpool/vault/stash";
+  legacyDataDir = "/ypool/vault/stash";
   preStartScript = pkgs.writeShellScript "stash-pre-start" ''
     install -d -m 0750 -o ${cfg.user} -g ${cfg.group} \
       ${cfg.dataDir} \
