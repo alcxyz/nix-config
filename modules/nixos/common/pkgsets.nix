@@ -270,6 +270,7 @@ rec {
 
     # macOS-only desktop apps
     desktopMacOnly = with pkgs; [
+      ghostty
       raycast
     ];
 
