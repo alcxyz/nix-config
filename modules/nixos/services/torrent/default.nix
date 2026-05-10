@@ -37,6 +37,20 @@ let
     stash2Dir
     mediaDir
   ];
+  sharedMediaRoots = [
+    {
+      path = stashDir;
+      owner = "stash";
+    }
+    {
+      path = stash2Dir;
+      owner = "stash";
+    }
+    {
+      path = mediaDir;
+      owner = "-";
+    }
+  ];
 
   sharedMediaDatasets = [
     "zpool/stash"
@@ -47,7 +61,7 @@ let
   tmpfilesRules =
     map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
     ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
-    ++ map (d: "d " + d + " 2775 - " + sharedGroup + " -") sharedMediaDirs
+    ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
     ++ map (
       d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
     ) sharedMediaDirs;
@@ -201,7 +215,7 @@ in
       script = ''
         set -euo pipefail
 
-        marker=/var/lib/torrent-shared-media/acl-v1
+        marker=/var/lib/torrent-shared-media/acl-v2
         dirs=(
           ${lib.escapeShellArg stashDir}
           ${lib.escapeShellArg stash2Dir}
@@ -214,8 +228,13 @@ in
           setfacl -m g:${lib.escapeShellArg sharedGroup}:rwx,d:g:${lib.escapeShellArg sharedGroup}:rwx,m::rwx,d:m::rwx "$dir"
         done
 
+        chown ${lib.escapeShellArg "stash"}:${lib.escapeShellArg sharedGroup} \
+          ${lib.escapeShellArg stashDir} \
+          ${lib.escapeShellArg stash2Dir}
+
         if [[ ! -e "$marker" ]]; then
           for dir in "''${dirs[@]}"; do
+            chgrp -R ${lib.escapeShellArg sharedGroup} "$dir"
             setfacl -R -m g:${lib.escapeShellArg sharedGroup}:rwX,d:g:${lib.escapeShellArg sharedGroup}:rwX,m::rwX,d:m::rwX "$dir"
             find "$dir" -type d -exec chmod g+s {} +
           done

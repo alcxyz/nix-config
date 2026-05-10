@@ -155,7 +155,7 @@ in
       "d ${cfg.dataDir}/cache 0750 ${cfg.user} ${cfg.group} - -"
       "d ${cfg.dataDir}/blobs 0750 ${cfg.user} ${cfg.group} - -"
       "d ${cfg.dataDir}/generated 0750 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.mediaDir} 2775 - media - -"
+      "d ${cfg.mediaDir} 2775 ${cfg.user} media - -"
       "a+ ${cfg.mediaDir} - - - - g:media:rwx,d:g:media:rwx,m::rwx,d:m::rwx"
     ];
 
