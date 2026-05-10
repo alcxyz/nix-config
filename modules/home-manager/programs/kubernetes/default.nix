@@ -68,6 +68,12 @@ in
         description = "Install a k9s wrapper that supplies KUBECONFIG when unset.";
       };
 
+      kdash = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Install a kdash wrapper that supplies KUBECONFIG when unset.";
+      };
+
       kubeswitch = lib.mkOption {
         type = lib.types.bool;
         default = true;
@@ -102,6 +108,9 @@ in
       ]
       ++ lib.optionals cfg.wrap.k9s [
         (wrapCommand "k9s" pkgs.k9s "k9s")
+      ]
+      ++ lib.optionals cfg.wrap.kdash [
+        (wrapCommand "kdash" pkgs.kdash "kdash")
       ]
       ++ lib.optionals cfg.wrap.kubeswitch [
         pkgs.kubeswitch
