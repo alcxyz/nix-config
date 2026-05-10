@@ -190,6 +190,12 @@ in
       tilesize = 44;
     };
 
+    spaces = {
+      # Required by Paneru. In the underlying plist, false means macOS
+      # "Displays have separate Spaces" is enabled. Requires logout/login.
+      spans-displays = false;
+    };
+
     # We will NOT use the `system.defaults.trackpad` alias here to avoid key name mismatches.
     # Instead, we'll set all trackpad preferences via CustomUserPreferences below,
     # using the actual plist key names defined in `customTrackpadSettings`.
