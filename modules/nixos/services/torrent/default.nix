@@ -19,8 +19,8 @@ let
   stashDir = "/zpool/stash";
   mediaDir = "/ypool/media";
 
+  appdataRoot = "/ypool/appdata";
   torrentDirs = [
-    "/ypool/appdata"
     qbConfigDir
     qbConfigStateDir
   ];
@@ -51,13 +51,15 @@ let
     "ypool/media"
   ];
 
-  tmpfilesRules =
-    map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
-    ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
-    ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
-    ++ map (
-      d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
-    ) sharedMediaDirs;
+  tmpfilesRules = [
+    ("d " + appdataRoot + " 0755 root root -")
+  ]
+  ++ map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
+  ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
+  ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
+  ++ map (
+    d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
+  ) sharedMediaDirs;
   qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
     set -euo pipefail
 
