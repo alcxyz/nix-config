@@ -1,0 +1,24 @@
+repos:
+  - repo: local
+    hooks:
+      - id: alejandra
+        name: alejandra
+        entry: nix develop -c alejandra --check
+        language: system
+        types_or: [nix]
+      - id: repository-hygiene
+        name: repository hygiene
+        entry: nix develop -c scripts/checks/forbid-submodules.sh
+        language: system
+        pass_filenames: false
+      - id: destroyed-symlinks
+        name: destroyed symlinks
+        entry: nix develop -c scripts/checks/destroyed-symlinks.sh
+        language: system
+        pass_filenames: false
+      - id: shellcheck-check-scripts
+        name: shellcheck check scripts
+        entry: nix develop -c shellcheck
+        language: system
+        files: ^scripts/checks/.*\.sh$
+        types: [shell]

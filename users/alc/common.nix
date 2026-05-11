@@ -60,6 +60,7 @@ in
       "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
       "${configDir}/modules/home-manager/programs/ssh/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
+      "${configDir}/modules/home-manager/host-metadata/default.nix"
       #../../modules/home-manager/secrets/ssh-keys.nix
     ];
 
