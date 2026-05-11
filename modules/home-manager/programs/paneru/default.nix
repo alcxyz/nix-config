@@ -31,6 +31,12 @@ in
     xdg.configFile."paneru/paneru.toml".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/paneru/paneru.toml";
 
+    home.activation.removeHomebrewPaneruAgent = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      launchctl bootout "gui/$UID/com.github.karinushka.paneru" 2>/dev/null || true
+      launchctl disable "gui/$UID/com.github.karinushka.paneru" 2>/dev/null || true
+      rm -f "${config.home.homeDirectory}/Library/LaunchAgents/com.github.karinushka.paneru.plist"
+    '';
+
     launchd.agents.paneru = {
       enable = true;
       config = {
