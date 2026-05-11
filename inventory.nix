@@ -12,6 +12,24 @@
       workspaceProfiles = ["base" "infra-admin"];
     };
 
+    k8s-worker = {
+      homePackageSet = "server";
+      systemPackageSet = "server";
+      workspaceProfiles = ["base" "infra-admin"];
+    };
+
+    laptop-workstation = {
+      homePackageSet = "workstation";
+      systemPackageSet = "workstation";
+      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+    };
+
+    family-gaming = {
+      homePackageSet = "family-gaming";
+      systemPackageSet = "workstation";
+      workspaceProfiles = [];
+    };
+
     embedded = {
       homePackageSet = "embedded";
       systemPackageSet = "server";
@@ -31,6 +49,14 @@
       schedulable = true;
       extraFlags = [
         "--node-label=workload-class=ephemeral"
+      ];
+    };
+
+    stable-agent = {
+      role = "agent";
+      schedulable = true;
+      extraFlags = [
+        "--node-label=workload-class=stable"
       ];
     };
 
