@@ -12,7 +12,21 @@
     builtins.any (profile: builtins.elem profile cfg.profiles) repo.profiles;
   selectedRepos = builtins.filter hasSelectedProfile cfg.repos;
   reposJson = builtins.toJSON selectedRepos;
-  dirs = ["apps" "infra" "forks" "clones" "scratch"];
+  dirs = [
+    "apps"
+    "infra"
+    "tools"
+    "tools/dms-plugins"
+    "orgs"
+    "orgs/alcorg"
+    "orgs/bn-apps"
+    "forks"
+    "clones"
+    "sites"
+    "personal"
+    "lib"
+    "scratch"
+  ];
 
   workspaceSync = pkgs.writeShellApplication {
     name = "workspace-sync";
@@ -55,7 +69,14 @@
 
       repos_json='${reposJson}'
 
-      printf '%s\n' "$repos_json" | jq -c '.[]' | while IFS= read -r repo; do
+      existing=0
+      cloned=0
+      missing=0
+      skipped=0
+      failed=0
+      failures=()
+
+      while IFS= read -r repo; do
         path="$(printf '%s\n' "$repo" | jq -r '.path')"
         url="$(printf '%s\n' "$repo" | jq -r '.url')"
         branch="$(printf '%s\n' "$repo" | jq -r '.branch // empty')"
@@ -63,26 +84,51 @@
 
         if [ -d "$target/.git" ]; then
           printf 'exists: %s\n' "$target"
+          existing=$((existing + 1))
           continue
         fi
 
         if [ -e "$target" ]; then
           printf 'skip: %s exists but is not a git repository\n' "$target" >&2
+          skipped=$((skipped + 1))
           continue
         fi
 
         if [ "$mode" = "status" ]; then
           printf 'missing: %s -> %s\n' "$target" "$url"
+          missing=$((missing + 1))
           continue
         fi
 
         mkdir -p "$(dirname "$target")"
         if [ -n "$branch" ]; then
-          git clone --branch "$branch" "$url" "$target"
+          if git clone --branch "$branch" "$url" "$target"; then
+            cloned=$((cloned + 1))
+          else
+            printf 'failed: %s -> %s (branch: %s)\n' "$target" "$url" "$branch" >&2
+            failures+=("$path -> $url (branch: $branch)")
+            failed=$((failed + 1))
+          fi
         else
-          git clone "$url" "$target"
+          if git clone "$url" "$target"; then
+            cloned=$((cloned + 1))
+          else
+            printf 'failed: %s -> %s\n' "$target" "$url" >&2
+            failures+=("$path -> $url")
+            failed=$((failed + 1))
+          fi
         fi
-      done
+      done < <(printf '%s\n' "$repos_json" | jq -c '.[]')
+
+      if [ "$mode" = "status" ]; then
+        printf '\nworkspace-sync status: %d existing, %d missing, %d skipped\n' "$existing" "$missing" "$skipped"
+      else
+        printf '\nworkspace-sync summary: %d existing, %d cloned, %d skipped, %d failed\n' "$existing" "$cloned" "$skipped" "$failed"
+        if [ "$failed" -gt 0 ]; then
+          printf 'workspace-sync failed repositories:\n' >&2
+          printf '  - %s\n' "''${failures[@]}" >&2
+        fi
+      fi
     '';
   };
 in {

@@ -3,13 +3,31 @@
     workstation = {
       homePackageSet = "workstation";
       systemPackageSet = "workstation";
-      workspaceProfiles = ["base" "infra-admin" "apps" "forks" "clones"];
+      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
 
     nuc = {
       homePackageSet = "nuc";
       systemPackageSet = "server";
       workspaceProfiles = ["base" "infra-admin"];
+    };
+
+    k8s-worker = {
+      homePackageSet = "server";
+      systemPackageSet = "server";
+      workspaceProfiles = ["base" "infra-admin"];
+    };
+
+    laptop-workstation = {
+      homePackageSet = "workstation";
+      systemPackageSet = "workstation";
+      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+    };
+
+    family-gaming = {
+      homePackageSet = "family-gaming";
+      systemPackageSet = "workstation";
+      workspaceProfiles = [];
     };
 
     embedded = {
@@ -21,7 +39,7 @@
     mac = {
       homePackageSet = "mac";
       systemPackageSet = "mac";
-      workspaceProfiles = ["base" "infra-admin" "apps"];
+      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
   };
 
@@ -31,6 +49,14 @@
       schedulable = true;
       extraFlags = [
         "--node-label=workload-class=ephemeral"
+      ];
+    };
+
+    stable-agent = {
+      role = "agent";
+      schedulable = true;
+      extraFlags = [
+        "--node-label=workload-class=stable"
       ];
     };
 
@@ -93,6 +119,8 @@
       platform = "darwin";
       role = "mac";
       k8sRole = null;
+      aliases = ["AM-VYH2F56CR6"];
+      darwinNetworkName = "AM-VYH2F56CR6";
       configuration = ./hosts/mac/configuration.nix;
       osIcon = "";
     };

@@ -46,6 +46,17 @@
         )
     )
     darwinHosts;
+
+  darwinHomeAliases =
+    lib.concatMapAttrs (
+      hostName: hostAttrs:
+        lib.mapAttrs' (
+          alias: _:
+            lib.nameValuePair "${username}-${alias}" darwinHomeConfigs."${username}-${hostName}"
+        )
+        (lib.genAttrs (hostAttrs.aliases or []) (_: null))
+    )
+    darwinHosts;
 in {
-  flake.homeConfigurations = nixosHomeConfigs // darwinHomeConfigs;
+  flake.homeConfigurations = nixosHomeConfigs // darwinHomeConfigs // darwinHomeAliases;
 }

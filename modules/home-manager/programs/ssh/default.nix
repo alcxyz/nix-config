@@ -5,8 +5,12 @@ let
   inherit (lib) mkIf mkMerge optionalAttrs;
   getent = "${pkgs.getent}/bin/getent";
   grep = "${pkgs.gnugrep}/bin/grep";
+  resolveGitSshHost =
+    if pkgs.stdenv.isDarwin
+    then ''/usr/bin/dscacheutil -q host -a name "$1"''
+    else ''${getent} ahostsv4 "$1"'';
   gitSshCloudflareFallbackMatch = pkgs.writeShellScript "git-ssh-cloudflare-fallback-match" ''
-    if ${getent} ahostsv4 "$1" | ${grep} -Fqw 192.168.1.240; then
+    if ${resolveGitSshHost} | ${grep} -Fqw 192.168.1.240; then
       exit 1
     else
       exit 0

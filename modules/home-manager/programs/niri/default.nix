@@ -2,11 +2,19 @@
 #
 # Manages Niri-related user files: config symlink, helper scripts,
 # and enables the shared Wayland settings (cursor, GTK, env).
-{ config, lib, pkgs, username, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  username,
+  configDir,
+  ...
+}:
 
 let
   cfg = config.programs.niri.managed;
-in {
+in
+{
   options.programs.niri.managed = {
     enable = lib.mkEnableOption "Manage Niri-related user files (config, scripts)";
   };
@@ -17,8 +25,8 @@ in {
     programs.wayland-common.enable = true;
 
     # Symlink niri config for live editing
-    xdg.configFile."niri/config.kdl".source = config.lib.file.mkOutOfStoreSymlink
-      "${config.home.homeDirectory}/nix/nix-config/users/${username}/configs/niri/config.kdl";
+    xdg.configFile."niri/config.kdl".source =
+      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/niri/config.kdl";
 
     # Niri-specific scripts
     home.file.".config/niri/scripts/fkey-handler.sh" = {

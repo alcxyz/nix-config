@@ -122,7 +122,7 @@ binds {
     // === HELP & SESSION ===
     Mod+Shift+Slash { show-hotkey-overlay; }
     Mod+Shift+Escape { quit; }
-    Mod+Q { spawn "dms" "ipc" "call" "lock" "lock"; }
+    Mod+Q { spawn "lock-screen"; }
     Mod+Backspace { spawn "dms" "ipc" "call" "powermenu" "toggle"; }
     Mod+Space { spawn "dms" "ipc" "call" "spotlight" "toggle"; }
 

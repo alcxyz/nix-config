@@ -8,6 +8,90 @@
 
 let
   cfg = config.programs.kubernetes.managed;
+  managedKubeconfigPaths = [
+    cfg.currentContextFile
+    cfg.kubeconfig
+  ]
+  ++ cfg.extraKubeconfigs;
+  managedKubeconfig = lib.concatStringsSep ":" managedKubeconfigPaths;
+  addManagedKubeconfigs = lib.concatMapStringsSep "\n" (
+    path: "        add_kubeconfig ${lib.escapeShellArg path}"
+  ) managedKubeconfigPaths;
+  setManagedKubeconfig = ''
+        if [ -z "''${KUBECONFIG:-}" ]; then
+          kubeconfigs=()
+          add_kubeconfig() {
+            if [ -r "$1" ]; then
+              kubeconfigs+=("$1")
+            fi
+          }
+
+    ${addManagedKubeconfigs}
+
+          if [ "''${#kubeconfigs[@]}" -gt 0 ]; then
+            old_ifs="$IFS"
+            IFS=:
+            export KUBECONFIG="''${kubeconfigs[*]}"
+            IFS="$old_ifs"
+          fi
+        fi
+  '';
+
+  kubeContextCommand = pkgs.writeShellApplication {
+    name = "kube-context";
+    runtimeInputs = [
+      pkgs.kubectl
+      pkgs.kubeswitch
+    ];
+    text = ''
+      ${setManagedKubeconfig}
+
+      response="$(switcher set-context "$@")"
+      status="$?"
+      if [ "$status" -ne 0 ]; then
+        printf '%s\n' "$response"
+        exit "$status"
+      fi
+
+      case "$response" in
+        "__ "*)
+          payload="''${response#__ }"
+          selected="''${payload#*,}"
+          selected="''${selected%%,*}"
+          exec kubectl config use-context "$selected"
+          ;;
+        *)
+          printf '%s\n' "$response"
+          ;;
+      esac
+    '';
+  };
+
+  kubeNamespaceCommand = pkgs.writeShellApplication {
+    name = "kube-namespace";
+    runtimeInputs = [ pkgs.kubectl ];
+    text = ''
+      ${setManagedKubeconfig}
+
+      if [ "$#" -ne 1 ]; then
+        printf 'Usage: kube-namespace <namespace>\n' >&2
+        exit 2
+      fi
+
+      current_context="$(kubectl config current-context)"
+      current_cluster="$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cluster}')"
+      current_user="$(kubectl config view --minify -o jsonpath='{.contexts[0].context.user}')"
+      writable_kubeconfig="''${KUBECONFIG%%:*}"
+
+      kubectl config set-context \
+        --kubeconfig "$writable_kubeconfig" \
+        "$current_context" \
+        --cluster "$current_cluster" \
+        --user "$current_user" \
+        --namespace "$1"
+      exec kubectl config use-context --kubeconfig "$writable_kubeconfig" "$current_context"
+    '';
+  };
 
   wrapCommand =
     name: package: executable:
@@ -15,9 +99,7 @@ let
       inherit name;
       runtimeInputs = [ package ];
       text = ''
-        if [ -z "''${KUBECONFIG:-}" ]; then
-          export KUBECONFIG="${cfg.kubeconfig}"
-        fi
+        ${setManagedKubeconfig}
         exec ${package}/bin/${executable} "$@"
       '';
     };
@@ -28,7 +110,25 @@ in
 
     kubeconfig = lib.mkOption {
       type = lib.types.str;
-      description = "Path to the kubeconfig file used by managed Kubernetes client wrappers.";
+      description = "Primary kubeconfig file used by managed Kubernetes client wrappers.";
+    };
+
+    extraKubeconfigs = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Additional kubeconfig files merged by managed Kubernetes client wrappers when they exist.";
+    };
+
+    currentContextFile = lib.mkOption {
+      type = lib.types.str;
+      default = "${config.home.homeDirectory}/.kube/nix-current-context";
+      description = "Writable kubeconfig file used to persist the active context across merged kubeconfigs.";
+    };
+
+    defaultContext = lib.mkOption {
+      type = lib.types.str;
+      default = "default";
+      description = "Initial current context written to currentContextFile when it does not exist.";
     };
 
     exportSessionVariable = lib.mkOption {
@@ -68,10 +168,16 @@ in
         description = "Install a k9s wrapper that supplies KUBECONFIG when unset.";
       };
 
+      kdash = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Install a kdash wrapper that supplies KUBECONFIG when unset.";
+      };
+
       kubeswitch = lib.mkOption {
         type = lib.types.bool;
         default = true;
-        description = "Install kubeswitch unchanged. It manages kubeconfig state itself.";
+        description = "Install switcher and context helper wrappers that use the managed kubeconfig set.";
       };
 
       leantimeTidy = lib.mkOption {
@@ -90,6 +196,23 @@ in
       }
     ];
 
+    home.activation.kubernetesCurrentContext = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            current_file=${lib.escapeShellArg cfg.currentContextFile}
+            if [ ! -e "$current_file" ]; then
+              mkdir -p "$(dirname "$current_file")"
+              cat > "$current_file" <<EOF
+      apiVersion: v1
+      kind: Config
+      preferences: {}
+      current-context: ${cfg.defaultContext}
+      clusters: []
+      contexts: []
+      users: []
+      EOF
+              chmod 600 "$current_file"
+            fi
+    '';
+
     home.packages =
       lib.optionals cfg.wrap.kubectl [
         (wrapCommand "kubectl" pkgs.kubectl "kubectl")
@@ -103,15 +226,20 @@ in
       ++ lib.optionals cfg.wrap.k9s [
         (wrapCommand "k9s" pkgs.k9s "k9s")
       ]
+      ++ lib.optionals cfg.wrap.kdash [
+        (wrapCommand "kdash" pkgs.kdash "kdash")
+      ]
       ++ lib.optionals cfg.wrap.kubeswitch [
-        pkgs.kubeswitch
+        (wrapCommand "switcher" pkgs.kubeswitch "switcher")
+        kubeContextCommand
+        kubeNamespaceCommand
       ]
       ++ lib.optionals cfg.wrap.leantimeTidy [
         (wrapCommand "leantime-tidy" pkgs.leantime-tidy "leantime-tidy")
       ];
 
     home.sessionVariables = lib.mkIf cfg.exportSessionVariable {
-      KUBECONFIG = cfg.kubeconfig;
+      KUBECONFIG = managedKubeconfig;
     };
 
     home.shellAliases = lib.mkIf cfg.aliases.enable {
@@ -122,8 +250,8 @@ in
       kdel = "kubectl delete";
       kgpo = "kubectl get pod";
       kgd = "kubectl get deployments";
-      kc = "switcher";
-      kns = "switcher ns";
+      kc = "kube-context";
+      kns = "kube-namespace";
       kl = "kubectl logs -f";
       ke = "kubectl exec -it";
     };

@@ -1,10 +1,11 @@
 # hosts/mac/configuration.nix
-{ config, pkgs, lib, inputs, configDir, username, ... }:
+{ config, pkgs, lib, inputs, configDir, username, hostInventory, ... }:
 
 let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  networkName = hostInventory.darwinNetworkName or "mac";
 
   # Define common trackpad settings using actual plist key names
   customTrackpadSettings = {
@@ -81,9 +82,9 @@ in
   # System Information
   # ============================================================================
   networking = {
-    hostName = "mac";
-    computerName = "mac";
-    localHostName = "mac";
+    hostName = networkName;
+    computerName = networkName;
+    localHostName = networkName;
   };
 
   services.openssh.enable = true;
@@ -126,6 +127,12 @@ in
     systemPackages = pkgsets.system.mac ++ [ pkgs.netbird ];
     shells = with pkgs; [ bash zsh nushell ];
     variables = { EDITOR = "nvim"; };
+  };
+
+  # Homebrew is used for macOS tools that are not available in nixpkgs.
+  homebrew = {
+    enable = true;
+    brews = [ ];
   };
 
   # ============================================================================
@@ -182,6 +189,12 @@ in
       show-recents = false;
       static-only = true;
       tilesize = 44;
+    };
+
+    spaces = {
+      # Required by Paneru. In the underlying plist, false means macOS
+      # "Displays have separate Spaces" is enabled. Requires logout/login.
+      spans-displays = false;
     };
 
     # We will NOT use the `system.defaults.trackpad` alias here to avoid key name mismatches.
@@ -243,6 +256,21 @@ in
         };
       };
 
+      ".GlobalPreferences" = {
+        NSUserKeyEquivalents = {
+          "Hide Others" = "";
+          "Minimize All" = "";
+        };
+      };
+
+      "com.t3tools.t3code" = {
+        NSUserKeyEquivalents = {
+          "Hide Others" = "";
+          "Hide T3 Code (Alpha)" = "";
+          "Hide T3 Code" = "";
+          "Minimize All" = "";
+        };
+      };
 
       "com.apple.finder" = {
         FXDesktopExtFoldersOnDesktop = false;

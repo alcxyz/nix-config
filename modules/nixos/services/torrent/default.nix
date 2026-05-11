@@ -1,110 +1,240 @@
 # modules/nixos/services/torrent/default.nix
-{ config, lib, pkgs, username, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  username,
+  ...
+}:
 
 let
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
-  qbConfigDir = "/var/lib/qbittorrent";
-  dataDir = "/zpool/downloads";
+  sharedGroup = "media";
+  qbConfigDir = "/ypool/appdata/qbittorrent";
+  qbConfigStateDir = "${qbConfigDir}/profile";
+  qbNativeDir = "${qbConfigStateDir}/qBittorrent";
+  dataDir = "/ypool/downloads";
 
   stashDir = "/zpool/stash";
-  stash2Dir = "/ypool/stash";
-  mediaDir = "/zpool/media";
+  mediaDir = "/ypool/media";
 
-  stashOverlayDir = "${dataDir}/stash_rtorrent";
-  stash2OverlayDir = "${dataDir}/stash2_rtorrent";
-  mediaOverlayDir = "${dataDir}/media_rtorrent";
-
-  baseDirs = [
+  appdataRoot = "/ypool/appdata";
+  torrentDirs = [
     qbConfigDir
+    qbConfigStateDir
+  ];
+
+  downloadDirs = [
     dataDir
     (dataDir + "/watch")
     (dataDir + "/completed")
-    stashOverlayDir
-    stash2OverlayDir
-    mediaOverlayDir
   ];
 
-  tmpfilesRules = map (d:
-    "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -"
-  ) baseDirs;
-in {
-  options.services.torrent.enable =
-    lib.mkEnableOption "Torrent infrastructure (users, dirs, mounts for Docker)";
+  sharedMediaDirs = [
+    stashDir
+    mediaDir
+  ];
+  sharedMediaRoots = [
+    {
+      path = stashDir;
+      owner = "stash";
+    }
+    {
+      path = mediaDir;
+      owner = "-";
+    }
+  ];
+
+  sharedMediaDatasets = [
+    "zpool/stash"
+    "ypool/media"
+  ];
+
+  tmpfilesRules = [
+    ("d " + appdataRoot + " 0755 root root -")
+  ]
+  ++ map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
+  ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
+  ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
+  ++ map (
+    d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
+  ) sharedMediaDirs;
+  qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
+    set -euo pipefail
+
+    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
+      ${lib.escapeShellArg (qbNativeDir + "/config")} \
+      ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
+
+    for config_file in \
+      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")} \
+      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")}
+    do
+      if [ -f "$config_file" ]; then
+        ${pkgs.gnused}/bin/sed -i 's#/zpool/downloads#/ypool/downloads#g' "$config_file"
+      fi
+    done
+
+    chown -R ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} ${lib.escapeShellArg qbNativeDir}
+  '';
+in
+{
+  options.services.torrent.enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
 
   config = lib.mkIf config.services.torrent.enable {
-    environment.systemPackages = with pkgs; [
-      bindfs
-    ];
-
-    users.groups.${serviceGroup} = {};
+    users.groups.${sharedGroup} = { };
+    users.groups.${serviceGroup} = { };
     users.users.${serviceUser} = {
       isSystemUser = true;
       group = serviceGroup;
-      extraGroups = [ "media" "stash" ];
+      extraGroups = [
+        sharedGroup
+        "stash"
+      ];
       createHome = true;
       home = qbConfigDir;
     };
     users.users.${username}.extraGroups = [ serviceGroup ];
 
-    users.groups.flood = {};
+    users.groups.flood = { };
     users.users.flood = {
       isSystemUser = true;
       group = "flood";
-      extraGroups = [ "media" "stash" ];
+      extraGroups = [
+        sharedGroup
+        "stash"
+      ];
     };
 
     systemd.tmpfiles.rules = tmpfilesRules;
 
-    systemd.mounts = [
-      {
-        description =
-          "Bind mount /zpool/stash to ${stashOverlayDir} with remapped ownership";
-        what = stashDir;
-        where = stashOverlayDir;
-        type = "fuse.bindfs";
-        options =
-          "force-user=${serviceUser},"
-          + "force-group=${serviceGroup},"
-          + "perms=770";
-        requires = [ "zfs-mount.service" ];
-        after = [ "zfs-mount.service" ];
-        before = [ "docker.service" ];
-        wantedBy = [ "multi-user.target" ];
-        requiredBy = [ "docker.service" ];
-      }
-      {
-        description =
-          "Bind mount /zpool/media to ${mediaOverlayDir} with remapped ownership";
-        what = mediaDir;
-        where = mediaOverlayDir;
-        type = "fuse.bindfs";
-        options =
-          "force-user=${serviceUser},"
-          + "force-group=${serviceGroup},"
-          + "perms=770";
-        requires = [ "zfs-mount.service" ];
-        after = [ "zfs-mount.service" ];
-        before = [ "docker.service" ];
-        wantedBy = [ "multi-user.target" ];
-        requiredBy = [ "docker.service" ];
-      }
-      {
-        description =
-          "Bind mount /ypool/stash to ${stash2OverlayDir} with remapped ownership";
-        what = stash2Dir;
-        where = stash2OverlayDir;
-        type = "fuse.bindfs";
-        options =
-          "force-user=${serviceUser},"
-          + "force-group=${serviceGroup},"
-          + "perms=770";
-        requires = [ "zfs-mount.service" ];
-        after = [ "zfs-mount.service" ];
-        before = [ "docker.service" ];
-        wantedBy = [ "multi-user.target" ];
-        requiredBy = [ "docker.service" ];
-      }
-    ];
+    networking.firewall = {
+      allowedTCPPorts = [
+        8080
+        51413
+      ];
+      allowedUDPPorts = [ 51413 ];
+    };
+
+    services.qbittorrent = {
+      enable = true;
+      user = serviceUser;
+      group = sharedGroup;
+      profileDir = qbConfigStateDir;
+      webuiPort = 8080;
+      torrentingPort = 51413;
+    };
+
+    systemd.services.qbittorrent = {
+      requires = [
+        "zfs-mount.service"
+        "torrent-shared-media-permissions.service"
+      ];
+      after = [
+        "zfs-mount.service"
+        "torrent-shared-media-permissions.service"
+      ];
+      conflicts = [ "docker-qbittorrent.service" ];
+      serviceConfig = {
+        ExecStartPre = [ "+${qbittorrentStateMigration}" ];
+        PrivateUsers = lib.mkForce false;
+        SupplementaryGroups = [
+          serviceGroup
+          "stash"
+        ];
+      };
+    };
+
+    systemd.services.torrent-shared-media-zfs-properties = {
+      description = "Enable POSIX ACLs on shared media ZFS datasets";
+      wantedBy = [ "multi-user.target" ];
+      requires = [ "zfs-auto-unlock.service" ];
+      after = [ "zfs-auto-unlock.service" ];
+      before = [
+        "torrent-shared-media-permissions.service"
+        "docker.service"
+        "k3s.service"
+      ];
+      path = with pkgs; [
+        zfs
+        util-linux
+      ];
+      serviceConfig.Type = "oneshot";
+      script = ''
+        set -euo pipefail
+
+        datasets=(
+          ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDatasets}
+        )
+        mountpoints=(
+          ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDirs}
+        )
+
+        for dataset in "''${datasets[@]}"; do
+          zfs set acltype=posixacl "$dataset"
+        done
+
+        for mountpoint in "''${mountpoints[@]}"; do
+          if findmnt -no OPTIONS "$mountpoint" | tr ',' '\n' | grep -qx noacl; then
+            mount -o remount,acl "$mountpoint" || true
+          fi
+        done
+      '';
+    };
+
+    systemd.services.torrent-shared-media-permissions = {
+      description = "Apply shared media ACLs for torrent and media workloads";
+      wantedBy = [ "multi-user.target" ];
+      requires = [
+        "zfs-mount.service"
+        "torrent-shared-media-zfs-properties.service"
+      ];
+      after = [
+        "zfs-mount.service"
+        "torrent-shared-media-zfs-properties.service"
+      ];
+      before = [
+        "docker.service"
+        "k3s.service"
+      ];
+      path = with pkgs; [
+        acl
+        coreutils
+        findutils
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        StateDirectory = "torrent-shared-media";
+      };
+      script = ''
+        set -euo pipefail
+
+        marker=/var/lib/torrent-shared-media/acl-v2
+        dirs=(
+          ${lib.escapeShellArg stashDir}
+          ${lib.escapeShellArg mediaDir}
+        )
+
+        for dir in "''${dirs[@]}"; do
+          install -d -m 2775 -g ${lib.escapeShellArg sharedGroup} "$dir"
+          chmod g+s "$dir"
+          setfacl -m g:${lib.escapeShellArg sharedGroup}:rwx,d:g:${lib.escapeShellArg sharedGroup}:rwx,m::rwx,d:m::rwx "$dir"
+        done
+
+        chown ${lib.escapeShellArg "stash"}:${lib.escapeShellArg sharedGroup} \
+          ${lib.escapeShellArg stashDir}
+
+        if [[ ! -e "$marker" ]]; then
+          for dir in "''${dirs[@]}"; do
+            chgrp -R ${lib.escapeShellArg sharedGroup} "$dir"
+            setfacl -R -m g:${lib.escapeShellArg sharedGroup}:rwX,d:g:${lib.escapeShellArg sharedGroup}:rwX,m::rwX,d:m::rwX "$dir"
+            find "$dir" -type d -exec chmod g+s {} +
+          done
+          touch "$marker"
+        fi
+      '';
+    };
+
   };
 }

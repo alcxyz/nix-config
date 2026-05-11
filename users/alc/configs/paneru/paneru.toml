@@ -1,0 +1,93 @@
+# Paneru config for macOS.
+# Option/Alt is treated as the macOS equivalent of the Hyprland/Niri Super key.
+
+[options]
+focus_follows_mouse = true
+mouse_follows_focus = true
+auto_center = false
+preset_column_widths = [0.25, 0.333333, 0.5, 0.666, 1.0]
+window_resize_cycle = true
+window_hidden_ratio = 0.0
+sliver_width = 5
+sliver_height = 1.0
+mouse_resize_modifier = "alt + ctrl"
+
+[padding]
+top = 4
+bottom = 4
+left = 4
+right = 4
+
+[swipe]
+sensitivity = 0.35
+deceleration = 4.0
+# Keep horizontal trackpad/scroll movement continuous, matching the scrolling
+# layout behavior used in Hyprland and Niri.
+continuous = true
+
+[swipe.gesture]
+fingers_count = 3
+direction = "Natural"
+
+[swipe.scroll]
+modifier = "alt"
+vertical_modifier = "shift"
+
+[bindings]
+# Horizontal column navigation: mirrors Hyprland scrolling binds.
+window_focus_west = ["alt - h", "alt - leftarrow"]
+window_focus_east = ["alt - l", "alt - rightarrow"]
+
+# Vertical navigation: Paneru virtual rows are the closest equivalent to
+# Niri/Hyprland vertical workspaces.
+window_virtual_south = ["alt - j", "alt - downarrow"]
+window_virtual_north = ["alt - k", "alt - uparrow"]
+
+# Swap/move columns.
+window_swap_west = ["alt + shift - h", "alt + shift - leftarrow"]
+window_swap_east = ["alt + shift - l", "alt + shift - rightarrow"]
+window_virtualmove_south = ["alt + shift - j", "alt + shift - downarrow"]
+window_virtualmove_north = ["alt + shift - k", "alt + shift - uparrow"]
+window_virtualsend_south = ["alt + ctrl - j", "alt + ctrl - downarrow"]
+window_virtualsend_north = ["alt + ctrl - k", "alt + ctrl - uparrow"]
+
+# Viewport extremes and centering.
+window_focus_first = "alt + ctrl - n"
+window_focus_last = "alt + ctrl - m"
+window_center = "alt - c"
+window_snap = "alt + ctrl - ,"
+
+# Consume / expel.
+window_stack = "alt + ctrl - y"
+window_unstack = "alt + ctrl - u"
+window_equalize = "alt + shift - b"
+
+# Column width presets.
+window_shrink = "alt - ,"
+window_grow = "alt - ."
+window_fullwidth = "alt - return"
+
+# Floating toggle.
+window_manage = "alt - s"
+
+# Display movement.
+window_nextdisplay = "ctrl + cmd - tab"
+window_nextdisplaysend = "ctrl + cmd + shift - tab"
+mouse_nextdisplay = "ctrl + cmd - g"
+
+# Conservative quit binding, matching the Linux session-exit chord shape.
+quit = "alt + shift - escape"
+
+[windows.default]
+title = ".*"
+width = 0.333333
+
+[windows.settings]
+title = ".*"
+bundle_id = "com.apple.systempreferences"
+floating = true
+
+[windows.finder-copy]
+title = ".*Copy.*"
+bundle_id = "com.apple.finder"
+floating = true

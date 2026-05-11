@@ -270,8 +270,8 @@ rec {
 
     # macOS-only desktop apps
     desktopMacOnly = with pkgs; [
+      ghostty
       raycast
-      omniwm
     ];
 
     # Convenience combined sets
@@ -294,6 +294,7 @@ rec {
       with pkgs;
       [
         rbw
+        bitwarden-cli
         bitwarden-desktop
         pinentry-gtk2
         texlive.combined.scheme-full
@@ -333,6 +334,10 @@ rec {
 
     # Embedded/edge: minimal CLI base + linux-specific only.
     embedded = hm.base ++ hm.linux;
+
+    # Family gaming client: desktop and gaming basics without infra-admin,
+    # Kubernetes, cloud, AI, or operator-heavy workstation extras.
+    family-gaming = hm.base ++ hm.linux ++ hm.linuxExtras ++ hm.desktopLinux ++ hm.gaming;
 
     # mac laptop: CLI base + cloud + mac-specific + dev/IaC/K8s.
     mac = hm.base ++ hm.cloud ++ hm.mac ++ hm.dev ++ hm.iac ++ hm.k8s ++ hm.ai ++ hm.desktopMac;
