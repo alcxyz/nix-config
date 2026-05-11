@@ -31,7 +31,7 @@
   }
   {
     path = "apps/canopy";
-    url = "git@git-ssh.alc.xyz:alcxyz/canopy.git";
+    url = "git@github.com:alcxyz/canopy.git";
     branch = "dev";
     profiles = ["apps"];
   }
@@ -43,7 +43,7 @@
   }
   {
     path = "apps/grove";
-    url = "git@git-ssh.alc.xyz:alcxyz/grove.git";
+    url = "git@github.com:alcxyz/grove.git";
     branch = "dev";
     profiles = ["apps"];
   }
@@ -73,7 +73,7 @@
   }
   {
     path = "apps/paperflow";
-    url = "git@git-ssh.alc.xyz:alcxyz/paperflow.git";
+    url = "git@github.com:alcxyz/paperflow.git";
     branch = "dev";
     profiles = ["apps"];
   }
