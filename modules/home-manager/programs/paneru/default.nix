@@ -11,8 +11,7 @@
 let
   cfg = config.programs.paneru.managed;
   paneruConfig = "${config.home.homeDirectory}/src/infra/nix-config/users/${username}/configs/paneru/paneru.toml";
-  defaultPaneruBin =
-    if pkgs.stdenv.hostPlatform.isAarch64 then "/opt/homebrew/bin/paneru" else "/usr/local/bin/paneru";
+  defaultPaneruBin = lib.getExe pkgs.paneru;
   reconcileT3Code = pkgs.writeShellScript "paneru-reconcile-t3code" ''
     set -eu
 
@@ -47,7 +46,7 @@ in
     command = lib.mkOption {
       type = lib.types.str;
       default = defaultPaneruBin;
-      description = "Path to the Paneru binary. Installed by nix-darwin/Homebrew on macOS until the nix-packages Paneru PR lands.";
+      description = "Path to the Paneru binary.";
     };
   };
 

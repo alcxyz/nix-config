@@ -131,7 +131,7 @@ in
   # Homebrew is used for macOS tools that are not available in nixpkgs.
   homebrew = {
     enable = true;
-    brews = [ "paneru" ];
+    brews = [ ];
   };
 
   # ============================================================================

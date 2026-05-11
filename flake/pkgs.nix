@@ -24,6 +24,7 @@ in
               "devlog"
               "agent-sync-check"
               "omniwm"
+              "paneru"
               "zen-browser"
               "nix-deploy"
               "wcap"
