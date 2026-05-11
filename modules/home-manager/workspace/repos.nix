@@ -151,7 +151,7 @@
   }
   {
     path = "forks/NB.no-Downloader";
-    url = "git@git-ssh.alc.xyz:alcxyz/NB.no-Downloader.git";
+    url = "git@github:alcxyz/NB.no-Downloader.git";
     branch = "epub-output";
     profiles = [ "forks" ];
   }
