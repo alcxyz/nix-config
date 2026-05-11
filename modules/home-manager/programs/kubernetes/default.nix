@@ -8,6 +8,15 @@
 
 let
   cfg = config.programs.kubernetes.managed;
+  managedKubeconfigPaths = [
+    cfg.currentContextFile
+    cfg.kubeconfig
+  ]
+  ++ cfg.extraKubeconfigs;
+  managedKubeconfig = lib.concatStringsSep ":" managedKubeconfigPaths;
+  addManagedKubeconfigs = lib.concatMapStringsSep "\n" (
+    path: "        add_kubeconfig ${lib.escapeShellArg path}"
+  ) managedKubeconfigPaths;
 
   wrapCommand =
     name: package: executable:
@@ -15,10 +24,24 @@ let
       inherit name;
       runtimeInputs = [ package ];
       text = ''
-        if [ -z "''${KUBECONFIG:-}" ]; then
-          export KUBECONFIG="${cfg.kubeconfig}"
-        fi
-        exec ${package}/bin/${executable} "$@"
+                if [ -z "''${KUBECONFIG:-}" ]; then
+                  kubeconfigs=()
+                  add_kubeconfig() {
+                    if [ -r "$1" ]; then
+                      kubeconfigs+=("$1")
+                    fi
+                  }
+
+        ${addManagedKubeconfigs}
+
+                  if [ "''${#kubeconfigs[@]}" -gt 0 ]; then
+                    old_ifs="$IFS"
+                    IFS=:
+                    export KUBECONFIG="''${kubeconfigs[*]}"
+                    IFS="$old_ifs"
+                  fi
+                fi
+                exec ${package}/bin/${executable} "$@"
       '';
     };
 in
@@ -28,7 +51,25 @@ in
 
     kubeconfig = lib.mkOption {
       type = lib.types.str;
-      description = "Path to the kubeconfig file used by managed Kubernetes client wrappers.";
+      description = "Primary kubeconfig file used by managed Kubernetes client wrappers.";
+    };
+
+    extraKubeconfigs = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Additional kubeconfig files merged by managed Kubernetes client wrappers when they exist.";
+    };
+
+    currentContextFile = lib.mkOption {
+      type = lib.types.str;
+      default = "${config.home.homeDirectory}/.kube/nix-current-context";
+      description = "Writable kubeconfig file used to persist the active context across merged kubeconfigs.";
+    };
+
+    defaultContext = lib.mkOption {
+      type = lib.types.str;
+      default = "default";
+      description = "Initial current context written to currentContextFile when it does not exist.";
     };
 
     exportSessionVariable = lib.mkOption {
@@ -96,6 +137,23 @@ in
       }
     ];
 
+    home.activation.kubernetesCurrentContext = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            current_file=${lib.escapeShellArg cfg.currentContextFile}
+            if [ ! -e "$current_file" ]; then
+              mkdir -p "$(dirname "$current_file")"
+              cat > "$current_file" <<EOF
+      apiVersion: v1
+      kind: Config
+      preferences: {}
+      current-context: ${cfg.defaultContext}
+      clusters: []
+      contexts: []
+      users: []
+      EOF
+              chmod 600 "$current_file"
+            fi
+    '';
+
     home.packages =
       lib.optionals cfg.wrap.kubectl [
         (wrapCommand "kubectl" pkgs.kubectl "kubectl")
@@ -120,7 +178,7 @@ in
       ];
 
     home.sessionVariables = lib.mkIf cfg.exportSessionVariable {
-      KUBECONFIG = cfg.kubeconfig;
+      KUBECONFIG = managedKubeconfig;
     };
 
     home.shellAliases = lib.mkIf cfg.aliases.enable {
