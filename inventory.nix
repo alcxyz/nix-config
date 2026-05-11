@@ -21,7 +21,7 @@
     mac = {
       homePackageSet = "mac";
       systemPackageSet = "mac";
-      workspaceProfiles = ["base" "infra-admin" "apps"];
+      workspaceProfiles = ["base" "infra-admin" "apps" "forks" "clones"];
     };
   };
 
