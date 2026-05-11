@@ -76,15 +76,15 @@
       "locked": {
         "lastModified": 1777828288,
         "narHash": "sha256-c9FCyVKHoofbzm7j4pjUMMyQkWIV+/XDnZvskTekC6I=",
-        "ref": "refs/heads/dev",
+        "owner": "alcxyz",
+        "repo": "canopy",
         "rev": "7e0125e3b0733cd6ec08dd62dbb9e8930a5e9e80",
-        "revCount": 30,
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/canopy.git"
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/canopy.git"
+        "owner": "alcxyz",
+        "repo": "canopy",
+        "type": "github"
       }
     },
     "dankMaterialShell": {
@@ -415,17 +415,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1777991762,
-        "narHash": "sha256-iupMPyz2IGMeoR1fEKppMX2IYz2SUvWaVKVf1TXie9E=",
-        "ref": "refs/heads/dev",
-        "rev": "01e8914b196d01cf5b7004de1ac5343c8e41d525",
-        "revCount": 141,
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/grove.git"
+        "lastModified": 1778161194,
+        "narHash": "sha256-/EnXhzTbducuDIE+fvCOz/S4dgYJBat7DZBeJ6jqgMQ=",
+        "owner": "alcxyz",
+        "repo": "grove",
+        "rev": "91da7feb84aaa0f09b2f8545aea287a122e9fd6d",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/grove.git"
+        "owner": "alcxyz",
+        "repo": "grove",
+        "type": "github"
       }
     },
     "home-manager": {
@@ -967,15 +967,15 @@
       "locked": {
         "lastModified": 1777826846,
         "narHash": "sha256-sEK2VSAdqpyb/lGTlIHNlYrqZW4ioZuImn7h/qyf0nc=",
-        "ref": "refs/heads/dev",
+        "owner": "alcxyz",
+        "repo": "paperflow",
         "rev": "13eecc14635e99f63b54059b6baffd544ad184d9",
-        "revCount": 45,
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperflow.git"
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperflow.git"
+        "owner": "alcxyz",
+        "repo": "paperflow",
+        "type": "github"
       }
     },
     "paperless-tools": {

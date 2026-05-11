@@ -66,7 +66,7 @@
     };
 
     paperflow = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/paperflow.git";
+      url = "github:alcxyz/paperflow";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -86,12 +86,12 @@
     };
 
     grove = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/grove.git";
+      url = "github:alcxyz/grove";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     canopy = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/canopy.git";
+      url = "github:alcxyz/canopy";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -99,8 +99,9 @@
   };
 
   # ---- Outputs ----------------------------------------------------------
-  outputs = inputs @ {flake-parts, ...}:
-    flake-parts.lib.mkFlake {inherit inputs;} {
+  outputs =
+    inputs@{ flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         ./flake/core.nix
         ./flake/hosts
