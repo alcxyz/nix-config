@@ -1,6 +1,6 @@
 # ADR-0044: Host inventory role model for new machines
 
-**Status:** Accepted
+**Status:** Accepted (partially implemented 2026-05-12)
 **Date:** 2026-05-11
 **Applies to:** `inventory.nix`, `flake/hosts/`, `modules/nixos/`, `modules/home-manager/`, `hosts/`, `users/alc/`
 
@@ -71,6 +71,26 @@ projection from ADR-0043.
 Do not add the new hosts to `inventory.nix` until each host has at least a
 minimal buildable configuration path. Placeholder inventory entries that point
 to missing files would make flake evaluation fragile.
+
+## Implementation Status
+
+Implemented:
+
+- inventory role vocabulary now includes `k8s-worker`, `laptop-workstation`,
+  and `family-gaming`
+- Kubernetes role vocabulary now includes `stable-agent`
+- `alc.host` exposes inventory role metadata and derived Kubernetes facts to
+  NixOS and Home Manager modules
+- the `family-gaming` package set avoids operator-heavy Kubernetes, cloud, AI,
+  and infra administration packages
+
+Still pending:
+
+- richer inventory dimensions for storage eligibility, support posture, and
+  trust boundary; these are not yet separate first-class fields
+- buildable host skeletons for `xev`, `xps`, and the family laptop
+- a dedicated family user profile and multi-user host composition
+- migration of more modules from role-name branching to typed `alc.host` facts
 
 ## Alternatives Considered
 
