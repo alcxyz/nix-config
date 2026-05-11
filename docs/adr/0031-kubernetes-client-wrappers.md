@@ -48,9 +48,14 @@ Managed wrappers currently include:
 - `helm`
 - `k9s`
 - `kdash`
+- `switcher`
 - selected higher-level tools, currently `leantime-tidy` on `xyz`
 
-`kubeswitch` is installed unchanged because it manages kubeconfig state itself.
+`kc` is a small helper around `switcher set-context`: it lets `switcher` choose
+the context, then persists that context with `kubectl config use-context` into
+the writable current-context file. `kns` uses `kubectl config set-context
+--current --namespace` for the same reason. Upstream `switcher ns` does not
+support multi-file `KUBECONFIG`.
 
 The module also owns the Kubernetes shell aliases (`k`, `kg`, `kl`, etc.).
 Raw Kubernetes client binaries were removed from the shared `hm.k8s` package
