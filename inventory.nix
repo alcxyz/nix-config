@@ -3,7 +3,7 @@
     workstation = {
       homePackageSet = "workstation";
       systemPackageSet = "workstation";
-      workspaceProfiles = ["base" "infra-admin" "apps" "forks" "clones"];
+      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
 
     nuc = {
@@ -39,7 +39,7 @@
     mac = {
       homePackageSet = "mac";
       systemPackageSet = "mac";
-      workspaceProfiles = ["base" "infra-admin" "apps" "forks" "clones"];
+      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
   };
 

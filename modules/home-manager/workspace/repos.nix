@@ -96,6 +96,60 @@
     profiles = [ "apps" ];
   }
   {
+    path = "tools/paperless-tools";
+    url = "git@git-ssh.alc.xyz:alcxyz/paperless-tools.git";
+    branch = "dev";
+    profiles = [ "tools" ];
+  }
+  {
+    path = "tools/leantime-tidy";
+    url = "git@git-ssh.alc.xyz:alcxyz/leantime-tidy.git";
+    branch = "dev";
+    profiles = [ "tools" ];
+  }
+  {
+    path = "tools/regnskap";
+    url = "git@git-ssh.alc.xyz:alcxyz/regnskap.git";
+    branch = "dev";
+    profiles = [ "tools" ];
+  }
+  {
+    path = "tools/digipost-sign";
+    url = "git@git-ssh.alc.xyz:alcxyz/digipost-sign.git";
+    branch = "dev";
+    profiles = [ "tools" ];
+  }
+  {
+    path = "personal/journal";
+    url = "git@git-ssh.alc.xyz:alcxyz/journal.git";
+    branch = "main";
+    profiles = [ "personal" ];
+  }
+  {
+    path = "sites/annaetattoo.github.io";
+    url = "git@github.com:alcxyz/annaetattoo.github.io.git";
+    branch = "main";
+    profiles = [ "sites" ];
+  }
+  {
+    path = "sites/madideal.github.io";
+    url = "git@github.com:alcxyz/madideal.github.io.git";
+    branch = "main";
+    profiles = [ "sites" ];
+  }
+  {
+    path = "orgs/alcorg/gcp-bootstrap";
+    url = "git@github.com:alcorg/gcp-bootstrap.git";
+    branch = "main";
+    profiles = [ "orgs" ];
+  }
+  {
+    path = "orgs/alcorg/project_setup";
+    url = "git@github.com:alcorg/project_setup.git";
+    branch = "main";
+    profiles = [ "orgs" ];
+  }
+  {
     path = "forks/NB.no-Downloader";
     url = "git@git-ssh.alc.xyz:alcxyz/NB.no-Downloader.git";
     branch = "epub-output";

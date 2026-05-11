@@ -12,7 +12,21 @@
     builtins.any (profile: builtins.elem profile cfg.profiles) repo.profiles;
   selectedRepos = builtins.filter hasSelectedProfile cfg.repos;
   reposJson = builtins.toJSON selectedRepos;
-  dirs = ["apps" "infra" "forks" "clones" "scratch"];
+  dirs = [
+    "apps"
+    "infra"
+    "tools"
+    "tools/dms-plugins"
+    "orgs"
+    "orgs/alcorg"
+    "orgs/bn-apps"
+    "forks"
+    "clones"
+    "sites"
+    "personal"
+    "lib"
+    "scratch"
+  ];
 
   workspaceSync = pkgs.writeShellApplication {
     name = "workspace-sync";
