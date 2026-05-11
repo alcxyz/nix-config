@@ -17,6 +17,7 @@ in
               "ndrop"
               "zfs-auto-unlock"
               "helium"
+              "ghostty"
               "kdash"
               "t3code"
               "claude-code"
