@@ -21,6 +21,8 @@ right = 4
 [swipe]
 sensitivity = 0.35
 deceleration = 4.0
+# Keep horizontal trackpad/scroll movement continuous, matching the scrolling
+# layout behavior used in Hyprland and Niri.
 continuous = true
 
 [swipe.gesture]
@@ -46,6 +48,8 @@ window_swap_west = ["alt + shift - h", "alt + shift - leftarrow"]
 window_swap_east = ["alt + shift - l", "alt + shift - rightarrow"]
 window_virtualmove_south = ["alt + shift - j", "alt + shift - downarrow"]
 window_virtualmove_north = ["alt + shift - k", "alt + shift - uparrow"]
+window_virtualsend_south = ["alt + ctrl - j", "alt + ctrl - downarrow"]
+window_virtualsend_north = ["alt + ctrl - k", "alt + ctrl - uparrow"]
 
 # Viewport extremes and centering.
 window_focus_first = "alt + ctrl - n"
