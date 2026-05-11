@@ -255,6 +255,21 @@ in
         };
       };
 
+      ".GlobalPreferences" = {
+        NSUserKeyEquivalents = {
+          "Hide Others" = "";
+          "Minimize All" = "";
+        };
+      };
+
+      "com.t3tools.t3code" = {
+        NSUserKeyEquivalents = {
+          "Hide Others" = "";
+          "Hide T3 Code (Alpha)" = "";
+          "Hide T3 Code" = "";
+          "Minimize All" = "";
+        };
+      };
 
       "com.apple.finder" = {
         FXDesktopExtFoldersOnDesktop = false;

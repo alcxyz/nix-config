@@ -7,8 +7,27 @@
                 },
                 "rules": [
                     {
-                        "description": "Disable Cmd+Option+H Hide Others",
+                        "description": "Disable macOS hide shortcuts",
                         "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "h",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "command"
+                                        ],
+                                        "optional": [
+                                            "any"
+                                        ]
+                                    }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "vk_none"
+                                    }
+                                ],
+                                "type": "basic"
+                            },
                             {
                                 "from": {
                                     "key_code": "h",
