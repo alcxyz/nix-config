@@ -13,6 +13,32 @@ let
   paneruConfig = "${config.home.homeDirectory}/src/infra/nix-config/users/${username}/configs/paneru/paneru.toml";
   defaultPaneruBin =
     if pkgs.stdenv.hostPlatform.isAarch64 then "/opt/homebrew/bin/paneru" else "/usr/local/bin/paneru";
+  reconcileT3Code = pkgs.writeShellScript "paneru-reconcile-t3code" ''
+    set -eu
+
+    state_dir="${config.home.homeDirectory}/.local/state/paneru"
+    state_file="$state_dir/t3code-pid"
+
+    mkdir -p "$state_dir"
+
+    pid="$(
+      /bin/ps ax -o pid= -o command= \
+        | /usr/bin/awk '/\/Applications\/T3 Code \(Alpha\)\.app\/Contents\/MacOS\/T3 Code \(Alpha\)$/ { print $1; exit }'
+    )"
+
+    if [ -z "$pid" ]; then
+      rm -f "$state_file"
+      exit 0
+    fi
+
+    if [ -f "$state_file" ] && [ "$(<"$state_file")" = "$pid" ]; then
+      exit 0
+    fi
+
+    printf '%s\n' "$pid" > "$state_file"
+    /bin/sleep 2
+    /bin/launchctl kickstart -k "gui/$(/usr/bin/id -u)/org.nix-community.home.paneru"
+  '';
 in
 {
   options.programs.paneru.managed = {
@@ -45,6 +71,17 @@ in
         };
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/paneru.log";
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/paneru.err.log";
+      };
+    };
+
+    launchd.agents.paneru-reconcile-t3code = {
+      enable = true;
+      config = {
+        ProgramArguments = [ "${reconcileT3Code}" ];
+        RunAtLoad = true;
+        StartInterval = 10;
+        StandardOutPath = "${config.home.homeDirectory}/Library/Logs/paneru-reconcile-t3code.log";
+        StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/paneru-reconcile-t3code.err.log";
       };
     };
   };
