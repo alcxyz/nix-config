@@ -47,7 +47,7 @@ in
     command = lib.mkOption {
       type = lib.types.str;
       default = defaultPaneruBin;
-      description = "Path to the Paneru binary. Installed by nix-darwin/Homebrew on macOS.";
+      description = "Path to the Paneru binary. Installed by nix-darwin/Homebrew on macOS until the nix-packages Paneru PR lands.";
     };
   };
 
