@@ -5,16 +5,14 @@
   lib,
   pkgs,
   username,
-  configDir,
   ...
 }:
 
 let
   cfg = config.programs.paneru.managed;
+  paneruConfig = "${config.home.homeDirectory}/src/infra/nix-config/users/${username}/configs/paneru/paneru.toml";
   defaultPaneruBin =
-    if pkgs.stdenv.hostPlatform.isAarch64
-    then "/opt/homebrew/bin/paneru"
-    else "/usr/local/bin/paneru";
+    if pkgs.stdenv.hostPlatform.isAarch64 then "/opt/homebrew/bin/paneru" else "/usr/local/bin/paneru";
 in
 {
   options.programs.paneru.managed = {
@@ -28,8 +26,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    xdg.configFile."paneru/paneru.toml".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/paneru/paneru.toml";
+    xdg.configFile."paneru/paneru.toml".source = config.lib.file.mkOutOfStoreSymlink paneruConfig;
 
     home.activation.removeHomebrewPaneruAgent = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       launchctl bootout "gui/$UID/com.github.karinushka.paneru" 2>/dev/null || true
@@ -44,7 +41,7 @@ in
         RunAtLoad = true;
         KeepAlive = true;
         EnvironmentVariables = {
-          PANERU_CONFIG = "${config.xdg.configHome}/paneru/paneru.toml";
+          PANERU_CONFIG = paneruConfig;
         };
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/paneru.log";
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/paneru.err.log";

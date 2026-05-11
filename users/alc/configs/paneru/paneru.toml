@@ -55,7 +55,7 @@ window_virtualmove_north = ["alt + shift - k", "alt + shift - uparrow"]
 window_focus_first = "alt + ctrl - n"
 window_focus_last = "alt + ctrl - m"
 window_center = "alt - c"
-window_snap = "alt + ctrl - comma"
+window_snap = "alt + ctrl - ,"
 
 # Consume / expel.
 window_stack = "alt + ctrl - y"
@@ -63,8 +63,8 @@ window_unstack = "alt + ctrl - u"
 window_equalize = "alt + shift - b"
 
 # Column width presets.
-window_shrink = "alt - comma"
-window_grow = "alt - period"
+window_shrink = "alt - ,"
+window_grow = "alt - ."
 window_fullwidth = "alt - return"
 
 # Floating toggle.
@@ -73,7 +73,7 @@ window_manage = "alt - s"
 # Display movement.
 window_nextdisplay = "ctrl + cmd - tab"
 window_nextdisplaysend = "ctrl + cmd + shift - tab"
-mouse_nextdisplay = "ctrl + cmd - grave"
+mouse_nextdisplay = "ctrl + cmd - g"
 
 # Conservative quit binding, matching the Linux session-exit chord shape.
 quit = "alt + shift - escape"
