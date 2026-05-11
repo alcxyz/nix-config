@@ -32,7 +32,7 @@
         value = {
           sopsFile = operatorSshKeysFile;
           key = "ssh_${name}";
-          path = ".ssh/${name}";
+          path = "${config.home.homeDirectory}/.ssh/${name}";
           mode = "0600";
         };
       }
@@ -41,7 +41,7 @@
         value = {
           sopsFile = operatorSshKeysFile;
           key = "ssh_${name}.pub";
-          path = ".ssh/${name}.pub";
+          path = "${config.home.homeDirectory}/.ssh/${name}.pub";
           mode = "0644";
         };
       }
@@ -148,13 +148,13 @@ in
           "ssh.${hostName}.private" = {
             sopsFile = hostSopsFile;
             key = "ssh_id_ed25519";
-            path = ".ssh/id_ed25519";
+            path = "${config.home.homeDirectory}/.ssh/id_ed25519";
             mode = "0600";
           };
           "ssh.${hostName}.public" = {
             sopsFile = hostSopsFile;
             key = "ssh_id_ed25519.pub";
-            path = ".ssh/id_ed25519.pub";
+            path = "${config.home.homeDirectory}/.ssh/id_ed25519.pub";
             mode = "0644";
           };
         }
