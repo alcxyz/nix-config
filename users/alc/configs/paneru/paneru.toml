@@ -31,10 +31,6 @@ direction = "Natural"
 modifier = "alt"
 vertical_modifier = "shift"
 
-[decorations.inactive.dim]
-opacity = -0.12
-opacity_night = -0.18
-
 [bindings]
 # Horizontal column navigation: mirrors Hyprland scrolling binds.
 window_focus_west = ["alt - h", "alt - leftarrow"]
@@ -80,7 +76,7 @@ quit = "alt + shift - escape"
 
 [windows.default]
 title = ".*"
-width = 0.5
+width = 0.333333
 
 [windows.settings]
 title = ".*"
