@@ -1,10 +1,11 @@
 # hosts/mac/configuration.nix
-{ config, pkgs, lib, inputs, configDir, username, ... }:
+{ config, pkgs, lib, inputs, configDir, username, hostInventory, ... }:
 
 let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  networkName = hostInventory.darwinNetworkName or "mac";
 
   # Define common trackpad settings using actual plist key names
   customTrackpadSettings = {
@@ -81,9 +82,9 @@ in
   # System Information
   # ============================================================================
   networking = {
-    hostName = "mac";
-    computerName = "mac";
-    localHostName = "mac";
+    hostName = networkName;
+    computerName = networkName;
+    localHostName = networkName;
   };
 
   services.openssh.enable = true;

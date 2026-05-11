@@ -93,6 +93,8 @@
       platform = "darwin";
       role = "mac";
       k8sRole = null;
+      aliases = ["AM-VYH2F56CR6"];
+      darwinNetworkName = "AM-VYH2F56CR6";
       configuration = ./hosts/mac/configuration.nix;
       osIcon = "";
     };
