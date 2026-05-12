@@ -105,7 +105,7 @@ in {
     localHostName = networkName;
   };
 
-  system.activationScripts.k8sApiLocalHost.text = ''
+  system.activationScripts.networking.text = lib.mkAfter ''
     echo "configuring k8s api local host alias..." >&2
     hosts_file=/etc/hosts
     tmp_file="$(mktemp /tmp/nix-darwin-hosts.XXXXXX)"
