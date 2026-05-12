@@ -16,6 +16,7 @@
     formattedNixFiles = [
       "flake/per-system.nix"
       "flake/hosts/lib.nix"
+      "hosts/mac/configuration.nix"
       "hosts/nex/configuration.nix"
       "hosts/nux/configuration.nix"
       "hosts/rpi0/configuration.nix"

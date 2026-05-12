@@ -98,6 +98,13 @@ configuration, secrets, SSH access, k3s agent join, metrics reachability, and
 Longhorn prerequisite validation. `xps` should remain workstation-first until
 its suspend, NVIDIA, Wi-Fi, and availability behavior are known.
 
+## Follow-up Issues
+
+- [#75](https://git.alc.xyz/alcxyz/nix-config/issues/75) Onboard `xev` as a
+  stable k3s worker candidate.
+- [#76](https://git.alc.xyz/alcxyz/nix-config/issues/76) Prepare `xps` as a
+  workstation host and decide its Kubernetes role separately.
+
 ## Alternatives Considered
 
 **Make `xev` a k3s server-worker immediately** - rejected for now. The current
