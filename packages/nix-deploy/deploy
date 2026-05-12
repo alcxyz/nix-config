@@ -42,6 +42,14 @@ is_darwin() {
   [[ "$(uname)" == "Darwin" ]]
 }
 
+nixos_rebuild_command() {
+  if command -v nixos-rebuild &>/dev/null; then
+    printf '%s' "nixos-rebuild"
+  else
+    printf '%s' "nix run nixpkgs#nixos-rebuild --"
+  fi
+}
+
 color() {
   local rgb="$1" text="$2"
 
@@ -144,11 +152,13 @@ nixos_local() {
 
 nixos_remote() {
   local host="$1"
+  local rebuild_cmd
+  rebuild_cmd="$(nixos_rebuild_command)"
 
   run_with_boot_fallback \
     "deploy(${host})" \
-    "nixos-rebuild switch --flake .#${host} --target-host root@${host}" \
-    "nixos-rebuild boot --flake .#${host} --target-host root@${host}"
+    "${rebuild_cmd} switch --flake .#${host} --target-host root@${host}" \
+    "${rebuild_cmd} boot --flake .#${host} --target-host root@${host}"
 }
 
 hm_local() {
@@ -230,7 +240,7 @@ do_deploy_all() {
           cmd="sudo -n nixos-rebuild switch --flake .#${host}"
         fi
       else
-        cmd="nixos-rebuild switch --flake .#${host} --target-host root@${host}"
+        cmd="$(nixos_rebuild_command) switch --flake .#${host} --target-host root@${host}"
       fi
 
       system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
