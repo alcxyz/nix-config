@@ -181,6 +181,23 @@ in
       ''
     );
 
+    home.activation.linkLinuxSystemSshKeys = lib.mkIf pkgs.stdenv.isLinux (
+      lib.hm.dag.entryBetween ["sops-nix"] ["linkGeneration"] ''
+        ssh_dir="${config.home.homeDirectory}/.ssh"
+        install -d -m 0700 "$ssh_dir"
+
+        if [ -e /run/secrets/${username}_ssh_private_key ]; then
+          rm -f "$ssh_dir/id_ed25519"
+          ln -s /run/secrets/${username}_ssh_private_key "$ssh_dir/id_ed25519"
+        fi
+
+        if [ -e /run/secrets/${username}_ssh_public_key ]; then
+          rm -f "$ssh_dir/id_ed25519.pub"
+          ln -s /run/secrets/${username}_ssh_public_key "$ssh_dir/id_ed25519.pub"
+        fi
+      ''
+    );
+
     # Configure Forgejo as the local primary remote for repos that exist on
     # Forgejo. Runs on every home-manager switch; skips silently when offline.
     home.activation.forgejoPrimary = lib.hm.dag.entryAfter ["writeBoundary"] ''
