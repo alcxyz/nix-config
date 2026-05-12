@@ -38,6 +38,12 @@ in {
       description = "Extra flags to pass to the K3s server/agent binary.";
     };
 
+    tlsSans = mkOption {
+      type = types.listOf types.str;
+      default = [];
+      description = "Additional Subject Alternative Names for the k3s API server certificate.";
+    };
+
     serverAddr = mkOption {
       type = types.nullOr types.str;
       default = null;
@@ -72,7 +78,10 @@ in {
       {
         enable = true;
         role = cfg.role;
-        extraFlags = inventoryExtraFlags ++ cfg.extraFlags;
+        extraFlags =
+          inventoryExtraFlags
+          ++ concatMap (san: ["--tls-san" san]) cfg.tlsSans
+          ++ cfg.extraFlags;
       }
       // optionalAttrs (cfg.serverAddr != null) {
         serverAddr = cfg.serverAddr;
