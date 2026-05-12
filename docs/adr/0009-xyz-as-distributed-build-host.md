@@ -1,8 +1,8 @@
-# ADR-0009: xyz as the distributed build host for server machines
+# ADR-0009: xyz and mac distributed build posture
 
-**Status:** Accepted (amended 2026-05-12: client config split from `server.nix`; `deploy --here` operator fallback)
+**Status:** Accepted (amended 2026-05-12: client config split from `server.nix`; `deploy --here` operator fallback; mac aarch64 Linux builder bootstrap)
 **Date:** 2026-04-18
-**Applies to:** `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`, `packages/nix-deploy`
+**Applies to:** `hosts/mac/configuration.nix`, `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`, `packages/nix-deploy`
 
 ## Context
 
@@ -43,6 +43,14 @@ the closure before copying it to the target host. This is an operator workflow
 fallback, not a target-host distributed-build configuration: on macOS it still
 requires a working Linux builder before Linux targets can be built locally.
 
+mac enables nix-darwin's stock Linux builder as a bootstrapping step. This
+creates a `linux-builder` build machine for `aarch64-linux`, which lets mac
+build and deploy rpi0 without asking rpi0 to compile locally. The builder is
+left close to the nix-darwin default because changing the builder VM's NixOS
+configuration before the first activation makes mac try to build Linux
+derivations on Darwin. x86_64-linux emulation for nux/nex is intentionally a
+follow-up after the initial Linux builder is active.
+
 ## Alternatives Considered
 
 - **Native builds on each host** — Rejected for rpi0. Compilation of non-trivial packages on ARM takes orders of magnitude longer; a full system rebuild would be impractical.
@@ -56,10 +64,26 @@ requires a working Linux builder before Linux targets can be built locally.
 - If xyz is unavailable, an operator can run `deploy --here --nixos <host>` or
   `deploy --here --all` from another capable machine. For non-`xyz` operators,
   `--here --all` deploys the remote server set (`nux`, `nex`, `rpi0`) and leaves
-  `xyz` out of the fleet batch.
+  `xyz` out of the fleet batch. From mac, rpi0 is the first supported Linux
+  target after the Linux builder is activated; nux/nex need either xyz or the
+  follow-up x86_64-linux builder work.
 - The build SSH key is declaratively deployed from each server host's SOPS file.
   Fresh installs still need enough SOPS bootstrap material to decrypt host
   secrets, but the build key itself is no longer a manual root dotfile.
 - xyz's own builds are local. Distributed-build clients opt in with
   `alc.distributedBuildClient.enable = true`; server role alone does not imply
   build-client credentials.
+
+## Follow-up Issues
+
+Track the remaining build-orchestration work separately from the initial ADR
+implementation PR:
+
+1. [#78](https://git.alc.xyz/alcxyz/nix-config/issues/78) Enable and validate
+   x86_64-linux support in mac's Linux builder for nux/nex after the stock
+   aarch64 builder has been activated.
+2. [#79](https://git.alc.xyz/alcxyz/nix-config/issues/79) Decide whether mac
+   should remain an emergency build coordinator only or become a normal fallback
+   in the operator runbook.
+3. [#80](https://git.alc.xyz/alcxyz/nix-config/issues/80) Retire the fallback
+   path or lower its priority when xyz is back in service.

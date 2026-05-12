@@ -77,6 +77,11 @@ Not implemented yet:
 - Netbird isolation policy still needs to be enforced outside this repository
 - support-scoped secrets still need to be created in `nix-secrets`
 
+## Follow-up Issues
+
+- [#77](https://git.alc.xyz/alcxyz/nix-config/issues/77) Onboard the remotely
+  managed family gaming laptop.
+
 ## Alternatives Considered
 
 **Use the normal workstation role** - rejected. The workstation role carries

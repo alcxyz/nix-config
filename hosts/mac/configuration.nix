@@ -1,7 +1,14 @@
 # hosts/mac/configuration.nix
-{ config, pkgs, lib, inputs, configDir, username, hostInventory, ... }:
-
-let
+{
+  config,
+  pkgs,
+  lib,
+  inputs,
+  configDir,
+  username,
+  hostInventory,
+  ...
+}: let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -15,8 +22,8 @@ let
 
     # --- Scroll & Zoom ---
     TrackpadMomentumScroll = true; # Smooth scrolling
-    TrackpadPinch = true;          # Pinch to zoom
-    TrackpadRotate = true;         # Rotate gesture
+    TrackpadPinch = true; # Pinch to zoom
+    TrackpadRotate = true; # Rotate gesture
 
     # --- Page Navigation ---
     # Two-finger swipe left/right to navigate pages
@@ -38,19 +45,17 @@ let
     # TrackpadThreeFingerTapGesture = 2; # Look up & data detectors
     # TrackpadFourFingerTapGesture = 0; # Off
   };
-in
-
-{
+in {
   # ============================================================================
   # Nix Configuration
   # ============================================================================
   # ... (rest of your Nix configuration remains the same) ...
   nix = {
     settings = {
-      experimental-features = [ "nix-command" "flakes" ];
+      experimental-features = ["nix-command" "flakes"];
       keep-derivations = true;
       keep-outputs = true;
-      trusted-users = [ "root" "@admin" ];
+      trusted-users = ["root" "@admin"];
 
       substituters = [
         "https://cache.nixos.org/"
@@ -62,9 +67,18 @@ in
       ];
     };
 
+    linux-builder = {
+      enable = true;
+      speedFactor = 3;
+    };
+
     gc = {
       automatic = true;
-      interval = { Weekday = 0; Hour = 2; Minute = 0; };
+      interval = {
+        Weekday = 0;
+        Hour = 2;
+        Minute = 0;
+      };
       # Only free space, never delete profile generations.
       # Profile generations are managed explicitly via: nix-env --delete-generations +5
       options = "--max-freed 10G";
@@ -72,7 +86,11 @@ in
 
     optimise = {
       automatic = true;
-      interval = { Weekday = 0; Hour = 3; Minute = 0; };
+      interval = {
+        Weekday = 0;
+        Hour = 3;
+        Minute = 0;
+      };
     };
   };
 
@@ -124,15 +142,15 @@ in
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = pkgsets.system.mac ++ [ pkgs.netbird ];
-    shells = with pkgs; [ bash zsh nushell ];
-    variables = { EDITOR = "nvim"; };
+    systemPackages = pkgsets.system.mac ++ [pkgs.netbird];
+    shells = with pkgs; [bash zsh nushell];
+    variables = {EDITOR = "nvim";};
   };
 
   # Homebrew is used for macOS tools that are not available in nixpkgs.
   homebrew = {
     enable = true;
-    brews = [ ];
+    brews = [];
   };
 
   # ============================================================================
@@ -251,8 +269,8 @@ in
       "com.apple.symbolichotkeys" = {
         AppleSymbolicHotKeys = {
           # 64 = Spotlight search, 65 = Finder search window (Cmd+Option+Space)
-          "64" = { enabled = false; };
-          "65" = { enabled = false; };
+          "64" = {enabled = false;};
+          "65" = {enabled = false;};
         };
       };
 
