@@ -1,8 +1,8 @@
 # ADR-0009: xyz as the distributed build host for server machines
 
-**Status:** Accepted (amended 2026-05-12: client config split from `server.nix`)
+**Status:** Accepted (amended 2026-05-12: client config split from `server.nix`; `deploy --here` operator fallback)
 **Date:** 2026-04-18
-**Applies to:** `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`
+**Applies to:** `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`, `packages/nix-deploy`
 
 ## Context
 
@@ -35,6 +35,14 @@ The build-client private key is stored per participating host in `nix-secrets` u
 `modules/nixos/common/distributed-build-client.nix` to `/root/.ssh/id_buildhost_xyz`. The matching
 public keys are authorized only for `root@xyz`.
 
+The deploy wrapper keeps `xyz` as the canonical `deploy --all` operator host,
+but also supports `deploy --here` for temporary operator failover. In `--here`
+mode, remote NixOS rebuilds intentionally omit `--build-host`; for
+`nixos-rebuild --target-host`, that means the machine running the command builds
+the closure before copying it to the target host. This is an operator workflow
+fallback, not a target-host distributed-build configuration: on macOS it still
+requires a working Linux builder before Linux targets can be built locally.
+
 ## Alternatives Considered
 
 - **Native builds on each host** — Rejected for rpi0. Compilation of non-trivial packages on ARM takes orders of magnitude longer; a full system rebuild would be impractical.
@@ -45,6 +53,10 @@ public keys are authorized only for `root@xyz`.
 
 - Deployments for nux and rpi0 are fast and practical, including full system rebuilds for rpi0.
 - Server deployments depend on xyz being online. If xyz is unreachable, builds fall back to local execution — slow on rpi0, acceptable on nux for most packages.
+- If xyz is unavailable, an operator can run `deploy --here --nixos <host>` or
+  `deploy --here --all` from another capable machine. For non-`xyz` operators,
+  `--here --all` deploys the remote server set (`nux`, `nex`, `rpi0`) and leaves
+  `xyz` out of the fleet batch.
 - The build SSH key is declaratively deployed from each server host's SOPS file.
   Fresh installs still need enough SOPS bootstrap material to decrypt host
   secrets, but the build key itself is no longer a manual root dotfile.

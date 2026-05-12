@@ -48,6 +48,9 @@ in
                   ]
               )
               lt)
+            // {
+              nix-deploy = _prev.callPackage ../packages/nix-deploy {};
+            }
             # SentinelOne kills freshly-built binaries during test phase on macOS.
             # Skip nushell tests to avoid build failure on managed Macs.
             // lib.optionalAttrs (system == "aarch64-darwin") {

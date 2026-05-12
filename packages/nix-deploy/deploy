@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SELF="$(hostname -s)"
+KNOWN_HOSTS=(xyz nux nex rpi0 mac)
+REMOTE_HOSTS=(nux nex rpi0)
+DEPLOY_ALL_HOSTS=(xyz nux nex rpi0)
+SUDO_KEEPALIVE_PID=""
+COLOR_RESET=""
+BUILD_HERE=false
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  COLOR_RESET=$'\033[0m'
+fi
+
+usage() {
+  cat <<EOF
+Usage: deploy [--here] [<host>]          Full rebuild (system + home-manager)
+       deploy [--here] --all             Parallel rebuild of provisioned hosts
+       deploy [--here] --nixos [<host>]  System rebuild only
+       deploy --hm [<host>]              Home Manager only
+
+When <host> is omitted, deploys to the current machine.
+When <host> differs from the current machine, deploys remotely via SSH.
+Known hosts: ${KNOWN_HOSTS[*]}
+
+By default, --all runs from xyz for the canonical fleet workflow.
+Use --here to run --all from the current machine and build locally before
+copying closures to the target hosts. On Darwin this requires a working Linux
+builder for Linux targets.
+EOF
+  exit 1
+}
+
+is_known() {
+  local h="$1"
+  for k in "${KNOWN_HOSTS[@]}"; do [[ "$k" == "$h" ]] && return 0; done
+  return 1
+}
+
+is_darwin() {
+  [[ "$(uname)" == "Darwin" ]]
+}
+
+color() {
+  local rgb="$1" text="$2"
+
+  if [[ -z "$COLOR_RESET" ]]; then
+    printf '%s' "$text"
+    return
+  fi
+
+  printf '\033[38;2;%sm%s%s' "$rgb" "$text" "$COLOR_RESET"
+}
+
+phase_label() {
+  local phase="$1"
+
+  case "$phase" in
+    system) color "116;199;236" "[system]" ;; # Catppuccin sapphire
+    hm) color "203;166;247" "[hm]" ;;         # Catppuccin mauve
+    *) color "205;214;244" "[${phase}]" ;;    # Catppuccin text
+  esac
+}
+
+host_label() {
+  local host="$1"
+
+  case "$host" in
+    xyz) color "137;180;250" "[xyz]" ;;   # Catppuccin blue
+    nux) color "166;227;161" "[nux]" ;;   # Catppuccin green
+    nex) color "249;226;175" "[nex]" ;;   # Catppuccin yellow
+    rpi0) color "235;160;172" "[rpi0]" ;; # Catppuccin maroon
+    mac) color "203;166;247" "[mac]" ;;   # Catppuccin mauve
+    *) color "205;214;244" "[${host}]" ;;
+  esac
+}
+
+section() {
+  local title="$1"
+  printf '\n%s %s\n' "$(color "180;190;254" "==>")" "$(color "205;214;244" "$title")"
+}
+
+run_parallel_jobs() {
+  local jobs=("$@")
+  parallel --colsep '\t' --tagstring '{1} {2}' --line-buffer '{3}' ::: "${jobs[@]}"
+}
+
+start_sudo_keepalive() {
+  sudo -v
+
+  while true; do
+    sleep 60
+    sudo -n -v || exit
+  done &
+
+  SUDO_KEEPALIVE_PID=$!
+}
+
+stop_sudo_keepalive() {
+  if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
+    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+  fi
+}
+
+# --- build actions ---
+
+run_with_boot_fallback() {
+  local label="$1" switch_cmd="$2" boot_cmd="$3"
+  shift 3
+
+  local output status
+  set +e
+  output="$(eval "$switch_cmd" 2>&1)"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+
+  if [[ $status -eq 0 ]]; then
+    return 0
+  fi
+
+  if grep -q "Pre-switch check 'switchInhibitors' failed" <<<"$output"; then
+    echo "${label}: switch inhibited, retrying with 'boot' so the change can take effect after reboot"
+    eval "$boot_cmd"
+    return 0
+  fi
+
+  return "$status"
+}
+
+nixos_local() {
+  local host="$1"
+  if is_darwin; then
+    sudo /run/current-system/sw/bin/darwin-rebuild switch --flake ".#${host}"
+  else
+    run_with_boot_fallback \
+      "deploy(${host})" \
+      "sudo nixos-rebuild switch --flake .#${host}" \
+      "sudo nixos-rebuild boot --flake .#${host}"
+  fi
+}
+
+nixos_remote() {
+  local host="$1"
+
+  run_with_boot_fallback \
+    "deploy(${host})" \
+    "nixos-rebuild switch --flake .#${host} --target-host root@${host}" \
+    "nixos-rebuild boot --flake .#${host} --target-host root@${host}"
+}
+
+hm_local() {
+  local host="$1"
+  home-manager switch --flake ".#alc-${host}"
+}
+
+hm_remote() {
+  local host="$1"
+  local result
+  result=$(nix build --no-link --print-out-paths ".#homeConfigurations.alc-${host}.activationPackage")
+  nix copy --to "ssh://alc@${host}" "$result"
+  # shellcheck disable=SC2029
+  ssh "alc@${host}" "$result/activate"
+}
+
+do_deploy() {
+  local host="$1" mode="$2"
+
+  if ! is_known "$host"; then
+    echo "deploy: unknown host '$host'" >&2
+    echo "Known hosts: ${KNOWN_HOSTS[*]}" >&2
+    exit 1
+  fi
+
+  local is_local=false
+  [[ "$host" == "$SELF" ]] && is_local=true
+
+  if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
+    section "$(phase_label system) $(host_label "$host") rebuild"
+    if $is_local; then
+      nixos_local "$host"
+    else
+      nixos_remote "$host"
+    fi
+  fi
+
+  if [[ "$mode" == "hm" || "$mode" == "full" ]]; then
+    section "$(phase_label hm) $(host_label "$host") switch"
+    if $is_local; then
+      hm_local "$host"
+    else
+      hm_remote "$host"
+    fi
+  fi
+}
+
+do_deploy_all() {
+  local mode="$1"
+  local deploy_hosts=("${DEPLOY_ALL_HOSTS[@]}")
+
+  if [[ "$SELF" != "xyz" && "$BUILD_HERE" != true ]]; then
+    echo "deploy --all must be run from xyz, or pass --here to run from ${SELF}" >&2
+    exit 1
+  fi
+
+  if [[ "$SELF" != "xyz" && "$BUILD_HERE" == true ]]; then
+    deploy_hosts=("${REMOTE_HOSTS[@]}")
+  fi
+
+  if ! command -v parallel &>/dev/null; then
+    echo "deploy: GNU parallel not found" >&2
+    exit 1
+  fi
+
+  if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
+    local system_jobs=()
+    local host cmd
+
+    start_sudo_keepalive
+    trap stop_sudo_keepalive EXIT
+    section "system rebuilds"
+
+    for host in "${deploy_hosts[@]}"; do
+      if [[ "$host" == "$SELF" ]]; then
+        if is_darwin; then
+          cmd="sudo -n /run/current-system/sw/bin/darwin-rebuild switch --flake .#${host}"
+        else
+          cmd="sudo -n nixos-rebuild switch --flake .#${host}"
+        fi
+      else
+        cmd="nixos-rebuild switch --flake .#${host} --target-host root@${host}"
+      fi
+
+      system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
+    done
+
+    run_parallel_jobs "${system_jobs[@]}"
+  fi
+
+  if [[ "$mode" == "hm" || "$mode" == "full" ]]; then
+    local hm_jobs=()
+    local host cmd
+
+    section "home-manager switches"
+
+    for host in "${deploy_hosts[@]}"; do
+      if [[ "$host" == "$SELF" ]]; then
+        cmd="home-manager switch --flake .#alc-${host}"
+      else
+        cmd="deploy --hm ${host}"
+      fi
+
+      hm_jobs+=("$(phase_label hm)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
+    done
+
+    run_parallel_jobs "${hm_jobs[@]}"
+  fi
+}
+
+# --- arg parsing ---
+
+mode="full"
+target=""
+all=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --nixos)
+      mode="nixos"
+      shift
+      ;;
+    --hm)
+      mode="hm"
+      shift
+      ;;
+    --all)
+      all=true
+      shift
+      ;;
+    --here)
+      BUILD_HERE=true
+      shift
+      ;;
+    --help | -h) usage ;;
+    -*)
+      echo "deploy: unknown option '$1'" >&2
+      usage
+      ;;
+    *)
+      target="$1"
+      shift
+      ;;
+  esac
+done
+
+if $all; then
+  do_deploy_all "$mode"
+else
+  do_deploy "${target:-$SELF}" "$mode"
+fi
