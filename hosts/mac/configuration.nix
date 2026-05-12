@@ -105,6 +105,28 @@ in {
     localHostName = networkName;
   };
 
+  system.activationScripts.k8sApiLocalHost.text = ''
+    echo "configuring k8s api local host alias..." >&2
+    hosts_file=/etc/hosts
+    tmp_file="$(mktemp /tmp/nix-darwin-hosts.XXXXXX)"
+
+    awk '
+      /^# nix-config k8s-api.local begin$/ { skip = 1; next }
+      /^# nix-config k8s-api.local end$/ { skip = 0; next }
+      skip != 1 { print }
+    ' "$hosts_file" > "$tmp_file"
+
+    {
+      printf '\n# nix-config k8s-api.local begin\n'
+      printf '192.168.1.250 k8s-api.local\n'
+      printf '# nix-config k8s-api.local end\n'
+    } >> "$tmp_file"
+
+    chown root:wheel "$tmp_file"
+    chmod 0644 "$tmp_file"
+    mv "$tmp_file" "$hosts_file"
+  '';
+
   services.openssh.enable = true;
 
   # ============================================================================
