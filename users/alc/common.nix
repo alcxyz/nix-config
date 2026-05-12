@@ -139,13 +139,21 @@ in
     programs.ncspot.enable = true;
 
     # ==================== Sops with age over ssh ====================
-    # Deploy user-level SSH keypair from sops
+    # On NixOS, the system layer deploys ~/.ssh/id_ed25519(.pub) using the host
+    # SSH key so first remote deploys do not depend on a Home Manager bootstrap
+    # cycle. Home Manager can then use that SSH key to decrypt user/operator
+    # secrets.
     sops = {
-      age.keyFile = "${config.home.homeDirectory}/.config/sops/age/keys.txt";
-      # optionally, fallback to SSH keys if you like:
-      # age.sshKeyPaths = [ "${config.home.homeDirectory}/.ssh/id_ed25519" ];
+      age =
+        if pkgs.stdenv.isDarwin
+        then {
+          keyFile = "${config.home.homeDirectory}/.config/sops/age/keys.txt";
+        }
+        else {
+          sshKeyPaths = ["${config.home.homeDirectory}/.ssh/id_ed25519"];
+        };
       secrets =
-        {
+        lib.optionalAttrs pkgs.stdenv.isDarwin {
           "ssh.${hostName}.private" = {
             sopsFile = hostSopsFile;
             key = "ssh_id_ed25519";
@@ -163,13 +171,15 @@ in
     };
 
     # Generate and manage the age key file
-    home.activation.setupSopsAgeKey = config.lib.dag.entryAfter ["writeBoundary"] ''
-      mkdir -p $HOME/.config/sops/age
-      if [ ! -f "$HOME/.config/sops/age/keys.txt" ]; then
-        ${pkgs.ssh-to-age}/bin/ssh-to-age -private-key < $HOME/.ssh/id_ed25519 > $HOME/.config/sops/age/keys.txt
-        chmod 600 $HOME/.config/sops/age/keys.txt
-      fi
-    '';
+    home.activation.setupSopsAgeKey = lib.mkIf pkgs.stdenv.isDarwin (
+      config.lib.dag.entryAfter ["writeBoundary"] ''
+        mkdir -p $HOME/.config/sops/age
+        if [ ! -f "$HOME/.config/sops/age/keys.txt" ]; then
+          ${pkgs.ssh-to-age}/bin/ssh-to-age -private-key < $HOME/.ssh/id_ed25519 > $HOME/.config/sops/age/keys.txt
+          chmod 600 $HOME/.config/sops/age/keys.txt
+        fi
+      ''
+    );
 
     # Configure Forgejo as the local primary remote for repos that exist on
     # Forgejo. Runs on every home-manager switch; skips silently when offline.

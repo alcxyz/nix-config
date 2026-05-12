@@ -35,8 +35,10 @@ should not be used for normal declarative access. Existing unmanaged files may
 temporarily remain only for extra local entries while they are migrated into
 NixOS.
 
-`alc` user private keys are Home Manager/sops-nix managed from per-host SOPS
-files:
+On NixOS, `alc` user private keys are system sops-nix managed from per-host
+SOPS files. They are intentionally deployed by the system activation, not Home
+Manager, so a first remote deploy installs the user SSH identity before Home
+Manager needs it for user-level SOPS decryption:
 
 ```text
 nix-secrets/hosts/<host>/secrets.yaml
@@ -44,12 +46,16 @@ nix-secrets/hosts/<host>/secrets.yaml
   ssh_id_ed25519.pub
 ```
 
-Home Manager deploys those to:
+NixOS deploys those to:
 
 ```text
 ~/.ssh/id_ed25519
 ~/.ssh/id_ed25519.pub
 ```
+
+On Linux, Home Manager uses `~/.ssh/id_ed25519` as a SOPS SSH identity for
+user/operator secrets after the system layer has installed it. On Darwin, the
+existing user-level Home Manager path remains in use.
 
 Operator SSH identities are stored separately from host-local identities:
 
