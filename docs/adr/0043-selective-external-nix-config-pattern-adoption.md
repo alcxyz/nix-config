@@ -74,6 +74,11 @@ Implemented in `feat/adr-0043-0046-implementation`:
   special Cloudflare, Git, and external entries explicit
 - behavior-preserving public SSH key catalog in
   `modules/nixos/common/ssh-keys.nix`
+- shared package-set and host-metadata ownership under `modules/shared/`
+- an explicit Linux operator Home Manager layer for infrastructure secrets,
+  Kubernetes credentials, and Forgejo/Grove automation
+- an explicit distributed-build client module, so server roles do not
+  automatically imply remote-build credentials
 
 Still pending:
 
@@ -82,6 +87,8 @@ Still pending:
 - any disko adoption for new hosts or reinstalls
 - broader migration of modules from loose `specialArgs` reads to `alc.host`
   facts where that reduces duplication
+- first-class inventory facts for operator access, support posture, and
+  distributed-build eligibility
 
 Do not adopt:
 

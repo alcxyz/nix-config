@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-03
-**Applies to:** `modules/home-manager/programs/kubernetes/`, `users/alc/*`, `modules/nixos/common/pkgsets.nix`
+**Applies to:** `modules/home-manager/programs/kubernetes/`, `users/alc/*`, `modules/shared/pkgsets.nix`
 
 ## Context
 

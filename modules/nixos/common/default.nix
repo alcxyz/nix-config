@@ -9,7 +9,7 @@
   lib,
   ...
 }: let
-  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+  pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
 
@@ -20,7 +20,8 @@
 in {
   # ==================== Imports ====================
   imports = [
-    ./host-metadata.nix
+    ../../shared/host-metadata.nix
+    ./distributed-build-client.nix
   ];
 
   # ==================== Nix Configuration ====================

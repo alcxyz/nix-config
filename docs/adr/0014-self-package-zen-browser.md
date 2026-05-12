@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-21
-**Applies to:** `flake.nix`, `modules/nixos/common/pkgsets.nix`, `alcxyz/nix-packages`
+**Applies to:** `flake.nix`, `modules/shared/pkgsets.nix`, `alcxyz/nix-packages`
 
 ## Context
 

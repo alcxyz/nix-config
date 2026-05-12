@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Applies to:** `nix-packages/tools/agent-sync-check/`, `nix-config/modules/nixos/common/pkgsets.nix`, `nix-secrets/shared/AGENTS.md`, `nix-secrets/shared/claude/CLAUDE.md`
+**Applies to:** `nix-packages/tools/agent-sync-check/`, `nix-config/modules/shared/pkgsets.nix`, `nix-secrets/shared/AGENTS.md`, `nix-secrets/shared/claude/CLAUDE.md`
 
 ## Context
 

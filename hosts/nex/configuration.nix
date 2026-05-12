@@ -19,6 +19,8 @@
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  alc.distributedBuildClient.enable = true;
+
   sops.secrets = {
     k3s_server_token = {
       sopsFile = "${inputs.nix-secrets}/cluster-bootstrap/secrets.yaml";

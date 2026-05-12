@@ -6,11 +6,11 @@
   hostRole,
   ...
 }: let
-  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+  pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
 in {
-  imports = ["${configDir}/users/alc/linux/common.nix"];
+  imports = ["${configDir}/users/alc/linux/operator.nix"];
 
   home.packages = pkgsets.home.${hostRole.homePackageSet};
 }

@@ -1,8 +1,8 @@
 # ADR-0009: xyz as the distributed build host for server machines
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-05-12: client config split from `server.nix`)
 **Date:** 2026-04-18
-**Applies to:** `modules/nixos/common/server.nix`
+**Applies to:** `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`
 
 ## Context
 
@@ -12,7 +12,8 @@ rpi0 specifically needs cross-architecture support: building aarch64 packages ei
 
 ## Decision
 
-xyz acts as the remote build host for all server-role machines. Configured in `modules/nixos/common/server.nix`, which all server-role hosts import:
+xyz acts as the remote build host for machines that explicitly enable the
+distributed-build client capability:
 
 ```nix
 nix.buildMachines = [{
@@ -29,9 +30,9 @@ nix.distributedBuilds = true;
 
 A dedicated SSH key (`/root/.ssh/id_buildhost_xyz`) is used exclusively for build authentication. aarch64 support on xyz is provided via binfmt/QEMU emulation.
 
-The build-client private key is stored per server host in `nix-secrets` under
+The build-client private key is stored per participating host in `nix-secrets` under
 `hosts/<host>/secrets.yaml` as `ssh_buildhost_xyz`, then deployed by
-`modules/nixos/common/server.nix` to `/root/.ssh/id_buildhost_xyz`. The matching
+`modules/nixos/common/distributed-build-client.nix` to `/root/.ssh/id_buildhost_xyz`. The matching
 public keys are authorized only for `root@xyz`.
 
 ## Alternatives Considered
@@ -47,4 +48,6 @@ public keys are authorized only for `root@xyz`.
 - The build SSH key is declaratively deployed from each server host's SOPS file.
   Fresh installs still need enough SOPS bootstrap material to decrypt host
   secrets, but the build key itself is no longer a manual root dotfile.
-- xyz's own builds are local — only hosts importing `server.nix` have distributed builds configured. Do not remove `nix.distributedBuilds` from `server.nix` assuming it is inactive.
+- xyz's own builds are local. Distributed-build clients opt in with
+  `alc.distributedBuildClient.enable = true`; server role alone does not imply
+  build-client credentials.

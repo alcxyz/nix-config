@@ -14,13 +14,13 @@ Configuration is organised into four tiers, composed via explicit `imports` in e
 
 **Tier 1 — Common base** (`modules/nixos/common/default.nix`): Applied to every host. Nix daemon settings, binary caches, SSH authorized keys, user/group definitions, core services (openssh, pipewire, bluetooth), sops-nix bootstrap, fonts, locale, keyboard, bootloader.
 
-**Tier 2 — Role** (`modules/nixos/common/{desktop,server}.nix`): Applied by host function. `desktop.nix` adds Hyprland, display manager, GPU support, Docker with CDI, kanata, and desktop packages. `server.nix` adds distributed build config and server packages. Each host imports exactly one role module.
+**Tier 2 — Role** (`modules/nixos/common/{desktop,server}.nix`): Applied by host function. `desktop.nix` adds Hyprland, display manager, GPU support, Docker with CDI, kanata, and desktop packages. `server.nix` adds server packages and server defaults. Optional capabilities such as distributed-build client credentials live in separate explicit modules.
 
 **Tier 3 — Service and hardware modules** (`modules/nixos/{services,hardware,virtualisation}/`): Opt-in, imported only by hosts that need them. Each module is self-contained — it defines its own sops secrets, systemd services, and package requirements. Examples: `nvidia.nix`, `amd.nix`, `zfs-autounlock`, `kvm/gpu-passthrough`.
 
 **Tier 4 — Per-host** (`hosts/{hostName}/configuration.nix`): Imports the applicable tiers and adds host-specific values: networking, ZFS pool names, service parameters, hardware UUIDs, tmpfiles rules.
 
-Home Manager mirrors this: `users/alc/common.nix` → `users/alc/linux/common.nix` → `users/alc/linux/{xyz,nux,rpi0}.nix`.
+Home Manager mirrors this: `users/alc/common.nix` → `users/alc/linux/common.nix` → optional operator layer → `users/alc/linux/{xyz,nux,rpi0}.nix`.
 
 ## Alternatives Considered
 

@@ -15,12 +15,22 @@
 
     formattedNixFiles = [
       "flake/per-system.nix"
-      "modules/home-manager/host-metadata/default.nix"
+      "flake/hosts/lib.nix"
       "modules/home-manager/programs/ssh/default.nix"
       "modules/nixos/common/default.nix"
-      "modules/nixos/common/host-metadata.nix"
+      "modules/nixos/common/distributed-build-client.nix"
+      "modules/nixos/common/pkgsets.nix"
+      "modules/nixos/common/server.nix"
       "modules/nixos/common/ssh-keys.nix"
+      "modules/shared/host-metadata.nix"
+      "modules/shared/pkgsets.nix"
       "users/alc/common.nix"
+      "users/alc/linux/common.nix"
+      "users/alc/linux/nex.nix"
+      "users/alc/linux/nux.nix"
+      "users/alc/linux/operator.nix"
+      "users/alc/linux/rpi0.nix"
+      "users/alc/linux/xyz.nix"
     ];
   in {
     devShells.default = pkgs.mkShell {

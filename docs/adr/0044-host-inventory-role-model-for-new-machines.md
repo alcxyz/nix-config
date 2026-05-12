@@ -83,6 +83,9 @@ Implemented:
   NixOS and Home Manager modules
 - the `family-gaming` package set avoids operator-heavy Kubernetes, cloud, AI,
   and infra administration packages
+- the Linux Home Manager base and operator layers are separate, allowing future
+  lower-trust Linux users to avoid importing operator secrets and Kubernetes
+  credentials
 
 Still pending:
 

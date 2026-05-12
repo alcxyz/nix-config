@@ -24,6 +24,7 @@
 
   nix.settings.require-sigs = false;
   nix.settings.max-jobs = 0; # always offload builds to xyz
+  alc.distributedBuildClient.enable = true;
 
   services.journald.extraConfig = ''
     Storage=persistent
