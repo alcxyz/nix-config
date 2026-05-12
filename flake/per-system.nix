@@ -30,6 +30,7 @@
       "modules/nixos/virtualisation/k3s/default.nix"
       "modules/shared/host-metadata.nix"
       "modules/shared/pkgsets.nix"
+      "packages/nix-deploy/default.nix"
       "users/alc/common.nix"
       "users/alc/linux/common.nix"
       "users/alc/linux/nex.nix"
@@ -56,11 +57,11 @@
       '';
 
       check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-        shellcheck scripts/checks/*.sh
+        shellcheck scripts/checks/*.sh packages/nix-deploy/deploy
       '';
 
       check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.shfmt] ''
-        shfmt -d -i 2 -ci scripts/checks/*.sh
+        shfmt -d -i 2 -ci scripts/checks/*.sh packages/nix-deploy/deploy
       '';
 
       forbid-submodule-config = mkRepoCheck "forbid-submodule-config" [] ''
