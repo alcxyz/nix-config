@@ -14,6 +14,7 @@
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
     "${configDir}/modules/nixos/services/unifi-native/default.nix"
+    "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
@@ -104,7 +105,24 @@
 
   k3s = {
     enable = true;
-    serverAddr = "https://192.168.1.15:6443";
+    serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
+    tlsSans = [
+      "k8s-api.local"
+      "192.168.1.250"
+    ];
   };
+
+  services.k8s-api-vip = {
+    enable = true;
+    interface = "end0";
+    sourceIp = "192.168.1.3";
+    peers = [
+      "192.168.1.15"
+      "192.168.1.16"
+    ];
+    priority = 90;
+  };
+
+  networking.hosts."192.168.1.250" = ["k8s-api.local"];
 }
