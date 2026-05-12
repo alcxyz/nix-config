@@ -24,7 +24,9 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   nix.settings.require-sigs = false;
-  nix.settings.max-jobs = 0; # always offload builds to xyz
+  # Prefer remote builders, but keep a local fallback for small activation-time
+  # derivations when the configured builder is unavailable.
+  nix.settings.max-jobs = 1;
   alc.distributedBuildClient.enable = true;
 
   services.journald.extraConfig = ''

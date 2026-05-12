@@ -1,6 +1,7 @@
 # users/alc/linux/rpi0.nix
 {
   inputs,
+  config,
   configDir,
   pkgs,
   hostRole,
@@ -10,7 +11,20 @@
     inherit pkgs inputs;
   };
 in {
-  imports = ["${configDir}/users/alc/linux/operator.nix"];
+  imports = ["${configDir}/users/alc/linux/common.nix"];
 
   home.packages = pkgsets.home.${hostRole.homePackageSet};
+
+  # Keep rpi0's user profile narrow. It needs cluster client access for local
+  # checks, but should not consume the full operator secret set.
+  sops.secrets.k3s_kubeconfig = {
+    sopsFile = "${inputs.nix-secrets}/cluster-bootstrap/k3s-kubeconfig.yaml";
+    key = "k3s_kubeconfig";
+  };
+
+  programs.kubernetes.managed = {
+    enable = true;
+    kubeconfig = config.sops.secrets.k3s_kubeconfig.path;
+    defaultContext = "funhouse";
+  };
 }
