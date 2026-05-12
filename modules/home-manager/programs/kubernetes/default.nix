@@ -550,7 +550,7 @@ in {
               chmod 600 "$current_file"
             elif grep -q '^current-context: default$' "$current_file" && [ ${lib.escapeShellArg cfg.defaultContext} != default ]; then
               tmp_file="$(mktemp)"
-              awk -v ctx=${lib.escapeShellArg cfg.defaultContext} '
+              ${pkgs.gawk}/bin/awk -v ctx=${lib.escapeShellArg cfg.defaultContext} '
                 /^current-context: default$/ { print "current-context: " ctx; next }
                 { print }
               ' "$current_file" > "$tmp_file"
