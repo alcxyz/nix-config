@@ -883,11 +883,11 @@
     "nix-secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1778499792,
-        "narHash": "sha256-w7mIE9TrdQ5aMoPw8r6E6lYxIRkbJh+L7iBligUoC+E=",
+        "lastModified": 1778589094,
+        "narHash": "sha256-2vBupKqT1vkI3F2d0KkyB28xaM7Yr1uOaOMHEQ4+0pk=",
         "ref": "refs/heads/main",
-        "rev": "891e530492459d725550902f8fb4c9c0f87e99c0",
-        "revCount": 73,
+        "rev": "aff7cb3c6516b03ad51054c92ebea90687867ada",
+        "revCount": 81,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },
