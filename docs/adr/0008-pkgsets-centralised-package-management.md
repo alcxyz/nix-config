@@ -1,8 +1,8 @@
 # ADR-0008: Centralised package sets via pkgsets.nix
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-05-12: package catalog moved to `modules/shared/pkgsets.nix`)
 **Date:** 2026-04-18
-**Applies to:** `modules/nixos/common/pkgsets.nix`
+**Applies to:** `modules/shared/pkgsets.nix`
 
 ## Context
 
@@ -10,7 +10,7 @@ Without a centralised approach, package lists scatter across host configs and ro
 
 ## Decision
 
-All package sets are defined in `modules/nixos/common/pkgsets.nix`, exported as a structured attribute set consumed by role modules and per-host configs:
+All package sets are defined in `modules/shared/pkgsets.nix`, exported as a structured attribute set consumed by role modules and per-host configs:
 
 - `sys.base` / `sys.linux` / `sys.linuxDesktop` — system-level package sets by role
 - `hm.base` / `hm.linux` / `hm.dev` / `hm.iac` / `hm.k8s` / `hm.gaming` / `hm.ai` / `hm.desktop*` / `hm.workstation*` — Home Manager sets by scope
@@ -26,7 +26,7 @@ Host class mapping:
 
 Modules import pkgsets.nix with `pkgs` and `inputs` in scope:
 ```nix
-let pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" { inherit pkgs inputs; };
+let pkgsets = import "${configDir}/modules/shared/pkgsets.nix" { inherit pkgs inputs; };
 in { environment.systemPackages = pkgsets.system.desktop; }
 ```
 

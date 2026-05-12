@@ -1,6 +1,6 @@
 # ADR-0045: xev and xps Kubernetes node onboarding
 
-**Status:** Accepted
+**Status:** Accepted (prepared; hosts not onboarded)
 **Date:** 2026-05-11
 **Applies to:** `inventory.nix`, `hosts/xev/`, `hosts/xps/`, `modules/nixos/virtualisation/k3s`, `modules/nixos/virtualisation/longhorn-prereqs`, gitops cluster manifests
 
@@ -73,6 +73,30 @@ Kubernetes onboarding gates for either host:
 6. Longhorn prerequisites pass before any storage scheduling is enabled.
 7. Gitops docs and node inventories are updated after the node is observed
    live.
+
+## Implementation Status
+
+Prepared in this repository:
+
+- `stable-agent` exists as a Kubernetes role for future schedulable stable
+  worker nodes
+- `k8s-worker` exists as a host role for future Linux cluster workers
+- `laptop-workstation` exists as a host role for `xps` while Kubernetes
+  membership remains undecided
+- `alc.host.k8s` exposes derived role, schedulability, labels, taints, and
+  extra flags for future host modules and checks
+
+Not implemented yet:
+
+- `xev` and `xps` are not present in `inventory.nix`
+- no `hosts/xev/` or `hosts/xps/` NixOS skeleton exists
+- no Longhorn storage scheduling has been enabled for either host
+- no gitops node/storage inventory has been updated for either host
+
+The next implementation step is a buildable `xev` skeleton with hardware
+configuration, secrets, SSH access, k3s agent join, metrics reachability, and
+Longhorn prerequisite validation. `xps` should remain workstation-first until
+its suspend, NVIDIA, Wi-Fi, and availability behavior are known.
 
 ## Alternatives Considered
 

@@ -1,6 +1,6 @@
 # ADR-0043: Selective external nix-config pattern adoption
 
-**Status:** Accepted
+**Status:** Accepted (partially implemented 2026-05-12)
 **Date:** 2026-05-11
 **Applies to:** `docs/adr/`, `inventory.nix`, `flake/`, `modules/`, `hosts/`, `users/`
 
@@ -57,6 +57,38 @@ Adopt:
 8. **Declarative disk layout evaluation.** Evaluate disko for new hosts and
    reinstalls, but do not migrate existing working storage layouts without a
    host-specific reason.
+
+## Implementation Status
+
+Implemented in `feat/adr-0043-0046-implementation`:
+
+- typed host metadata projection through `alc.host` for both NixOS and Home
+  Manager
+- `justfile` command surface for checks, formatting, rebuilds, deploys,
+  workspace status, and input updates
+- flake checks for targeted Nix formatting, check-script formatting,
+  shellcheck, and submodule hygiene
+- local pre-commit hooks for targeted Nix formatting, repository hygiene,
+  destroyed symlink detection, and shellcheck
+- inventory-generated SSH client match blocks for managed hosts, while keeping
+  special Cloudflare, Git, and external entries explicit
+- behavior-preserving public SSH key catalog in
+  `modules/nixos/common/ssh-keys.nix`
+- shared package-set and host-metadata ownership under `modules/shared/`
+- an explicit Linux operator Home Manager layer for infrastructure secrets,
+  Kubernetes credentials, and Forgejo/Grove automation
+- an explicit distributed-build client module, so server roles do not
+  automatically imply remote-build credentials
+
+Still pending:
+
+- splitting oversized host-local files such as `hosts/xyz/configuration.nix`
+- install or recovery outputs for hosts that need them
+- any disko adoption for new hosts or reinstalls
+- broader migration of modules from loose `specialArgs` reads to `alc.host`
+  facts where that reduces duplication
+- first-class inventory facts for operator access, support posture, and
+  distributed-build eligibility
 
 Do not adopt:
 

@@ -1,13 +1,65 @@
 {config, ...}: {
   perSystem = {system, ...}: let
     pkgs = config.alc.pkgsFor.${system};
+    lib = pkgs.lib;
+    src = lib.cleanSource ../.;
+
+    mkRepoCheck = name: nativeBuildInputs: command:
+      pkgs.runCommand name {inherit nativeBuildInputs src;} ''
+        cp -R "$src" source
+        chmod -R u+w source
+        cd source
+        ${command}
+        touch "$out"
+      '';
+
+    formattedNixFiles = [
+      "flake/per-system.nix"
+      "flake/hosts/lib.nix"
+      "modules/home-manager/programs/ssh/default.nix"
+      "modules/nixos/common/default.nix"
+      "modules/nixos/common/distributed-build-client.nix"
+      "modules/nixos/common/pkgsets.nix"
+      "modules/nixos/common/server.nix"
+      "modules/nixos/common/ssh-keys.nix"
+      "modules/shared/host-metadata.nix"
+      "modules/shared/pkgsets.nix"
+      "users/alc/common.nix"
+      "users/alc/linux/common.nix"
+      "users/alc/linux/nex.nix"
+      "users/alc/linux/nux.nix"
+      "users/alc/linux/operator.nix"
+      "users/alc/linux/rpi0.nix"
+      "users/alc/linux/xyz.nix"
+    ];
   in {
     devShells.default = pkgs.mkShell {
       nativeBuildInputs = with pkgs; [
         treefmt
         alejandra
         shfmt
+        shellcheck
+        pre-commit
+        just
       ];
+    };
+
+    checks = {
+      nix-format = mkRepoCheck "nix-format-check" [pkgs.alejandra] ''
+        alejandra --check ${lib.escapeShellArgs formattedNixFiles}
+      '';
+
+      check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
+        shellcheck scripts/checks/*.sh
+      '';
+
+      check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.shfmt] ''
+        shfmt -d -i 2 -ci scripts/checks/*.sh
+      '';
+
+      forbid-submodule-config = mkRepoCheck "forbid-submodule-config" [] ''
+        test ! -e .gitmodules
+      '';
     };
 
     packages =

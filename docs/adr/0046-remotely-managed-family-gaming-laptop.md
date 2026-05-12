@@ -1,6 +1,6 @@
 # ADR-0046: Remotely managed family gaming laptop
 
-**Status:** Accepted
+**Status:** Accepted (prepared; host not onboarded)
 **Date:** 2026-05-11
 **Applies to:** `inventory.nix`, `hosts/`, `users/`, `modules/nixos/services/netbird`, `modules/nixos/common/desktop.nix`, `modules/home-manager/`
 
@@ -58,6 +58,24 @@ Package policy:
 - avoid installing Kubernetes, cloud, CI, and infrastructure administration
   tooling
 - keep browser, audio, input, gamepad, and graphics support boring and reliable
+
+## Implementation Status
+
+Prepared in this repository:
+
+- inventory role vocabulary includes `family-gaming`
+- package sets include a `family-gaming` Home Manager package set for a
+  consumer desktop/gaming client without operator-heavy tooling
+- `alc.host` can expose the eventual host role and inventory facts to NixOS and
+  Home Manager modules
+
+Not implemented yet:
+
+- the family laptop is not present in `inventory.nix`
+- no host skeleton exists under `hosts/`
+- no separate family user profile exists
+- Netbird isolation policy still needs to be enforced outside this repository
+- support-scoped secrets still need to be created in `nix-secrets`
 
 ## Alternatives Considered
 

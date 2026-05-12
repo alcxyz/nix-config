@@ -9,42 +9,19 @@
   lib,
   ...
 }: let
-  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+  pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
 
-  alc_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM9g7HJbiqvmCZRZF5z5g9J/VLI91p7RpXipA9eWHX2q alc@xyz";
-  alc_mac_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxWjN37TvOrWjv1FXde72TscMwP0TbHRhoe0kO8IIU0 alc@mac";
-  alc_iphone_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEhgqS6A8n44Azg65g9u7a2mQ+RwqYo8dBW/4CHfua+0 terminus@iphone";
-  alc_nux_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
-  alc_nex_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIME9egqxg1z9e+Ef8M6866vlmjV7erNpfKJvSg+x/btI alc@nex";
-  alc_rpi0_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
-  alc_yubikey_sk_key = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIMDqhZG24+O0aJzsfiRY1AbNHcb62apx2F7DPTAJf9olAAAABHNzaDo=";
-  nux_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOCqmPEzDy4Nc2ZcRggLVAfYsay6dMoPJrVBR52MskrD nix-build@nux-to-xyz";
-  nex_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8qgxpjQ82ktYwBKBatdI0bQlfFx0UPwCpJ6maVuhQL nix-build@nex-to-xyz";
-  rpi0_buildhost_xyz_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBtfjE0ipO2T87jT0FB+CpMDpKPCSrehWlYmKUZN6txF nix-build@rpi0-to-xyz";
-  xyz_host_ed25519_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEztyNrJk03TzMyLgwYd0BmUtUR5acWpgJf8obeGG1bS";
-  docker_app_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
-  humanLoginKeys = [
-    alc_xyz_key
-    alc_nux_key
-    alc_nex_key
-    alc_rpi0_key
-    alc_mac_key
-    alc_yubikey_sk_key
-  ];
-  mobileAppKeys = [
-    alc_iphone_key
-    docker_app_key
-  ];
-  xyzDistributedBuildClientKeys = [
-    nux_buildhost_xyz_key
-    nex_buildhost_xyz_key
-    rpi0_buildhost_xyz_key
-  ];
+  sshKeys = import ./ssh-keys.nix;
+  humanLoginKeys = sshKeys.groups.humanLogin sshKeys.keys;
+  mobileAppKeys = sshKeys.groups.mobileApps sshKeys.keys;
+  xyzDistributedBuildClientKeys = sshKeys.groups.xyzDistributedBuildClients sshKeys.keys;
 in {
   # ==================== Imports ====================
   imports = [
+    ../../shared/host-metadata.nix
+    ./distributed-build-client.nix
   ];
 
   # ==================== Nix Configuration ====================
@@ -54,7 +31,7 @@ in {
         "xyz"
         "192.168.1.10"
       ];
-      publicKey = xyz_host_ed25519_key;
+      publicKey = sshKeys.keys.xyz_host_ed25519;
     };
   };
 

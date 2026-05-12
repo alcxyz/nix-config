@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-03
-**Applies to:** `modules/nixos/common/default.nix`, `modules/nixos/common/server.nix`, `users/alc/common.nix`, `nix-secrets`
+**Applies to:** `modules/nixos/common/default.nix`, `modules/nixos/common/distributed-build-client.nix`, `users/alc/common.nix`, `nix-secrets`
 
 ## Context
 
@@ -67,7 +67,7 @@ ssh_buildhost_xyz
 ssh_buildhost_xyz.pub
 ```
 
-`modules/nixos/common/server.nix` deploys these to:
+`modules/nixos/common/distributed-build-client.nix` deploys these to:
 
 ```text
 /root/.ssh/id_buildhost_xyz
@@ -102,7 +102,7 @@ Adding a new server host that should build on `xyz` requires:
 
 1. Generate/import a dedicated build key into `nix-secrets/hosts/<host>/secrets.yaml`.
 2. Add the public key to `xyzDistributedBuildClientKeys` in `modules/nixos/common/default.nix`.
-3. Ensure the host imports `modules/nixos/common/server.nix`.
+3. Ensure the host enables `alc.distributedBuildClient`.
 4. Rebuild the new host before tightening or relying on `xyz` authorization.
 
 Rebuild ordering matters when rotating build keys:

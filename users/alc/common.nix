@@ -10,7 +10,7 @@
   system,
   ...
 }: let
-  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
+  pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
   hostSopsFile = (
@@ -60,6 +60,7 @@ in
       "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
       "${configDir}/modules/home-manager/programs/ssh/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
+      "${configDir}/modules/shared/host-metadata.nix"
       #../../modules/home-manager/secrets/ssh-keys.nix
     ];
 
