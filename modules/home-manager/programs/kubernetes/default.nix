@@ -141,7 +141,10 @@
   wrapCommand = name: package: executable:
     pkgs.writeShellApplication {
       inherit name;
-      runtimeInputs = [package];
+      runtimeInputs = [
+        package
+        pkgs.kubelogin
+      ];
       text = ''
         ${setManagedKubeconfig}
         exec ${package}/bin/${executable} "$@"

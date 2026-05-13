@@ -113,7 +113,8 @@ credential surface that can drift or outlive the decrypted secret.
 ## Consequences
 
 - `kubectl`, `flux`, `helm`, and wrapped tools work from plain shells and agent
-  subprocesses without inherited session variables.
+  subprocesses without inherited session variables. The wrappers also provide
+  `kubelogin` on PATH for AKS kubeconfigs that use Azure exec auth.
 - Local kubeconfigs, such as minikube, and script-created kubeconfigs can be
   part of the same merged client view.
 - Bullet work kubeconfigs are written to stable, named files instead of being
