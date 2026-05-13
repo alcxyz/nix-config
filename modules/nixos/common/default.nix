@@ -18,10 +18,17 @@
   mobileAppKeys = sshKeys.groups.mobileApps sshKeys.keys;
   xyzDistributedBuildClientKeys = sshKeys.groups.xyzDistributedBuildClients sshKeys.keys;
   userHome = "/home/${username}";
+  shellPackages = {
+    bash = pkgs.bashInteractive;
+    nu = pkgs.nushell;
+    nushell = pkgs.nushell;
+    zsh = pkgs.zsh;
+  };
 in {
   # ==================== Imports ====================
   imports = [
     ../../shared/host-metadata.nix
+    ../../shared/shell.nix
     ./distributed-build-client.nix
   ];
 
@@ -109,7 +116,7 @@ in {
         isNormalUser = true;
         home = "/home/${username}";
         createHome = true;
-        shell = pkgs.nushell;
+        shell = shellPackages.${config.alc.shell.default};
         extraGroups = [
           "networkmanager"
           "wheel"
@@ -136,6 +143,12 @@ in {
       };
     };
   };
+
+  environment.shells = with pkgs; [
+    bashInteractive
+    nushell
+    zsh
+  ];
 
   # ==================== Fonts ====================
   fonts.packages = with pkgs; [
