@@ -1,25 +1,17 @@
 # modules/home-manager/programs/kubernetes/default.nix
 {
   config,
-  inputs,
   lib,
   pkgs,
   ...
 }: let
   cfg = config.programs.kubernetes.managed;
-  bulletKubeconfigPaths = lib.optionals cfg.bullet.enable [
-    cfg.bullet.sandboxKubeconfig
-    cfg.bullet.stagingKubeconfig
-    cfg.bullet.prodKubeconfig
-    cfg.bullet.infraKubeconfig
-  ];
   managedKubeconfigPaths = lib.unique (
     [
       cfg.currentContextFile
       cfg.kubeconfig
     ]
     ++ cfg.extraKubeconfigs
-    ++ bulletKubeconfigPaths
   );
   managedKubeconfig = lib.concatStringsSep ":" managedKubeconfigPaths;
   addManagedKubeconfigs =
@@ -151,32 +143,6 @@
       '';
     };
 
-  bulletEnv = ''
-    export BULLET_AZURE_TENANT_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.tenantIdFile}
-    export BULLET_AZURE_SANDBOX_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.sandboxSubscriptionIdFile}
-    export BULLET_AZURE_STAGING_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.stagingSubscriptionIdFile}
-    export BULLET_AZURE_PROD_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.prodSubscriptionIdFile}
-    export BULLET_AZURE_INFRA_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.infraSubscriptionIdFile}
-    export BULLET_AZURE_PROD_BASTION_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.prodBastionSubscriptionIdFile}
-    export BULLET_CONTEXT_SANDBOX=${lib.escapeShellArg cfg.bullet.sandboxContext}
-    export BULLET_CONTEXT_STAGING=${lib.escapeShellArg cfg.bullet.stagingContext}
-    export BULLET_CONTEXT_PROD=${lib.escapeShellArg cfg.bullet.prodContext}
-    export BULLET_CONTEXT_INFRA=${lib.escapeShellArg cfg.bullet.infraContext}
-    export BULLET_KUBECONFIG_SANDBOX=${lib.escapeShellArg cfg.bullet.sandboxKubeconfig}
-    export BULLET_KUBECONFIG_STAGING=${lib.escapeShellArg cfg.bullet.stagingKubeconfig}
-    export BULLET_KUBECONFIG_PROD=${lib.escapeShellArg cfg.bullet.prodKubeconfig}
-    export BULLET_KUBECONFIG_INFRA=${lib.escapeShellArg cfg.bullet.infraKubeconfig}
-  '';
-
-  bulletCommand = name:
-    pkgs.writeShellApplication {
-      inherit name;
-      runtimeInputs = [cfg.bullet.package];
-      text = ''
-        ${bulletEnv}
-        exec ${cfg.bullet.package}/bin/${name} "$@"
-      '';
-    };
 in {
   options.programs.kubernetes.managed = {
     enable = lib.mkEnableOption "managed Kubernetes client wrappers";
@@ -260,107 +226,6 @@ in {
       };
     };
 
-    bullet = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default =
-          builtins.elem cfg.bullet.stagingKubeconfig cfg.extraKubeconfigs
-          || builtins.elem cfg.bullet.prodKubeconfig cfg.extraKubeconfigs;
-        description = "Install Bullet Azure/Bastion helper commands from bn-bootstrap.";
-      };
-
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = inputs.bn-bootstrap.packages.${pkgs.stdenv.hostPlatform.system}.default;
-        description = "Package providing Bullet helper commands.";
-      };
-
-      stagingKubeconfig = lib.mkOption {
-        type = lib.types.str;
-        default = "${config.home.homeDirectory}/.kube/bullet-staging-config";
-        description = "Kubeconfig path written by bullet-kube for the Bullet staging AKS cluster.";
-      };
-
-      sandboxKubeconfig = lib.mkOption {
-        type = lib.types.str;
-        default = "${config.home.homeDirectory}/.kube/bullet-sandbox-config";
-        description = "Kubeconfig path written by bullet-kube for the Bullet sandbox AKS cluster.";
-      };
-
-      prodKubeconfig = lib.mkOption {
-        type = lib.types.str;
-        default = "${config.home.homeDirectory}/.kube/bullet-prod-config";
-        description = "Kubeconfig path written by bullet-kube for the Bullet production AKS cluster.";
-      };
-
-      infraKubeconfig = lib.mkOption {
-        type = lib.types.str;
-        default = "${config.home.homeDirectory}/.kube/bullet-infra-config";
-        description = "Kubeconfig path written by bullet-kube for the Bullet infrastructure AKS cluster.";
-      };
-
-      stagingContext = lib.mkOption {
-        type = lib.types.str;
-        default = "bullet-staging";
-        description = "Context name written by bullet-kube for the Bullet staging AKS cluster.";
-      };
-
-      sandboxContext = lib.mkOption {
-        type = lib.types.str;
-        default = "bullet-sandbox";
-        description = "Context name written by bullet-kube for the Bullet sandbox AKS cluster.";
-      };
-
-      prodContext = lib.mkOption {
-        type = lib.types.str;
-        default = "bullet-prod";
-        description = "Context name written by bullet-kube for the Bullet production AKS cluster.";
-      };
-
-      infraContext = lib.mkOption {
-        type = lib.types.str;
-        default = "bullet-infra";
-        description = "Context name written by bullet-kube for the Bullet infrastructure AKS cluster.";
-      };
-
-      azure = {
-        tenantIdFile = lib.mkOption {
-          type = lib.types.str;
-          default = "";
-          description = "SOPS-managed file containing the Bullet Azure tenant ID.";
-        };
-
-        sandboxSubscriptionIdFile = lib.mkOption {
-          type = lib.types.str;
-          default = "";
-          description = "SOPS-managed file containing the Bullet sandbox subscription ID.";
-        };
-
-        stagingSubscriptionIdFile = lib.mkOption {
-          type = lib.types.str;
-          default = "";
-          description = "SOPS-managed file containing the Bullet staging subscription ID.";
-        };
-
-        prodSubscriptionIdFile = lib.mkOption {
-          type = lib.types.str;
-          default = "";
-          description = "SOPS-managed file containing the Bullet production subscription ID.";
-        };
-
-        infraSubscriptionIdFile = lib.mkOption {
-          type = lib.types.str;
-          default = "";
-          description = "SOPS-managed file containing the Bullet infrastructure subscription ID.";
-        };
-
-        prodBastionSubscriptionIdFile = lib.mkOption {
-          type = lib.types.str;
-          default = "";
-          description = "SOPS-managed file containing the Bullet shared production Bastion subscription ID.";
-        };
-      };
-    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -368,20 +233,6 @@ in {
       {
         assertion = cfg.kubeconfig != "";
         message = "programs.kubernetes.managed.kubeconfig must be set";
-      }
-      {
-        assertion =
-          !cfg.bullet.enable
-          || (
-            cfg.bullet.azure.tenantIdFile
-            != ""
-            && cfg.bullet.azure.sandboxSubscriptionIdFile != ""
-            && cfg.bullet.azure.stagingSubscriptionIdFile != ""
-            && cfg.bullet.azure.prodSubscriptionIdFile != ""
-            && cfg.bullet.azure.infraSubscriptionIdFile != ""
-            && cfg.bullet.azure.prodBastionSubscriptionIdFile != ""
-          );
-        message = "programs.kubernetes.managed.bullet.azure secret file paths must be set when Bullet helpers are enabled";
       }
     ];
 
@@ -433,35 +284,11 @@ in {
       ]
       ++ lib.optionals cfg.wrap.leantimeTidy [
         (wrapCommand "leantime-tidy" pkgs.leantime-tidy "leantime-tidy")
-      ]
-      ++ lib.optionals cfg.bullet.enable [
-        (bulletCommand "bullet-login")
-        (bulletCommand "bullet-connect")
-        (bulletCommand "bullet-kube")
-        (bulletCommand "bullet-proxy")
-        (bulletCommand "bullet-boards")
       ];
 
-    home.sessionVariables =
-      lib.optionalAttrs cfg.exportSessionVariable {
-        KUBECONFIG = managedKubeconfig;
-      }
-      // lib.optionalAttrs cfg.bullet.enable {
-        BULLET_AZURE_TENANT_ID_FILE = cfg.bullet.azure.tenantIdFile;
-        BULLET_AZURE_SANDBOX_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.sandboxSubscriptionIdFile;
-        BULLET_AZURE_STAGING_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.stagingSubscriptionIdFile;
-        BULLET_AZURE_PROD_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.prodSubscriptionIdFile;
-        BULLET_AZURE_INFRA_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.infraSubscriptionIdFile;
-        BULLET_AZURE_PROD_BASTION_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.prodBastionSubscriptionIdFile;
-        BULLET_CONTEXT_SANDBOX = cfg.bullet.sandboxContext;
-        BULLET_CONTEXT_STAGING = cfg.bullet.stagingContext;
-        BULLET_CONTEXT_PROD = cfg.bullet.prodContext;
-        BULLET_CONTEXT_INFRA = cfg.bullet.infraContext;
-        BULLET_KUBECONFIG_SANDBOX = cfg.bullet.sandboxKubeconfig;
-        BULLET_KUBECONFIG_STAGING = cfg.bullet.stagingKubeconfig;
-        BULLET_KUBECONFIG_PROD = cfg.bullet.prodKubeconfig;
-        BULLET_KUBECONFIG_INFRA = cfg.bullet.infraKubeconfig;
-      };
+    home.sessionVariables = lib.mkIf cfg.exportSessionVariable {
+      KUBECONFIG = managedKubeconfig;
+    };
 
     home.shellAliases = lib.mkIf cfg.aliases.enable {
       k = "kubectl";

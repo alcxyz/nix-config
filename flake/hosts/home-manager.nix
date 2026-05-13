@@ -24,6 +24,7 @@
 
       modules = [
         homeConfigPath
+        inputs.bn-bootstrap.homeManagerModules.bullet
         inputs.nix-colors.homeManagerModules.default
         inputs.sops-nix.homeManagerModules.sops
       ];
