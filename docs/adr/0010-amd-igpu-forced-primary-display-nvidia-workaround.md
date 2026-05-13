@@ -26,7 +26,7 @@ environment.sessionVariables = {
 
 Both `nvidia.nix` and `amd.nix` hardware modules are imported simultaneously — the NVIDIA driver remains active for CUDA and container GPU access via CDI; only the display and VA-API pipeline is locked to AMD.
 
-The `/dev/dri/amd-display-card` symlink is created by a udev rule that matches PCI slot `0000:71:00.0`, PCI ID `1002:13C0`, and the `amdgpu` driver. A `gpu-display-guard` systemd service runs before `greetd` and fails the greeter startup if that symlink is missing, resolves to another PCI device, has a different PCI ID, or is not bound to `amdgpu`.
+The `/dev/dri/amd-display-card` symlink is created by a udev rule that matches PCI slot `0000:79:00.0`, PCI ID `1002:13C0`, and the `amdgpu` driver. A `gpu-display-guard` systemd service runs before `greetd` and fails the greeter startup if that symlink is missing, resolves to another PCI device, has a different PCI ID, or is not bound to `amdgpu`.
 
 ## Alternatives Considered
 
