@@ -65,26 +65,12 @@ Raw Kubernetes client binaries were removed from the shared `hm.k8s` package
 set so command names are owned by the wrappers and Home Manager does not
 collide on duplicate `bin/*` entries.
 
-For Bullet work clusters, the module can also install managed helper commands
-from the private `bn-bootstrap` flake:
-
-- `bullet-connect` selects the Bullet Azure subscription and opens an Azure
-  Bastion SSH session to the environment management VM.
-- `bullet-proxy` selects the same environment, opens an Azure Bastion tunnel,
-  and optionally starts a local SOCKS5 proxy through that tunnel.
-- `bullet-kube` fetches AKS credentials into dedicated per-environment files
-  (`~/.kube/bullet-sandbox-config`, `~/.kube/bullet-staging-config`,
-  `~/.kube/bullet-prod-config`, `~/.kube/bullet-infra-config`) and converts
-  them to Azure CLI exec auth with `kubelogin`.
-
-The script implementation and Bullet-specific access documentation live in
-`bn-bootstrap`. This module only installs the package, exports SOPS-backed
-Azure identifier file paths, and merges the resulting kubeconfig files.
-
-Those Bullet kubeconfig paths are part of the managed kubeconfig merge when the
-Bullet helpers are enabled. This means `switcher` can list and select the
-contexts after `bullet-kube` has materialized the files, while network access to
-the private AKS API still depends on the Bullet management path.
+Engagement-specific modules can append kubeconfig files through
+`extraKubeconfigs`. For example, the private `bn-bootstrap` flake owns the
+Bullet command wrappers and appends Bullet kubeconfig paths when its Home
+Manager module is enabled. This keeps Banenor/Bullet behavior outside the
+generic Kubernetes wrapper module while still letting `switcher` and `kc` see
+those contexts after the external module materializes the files.
 
 The global `KUBECONFIG` session variable is no longer exported by default.
 The module still exposes `exportSessionVariable` as an opt-in escape hatch.
@@ -112,11 +98,12 @@ credential surface that can drift or outlive the decrypted secret.
 ## Consequences
 
 - `kubectl`, `flux`, `helm`, and wrapped tools work from plain shells and agent
-  subprocesses without inherited session variables.
+  subprocesses without inherited session variables. The wrappers also provide
+  `kubelogin` on PATH for AKS kubeconfigs that use Azure exec auth.
 - Local kubeconfigs, such as minikube, and script-created kubeconfigs can be
   part of the same merged client view.
-- Bullet work kubeconfigs are written to stable, named files instead of being
-  merged into `~/.kube/config`, so they are visible to `switcher` without
+- Work/temporary kubeconfigs can be written to stable, named files and appended
+  through `extraKubeconfigs`, so they are visible to `switcher` without
   polluting the default kubeconfig.
 - Cluster credentials are scoped to Kubernetes-aware commands rather than every
   child process in the user session.
