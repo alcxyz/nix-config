@@ -21,7 +21,7 @@
     };
 
     paneru = {
-      url = "github:alcxyz/paneru?ref=qa/center-underfilled-strip";
+      url = "github:alcxyz/paneru?ref=qa/alc-dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

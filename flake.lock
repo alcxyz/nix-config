@@ -1074,16 +1074,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1778672948,
-        "narHash": "sha256-LsvM4MWtUwhGNESXDKC8n1G0ngOHFItfQg5bWecXKF4=",
+        "lastModified": 1778681141,
+        "narHash": "sha256-GTXDzmvA7Zshd2ntcVYnbr/DRHKNXMWN8GiAKaA/24I=",
         "owner": "alcxyz",
         "repo": "paneru",
-        "rev": "6b98c17a3caacfa44f2c4251c562c5d7c8b3ff18",
+        "rev": "0050879439be4bb2ecea84507e491958eb894490",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "qa/center-underfilled-strip",
+        "ref": "qa/alc-dev",
         "repo": "paneru",
         "type": "github"
       }
