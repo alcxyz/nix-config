@@ -20,6 +20,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    paneru = {
+      url = "github:alcxyz/paneru?ref=qa/center-underfilled-strip";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     bn-bootstrap = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git";
       inputs.nixpkgs.follows = "nixpkgs";

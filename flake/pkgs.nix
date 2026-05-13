@@ -24,7 +24,6 @@ in
               "devlog"
               "agent-sync-check"
               "omniwm"
-              "paneru"
               "zen-browser"
               "nix-deploy"
               "wcap"
@@ -50,6 +49,7 @@ in
               lt)
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
+              paneru = inputs.paneru.packages.${system}.default;
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.
             # Skip nushell tests to avoid build failure on managed Macs.

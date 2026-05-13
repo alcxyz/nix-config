@@ -5,7 +5,7 @@
 focus_follows_mouse = true
 mouse_follows_focus = true
 auto_center = false
-preset_column_widths = [0.25, 0.333333, 0.5, 0.666, 1.0]
+preset_column_widths = [0.166666, 0.25, 0.333333, 0.5, 0.666666, 1.0]
 window_resize_cycle = true
 window_hidden_ratio = 0.0
 sliver_width = 5
@@ -21,8 +21,6 @@ right = 4
 [swipe]
 sensitivity = 0.35
 deceleration = 4.0
-# Keep horizontal trackpad/scroll movement continuous, matching the scrolling
-# layout behavior used in Hyprland and Niri.
 continuous = true
 
 [swipe.gesture]
@@ -75,8 +73,8 @@ window_nextdisplay = "ctrl + cmd - tab"
 window_nextdisplaysend = "ctrl + cmd + shift - tab"
 mouse_nextdisplay = "ctrl + cmd - g"
 
-# Conservative quit binding, matching the Linux session-exit chord shape.
-quit = "alt + shift - escape"
+# Paneru is managed by launchd with KeepAlive, so quit is effectively restart.
+quit = ["alt + ctrl - r", "alt + shift - escape"]
 
 [windows.default]
 title = ".*"
@@ -91,3 +89,9 @@ floating = true
 title = ".*Copy.*"
 bundle_id = "com.apple.finder"
 floating = true
+
+[decorations.active.border]
+enabled = false
+color = "#89b4fa"
+width = 1.0
+radius = 12.0

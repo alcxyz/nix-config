@@ -6,9 +6,7 @@
   pkgs,
   username,
   ...
-}:
-
-let
+}: let
   cfg = config.programs.paneru.managed;
   paneruConfig = "${config.home.homeDirectory}/src/infra/nix-config/users/${username}/configs/paneru/paneru.toml";
   defaultPaneruBin = lib.getExe pkgs.paneru;
@@ -38,8 +36,7 @@ let
     /bin/sleep 2
     /bin/launchctl kickstart -k "gui/$(/usr/bin/id -u)/org.nix-community.home.paneru"
   '';
-in
-{
+in {
   options.programs.paneru.managed = {
     enable = lib.mkEnableOption "Manage Paneru configuration and launchd agent";
 
@@ -53,7 +50,7 @@ in
   config = lib.mkIf cfg.enable {
     xdg.configFile."paneru/paneru.toml".source = config.lib.file.mkOutOfStoreSymlink paneruConfig;
 
-    home.activation.removeHomebrewPaneruAgent = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.removeHomebrewPaneruAgent = lib.hm.dag.entryAfter ["writeBoundary"] ''
       launchctl bootout "gui/$UID/com.github.karinushka.paneru" 2>/dev/null || true
       launchctl disable "gui/$UID/com.github.karinushka.paneru" 2>/dev/null || true
       rm -f "${config.home.homeDirectory}/Library/LaunchAgents/com.github.karinushka.paneru.plist"
@@ -62,7 +59,7 @@ in
     launchd.agents.paneru = {
       enable = true;
       config = {
-        ProgramArguments = [ cfg.command ];
+        ProgramArguments = [cfg.command];
         RunAtLoad = true;
         KeepAlive = true;
         EnvironmentVariables = {
@@ -76,7 +73,7 @@ in
     launchd.agents.paneru-reconcile-t3code = {
       enable = true;
       config = {
-        ProgramArguments = [ "${reconcileT3Code}" ];
+        ProgramArguments = ["${reconcileT3Code}"];
         RunAtLoad = true;
         StartInterval = 10;
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/paneru-reconcile-t3code.log";
