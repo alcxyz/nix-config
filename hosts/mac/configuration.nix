@@ -13,6 +13,12 @@
     inherit pkgs inputs;
   };
   networkName = hostInventory.darwinNetworkName or "mac";
+  shellPackages = {
+    bash = pkgs.bashInteractive;
+    nu = pkgs.nushell;
+    nushell = pkgs.nushell;
+    zsh = pkgs.zsh;
+  };
 
   # Define common trackpad settings using actual plist key names
   customTrackpadSettings = {
@@ -46,6 +52,10 @@
     # TrackpadFourFingerTapGesture = 0; # Off
   };
 in {
+  imports = [
+    "${configDir}/modules/shared/shell.nix"
+  ];
+
   # ============================================================================
   # Nix Configuration
   # ============================================================================
@@ -159,6 +169,8 @@ in {
   # Primary User (Required for system defaults)
   # ============================================================================
   system.primaryUser = username;
+
+  users.users.${username}.shell = shellPackages.${config.alc.shell.default};
 
   # ============================================================================
   # System Packages
