@@ -50,13 +50,48 @@
   kubeContextCommand = pkgs.writeShellApplication {
     name = "kube-context";
     runtimeInputs = [
+      pkgs.gnugrep
       pkgs.kubectl
       pkgs.kubeswitch
     ];
     text = ''
       ${setManagedKubeconfig}
 
+      if [ "$#" -eq 1 ] && kubectl config get-contexts -o name | grep -Fx -- "$1" >/dev/null; then
+        exec kubectl config use-context "$1"
+      fi
+
       response="$(switcher set-context "$@")"
+      status="$?"
+      if [ "$status" -ne 0 ]; then
+        printf '%s\n' "$response"
+        exit "$status"
+      fi
+
+      case "$response" in
+        "__ "*)
+          payload="''${response#__ }"
+          selected="''${payload#*,}"
+          selected="''${selected%%,*}"
+          exec kubectl config use-context "$selected"
+          ;;
+        *)
+          printf '%s\n' "$response"
+          ;;
+      esac
+    '';
+  };
+
+  switcherCommand = pkgs.writeShellApplication {
+    name = "switcher";
+    runtimeInputs = [
+      pkgs.kubectl
+      pkgs.kubeswitch
+    ];
+    text = ''
+      ${setManagedKubeconfig}
+
+      response="$(${pkgs.kubeswitch}/bin/switcher "$@")"
       status="$?"
       if [ "$status" -ne 0 ]; then
         printf '%s\n' "$response"
@@ -362,7 +397,7 @@ in {
         (wrapCommand "kdash" pkgs.kdash "kdash")
       ]
       ++ lib.optionals cfg.wrap.kubeswitch [
-        (wrapCommand "switcher" pkgs.kubeswitch "switcher")
+        switcherCommand
         kubeContextCommand
         kubeNamespaceCommand
       ]

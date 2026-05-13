@@ -51,11 +51,14 @@ Managed wrappers currently include:
 - `switcher`
 - selected higher-level tools, currently `leantime-tidy` on `xyz`
 
-`kc` is a small helper around `switcher set-context`: it lets `switcher` choose
-the context, then persists that context with `kubectl config use-context` into
-the writable current-context file. `kns` uses `kubectl config set-context
---current --namespace` for the same reason. Upstream `switcher ns` does not
-support multi-file `KUBECONFIG`.
+`switcher` and `kc` both persist context selections into the managed
+current-context file. `kc <context>` first checks the merged kubectl context
+list for an exact match so it does not depend on switcher cache state, then
+falls back to `switcher set-context` for fuzzy or interactive selection. Plain
+`switcher` wraps upstream `switcher`, parses the selected `config-path,context`
+response, and then runs `kubectl config use-context`. `kns` uses
+`kubectl config set-context --current --namespace` for the same reason.
+Upstream `switcher ns` does not support multi-file `KUBECONFIG`.
 
 The module also owns the Kubernetes shell aliases (`k`, `kg`, `kl`, etc.).
 Raw Kubernetes client binaries were removed from the shared `hm.k8s` package
