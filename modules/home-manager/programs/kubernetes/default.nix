@@ -147,6 +147,33 @@
         exec ${package}/bin/${executable} "$@"
       '';
     };
+
+  bulletEnv = ''
+    export BULLET_AZURE_TENANT_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.tenantIdFile}
+    export BULLET_AZURE_SANDBOX_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.sandboxSubscriptionIdFile}
+    export BULLET_AZURE_STAGING_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.stagingSubscriptionIdFile}
+    export BULLET_AZURE_PROD_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.prodSubscriptionIdFile}
+    export BULLET_AZURE_INFRA_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.infraSubscriptionIdFile}
+    export BULLET_AZURE_PROD_BASTION_SUBSCRIPTION_ID_FILE=${lib.escapeShellArg cfg.bullet.azure.prodBastionSubscriptionIdFile}
+    export BULLET_CONTEXT_SANDBOX=${lib.escapeShellArg cfg.bullet.sandboxContext}
+    export BULLET_CONTEXT_STAGING=${lib.escapeShellArg cfg.bullet.stagingContext}
+    export BULLET_CONTEXT_PROD=${lib.escapeShellArg cfg.bullet.prodContext}
+    export BULLET_CONTEXT_INFRA=${lib.escapeShellArg cfg.bullet.infraContext}
+    export BULLET_KUBECONFIG_SANDBOX=${lib.escapeShellArg cfg.bullet.sandboxKubeconfig}
+    export BULLET_KUBECONFIG_STAGING=${lib.escapeShellArg cfg.bullet.stagingKubeconfig}
+    export BULLET_KUBECONFIG_PROD=${lib.escapeShellArg cfg.bullet.prodKubeconfig}
+    export BULLET_KUBECONFIG_INFRA=${lib.escapeShellArg cfg.bullet.infraKubeconfig}
+  '';
+
+  bulletCommand = name:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [cfg.bullet.package];
+      text = ''
+        ${bulletEnv}
+        exec ${cfg.bullet.package}/bin/${name} "$@"
+      '';
+    };
 in {
   options.programs.kubernetes.managed = {
     enable = lib.mkEnableOption "managed Kubernetes client wrappers";
@@ -405,7 +432,11 @@ in {
         (wrapCommand "leantime-tidy" pkgs.leantime-tidy "leantime-tidy")
       ]
       ++ lib.optionals cfg.bullet.enable [
-        cfg.bullet.package
+        (bulletCommand "bullet-login")
+        (bulletCommand "bullet-connect")
+        (bulletCommand "bullet-kube")
+        (bulletCommand "bullet-proxy")
+        (bulletCommand "bullet-boards")
       ];
 
     home.sessionVariables =

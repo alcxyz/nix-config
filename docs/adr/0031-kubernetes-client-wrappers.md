@@ -78,8 +78,9 @@ from the private `bn-bootstrap` flake:
   them to Azure CLI exec auth with `kubelogin`.
 
 The script implementation and Bullet-specific access documentation live in
-`bn-bootstrap`. This module only installs the package, exports SOPS-backed
-Azure identifier file paths, and merges the resulting kubeconfig files.
+`bn-bootstrap`. This module installs wrappers around those commands so the
+SOPS-backed Azure identifier file paths and managed kubeconfig paths are baked
+into each invocation instead of depending on shell session variables.
 
 Those Bullet kubeconfig paths are part of the managed kubeconfig merge when the
 Bullet helpers are enabled. This means `switcher` can list and select the
