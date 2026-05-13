@@ -62,15 +62,21 @@ Raw Kubernetes client binaries were removed from the shared `hm.k8s` package
 set so command names are owned by the wrappers and Home Manager does not
 collide on duplicate `bin/*` entries.
 
-For Bullet work clusters, the module can also install managed helper commands:
+For Bullet work clusters, the module can also install managed helper commands
+from the private `bn-bootstrap` flake:
 
 - `bullet-connect` selects the Bullet Azure subscription and opens an Azure
   Bastion SSH session to the environment management VM.
 - `bullet-proxy` selects the same environment, opens an Azure Bastion tunnel,
   and optionally starts a local SOCKS5 proxy through that tunnel.
 - `bullet-kube` fetches AKS credentials into dedicated per-environment files
-  (`~/.kube/bullet-staging-config`, `~/.kube/bullet-prod-config`) and converts
+  (`~/.kube/bullet-sandbox-config`, `~/.kube/bullet-staging-config`,
+  `~/.kube/bullet-prod-config`, `~/.kube/bullet-infra-config`) and converts
   them to Azure CLI exec auth with `kubelogin`.
+
+The script implementation and Bullet-specific access documentation live in
+`bn-bootstrap`. This module only installs the package, exports SOPS-backed
+Azure identifier file paths, and merges the resulting kubeconfig files.
 
 Those Bullet kubeconfig paths are part of the managed kubeconfig merge when the
 Bullet helpers are enabled. This means `switcher` can list and select the

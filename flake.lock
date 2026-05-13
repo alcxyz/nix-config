@@ -49,6 +49,26 @@
         "type": "github"
       }
     },
+    "bn-bootstrap": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1778631030,
+        "narHash": "sha256-LElhUjYbLWZ7+p75X7Px6/i/pRh+BElBbuYgic3l2SM=",
+        "ref": "refs/heads/main",
+        "rev": "82fd53abe3ad9bfeff7380d749329b34e85dceea",
+        "revCount": 5,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
+      }
+    },
     "calculator": {
       "flake": false,
       "locked": {
@@ -883,11 +903,11 @@
     "nix-secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1778617346,
-        "narHash": "sha256-spnQtHY1JJ3+wXrSswU9FsEhve9VzSMCEtopqB2NStk=",
+        "lastModified": 1778627931,
+        "narHash": "sha256-DPcdQ5eya9e/0it91wMtP2XIawJ1fdOz6iBDKjW+xFs=",
         "ref": "refs/heads/main",
-        "rev": "179c25653a59b6ef18bb98456105f6d8f1765088",
-        "revCount": 84,
+        "rev": "a2254afdb56232c7fcdcb4577c51776963ec3d7a",
+        "revCount": 86,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1101,6 +1121,7 @@
     },
     "root": {
       "inputs": {
+        "bn-bootstrap": "bn-bootstrap",
         "canopy": "canopy",
         "dankMaterialShell": "dankMaterialShell",
         "darwin": "darwin",

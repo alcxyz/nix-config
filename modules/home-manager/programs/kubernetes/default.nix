@@ -1,20 +1,17 @@
 # modules/home-manager/programs/kubernetes/default.nix
 {
   config,
+  inputs,
   lib,
   pkgs,
   ...
 }: let
   cfg = config.programs.kubernetes.managed;
-  azureCli = pkgs.azure-cli.withExtensions (
-    with pkgs.azure-cli.extensions; [
-      ssh
-      bastion
-    ]
-  );
   bulletKubeconfigPaths = lib.optionals cfg.bullet.enable [
+    cfg.bullet.sandboxKubeconfig
     cfg.bullet.stagingKubeconfig
     cfg.bullet.prodKubeconfig
+    cfg.bullet.infraKubeconfig
   ];
   managedKubeconfigPaths = lib.unique (
     [
@@ -103,299 +100,6 @@
         --user "$current_user" \
         --namespace "$1"
       exec kubectl config use-context --kubeconfig "$writable_kubeconfig" "$current_context"
-    '';
-  };
-
-  bulletConnectCommand = pkgs.writeShellApplication {
-    name = "bullet-connect";
-    runtimeInputs = [azureCli];
-    text = ''
-      usage() {
-        cat <<'EOF'
-      Usage: bullet-connect [staging|prod]
-
-      Connect to a Bullet management VM through Azure Bastion.
-
-      Environments:
-        staging  aliases: stg, nonprod, test
-        prod     alias: production, requires PIM elevation
-      EOF
-      }
-
-      ENV="''${1:-staging}"
-
-      case "$ENV" in
-        -h|--help)
-          usage
-          exit 0
-          ;;
-        staging|stg|nonprod|test)
-          SUB="78b79a31-1a31-4ea7-b30f-9da053196f3c"
-          RG="bn-rcmeaks-neu-rg-test"
-          BASTION="bn-rcmeaks-neu-bas-test"
-          VM_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Compute/virtualMachines/bn-rcmeaksmgmt-neu-vm-test"
-          LABEL="staging"
-          ;;
-        prod|production)
-          SUB="b62e975d-f464-43e3-a867-f860d71fccc6"
-          RG="bn-rcmeaks-nwe-rg-prod02"
-          BASTION="bn-rcmeaks-nwe-bas-prod02"
-          VM_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Compute/virtualMachines/bn-rcmeaksmgmt-nwe-vm-prod01-02"
-          LABEL="production"
-          ;;
-        *)
-          usage >&2
-          exit 2
-          ;;
-      esac
-
-      printf '==> Connecting to Bullet %s management VM via Bastion...\n' "$LABEL"
-      printf '    Subscription: %s\n\n' "$SUB"
-
-      if [ "$LABEL" = "production" ]; then
-        cat <<'EOF'
-          NOTE: Production requires PIM elevation.
-          Activate the relevant bn-platform-<TEAM>-prod group, then run:
-            az logout && az login
-
-      EOF
-      fi
-
-      az account set --subscription "$SUB"
-      exec az network bastion ssh \
-        --name "$BASTION" \
-        --resource-group "$RG" \
-        --target-resource-id "$VM_ID" \
-        --auth-type AAD
-    '';
-  };
-
-  bulletKubeCommand = pkgs.writeShellApplication {
-    name = "bullet-kube";
-    runtimeInputs = [
-      azureCli
-      pkgs.coreutils
-      pkgs.kubelogin
-    ];
-    text = ''
-      usage() {
-        cat <<'EOF'
-      Usage: bullet-kube [staging|prod] [--file PATH]
-
-      Fetch Bullet AKS credentials into a dedicated kubeconfig file and convert
-      it to Azure CLI exec auth so managed Kubernetes wrappers can discover it.
-
-      Default output files:
-        staging  ${cfg.bullet.stagingKubeconfig}
-        prod     ${cfg.bullet.prodKubeconfig}
-
-      Notes:
-        - Production requires PIM elevation before running this command.
-        - The generated kubeconfig lets switcher list/select the context.
-        - Actual kubectl access still requires network reachability to the private AKS API.
-      EOF
-      }
-
-      ENV="''${1:-staging}"
-      if [ "$ENV" = "-h" ] || [ "$ENV" = "--help" ]; then
-        usage
-        exit 0
-      fi
-
-      if [ "$#" -gt 0 ]; then
-        shift
-      fi
-
-      DEST_OVERRIDE=""
-      while [ "$#" -gt 0 ]; do
-        case "$1" in
-          --file)
-            if [ "$#" -lt 2 ]; then
-              printf 'bullet-kube: --file requires a path\n' >&2
-              exit 2
-            fi
-            DEST_OVERRIDE="$2"
-            shift 2
-            ;;
-          -h|--help)
-            usage
-            exit 0
-            ;;
-          *)
-            usage >&2
-            exit 2
-            ;;
-        esac
-      done
-
-      case "$ENV" in
-        staging|stg|nonprod|test)
-          SUB="78b79a31-1a31-4ea7-b30f-9da053196f3c"
-          RG="bn-rcmeaks-neu-rg-test"
-          AKS="bn-rcmeaks-neu-aks-test"
-          LABEL="staging"
-          CONTEXT=${lib.escapeShellArg cfg.bullet.stagingContext}
-          DEST=${lib.escapeShellArg cfg.bullet.stagingKubeconfig}
-          ;;
-        prod|production)
-          SUB="b62e975d-f464-43e3-a867-f860d71fccc6"
-          RG="bn-rcmeaks-nwe-rg-prod02"
-          AKS="bn-rcmeaks-nwe-aks-prod02"
-          LABEL="production"
-          CONTEXT=${lib.escapeShellArg cfg.bullet.prodContext}
-          DEST=${lib.escapeShellArg cfg.bullet.prodKubeconfig}
-          ;;
-        *)
-          usage >&2
-          exit 2
-          ;;
-      esac
-
-      if [ -n "$DEST_OVERRIDE" ]; then
-        DEST="$DEST_OVERRIDE"
-      fi
-
-      printf '==> Fetching Bullet %s AKS credentials...\n' "$LABEL"
-      printf '    Cluster: %s\n' "$AKS"
-      printf '    Context: %s\n' "$CONTEXT"
-      printf '    File: %s\n\n' "$DEST"
-
-      if [ "$LABEL" = "production" ]; then
-        cat <<'EOF'
-          NOTE: Production requires PIM elevation.
-          Activate the relevant bn-platform-<TEAM>-prod group, then run:
-            az logout && az login
-
-      EOF
-      fi
-
-      mkdir -p "$(dirname "$DEST")"
-      az account set --subscription "$SUB"
-      az aks get-credentials \
-        --resource-group "$RG" \
-        --name "$AKS" \
-        --file "$DEST" \
-        --context "$CONTEXT" \
-        --overwrite-existing
-      kubelogin convert-kubeconfig \
-        --kubeconfig "$DEST" \
-        --context "$CONTEXT" \
-        -l azurecli
-      chmod 600 "$DEST"
-
-      cat <<EOF
-
-      ==> Done.
-          Run 'kc' or 'switcher set-context' and select: $CONTEXT
-      EOF
-    '';
-  };
-
-  bulletProxyCommand = pkgs.writeShellApplication {
-    name = "bullet-proxy";
-    runtimeInputs = [
-      azureCli
-      pkgs.coreutils
-      pkgs.openssh
-    ];
-    text = ''
-      usage() {
-        cat <<'EOF'
-      Usage: bullet-proxy [staging|prod] [--tunnel-only]
-
-      Create a Bastion tunnel to a Bullet management VM and, by default, run a
-      SOCKS5 proxy through that tunnel.
-
-      Environment variables:
-        BULLET_TUNNEL_PORT  local SSH tunnel port, default 2222
-        BULLET_SOCKS_PORT   local SOCKS5 port, default 8080
-        BULLET_SSH_TARGET   SSH target through the tunnel, default 127.0.0.1
-      EOF
-      }
-
-      ENV="''${1:-staging}"
-      TUNNEL_ONLY="''${2:-}"
-      LOCAL_PORT="''${BULLET_TUNNEL_PORT:-2222}"
-      SOCKS_PORT="''${BULLET_SOCKS_PORT:-8080}"
-      SSH_TARGET="''${BULLET_SSH_TARGET:-127.0.0.1}"
-
-      case "$ENV" in
-        -h|--help)
-          usage
-          exit 0
-          ;;
-        staging|stg|nonprod|test)
-          SUB="78b79a31-1a31-4ea7-b30f-9da053196f3c"
-          RG="bn-rcmeaks-neu-rg-test"
-          BASTION="bn-rcmeaks-neu-bas-test"
-          VM_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Compute/virtualMachines/bn-rcmeaksmgmt-neu-vm-test"
-          LABEL="staging"
-          ;;
-        prod|production)
-          SUB="b62e975d-f464-43e3-a867-f860d71fccc6"
-          RG="bn-rcmeaks-nwe-rg-prod02"
-          BASTION="bn-rcmeaks-nwe-bas-prod02"
-          VM_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Compute/virtualMachines/bn-rcmeaksmgmt-nwe-vm-prod01-02"
-          LABEL="production"
-          ;;
-        *)
-          usage >&2
-          exit 2
-          ;;
-      esac
-
-      if [ -n "$TUNNEL_ONLY" ] && [ "$TUNNEL_ONLY" != "--tunnel-only" ]; then
-        usage >&2
-        exit 2
-      fi
-
-      printf '==> Starting Bastion tunnel to Bullet %s management VM...\n' "$LABEL"
-      printf '    Local port %s -> VM port 22\n\n' "$LOCAL_PORT"
-
-      if [ "$LABEL" = "production" ]; then
-        cat <<'EOF'
-          NOTE: Production requires PIM elevation.
-          Activate the relevant bn-platform-<TEAM>-prod group, then run:
-            az logout && az login
-
-      EOF
-      fi
-
-      az account set --subscription "$SUB"
-
-      if [ "$TUNNEL_ONLY" = "--tunnel-only" ]; then
-        exec az network bastion tunnel \
-          --name "$BASTION" \
-          --resource-group "$RG" \
-          --target-resource-id "$VM_ID" \
-          --port "$LOCAL_PORT" \
-          --resource-port 22
-      fi
-
-      az network bastion tunnel \
-        --name "$BASTION" \
-        --resource-group "$RG" \
-        --target-resource-id "$VM_ID" \
-        --port "$LOCAL_PORT" \
-        --resource-port 22 &
-      TUNNEL_PID="$!"
-
-      cleanup() {
-        kill "$TUNNEL_PID" 2>/dev/null || true
-      }
-      trap cleanup EXIT INT TERM
-
-      sleep 3
-      if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
-        printf 'ERROR: Bastion tunnel failed to start.\n' >&2
-        exit 1
-      fi
-
-      printf '==> Tunnel running (PID %s). Starting SOCKS5 proxy on port %s...\n' "$TUNNEL_PID" "$SOCKS_PORT"
-      printf '    Configure your browser to use SOCKS5 at localhost:%s\n' "$SOCKS_PORT"
-      printf '    Press Ctrl+C to stop.\n\n'
-
-      ssh -D "$SOCKS_PORT" -N -o StrictHostKeyChecking=no -p "$LOCAL_PORT" "$SSH_TARGET"
     '';
   };
 
@@ -497,7 +201,13 @@ in {
         default =
           builtins.elem cfg.bullet.stagingKubeconfig cfg.extraKubeconfigs
           || builtins.elem cfg.bullet.prodKubeconfig cfg.extraKubeconfigs;
-        description = "Install Bullet Azure/Bastion helper commands.";
+        description = "Install Bullet Azure/Bastion helper commands from bn-bootstrap.";
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = inputs.bn-bootstrap.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        description = "Package providing Bullet helper commands.";
       };
 
       stagingKubeconfig = lib.mkOption {
@@ -506,10 +216,22 @@ in {
         description = "Kubeconfig path written by bullet-kube for the Bullet staging AKS cluster.";
       };
 
+      sandboxKubeconfig = lib.mkOption {
+        type = lib.types.str;
+        default = "${config.home.homeDirectory}/.kube/bullet-sandbox-config";
+        description = "Kubeconfig path written by bullet-kube for the Bullet sandbox AKS cluster.";
+      };
+
       prodKubeconfig = lib.mkOption {
         type = lib.types.str;
         default = "${config.home.homeDirectory}/.kube/bullet-prod-config";
         description = "Kubeconfig path written by bullet-kube for the Bullet production AKS cluster.";
+      };
+
+      infraKubeconfig = lib.mkOption {
+        type = lib.types.str;
+        default = "${config.home.homeDirectory}/.kube/bullet-infra-config";
+        description = "Kubeconfig path written by bullet-kube for the Bullet infrastructure AKS cluster.";
       };
 
       stagingContext = lib.mkOption {
@@ -518,10 +240,60 @@ in {
         description = "Context name written by bullet-kube for the Bullet staging AKS cluster.";
       };
 
+      sandboxContext = lib.mkOption {
+        type = lib.types.str;
+        default = "bullet-sandbox";
+        description = "Context name written by bullet-kube for the Bullet sandbox AKS cluster.";
+      };
+
       prodContext = lib.mkOption {
         type = lib.types.str;
         default = "bullet-prod";
         description = "Context name written by bullet-kube for the Bullet production AKS cluster.";
+      };
+
+      infraContext = lib.mkOption {
+        type = lib.types.str;
+        default = "bullet-infra";
+        description = "Context name written by bullet-kube for the Bullet infrastructure AKS cluster.";
+      };
+
+      azure = {
+        tenantIdFile = lib.mkOption {
+          type = lib.types.str;
+          default = "";
+          description = "SOPS-managed file containing the Bullet Azure tenant ID.";
+        };
+
+        sandboxSubscriptionIdFile = lib.mkOption {
+          type = lib.types.str;
+          default = "";
+          description = "SOPS-managed file containing the Bullet sandbox subscription ID.";
+        };
+
+        stagingSubscriptionIdFile = lib.mkOption {
+          type = lib.types.str;
+          default = "";
+          description = "SOPS-managed file containing the Bullet staging subscription ID.";
+        };
+
+        prodSubscriptionIdFile = lib.mkOption {
+          type = lib.types.str;
+          default = "";
+          description = "SOPS-managed file containing the Bullet production subscription ID.";
+        };
+
+        infraSubscriptionIdFile = lib.mkOption {
+          type = lib.types.str;
+          default = "";
+          description = "SOPS-managed file containing the Bullet infrastructure subscription ID.";
+        };
+
+        prodBastionSubscriptionIdFile = lib.mkOption {
+          type = lib.types.str;
+          default = "";
+          description = "SOPS-managed file containing the Bullet shared production Bastion subscription ID.";
+        };
       };
     };
   };
@@ -531,6 +303,20 @@ in {
       {
         assertion = cfg.kubeconfig != "";
         message = "programs.kubernetes.managed.kubeconfig must be set";
+      }
+      {
+        assertion =
+          !cfg.bullet.enable
+          || (
+            cfg.bullet.azure.tenantIdFile
+            != ""
+            && cfg.bullet.azure.sandboxSubscriptionIdFile != ""
+            && cfg.bullet.azure.stagingSubscriptionIdFile != ""
+            && cfg.bullet.azure.prodSubscriptionIdFile != ""
+            && cfg.bullet.azure.infraSubscriptionIdFile != ""
+            && cfg.bullet.azure.prodBastionSubscriptionIdFile != ""
+          );
+        message = "programs.kubernetes.managed.bullet.azure secret file paths must be set when Bullet helpers are enabled";
       }
     ];
 
@@ -584,14 +370,29 @@ in {
         (wrapCommand "leantime-tidy" pkgs.leantime-tidy "leantime-tidy")
       ]
       ++ lib.optionals cfg.bullet.enable [
-        bulletConnectCommand
-        bulletKubeCommand
-        bulletProxyCommand
+        cfg.bullet.package
       ];
 
-    home.sessionVariables = lib.mkIf cfg.exportSessionVariable {
-      KUBECONFIG = managedKubeconfig;
-    };
+    home.sessionVariables =
+      lib.optionalAttrs cfg.exportSessionVariable {
+        KUBECONFIG = managedKubeconfig;
+      }
+      // lib.optionalAttrs cfg.bullet.enable {
+        BULLET_AZURE_TENANT_ID_FILE = cfg.bullet.azure.tenantIdFile;
+        BULLET_AZURE_SANDBOX_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.sandboxSubscriptionIdFile;
+        BULLET_AZURE_STAGING_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.stagingSubscriptionIdFile;
+        BULLET_AZURE_PROD_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.prodSubscriptionIdFile;
+        BULLET_AZURE_INFRA_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.infraSubscriptionIdFile;
+        BULLET_AZURE_PROD_BASTION_SUBSCRIPTION_ID_FILE = cfg.bullet.azure.prodBastionSubscriptionIdFile;
+        BULLET_CONTEXT_SANDBOX = cfg.bullet.sandboxContext;
+        BULLET_CONTEXT_STAGING = cfg.bullet.stagingContext;
+        BULLET_CONTEXT_PROD = cfg.bullet.prodContext;
+        BULLET_CONTEXT_INFRA = cfg.bullet.infraContext;
+        BULLET_KUBECONFIG_SANDBOX = cfg.bullet.sandboxKubeconfig;
+        BULLET_KUBECONFIG_STAGING = cfg.bullet.stagingKubeconfig;
+        BULLET_KUBECONFIG_PROD = cfg.bullet.prodKubeconfig;
+        BULLET_KUBECONFIG_INFRA = cfg.bullet.infraKubeconfig;
+      };
 
     home.shellAliases = lib.mkIf cfg.aliases.enable {
       k = "kubectl";

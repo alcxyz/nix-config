@@ -20,6 +20,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    bn-bootstrap = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # color schemes, small extras
     nix-colors.url = "github:alcxyz/nix-colors";
 
@@ -99,9 +104,8 @@
   };
 
   # ---- Outputs ----------------------------------------------------------
-  outputs =
-    inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+  outputs = inputs @ {flake-parts, ...}:
+    flake-parts.lib.mkFlake {inherit inputs;} {
       imports = [
         ./flake/core.nix
         ./flake/hosts
