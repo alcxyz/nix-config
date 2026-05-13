@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SELF="$(hostname -s)"
 KNOWN_HOSTS=(xyz nux nex rpi0 mac)
 REMOTE_HOSTS=(nux nex rpi0)
 DEPLOY_ALL_HOSTS=(xyz nux nex rpi0)
 SUDO_KEEPALIVE_PID=""
 COLOR_RESET=""
 BUILD_HERE=false
+SELF_RAW="$(hostname -s)"
+SELF=""
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_RESET=$'\033[0m'
@@ -36,6 +37,15 @@ is_known() {
   local h="$1"
   for k in "${KNOWN_HOSTS[@]}"; do [[ "$k" == "$h" ]] && return 0; done
   return 1
+}
+
+canonical_host() {
+  local h="$1"
+
+  case "$h" in
+    AM-VYH2F56CR6) printf '%s\n' "mac" ;;
+    *) printf '%s\n' "$h" ;;
+  esac
 }
 
 is_darwin() {
@@ -177,6 +187,7 @@ hm_remote() {
 
 do_deploy() {
   local host="$1" mode="$2"
+  host="$(canonical_host "$host")"
 
   if ! is_known "$host"; then
     echo "deploy: unknown host '$host'" >&2
@@ -268,6 +279,8 @@ do_deploy_all() {
     run_parallel_jobs "${hm_jobs[@]}"
   fi
 }
+
+SELF="$(canonical_host "$SELF_RAW")"
 
 # --- arg parsing ---
 
