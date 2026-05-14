@@ -12,9 +12,9 @@ A weekly summary was requested to improve readability — synthesizing daily ent
 
 ## Decision
 
-1. **Go binary in nix-packages**: The devlog tool is a single Go binary (`devlog daily` / `devlog weekly`) in `nix-packages/tools/devlog/`, built with `buildGoModule` and exposed via the overlay as `pkgs.devlog`. This follows the same pattern as `zfs-auto-unlock`.
+1. **Go binary in nix-packages**: The devlog tool is a single Go binary (`devlog daily` / `devlog weekly` / `devlog catch-up`) in `nix-packages/tools/devlog/`, built with `buildGoModule` and exposed via the overlay as `pkgs.devlog`. This follows the same pattern as `zfs-auto-unlock`.
 
-2. **Schedule shift**: Daily timer runs at 01:00 and generates for yesterday (not 23:00 for today), eliminating the late-night activity gap.
+2. **Schedule shift and catch-up**: Daily timer runs at 01:00 and invokes `devlog catch-up`, which scans a configurable recent window (`services.devlog.catchUpDays`, default 30) through yesterday. This preserves the 01:00 "yesterday" semantics while filling holes from host or timer outages.
 
 3. **Weekly timer**: Runs Monday at 02:00 (after Sunday's daily entry is generated at 01:00). Produces `weekly/YYYY-WNN.md` with ISO week numbering and posts to HedgeDoc via sops-decrypted credentials. The weekly file contains a Claude-synthesized summary (split into distinct **Weekdays** and **Weekend** sections) followed by all raw daily entries stitched below a `# Daily entries` heading, so the full week is readable in one file.
 
@@ -29,7 +29,8 @@ A weekly summary was requested to improve readability — synthesizing daily ent
 ## Consequences
 
 - The journal repo no longer contains any scripts — it is purely data (daily/weekly markdown files).
-- Adding new subcommands (e.g. `devlog backfill`, `devlog repost`) is straightforward Go work.
+- Daily generation is outage-tolerant for short host downtime: missed days in the catch-up window are generated on the next successful timer run.
 - Weekly files are self-contained: the summary provides the narrative, and the stitched daily entries provide the detail, eliminating the need to open individual daily files.
+- Weekly summaries for completed weeks are refreshed when catch-up creates a missing daily entry in that week.
 - The `devlog` binary must be in the nix-packages overlay for the systemd service to reference it as `pkgs.devlog`.
 - HedgeDoc credentials are decrypted at runtime via sops in the Go binary; the systemd service needs `sops` and `age` in PATH plus `SOPS_AGE_KEY_FILE` set.
