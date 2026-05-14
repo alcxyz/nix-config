@@ -1,6 +1,6 @@
 # ADR-0045: xev and xps Kubernetes node onboarding
 
-**Status:** Accepted (prepared; hosts not onboarded)
+**Status:** Accepted (xev skeleton added; runtime onboarding in progress)
 **Date:** 2026-05-11
 **Applies to:** `inventory.nix`, `hosts/xev/`, `hosts/xps/`, `modules/nixos/virtualisation/k3s`, `modules/nixos/virtualisation/longhorn-prereqs`, gitops cluster manifests
 
@@ -86,17 +86,27 @@ Prepared in this repository:
 - `alc.host.k8s` exposes derived role, schedulability, labels, taints, and
   extra flags for future host modules and checks
 
+Implemented for `xev`:
+
+- `xev` is present in `inventory.nix` as `role = "k8s-worker"` and
+  `k8sRole = "stable-agent"`
+- `hosts/xev/` contains a buildable NixOS skeleton based on the live hardware
+  scan from `192.168.1.13`
+- the skeleton joins k3s as an agent and enables Longhorn host prerequisites
+
 Not implemented yet:
 
-- `xev` and `xps` are not present in `inventory.nix`
-- no `hosts/xev/` or `hosts/xps/` NixOS skeleton exists
+- `xps` is not present in `inventory.nix`
+- no `hosts/xps/` NixOS skeleton exists
 - no Longhorn storage scheduling has been enabled for either host
 - no gitops node/storage inventory has been updated for either host
 
-The next implementation step is a buildable `xev` skeleton with hardware
-configuration, secrets, SSH access, k3s agent join, metrics reachability, and
-Longhorn prerequisite validation. `xps` should remain workstation-first until
-its suspend, NVIDIA, Wi-Fi, and availability behavior are known.
+The next implementation step is to finish `xev` secrets, deploy the managed
+generation, confirm SSH access, verify the k3s agent joins with the expected
+stable label, confirm Metrics Server reachability, and validate Longhorn
+prerequisites before enabling storage scheduling. `xps` should remain
+workstation-first until its suspend, NVIDIA, Wi-Fi, and availability behavior
+are known.
 
 ## Follow-up Issues
 

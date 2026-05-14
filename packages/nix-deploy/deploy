@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KNOWN_HOSTS=(xyz nux nex rpi0 mac)
-REMOTE_HOSTS=(nux nex rpi0)
-DEPLOY_ALL_HOSTS=(xyz nux nex rpi0)
+KNOWN_HOSTS=(xyz nux nex xev rpi0 mac)
+REMOTE_HOSTS=(nux nex xev rpi0)
+DEPLOY_ALL_HOSTS=(xyz nux nex xev rpi0)
 SUDO_KEEPALIVE_PID=""
 COLOR_RESET=""
 BUILD_HERE=false
@@ -88,6 +88,7 @@ host_label() {
     xyz) color "137;180;250" "[xyz]" ;;   # Catppuccin blue
     nux) color "166;227;161" "[nux]" ;;   # Catppuccin green
     nex) color "249;226;175" "[nex]" ;;   # Catppuccin yellow
+    xev) color "148;226;213" "[xev]" ;;   # Catppuccin teal
     rpi0) color "235;160;172" "[rpi0]" ;; # Catppuccin maroon
     mac) color "203;166;247" "[mac]" ;;   # Catppuccin mauve
     *) color "205;214;244" "[${host}]" ;;
