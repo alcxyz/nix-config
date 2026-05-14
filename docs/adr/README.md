@@ -49,7 +49,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Accepted | media, torrent, stash, xyz |
 | [ADR-0043](0043-selective-external-nix-config-pattern-adoption.md) | Selective external nix-config pattern adoption | Accepted, partially implemented | modules, hosts, checks, workflow |
 | [ADR-0044](0044-host-inventory-role-model-for-new-machines.md) | Host inventory role model for new machines | Accepted, partially implemented | inventory, hosts, roles |
-| [ADR-0045](0045-xev-and-xps-kubernetes-node-onboarding.md) | xev and xps Kubernetes node onboarding | Accepted, prepared | xev, xps, k3s, Longhorn |
+| [ADR-0045](0045-xev-and-xps-kubernetes-node-onboarding.md) | xev and xps Kubernetes node onboarding | Accepted, xev onboarded | xev, xps, k3s, Longhorn |
 | [ADR-0046](0046-remotely-managed-family-gaming-laptop.md) | Remotely managed family gaming laptop | Accepted, prepared | remote support, Netbird, gaming |
 | [ADR-0047](0047-k8s-api-vip.md) | Kubernetes API floating VIP | Accepted | k3s, keepalived, hosts |
 | [ADR-0048](0048-xyz-small-nvme-retirement.md) | xyz storage maintenance private runbook boundary | Accepted, redacted | xyz, private runbooks |
