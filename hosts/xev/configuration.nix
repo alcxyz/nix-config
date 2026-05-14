@@ -43,6 +43,16 @@
     tokenFile = config.sops.secrets.k3s_server_token.path;
   };
 
+  fileSystems."/var/lib/longhorn" = {
+    device = "/dev/disk/by-label/xev-longhorn";
+    fsType = "ext4";
+  };
+
+  systemd.services.k3s = {
+    requires = ["var-lib-longhorn.mount"];
+    after = ["var-lib-longhorn.mount"];
+  };
+
   networking.hosts = {
     "192.168.1.13" = ["xev"];
     "192.168.1.250" = ["k8s-api.local"];
