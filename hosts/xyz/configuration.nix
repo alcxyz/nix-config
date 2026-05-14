@@ -234,6 +234,11 @@
     tokenFile = config.sops.secrets.k3s_server_token.path;
   };
 
+  systemd.services.k3s = {
+    requires = ["ext4.mount"];
+    after = ["ext4.mount"];
+  };
+
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
   # t3code server — only reachable via Netbird (wt0), not LAN
