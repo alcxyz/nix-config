@@ -6,7 +6,9 @@ NODE=""
 SSH_TARGET=""
 SKIP_DRAIN=false
 FORCE_DRAIN=false
+BYPASS_PDB=false
 LEAVE_CORDONED=false
+DRAIN_TIMEOUT="10m"
 READY_TIMEOUT="10m"
 SSH_TIMEOUT_SECONDS=900
 POLL_SECONDS=5
@@ -22,7 +24,9 @@ Options:
   --ssh-target <target>    SSH target. Defaults to <host>.
   --skip-drain             Cordon only, then reboot. Use for intentional disruption.
   --force-drain            Pass --force to kubectl drain for unmanaged pods.
+  --bypass-pdb             Use pod deletion instead of eviction; ignores PDBs.
   --leave-cordoned         Keep the node cordoned after it returns.
+  --drain-timeout <dur>    kubectl drain duration. Default: 10m.
   --ready-timeout <dur>    kubectl wait duration. Default: 10m.
   --ssh-timeout <seconds>  SSH return timeout. Default: 900.
   -h, --help               Show this help.
@@ -65,9 +69,18 @@ parse_args() {
         FORCE_DRAIN=true
         shift
         ;;
+      --bypass-pdb)
+        BYPASS_PDB=true
+        shift
+        ;;
       --leave-cordoned)
         LEAVE_CORDONED=true
         shift
+        ;;
+      --drain-timeout)
+        [[ $# -ge 2 ]] || die "--drain-timeout requires a value"
+        DRAIN_TIMEOUT="$2"
+        shift 2
         ;;
       --ready-timeout)
         [[ $# -ge 2 ]] || die "--ready-timeout requires a value"
@@ -171,10 +184,15 @@ main() {
       drain "$NODE"
       --ignore-daemonsets
       --delete-emptydir-data
+      --timeout="$DRAIN_TIMEOUT"
     )
 
     if [[ "$FORCE_DRAIN" == true ]]; then
       drain_args+=(--force)
+    fi
+
+    if [[ "$BYPASS_PDB" == true ]]; then
+      drain_args+=(--disable-eviction)
     fi
 
     log "draining ${NODE}"
