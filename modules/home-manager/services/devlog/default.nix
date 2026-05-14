@@ -20,6 +20,12 @@ in
       description = "Path to the journal git repo.";
     };
 
+    catchUpDays = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 30;
+      description = "Number of recent days the daily timer scans for missing devlog entries.";
+    };
+
     weekly = {
       enable = lib.mkEnableOption "Weekly devlog summary and HedgeDoc posting";
 
@@ -57,7 +63,7 @@ in
         Unit.Description = "Generate daily devlog from GitHub activity";
         Service = {
           Type = "oneshot";
-          ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.devlog}/bin/devlog daily -repo ${cfg.repoPath} -date $(${pkgs.coreutils}/bin/date -d yesterday +%%Y-%%m-%%d)'";
+          ExecStart = "${pkgs.devlog}/bin/devlog catch-up -repo ${cfg.repoPath} -days ${toString cfg.catchUpDays}";
           StandardOutput = "journal";
           StandardError = "journal";
           Environment = [
