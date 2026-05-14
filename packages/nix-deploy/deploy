@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KNOWN_HOSTS=(xyz nux nex xev rpi0 mac)
-REMOTE_HOSTS=(nux nex xev rpi0)
-DEPLOY_ALL_HOSTS=(xyz nux nex xev rpi0)
+@deployHostData@
 SUDO_KEEPALIVE_PID=""
 COLOR_RESET=""
 BUILD_HERE=false
@@ -42,10 +40,16 @@ is_known() {
 canonical_host() {
   local h="$1"
 
-  case "$h" in
-    AM-VYH2F56CR6) printf '%s\n' "mac" ;;
-    *) printf '%s\n' "$h" ;;
-  esac
+  if [[ -n "${HOST_ALIASES[$h]:-}" ]]; then
+    printf '%s\n' "${HOST_ALIASES[$h]}"
+  else
+    printf '%s\n' "$h"
+  fi
+}
+
+ssh_host() {
+  local h="$1"
+  printf '%s\n' "${SSH_HOSTS[$h]:-$h}"
 }
 
 is_darwin() {
@@ -168,8 +172,8 @@ nixos_remote() {
 
   run_with_boot_fallback \
     "deploy(${host})" \
-    "${rebuild_cmd} switch --flake .#${host} --target-host root@${host}" \
-    "${rebuild_cmd} boot --flake .#${host} --target-host root@${host}"
+    "${rebuild_cmd} switch --flake .#${host} --target-host root@$(ssh_host "$host")" \
+    "${rebuild_cmd} boot --flake .#${host} --target-host root@$(ssh_host "$host")"
 }
 
 hm_local() {
@@ -181,9 +185,9 @@ hm_remote() {
   local host="$1"
   local result
   result=$(nix build --no-link --print-out-paths ".#homeConfigurations.alc-${host}.activationPackage")
-  nix copy --to "ssh://alc@${host}" "$result"
+  nix copy --to "ssh://alc@$(ssh_host "$host")" "$result"
   # shellcheck disable=SC2029
-  ssh "alc@${host}" "$result/activate"
+  ssh "alc@$(ssh_host "$host")" "$result/activate"
 }
 
 do_deploy() {
@@ -252,7 +256,7 @@ do_deploy_all() {
           cmd="sudo -n nixos-rebuild switch --flake .#${host}"
         fi
       else
-        cmd="$(nixos_rebuild_command) switch --flake .#${host} --target-host root@${host}"
+        cmd="$(nixos_rebuild_command) switch --flake .#${host} --target-host root@$(ssh_host "$host")"
       fi
 
       system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
