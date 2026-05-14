@@ -17,6 +17,16 @@
 
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  boot.binfmt.emulatedSystems = ["aarch64-linux"];
+
+  # ---- Nix Settings ----
+  # Allow this host to build for remote machines via SSH.
+  nix.settings.allowed-uris = [
+    "ssh-ng://*"
+    "ssh://*"
+    "file://*"
+    "https://*"
+  ];
 
   sops.secrets = {
     k3s_server_token = {
@@ -41,5 +51,5 @@
   # xev was first installed from a NixOS 25.11 installer generation.
   system.stateVersion = lib.mkForce "25.11";
 
-  nix.settings.max-jobs = 2;
+  nix.settings.max-jobs = 12;
 }

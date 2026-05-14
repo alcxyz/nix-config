@@ -16,7 +16,7 @@
   sshKeys = import ./ssh-keys.nix;
   humanLoginKeys = sshKeys.groups.humanLogin sshKeys.keys;
   mobileAppKeys = sshKeys.groups.mobileApps sshKeys.keys;
-  xyzDistributedBuildClientKeys = sshKeys.groups.xyzDistributedBuildClients sshKeys.keys;
+  distributedBuildClientKeys = sshKeys.groups.distributedBuildClients sshKeys.keys;
   userHome = "/home/${username}";
   shellPackages = {
     bash = pkgs.bashInteractive;
@@ -40,6 +40,13 @@ in {
         "192.168.1.10"
       ];
       publicKey = sshKeys.keys.xyz_host_ed25519;
+    };
+    xev = {
+      hostNames = [
+        "xev"
+        "192.168.1.13"
+      ];
+      publicKey = sshKeys.keys.xev_host_ed25519;
     };
   };
 
@@ -139,7 +146,7 @@ in {
         shell = pkgs.bashInteractive;
         openssh.authorizedKeys.keys =
           humanLoginKeys
-          ++ lib.optionals (hostName == "xyz") xyzDistributedBuildClientKeys;
+          ++ lib.optionals (builtins.elem hostName ["xev" "xyz"]) distributedBuildClientKeys;
       };
     };
   };

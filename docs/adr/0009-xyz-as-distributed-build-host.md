@@ -1,39 +1,66 @@
-# ADR-0009: xyz and mac distributed build posture
+# ADR-0009: xev, xyz, and mac distributed build posture
 
-**Status:** Accepted (amended 2026-05-12: client config split from `server.nix`; `deploy --here` operator fallback; mac aarch64 Linux builder bootstrap)
+**Status:** Accepted (amended 2026-05-14: xev primary builder; xyz fallback builder)
 **Date:** 2026-04-18
-**Applies to:** `hosts/mac/configuration.nix`, `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`, `packages/nix-deploy`
+**Applies to:** `hosts/xev/configuration.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`, `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`, `packages/nix-deploy`
 
 ## Context
 
-The repo's server hosts have constrained build capacity: nux is a modest x86_64 server, and rpi0 is an aarch64 ARM board where native compilation of anything substantial is prohibitively slow. NixOS supports distributed builds, offloading compilation to a more powerful machine. xyz, as the primary workstation with significant CPU resources and KVM support, is the natural candidate.
+The repo's server hosts have constrained build capacity: nux is a modest x86_64
+server, nex is better used as a Kubernetes control-plane member than a general
+compiler, and rpi0 is an aarch64 ARM board where native compilation of anything
+substantial is prohibitively slow. NixOS supports distributed builds, offloading
+compilation to more powerful machines.
+
+`xev` is now the always-on power server and should absorb normal build load.
+`xyz` remains capable and keeps its builder role as the fallback when `xev` is
+offline or saturated.
 
 rpi0 specifically needs cross-architecture support: building aarch64 packages either requires native compilation on the slow board or a build host that supports aarch64 (via native hardware or binfmt/QEMU emulation on x86_64).
 
 ## Decision
 
-xyz acts as the remote build host for machines that explicitly enable the
-distributed-build client capability:
+`xev` acts as the primary remote build host for machines that explicitly enable
+the distributed-build client capability. `xyz` remains configured as the
+fallback remote build host:
 
 ```nix
-nix.buildMachines = [{
-  hostName = "xyz";
-  sshUser = "root";
-  sshKey = "/root/.ssh/id_buildhost_xyz";
-  systems = [ "x86_64-linux" "aarch64-linux" ];
-  maxJobs = 4;
-  speedFactor = 2;
-  supportedFeatures = [ "nixos-test" "benchmark" "big-parallel" "kvm" ];
-}];
+nix.buildMachines = [
+  {
+    hostName = "xev";
+    sshUser = "root";
+    sshKey = "/root/.ssh/id_distributed_build";
+    systems = [ "x86_64-linux" "aarch64-linux" ];
+    maxJobs = 12;
+    speedFactor = 3;
+    supportedFeatures = [ "big-parallel" "kvm" ];
+  }
+  {
+    hostName = "xyz";
+    sshUser = "root";
+    sshKey = "/root/.ssh/id_distributed_build";
+    systems = [ "x86_64-linux" "aarch64-linux" ];
+    maxJobs = 8;
+    speedFactor = 2;
+    supportedFeatures = [ "big-parallel" "kvm" ];
+  }
+];
 nix.distributedBuilds = true;
 ```
 
-A dedicated SSH key (`/root/.ssh/id_buildhost_xyz`) is used exclusively for build authentication. aarch64 support on xyz is provided via binfmt/QEMU emulation.
+A dedicated SSH key (`/root/.ssh/id_distributed_build`) is used exclusively for
+build authentication. The current encrypted secret key name remains
+`ssh_buildhost_xyz` for compatibility with existing host secret files, but its
+meaning is now "fleet distributed build client key". The corresponding public
+keys are authorized for `root@xev` and `root@xyz`.
 
-The build-client private key is stored per participating host in `nix-secrets` under
-`hosts/<host>/secrets.yaml` as `ssh_buildhost_xyz`, then deployed by
-`modules/nixos/common/distributed-build-client.nix` to `/root/.ssh/id_buildhost_xyz`. The matching
-public keys are authorized only for `root@xyz`.
+aarch64 support on both x86_64 build hosts is provided via binfmt/QEMU
+emulation.
+
+The build-client private key is stored per participating host in `nix-secrets`
+under `hosts/<host>/secrets.yaml` as `ssh_buildhost_xyz`, then deployed by
+`modules/nixos/common/distributed-build-client.nix` to
+`/root/.ssh/id_distributed_build`.
 
 The deploy wrapper keeps `xyz` as the canonical `deploy --all` operator host,
 but also supports `deploy --here` for temporary operator failover. In `--here`
@@ -59,8 +86,11 @@ follow-up after the initial Linux builder is active.
 
 ## Consequences
 
-- Deployments for nux and rpi0 are fast and practical, including full system rebuilds for rpi0.
-- Server deployments depend on xyz being online. If xyz is unreachable, builds fall back to local execution — slow on rpi0, acceptable on nux for most packages.
+- Deployments for nux, nex, and rpi0 are fast and practical, including full
+  system rebuilds for rpi0.
+- Server deployments prefer xev, then xyz. If both remote builders are
+  unreachable, builds fall back to local execution where supported: slow on
+  rpi0, acceptable on nux/nex for smaller changes.
 - If xyz is unavailable, an operator can run `deploy --here --nixos <host>` or
   `deploy --here --all` from another capable machine. For non-`xyz` operators,
   `--here --all` deploys the remote server set (`nux`, `nex`, `rpi0`) and leaves
@@ -70,9 +100,10 @@ follow-up after the initial Linux builder is active.
 - The build SSH key is declaratively deployed from each server host's SOPS file.
   Fresh installs still need enough SOPS bootstrap material to decrypt host
   secrets, but the build key itself is no longer a manual root dotfile.
-- xyz's own builds are local. Distributed-build clients opt in with
-  `alc.distributedBuildClient.enable = true`; server role alone does not imply
-  build-client credentials.
+- xev's own builds are local. xyz's own builds remain local unless it
+  explicitly opts into distributed-build client credentials later.
+  Distributed-build clients opt in with `alc.distributedBuildClient.enable =
+  true`; server role alone does not imply build-client credentials.
 
 ## Follow-up Issues
 

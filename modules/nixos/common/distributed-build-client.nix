@@ -1,10 +1,35 @@
 {
   config,
+  hostName,
   lib,
   ...
-}: {
+}: let
+  buildKeyPath = "/root/.ssh/id_distributed_build";
+  primaryBuilders = [
+    {
+      hostName = "xev";
+      speedFactor = 3;
+      maxJobs = 12;
+    }
+    {
+      hostName = "xyz";
+      speedFactor = 2;
+      maxJobs = 8;
+    }
+  ];
+  buildMachines =
+    map (builder: {
+      inherit (builder) hostName speedFactor maxJobs;
+      sshUser = "root";
+      sshKey = buildKeyPath;
+      systems = ["x86_64-linux" "aarch64-linux"];
+      supportedFeatures = ["big-parallel" "kvm"];
+      protocol = "ssh";
+    })
+    (lib.filter (builder: builder.hostName != hostName) primaryBuilders);
+in {
   options.alc.distributedBuildClient.enable =
-    lib.mkEnableOption "distributed builds through xyz";
+    lib.mkEnableOption "distributed builds through xev with xyz fallback";
 
   config = lib.mkIf config.alc.distributedBuildClient.enable {
     systemd.tmpfiles.rules = [
@@ -12,16 +37,16 @@
     ];
 
     sops.secrets = {
-      buildhost_xyz_private_key = {
+      distributed_build_private_key = {
         key = "ssh_buildhost_xyz";
-        path = "/root/.ssh/id_buildhost_xyz";
+        path = buildKeyPath;
         owner = "root";
         group = "root";
         mode = "0600";
       };
-      buildhost_xyz_public_key = {
+      distributed_build_public_key = {
         key = "ssh_buildhost_xyz.pub";
-        path = "/root/.ssh/id_buildhost_xyz.pub";
+        path = "${buildKeyPath}.pub";
         owner = "root";
         group = "root";
         mode = "0644";
@@ -30,18 +55,7 @@
 
     nix = {
       distributedBuilds = true;
-      buildMachines = [
-        {
-          hostName = "xyz";
-          sshUser = "root";
-          sshKey = "/root/.ssh/id_buildhost_xyz";
-          systems = ["x86_64-linux" "aarch64-linux"];
-          maxJobs = 8;
-          speedFactor = 2;
-          supportedFeatures = ["big-parallel" "kvm"];
-          protocol = "ssh";
-        }
-      ];
+      inherit buildMachines;
       settings."builders-use-substitutes" = true;
     };
   };

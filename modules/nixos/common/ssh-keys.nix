@@ -11,6 +11,7 @@
     nex_buildhost_xyz = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8qgxpjQ82ktYwBKBatdI0bQlfFx0UPwCpJ6maVuhQL nix-build@nex-to-xyz";
     rpi0_buildhost_xyz = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBtfjE0ipO2T87jT0FB+CpMDpKPCSrehWlYmKUZN6txF nix-build@rpi0-to-xyz";
     xyz_host_ed25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEztyNrJk03TzMyLgwYd0BmUtUR5acWpgJf8obeGG1bS";
+    xev_host_ed25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJfbxhVZERpD22eVkP486unzTTV68tMf8YRgut2BDmSj";
     docker_app = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
   };
 
@@ -27,6 +28,12 @@
     mobileApps = keys: [
       keys.alc_iphone
       keys.docker_app
+    ];
+
+    distributedBuildClients = keys: [
+      keys.nux_buildhost_xyz
+      keys.nex_buildhost_xyz
+      keys.rpi0_buildhost_xyz
     ];
 
     xyzDistributedBuildClients = keys: [
