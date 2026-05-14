@@ -41,6 +41,12 @@ window_focus_east = ["alt - l", "alt - rightarrow"]
 window_virtual_south = ["alt - j", "alt - downarrow"]
 window_virtual_north = ["alt - k", "alt - uparrow"]
 
+# Physical display context: switches the active display without moving windows.
+display_west = "ctrl + cmd - leftarrow"
+display_east = "ctrl + cmd - rightarrow"
+display_north = "ctrl + cmd - uparrow"
+display_south = "ctrl + cmd - downarrow"
+
 # Swap/move columns.
 window_swap_west = ["alt + shift - h", "alt + shift - leftarrow"]
 window_swap_east = ["alt + shift - l", "alt + shift - rightarrow"]
