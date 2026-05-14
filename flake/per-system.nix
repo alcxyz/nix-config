@@ -31,6 +31,7 @@
       "modules/nixos/virtualisation/k3s/default.nix"
       "modules/shared/host-metadata.nix"
       "modules/shared/pkgsets.nix"
+      "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
       "users/alc/common.nix"
       "users/alc/linux/common.nix"
@@ -58,11 +59,11 @@
       '';
 
       check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-        shellcheck scripts/checks/*.sh packages/nix-deploy/deploy
+        shellcheck scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
       '';
 
       check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.shfmt] ''
-        shfmt -d -i 2 -ci scripts/checks/*.sh packages/nix-deploy/deploy
+        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
       '';
 
       forbid-submodule-config = mkRepoCheck "forbid-submodule-config" [] ''
@@ -71,8 +72,10 @@
     };
 
     packages =
-      if system == "x86_64-linux"
-      then {
+      {
+        k8s-node-reboot = pkgs.k8s-node-reboot;
+      }
+      // lib.optionalAttrs (system == "x86_64-linux") {
         # Cross-compiled U-Boot for Rock Pi 4 (RK3399).
         rpi0-uboot = pkgs.pkgsCross.aarch64-multiplatform.ubootRockPi4;
 
@@ -85,7 +88,6 @@
           cp ${pkgs.pkgsCross.aarch64-multiplatform.ubootRockPi4}/u-boot.itb "$outdir/"
           echo "Wrote Rock Pi 4 boot files to $outdir"
         '';
-      }
-      else {};
+      };
   };
 }

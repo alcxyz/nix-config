@@ -141,6 +141,7 @@ in rec {
       parallel
       agent-sync-check
       nix-deploy
+      k8s-node-reboot
     ];
 
     # Cloud SDKs & heavier infra tools — workstation/mac only

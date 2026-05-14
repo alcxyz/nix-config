@@ -26,6 +26,7 @@ in
               "omniwm"
               "zen-browser"
               "nix-deploy"
+              "k8s-node-reboot"
               "wcap"
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
@@ -49,6 +50,7 @@ in
               lt)
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
+              k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
               paneru = inputs.paneru.packages.${system}.default;
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.
