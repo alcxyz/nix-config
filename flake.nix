@@ -12,7 +12,7 @@
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git";
-      flake = false;
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     nix-packages = {
@@ -109,8 +109,9 @@
   };
 
   # ---- Outputs ----------------------------------------------------------
-  outputs = inputs @ {flake-parts, ...}:
-    flake-parts.lib.mkFlake {inherit inputs;} {
+  outputs =
+    inputs@{ flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         ./flake/core.nix
         ./flake/hosts
