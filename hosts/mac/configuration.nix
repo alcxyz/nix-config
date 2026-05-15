@@ -17,6 +17,7 @@
     bash = pkgs.bashInteractive;
     nu = pkgs.nushell;
     nushell = pkgs.nushell;
+    xonsh = pkgs.xonsh-with-direnv or pkgs.xonsh;
     zsh = pkgs.zsh;
   };
 
@@ -177,7 +178,12 @@ in {
   # ============================================================================
   environment = {
     systemPackages = pkgsets.system.mac ++ [pkgs.netbird];
-    shells = with pkgs; [bash zsh nushell];
+    shells = with pkgs; [
+      bash
+      nushell
+      (pkgs.xonsh-with-direnv or pkgs.xonsh)
+      zsh
+    ];
     variables = {EDITOR = "nvim";};
   };
 

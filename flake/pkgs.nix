@@ -28,6 +28,7 @@ in
               "nix-deploy"
               "k8s-node-reboot"
               "wcap"
+              "xonsh-with-direnv"
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
             lt = inputs.leantime-tidy.packages.${system} or {};
