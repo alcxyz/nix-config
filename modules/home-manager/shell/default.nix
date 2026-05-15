@@ -10,6 +10,7 @@
   enableBash = cfg.enableBash;
   enableNushell = cfg.enableNushell;
   enableXonsh = cfg.enableXonsh;
+  enableXonshCarapace = cfg.enableXonshCarapace;
   enableZsh = cfg.enableZsh;
   xonshPackage = pkgs.xonsh-with-direnv or pkgs.xonsh;
   xonshDirenvIntegration = pkgs ? xonsh-with-direnv;
@@ -214,6 +215,10 @@ in {
       execx($(${pkgs.starship}/bin/starship init xonsh --print-full-init))
       execx($(${pkgs.zoxide}/bin/zoxide init xonsh))
       execx($(${pkgs.atuin}/bin/atuin init xonsh))
+      ${lib.optionalString enableXonshCarapace ''
+        if __xonsh__.env.get("XONSH_INTERACTIVE"):
+            execx($(${pkgs.carapace}/bin/carapace _carapace xonsh))
+      ''}
       ${lib.optionalString xonshDirenvIntegration ''
         xontrib load direnv
       ''}

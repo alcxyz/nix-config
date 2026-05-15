@@ -35,5 +35,11 @@
       default = true;
       description = "Enable Xonsh and its interactive integrations.";
     };
+
+    enableXonshCarapace = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable experimental Carapace completion integration for Xonsh.";
+    };
   };
 }
