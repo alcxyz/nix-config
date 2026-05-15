@@ -22,6 +22,7 @@
     bash = pkgs.bashInteractive;
     nu = pkgs.nushell;
     nushell = pkgs.nushell;
+    xonsh = pkgs.xonsh-with-direnv or pkgs.xonsh;
     zsh = pkgs.zsh;
   };
 in {
@@ -154,6 +155,7 @@ in {
   environment.shells = with pkgs; [
     bashInteractive
     nushell
+    (pkgs.xonsh-with-direnv or pkgs.xonsh)
     zsh
   ];
 

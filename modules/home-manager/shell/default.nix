@@ -9,7 +9,60 @@
   cfg = config.alc.shell;
   enableBash = cfg.enableBash;
   enableNushell = cfg.enableNushell;
+  enableXonsh = cfg.enableXonsh;
   enableZsh = cfg.enableZsh;
+  xonshPackage = pkgs.xonsh-with-direnv or pkgs.xonsh;
+  xonshDirenvIntegration = pkgs ? xonsh-with-direnv;
+
+  shellAliases = {
+    tf = "terraform";
+    v = "nvim";
+    d = "docker";
+    dcd = "docker compose down";
+    dcu = "docker compose up -d";
+    l = "eza -a";
+    ll = "eza -la --git --icons=auto";
+    lll = "eza -la --git --icons=auto --time-style=long-iso";
+    c = "clear";
+    cd = "z";
+    "," = "z";
+    ",," = "z -";
+    ":" = "nix-shell -p";
+    g = "gitui";
+    gc = "git commit -m";
+    gca = "git commit -am";
+    gps = "git push";
+    gpl = "git pull";
+    gst = "git status";
+    glog = "git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
+    t = "tmux";
+    ta = "tmux a";
+  };
+
+  xonshAliases =
+    lib.concatStringsSep "\n"
+    (lib.mapAttrsToList (
+        name: value: "aliases[${builtins.toJSON name}] = ${builtins.toJSON value}"
+      )
+      shellAliases);
+
+  xonshSessionVariables =
+    lib.concatStringsSep "\n"
+    (lib.mapAttrsToList (
+        name: value: "__xonsh__.env[${builtins.toJSON name}] = ${builtins.toJSON value}"
+      )
+      (lib.filterAttrs (
+          _name: value: builtins.isString value && ! lib.hasInfix "$" value
+        )
+        config.home.sessionVariables));
+
+  xonshSessionPath =
+    lib.concatMapStringsSep "\n"
+    (path: ''
+      if os.path.isdir(${builtins.toJSON path}) and ${builtins.toJSON path} not in $PATH:
+          $PATH.append(${builtins.toJSON path})
+    '')
+    config.home.sessionPath;
 
   # Patch atuin's nushell integration: fixes the e>| stdout-drop bug introduced
   # in 18.13.0 (atuinsh/atuin PR#3358, merged but unreleased as of 18.13.6).
@@ -46,7 +99,8 @@ in {
       ruff
       stylua
     ]
-    ++ lib.optionals enableNushell [nushell];
+    ++ lib.optionals enableNushell [nushell]
+    ++ lib.optionals enableXonsh [xonshPackage];
 
   home.sessionPath = [
     "${config.home.homeDirectory}/.cargo/bin"
@@ -142,28 +196,29 @@ in {
   in
     lib.replaceStrings ["@osIcon@"] [osIcon] template;
 
-  home.shellAliases = {
-    tf = "terraform";
-    v = "nvim";
-    d = "docker";
-    dcd = "docker compose down";
-    dcu = "docker compose up -d";
-    l = "eza -a";
-    ll = "eza -la --git --icons=auto";
-    lll = "eza -la --git --icons=auto --time-style=long-iso";
-    c = "clear";
-    cd = "z";
-    "," = "z";
-    ",," = "z -";
-    ":" = "nix-shell -p";
-    g = "gitui";
-    gc = "git commit -m";
-    gca = "git commit -am";
-    gps = "git push";
-    gpl = "git pull";
-    gst = "git status";
-    glog = "git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit";
-    t = "tmux";
-    ta = "tmux a";
+  xdg.configFile."xonsh/rc.xsh" = lib.mkIf enableXonsh {
+    text = ''
+      import os
+
+      $VI_MODE = True
+
+      ${xonshSessionVariables}
+
+      ${xonshSessionPath}
+
+      if "XDG_RUNTIME_DIR" in __xonsh__.env:
+          __xonsh__.env["SSH_AUTH_SOCK"] = os.path.join($XDG_RUNTIME_DIR, "ssh-agent")
+
+      ${xonshAliases}
+
+      execx($(${pkgs.starship}/bin/starship init xonsh --print-full-init))
+      execx($(${pkgs.zoxide}/bin/zoxide init xonsh))
+      execx($(${pkgs.atuin}/bin/atuin init xonsh))
+      ${lib.optionalString xonshDirenvIntegration ''
+        xontrib load direnv
+      ''}
+    '';
   };
+
+  home.shellAliases = shellAliases;
 }

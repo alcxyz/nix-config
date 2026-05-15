@@ -6,6 +6,7 @@
         "nushell"
         "zsh"
         "bash"
+        "xonsh"
       ];
       default = "nu";
       description = "Default interactive login shell for the primary user.";
@@ -27,6 +28,12 @@
       type = lib.types.bool;
       default = true;
       description = "Enable Bash and its interactive integrations.";
+    };
+
+    enableXonsh = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Enable Xonsh and its interactive integrations.";
     };
   };
 }
