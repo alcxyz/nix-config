@@ -1078,11 +1078,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1778829351,
-        "narHash": "sha256-sNceQaKI0n2KrDDCRhehVIajUUU7dQogrlQ5kLTpnMw=",
+        "lastModified": 1778830536,
+        "narHash": "sha256-jJeasmLUrFhk0eYP9HD/hK3K0gdS9HJmYnIzFWCI/Js=",
         "owner": "alcxyz",
         "repo": "paneru",
-        "rev": "46d0da0bdb974dfc899997612caa78765dfd4706",
+        "rev": "41431594a99eff40a868ba666a49bb1e9ac9f77b",
         "type": "github"
       },
       "original": {
