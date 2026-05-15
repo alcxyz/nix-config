@@ -107,11 +107,5 @@ in {
       remote = "dropbox";
       localPath = "${config.home.homeDirectory}/Cloud/Dropbox";
     };
-
-    nextcloud = {
-      enable = true;
-      remote = "nextcloud";
-      localPath = "${config.home.homeDirectory}/Cloud/Nextcloud";
-    };
   };
 }
