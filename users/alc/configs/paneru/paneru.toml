@@ -31,21 +31,22 @@ direction = "Natural"
 modifier = "alt"
 vertical_modifier = "shift"
 
+[display_workspaces]
+enabled = true
+# Stable display IDs can be discovered with `printstate`; when omitted, Paneru
+# orders displays by geometry.
+order = []
+
 [bindings]
 # Horizontal column navigation: mirrors Hyprland scrolling binds.
 window_focus_west = ["alt - h", "alt - leftarrow"]
 window_focus_east = ["alt - l", "alt - rightarrow"]
 
-# Vertical navigation: Paneru virtual rows are the closest equivalent to
-# Niri/Hyprland vertical workspaces.
-window_virtual_south = ["alt - j", "alt - downarrow"]
-window_virtual_north = ["alt - k", "alt - uparrow"]
-
-# Physical display context: switches the active display without moving windows.
+# Display workspace navigation: switches the active display without moving windows.
+display_south = ["alt - j", "alt - downarrow", "ctrl + cmd - downarrow"]
+display_north = ["alt - k", "alt - uparrow", "ctrl + cmd - uparrow"]
 display_west = "ctrl + cmd - leftarrow"
 display_east = "ctrl + cmd - rightarrow"
-display_north = "ctrl + cmd - uparrow"
-display_south = "ctrl + cmd - downarrow"
 
 # Swap/move columns.
 window_swap_west = ["alt + shift - h", "alt + shift - leftarrow"]
