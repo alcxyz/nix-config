@@ -73,10 +73,17 @@ k3s control-plane/workload machines.
 
 Kernel rollout should still be staged:
 
-1. Switch and reboot `nex` first.
-2. Verify `nex` rejoins k3s as `Ready`.
-3. Switch and reboot `nux`.
-4. Verify k3s control-plane health and workload scheduling.
+1. Switch `nex` first.
+2. Reboot `nex` through the shared Kubernetes reboot helper.
+3. Verify `nex` rejoins k3s as `Ready` and the helper's cluster health checks
+   pass.
+4. Switch `nux`.
+5. Reboot `nux` through the shared Kubernetes reboot helper.
+6. Verify k3s control-plane health and workload scheduling.
+
+Do not use a raw host reboot for schedulable k3s nodes during routine
+maintenance. The helper is responsible for cordon/drain, Longhorn-aware health
+checks, workload settle checks, and uncordon.
 
 `xyz` can be reconsidered for `linuxPackages_latest` when a dry-run of the full
 system no longer fails on ZFS for the latest kernel.
