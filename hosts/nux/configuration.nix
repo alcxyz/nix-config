@@ -142,6 +142,17 @@ in {
     };
   };
 
+  systemd.services.unbound = {
+    after = [
+      "network-online.target"
+      "time-sync.target"
+    ];
+    wants = [
+      "network-online.target"
+      "time-sync.target"
+    ];
+  };
+
   services.pihole-native = {
     enable = true;
     listenInterface = "eno1";

@@ -104,12 +104,15 @@ in {
     systemd.services.pihole-ftl = {
       description = "Pi-hole FTL";
       after = [
-        "network.target"
+        "network-online.target"
         "sops-nix.service"
+        "time-sync.target"
         "unbound.service"
       ];
       wants = [
+        "network-online.target"
         "sops-nix.service"
+        "time-sync.target"
       ];
       requires = [
         "unbound.service"
