@@ -9,7 +9,12 @@
   configDir,
   lib,
   ...
-}: {
+}: let
+  zfsKernelPkgs = import inputs.nixpkgs-zfs-master {
+    system = pkgs.stdenv.hostPlatform.system;
+    config.allowUnfree = true;
+  };
+in {
   imports = [
     ./hardware-configuration.nix
 
@@ -42,6 +47,8 @@
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
 
+  boot.kernelPackages = zfsKernelPkgs.linuxPackages_latest;
+  boot.zfs.package = zfsKernelPkgs.zfs;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
 
   # ---- Nix Settings ----
