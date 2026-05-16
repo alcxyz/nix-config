@@ -31,8 +31,26 @@ let
   ];
 
   sharedMediaDirs = [
-    stashDir
-    mediaDir
+    {
+      path = dataDir;
+      owner = serviceUser;
+    }
+    {
+      path = dataDir + "/watch";
+      owner = serviceUser;
+    }
+    {
+      path = dataDir + "/completed";
+      owner = serviceUser;
+    }
+    {
+      path = stashDir;
+      owner = "stash";
+    }
+    {
+      path = mediaDir;
+      owner = "root";
+    }
   ];
   sharedMediaRoots = [
     {
@@ -46,6 +64,7 @@ let
   ];
 
   sharedMediaDatasets = [
+    "tank/downloads"
     "tank/stash"
     "tank/media"
   ];
@@ -55,7 +74,24 @@ let
     ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
     ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
     ++ map (
-      d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
+      d:
+      "z "
+      + d.path
+      + " 2775 "
+      + d.owner
+      + " "
+      + sharedGroup
+      + " - -"
+    ) sharedMediaDirs
+    ++ map (
+      d:
+      "a+ "
+      + d.path
+      + " - - - - g:"
+      + sharedGroup
+      + ":rwx,d:g:"
+      + sharedGroup
+      + ":rwx,m::rwx,d:m::rwx"
     ) sharedMediaDirs;
   qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
     set -euo pipefail
@@ -168,7 +204,7 @@ in
           ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDatasets}
         )
         mountpoints=(
-          ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDirs}
+          ${lib.concatMapStringsSep "\n          " (d: lib.escapeShellArg d.path) sharedMediaDirs}
         )
 
         for dataset in "''${datasets[@]}"; do
@@ -210,10 +246,9 @@ in
       script = ''
         set -euo pipefail
 
-        marker=/var/lib/torrent-shared-media/acl-v2
+        marker=/var/lib/torrent-shared-media/acl-v3
         dirs=(
-          ${lib.escapeShellArg stashDir}
-          ${lib.escapeShellArg mediaDir}
+          ${lib.concatMapStringsSep "\n          " (d: lib.escapeShellArg d.path) sharedMediaDirs}
         )
 
         for dir in "''${dirs[@]}"; do
@@ -222,8 +257,14 @@ in
           setfacl -m g:${lib.escapeShellArg sharedGroup}:rwx,d:g:${lib.escapeShellArg sharedGroup}:rwx,m::rwx,d:m::rwx "$dir"
         done
 
+        chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} \
+          ${lib.escapeShellArg dataDir} \
+          ${lib.escapeShellArg (dataDir + "/watch")} \
+          ${lib.escapeShellArg (dataDir + "/completed")}
         chown ${lib.escapeShellArg "stash"}:${lib.escapeShellArg sharedGroup} \
           ${lib.escapeShellArg stashDir}
+        chown ${lib.escapeShellArg "root"}:${lib.escapeShellArg sharedGroup} \
+          ${lib.escapeShellArg mediaDir}
 
         if [[ ! -e "$marker" ]]; then
           for dir in "''${dirs[@]}"; do
