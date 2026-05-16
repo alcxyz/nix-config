@@ -45,7 +45,7 @@ let
     }
     {
       path = stashDir;
-      owner = "stash";
+      owner = "root";
     }
     {
       path = mediaDir;
@@ -55,7 +55,7 @@ let
   sharedMediaRoots = [
     {
       path = stashDir;
-      owner = "stash";
+      owner = "root";
     }
     {
       path = mediaDir;
@@ -126,7 +126,6 @@ in
       group = serviceGroup;
       extraGroups = [
         sharedGroup
-        "stash"
       ];
       createHome = true;
       home = qbConfigDir;
@@ -139,7 +138,6 @@ in
       group = "flood";
       extraGroups = [
         sharedGroup
-        "stash"
       ];
     };
 
@@ -177,7 +175,6 @@ in
         PrivateUsers = lib.mkForce false;
         SupplementaryGroups = [
           serviceGroup
-          "stash"
         ];
       };
     };
@@ -246,7 +243,7 @@ in
       script = ''
         set -euo pipefail
 
-        marker=/var/lib/torrent-shared-media/acl-v3
+        marker=/var/lib/torrent-shared-media/acl-v4
         dirs=(
           ${lib.concatMapStringsSep "\n          " (d: lib.escapeShellArg d.path) sharedMediaDirs}
         )
@@ -261,7 +258,7 @@ in
           ${lib.escapeShellArg dataDir} \
           ${lib.escapeShellArg (dataDir + "/watch")} \
           ${lib.escapeShellArg (dataDir + "/completed")}
-        chown ${lib.escapeShellArg "stash"}:${lib.escapeShellArg sharedGroup} \
+        chown ${lib.escapeShellArg "root"}:${lib.escapeShellArg sharedGroup} \
           ${lib.escapeShellArg stashDir}
         chown ${lib.escapeShellArg "root"}:${lib.escapeShellArg sharedGroup} \
           ${lib.escapeShellArg mediaDir}

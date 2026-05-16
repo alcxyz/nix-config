@@ -43,6 +43,9 @@ in {
   programs.hyprlock.enable = true;
   security.pam.services.hyprlock.u2f.enable = true;
 
+  # Keep raw keyboard input while the host input stack is being debugged.
+  services.kanata.enable = lib.mkForce false;
+
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
 
