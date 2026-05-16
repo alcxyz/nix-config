@@ -4,6 +4,7 @@ set -euo pipefail
 HOST=""
 NODE=""
 SSH_TARGET=""
+ACTION=""
 SKIP_DRAIN=false
 FORCE_DRAIN=false
 BYPASS_PDB=false
@@ -16,9 +17,16 @@ POLL_SECONDS=5
 
 usage() {
   cat <<'EOF'
-Usage: k8s-node-reboot [options] <host>
+Usage: kreboot [options] <host>
+       koff [options] <host>
+       kon [options] <host>
 
-Cordon, drain, reboot, wait for Ready, then uncordon a Kubernetes node.
+Kubernetes-aware node power helpers.
+
+Commands:
+  kreboot                  Cordon, drain, reboot, wait for Ready, uncordon.
+  koff                     Cordon, drain, power off, leave cordoned.
+  kon                      Wait for host/node to return, uncordon, settle.
 
 Options:
   --node <name>            Kubernetes node name. Defaults to <host>.
@@ -143,6 +151,29 @@ parse_args() {
 
   NODE="${NODE:-$HOST}"
   SSH_TARGET="${SSH_TARGET:-$HOST}"
+
+  ACTION="${K8S_NODE_POWER_ACTION:-}"
+
+  if [[ -z "$ACTION" ]]; then
+    case "$(basename "$0")" in
+      koff)
+        ACTION="off"
+        ;;
+      kon)
+        ACTION="on"
+        ;;
+      kreboot | k8s-node-reboot | k8s-node-reboot.sh)
+        ACTION="reboot"
+        ;;
+      *)
+        ACTION="reboot"
+        ;;
+    esac
+  fi
+
+  if [[ "$ACTION" == "off" ]]; then
+    LEAVE_CORDONED=true
+  fi
 }
 
 workload_key_for_pod() {
@@ -396,15 +427,28 @@ reboot_host() {
   esac
 }
 
-main() {
-  parse_args "$@"
-  need_command kubectl
-  need_command ssh
-  need_command jq
+poweroff_host() {
+  local status
 
+  log "powering off ${SSH_TARGET}"
+
+  set +e
+  ssh -t "$SSH_TARGET" 'sudo systemctl poweroff'
+  status=$?
+  set -e
+
+  case "$status" in
+    0 | 255)
+      ;;
+    *)
+      die "remote poweroff command failed before shutdown started"
+      ;;
+  esac
+}
+
+prepare_node_for_disruption() {
   local workloads_file
-  workloads_file=$(mktemp)
-  trap 'rm -f "$workloads_file"' EXIT
+  workloads_file="$1"
 
   log "checking Kubernetes node ${NODE}"
   kubectl get node "$NODE" >/dev/null
@@ -440,12 +484,19 @@ main() {
     if ! kubectl "${drain_args[@]}"; then
       log "drain failed; uncordoning ${NODE}"
       kubectl uncordon "$NODE" || true
-      die "drain failed; reboot was not started"
+      die "drain failed; node disruption was not started"
     fi
 
     settle_cluster "$workloads_file"
   fi
+}
 
+run_reboot() {
+  local workloads_file
+  workloads_file=$(mktemp)
+  trap 'rm -f "$workloads_file"' EXIT
+
+  prepare_node_for_disruption "$workloads_file"
   reboot_host
   wait_for_ssh_down
   wait_for_ssh_up
@@ -462,6 +513,58 @@ main() {
   fi
 
   log "done"
+}
+
+run_poweroff() {
+  local workloads_file
+  workloads_file=$(mktemp)
+  trap 'rm -f "$workloads_file"' EXIT
+
+  prepare_node_for_disruption "$workloads_file"
+  poweroff_host
+  wait_for_ssh_down
+
+  log "${NODE} is powered off and remains cordoned"
+}
+
+run_poweron_finalize() {
+  log "checking Kubernetes node ${NODE}"
+  kubectl get node "$NODE" >/dev/null
+
+  wait_for_ssh_up
+
+  log "waiting for ${NODE} to report Ready"
+  kubectl wait "node/${NODE}" --for=condition=Ready --timeout="$READY_TIMEOUT"
+
+  log "uncordoning ${NODE}"
+  kubectl uncordon "$NODE"
+
+  wait_for_longhorn_health
+  wait_for_no_bad_pods
+
+  log "done"
+}
+
+main() {
+  parse_args "$@"
+  need_command kubectl
+  need_command ssh
+  need_command jq
+
+  case "$ACTION" in
+    reboot)
+      run_reboot
+      ;;
+    off)
+      run_poweroff
+      ;;
+    on)
+      run_poweron_finalize
+      ;;
+    *)
+      die "unsupported action: ${ACTION}"
+      ;;
+  esac
 }
 
 main "$@"
