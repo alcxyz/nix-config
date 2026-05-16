@@ -166,7 +166,7 @@ in {
     transcodeDir = "/tmp/plex-transcode";
   };
   services.stash.managed = {
-    enable = false;
+    enable = true;
   };
   services.calibre-web.managed = {
     enable = true;
