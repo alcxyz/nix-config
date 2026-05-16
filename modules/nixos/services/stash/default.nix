@@ -60,20 +60,6 @@ let
       echo "Refusing to start Stash: ${cfg.dataDir}/config/stash-go.sqlite is missing." >&2
       exit 1
     fi
-
-    current_database="$(${lib.getExe pkgs.yq-go} '.database' ${cfg.dataDir}/config/config.yml)"
-    if [ "$current_database" != "${cfg.dataDir}/config/stash-go.sqlite" ]; then
-      cp -an ${cfg.dataDir}/config/config.yml ${cfg.dataDir}/config/config.yml.pre-native-paths
-      ${lib.getExe pkgs.yq-go} -i '
-        .database = "${cfg.dataDir}/config/stash-go.sqlite" |
-        .generated = "/generated" |
-        .metadata = "/metadata" |
-        .cache = "/cache" |
-        .blobs_path = "/blobs"
-      ' ${cfg.dataDir}/config/config.yml
-      chown ${cfg.user}:${cfg.group} ${cfg.dataDir}/config/config.yml
-      chmod 0660 ${cfg.dataDir}/config/config.yml
-    fi
   '';
 in
 {
