@@ -92,6 +92,7 @@
       platform = "nixos";
       role = "nuc";
       k8sRole = "server-worker";
+      sshHostname = "192.168.1.15";
       configuration = ./hosts/nux/configuration.nix;
       osIcon = "";
     };
@@ -120,6 +121,7 @@
       platform = "nixos";
       role = "embedded";
       k8sRole = "server-control-plane";
+      sshHostname = "192.168.1.3";
       configuration = ./hosts/rpi0/configuration.nix;
       osIcon = "";
     };
