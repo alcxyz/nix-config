@@ -51,6 +51,7 @@ in {
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   boot.extraModprobeConfig = ''
     options btusb reset=1 enable_autosuspend=0
+    options mt7925e disable_aspm=1
   '';
 
   # ---- Nix Settings ----
