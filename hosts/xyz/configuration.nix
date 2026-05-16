@@ -35,7 +35,6 @@ in {
     "${configDir}/modules/nixos/virtualisation/kvm/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/gpu-passthrough.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
-    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -174,7 +173,7 @@ in {
     libraryDir = "/var/lib/calibre/config/libraries/Main";
   };
   services.k8s-backup-s3 = {
-    enable = true;
+    enable = false;
     dataset = "tank/k8s-backups";
     dataDir = "/tank/k8s-backups/rustfs";
     quota = "1T";
@@ -237,14 +236,9 @@ in {
   };
 
   k3s = {
-    enable = true;
+    enable = false;
     serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
-  };
-
-  systemd.services.k3s = {
-    requires = ["ext4.mount"];
-    after = ["ext4.mount"];
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
