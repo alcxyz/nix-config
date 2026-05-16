@@ -11,13 +11,63 @@
 
 let
   cfg = config.services.dms;
+  idleLockCfg = cfg.idleLock;
+  idleLockSettings = {
+    acLockTimeout = idleLockCfg.acTimeout;
+    batteryLockTimeout = idleLockCfg.batteryTimeout;
+    customPowerActionLock = idleLockCfg.command;
+    fadeToLockEnabled = idleLockCfg.fadeToLock;
+  }
+  // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
+    loginctlLockIntegration = false;
+    lockBeforeSuspend = false;
+  };
+  idleLockSettingsFile = pkgs.writeText "dms-idle-lock-settings.json" (
+    builtins.toJSON idleLockSettings
+  );
   plugins = inputs.dms-plugins.srcs;
   dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
   };
 in
 {
-  options.services.dms.enable = lib.mkEnableOption "Enable DankMaterialShell suite";
+  options.services.dms = {
+    enable = lib.mkEnableOption "Enable DankMaterialShell suite";
+
+    idleLock = {
+      enable = lib.mkEnableOption "Use DMS idle detection to invoke an external locker";
+
+      command = lib.mkOption {
+        type = lib.types.str;
+        default = "lock-screen";
+        description = "External command DMS should run when its idle lock timeout fires.";
+      };
+
+      acTimeout = lib.mkOption {
+        type = lib.types.int;
+        default = 300;
+        description = "AC power idle lock timeout in seconds.";
+      };
+
+      batteryTimeout = lib.mkOption {
+        type = lib.types.int;
+        default = 300;
+        description = "Battery power idle lock timeout in seconds.";
+      };
+
+      disableLoginctlIntegration = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Disable DMS loginctl lock integration when an external locker owns locking.";
+      };
+
+      fadeToLock = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether DMS should show its fade-to-lock transition before invoking the external locker.";
+      };
+    };
+  };
 
   imports = [
     inputs.dsearch.homeModules.default
@@ -141,5 +191,21 @@ in
         };
       };
     };
+
+    home.activation.dmsIdleLockSettings = lib.mkIf idleLockCfg.enable (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        settings_file="${config.xdg.configHome}/DankMaterialShell/settings.json"
+        settings_tmp="$settings_file.tmp"
+
+        mkdir -p "$(${pkgs.coreutils}/bin/dirname "$settings_file")"
+
+        if [ -e "$settings_file" ] && ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$settings_file" "${idleLockSettingsFile}" > "$settings_tmp"; then
+          mv "$settings_tmp" "$settings_file"
+        else
+          cp "${idleLockSettingsFile}" "$settings_file"
+          rm -f "$settings_tmp"
+        fi
+      ''
+    );
   };
 }

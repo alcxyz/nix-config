@@ -82,6 +82,10 @@ in {
   };
 
   services.dms.enable = true;
+  services.dms.idleLock = {
+    enable = true;
+    command = config.services.hyprlock.lockCommand;
+  };
   services.hyprlock.enable = true;
   services.udiskie = {
     enable = true;
