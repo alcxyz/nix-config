@@ -128,7 +128,7 @@ in {
   };
 
   # ==================== ZFS ====================
-  environment.systemPackages = [pkgs.zfs];
+  environment.systemPackages = [zfsKernelPkgs.zfs];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
 
