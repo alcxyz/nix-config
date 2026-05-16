@@ -121,7 +121,7 @@
       platform = "nixos";
       role = "laptop-workstation";
       k8sRole = null;
-      sshHostname = "192.168.1.203";
+      sshHostname = "192.168.1.14";
       systemSshUser = "alc";
       systemUseRemoteSudo = true;
       skipManagedUserSshSecrets = true;

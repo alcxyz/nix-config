@@ -98,7 +98,7 @@ in {
   services.netbird.useRoutingFeatures = "client";
 
   networking.hosts = {
-    "192.168.1.203" = ["xps"];
+    "192.168.1.14" = ["xps"];
   };
 
   nix.settings.max-jobs = 8;
