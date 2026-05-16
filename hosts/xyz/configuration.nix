@@ -50,6 +50,9 @@ in {
   boot.kernelPackages = zfsKernelPkgs.linuxPackages_latest;
   boot.zfs.package = zfsKernelPkgs.zfs;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
+  boot.extraModprobeConfig = ''
+    options btusb reset=1 enable_autosuspend=0
+  '';
 
   # ---- Nix Settings ----
   nix.settings.secret-key-files = ["/etc/nix/signing-key"];
