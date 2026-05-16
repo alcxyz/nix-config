@@ -13,13 +13,13 @@ in {
 
     dataset = lib.mkOption {
       type = lib.types.str;
-      default = "ypool/k8s-backups";
+      default = "tank/k8s-backups";
       description = "ZFS dataset used for backup object storage.";
     };
 
     dataDir = lib.mkOption {
       type = lib.types.path;
-      default = "/ypool/k8s-backups/rustfs";
+      default = "/tank/k8s-backups/rustfs";
       description = "RustFS object data directory.";
     };
 

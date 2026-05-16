@@ -152,13 +152,11 @@
   services.torrent.enable = true;
   services.plex.managed = {
     enable = true;
-    dataDir = "/ypool/appdata/plex";
-    mediaDir = "/ypool/media/plex";
+    mediaDir = "/tank/media/plex";
     transcodeDir = "/tmp/plex-transcode";
   };
   services.stash.managed = {
     enable = true;
-    dataDir = "/zpool/appdata/stash";
   };
   services.calibre-web.managed = {
     enable = true;
@@ -167,8 +165,8 @@
   };
   services.k8s-backup-s3 = {
     enable = true;
-    dataset = "ypool/k8s-backups";
-    dataDir = "/ypool/k8s-backups/rustfs";
+    dataset = "tank/k8s-backups";
+    dataDir = "/tank/k8s-backups/rustfs";
     quota = "1T";
     apiAddress = "192.168.1.10:9100";
     consoleAddress = "127.0.0.1:9101";
@@ -208,10 +206,10 @@
       # Shared state for gitops tools (tokens, cross-host config)
       {path = "/home/alc/.local/share/gitops-state";}
       # ZFS datasets
-      {path = "/ypool/media";}
-      {path = "/ypool/downloads";}
-      {path = "/ypool/games";}
-      {path = "/ypool/vault";}
+      {path = "/tank/media";}
+      {path = "/tank/downloads";}
+      {path = "/tank/games";}
+      {path = "/tank/vault";}
     ];
   };
 
@@ -301,10 +299,10 @@
 
   # ==================== Tmpfiles ====================
   systemd.tmpfiles.rules = [
-    "L+ /downloads - - - - /ypool/downloads"
-    "L+ /vault - - - - /ypool/vault"
-    "d /ypool/games 0770 root media - -"
-    "d /ypool/vault 0770 root media - -"
+    "L+ /downloads - - - - /tank/downloads"
+    "L+ /vault - - - - /tank/vault"
+    "d /tank/games 0770 root media - -"
+    "d /tank/vault 0770 root media - -"
 
     # Ensure the filtered input directory exists on boot (tmpfs)
     #"d /run/steam-headless-input 0755 root root - -"

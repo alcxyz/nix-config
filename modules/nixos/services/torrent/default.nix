@@ -11,15 +11,14 @@ let
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
   sharedGroup = "media";
-  qbConfigDir = "/ypool/appdata/qbittorrent";
+  qbConfigDir = "/var/lib/qbittorrent";
   qbConfigStateDir = "${qbConfigDir}/profile";
   qbNativeDir = "${qbConfigStateDir}/qBittorrent";
-  dataDir = "/ypool/downloads";
+  dataDir = "/tank/downloads";
 
-  stashDir = "/zpool/stash";
-  mediaDir = "/ypool/media";
+  stashDir = "/tank/stash";
+  mediaDir = "/tank/media";
 
-  appdataRoot = "/ypool/appdata";
   torrentDirs = [
     qbConfigDir
     qbConfigStateDir
@@ -47,19 +46,17 @@ let
   ];
 
   sharedMediaDatasets = [
-    "zpool/stash"
-    "ypool/media"
+    "tank/stash"
+    "tank/media"
   ];
 
-  tmpfilesRules = [
-    ("d " + appdataRoot + " 0755 root root -")
-  ]
-  ++ map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
-  ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
-  ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
-  ++ map (
-    d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
-  ) sharedMediaDirs;
+  tmpfilesRules =
+    map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
+    ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
+    ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
+    ++ map (
+      d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
+    ) sharedMediaDirs;
   qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
     set -euo pipefail
 
@@ -72,7 +69,10 @@ let
       ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")}
     do
       if [ -f "$config_file" ]; then
-        ${pkgs.gnused}/bin/sed -i 's#/zpool/downloads#/ypool/downloads#g' "$config_file"
+        ${pkgs.gnused}/bin/sed -i \
+          -e 's#/zpool/downloads#/tank/downloads#g' \
+          -e 's#/ypool/downloads#/tank/downloads#g' \
+          "$config_file"
       fi
     done
 

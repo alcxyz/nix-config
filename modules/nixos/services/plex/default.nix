@@ -46,7 +46,7 @@ in
 
     mediaDir = mkOption {
       type = types.str;
-      default = "/zpool/media/plex";
+      default = "/tank/media/plex";
       description = "Root directory for media libraries";
     };
 

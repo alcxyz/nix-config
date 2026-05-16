@@ -1,6 +1,6 @@
 # ADR-0039: xyz ZFS-backed S3 target for cluster backups
 
-**Status:** Accepted
+**Status:** Superseded by the `tank` storage rebuild
 **Date:** 2026-05-06
 **Applies to:** `hosts/xyz`, `modules/nixos/services/k8s-backup-s3`, k3s backup posture
 
@@ -11,9 +11,10 @@ improves node mobility inside the cluster, but it is not a backup. Backing up
 Longhorn to the in-cluster RustFS deployment would create a circular dependency:
 the backup target itself depends on k3s and Longhorn being healthy.
 
-`xyz` has encrypted ZFS pools that are outside the k3s storage dependency path.
-`ypool` currently has enough free space to host a bounded backup target, while
-`zpool` is already heavily used for media and local datasets.
+`xyz` has encrypted ZFS storage outside the k3s storage dependency path. The
+original decision placed the bounded backup target on `ypool`. The storage
+rebuild consolidates the old `zpool` and `ypool` roles into one encrypted
+mirror-vdev pool named `tank`.
 
 Database backup automation is intentionally deferred until the database topology
 is revisited. The cluster still has a per-application database pattern, while
@@ -25,9 +26,9 @@ lock in the current topology and multiply backup lifecycle work.
 Run a host-level RustFS S3 endpoint on `xyz` for cluster backups, backed by a
 dedicated ZFS dataset:
 
-- dataset: `ypool/k8s-backups`
-- mountpoint: `/ypool/k8s-backups`
-- object data: `/ypool/k8s-backups/rustfs`
+- dataset: `tank/k8s-backups`
+- mountpoint: `/tank/k8s-backups`
+- object data: `/tank/k8s-backups/rustfs`
 - quota: `1T`
 - API: `192.168.1.10:9100`
 - console: `127.0.0.1:9101`
@@ -47,7 +48,7 @@ workloads.
 
 The hard cap is the ZFS dataset quota, initially `1T`. Backup schedules must be
 configured so normal retention remains well below that cap. If the dataset fills,
-backups should fail loudly instead of consuming the rest of `ypool`.
+backups should fail loudly instead of consuming the rest of `tank`.
 
 Longhorn recurring backup retention should be conservative at first:
 

@@ -124,7 +124,7 @@ in
     };
     mediaDir = mkOption {
       type = types.path;
-      default = "/zpool/stash";
+      default = "/tank/stash";
       description = "Directory where Stash media is located.";
     };
   };
@@ -213,7 +213,7 @@ in
         ProtectSystem = "strict";
         ReadWritePaths = [
           cfg.dataDir
-          "/zpool/stash"
+          cfg.mediaDir
         ];
       };
     };
