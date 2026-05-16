@@ -13,7 +13,6 @@ with lib;
 let
   cfg = config.services.stash.managed;
   system = pkgs.stdenv.hostPlatform.system;
-  legacyDataDir = "/ypool/vault/stash";
   preStartScript = pkgs.writeShellScript "stash-pre-start" ''
     install -d -m 0750 -o ${cfg.user} -g ${cfg.group} \
       ${cfg.dataDir} \
@@ -22,25 +21,6 @@ let
       ${cfg.dataDir}/cache \
       ${cfg.dataDir}/blobs \
       ${cfg.dataDir}/generated
-
-    legacy_migration_marker=${cfg.dataDir}/config/.legacy-appdata-migrated
-    if [ -d ${lib.escapeShellArg legacyDataDir} ] && [ ! -e "$legacy_migration_marker" ]; then
-      if [ -d ${lib.escapeShellArg (legacyDataDir + "/config")} ]; then
-        ${lib.getExe pkgs.rsync} -a --ignore-existing \
-          ${lib.escapeShellArg (legacyDataDir + "/config/")} \
-          ${lib.escapeShellArg (cfg.dataDir + "/config/")}
-      fi
-
-      for state_dir in metadata cache blobs generated; do
-        if [ -d ${lib.escapeShellArg legacyDataDir}/"$state_dir" ]; then
-          ${lib.getExe pkgs.rsync} -a --ignore-existing \
-            ${lib.escapeShellArg legacyDataDir}/"$state_dir"/ \
-            ${lib.escapeShellArg cfg.dataDir}/"$state_dir"/
-        fi
-      done
-
-      touch "$legacy_migration_marker"
-    fi
 
     permission_marker=${cfg.dataDir}/config/.native-permissions-v3
     if [ ! -e "$permission_marker" ]; then
@@ -82,7 +62,7 @@ let
     fi
 
     current_database="$(${lib.getExe pkgs.yq-go} '.database' ${cfg.dataDir}/config/config.yml)"
-    if [ "$current_database" = "/root/.stash/stash-go.sqlite" ] || [ "$current_database" = "${legacyDataDir}/config/stash-go.sqlite" ]; then
+    if [ "$current_database" != "${cfg.dataDir}/config/stash-go.sqlite" ]; then
       cp -an ${cfg.dataDir}/config/config.yml ${cfg.dataDir}/config/config.yml.pre-native-paths
       ${lib.getExe pkgs.yq-go} -i '
         .database = "${cfg.dataDir}/config/stash-go.sqlite" |
