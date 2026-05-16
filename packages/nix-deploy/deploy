@@ -52,6 +52,17 @@ ssh_host() {
   printf '%s\n' "${SSH_HOSTS[$h]:-$h}"
 }
 
+system_ssh_user() {
+  local h="$1"
+  printf '%s\n' "${SYSTEM_SSH_USERS[$h]:-root}"
+}
+
+uses_remote_sudo() {
+  local h="$1"
+  for k in "${SYSTEM_REMOTE_SUDO_HOSTS[@]}"; do [[ "$k" == "$h" ]] && return 0; done
+  return 1
+}
+
 is_darwin() {
   [[ "$(uname)" == "Darwin" ]]
 }
@@ -167,13 +178,17 @@ nixos_local() {
 
 nixos_remote() {
   local host="$1"
-  local rebuild_cmd
+  local rebuild_cmd remote_sudo_arg
   rebuild_cmd="$(nixos_rebuild_command)"
+  remote_sudo_arg=""
+  if uses_remote_sudo "$host"; then
+    remote_sudo_arg=" --ask-sudo-password"
+  fi
 
   run_with_boot_fallback \
     "deploy(${host})" \
-    "${rebuild_cmd} switch --flake .#${host} --target-host root@$(ssh_host "$host")" \
-    "${rebuild_cmd} boot --flake .#${host} --target-host root@$(ssh_host "$host")"
+    "${rebuild_cmd} switch --flake .#${host} --target-host $(system_ssh_user "$host")@$(ssh_host "$host")${remote_sudo_arg}" \
+    "${rebuild_cmd} boot --flake .#${host} --target-host $(system_ssh_user "$host")@$(ssh_host "$host")${remote_sudo_arg}"
 }
 
 hm_local() {
@@ -256,7 +271,10 @@ do_deploy_all() {
           cmd="sudo -n nixos-rebuild switch --flake .#${host}"
         fi
       else
-        cmd="$(nixos_rebuild_command) switch --flake .#${host} --target-host root@$(ssh_host "$host")"
+        cmd="$(nixos_rebuild_command) switch --flake .#${host} --target-host $(system_ssh_user "$host")@$(ssh_host "$host")"
+        if uses_remote_sudo "$host"; then
+          cmd="${cmd} --ask-sudo-password"
+        fi
       fi
 
       system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")

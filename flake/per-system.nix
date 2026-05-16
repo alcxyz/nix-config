@@ -14,12 +14,16 @@
       '';
 
     formattedNixFiles = [
+      "inventory.nix"
       "flake/per-system.nix"
       "flake/hosts/lib.nix"
       "hosts/mac/configuration.nix"
       "hosts/nex/configuration.nix"
       "hosts/nux/configuration.nix"
       "hosts/rpi0/configuration.nix"
+      "hosts/xev/configuration.nix"
+      "hosts/xps/configuration.nix"
+      "hosts/xps/hardware-configuration.nix"
       "hosts/xyz/configuration.nix"
       "modules/home-manager/programs/ssh/default.nix"
       "modules/nixos/common/default.nix"
@@ -39,6 +43,8 @@
       "users/alc/linux/nux.nix"
       "users/alc/linux/operator.nix"
       "users/alc/linux/rpi0.nix"
+      "users/alc/linux/xev.nix"
+      "users/alc/linux/xps.nix"
       "users/alc/linux/xyz.nix"
     ];
   in {
@@ -74,6 +80,7 @@
     packages =
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
+        nix-deploy = pkgs.nix-deploy;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
         # Cross-compiled U-Boot for Rock Pi 4 (RK3399).

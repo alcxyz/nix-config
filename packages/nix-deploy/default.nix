@@ -7,9 +7,11 @@
   hostNames = builtins.attrNames inventory.hosts;
   nixosHostNames = lib.filter (host: inventory.hosts.${host}.platform == "nixos") hostNames;
 
+  deployableInAll = host: inventory.hosts.${host}.deployAll or true;
+
   deployAllHostNames =
-    lib.optional (builtins.elem "xyz" nixosHostNames) "xyz"
-    ++ lib.filter (host: host != "xyz") nixosHostNames;
+    lib.optional (builtins.elem "xyz" nixosHostNames && deployableInAll "xyz") "xyz"
+    ++ lib.filter (host: host != "xyz" && deployableInAll host) nixosHostNames;
 
   remoteHostNames = lib.filter (host: host != "xyz") nixosHostNames;
 
@@ -29,6 +31,14 @@
     })
     hostNames
   );
+  systemSshUserEntries = lib.filter (entry: entry.user != "root") (
+    map (host: {
+      inherit host;
+      user = inventory.hosts.${host}.systemSshUser or "root";
+    })
+    nixosHostNames
+  );
+  remoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
 
   bashArray = name: values: ''
     ${name}=(${lib.concatMapStringsSep " " lib.escapeShellArg values})
@@ -43,7 +53,9 @@
     + bashArray "REMOTE_HOSTS" remoteHostNames
     + bashArray "DEPLOY_ALL_HOSTS" deployAllHostNames
     + bashAssoc "HOST_ALIASES" aliases "alias" "host"
-    + bashAssoc "SSH_HOSTS" sshHostEntries "host" "target";
+    + bashAssoc "SSH_HOSTS" sshHostEntries "host" "target"
+    + bashAssoc "SYSTEM_SSH_USERS" systemSshUserEntries "host" "user"
+    + bashArray "SYSTEM_REMOTE_SUDO_HOSTS" remoteSudoHosts;
 in
   stdenv.mkDerivation {
     pname = "nix-deploy";

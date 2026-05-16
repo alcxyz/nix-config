@@ -116,6 +116,20 @@
       osIcon = "";
     };
 
+    xps = {
+      system = "x86_64-linux";
+      platform = "nixos";
+      role = "laptop-workstation";
+      k8sRole = null;
+      sshHostname = "192.168.1.203";
+      systemSshUser = "alc";
+      systemUseRemoteSudo = true;
+      deployAll = false;
+      skipManagedUserSshSecrets = true;
+      configuration = ./hosts/xps/configuration.nix;
+      osIcon = "";
+    };
+
     rpi0 = {
       system = "aarch64-linux";
       platform = "nixos";

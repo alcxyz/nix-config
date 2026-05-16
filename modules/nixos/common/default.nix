@@ -5,6 +5,7 @@
   inputs,
   username,
   hostName,
+  hostInventory,
   configDir,
   lib,
   ...
@@ -18,6 +19,7 @@
   mobileAppKeys = sshKeys.groups.mobileApps sshKeys.keys;
   distributedBuildClientKeys = sshKeys.groups.distributedBuildClients sshKeys.keys;
   userHome = "/home/${username}";
+  manageUserSshSecrets = !(hostInventory.skipManagedUserSshSecrets or false);
   shellPackages = {
     bash = pkgs.bashInteractive;
     nu = pkgs.nushell;
@@ -215,7 +217,7 @@ in {
   sops = {
     defaultSopsFile = "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
     age.sshKeyPaths = ["/etc/ssh/ssh_host_ed25519_key"];
-    secrets = {
+    secrets = lib.optionalAttrs manageUserSshSecrets {
       "${username}_ssh_private_key" = {
         key = "ssh_id_ed25519";
         path = "${userHome}/.ssh/id_ed25519";
