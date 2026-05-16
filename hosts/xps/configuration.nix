@@ -31,7 +31,22 @@ in {
     "render"
   ];
 
+  programs.hyprlock.enable = true;
   services.accounts-daemon.enable = true;
+  system.activationScripts.accountsServiceIcon = {
+    text = ''
+      install -d -m755 /var/lib/AccountsService/icons
+      install -d -m755 /var/lib/AccountsService/users
+      install -m644 ${configDir}/users/${username}/profile.jpg \
+        /var/lib/AccountsService/icons/${username}
+      if [ ! -f /var/lib/AccountsService/users/${username} ]; then
+        printf '[User]\nIcon=/var/lib/AccountsService/icons/${username}\nSystemAccount=false\n' \
+          > /var/lib/AccountsService/users/${username}
+      fi
+    '';
+    deps = [];
+  };
+
   services.displayManager.gdm.enable = false;
   services.greetd = {
     enable = true;

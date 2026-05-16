@@ -124,7 +124,6 @@
       sshHostname = "192.168.1.203";
       systemSshUser = "alc";
       systemUseRemoteSudo = true;
-      deployAll = false;
       skipManagedUserSshSecrets = true;
       configuration = ./hosts/xps/configuration.nix;
       osIcon = "";

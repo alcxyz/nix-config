@@ -104,6 +104,7 @@ host_label() {
     nux) color "166;227;161" "[nux]" ;;   # Catppuccin green
     nex) color "249;226;175" "[nex]" ;;   # Catppuccin yellow
     xev) color "148;226;213" "[xev]" ;;   # Catppuccin teal
+    xps) color "245;194;231" "[xps]" ;;   # Catppuccin pink
     rpi0) color "235;160;172" "[rpi0]" ;; # Catppuccin maroon
     mac) color "203;166;247" "[mac]" ;;   # Catppuccin mauve
     *) color "205;214;244" "[${host}]" ;;
@@ -257,6 +258,7 @@ do_deploy_all() {
 
   if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
     local system_jobs=()
+    local interactive_system_jobs=()
     local host cmd
 
     start_sudo_keepalive
@@ -274,13 +276,23 @@ do_deploy_all() {
         cmd="$(nixos_rebuild_command) switch --flake .#${host} --target-host $(system_ssh_user "$host")@$(ssh_host "$host")"
         if uses_remote_sudo "$host"; then
           cmd="${cmd} --ask-sudo-password"
+          interactive_system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
+          continue
         fi
       fi
 
       system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
     done
 
-    run_parallel_jobs "${system_jobs[@]}"
+    if [[ ${#system_jobs[@]} -gt 0 ]]; then
+      run_parallel_jobs "${system_jobs[@]}"
+    fi
+
+    for job in "${interactive_system_jobs[@]}"; do
+      IFS=$'\t' read -r phase host_label_text cmd <<<"$job"
+      printf '%s %s %s\n' "$phase" "$host_label_text" "$cmd"
+      eval "$cmd"
+    done
   fi
 
   if [[ "$mode" == "hm" || "$mode" == "full" ]]; then
