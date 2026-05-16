@@ -251,9 +251,9 @@
   };
 
   # ==================== Virtualisation ====================
-  virtualisation.kvm.managed.enable = true;
+  virtualisation.kvm.managed.enable = false;
   virtualisation.kvm.gpu-passthrough = {
-    enable = true;
+    enable = false;
     vmName = "win11";
     gpuContainerStacks = [
       "/home/alc/src/infra/gitops/docker/xyz/steam"
