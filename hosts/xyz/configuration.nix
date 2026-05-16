@@ -174,7 +174,7 @@ in {
     libraryDir = "/var/lib/calibre/config/libraries/Main";
   };
   services.k8s-backup-s3 = {
-    enable = false;
+    enable = true;
     dataset = "tank/k8s-backups";
     dataDir = "/tank/k8s-backups/rustfs";
     quota = "1T";
