@@ -51,14 +51,8 @@ let
       ${cfg.dataDir}/blobs \
       ${cfg.dataDir}/generated
 
-    if [ ! -f ${cfg.dataDir}/config/config.yml ]; then
-      echo "Refusing to start Stash: ${cfg.dataDir}/config/config.yml is missing." >&2
-      exit 1
-    fi
-
-    if [ ! -f ${cfg.dataDir}/config/stash-go.sqlite ]; then
-      echo "Refusing to start Stash: ${cfg.dataDir}/config/stash-go.sqlite is missing." >&2
-      exit 1
+    if [ ! -f ${cfg.dataDir}/config/config.yml ] || [ ! -f ${cfg.dataDir}/config/stash-go.sqlite ]; then
+      echo "Stash state is incomplete; allowing Stash to bootstrap fresh state." >&2
     fi
   '';
 in
