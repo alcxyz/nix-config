@@ -223,7 +223,10 @@ in {
     ];
   };
 
-  services.netbird.managed.enable = true;
+  services.netbird.managed = {
+    enable = true;
+    disableDns = true;
+  };
 
   services.forgejo-actions-runner = {
     enable = true;

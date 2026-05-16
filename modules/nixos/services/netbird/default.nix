@@ -25,6 +25,12 @@ in {
       default = null;
       description = "Path to a NetBird setup key file used for non-interactive login.";
     };
+
+    disableDns = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Disable NetBird DNS management so system DNS remains owned by the host network.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -69,7 +75,7 @@ in {
           netbird deregister || true
         fi
 
-        netbird up --setup-key-file ${setupKeyFile}
+        netbird up --setup-key-file ${setupKeyFile} ${optionalString cfg.disableDns "--disable-dns"}
       '';
     };
 
