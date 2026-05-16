@@ -83,6 +83,17 @@ in {
 
   services.dms.enable = true;
   services.hyprlock.enable = true;
+  services.udiskie = {
+    enable = true;
+    tray = "never";
+  };
+  systemd.user.services.udiskie = {
+    Unit = {
+      After = lib.mkForce [];
+      PartOf = lib.mkForce [];
+    };
+    Install.WantedBy = lib.mkForce ["default.target"];
+  };
 
   services.devlog.enable = true;
   services.devlog.weekly.enable = true;

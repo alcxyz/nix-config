@@ -87,6 +87,8 @@ in {
     user_allow_other
   '';
 
+  boot.supportedFilesystems.ntfs = true;
+
   # ==================== Emulation (for aarch64 remote builds) ====================
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
 
@@ -196,6 +198,10 @@ in {
   };
 
   services.gnome.sushi.enable = true;
+  services.udisks2.enable = true;
+  services.gvfs.enable = true;
+  security.polkit.enable = true;
+  programs.dconf.enable = true;
 
   xdg.portal = {
     enable = true;
