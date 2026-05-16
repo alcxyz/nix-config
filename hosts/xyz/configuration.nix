@@ -300,6 +300,7 @@
   # ==================== Tmpfiles ====================
   systemd.tmpfiles.rules = [
     "d /tank 0755 root root - -"
+    "z /tank 0755 root root - -"
     "L+ /downloads - - - - /tank/downloads"
     "L+ /vault - - - - /tank/vault"
     "d /tank/games 0770 root media - -"
