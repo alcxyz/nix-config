@@ -1,2 +1,3 @@
 # Runtime output for the vidown TUI and CLI.
 output_dir = "~/Videos/vidown"
+max_per_fqdn = 3
