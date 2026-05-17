@@ -129,6 +129,20 @@
       osIcon = "";
     };
 
+    family-thinkpad = {
+      system = "x86_64-linux";
+      platform = "nixos";
+      role = "family-gaming";
+      k8sRole = null;
+      sshHostname = "192.168.1.14";
+      systemSshUser = "alc";
+      systemUseRemoteSudo = true;
+      deployAll = false;
+      skipManagedUserSshSecrets = true;
+      configuration = ./hosts/family-thinkpad/configuration.nix;
+      osIcon = "";
+    };
+
     rpi0 = {
       system = "aarch64-linux";
       platform = "nixos";
