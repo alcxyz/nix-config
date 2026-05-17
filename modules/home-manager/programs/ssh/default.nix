@@ -84,6 +84,11 @@ in {
               user = "git";
             };
 
+            "git.local" = {
+              user = "git";
+              extraOptions.HostKeyAlias = "git-ssh.alc.xyz";
+            };
+
             "git-ssh.alc.xyz-cloudflare-fallback" = {
               match = ''originalhost git-ssh.alc.xyz exec "${gitSshCloudflareFallbackMatch} %h"'';
               extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
