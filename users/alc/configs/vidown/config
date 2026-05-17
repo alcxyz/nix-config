@@ -2,3 +2,6 @@
 output_dir = "~/Videos/vidown"
 max_per_fqdn = 3
 skip_successful_history = true
+browser_tab_filter = "video"
+browser_firefox_roots = "~/.mozilla/firefox,~/.zen"
+browser_devtools_urls = "http://127.0.0.1:9222/json,http://127.0.0.1:9223/json"
