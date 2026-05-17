@@ -32,6 +32,7 @@ in
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
             lt = inputs.leantime-tidy.packages.${system} or {};
+            avd = inputs.authorized-video-download.packages.${system} or {};
           in
             (lib.filterAttrs (n: _: builtins.elem n wanted) np)
             // (lib.filterAttrs (
@@ -49,6 +50,9 @@ in
                   ]
               )
               lt)
+            // lib.optionalAttrs (avd ? default) {
+              authorized-video-download = avd.default;
+            }
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};

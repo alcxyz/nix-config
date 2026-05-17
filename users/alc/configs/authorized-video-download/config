@@ -1,0 +1,2 @@
+# Runtime output for the authorized-video-download TUI and CLI.
+output_dir = "~/Videos/authorized-video-download"

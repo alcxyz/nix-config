@@ -33,6 +33,23 @@
         "type": "github"
       }
     },
+    "authorized-video-download": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779031017,
+        "narHash": "sha256-x+m9fIWIEHu6DzCLdjT1E0DKlTd9tmFFlWdcrVYowFc=",
+        "path": "/home/alc/src/tools/authorized-video-download",
+        "type": "path"
+      },
+      "original": {
+        "path": "/home/alc/src/tools/authorized-video-download",
+        "type": "path"
+      }
+    },
     "base16-schemes": {
       "flake": false,
       "locked": {
@@ -1235,6 +1252,7 @@
     },
     "root": {
       "inputs": {
+        "authorized-video-download": "authorized-video-download",
         "bn-bootstrap": "bn-bootstrap",
         "canopy": "canopy",
         "dankMaterialShell": "dankMaterialShell",

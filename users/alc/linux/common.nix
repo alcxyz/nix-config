@@ -12,7 +12,10 @@
   };
 in {
   # Import the global common config first.
-  imports = ["${configDir}/users/alc/common.nix"];
+  imports = [
+    "${configDir}/users/alc/common.nix"
+    "${configDir}/modules/home-manager/programs/authorized-video-download/default.nix"
+  ];
 
   # ==================== Common Linux Packages ====================
   # Small Linux-specific additions; common.nix already provides the shared base.
@@ -20,6 +23,7 @@ in {
 
   # ==================== Common Linux Programs & Services ====================
   programs.atuin.daemon.enable = true;
+  programs.authorized-video-download.enable = true;
 
   programs.nushell = {
     extraConfig = ''
