@@ -27,6 +27,7 @@
       "hosts/xps/configuration.nix"
       "hosts/xps/hardware-configuration.nix"
       "hosts/xyz/configuration.nix"
+      "modules/home-manager/programs/stashdb-acquisition/default.nix"
       "modules/home-manager/programs/ssh/default.nix"
       "modules/nixos/common/default.nix"
       "modules/nixos/common/distributed-build-client.nix"
@@ -84,6 +85,7 @@
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
+        stashdb-acquisition-list = pkgs.stashdb-acquisition-list;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
         # Cross-compiled U-Boot for Rock Pi 4 (RK3399).

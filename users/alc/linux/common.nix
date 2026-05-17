@@ -14,7 +14,7 @@ in {
   # Import the global common config first.
   imports = [
     "${configDir}/users/alc/common.nix"
-    "${configDir}/modules/home-manager/programs/authorized-video-download/default.nix"
+    "${configDir}/modules/home-manager/programs/vidown/default.nix"
   ];
 
   # ==================== Common Linux Packages ====================
@@ -23,7 +23,7 @@ in {
 
   # ==================== Common Linux Programs & Services ====================
   programs.atuin.daemon.enable = true;
-  programs.authorized-video-download.enable = true;
+  programs.vidown.enable = true;
 
   programs.nushell = {
     extraConfig = ''

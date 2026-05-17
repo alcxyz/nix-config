@@ -33,23 +33,6 @@
         "type": "github"
       }
     },
-    "authorized-video-download": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1779031017,
-        "narHash": "sha256-x+m9fIWIEHu6DzCLdjT1E0DKlTd9tmFFlWdcrVYowFc=",
-        "path": "/home/alc/src/tools/authorized-video-download",
-        "type": "path"
-      },
-      "original": {
-        "path": "/home/alc/src/tools/authorized-video-download",
-        "type": "path"
-      }
-    },
     "base16-schemes": {
       "flake": false,
       "locked": {
@@ -1252,7 +1235,6 @@
     },
     "root": {
       "inputs": {
-        "authorized-video-download": "authorized-video-download",
         "bn-bootstrap": "bn-bootstrap",
         "canopy": "canopy",
         "dankMaterialShell": "dankMaterialShell",
@@ -1276,7 +1258,8 @@
         "paperless-tools": "paperless-tools",
         "quickshell": "quickshell_2",
         "rustfs": "rustfs",
-        "sops-nix": "sops-nix"
+        "sops-nix": "sops-nix",
+        "vidown": "vidown"
       }
     },
     "rust-overlay": {
@@ -1495,6 +1478,26 @@
         "ref": "main",
         "repo": "DankVault",
         "type": "github"
+      }
+    },
+    "vidown": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779031778,
+        "narHash": "sha256-Yp8LfXkMGosaLdV3TS+0VHkJQGw/ZcTWp3u8Hxljtts=",
+        "ref": "refs/heads/main",
+        "rev": "b2aae0658a98a4e105ac19cba20efc457a91827d",
+        "revCount": 4,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git"
       }
     },
     "worldclock": {

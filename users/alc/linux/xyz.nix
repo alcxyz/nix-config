@@ -26,6 +26,7 @@ in {
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
 
     "${configDir}/modules/home-manager/programs/ai/default.nix"
+    "${configDir}/modules/home-manager/programs/stashdb-acquisition/default.nix"
 
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
@@ -106,6 +107,7 @@ in {
   services.t3code.port = 3777;
 
   programs.ai.enable = true;
+  programs.stashdb-acquisition.enable = true;
 
   services.cloud-sync = {
     enable = true;

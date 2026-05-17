@@ -20,6 +20,7 @@ in
               "ghostty"
               "kdash"
               "t3code"
+              "stashdb-acquisition-list"
               "claude-code"
               "devlog"
               "agent-sync-check"
@@ -32,7 +33,7 @@ in
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
             lt = inputs.leantime-tidy.packages.${system} or {};
-            avd = inputs.authorized-video-download.packages.${system} or {};
+            vidown = inputs.vidown.packages.${system} or {};
           in
             (lib.filterAttrs (n: _: builtins.elem n wanted) np)
             // (lib.filterAttrs (
@@ -50,12 +51,13 @@ in
                   ]
               )
               lt)
-            // lib.optionalAttrs (avd ? default) {
-              authorized-video-download = avd.default;
+            // lib.optionalAttrs (vidown ? default) {
+              vidown = vidown.default;
             }
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
+              stashdb-acquisition-list = _prev.callPackage ../packages/stashdb-acquisition-list {};
               paneru = inputs.paneru.packages.${system}.default;
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.

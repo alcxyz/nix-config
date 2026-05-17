@@ -96,10 +96,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    authorized-video-download = {
-      # Switch to git+ssh://git@git-ssh.alc.xyz/alcxyz/authorized-video-download.git
-      # after the private Forgejo repository exists.
-      url = "path:/home/alc/src/tools/authorized-video-download";
+    vidown = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
