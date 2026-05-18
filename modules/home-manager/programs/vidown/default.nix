@@ -4,10 +4,16 @@
   pkgs,
   username,
   configDir,
+  inputs,
   ...
 }: let
   cfg = config.programs.vidown;
-  configPath = "${configDir}/users/${username}/configs/vidown/config";
+  publicConfigPath = "${configDir}/users/${username}/configs/vidown/config";
+  privateConfigPath = "${inputs.nix-secrets}/users/${username}/configs/vidown/config";
+  configPath =
+    if builtins.pathExists privateConfigPath
+    then privateConfigPath
+    else publicConfigPath;
 in {
   options.programs.vidown = {
     enable = lib.mkEnableOption "vidown video download TUI";
@@ -22,8 +28,8 @@ in {
   config = lib.mkIf cfg.enable {
     home.packages = [cfg.package];
 
-    # Symlink the user-editable config directly to the repo checkout, matching
-    # the Hyprland config pattern.
+    # Prefer private per-user config from nix-secrets when present; keep the
+    # public repo fallback non-private.
     xdg.configFile."vidown/config".source =
       config.lib.file.mkOutOfStoreSymlink configPath;
   };
