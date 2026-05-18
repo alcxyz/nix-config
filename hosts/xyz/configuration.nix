@@ -297,6 +297,11 @@ in {
     packages = [
       "com.heroicgameslauncher.hgl"
     ];
+    overrides."com.heroicgameslauncher.hgl" = [
+      "--filesystem=/ext4"
+      "--filesystem=/nix/store:ro"
+      "--filesystem=home"
+    ];
   };
 
   services.heroicSideload = {
@@ -309,6 +314,7 @@ in {
       installDir = "/ext4/games/Totem_Quest";
       executable = "TotemQuest.exe";
       art = "https://www.myabandonware.com/media/screenshots/t/totem-quest-1c8k/webp/totem-quest_1.webp";
+      protonPackage = pkgs.proton-ge-bin.steamcompattool;
     };
   };
 

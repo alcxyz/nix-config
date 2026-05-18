@@ -151,6 +151,10 @@ in {
     packages = [
       "com.heroicgameslauncher.hgl"
     ];
+    overrides."com.heroicgameslauncher.hgl" = [
+      "--filesystem=/nix/store:ro"
+      "--filesystem=home"
+    ];
   };
 
   programs.steam.enable = true;
@@ -166,6 +170,8 @@ in {
       installDir = "/home/madsil/Games/Totem_Quest";
       executable = "TotemQuest.exe";
       art = "https://www.myabandonware.com/media/screenshots/t/totem-quest-1c8k/webp/totem-quest_1.webp";
+      protonPackage = pkgs.proton-ge-bin.steamcompattool;
+      desktopShortcut = true;
     };
   };
 

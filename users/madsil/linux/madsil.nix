@@ -31,10 +31,17 @@
   };
 
   programs.foot.enable = true;
-  programs.hyprland.managed.enable = true;
+  programs.hyprland.managed = {
+    enable = true;
+    inputSensitivity = 0.0;
+  };
 
   services.dms = {
     enable = true;
+    dock = {
+      enable = true;
+      autoHide = true;
+    };
     idleLock = {
       enable = true;
       command = config.services.hyprlock.lockCommand;

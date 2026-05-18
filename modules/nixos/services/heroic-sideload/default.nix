@@ -42,6 +42,18 @@
         default = null;
         description = "Optional cover/square artwork URL for Heroic.";
       };
+
+      protonPackage = lib.mkOption {
+        type = lib.types.nullOr lib.types.package;
+        default = null;
+        description = "Optional Proton compatibility tool package to use for this Windows app.";
+      };
+
+      desktopShortcut = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether to create desktop and application-menu shortcuts for this sideload.";
+      };
     };
   });
 
@@ -88,7 +100,14 @@
       afterLaunchScriptPath = "";
       verboseLogs = false;
       advertiseAvxForRosetta = false;
-      wineVersion = {};
+      wineVersion =
+        if app.protonPackage == null
+        then {}
+        else {
+          bin = "${app.protonPackage}/proton";
+          name = "Proton - ${app.protonPackage.name}";
+          type = "proton";
+        };
       winePrefix = "${config.users.users.${cfg.user}.home}/Games/Heroic/Prefixes/default/${app.title}";
       wineCrossoverBottle = "";
     };
@@ -108,6 +127,22 @@
       }
     )
     cfg.apps;
+  shortcutFiles =
+    lib.mapAttrsToList (
+      _: app: {
+        inherit app;
+        file = pkgs.writeText "heroic-${app.appName}.desktop" ''
+          [Desktop Entry]
+          Name=${app.title}
+          Exec=xdg-open heroic://launch?appName=${app.appName}&runner=sideload
+          Terminal=false
+          Type=Application
+          Icon=com.heroicgameslauncher.hgl
+          Categories=Game;
+        '';
+      }
+    )
+    (lib.filterAttrs (_: app: app.desktopShortcut) cfg.apps);
 in {
   options.services.heroicSideload = {
     enable = lib.mkEnableOption "Heroic sideloaded game repair";
@@ -148,7 +183,7 @@ in {
         home=${lib.escapeShellArg config.users.users.${cfg.user}.home}
         heroic_config="$home/.var/app/com.heroicgameslauncher.hgl/config/heroic"
 
-        install -d -m755 "$home/Games" "$heroic_config/sideload_apps" "$heroic_config/GamesConfig"
+        install -d -m755 "$home/Games" "$heroic_config/sideload_apps" "$heroic_config/GamesConfig" "$home/Desktop" "$home/.local/share/applications"
 
         ${lib.concatMapStringsSep "\n" (app: ''
             source_path=${lib.escapeShellArg (toString app.source)}
@@ -188,7 +223,13 @@ in {
         ${lib.concatMapStringsSep "\n" (entry: "install -m644 ${entry.file} \"$heroic_config/GamesConfig/${entry.app.appName}.json\"")
           gameConfigFiles}
 
-        chown -R "$user:users" "$home/Games" "$heroic_config"
+        ${lib.concatMapStringsSep "\n" (entry: ''
+            install -m755 ${entry.file} "$home/Desktop"/${lib.escapeShellArg "${entry.app.title}.desktop"}
+            install -m644 ${entry.file} "$home/.local/share/applications"/${lib.escapeShellArg "${entry.app.title}.desktop"}
+          '')
+          shortcutFiles}
+
+        chown -R "$user:users" "$home/Games" "$heroic_config" "$home/Desktop" "$home/.local/share/applications"
       '';
     };
   };

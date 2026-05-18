@@ -39,7 +39,10 @@ in {
   };
 
   programs.foot.enable = true;
-  programs.hyprland.managed.enable = true;
+  programs.hyprland.managed = {
+    enable = true;
+    inputSensitivity = 0.0;
+  };
   programs.niri.managed.enable = true;
 
   programs.hyprscratch = {
@@ -56,10 +59,16 @@ in {
     };
   };
 
-  services.dms.enable = true;
-  services.dms.idleLock = {
+  services.dms = {
     enable = true;
-    command = config.services.hyprlock.lockCommand;
+    dock = {
+      enable = true;
+      autoHide = true;
+    };
+    idleLock = {
+      enable = true;
+      command = config.services.hyprlock.lockCommand;
+    };
   };
   services.hyprlock.enable = true;
   dconf.enable = false;

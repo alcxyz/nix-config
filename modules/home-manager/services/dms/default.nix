@@ -7,30 +7,35 @@
   username,
   configDir,
   ...
-}:
-
-let
+}: let
   cfg = config.services.dms;
   idleLockCfg = cfg.idleLock;
-  idleLockSettings = {
-    acLockTimeout = idleLockCfg.acTimeout;
-    batteryLockTimeout = idleLockCfg.batteryTimeout;
-    customPowerActionLock = idleLockCfg.command;
-    fadeToLockEnabled = idleLockCfg.fadeToLock;
-  }
-  // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
-    loginctlLockIntegration = false;
-    lockBeforeSuspend = false;
-  };
-  idleLockSettingsFile = pkgs.writeText "dms-idle-lock-settings.json" (
-    builtins.toJSON idleLockSettings
+  dockCfg = cfg.dock;
+  idleLockSettings =
+    {
+      acLockTimeout = idleLockCfg.acTimeout;
+      batteryLockTimeout = idleLockCfg.batteryTimeout;
+      customPowerActionLock = idleLockCfg.command;
+      fadeToLockEnabled = idleLockCfg.fadeToLock;
+    }
+    // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
+      loginctlLockIntegration = false;
+      lockBeforeSuspend = false;
+    };
+  managedSettings =
+    lib.optionalAttrs idleLockCfg.enable idleLockSettings
+    // lib.optionalAttrs dockCfg.enable {
+      showDock = true;
+      dockAutoHide = dockCfg.autoHide;
+    };
+  managedSettingsFile = pkgs.writeText "dms-managed-settings.json" (
+    builtins.toJSON managedSettings
   );
   plugins = inputs.dms-plugins.srcs;
   dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
   };
-in
-{
+in {
   options.services.dms = {
     enable = lib.mkEnableOption "Enable DankMaterialShell suite";
 
@@ -65,6 +70,16 @@ in
         type = lib.types.bool;
         default = false;
         description = "Whether DMS should show its fade-to-lock transition before invoking the external locker.";
+      };
+    };
+
+    dock = {
+      enable = lib.mkEnableOption "Show the DMS dock";
+
+      autoHide = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether the DMS dock should auto-hide.";
       };
     };
   };
@@ -192,17 +207,17 @@ in
       };
     };
 
-    home.activation.dmsIdleLockSettings = lib.mkIf idleLockCfg.enable (
-      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.dmsManagedSettings = lib.mkIf (managedSettings != {}) (
+      lib.hm.dag.entryAfter ["writeBoundary"] ''
         settings_file="${config.xdg.configHome}/DankMaterialShell/settings.json"
         settings_tmp="$settings_file.tmp"
 
         mkdir -p "$(${pkgs.coreutils}/bin/dirname "$settings_file")"
 
-        if [ -e "$settings_file" ] && ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$settings_file" "${idleLockSettingsFile}" > "$settings_tmp"; then
+        if [ -e "$settings_file" ] && ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$settings_file" "${managedSettingsFile}" > "$settings_tmp"; then
           mv "$settings_tmp" "$settings_file"
         else
-          cp "${idleLockSettingsFile}" "$settings_file"
+          cp "${managedSettingsFile}" "$settings_file"
           rm -f "$settings_tmp"
         fi
       ''

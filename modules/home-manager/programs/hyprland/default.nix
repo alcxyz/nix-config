@@ -16,6 +16,12 @@ with lib; let
 in {
   options.programs.hyprland.managed = {
     enable = mkEnableOption "Manage Hyprland-related user files (scripts, colors)";
+
+    inputSensitivity = mkOption {
+      type = types.nullOr types.float;
+      default = null;
+      description = "Optional Hyprland input sensitivity override in the range -1.0 to 1.0.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -44,6 +50,12 @@ in {
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/binds-scrolling.conf";
     xdg.configFile."hypr/binds-dwindle.conf".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/binds-dwindle.conf";
+
+    xdg.configFile."hypr/managed-overrides.conf".text = optionalString (cfg.inputSensitivity != null) ''
+      input {
+        sensitivity = ${toString cfg.inputSensitivity}
+      }
+    '';
 
     # DMS user-editable configs — live symlinks so edits take effect immediately.
     # colors.conf and layout.conf are excluded: DMS generates them at runtime.

@@ -23,6 +23,12 @@ in {
       default = [];
       description = "Flatpak application IDs to ensure are installed from Flathub.";
     };
+
+    overrides = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+      default = {};
+      description = "System Flatpak override arguments keyed by application ID.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -52,6 +58,11 @@ in {
             app: "flatpak install --system --noninteractive flathub ${lib.escapeShellArg app}"
           )
           cfg.packages}
+
+        ${lib.concatMapStringsSep "\n" (
+            app: "flatpak override --system ${lib.concatMapStringsSep " " lib.escapeShellArg cfg.overrides.${app}} ${lib.escapeShellArg app}"
+          )
+          (lib.attrNames cfg.overrides)}
       '';
     };
   };

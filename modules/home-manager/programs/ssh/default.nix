@@ -31,6 +31,7 @@
       host = lib.concatStringsSep " " hostPatterns;
       hostname = hostAttrs.sshHostname or name;
       user = hostAttrs.sshUser or username;
+      forwardAgent = hostAttrs.forwardAgent or false;
     };
   };
   managedHostBlocks = lib.attrsets.mergeAttrsList (lib.mapAttrsToList mkManagedHostBlock managedHosts);
