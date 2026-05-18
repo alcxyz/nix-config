@@ -137,7 +137,6 @@
       sshHostname = "100.82.58.0";
       systemSshUser = "alc";
       systemUseRemoteSudo = true;
-      systemActivationMode = "boot";
       deployAll = false;
       skipManagedUserSshSecrets = true;
       configuration = ./hosts/madsil/configuration.nix;
