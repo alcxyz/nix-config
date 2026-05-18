@@ -29,19 +29,21 @@ in {
     extraConfig = ''
       # Set SSH_AUTH_SOCK at runtime so $XDG_RUNTIME_DIR is properly
       # expanded. This matches the socket path used by services.ssh-agent
-      # on Linux.
-      $env.SSH_AUTH_SOCK = ($env.XDG_RUNTIME_DIR | path join "ssh-agent")
+      # on Linux, while preserving forwarded agents in SSH sessions.
+      if ("SSH_AUTH_SOCK" not-in $env) and ("XDG_RUNTIME_DIR" in $env) {
+        $env.SSH_AUTH_SOCK = ($env.XDG_RUNTIME_DIR | path join "ssh-agent")
+      }
     '';
   };
 
   programs.bash.initExtra = ''
-    if [ -n "''${XDG_RUNTIME_DIR:-}" ]; then
+    if [ -z "''${SSH_AUTH_SOCK:-}" ] && [ -n "''${XDG_RUNTIME_DIR:-}" ]; then
       export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent"
     fi
   '';
 
   programs.zsh.initContent = ''
-    if [ -n "''${XDG_RUNTIME_DIR:-}" ]; then
+    if [ -z "''${SSH_AUTH_SOCK:-}" ] && [ -n "''${XDG_RUNTIME_DIR:-}" ]; then
       export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent"
     fi
   '';
