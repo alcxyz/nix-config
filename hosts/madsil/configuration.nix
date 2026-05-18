@@ -71,6 +71,10 @@ in {
     TTYVHangup = true;
     TTYVTDisallocate = true;
   };
+  systemd.services.greetd = {
+    after = ["home-manager-madsil.service"];
+    wants = ["home-manager-madsil.service"];
+  };
 
   services.xserver.enable = true;
   programs.hyprland = {
@@ -119,6 +123,18 @@ in {
       system = pkgs.stdenv.hostPlatform.system;
     };
     users.madsil = import "${configDir}/users/madsil/linux/madsil.nix";
+  };
+  systemd.services.home-manager-madsil = {
+    after = ["nix-daemon.service"];
+    wants = ["nix-daemon.service"];
+    serviceConfig = {
+      Restart = "on-failure";
+      RestartSec = "10s";
+    };
+    unitConfig = {
+      StartLimitBurst = 6;
+      StartLimitIntervalSec = "2m";
+    };
   };
 
   services.fwupd.enable = true;
