@@ -24,10 +24,16 @@ in {
 
   hardware.enableRedistributableFirmware = true;
 
-  users.users.family = {
+  alc.shell = {
+    default = "bash";
+    enableNushell = false;
+  };
+
+  users.users.madsil = {
     isNormalUser = true;
-    description = "Family";
+    description = "Madsil";
     createHome = true;
+    shell = pkgs.bashInteractive;
     initialPassword = "changeme";
     extraGroups = [
       "audio"
@@ -37,6 +43,10 @@ in {
     ];
   };
 
+  services.displayManager.hiddenUsers = [
+    username
+    "family"
+  ];
   services.displayManager.gdm.enable = true;
   services.desktopManager.gnome.enable = true;
   services.gnome.gnome-keyring.enable = true;
@@ -54,7 +64,7 @@ in {
   };
 
   networking.hosts = {
-    "192.168.1.14" = ["family-thinkpad"];
+    "192.168.1.199" = ["family-thinkpad"];
   };
 
   nix.settings.max-jobs = 4;

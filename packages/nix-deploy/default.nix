@@ -39,6 +39,13 @@
     nixosHostNames
   );
   remoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
+  systemActivationEntries = lib.filter (entry: entry.action != "switch") (
+    map (host: {
+      inherit host;
+      action = inventory.hosts.${host}.systemActivationMode or "switch";
+    })
+    nixosHostNames
+  );
 
   bashArray = name: values: ''
     ${name}=(${lib.concatMapStringsSep " " lib.escapeShellArg values})
@@ -55,7 +62,8 @@
     + bashAssoc "HOST_ALIASES" aliases "alias" "host"
     + bashAssoc "SSH_HOSTS" sshHostEntries "host" "target"
     + bashAssoc "SYSTEM_SSH_USERS" systemSshUserEntries "host" "user"
-    + bashArray "SYSTEM_REMOTE_SUDO_HOSTS" remoteSudoHosts;
+    + bashArray "SYSTEM_REMOTE_SUDO_HOSTS" remoteSudoHosts
+    + bashAssoc "SYSTEM_ACTIVATION_MODES" systemActivationEntries "host" "action";
 in
   stdenv.mkDerivation {
     pname = "nix-deploy";

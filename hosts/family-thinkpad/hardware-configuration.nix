@@ -10,20 +10,18 @@
   boot.initrd.availableKernelModules = [
     "xhci_pci"
     "ahci"
-    "nvme"
     "usb_storage"
     "sd_mod"
-    "rtsx_pci_sdmmc"
   ];
   boot.kernelModules = ["kvm-intel"];
 
   fileSystems."/" = {
-    device = "/dev/disk/by-label/root";
+    device = "/dev/disk/by-uuid/62dbdc07-79ff-404f-8384-5091666a42bf";
     fsType = "ext4";
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-label/boot";
+    device = "/dev/disk/by-uuid/6B7C-EB88";
     fsType = "vfat";
     options = [
       "fmask=0077"
@@ -31,9 +29,7 @@
     ];
   };
 
-  swapDevices = [
-    {device = "/dev/disk/by-label/swap";}
-  ];
+  swapDevices = [];
 
   hardware.cpu.intel.updateMicrocode = lib.mkDefault true;
 }

@@ -71,15 +71,20 @@ in {
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        Environment = [
+          "HOME=/root"
+          "XDG_CONFIG_HOME=/root/.config"
+        ];
       };
 
       script = ''
         cleanup_dns() {
+          :
           ${optionalString cfg.disableDns ''
-            resolvconf -d wt0 || true
-            rm -f /run/resolvconf/keys/wt0 /run/resolvconf/exclusive/*wt0
-            resolvconf -u || true
-          ''}
+          resolvconf -d wt0 || true
+          rm -f /run/resolvconf/keys/wt0 /run/resolvconf/exclusive/*wt0
+          resolvconf -u || true
+        ''}
         }
 
         status="$(netbird status 2>&1 || true)"

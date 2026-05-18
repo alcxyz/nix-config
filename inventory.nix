@@ -134,9 +134,10 @@
       platform = "nixos";
       role = "family-gaming";
       k8sRole = null;
-      sshHostname = "192.168.1.14";
+      sshHostname = "192.168.1.199";
       systemSshUser = "alc";
       systemUseRemoteSudo = true;
+      systemActivationMode = "boot";
       deployAll = false;
       skipManagedUserSshSecrets = true;
       configuration = ./hosts/family-thinkpad/configuration.nix;
