@@ -2,6 +2,7 @@
 # Private browser profiles and ignored hosts live in nix-secrets.
 output_dir = "~/Videos/vidown"
 max_per_fqdn = 3
+bulk_download_limit = 3
 skip_successful_history = true
 skip_handled_browser_tabs = false
 skip_failed_history = true
