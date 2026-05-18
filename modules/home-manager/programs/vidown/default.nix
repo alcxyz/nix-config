@@ -7,8 +7,9 @@
   ...
 }: let
   cfg = config.programs.vidown;
+  secretsDir = "${builtins.dirOf configDir}/nix-secrets";
   publicConfigPath = "${configDir}/users/${username}/configs/vidown/config";
-  privateConfigPath = "${config.home.homeDirectory}/src/infra/nix-secrets/users/${username}/configs/vidown/config";
+  privateConfigPath = "${secretsDir}/users/${username}/configs/vidown/config";
   configPath =
     if builtins.pathExists privateConfigPath
     then privateConfigPath
