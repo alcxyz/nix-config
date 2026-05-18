@@ -14,6 +14,7 @@ READY_TIMEOUT="10m"
 SETTLE_TIMEOUT="15m"
 SSH_TIMEOUT_SECONDS=900
 POLL_SECONDS=5
+REQUIRE_LONGHORN_BACKUP_TARGET=false
 
 usage() {
   cat <<'EOF'
@@ -39,6 +40,8 @@ Options:
   --ready-timeout <dur>    kubectl wait duration. Default: 10m.
   --settle-timeout <dur>   Workload/Longhorn health wait duration. Default: 15m.
   --ssh-timeout <seconds>  SSH return timeout. Default: 900.
+  --require-longhorn-backup-target
+                           Fail if the Longhorn backup target is unavailable.
   -h, --help               Show this help.
 
 Requires kubectl access to the target cluster and SSH sudo rights on the host.
@@ -128,6 +131,10 @@ parse_args() {
         [[ $# -ge 2 ]] || die "--ssh-timeout requires a value"
         SSH_TIMEOUT_SECONDS="$2"
         shift 2
+        ;;
+      --require-longhorn-backup-target)
+        REQUIRE_LONGHORN_BACKUP_TARGET=true
+        shift
         ;;
       -h | --help)
         usage
@@ -326,6 +333,7 @@ wait_for_longhorn_health() {
   local settle_seconds
   local bad_volumes
   local backup_available
+  local backup_reason
 
   if ! kubectl get namespace longhorn-system >/dev/null 2>&1; then
     log "longhorn-system namespace not found; skipping Longhorn checks"
@@ -365,7 +373,21 @@ wait_for_longhorn_health() {
     backup_available=$(
       kubectl -n longhorn-system get backuptargets.longhorn.io default -o jsonpath='{.status.available}' 2>/dev/null || true
     )
-    [[ "$backup_available" == "true" ]] || die "Longhorn backup target is not available"
+
+    if [[ "$backup_available" != "true" ]]; then
+      backup_reason=$(
+        kubectl -n longhorn-system get backuptargets.longhorn.io default -o json | jq -r '
+          (.status.conditions // [])
+          | map(select(.type == "Unavailable" and .status == "True"))
+          | .[0].reason // "unavailable"'
+      )
+
+      if [[ "$REQUIRE_LONGHORN_BACKUP_TARGET" == true ]]; then
+        die "Longhorn backup target is not available (${backup_reason})"
+      fi
+
+      log "Longhorn backup target is not available (${backup_reason}); continuing"
+    fi
   fi
 }
 
