@@ -97,6 +97,16 @@ in {
     ];
   };
 
+  fileSystems."/var/lib/longhorn" = {
+    device = "/dev/disk/by-label/nux-longhorn";
+    fsType = "ext4";
+  };
+
+  systemd.services.k3s = {
+    requires = ["var-lib-longhorn.mount"];
+    after = ["var-lib-longhorn.mount"];
+  };
+
   services.k8s-api-vip = {
     enable = true;
     interface = "eno1";
