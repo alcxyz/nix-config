@@ -1,6 +1,6 @@
 # Public fallback config for the vidown TUI and CLI.
 # Private browser profiles and ignored hosts live in nix-secrets.
-output_dir = "~/Videos/vidown"
+output_dir = "/tank/stash/vidown"
 chronological_output = false
 max_per_fqdn = 3
 bulk_download_limit = 3
