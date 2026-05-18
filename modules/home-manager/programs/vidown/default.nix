@@ -7,13 +7,7 @@
   ...
 }: let
   cfg = config.programs.vidown;
-  secretsDir = "${builtins.dirOf configDir}/nix-secrets";
-  publicConfigPath = "${configDir}/users/${username}/configs/vidown/config";
-  privateConfigPath = "${secretsDir}/users/${username}/configs/vidown/config";
-  configPath =
-    if builtins.pathExists privateConfigPath
-    then privateConfigPath
-    else publicConfigPath;
+  configPath = "${config.programs.workspace.root}/infra/nix-secrets/users/${username}/configs/vidown/config";
 in {
   options.programs.vidown = {
     enable = lib.mkEnableOption "vidown video download TUI";
