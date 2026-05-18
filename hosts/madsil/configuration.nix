@@ -15,6 +15,7 @@ in {
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
+    "${configDir}/modules/nixos/services/flatpak/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -67,7 +68,12 @@ in {
 
   services.fwupd.enable = true;
   services.printing.enable = true;
-  services.flatpak.enable = true;
+  services.flatpak.managed = {
+    enable = true;
+    packages = [
+      "com.heroicgameslauncher.hgl"
+    ];
+  };
 
   programs.steam.enable = true;
   programs.gamemode.enable = true;
