@@ -1349,14 +1349,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1779110284,
-        "narHash": "sha256-t5TzruzP5g8jEX+dr+/he3uypSIz1IixBN9goCh2bBM=",
-        "path": "/home/alc/src/tools/stashdb-pop",
-        "type": "path"
+        "lastModified": 1779112553,
+        "narHash": "sha256-YPfQlFRifcLq7WkW8y9CLGwZnwm4AkmDey8uSlGQV3Q=",
+        "ref": "refs/heads/main",
+        "rev": "897c4804462911672da2063e874d024d0a157234",
+        "revCount": 1,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git"
       },
       "original": {
-        "path": "/home/alc/src/tools/stashdb-pop",
-        "type": "path"
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git"
       }
     },
     "systems": {

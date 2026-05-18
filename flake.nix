@@ -97,7 +97,7 @@
     };
 
     stashdb-pop = {
-      url = "path:/home/alc/src/tools/stashdb-pop";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
