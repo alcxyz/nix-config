@@ -31,7 +31,7 @@ in
           };
           syncArgs = mkOption {
             type = types.str;
-            default = "--force --filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            default = "--force --recover --resilient --filter-from ${config.xdg.configHome}/rclone/filters.txt";
             description = "Additional rclone sync arguments";
           };
         };
@@ -54,7 +54,7 @@ in
           };
           syncArgs = mkOption {
             type = types.str;
-            default = "--force --filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            default = "--force --recover --resilient --filter-from ${config.xdg.configHome}/rclone/filters.txt";
             description = "Additional rclone sync arguments";
           };
         };
@@ -77,7 +77,7 @@ in
           };
           syncArgs = mkOption {
             type = types.str;
-            default = "--force --filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            default = "--force --recover --resilient --filter-from ${config.xdg.configHome}/rclone/filters.txt";
             description = "Additional rclone sync arguments";
           };
         };
@@ -100,6 +100,7 @@ in
           Service = {
             Type = "oneshot";
             ExecStart = "${pkgs.rclone}/bin/rclone bisync ${cfg.googleDrive.remote}: ${toString cfg.googleDrive.localPath} ${cfg.googleDrive.syncArgs}";
+            TimeoutStartSec = "2h";
             StandardOutput = "journal";
             StandardError = "journal";
           };
@@ -115,6 +116,7 @@ in
           Service = {
             Type = "oneshot";
             ExecStart = "${pkgs.rclone}/bin/rclone bisync ${cfg.dropbox.remote}: ${toString cfg.dropbox.localPath} ${cfg.dropbox.syncArgs}";
+            TimeoutStartSec = "2h";
             StandardOutput = "journal";
             StandardError = "journal";
           };
@@ -130,6 +132,7 @@ in
           Service = {
             Type = "oneshot";
             ExecStart = "${pkgs.rclone}/bin/rclone bisync ${cfg.nextcloud.remote}: ${toString cfg.nextcloud.localPath} ${cfg.nextcloud.syncArgs}";
+            TimeoutStartSec = "2h";
             StandardOutput = "journal";
             StandardError = "journal";
           };

@@ -134,6 +134,46 @@ in {
   environment.systemPackages = [zfsKernelPkgs.zfs];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
+  swapDevices = lib.mkForce [
+    {
+      device = "/dev/disk/by-partuuid/34b759ea-2e88-4ea1-9cd5-f79cee42e952";
+      randomEncryption.enable = true;
+      options = ["nofail"];
+    }
+  ];
+
+  # Disable discard/trim timers on this storage stack. A hard hang on 2026-05-18
+  # coincided with fstrim starting, and the post-reset boot left tank import
+  # blocked until manual recovery.
+  services.fstrim.enable = lib.mkForce false;
+  systemd.timers.fstrim.wantedBy = lib.mkForce [];
+  systemd.timers.zpool-trim.wantedBy = lib.mkForce [];
+  systemd.timers.fstrim.timerConfig = {
+    OnCalendar = lib.mkForce "Sat *-*-* 05:00:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
+  systemd.timers.zpool-trim.timerConfig = {
+    OnCalendar = lib.mkForce "Sat *-*-* 06:00:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
+
+  # Keep disruptive maintenance in the 04:00-07:00 local quiet window.
+  nix.gc = {
+    dates = lib.mkForce "Mon *-*-* 04:30:00";
+    persistent = lib.mkForce false;
+  };
+  systemd.timers.logrotate.timerConfig = {
+    OnCalendar = lib.mkForce "*-*-* 04:10:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
+  systemd.timers.systemd-tmpfiles-clean.timerConfig = {
+    OnCalendar = lib.mkForce "*-*-* 04:20:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
 
   systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
