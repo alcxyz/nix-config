@@ -16,6 +16,7 @@ in {
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/services/flatpak/default.nix"
+    "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -77,6 +78,19 @@ in {
 
   programs.steam.enable = true;
   programs.gamemode.enable = true;
+
+  services.heroicSideload = {
+    enable = true;
+    user = "madsil";
+    apps.totem-quest = {
+      title = "Totem Quest";
+      appName = "rcFYseiJyPmfqM9tn2Di7a";
+      source = "/var/lib/madsil-games/sources/Totem-Quest_Win_EN_Full.zip";
+      installDir = "/home/madsil/Games/Totem_Quest";
+      executable = "TotemQuest.exe";
+      art = "https://www.myabandonware.com/media/screenshots/t/totem-quest-1c8k/webp/totem-quest_1.webp";
+    };
+  };
 
   services.netbird.managed = {
     enable = true;

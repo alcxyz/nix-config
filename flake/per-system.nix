@@ -35,6 +35,7 @@
       "modules/nixos/common/server.nix"
       "modules/nixos/common/ssh-keys.nix"
       "modules/nixos/services/flatpak/default.nix"
+      "modules/nixos/services/heroic-sideload/default.nix"
       "modules/nixos/services/k8s-api-vip/default.nix"
       "modules/nixos/virtualisation/k3s/default.nix"
       "modules/shared/host-metadata.nix"
