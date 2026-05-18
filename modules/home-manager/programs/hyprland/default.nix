@@ -9,20 +9,16 @@
   configDir,
   ...
 }:
-with lib;
-
-let
+with lib; let
   cfg = config.programs.hyprland.managed;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
-in
-{
+in {
   options.programs.hyprland.managed = {
     enable = mkEnableOption "Manage Hyprland-related user files (scripts, colors)";
   };
 
   config = mkIf cfg.enable {
-
     # Shared wayland settings (cursor, GTK, ozone)
     programs.wayland-common.enable = true;
 
@@ -38,8 +34,10 @@ in
 
     # Symlink hyprland configs directly to the repo checkout so edits take
     # effect immediately without a home-manager rebuild.
-    xdg.configFile."hypr/hyprland.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/hyprland.conf";
+    xdg.configFile."hypr/hyprland.conf" = {
+      force = true;
+      source = config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/hyprland.conf";
+    };
     xdg.configFile."hypr/binds.conf".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/binds.conf";
     xdg.configFile."hypr/binds-scrolling.conf".source =
@@ -63,6 +61,5 @@ in
         col.inactive_border = 0xff${colors.base00}
       }
     '';
-
   };
 }
