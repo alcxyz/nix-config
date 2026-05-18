@@ -134,7 +134,7 @@
       platform = "nixos";
       role = "family-gaming";
       k8sRole = null;
-      sshHostname = "192.168.1.199";
+      sshHostname = "100.82.58.0";
       systemSshUser = "alc";
       systemUseRemoteSudo = true;
       systemActivationMode = "boot";

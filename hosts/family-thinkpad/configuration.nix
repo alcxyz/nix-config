@@ -47,9 +47,23 @@ in {
     username
     "family"
   ];
-  services.displayManager.gdm.enable = true;
+  services.displayManager = {
+    autoLogin = {
+      enable = true;
+      user = "madsil";
+    };
+    gdm.enable = true;
+  };
   services.desktopManager.gnome.enable = true;
   services.gnome.gnome-keyring.enable = true;
+  programs.dconf = {
+    enable = true;
+    profiles.gdm.databases = [
+      {
+        settings."org/gnome/login-screen".disable-user-list = true;
+      }
+    ];
+  };
 
   services.fwupd.enable = true;
   services.printing.enable = true;
@@ -64,7 +78,7 @@ in {
   };
 
   networking.hosts = {
-    "192.168.1.199" = ["family-thinkpad"];
+    "100.82.58.0" = ["family-thinkpad"];
   };
 
   nix.settings.max-jobs = 4;
