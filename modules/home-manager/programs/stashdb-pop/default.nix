@@ -5,15 +5,15 @@
   pkgs,
   ...
 }: let
-  cfg = config.programs.stashdb-acquisition;
+  cfg = config.programs.stashdb-pop;
 in {
-  options.programs.stashdb-acquisition = {
-    enable = lib.mkEnableOption "StashDB acquisition list tooling";
+  options.programs.stashdb-pop = {
+    enable = lib.mkEnableOption "stashdb-pop tooling";
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.stashdb-acquisition-list;
-      description = "Package providing the stashdb-acquisition-list command.";
+      default = pkgs.stashdb-pop;
+      description = "Package providing the stashdb-pop command.";
     };
   };
 

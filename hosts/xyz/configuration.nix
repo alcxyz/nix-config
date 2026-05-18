@@ -14,6 +14,181 @@
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
   };
+  appStateDatasets = {
+    calibre = "xpool/appstate/calibre";
+    calibre-web = "xpool/appstate/calibre-web";
+    plex = "xpool/appstate/plex";
+    qbittorrent = "xpool/appstate/qbittorrent";
+    stash = "xpool/appstate/stash";
+    steam-headless = "xpool/appstate/steam-headless";
+  };
+  appStateBackupPool = "hitachi";
+  appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
+  appStateMigrate = pkgs.writeShellScriptBin "xyz-appstate-migrate" ''
+    set -euo pipefail
+
+    if [ "$(id -u)" -ne 0 ]; then
+      echo "xyz-appstate-migrate must run as root" >&2
+      exit 1
+    fi
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.rsync
+        pkgs.systemd
+        pkgs.util-linux
+        zfsKernelPkgs.zfs
+      ]
+    }
+
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+
+    systemctl stop calibre-web.service plex.service qbittorrent.service stash.service docker.service docker.socket || true
+
+    migrate_dataset() {
+      local name="$1"
+      local dataset="$2"
+      local target="$3"
+      local backup="''${target}.pre-appstate-''${stamp}"
+
+      if ! zfs list -H "$dataset" >/dev/null 2>&1; then
+        zfs create -p \
+          -o mountpoint=legacy \
+          -o compression=zstd \
+          -o atime=off \
+          "$dataset"
+      fi
+
+      zfs set mountpoint=legacy "$dataset"
+      zfs set compression=zstd "$dataset"
+      zfs set atime=off "$dataset"
+
+      echo "migrating $name: $target -> $dataset"
+
+      if mountpoint -q "$target"; then
+        echo "  unmounting existing dataset at $target"
+        umount "$target"
+      fi
+
+      if [ -e "$target" ]; then
+        echo "  moving current directory to $backup"
+        mv "$target" "$backup"
+      else
+        echo "  current directory missing; creating empty backup source $backup"
+        install -d -m 0755 "$backup"
+      fi
+
+      install -d -m 0755 "$target"
+      echo "  mounting $dataset at $target"
+      mount -t zfs "$dataset" "$target"
+
+      if [ -d "$backup" ]; then
+        echo "  copying $backup into $target"
+        rsync -aHAX --numeric-ids "$backup"/ "$target"/
+      fi
+
+      echo "migrated $name to $dataset at $target; old copy: $backup"
+    }
+
+    migrate_named() {
+      case "$1" in
+        calibre) migrate_dataset calibre xpool/appstate/calibre /var/lib/calibre ;;
+        calibre-web) migrate_dataset calibre-web xpool/appstate/calibre-web /var/lib/calibre-web ;;
+        plex) migrate_dataset plex xpool/appstate/plex /var/lib/plex ;;
+        qbittorrent) migrate_dataset qbittorrent xpool/appstate/qbittorrent /var/lib/qbittorrent ;;
+        stash) migrate_dataset stash xpool/appstate/stash /var/lib/stash ;;
+        steam-headless) migrate_dataset steam-headless xpool/appstate/steam-headless /var/lib/steam-headless ;;
+        *)
+          echo "unknown appstate dataset: $1" >&2
+          exit 1
+          ;;
+      esac
+    }
+
+    if [ "$#" -eq 0 ]; then
+      set -- calibre calibre-web plex qbittorrent stash steam-headless
+    fi
+
+    for name in "$@"; do
+      migrate_named "$name"
+    done
+
+    systemctl daemon-reload
+    echo "appstate migration complete; rebuild this host, then start the services"
+  '';
+  appStateBackup = pkgs.writeShellScriptBin "xyz-appstate-backup" ''
+    set -euo pipefail
+
+    if [ "$(id -u)" -ne 0 ]; then
+      echo "xyz-appstate-backup must run as root" >&2
+      exit 1
+    fi
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.sanoid
+        zfsKernelPkgs.zfs
+      ]
+    }
+
+    source_dataset=xpool/appstate
+    target_pool=${lib.escapeShellArg appStateBackupPool}
+    target_dataset=${lib.escapeShellArg appStateBackupRoot}
+
+    if ! zpool list -H "$target_pool" >/dev/null 2>&1; then
+      echo "backup pool '$target_pool' is not imported; create/import it before running appstate backups" >&2
+      exit 1
+    fi
+
+    if ! zfs list -H "$source_dataset" >/dev/null 2>&1; then
+      echo "source dataset '$source_dataset' does not exist" >&2
+      exit 1
+    fi
+
+    target_pool_encryption="$(zfs get -H -o value encryption "$target_pool" 2>/dev/null || echo off)"
+    if [ "$target_pool_encryption" = off ]; then
+      echo "backup pool '$target_pool' is not encrypted; refusing to write unencrypted appstate backups" >&2
+      exit 1
+    fi
+
+    target_pool_keystatus="$(zfs get -H -o value keystatus "$target_pool" 2>/dev/null || echo unavailable)"
+    if [ "$target_pool_keystatus" != available ]; then
+      echo "backup pool '$target_pool' key is not loaded; run: zfs load-key $target_pool" >&2
+      exit 1
+    fi
+
+    if ! zfs list -H "$target_dataset" >/dev/null 2>&1; then
+      zfs create -p \
+        -o mountpoint=none \
+        -o canmount=off \
+        -o compression=zstd \
+        -o atime=off \
+        "$target_dataset"
+    fi
+
+    target_dataset_encryption="$(zfs get -H -o value encryption "$target_dataset" 2>/dev/null || echo off)"
+    if [ "$target_dataset_encryption" = off ]; then
+      echo "backup dataset '$target_dataset' is not encrypted; refusing to write unencrypted appstate backups" >&2
+      exit 1
+    fi
+
+    target_dataset_keystatus="$(zfs get -H -o value keystatus "$target_dataset" 2>/dev/null || echo unavailable)"
+    if [ "$target_dataset_keystatus" != available ]; then
+      echo "backup dataset '$target_dataset' key is not loaded; run: zfs load-key $target_dataset" >&2
+      exit 1
+    fi
+
+    syncoid \
+      --recursive \
+      --skip-parent \
+      --compress=none \
+      --recvoptions="u o canmount=off o readonly=on" \
+      "$source_dataset" \
+      "$target_dataset"
+  '';
 in {
   imports = [
     ./hardware-configuration.nix
@@ -133,7 +308,11 @@ in {
   };
 
   # ==================== ZFS ====================
-  environment.systemPackages = [zfsKernelPkgs.zfs];
+  environment.systemPackages = [
+    appStateBackup
+    appStateMigrate
+    zfsKernelPkgs.zfs
+  ];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
   swapDevices = lib.mkForce [
@@ -143,6 +322,37 @@ in {
       options = ["nofail"];
     }
   ];
+
+  fileSystems."/var/lib/calibre" = {
+    device = appStateDatasets.calibre;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/calibre-web" = {
+    device = appStateDatasets.calibre-web;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/plex" = {
+    device = appStateDatasets.plex;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/qbittorrent" = {
+    device = appStateDatasets.qbittorrent;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/stash" = {
+    device = appStateDatasets.stash;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/steam-headless" = {
+    device = appStateDatasets.steam-headless;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
 
   # Disable discard/trim timers on this storage stack. A hard hang on 2026-05-18
   # coincided with fstrim starting, and the post-reset boot left tank import
@@ -180,6 +390,26 @@ in {
   systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
 
+  systemd.services.xyz-appstate-backup = {
+    description = "Replicate xyz appstate datasets to the local backup pool";
+    after = ["zfs-mount.service"];
+    requires = ["zfs-mount.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${appStateBackup}/bin/xyz-appstate-backup";
+    };
+  };
+
+  systemd.timers.xyz-appstate-backup = {
+    description = "Daily xyz appstate dataset backup";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*-*-* 05:20:00";
+      Persistent = false;
+      RandomizedDelaySec = "0";
+    };
+  };
+
   # Docker - ZFS relationship
 
   systemd.services.docker = {
@@ -215,6 +445,30 @@ in {
     configDir = "/var/lib/calibre-web/config";
     libraryDir = "/var/lib/calibre/config/libraries/Main";
   };
+
+  systemd.services.calibre-web = {
+    requires = [
+      "var-lib-calibre.mount"
+      "var-lib-calibre\\x2dweb.mount"
+    ];
+    after = [
+      "var-lib-calibre.mount"
+      "var-lib-calibre\\x2dweb.mount"
+    ];
+  };
+  systemd.services.plex = {
+    requires = ["var-lib-plex.mount"];
+    after = ["var-lib-plex.mount"];
+  };
+  systemd.services.qbittorrent = {
+    requires = ["var-lib-qbittorrent.mount"];
+    after = ["var-lib-qbittorrent.mount"];
+  };
+  systemd.services.stash = {
+    requires = ["var-lib-stash.mount"];
+    after = ["var-lib-stash.mount"];
+  };
+
   services.k8s-backup-s3 = {
     enable = true;
     dataset = "tank/k8s-backups";

@@ -1259,6 +1259,7 @@
         "quickshell": "quickshell_2",
         "rustfs": "rustfs",
         "sops-nix": "sops-nix",
+        "stashdb-pop": "stashdb-pop",
         "vidown": "vidown"
       }
     },
@@ -1339,6 +1340,23 @@
         "ref": "main",
         "repo": "DankSpotify",
         "type": "github"
+      }
+    },
+    "stashdb-pop": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779110284,
+        "narHash": "sha256-t5TzruzP5g8jEX+dr+/he3uypSIz1IixBN9goCh2bBM=",
+        "path": "/home/alc/src/tools/stashdb-pop",
+        "type": "path"
+      },
+      "original": {
+        "path": "/home/alc/src/tools/stashdb-pop",
+        "type": "path"
       }
     },
     "systems": {

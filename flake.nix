@@ -96,6 +96,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    stashdb-pop = {
+      url = "path:/home/alc/src/tools/stashdb-pop";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     vidown = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -115,9 +120,8 @@
   };
 
   # ---- Outputs ----------------------------------------------------------
-  outputs =
-    inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+  outputs = inputs @ {flake-parts, ...}:
+    flake-parts.lib.mkFlake {inherit inputs;} {
       imports = [
         ./flake/core.nix
         ./flake/hosts

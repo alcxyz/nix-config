@@ -7,37 +7,31 @@
   username,
   ...
 }:
-
-with lib;
-
-let
+with lib; let
   cfg = config.services.stash.managed;
   system = pkgs.stdenv.hostPlatform.system;
+  stateDirs = [
+    "blobs"
+    "cache"
+    "generated"
+    "metadata"
+  ];
   preStartScript = pkgs.writeShellScript "stash-pre-start" ''
     install -d -m 0750 -o ${cfg.user} -g ${cfg.group} \
       ${cfg.dataDir} \
       ${cfg.dataDir}/config \
-      ${cfg.dataDir}/metadata \
-      ${cfg.dataDir}/cache \
-      ${cfg.dataDir}/blobs \
-      ${cfg.dataDir}/generated
+      ${lib.concatMapStringsSep " \\\n      " (dir: "${cfg.dataDir}/config/${dir}") stateDirs}
 
-    permission_marker=${cfg.dataDir}/config/.native-permissions-v3
+    permission_marker=${cfg.dataDir}/config/.native-permissions-v4
     if [ ! -e "$permission_marker" ]; then
       find \
         ${cfg.dataDir}/config \
-        ${cfg.dataDir}/metadata \
-        ${cfg.dataDir}/cache \
-        ${cfg.dataDir}/blobs \
-        ${cfg.dataDir}/generated \
+        ${lib.concatMapStringsSep " \\\n        " (dir: "${cfg.dataDir}/config/${dir}") stateDirs} \
         -type d -exec chmod 0750 {} +
 
       find \
         ${cfg.dataDir}/config \
-        ${cfg.dataDir}/metadata \
-        ${cfg.dataDir}/cache \
-        ${cfg.dataDir}/blobs \
-        ${cfg.dataDir}/generated \
+        ${lib.concatMapStringsSep " \\\n        " (dir: "${cfg.dataDir}/config/${dir}") stateDirs} \
         -type f -exec chmod 0660 {} +
 
       touch "$permission_marker"
@@ -46,17 +40,13 @@ let
 
     chown -R ${cfg.user}:${cfg.group} \
       ${cfg.dataDir}/config \
-      ${cfg.dataDir}/metadata \
-      ${cfg.dataDir}/cache \
-      ${cfg.dataDir}/blobs \
-      ${cfg.dataDir}/generated
+      ${lib.concatMapStringsSep " \\\n      " (dir: "${cfg.dataDir}/config/${dir}") stateDirs}
 
     if [ ! -f ${cfg.dataDir}/config/config.yml ] || [ ! -f ${cfg.dataDir}/config/stash-go.sqlite ]; then
       echo "Stash state is incomplete; allowing Stash to bootstrap fresh state." >&2
     fi
   '';
-in
-{
+in {
   options.services.stash.managed = {
     enable = mkEnableOption "Stash (managed as a native systemd service)";
 
@@ -90,7 +80,7 @@ in
   };
 
   config = mkIf cfg.enable {
-    users.groups.media = { };
+    users.groups.media = {};
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
@@ -103,26 +93,26 @@ in
         "video"
       ];
     };
-    users.groups.${cfg.group} = { };
+    users.groups.${cfg.group} = {};
 
-    users.users.${username}.extraGroups = [ cfg.group ];
+    users.users.${username}.extraGroups = [cfg.group];
 
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0750 ${cfg.user} ${cfg.group} - -"
       "d ${cfg.dataDir}/config 0750 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/metadata 0750 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/cache 0750 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/blobs 0750 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/generated 0750 ${cfg.user} ${cfg.group} - -"
+      "d ${cfg.dataDir}/config/metadata 0750 ${cfg.user} ${cfg.group} - -"
+      "d ${cfg.dataDir}/config/cache 0750 ${cfg.user} ${cfg.group} - -"
+      "d ${cfg.dataDir}/config/blobs 0750 ${cfg.user} ${cfg.group} - -"
+      "d ${cfg.dataDir}/config/generated 0750 ${cfg.user} ${cfg.group} - -"
       "d ${cfg.mediaDir} 2775 ${cfg.user} media - -"
       "a+ ${cfg.mediaDir} - - - - g:media:rwx,d:g:media:rwx,m::rwx,d:m::rwx"
     ];
 
-    networking.firewall.allowedTCPPorts = [ 9999 ];
+    networking.firewall.allowedTCPPorts = [9999];
 
     systemd.services.stash = {
       description = "Stash media organizer";
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = ["multi-user.target"];
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
@@ -132,7 +122,7 @@ in
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
       ];
-      conflicts = [ "docker-stash.service" ];
+      conflicts = ["docker-stash.service"];
 
       path = with pkgs; [
         ffmpeg-full
@@ -160,13 +150,6 @@ in
         Restart = "on-failure";
         RestartSec = "10s";
         TimeoutStartSec = "30min";
-
-        BindPaths = [
-          "${cfg.dataDir}/generated:/generated"
-          "${cfg.dataDir}/metadata:/metadata"
-          "${cfg.dataDir}/cache:/cache"
-          "${cfg.dataDir}/blobs:/blobs"
-        ];
 
         NoNewPrivileges = true;
         PrivateTmp = true;

@@ -4,13 +4,10 @@
   pkgs,
   ...
 }:
-
-with lib;
-
-let
+with lib; let
   cfg = config.services.plex.managed;
   nativeDataDir = "${cfg.dataDir}/Library/Application Support";
-  nativeDataDirTmpfiles = builtins.replaceStrings [ " " ] [ "\\x20" ] nativeDataDir;
+  nativeDataDirTmpfiles = builtins.replaceStrings [" "] ["\\x20"] nativeDataDir;
   legacyDataDir = "/var/lib/plex/Library/Application Support";
   previousZpoolDataDir = "/zpool/appdata/plex/Library/Application Support";
   plexStateMigration = pkgs.writeShellScript "plex-state-migration" ''
@@ -33,8 +30,7 @@ let
 
     chown -R media:media ${lib.escapeShellArg cfg.dataDir}
   '';
-in
-{
+in {
   options.services.plex.managed = {
     enable = mkEnableOption "Plex Media Server managed as a native systemd service";
 
@@ -58,7 +54,7 @@ in
   };
 
   config = mkIf cfg.enable {
-    users.groups.media = { };
+    users.groups.media = {};
     users.users.media = {
       isSystemUser = true;
       group = "media";
@@ -88,15 +84,13 @@ in
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
       ];
-      conflicts = [ "docker-plex.service" ];
+      conflicts = ["docker-plex.service"];
       environment = {
         LD_LIBRARY_PATH = mkForce "";
         PLEX_MEDIA_SERVER_TMPDIR = mkForce cfg.transcodeDir;
       };
       serviceConfig = {
-        ExecStartPre = [ "+${plexStateMigration}" ];
-        BindReadOnlyPaths = [ "${cfg.mediaDir}:/media" ];
-        BindPaths = [ "${cfg.transcodeDir}:/transcode" ];
+        ExecStartPre = ["+${plexStateMigration}"];
       };
     };
   };
