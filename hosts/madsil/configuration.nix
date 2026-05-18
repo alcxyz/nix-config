@@ -178,7 +178,10 @@ in {
     "100.82.58.0" = ["madsil"];
   };
 
-  nix.settings.max-jobs = 4;
+  nix.settings = {
+    allowed-users = ["madsil"];
+    max-jobs = 4;
+  };
 
   system.stateVersion = lib.mkForce "25.11";
 }
