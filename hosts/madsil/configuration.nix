@@ -14,6 +14,7 @@
 in {
   imports = [
     ./hardware-configuration.nix
+    inputs.home-manager.nixosModules.home-manager
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/services/flatpak/default.nix"
     "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
@@ -45,30 +46,90 @@ in {
     ];
   };
 
-  services.displayManager.hiddenUsers = [
-    username
-    "family"
-  ];
-  services.displayManager = {
-    autoLogin = {
-      enable = true;
-      user = "madsil";
+  programs.hyprlock.enable = true;
+  services.accounts-daemon.enable = true;
+  services.displayManager.gdm.enable = false;
+  services.greetd = {
+    enable = true;
+    settings = {
+      initial_session = {
+        command = "${pkgs.uwsm}/bin/uwsm start hyprland-uwsm.desktop";
+        user = "madsil";
+      };
+      default_session = {
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --sessions /run/current-system/sw/share/wayland-sessions";
+        user = "greeter";
+      };
     };
-    gdm.enable = true;
   };
-  services.desktopManager.gnome.enable = true;
+  systemd.services.greetd.serviceConfig = {
+    Type = "idle";
+    StandardInput = "tty";
+    StandardOutput = "tty";
+    StandardError = "journal";
+    TTYReset = true;
+    TTYVHangup = true;
+    TTYVTDisallocate = true;
+  };
+
+  services.xserver.enable = true;
+  programs.hyprland = {
+    enable = true;
+    withUWSM = true;
+    xwayland.enable = true;
+  };
+  services.gnome.sushi.enable = true;
   services.gnome.gnome-keyring.enable = true;
+  services.udisks2.enable = true;
+  services.gvfs.enable = true;
+  security.polkit.enable = true;
+  xdg.portal = {
+    enable = true;
+    extraPortals = with pkgs; [xdg-desktop-portal-gtk];
+    config.common.default = ["gtk"];
+    config.hyprland.default = [
+      "hyprland"
+      "gtk"
+    ];
+    xdgOpenUsePortal = true;
+  };
+
   programs.dconf = {
     enable = true;
-    profiles.gdm.databases = [
+    profiles.user.databases = [
       {
-        settings."org/gnome/login-screen".disable-user-list = true;
+        settings = {
+          "org/gnome/settings-daemon/plugins/power" = {
+            sleep-inactive-ac-type = "nothing";
+            sleep-inactive-battery-type = "nothing";
+            power-button-action = "interactive";
+          };
+        };
       }
     ];
   };
 
+  home-manager = {
+    useGlobalPkgs = true;
+    useUserPackages = true;
+    extraSpecialArgs = {
+      inherit inputs configDir hostRole;
+      hostName = "madsil";
+      username = "madsil";
+      system = pkgs.stdenv.hostPlatform.system;
+    };
+    users.madsil = import "${configDir}/users/madsil/linux/madsil.nix";
+  };
+
   services.fwupd.enable = true;
   services.printing.enable = true;
+  services.power-profiles-daemon.enable = true;
+  services.logind.settings.Login = {
+    HandleLidSwitch = "ignore";
+    HandleLidSwitchExternalPower = "ignore";
+    HandleLidSwitchDocked = "ignore";
+    IdleAction = "ignore";
+  };
   services.flatpak.managed = {
     enable = true;
     packages = [

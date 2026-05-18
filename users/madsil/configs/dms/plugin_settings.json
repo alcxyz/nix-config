@@ -1,0 +1,81 @@
+{
+  "worldClock": {
+    "enabled": true,
+    "timezones": [
+      {
+        "timezone": "America/Los_Angeles",
+        "label": "LA"
+      },
+      {
+        "timezone": "America/New_York",
+        "label": "NYC"
+      },
+      {
+        "timezone": "America/Sao_Paulo",
+        "label": "SP"
+      },
+      {
+        "timezone": "Europe/Moscow",
+        "label": "MSK"
+      },
+      {
+        "timezone": "Asia/Hong_Kong",
+        "label": "HK"
+      }
+    ]
+  },
+  "calculator": {
+    "enabled": true,
+    "trigger": "=",
+    "noTrigger": false
+  },
+  "dankQuickSearch": {
+    "enabled": true,
+    "trigger": "!",
+    "defaultEngine": "duckduckgo"
+  },
+  "dankVault": {
+    "enabled": true,
+    "trigger": "@",
+    "backend": "auto",
+    "defaultAction": "password"
+  },
+  "dankTranslate": {
+    "enabled": true,
+    "trigger": ">",
+    "defaultLang": "en"
+  },
+  "dankSpotify": {
+    "enabled": true,
+    "trigger": "~",
+    "playerName": "ncspot",
+    "terminal": "foot"
+  },
+  "dankCalendar": {
+    "enabled": true
+  },
+  "dankDiskUsage": {
+    "enabled": true
+  },
+  "dankGifSearch": {
+    "enabled": true
+  },
+  "dankLauncherKeys": {
+    "enabled": true
+  },
+  "dankNotepadModule": {
+    "enabled": true
+  },
+  "dankPomodoroTimer": {
+    "enabled": true
+  },
+  "dankStickerSearch": {
+    "enabled": true
+  },
+  "dankClight": {
+    "enabled": false
+  },
+  "dankHyprlandWindows": {
+    "enabled": false
+  }
+}

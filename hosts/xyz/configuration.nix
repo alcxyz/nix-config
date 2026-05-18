@@ -29,6 +29,8 @@ in {
     "${configDir}/modules/nixos/services/stash/default.nix"
     "${configDir}/modules/nixos/services/plex/default.nix"
     "${configDir}/modules/nixos/services/calibre-web/default.nix"
+    "${configDir}/modules/nixos/services/flatpak/default.nix"
+    "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
@@ -290,7 +292,25 @@ in {
   # t3code server — only reachable via Netbird (wt0), not LAN
   networking.firewall.interfaces."wt0".allowedTCPPorts = [3773];
 
-  services.flatpak.enable = true;
+  services.flatpak.managed = {
+    enable = true;
+    packages = [
+      "com.heroicgameslauncher.hgl"
+    ];
+  };
+
+  services.heroicSideload = {
+    enable = true;
+    user = username;
+    apps.totem-quest = {
+      title = "Totem Quest";
+      appName = "rcFYseiJyPmfqM9tn2Di7a";
+      source = "/var/lib/xyz-games/sources/Totem-Quest_Win_EN_Full.zip";
+      installDir = "/ext4/games/Totem_Quest";
+      executable = "TotemQuest.exe";
+      art = "https://www.myabandonware.com/media/screenshots/t/totem-quest-1c8k/webp/totem-quest_1.webp";
+    };
+  };
 
   systemd.coredump.enable = true;
   systemd.coredump.settings.Coredump = {

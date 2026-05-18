@@ -132,6 +132,7 @@ in {
       path = with pkgs; [
         coreutils
         gnugrep
+        jq
         unzip
       ];
 
@@ -160,15 +161,32 @@ in {
               unzip -oq "$source_path" -d "$install_dir"
             else
               echo "heroic-sideload: missing source $source_path" >&2
-              exit 1
             fi
+
+            chown -R "$user:users" "$install_dir"
           '')
           (lib.attrValues cfg.apps)}
 
-        install -m644 ${libraryFile} "$heroic_config/sideload_apps/library.json"
-        ${lib.concatMapStringsSep "\n" (entry:
-          "install -m644 ${entry.file} \"$heroic_config/GamesConfig/${entry.app.appName}.json\"")
-        gameConfigFiles}
+        library_target="$heroic_config/sideload_apps/library.json"
+        if [ -f "$library_target" ]; then
+          tmp="$(mktemp)"
+          jq -s '
+            .[0].games as $managed
+            | (.[1].games // []) as $existing
+            | ($managed | map(.app_name)) as $managed_ids
+            | {
+                games:
+                  (($existing | map(select((.app_name as $id | $managed_ids | index($id)) | not))) + $managed)
+              }
+          ' ${libraryFile} "$library_target" > "$tmp"
+          install -m644 "$tmp" "$library_target"
+          rm -f "$tmp"
+        else
+          install -m644 ${libraryFile} "$library_target"
+        fi
+
+        ${lib.concatMapStringsSep "\n" (entry: "install -m644 ${entry.file} \"$heroic_config/GamesConfig/${entry.app.appName}.json\"")
+          gameConfigFiles}
 
         chown -R "$user:users" "$home/Games" "$heroic_config"
       '';

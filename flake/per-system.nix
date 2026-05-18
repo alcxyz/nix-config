@@ -52,6 +52,7 @@
       "users/alc/linux/xev.nix"
       "users/alc/linux/xps.nix"
       "users/alc/linux/xyz.nix"
+      "users/madsil/linux/madsil.nix"
     ];
   in {
     devShells.default = pkgs.mkShell {
