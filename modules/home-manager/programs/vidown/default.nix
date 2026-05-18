@@ -4,12 +4,11 @@
   pkgs,
   username,
   configDir,
-  inputs,
   ...
 }: let
   cfg = config.programs.vidown;
   publicConfigPath = "${configDir}/users/${username}/configs/vidown/config";
-  privateConfigPath = "${inputs.nix-secrets}/users/${username}/configs/vidown/config";
+  privateConfigPath = "${config.home.homeDirectory}/src/infra/nix-secrets/users/${username}/configs/vidown/config";
   configPath =
     if builtins.pathExists privateConfigPath
     then privateConfigPath
@@ -28,8 +27,8 @@ in {
   config = lib.mkIf cfg.enable {
     home.packages = [cfg.package];
 
-    # Prefer private per-user config from nix-secrets when present; keep the
-    # public repo fallback non-private.
+    # Keep this mutable: editing the local nix-secrets checkout updates vidown
+    # without needing a flake input bump.
     xdg.configFile."vidown/config".source =
       config.lib.file.mkOutOfStoreSymlink configPath;
   };
