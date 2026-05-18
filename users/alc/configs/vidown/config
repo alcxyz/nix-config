@@ -4,6 +4,7 @@ output_dir = "~/Videos/vidown"
 max_per_fqdn = 3
 skip_successful_history = true
 skip_handled_browser_tabs = false
+detect_bulk_downloads = true
 ignored_hosts = ""
 browser_tab_filter = "video"
 browser_firefox_profiles = ""
