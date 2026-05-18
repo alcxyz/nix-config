@@ -6,3 +6,4 @@ skip_handled_browser_tabs = false
 browser_tab_filter = "video"
 browser_firefox_profiles = "~/.zen/xyz"
 browser_devtools_urls = "helium:asdf=http://127.0.0.1:9222/json,brave:abc=http://127.0.0.1:9223/json"
+browser_chromium_profiles = "helium:asdf=~/.config/net.imput.helium/Profile 1,brave:abc=~/.config/BraveSoftware/Brave-Browser/Profile 1"
