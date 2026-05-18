@@ -1,4 +1,4 @@
-# nix-config/hosts/family-thinkpad/configuration.nix
+# nix-config/hosts/madsil/configuration.nix
 {
   pkgs,
   inputs,
@@ -78,7 +78,7 @@ in {
   };
 
   networking.hosts = {
-    "100.82.58.0" = ["family-thinkpad"];
+    "100.82.58.0" = ["madsil"];
   };
 
   nix.settings.max-jobs = 4;

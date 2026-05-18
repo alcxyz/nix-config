@@ -1,4 +1,4 @@
-# users/alc/linux/family-thinkpad.nix
+# users/alc/linux/madsil.nix
 {
   pkgs,
   configDir,

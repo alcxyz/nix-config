@@ -129,7 +129,7 @@
       osIcon = "";
     };
 
-    family-thinkpad = {
+    madsil = {
       system = "x86_64-linux";
       platform = "nixos";
       role = "family-gaming";
@@ -140,7 +140,7 @@
       systemActivationMode = "boot";
       deployAll = false;
       skipManagedUserSshSecrets = true;
-      configuration = ./hosts/family-thinkpad/configuration.nix;
+      configuration = ./hosts/madsil/configuration.nix;
       osIcon = "";
     };
 
