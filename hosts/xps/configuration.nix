@@ -92,6 +92,12 @@ in {
   };
 
   services.power-profiles-daemon.enable = true;
+  services.logind.settings.Login = {
+    HandleLidSwitch = "ignore";
+    HandleLidSwitchExternalPower = "ignore";
+    HandleLidSwitchDocked = "ignore";
+    IdleAction = "ignore";
+  };
   services.printing.enable = true;
   services.flatpak.enable = true;
   services.netbird.enable = true;
