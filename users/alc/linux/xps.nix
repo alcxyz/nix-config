@@ -42,6 +42,7 @@ in {
   programs.hyprland.managed = {
     enable = true;
     inputSensitivity = 0.0;
+    laptopDisplayAutoSwitch.enable = true;
   };
   programs.niri.managed.enable = true;
 
