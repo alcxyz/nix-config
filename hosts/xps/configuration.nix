@@ -1,5 +1,6 @@
 # nix-config/hosts/xps/configuration.nix
 {
+  config,
   pkgs,
   inputs,
   username,
@@ -16,6 +17,8 @@ in {
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
+    "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
+    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
   ];
 
   boot.initrd.systemd.enable = true;
@@ -103,8 +106,25 @@ in {
   services.netbird.enable = true;
   services.netbird.useRoutingFeatures = "client";
 
+  sops.secrets.k3s_server_token = {
+    sopsFile = "${inputs.nix-secrets}/cluster-bootstrap/secrets.yaml";
+    key = "k3s_server_token";
+    owner = "root";
+    group = "root";
+  };
+
+  k3s = {
+    enable = true;
+    serverAddr = "https://k8s-api.local:6443";
+    tokenFile = config.sops.secrets.k3s_server_token.path;
+    extraFlags = [
+      "--node-ip=192.168.1.14"
+    ];
+  };
+
   networking.hosts = {
     "192.168.1.14" = ["xps"];
+    "192.168.1.250" = ["k8s-api.local"];
   };
 
   nix.settings.max-jobs = 8;

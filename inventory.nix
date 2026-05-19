@@ -120,7 +120,7 @@
       system = "x86_64-linux";
       platform = "nixos";
       role = "laptop-workstation";
-      k8sRole = null;
+      k8sRole = "stable-agent";
       sshHostname = "192.168.1.14";
       systemSshUser = "alc";
       systemUseRemoteSudo = true;
