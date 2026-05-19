@@ -122,6 +122,32 @@ in {
     ];
   };
 
+  systemd.services.xps-network-route-metrics = {
+    description = "Prefer wired routing and keep Wi-Fi as fallback";
+    after = ["NetworkManager.service"];
+    wants = ["NetworkManager.service"];
+    wantedBy = ["multi-user.target"];
+    path = [pkgs.networkmanager];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      nmcli connection modify "Wired connection 1" \
+        ipv4.route-metric 50 ipv6.route-metric 50 || true
+
+      nmcli -t -f NAME,TYPE connection show | while IFS=: read -r name type; do
+        if [ "$type" = "wifi" ]; then
+          nmcli connection modify "$name" \
+            ipv4.route-metric 600 ipv6.route-metric 600 || true
+        fi
+      done
+
+      nmcli device reapply enp0s20f0u2 || true
+      nmcli device reapply wlp59s0 || true
+    '';
+  };
+
   networking.hosts = {
     "192.168.1.14" = ["xps"];
     "192.168.1.250" = ["k8s-api.local"];
