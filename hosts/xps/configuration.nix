@@ -119,6 +119,7 @@ in {
     tokenFile = config.sops.secrets.k3s_server_token.path;
     extraFlags = [
       "--node-ip=192.168.1.14"
+      "--flannel-iface=enp0s20f0u2"
     ];
   };
 
