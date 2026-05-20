@@ -48,21 +48,9 @@
     fsType = "ext4";
   };
 
-  fileSystems."/var/lib/rancher" = {
-    device = "/var/lib/longhorn/.host-state/rancher";
-    fsType = "none";
-    options = ["bind"];
-  };
-
   systemd.services.k3s = {
-    requires = [
-      "var-lib-longhorn.mount"
-      "var-lib-rancher.mount"
-    ];
-    after = [
-      "var-lib-longhorn.mount"
-      "var-lib-rancher.mount"
-    ];
+    requires = ["var-lib-longhorn.mount"];
+    after = ["var-lib-longhorn.mount"];
   };
 
   networking.hosts = {

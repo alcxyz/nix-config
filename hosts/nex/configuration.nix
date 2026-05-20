@@ -46,43 +46,9 @@
     fsType = "ext4";
   };
 
-  fileSystems."/var/lib/rancher" = {
-    device = "/var/lib/longhorn/.host-state/rancher";
-    fsType = "none";
-    options = ["bind"];
-  };
-
-  fileSystems."/var/lib/netbird" = {
-    device = "/var/lib/longhorn/.host-state/netbird";
-    fsType = "none";
-    options = ["bind"];
-  };
-
-  fileSystems."/var/lib/forgejo" = {
-    device = "/var/lib/longhorn/.host-state/forgejo";
-    fsType = "none";
-    options = ["bind"];
-  };
-
   systemd.services.k3s = {
-    requires = [
-      "var-lib-longhorn.mount"
-      "var-lib-rancher.mount"
-    ];
-    after = [
-      "var-lib-longhorn.mount"
-      "var-lib-rancher.mount"
-    ];
-  };
-
-  systemd.services.netbird = {
-    requires = ["var-lib-netbird.mount"];
-    after = ["var-lib-netbird.mount"];
-  };
-
-  systemd.services.forgejo-actions-runner = {
-    requires = ["var-lib-forgejo.mount"];
-    after = ["var-lib-forgejo.mount"];
+    requires = ["var-lib-longhorn.mount"];
+    after = ["var-lib-longhorn.mount"];
   };
 
   services.k8s-api-vip = {
