@@ -7,7 +7,8 @@
   username,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.services.stash.managed;
   system = pkgs.stdenv.hostPlatform.system;
   stateDirs = [
@@ -22,7 +23,7 @@ with lib; let
       ${cfg.dataDir}/config \
       ${lib.concatMapStringsSep " \\\n      " (dir: "${cfg.dataDir}/config/${dir}") stateDirs}
 
-    permission_marker=${cfg.dataDir}/config/.native-permissions-v4
+    permission_marker=${cfg.dataDir}/config/.native-permissions-v5
     if [ ! -e "$permission_marker" ]; then
       find \
         ${cfg.dataDir}/config \
@@ -38,6 +39,9 @@ with lib; let
       chmod 0640 "$permission_marker"
     fi
 
+    chown ${cfg.user}:${cfg.group} \
+      ${cfg.dataDir}
+
     chown -R ${cfg.user}:${cfg.group} \
       ${cfg.dataDir}/config \
       ${lib.concatMapStringsSep " \\\n      " (dir: "${cfg.dataDir}/config/${dir}") stateDirs}
@@ -46,7 +50,8 @@ with lib; let
       echo "Stash state is incomplete; allowing Stash to bootstrap fresh state." >&2
     fi
   '';
-in {
+in
+{
   options.services.stash.managed = {
     enable = mkEnableOption "Stash (managed as a native systemd service)";
 
@@ -80,7 +85,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-    users.groups.media = {};
+    users.groups.media = { };
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
@@ -93,9 +98,9 @@ in {
         "video"
       ];
     };
-    users.groups.${cfg.group} = {};
+    users.groups.${cfg.group} = { };
 
-    users.users.${username}.extraGroups = [cfg.group];
+    users.users.${username}.extraGroups = [ cfg.group ];
 
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0750 ${cfg.user} ${cfg.group} - -"
@@ -108,11 +113,11 @@ in {
       "a+ ${cfg.mediaDir} - - - - g:media:rwx,d:g:media:rwx,m::rwx,d:m::rwx"
     ];
 
-    networking.firewall.allowedTCPPorts = [9999];
+    networking.firewall.allowedTCPPorts = [ 9999 ];
 
     systemd.services.stash = {
       description = "Stash media organizer";
-      wantedBy = ["multi-user.target"];
+      wantedBy = [ "multi-user.target" ];
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
@@ -122,7 +127,7 @@ in {
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
       ];
-      conflicts = ["docker-stash.service"];
+      conflicts = [ "docker-stash.service" ];
 
       path = with pkgs; [
         ffmpeg-full

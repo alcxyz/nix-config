@@ -391,11 +391,40 @@ wait_for_longhorn_health() {
   fi
 }
 
+warn_for_longhorn_health() {
+  local bad_volumes
+
+  if ! kubectl get namespace longhorn-system >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! kubectl -n longhorn-system get volumes.longhorn.io >/dev/null 2>&1; then
+    return 0
+  fi
+
+  bad_volumes=$(
+    kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '
+      .items[]
+      | select(.status.state == "attached" or .status.state == "attaching")
+      | select(.status.robustness != "healthy")
+      | "\(.metadata.name)\t\(.status.state)\t\(.status.robustness)\t\(.status.kubernetesStatus.namespace // "")/\(.status.kubernetesStatus.pvcName // "")"'
+  )
+
+  if [[ -n "$bad_volumes" ]]; then
+    log "attached Longhorn volumes are not healthy after drain; continuing for poweroff"
+    printf '%s\n' "$bad_volumes" >&2
+  fi
+}
+
 settle_cluster() {
   local workloads_file="$1"
 
   wait_for_workloads "$workloads_file"
-  wait_for_longhorn_health
+  if [[ "$ACTION" == "off" ]]; then
+    warn_for_longhorn_health
+  else
+    wait_for_longhorn_health
+  fi
   wait_for_no_bad_pods
 }
 

@@ -73,29 +73,18 @@ let
     map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
     ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
     ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
+    ++ map (d: "z " + d.path + " 2775 " + d.owner + " " + sharedGroup + " - -") sharedMediaDirs
     ++ map (
-      d:
-      "z "
-      + d.path
-      + " 2775 "
-      + d.owner
-      + " "
-      + sharedGroup
-      + " - -"
-    ) sharedMediaDirs
-    ++ map (
-      d:
-      "a+ "
-      + d.path
-      + " - - - - g:"
-      + sharedGroup
-      + ":rwx,d:g:"
-      + sharedGroup
-      + ":rwx,m::rwx,d:m::rwx"
+      d: "a+ " + d.path + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
     ) sharedMediaDirs;
   qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
     set -euo pipefail
 
+    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg serviceGroup} \
+      ${lib.escapeShellArg qbConfigDir}
+    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
+      ${lib.escapeShellArg qbConfigStateDir} \
+      ${lib.escapeShellArg qbNativeDir}
     install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
       ${lib.escapeShellArg (qbNativeDir + "/config")} \
       ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
@@ -112,6 +101,10 @@ let
       fi
     done
 
+    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg serviceGroup} ${lib.escapeShellArg qbConfigDir}
+    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} \
+      ${lib.escapeShellArg qbConfigStateDir} \
+      ${lib.escapeShellArg qbNativeDir}
     chown -R ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} ${lib.escapeShellArg qbNativeDir}
   '';
 in
@@ -230,6 +223,9 @@ in
       before = [
         "docker.service"
         "k3s.service"
+        "plex.service"
+        "qbittorrent.service"
+        "stash.service"
       ];
       path = with pkgs; [
         acl

@@ -126,6 +126,7 @@ in {
         Type = "simple";
         User = "pihole";
         Group = "pihole";
+        ExecStartPre = "+${pkgs.coreutils}/bin/chown -R pihole:pihole ${cfg.stateDirectory} ${cfg.logDirectory}";
         ExecStart = piholeStart;
         Restart = "on-failure";
         RestartSec = 1;
