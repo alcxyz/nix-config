@@ -3,9 +3,11 @@
   inputs,
   lib,
   pkgs,
+  username,
   ...
 }: let
   cfg = config.programs.stashdb-pop;
+  configPath = "${config.programs.workspace.root}/infra/nix-secrets/users/${username}/configs/stashdb-pop/config";
 in {
   options.programs.stashdb-pop = {
     enable = lib.mkEnableOption "stashdb-pop tooling";
@@ -14,30 +16,6 @@ in {
       type = lib.types.package;
       default = pkgs.stashdb-pop;
       description = "Package providing the stashdb-pop command.";
-    };
-
-    dbPath = lib.mkOption {
-      type = lib.types.str;
-      default = "${config.home.homeDirectory}/.local/share/stashdb/acquisition-list.sqlite";
-      description = "SQLite database path used by stashdb-pop.";
-    };
-
-    listenAddr = lib.mkOption {
-      type = lib.types.str;
-      default = "127.0.0.1:8765";
-      description = "Default listen address for the stashdb-pop web UI.";
-    };
-
-    pageSize = lib.mkOption {
-      type = lib.types.ints.positive;
-      default = 100;
-      description = "Default StashDB page size for refreshes.";
-    };
-
-    sleep = lib.mkOption {
-      type = lib.types.str;
-      default = "200ms";
-      description = "Default delay between StashDB pages.";
     };
   };
 
@@ -54,14 +32,10 @@ in {
       key = "stashdb_api_key";
     };
 
-    xdg.configFile."stashdb-pop/config".text = ''
-      db_path = ${cfg.dbPath}
-      listen_addr = ${cfg.listenAddr}
-      page_size = ${toString cfg.pageSize}
-      sleep = ${cfg.sleep}
-      stashdb_graphql_endpoint_file = ${config.sops.secrets.stashdb_graphql_endpoint.path}
-      stashdb_api_key_file = ${config.sops.secrets.stashdb_api_key.path}
-    '';
+    # Keep this mutable: editing the local nix-secrets checkout updates
+    # stashdb-pop without needing a nix-config rebuild.
+    xdg.configFile."stashdb-pop/config".source =
+      config.lib.file.mkOutOfStoreSymlink configPath;
 
     home.sessionVariables = {
       STASHDB_GRAPHQL_ENDPOINT_FILE = config.sops.secrets.stashdb_graphql_endpoint.path;
