@@ -17,7 +17,7 @@
     };
 
     nix-packages = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

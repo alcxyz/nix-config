@@ -942,15 +942,16 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1778492703,
-        "narHash": "sha256-hSj7jfIVmt01rGbpokJ64iveie/AB9j0hGIBgdQYRh4=",
-        "ref": "refs/heads/main",
-        "rev": "6b394603e023da2bceae46f0644dcb734ec2f15a",
-        "revCount": 176,
+        "lastModified": 1779347315,
+        "narHash": "sha256-7unLd91pww/o7W95ZTtMNakIcy+hkThZAh1SW5evA5E=",
+        "ref": "dev",
+        "rev": "00a483751493d3c69c6506ec816983dfaf172901",
+        "revCount": 217,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
       "original": {
+        "ref": "dev",
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       }
