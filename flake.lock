@@ -1349,11 +1349,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779322519,
-        "narHash": "sha256-72kizXSjtpDPmuvWOLNAV10Ax1MtQTom0uiMrqvGTKQ=",
+        "lastModified": 1779322707,
+        "narHash": "sha256-SXTrzOTD16QDydbHQ6ZXAaEg8RYmIwaM1OT5muOM84k=",
         "ref": "refs/heads/main",
-        "rev": "3f609cbddf284c1b844758d48b685f9b9f2250b0",
-        "revCount": 3,
+        "rev": "32340dbd18d44644fe9dbb1dda5d4d99a5adb5fe",
+        "revCount": 4,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git"
       },

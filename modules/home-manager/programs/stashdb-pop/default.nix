@@ -15,6 +15,30 @@ in {
       default = pkgs.stashdb-pop;
       description = "Package providing the stashdb-pop command.";
     };
+
+    dbPath = lib.mkOption {
+      type = lib.types.str;
+      default = "${config.home.homeDirectory}/.local/share/stashdb/acquisition-list.sqlite";
+      description = "SQLite database path used by stashdb-pop.";
+    };
+
+    listenAddr = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1:8765";
+      description = "Default listen address for the stashdb-pop web UI.";
+    };
+
+    pageSize = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 100;
+      description = "Default StashDB page size for refreshes.";
+    };
+
+    sleep = lib.mkOption {
+      type = lib.types.str;
+      default = "200ms";
+      description = "Default delay between StashDB pages.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -29,6 +53,15 @@ in {
       sopsFile = inputs.nix-secrets.secrets.files.apps;
       key = "stashdb_api_key";
     };
+
+    xdg.configFile."stashdb-pop/config".text = ''
+      db_path = ${cfg.dbPath}
+      listen_addr = ${cfg.listenAddr}
+      page_size = ${toString cfg.pageSize}
+      sleep = ${cfg.sleep}
+      stashdb_graphql_endpoint_file = ${config.sops.secrets.stashdb_graphql_endpoint.path}
+      stashdb_api_key_file = ${config.sops.secrets.stashdb_api_key.path}
+    '';
 
     home.sessionVariables = {
       STASHDB_GRAPHQL_ENDPOINT_FILE = config.sops.secrets.stashdb_graphql_endpoint.path;
