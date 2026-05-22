@@ -879,11 +879,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777725888,
-        "narHash": "sha256-akLzyukTY0X8U+Lj44UJQQsD/J3qI3z2pVwgfMsLECo=",
+        "lastModified": 1779433372,
+        "narHash": "sha256-JyGHmRNiphjbFVE6MIqEbaNBPh3EmINOUVtvAnfMzoc=",
         "ref": "refs/heads/dev",
-        "rev": "226e2969959082cf83421311f16398ed64264787",
-        "revCount": 9,
+        "rev": "6e1d14c2ff926b21967c491df6129b9a90a42619",
+        "revCount": 11,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/leantime-tidy.git"
       },
