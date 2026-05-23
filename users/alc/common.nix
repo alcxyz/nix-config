@@ -173,10 +173,14 @@ in
     # Generate and manage the age key file
     home.activation.setupSopsAgeKey = lib.mkIf pkgs.stdenv.isDarwin (
       config.lib.dag.entryAfter ["writeBoundary"] ''
-        mkdir -p $HOME/.config/sops/age
-        if [ ! -f "$HOME/.config/sops/age/keys.txt" ]; then
-          ${pkgs.ssh-to-age}/bin/ssh-to-age -private-key < $HOME/.ssh/id_ed25519 > $HOME/.config/sops/age/keys.txt
-          chmod 600 $HOME/.config/sops/age/keys.txt
+        age_dir="$HOME/.config/sops/age"
+        age_key="$age_dir/keys.txt"
+        ssh_key="$HOME/.ssh/id_ed25519"
+
+        mkdir -p "$age_dir"
+        if [ ! -f "$age_key" ] && [ -f "$ssh_key" ]; then
+          ${pkgs.ssh-to-age}/bin/ssh-to-age -private-key < "$ssh_key" > "$age_key"
+          chmod 600 "$age_key"
         fi
       ''
     );
