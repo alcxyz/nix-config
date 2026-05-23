@@ -962,11 +962,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779569322,
-        "narHash": "sha256-tMNIgetPuhTrhOK68glXtsyhv+Cp+5elMPWjG7Ellfg=",
+        "lastModified": 1779577162,
+        "narHash": "sha256-TGZstuu2eoro1gtlx/eqU/gKgDP1kSZZR4NyvrEGcfc=",
         "ref": "refs/heads/main",
-        "rev": "45b66ff589f2a6dde53f03aa7b92742ca3115082",
-        "revCount": 142,
+        "rev": "15158be79fb402685ee147a92b58645561021704",
+        "revCount": 143,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1507,11 +1507,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779569297,
-        "narHash": "sha256-0NTDgA6TQMW6haNKrA1UtAniL/9rVY5ArPzqgKdttqw=",
+        "lastModified": 1779577150,
+        "narHash": "sha256-AMsihjoqscTEW8H14HzjHyp/gQAV288kqQXSGbjs230=",
         "ref": "refs/heads/dev",
-        "rev": "e1ec7c6eefb684b4d4aaac9cfc5d3a388aa6fb37",
-        "revCount": 123,
+        "rev": "78779bc21c67d1c529c247c69349f8fda508c3a9",
+        "revCount": 124,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git"
       },
