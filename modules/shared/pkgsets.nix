@@ -12,11 +12,9 @@
 {
   pkgs,
   inputs ? null,
-}:
-let
+}: let
   lib = pkgs.lib;
-in
-rec {
+in rec {
   # =======================================================================
   # System (global) packages
   # =======================================================================
@@ -74,9 +72,9 @@ rec {
   # =======================================================================
   hm = rec {
     /*
-      -------------------------------------------------------------------
-      CLI / non-GUI base: cross-platform
-      -------------------------------------------------------------------
+    -------------------------------------------------------------------
+    CLI / non-GUI base: cross-platform
+    -------------------------------------------------------------------
     */
     base = with pkgs; [
       # Editors & UI-ish TUI
@@ -158,8 +156,7 @@ rec {
       minikube
 
       (azure-cli.withExtensions (
-        with azure-cli.extensions;
-        [
+        with azure-cli.extensions; [
           ssh
           fzf
           azure-devops
@@ -182,9 +179,9 @@ rec {
     ];
 
     /*
-      -------------------------------------------------------------------
-      Dev / IaC / K8s (CLI tooling)
-      -------------------------------------------------------------------
+    -------------------------------------------------------------------
+    Dev / IaC / K8s (CLI tooling)
+    -------------------------------------------------------------------
     */
     dev = with pkgs; [
       rustup
@@ -193,7 +190,7 @@ rec {
       lua-language-server
       nodejs_22
       #node2nix
-      python3
+      (lib.lowPrio python3)
       python3Packages.rencode
       gnumake
       gcc
@@ -214,7 +211,7 @@ rec {
     # Kubernetes / cloud-native CLI tools are installed by
     # modules/home-manager/programs/kubernetes/default.nix so they can be
     # wrapped with per-command KUBECONFIG handling.
-    k8s = [ ];
+    k8s = [];
 
     ai = with pkgs; [
       #gemini-cli
@@ -233,13 +230,13 @@ rec {
     ];
 
     /*
-      -------------------------------------------------------------------
-      Desktop / GUI apps
-      We split into:
-      - desktopCommon      (intended for both Linux + mac where supported)
-      - desktopLinuxOnly   (Linux-specific or very Linux-centric)
-      - desktopMacOnly     (mac-specific, currently empty placeholder)
-      -------------------------------------------------------------------
+    -------------------------------------------------------------------
+    Desktop / GUI apps
+    We split into:
+    - desktopCommon      (intended for both Linux + mac where supported)
+    - desktopLinuxOnly   (Linux-specific or very Linux-centric)
+    - desktopMacOnly     (mac-specific, currently empty placeholder)
+    -------------------------------------------------------------------
     */
 
     # Common desktop apps you might want on both Linux and macOS
@@ -287,12 +284,11 @@ rec {
     ];
 
     /*
-      Workstation (xyz) GUI / desktop extras (user-level)
-      — includes the GUI apps you had scattered under xyz.nix
+    Workstation (xyz) GUI / desktop extras (user-level)
+    — includes the GUI apps you had scattered under xyz.nix
     */
     workstationExtras = (
-      with pkgs;
-      [
+      with pkgs; [
         rbw
         bitwarden-cli
         bitwarden-desktop

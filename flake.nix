@@ -106,6 +106,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    videdupe = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     grove = {
       url = "github:alcxyz/grove?reg=dev";
       inputs.nixpkgs.follows = "nixpkgs";

@@ -34,6 +34,7 @@ in
             lt = inputs.leantime-tidy.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
+            videdupe = inputs.videdupe.packages.${system} or {};
           in
             (lib.filterAttrs (n: _: builtins.elem n wanted) np)
             // (lib.filterAttrs (
@@ -53,6 +54,9 @@ in
               lt)
             // lib.optionalAttrs (vidown ? default) {
               vidown = vidown.default;
+            }
+            // lib.optionalAttrs (videdupe ? default) {
+              videdupe = videdupe.default;
             }
             // lib.optionalAttrs (stashdb-pop ? default) {
               stashdb-pop = stashdb-pop.default;

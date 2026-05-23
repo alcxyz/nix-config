@@ -32,6 +32,9 @@
     builtins.toJSON managedSettings
   );
   plugins = inputs.dms-plugins.srcs;
+  dsearchPkg = inputs.dsearch.packages.${pkgs.stdenv.hostPlatform.system}.dsearch.overrideAttrs {
+    vendorHash = "sha256-scvZWbMHAhpYWCU0xZK1E6h6sAkoXegqI1iYS44fcCg=";
+  };
   dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
   };
@@ -103,6 +106,7 @@ in {
 
     programs.dsearch = {
       enable = true;
+      package = dsearchPkg;
     };
 
     programs.dank-material-shell = {

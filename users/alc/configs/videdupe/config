@@ -1,0 +1,3 @@
+# Public config for the videdupe duplicate review TUI.
+root = "/tank/stash/vidown"
+workers = 4
