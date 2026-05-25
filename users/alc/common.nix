@@ -113,7 +113,6 @@ in
 
     # ==================== Files ====================
     home.file = {
-      "Downloads/.keep".text = "";
       "Music/.keep".text = "";
       "Pictures/.keep".text = "";
       # Profile picture is usually common regardless of OS
