@@ -1507,11 +1507,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779708010,
-        "narHash": "sha256-PMNF3wXVLa505oc1OKGXebyqMt7hvNX2iQ0fQUlz0eg=",
+        "lastModified": 1779708538,
+        "narHash": "sha256-IIwgbvVa3oFhygqFMAfswRWp1w5peb5m6Uo4rZanaLY=",
         "ref": "refs/heads/dev",
-        "rev": "67cef8e28175cde5976f52eb1d4c8269239857a5",
-        "revCount": 139,
+        "rev": "c75bd2fd7d628bf3e208c3e45dab407858fd0f6e",
+        "revCount": 140,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git"
       },
