@@ -1487,11 +1487,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779537534,
-        "narHash": "sha256-thVThCdJ5iQ66VswZvaVoXV4KZCCguL6UWaLXiQuIiU=",
+        "lastModified": 1779639707,
+        "narHash": "sha256-gpkrliUrxsie9D0EphUKp/O0x+QVFa+TLsTfpYyb7aM=",
         "ref": "refs/heads/main",
-        "rev": "98e29da7ecbc327d693ecc7ad22c8c6d9847794b",
-        "revCount": 1,
+        "rev": "c65e745a371ed8f26b83ed564c15e9567d5923f1",
+        "revCount": 3,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git"
       },
