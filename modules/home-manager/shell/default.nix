@@ -77,6 +77,7 @@
       | ${pkgs.gnused}/bin/sed 's/job spawn -t/job spawn -d/g' \
       > $out
   '';
+  nushellSessionPath = builtins.toJSON config.home.sessionPath;
 in {
   imports = [
     ../../shared/shell.nix
@@ -173,8 +174,19 @@ in {
         EDITOR = "nvim";
         LANG = "en_US.UTF-8";
         LC_ALL = "en_US.UTF-8";
-        PATH = config.home.sessionPath;
       };
+
+      extraEnv = ''
+        let hm_session_path = ${nushellSessionPath}
+        let inherited_path = (
+          if (($env.PATH? | default []) | describe) == "string" {
+            $env.PATH | split row (char esep)
+          } else {
+            $env.PATH? | default []
+          }
+        )
+        $env.PATH = ($hm_session_path | append $inherited_path | flatten | uniq)
+      '';
 
       extraConfig = ''
         # --- Common Nushell Configuration (Part 1) ---
