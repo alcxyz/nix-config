@@ -26,6 +26,7 @@ in {
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
 
     "${configDir}/modules/home-manager/programs/ai/default.nix"
+    "${configDir}/modules/home-manager/programs/stashdb-pop/default.nix"
 
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
@@ -82,7 +83,22 @@ in {
   };
 
   services.dms.enable = true;
+  services.dms.idleLock = {
+    enable = true;
+    command = config.services.hyprlock.lockCommand;
+  };
   services.hyprlock.enable = true;
+  services.udiskie = {
+    enable = true;
+    tray = "never";
+  };
+  systemd.user.services.udiskie = {
+    Unit = {
+      After = lib.mkForce [];
+      PartOf = lib.mkForce [];
+    };
+    Install.WantedBy = lib.mkForce ["default.target"];
+  };
 
   services.devlog.enable = true;
   services.devlog.weekly.enable = true;
@@ -91,6 +107,7 @@ in {
   services.t3code.port = 3777;
 
   programs.ai.enable = true;
+  programs.stashdb-pop.enable = true;
 
   services.cloud-sync = {
     enable = true;

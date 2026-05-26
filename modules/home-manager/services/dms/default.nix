@@ -7,17 +7,85 @@
   username,
   configDir,
   ...
-}:
-
-let
+}: let
   cfg = config.services.dms;
+  idleLockCfg = cfg.idleLock;
+  dockCfg = cfg.dock;
+  idleLockSettings =
+    {
+      acLockTimeout = idleLockCfg.acTimeout;
+      batteryLockTimeout = idleLockCfg.batteryTimeout;
+      customPowerActionLock = idleLockCfg.command;
+      fadeToLockEnabled = idleLockCfg.fadeToLock;
+    }
+    // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
+      loginctlLockIntegration = false;
+      lockBeforeSuspend = false;
+    };
+  managedSettings =
+    lib.optionalAttrs idleLockCfg.enable idleLockSettings
+    // lib.optionalAttrs dockCfg.enable {
+      showDock = true;
+      dockAutoHide = dockCfg.autoHide;
+    };
+  managedSettingsFile = pkgs.writeText "dms-managed-settings.json" (
+    builtins.toJSON managedSettings
+  );
   plugins = inputs.dms-plugins.srcs;
+  dsearchPkg = inputs.dsearch.packages.${pkgs.stdenv.hostPlatform.system}.dsearch.overrideAttrs {
+    vendorHash = "sha256-scvZWbMHAhpYWCU0xZK1E6h6sAkoXegqI1iYS44fcCg=";
+  };
   dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
   };
-in
-{
-  options.services.dms.enable = lib.mkEnableOption "Enable DankMaterialShell suite";
+in {
+  options.services.dms = {
+    enable = lib.mkEnableOption "Enable DankMaterialShell suite";
+
+    idleLock = {
+      enable = lib.mkEnableOption "Use DMS idle detection to invoke an external locker";
+
+      command = lib.mkOption {
+        type = lib.types.str;
+        default = "lock-screen";
+        description = "External command DMS should run when its idle lock timeout fires.";
+      };
+
+      acTimeout = lib.mkOption {
+        type = lib.types.int;
+        default = 300;
+        description = "AC power idle lock timeout in seconds.";
+      };
+
+      batteryTimeout = lib.mkOption {
+        type = lib.types.int;
+        default = 300;
+        description = "Battery power idle lock timeout in seconds.";
+      };
+
+      disableLoginctlIntegration = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Disable DMS loginctl lock integration when an external locker owns locking.";
+      };
+
+      fadeToLock = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether DMS should show its fade-to-lock transition before invoking the external locker.";
+      };
+    };
+
+    dock = {
+      enable = lib.mkEnableOption "Show the DMS dock";
+
+      autoHide = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether the DMS dock should auto-hide.";
+      };
+    };
+  };
 
   imports = [
     inputs.dsearch.homeModules.default
@@ -38,6 +106,7 @@ in
 
     programs.dsearch = {
       enable = true;
+      package = dsearchPkg;
     };
 
     programs.dank-material-shell = {
@@ -141,5 +210,21 @@ in
         };
       };
     };
+
+    home.activation.dmsManagedSettings = lib.mkIf (managedSettings != {}) (
+      lib.hm.dag.entryAfter ["writeBoundary"] ''
+        settings_file="${config.xdg.configHome}/DankMaterialShell/settings.json"
+        settings_tmp="$settings_file.tmp"
+
+        mkdir -p "$(${pkgs.coreutils}/bin/dirname "$settings_file")"
+
+        if [ -e "$settings_file" ] && ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$settings_file" "${managedSettingsFile}" > "$settings_tmp"; then
+          mv "$settings_tmp" "$settings_file"
+        else
+          cp "${managedSettingsFile}" "$settings_file"
+          rm -f "$settings_tmp"
+        fi
+      ''
+    );
   };
 }

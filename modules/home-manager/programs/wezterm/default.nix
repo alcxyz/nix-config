@@ -1,9 +1,12 @@
 # modules/home-manager/programs/wezterm/default.nix
-{ config, lib, pkgs, inputs, ... }:
-
-with lib;
-
-let
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
+with lib; let
   cfg = config.programs.wezterm; # Use the built-in module's enable option
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
@@ -42,9 +45,7 @@ let
     selection_bg = colors.base03;
     selection_fg = colors.base05;
   };
-
-in
-{
+in {
   config = mkIf cfg.enable {
     programs.wezterm.colorSchemes = {
       "PaletteScheme" = paletteColorScheme;
@@ -54,6 +55,8 @@ in
       local config = wezterm.config_builder()
 
       config.color_scheme = "PaletteScheme"
+
+      config.default_prog = { "${pkgs.nushell}/bin/nu", "-l" }
 
       config.font = wezterm.font("JetBrainsMono Nerd Font", { weight = "Regular" })
       config.font_size = 14.0

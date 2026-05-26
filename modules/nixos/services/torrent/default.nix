@@ -11,15 +11,14 @@ let
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
   sharedGroup = "media";
-  qbConfigDir = "/ypool/appdata/qbittorrent";
+  qbConfigDir = "/var/lib/qbittorrent";
   qbConfigStateDir = "${qbConfigDir}/profile";
   qbNativeDir = "${qbConfigStateDir}/qBittorrent";
-  dataDir = "/ypool/downloads";
+  dataDir = "/tank/downloads";
 
-  stashDir = "/zpool/stash";
-  mediaDir = "/ypool/media";
+  stashDir = "/tank/stash";
+  mediaDir = "/tank/media";
 
-  appdataRoot = "/ypool/appdata";
   torrentDirs = [
     qbConfigDir
     qbConfigStateDir
@@ -32,13 +31,31 @@ let
   ];
 
   sharedMediaDirs = [
-    stashDir
-    mediaDir
+    {
+      path = dataDir;
+      owner = serviceUser;
+    }
+    {
+      path = dataDir + "/watch";
+      owner = serviceUser;
+    }
+    {
+      path = dataDir + "/completed";
+      owner = serviceUser;
+    }
+    {
+      path = stashDir;
+      owner = "root";
+    }
+    {
+      path = mediaDir;
+      owner = "root";
+    }
   ];
   sharedMediaRoots = [
     {
       path = stashDir;
-      owner = "stash";
+      owner = "root";
     }
     {
       path = mediaDir;
@@ -47,22 +64,27 @@ let
   ];
 
   sharedMediaDatasets = [
-    "zpool/stash"
-    "ypool/media"
+    "tank/downloads"
+    "tank/stash"
+    "tank/media"
   ];
 
-  tmpfilesRules = [
-    ("d " + appdataRoot + " 0755 root root -")
-  ]
-  ++ map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
-  ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
-  ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
-  ++ map (
-    d: "a+ " + d + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
-  ) sharedMediaDirs;
+  tmpfilesRules =
+    map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
+    ++ map (d: "d " + d + " 2775 " + serviceUser + " " + sharedGroup + " -") downloadDirs
+    ++ map (d: "d " + d.path + " 2775 " + d.owner + " " + sharedGroup + " -") sharedMediaRoots
+    ++ map (d: "z " + d.path + " 2775 " + d.owner + " " + sharedGroup + " - -") sharedMediaDirs
+    ++ map (
+      d: "a+ " + d.path + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
+    ) sharedMediaDirs;
   qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
     set -euo pipefail
 
+    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg serviceGroup} \
+      ${lib.escapeShellArg qbConfigDir}
+    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
+      ${lib.escapeShellArg qbConfigStateDir} \
+      ${lib.escapeShellArg qbNativeDir}
     install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
       ${lib.escapeShellArg (qbNativeDir + "/config")} \
       ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
@@ -72,10 +94,17 @@ let
       ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")}
     do
       if [ -f "$config_file" ]; then
-        ${pkgs.gnused}/bin/sed -i 's#/zpool/downloads#/ypool/downloads#g' "$config_file"
+        ${pkgs.gnused}/bin/sed -i \
+          -e 's#/zpool/downloads#/tank/downloads#g' \
+          -e 's#/ypool/downloads#/tank/downloads#g' \
+          "$config_file"
       fi
     done
 
+    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg serviceGroup} ${lib.escapeShellArg qbConfigDir}
+    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} \
+      ${lib.escapeShellArg qbConfigStateDir} \
+      ${lib.escapeShellArg qbNativeDir}
     chown -R ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} ${lib.escapeShellArg qbNativeDir}
   '';
 in
@@ -90,7 +119,6 @@ in
       group = serviceGroup;
       extraGroups = [
         sharedGroup
-        "stash"
       ];
       createHome = true;
       home = qbConfigDir;
@@ -103,7 +131,6 @@ in
       group = "flood";
       extraGroups = [
         sharedGroup
-        "stash"
       ];
     };
 
@@ -141,7 +168,6 @@ in
         PrivateUsers = lib.mkForce false;
         SupplementaryGroups = [
           serviceGroup
-          "stash"
         ];
       };
     };
@@ -168,7 +194,7 @@ in
           ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDatasets}
         )
         mountpoints=(
-          ${lib.concatMapStringsSep "\n          " lib.escapeShellArg sharedMediaDirs}
+          ${lib.concatMapStringsSep "\n          " (d: lib.escapeShellArg d.path) sharedMediaDirs}
         )
 
         for dataset in "''${datasets[@]}"; do
@@ -197,6 +223,9 @@ in
       before = [
         "docker.service"
         "k3s.service"
+        "plex.service"
+        "qbittorrent.service"
+        "stash.service"
       ];
       path = with pkgs; [
         acl
@@ -210,10 +239,9 @@ in
       script = ''
         set -euo pipefail
 
-        marker=/var/lib/torrent-shared-media/acl-v2
+        marker=/var/lib/torrent-shared-media/acl-v4
         dirs=(
-          ${lib.escapeShellArg stashDir}
-          ${lib.escapeShellArg mediaDir}
+          ${lib.concatMapStringsSep "\n          " (d: lib.escapeShellArg d.path) sharedMediaDirs}
         )
 
         for dir in "''${dirs[@]}"; do
@@ -222,8 +250,14 @@ in
           setfacl -m g:${lib.escapeShellArg sharedGroup}:rwx,d:g:${lib.escapeShellArg sharedGroup}:rwx,m::rwx,d:m::rwx "$dir"
         done
 
-        chown ${lib.escapeShellArg "stash"}:${lib.escapeShellArg sharedGroup} \
+        chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} \
+          ${lib.escapeShellArg dataDir} \
+          ${lib.escapeShellArg (dataDir + "/watch")} \
+          ${lib.escapeShellArg (dataDir + "/completed")}
+        chown ${lib.escapeShellArg "root"}:${lib.escapeShellArg sharedGroup} \
           ${lib.escapeShellArg stashDir}
+        chown ${lib.escapeShellArg "root"}:${lib.escapeShellArg sharedGroup} \
+          ${lib.escapeShellArg mediaDir}
 
         if [[ ! -e "$marker" ]]; then
           for dir in "''${dirs[@]}"; do

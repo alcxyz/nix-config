@@ -1,6 +1,6 @@
 # ADR-0045: xev and xps Kubernetes node onboarding
 
-**Status:** Accepted (xev onboarded; xps deferred)
+**Status:** Accepted (xev onboarded; xps workstation-only for now)
 **Date:** 2026-05-11
 **Applies to:** `inventory.nix`, `hosts/xev/`, `hosts/xps/`, `modules/nixos/virtualisation/k3s`, `modules/nixos/virtualisation/longhorn-prereqs`, gitops cluster manifests
 
@@ -25,9 +25,10 @@ The gitops repo documents the Longhorn and autoscaling posture:
 - Metrics coverage and autoscaling policy assume every schedulable node has
   kubelet metrics reachability.
 
-`xev` is planned as the next full-capability Kubernetes node. `xps` may also
-join later, but it is a Dell XPS 15-inch laptop with NVIDIA hardware and its
-role is not yet decided.
+`xev` is the next full-capability Kubernetes node. `xps` is a Dell XPS 15-inch
+laptop with NVIDIA hardware. It briefly joined as temporary worker capacity
+during the 2026-05-20 storage swap, but USB Ethernet instability made it a poor
+fit for the steady-state cluster.
 
 ## Decision
 
@@ -54,7 +55,7 @@ For `xps`:
 - handle NVIDIA through the existing NVIDIA hardware module or a laptop-specific
   variant
 - do not join Kubernetes by default
-- decide separately whether it is:
+- if reliable wired networking is added later, decide separately whether it is:
   - a normal workstation only
   - an ephemeral k3s worker
   - a stable k3s worker
@@ -96,21 +97,25 @@ Implemented for `xev`:
 - the host joins k3s as an agent and enables Longhorn host prerequisites
 - the normal deploy inventory includes `xev`
 
-Not implemented yet:
+Implemented for `xps`:
 
-- `xps` is not present in `inventory.nix`
-- no `hosts/xps/` NixOS skeleton exists
+- `xps` is present in `inventory.nix` as `role = "laptop-workstation"` and
+  `k8sRole = null`
+- `hosts/xps/` contains a buildable NixOS workstation configuration
+- the managed generation has been deployed
+- temporary k3s participation was removed after the storage swap
 - no Longhorn storage scheduling has been enabled for `xps`
 
-`xps` should remain workstation-first until its suspend, NVIDIA, Wi-Fi, and
-availability behavior are known.
+`xps` should remain workstation-first until reliable wired networking and its
+suspend, NVIDIA, Wi-Fi, and availability behavior are known.
 
 ## Follow-up Issues
 
 - [#75](https://git.alc.xyz/alcxyz/nix-config/issues/75) Onboard `xev` as a
   stable k3s worker candidate. Completed 2026-05-14.
 - [#76](https://git.alc.xyz/alcxyz/nix-config/issues/76) Prepare `xps` as a
-  workstation host and decide its Kubernetes role separately.
+  workstation host and decide its Kubernetes role separately. Completed
+  2026-05-20 with `xps` kept outside k3s.
 
 ## Alternatives Considered
 

@@ -7,6 +7,10 @@ COLOR_RESET=""
 BUILD_HERE=false
 SELF_RAW="$(hostname -s)"
 SELF=""
+NIX_SSHOPTS="${NIX_SSHOPTS:--o ServerAliveInterval=10 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -o ConnectTimeout=30}"
+export NIX_SSHOPTS
+# shellcheck disable=SC2206
+SSH_ARGS=(${NIX_SSHOPTS})
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_RESET=$'\033[0m'
@@ -52,6 +56,22 @@ ssh_host() {
   printf '%s\n' "${SSH_HOSTS[$h]:-$h}"
 }
 
+system_ssh_user() {
+  local h="$1"
+  printf '%s\n' "${SYSTEM_SSH_USERS[$h]:-root}"
+}
+
+uses_remote_sudo() {
+  local h="$1"
+  for k in "${SYSTEM_REMOTE_SUDO_HOSTS[@]}"; do [[ "$k" == "$h" ]] && return 0; done
+  return 1
+}
+
+system_activation_mode() {
+  local h="$1"
+  printf '%s\n' "${SYSTEM_ACTIVATION_MODES[$h]:-switch}"
+}
+
 is_darwin() {
   [[ "$(uname)" == "Darwin" ]]
 }
@@ -93,6 +113,7 @@ host_label() {
     nux) color "166;227;161" "[nux]" ;;   # Catppuccin green
     nex) color "249;226;175" "[nex]" ;;   # Catppuccin yellow
     xev) color "148;226;213" "[xev]" ;;   # Catppuccin teal
+    xps) color "245;194;231" "[xps]" ;;   # Catppuccin pink
     rpi0) color "235;160;172" "[rpi0]" ;; # Catppuccin maroon
     mac) color "203;166;247" "[mac]" ;;   # Catppuccin mauve
     *) color "205;214;244" "[${host}]" ;;
@@ -167,13 +188,24 @@ nixos_local() {
 
 nixos_remote() {
   local host="$1"
-  local rebuild_cmd
+  local rebuild_cmd remote_args remote_sudo_arg action
   rebuild_cmd="$(nixos_rebuild_command)"
+  action="$(system_activation_mode "$host")"
+  remote_args="--flake .#${host} --target-host $(system_ssh_user "$host")@$(ssh_host "$host") --use-substitutes"
+  remote_sudo_arg=""
+  if uses_remote_sudo "$host"; then
+    remote_sudo_arg=" --ask-sudo-password"
+  fi
+
+  if [[ "$action" == "boot" ]]; then
+    eval "${rebuild_cmd} boot ${remote_args}${remote_sudo_arg}"
+    return
+  fi
 
   run_with_boot_fallback \
     "deploy(${host})" \
-    "${rebuild_cmd} switch --flake .#${host} --target-host root@$(ssh_host "$host")" \
-    "${rebuild_cmd} boot --flake .#${host} --target-host root@$(ssh_host "$host")"
+    "${rebuild_cmd} switch ${remote_args}${remote_sudo_arg}" \
+    "${rebuild_cmd} boot ${remote_args}${remote_sudo_arg}"
 }
 
 hm_local() {
@@ -185,9 +217,9 @@ hm_remote() {
   local host="$1"
   local result
   result=$(nix build --no-link --print-out-paths ".#homeConfigurations.alc-${host}.activationPackage")
-  nix copy --to "ssh://alc@$(ssh_host "$host")" "$result"
+  nix copy --substitute-on-destination --to "ssh://alc@$(ssh_host "$host")" "$result"
   # shellcheck disable=SC2029
-  ssh "alc@$(ssh_host "$host")" "$result/activate"
+  ssh "${SSH_ARGS[@]}" "alc@$(ssh_host "$host")" "$result/activate"
 }
 
 do_deploy() {
@@ -242,6 +274,7 @@ do_deploy_all() {
 
   if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
     local system_jobs=()
+    local interactive_system_jobs=()
     local host cmd
 
     start_sudo_keepalive
@@ -256,13 +289,26 @@ do_deploy_all() {
           cmd="sudo -n nixos-rebuild switch --flake .#${host}"
         fi
       else
-        cmd="$(nixos_rebuild_command) switch --flake .#${host} --target-host root@$(ssh_host "$host")"
+        cmd="$(nixos_rebuild_command) $(system_activation_mode "$host") --flake .#${host} --target-host $(system_ssh_user "$host")@$(ssh_host "$host") --use-substitutes"
+        if uses_remote_sudo "$host"; then
+          cmd="${cmd} --ask-sudo-password"
+          interactive_system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
+          continue
+        fi
       fi
 
       system_jobs+=("$(phase_label system)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
     done
 
-    run_parallel_jobs "${system_jobs[@]}"
+    if [[ ${#system_jobs[@]} -gt 0 ]]; then
+      run_parallel_jobs "${system_jobs[@]}"
+    fi
+
+    for job in "${interactive_system_jobs[@]}"; do
+      IFS=$'\t' read -r phase host_label_text cmd <<<"$job"
+      printf '%s %s %s\n' "$phase" "$host_label_text" "$cmd"
+      eval "$cmd"
+    done
   fi
 
   if [[ "$mode" == "hm" || "$mode" == "full" ]]; then

@@ -28,12 +28,13 @@
     hostPatterns = [name] ++ aliases;
   in {
     ${name} = {
-      host = lib.concatStringsSep " " hostPatterns;
-      hostname = hostAttrs.sshHostname or name;
-      user = hostAttrs.sshUser or username;
+      header = "Host ${lib.concatStringsSep " " hostPatterns}";
+      HostName = hostAttrs.sshHostname or name;
+      User = hostAttrs.sshUser or username;
+      ForwardAgent = hostAttrs.forwardAgent or false;
     };
   };
-  managedHostBlocks = lib.attrsets.mergeAttrsList (lib.mapAttrsToList mkManagedHostBlock managedHosts);
+  managedHostSettings = lib.attrsets.mergeAttrsList (lib.mapAttrsToList mkManagedHostBlock managedHosts);
 in {
   config = mkIf config.programs.ssh.enable (mkMerge [
     {
@@ -41,61 +42,62 @@ in {
         # Don't use HM's built-in defaults; we define everything ourselves.
         enableDefaultConfig = false;
 
-        matchBlocks =
-          managedHostBlocks
+        settings =
+          managedHostSettings
           // {
-            "*" = {
-              # Primary and hardware-backed keys (deployed by your secrets module)
-              identityFile = [
-                "~/.ssh/id_ed25519"
-                "~/.ssh/id_ed25519_sk"
-                "~/.ssh/id_ed25519_sk_rk"
-              ];
+            "*" =
+              {
+                # Primary and hardware-backed keys (deployed by your secrets module)
+                IdentityFile = [
+                  "~/.ssh/id_ed25519"
+                  "~/.ssh/id_ed25519_sk"
+                  "~/.ssh/id_ed25519_sk_rk"
+                ];
 
-              # New-style location for AddKeysToAgent
-              addKeysToAgent = "yes";
-
-              extraOptions =
-                {
-                  ServerAliveInterval = "60";
-                  ServerAliveCountMax = "3";
-                  HashKnownHosts = "yes";
-                }
-                // optionalAttrs pkgs.stdenv.isDarwin {
-                  # macOS keychain integration
-                  #UseKeychain = "yes";
-                };
-            };
+                AddKeysToAgent = "yes";
+                ServerAliveInterval = 60;
+                ServerAliveCountMax = 3;
+                HashKnownHosts = true;
+              }
+              // optionalAttrs pkgs.stdenv.isDarwin {
+                # macOS keychain integration
+                #UseKeychain = "yes";
+              };
 
             "rpi1" = {
-              user = "root";
+              User = "root";
             };
 
             "rpi2" = {
-              user = "root";
+              User = "root";
             };
 
             "github" = {
-              hostname = "github.com";
-              user = "git";
+              HostName = "github.com";
+              User = "git";
             };
 
             "git-ssh.alc.xyz" = {
-              user = "git";
+              User = "git";
+            };
+
+            "git.local" = {
+              User = "git";
+              HostKeyAlias = "git-ssh.alc.xyz";
             };
 
             "git-ssh.alc.xyz-cloudflare-fallback" = {
-              match = ''originalhost git-ssh.alc.xyz exec "${gitSshCloudflareFallbackMatch} %h"'';
-              extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
+              header = ''Match originalhost git-ssh.alc.xyz exec "${gitSshCloudflareFallbackMatch} %h"'';
+              ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
             };
 
             "nux-ssh.alc.xyz" = {
-              extraOptions.ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
+              ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
             };
 
             "vps" = {
-              hostname = "46.202.150.96";
-              user = "root";
+              HostName = "46.202.150.96";
+              User = "root";
             };
           };
       };

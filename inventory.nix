@@ -92,6 +92,7 @@
       platform = "nixos";
       role = "nuc";
       k8sRole = "server-worker";
+      sshHostname = "192.168.1.15";
       configuration = ./hosts/nux/configuration.nix;
       osIcon = "";
     };
@@ -115,11 +116,39 @@
       osIcon = "";
     };
 
+    xps = {
+      system = "x86_64-linux";
+      platform = "nixos";
+      role = "laptop-workstation";
+      k8sRole = null;
+      sshHostname = "192.168.1.14";
+      systemSshUser = "alc";
+      systemUseRemoteSudo = true;
+      configuration = ./hosts/xps/configuration.nix;
+      osIcon = "";
+    };
+
+    madsil = {
+      system = "x86_64-linux";
+      platform = "nixos";
+      role = "family-gaming";
+      k8sRole = null;
+      sshHostname = "100.82.58.0";
+      systemSshUser = "alc";
+      systemUseRemoteSudo = true;
+      forwardAgent = true;
+      deployAll = false;
+      skipManagedUserSshSecrets = true;
+      configuration = ./hosts/madsil/configuration.nix;
+      osIcon = "";
+    };
+
     rpi0 = {
       system = "aarch64-linux";
       platform = "nixos";
       role = "embedded";
       k8sRole = "server-control-plane";
+      sshHostname = "192.168.1.3";
       configuration = ./hosts/rpi0/configuration.nix;
       osIcon = "";
     };

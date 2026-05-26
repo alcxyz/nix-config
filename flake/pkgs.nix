@@ -21,6 +21,8 @@ in
               "kdash"
               "t3code"
               "claude-code"
+              "codex-app-server"
+              "codex-cli"
               "devlog"
               "agent-sync-check"
               "omniwm"
@@ -32,6 +34,9 @@ in
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
             lt = inputs.leantime-tidy.packages.${system} or {};
+            stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
+            vidown = inputs.vidown.packages.${system} or {};
+            videdupe = inputs.videdupe.packages.${system} or {};
           in
             (lib.filterAttrs (n: _: builtins.elem n wanted) np)
             // (lib.filterAttrs (
@@ -49,6 +54,15 @@ in
                   ]
               )
               lt)
+            // lib.optionalAttrs (vidown ? default) {
+              vidown = vidown.default;
+            }
+            // lib.optionalAttrs (videdupe ? default) {
+              videdupe = videdupe.default;
+            }
+            // lib.optionalAttrs (stashdb-pop ? default) {
+              stashdb-pop = stashdb-pop.default;
+            }
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};

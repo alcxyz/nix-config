@@ -1,6 +1,6 @@
 # ADR-0042: Shared media group permissions for torrent and Stash storage
 
-**Status:** Accepted
+**Status:** Superseded by the `tank` storage rebuild
 **Date:** 2026-05-07
 **Applies to:** `modules/nixos/services/torrent`, `modules/nixos/services/stash`, `modules/nixos/services/plex`, `modules/nixos/services/calibre-web`, `hosts/xyz`
 
@@ -29,7 +29,7 @@ breaking each other's files.
 
 Use a shared host group, `media`, as the permission boundary for media datasets.
 
-The host should manage `/zpool/stash` and `/ypool/media` as group-writable
+The host should manage `/tank/stash` and `/tank/media` as group-writable
 shared media roots:
 
 - top-level directories use mode `2775`
@@ -47,8 +47,8 @@ workloads pinned back to the same host. Kubernetes may still route to them
 through explicit host endpoint services, but it should not own their processes
 or hostPath storage.
 
-Stash media is consolidated under `/zpool/stash`; the old `/ypool/stash` split
-is retired after moving remaining files back to `zpool`.
+Stash media is consolidated under `/tank/stash`; the old split between `zpool`
+and `ypool` is retired by the `tank` rebuild.
 
 ## Alternatives Considered
 

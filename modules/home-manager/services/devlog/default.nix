@@ -10,8 +10,8 @@ in
 
     schedule = lib.mkOption {
       type = lib.types.str;
-      default = "01:00";
-      description = "Systemd timer schedule (OnCalendar value). Runs in local timezone.";
+      default = "05:00";
+      description = "Systemd timer schedule (OnCalendar value). Runs in local timezone after the devlog day closes.";
     };
 
     repoPath = lib.mkOption {
@@ -31,7 +31,7 @@ in
 
       schedule = lib.mkOption {
         type = lib.types.str;
-        default = "Mon 02:00";
+        default = "Mon 06:00";
         description = "Systemd timer OnCalendar value for the weekly summary.";
       };
 

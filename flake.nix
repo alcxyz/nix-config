@@ -6,6 +6,7 @@
   # ---- Inputs -----------------------------------------------------------
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-zfs-master.url = "github:NixOS/nixpkgs/master";
 
     flake-parts.url = "github:hercules-ci/flake-parts";
 
@@ -16,7 +17,7 @@
     };
 
     nix-packages = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -95,6 +96,21 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    stashdb-pop = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    vidown = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    videdupe = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     grove = {
       url = "github:alcxyz/grove?reg=dev";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -109,9 +125,8 @@
   };
 
   # ---- Outputs ----------------------------------------------------------
-  outputs =
-    inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+  outputs = inputs @ {flake-parts, ...}:
+    flake-parts.lib.mkFlake {inherit inputs;} {
       imports = [
         ./flake/core.nix
         ./flake/hosts
