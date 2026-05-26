@@ -14,9 +14,9 @@ A weekly summary was requested to improve readability — synthesizing daily ent
 
 1. **Go binary in nix-packages**: The devlog tool is a single Go binary (`devlog daily` / `devlog weekly` / `devlog catch-up`) in `nix-packages/tools/devlog/`, built with `buildGoModule` and exposed via the overlay as `pkgs.devlog`. This follows the same pattern as `zfs-auto-unlock`.
 
-2. **Schedule shift and catch-up**: Daily timer runs at 01:00 and invokes `devlog catch-up`, which scans a configurable recent window (`services.devlog.catchUpDays`, default 30) through yesterday. This preserves the 01:00 "yesterday" semantics while filling holes from host or timer outages.
+2. **Schedule shift and catch-up**: Daily timer runs at 05:00 and invokes `devlog catch-up`, which scans a configurable recent window (`services.devlog.catchUpDays`, default 30) through the last completed devlog day. A devlog day is the local-time window from 05:00 through 04:59 the next calendar day, so late-night activity stays attached to the previous day's entry while host or timer outages are backfilled.
 
-3. **Weekly timer**: Runs Monday at 02:00 (after Sunday's daily entry is generated at 01:00). Produces `weekly/YYYY-WNN.md` with ISO week numbering and posts to HedgeDoc via sops-decrypted credentials. The weekly file contains a Claude-synthesized summary (split into distinct **Weekdays** and **Weekend** sections) followed by all raw daily entries stitched below a `# Daily entries` heading, so the full week is readable in one file.
+3. **Weekly timer**: Runs Monday at 06:00 (after Sunday's daily entry is generated at 05:00). Produces `weekly/YYYY-WNN.md` with ISO week numbering and posts to HedgeDoc via sops-decrypted credentials. The weekly file contains a Claude-synthesized summary (split into distinct **Weekdays** and **Weekend** sections) followed by all raw daily entries stitched below a `# Daily entries` heading, so the full week is readable in one file.
 
 4. **Module structure**: The NixOS module uses `lib.mkMerge` to conditionally add the weekly service/timer when `services.devlog.weekly.enable` is set, keeping weekly as an opt-in extension of the daily system.
 

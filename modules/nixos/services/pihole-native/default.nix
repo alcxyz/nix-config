@@ -104,12 +104,15 @@ in {
     systemd.services.pihole-ftl = {
       description = "Pi-hole FTL";
       after = [
-        "network.target"
+        "network-online.target"
         "sops-nix.service"
+        "time-sync.target"
         "unbound.service"
       ];
       wants = [
+        "network-online.target"
         "sops-nix.service"
+        "time-sync.target"
       ];
       requires = [
         "unbound.service"
@@ -123,6 +126,7 @@ in {
         Type = "simple";
         User = "pihole";
         Group = "pihole";
+        ExecStartPre = "+${pkgs.coreutils}/bin/chown -R pihole:pihole ${cfg.stateDirectory} ${cfg.logDirectory}";
         ExecStart = piholeStart;
         Restart = "on-failure";
         RestartSec = 1;

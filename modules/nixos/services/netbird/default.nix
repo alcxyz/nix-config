@@ -25,6 +25,12 @@ in {
       default = null;
       description = "Path to a NetBird setup key file used for non-interactive login.";
     };
+
+    disableDns = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Disable NetBird DNS management so system DNS remains owned by the host network.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -35,6 +41,10 @@ in {
 
     # Netbird needs to manage routes for peers
     services.netbird.useRoutingFeatures = "client";
+
+    services.netbird.clients.default.config = mkIf cfg.disableDns {
+      DisableDNS = true;
+    };
 
     sops.secrets.netbird_setup_key = mkIf (cfg.setupKeyFile == null) {
       sopsFile = "${inputs.nix-secrets}/operators/secrets.yaml";
@@ -51,17 +61,36 @@ in {
       requires = ["netbird.service"];
       wantedBy = ["multi-user.target"];
       restartTriggers = [setupKeyFile];
-      path = [config.services.netbird.package pkgs.coreutils pkgs.gnugrep];
+      path = [
+        config.services.netbird.package
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.openresolv
+      ];
 
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        Environment = [
+          "HOME=/root"
+          "XDG_CONFIG_HOME=/root/.config"
+        ];
       };
 
       script = ''
+        cleanup_dns() {
+          :
+          ${optionalString cfg.disableDns ''
+          resolvconf -d wt0 || true
+          rm -f /run/resolvconf/keys/wt0 /run/resolvconf/exclusive/*wt0
+          resolvconf -u || true
+        ''}
+        }
+
         status="$(netbird status 2>&1 || true)"
 
         if printf '%s\n' "$status" | grep -q ': Connected'; then
+          cleanup_dns
           exit 0
         fi
 
@@ -69,14 +98,15 @@ in {
           netbird deregister || true
         fi
 
-        netbird up --setup-key-file ${setupKeyFile}
+        netbird up --setup-key-file ${setupKeyFile} ${optionalString cfg.disableDns "--disable-dns"}
+        cleanup_dns
       '';
     };
 
     system.activationScripts.netbird-login = lib.stringAfter ["setupSecrets"] ''
       if [ -e /run/systemd/system ]; then
         ${pkgs.systemd}/bin/systemctl daemon-reload || true
-        ${pkgs.systemd}/bin/systemctl start netbird-managed-login.service || true
+        ${pkgs.systemd}/bin/systemctl restart netbird-managed-login.service || true
       fi
     '';
   };

@@ -29,6 +29,7 @@ in rec {
 
     # Linux-only system bits (keep in systemPackages)
     linux = with pkgs; [
+      smartmontools
       nfs-utils
       gptfdisk
       libsecret
@@ -189,7 +190,7 @@ in rec {
       lua-language-server
       nodejs_22
       #node2nix
-      python3
+      (lib.lowPrio python3)
       python3Packages.rencode
       gnumake
       gcc
@@ -216,7 +217,8 @@ in rec {
       #gemini-cli
       opencode
       claude-code
-      codex
+      codex-cli
+      codex-app-server
       t3code
     ];
 

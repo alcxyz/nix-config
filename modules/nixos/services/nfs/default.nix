@@ -8,11 +8,22 @@ let
 
   # Build export lines — one per share per allowed client
   exportLines = concatMapStringsSep "\n" (s:
-    let clients = concatMapStringsSep " " (ip:
-      "${ip}(rw,nohide,insecure,no_subtree_check,all_squash,anonuid=${toString s.anonuid},anongid=${toString s.anongid})"
-    ) cfg.allowedClients;
+    let
+      clients = concatMapStringsSep " " (ip:
+        "${ip}(rw,nohide,insecure,no_subtree_check,all_squash,anonuid=${toString s.anonuid},anongid=${toString s.anongid})"
+      ) (cfg.allowedClients ++ s.allowedClients);
     in "${s.path}  ${clients}"
   ) cfg.shares;
+
+  allowedFirewallClients = unique (
+    cfg.allowedClients ++ concatMap (s: s.allowedClients) cfg.shares
+  );
+
+  firewallPorts = [
+    111
+    2049
+    20048
+  ];
 
   # Build Avahi service XML entries for Finder discovery
   avahiNfsService = ''
@@ -22,6 +33,7 @@ let
       <name replace-wildcards="yes">%h NFS</name>
       ${concatMapStringsSep "\n    " (s: ''
     <service>
+        <name replace-wildcards="yes">%h NFS ${s.path}</name>
         <type>_nfs._tcp</type>
         <port>2049</port>
         <txt-record>path=${s.path}</txt-record>
@@ -56,6 +68,11 @@ in
             default = 100;
             description = "GID for anonymous access (all_squash).";
           };
+          allowedClients = mkOption {
+            type = types.listOf types.str;
+            default = [];
+            description = "Additional IPs or subnets allowed to mount this share.";
+          };
         };
       });
       default = [];
@@ -69,10 +86,13 @@ in
       exports = exportLines;
     };
 
-    # Firewall — only allow NFS from whitelisted clients
+    # Firewall — only allow NFS/RPC discovery from whitelisted clients.
     networking.firewall.extraCommands = concatMapStringsSep "\n" (ip:
-      "iptables -A nixos-fw -p tcp --dport 2049 -s ${ip} -j nixos-fw-accept"
-    ) cfg.allowedClients;
+      concatMapStringsSep "\n" (port: ''
+        iptables -A nixos-fw -p tcp --dport ${toString port} -s ${ip} -j nixos-fw-accept
+        iptables -A nixos-fw -p udp --dport ${toString port} -s ${ip} -j nixos-fw-accept
+      '') firewallPorts
+    ) allowedFirewallClients;
 
     # Avahi for mDNS/Bonjour discovery
     services.avahi = {

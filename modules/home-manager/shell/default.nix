@@ -68,11 +68,12 @@
   # Patch atuin's nushell integration: fixes the e>| stdout-drop bug introduced
   # in 18.13.0 (atuinsh/atuin PR#3358, merged but unreleased as of 18.13.6).
   # e>| redirects only stderr into the pipe, so ATUIN_HISTORY_ID is always empty
-  # and history end never records. Replace e>| with | to restore correct behaviour.
+  # and interactive search returns no selected command. Replace e>| with | to
+  # restore correct behaviour.
   atuinNuFixed = pkgs.runCommand "atuin-nushell-config-fixed.nu" {} ''
     export HOME=$(mktemp -d)
     ${pkgs.atuin}/bin/atuin init nu \
-      | ${pkgs.gnused}/bin/sed 's/e>| complete | get stdout/| complete | get stdout/g' \
+      | ${pkgs.gnused}/bin/sed 's/e>|/|/g' \
       | ${pkgs.gnused}/bin/sed 's/job spawn -t/job spawn -d/g' \
       > $out
   '';
@@ -172,6 +173,7 @@ in {
         EDITOR = "nvim";
         LANG = "en_US.UTF-8";
         LC_ALL = "en_US.UTF-8";
+        PATH = config.home.sessionPath;
       };
 
       extraConfig = ''

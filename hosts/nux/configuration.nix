@@ -97,6 +97,16 @@ in {
     ];
   };
 
+  fileSystems."/var/lib/longhorn" = {
+    device = "/dev/disk/by-label/nux-longhorn";
+    fsType = "ext4";
+  };
+
+  systemd.services.k3s = {
+    requires = ["var-lib-longhorn.mount"];
+    after = ["var-lib-longhorn.mount"];
+  };
+
   services.k8s-api-vip = {
     enable = true;
     interface = "eno1";
@@ -140,6 +150,17 @@ in {
       qname-minimisation = true;
       rrset-roundrobin = true;
     };
+  };
+
+  systemd.services.unbound = {
+    after = [
+      "network-online.target"
+      "time-sync.target"
+    ];
+    wants = [
+      "network-online.target"
+      "time-sync.target"
+    ];
   };
 
   services.pihole-native = {

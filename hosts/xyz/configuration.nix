@@ -9,7 +9,187 @@
   configDir,
   lib,
   ...
-}: {
+}: let
+  zfsKernelPkgs = import inputs.nixpkgs-zfs-master {
+    system = pkgs.stdenv.hostPlatform.system;
+    config.allowUnfree = true;
+  };
+  appStateDatasets = {
+    calibre = "xpool/appstate/calibre";
+    calibre-web = "xpool/appstate/calibre-web";
+    plex = "xpool/appstate/plex";
+    qbittorrent = "xpool/appstate/qbittorrent";
+    stash = "xpool/appstate/stash";
+    steam-headless = "xpool/appstate/steam-headless";
+  };
+  appStateBackupPool = "hitachi";
+  appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
+  appStateMigrate = pkgs.writeShellScriptBin "xyz-appstate-migrate" ''
+    set -euo pipefail
+
+    if [ "$(id -u)" -ne 0 ]; then
+      echo "xyz-appstate-migrate must run as root" >&2
+      exit 1
+    fi
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.rsync
+        pkgs.systemd
+        pkgs.util-linux
+        zfsKernelPkgs.zfs
+      ]
+    }
+
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+
+    systemctl stop calibre-web.service plex.service qbittorrent.service stash.service docker.service docker.socket || true
+
+    migrate_dataset() {
+      local name="$1"
+      local dataset="$2"
+      local target="$3"
+      local backup="''${target}.pre-appstate-''${stamp}"
+
+      if ! zfs list -H "$dataset" >/dev/null 2>&1; then
+        zfs create -p \
+          -o mountpoint=legacy \
+          -o compression=zstd \
+          -o atime=off \
+          "$dataset"
+      fi
+
+      zfs set mountpoint=legacy "$dataset"
+      zfs set compression=zstd "$dataset"
+      zfs set atime=off "$dataset"
+
+      echo "migrating $name: $target -> $dataset"
+
+      if mountpoint -q "$target"; then
+        echo "  unmounting existing dataset at $target"
+        umount "$target"
+      fi
+
+      if [ -e "$target" ]; then
+        echo "  moving current directory to $backup"
+        mv "$target" "$backup"
+      else
+        echo "  current directory missing; creating empty backup source $backup"
+        install -d -m 0755 "$backup"
+      fi
+
+      install -d -m 0755 "$target"
+      echo "  mounting $dataset at $target"
+      mount -t zfs "$dataset" "$target"
+
+      if [ -d "$backup" ]; then
+        echo "  copying $backup into $target"
+        rsync -aHAX --numeric-ids "$backup"/ "$target"/
+      fi
+
+      echo "migrated $name to $dataset at $target; old copy: $backup"
+    }
+
+    migrate_named() {
+      case "$1" in
+        calibre) migrate_dataset calibre xpool/appstate/calibre /var/lib/calibre ;;
+        calibre-web) migrate_dataset calibre-web xpool/appstate/calibre-web /var/lib/calibre-web ;;
+        plex) migrate_dataset plex xpool/appstate/plex /var/lib/plex ;;
+        qbittorrent) migrate_dataset qbittorrent xpool/appstate/qbittorrent /var/lib/qbittorrent ;;
+        stash) migrate_dataset stash xpool/appstate/stash /var/lib/stash ;;
+        steam-headless) migrate_dataset steam-headless xpool/appstate/steam-headless /var/lib/steam-headless ;;
+        *)
+          echo "unknown appstate dataset: $1" >&2
+          exit 1
+          ;;
+      esac
+    }
+
+    if [ "$#" -eq 0 ]; then
+      set -- calibre calibre-web plex qbittorrent stash steam-headless
+    fi
+
+    for name in "$@"; do
+      migrate_named "$name"
+    done
+
+    systemctl daemon-reload
+    echo "appstate migration complete; rebuild this host, then start the services"
+  '';
+  appStateBackup = pkgs.writeShellScriptBin "xyz-appstate-backup" ''
+    set -euo pipefail
+
+    if [ "$(id -u)" -ne 0 ]; then
+      echo "xyz-appstate-backup must run as root" >&2
+      exit 1
+    fi
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.sanoid
+        zfsKernelPkgs.zfs
+      ]
+    }
+
+    source_dataset=xpool/appstate
+    target_pool=${lib.escapeShellArg appStateBackupPool}
+    target_dataset=${lib.escapeShellArg appStateBackupRoot}
+
+    if ! zpool list -H "$target_pool" >/dev/null 2>&1; then
+      echo "backup pool '$target_pool' is not imported; create/import it before running appstate backups" >&2
+      exit 1
+    fi
+
+    if ! zfs list -H "$source_dataset" >/dev/null 2>&1; then
+      echo "source dataset '$source_dataset' does not exist" >&2
+      exit 1
+    fi
+
+    target_pool_encryption="$(zfs get -H -o value encryption "$target_pool" 2>/dev/null || echo off)"
+    if [ "$target_pool_encryption" = off ]; then
+      echo "backup pool '$target_pool' is not encrypted; refusing to write unencrypted appstate backups" >&2
+      exit 1
+    fi
+
+    target_pool_keystatus="$(zfs get -H -o value keystatus "$target_pool" 2>/dev/null || echo unavailable)"
+    if [ "$target_pool_keystatus" != available ]; then
+      echo "backup pool '$target_pool' key is not loaded; run: zfs load-key $target_pool" >&2
+      exit 1
+    fi
+
+    if ! zfs list -H "$target_dataset" >/dev/null 2>&1; then
+      zfs create -p \
+        -o mountpoint=none \
+        -o canmount=off \
+        -o compression=zstd \
+        -o atime=off \
+        "$target_dataset"
+    fi
+
+    target_dataset_encryption="$(zfs get -H -o value encryption "$target_dataset" 2>/dev/null || echo off)"
+    if [ "$target_dataset_encryption" = off ]; then
+      echo "backup dataset '$target_dataset' is not encrypted; refusing to write unencrypted appstate backups" >&2
+      exit 1
+    fi
+
+    target_dataset_keystatus="$(zfs get -H -o value keystatus "$target_dataset" 2>/dev/null || echo unavailable)"
+    if [ "$target_dataset_keystatus" != available ]; then
+      echo "backup dataset '$target_dataset' key is not loaded; run: zfs load-key $target_dataset" >&2
+      exit 1
+    fi
+
+    syncoid \
+      --recursive \
+      --skip-parent \
+      --compress=none \
+      --recvoptions="u o canmount=off o readonly=on" \
+      "$source_dataset" \
+      "$target_dataset"
+  '';
+in {
   imports = [
     ./hardware-configuration.nix
 
@@ -24,13 +204,14 @@
     "${configDir}/modules/nixos/services/stash/default.nix"
     "${configDir}/modules/nixos/services/plex/default.nix"
     "${configDir}/modules/nixos/services/calibre-web/default.nix"
+    "${configDir}/modules/nixos/services/flatpak/default.nix"
+    "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/gpu-passthrough.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
-    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -42,7 +223,52 @@
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
 
+  boot.kernelPackages = zfsKernelPkgs.linuxPackages_latest;
+  boot.zfs.package = zfsKernelPkgs.zfs;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
+  boot.kernelParams = ["usbcore.autosuspend=-1"];
+  boot.extraModprobeConfig = ''
+    options btusb reset=1 enable_autosuspend=0
+    options mt7925e disable_aspm=1
+  '';
+
+  systemd.services.bluetooth-keyboard-reconnect = {
+    description = "Reconnect trusted Bluetooth keyboards";
+    after = ["bluetooth.service"];
+    wants = ["bluetooth.service"];
+    wantedBy = ["multi-user.target"];
+    path = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.systemd
+    ];
+    serviceConfig = {
+      Restart = "always";
+      RestartSec = "5s";
+    };
+    script = ''
+      set -u
+
+      prop() {
+        busctl get-property org.bluez "$1" org.bluez.Device1 "$2" 2>/dev/null || true
+      }
+
+      while true; do
+        busctl tree --list org.bluez \
+          | grep -E '^/org/bluez/hci[0-9]+/dev_[^/]+$' \
+          | while read -r device; do
+            [ "$(prop "$device" Icon)" = 's "input-keyboard"' ] || continue
+            [ "$(prop "$device" Paired)" = "b true" ] || continue
+            [ "$(prop "$device" Trusted)" = "b true" ] || continue
+            [ "$(prop "$device" Connected)" = "b false" ] || continue
+
+            busctl call org.bluez "$device" org.bluez.Device1 Connect >/dev/null 2>&1 || true
+          done
+
+        sleep 10
+      done
+    '';
+  };
 
   # ---- Nix Settings ----
   nix.settings.secret-key-files = ["/etc/nix/signing-key"];
@@ -121,12 +347,107 @@
   };
 
   # ==================== ZFS ====================
-  environment.systemPackages = [pkgs.zfs];
+  environment.systemPackages = [
+    appStateBackup
+    appStateMigrate
+    zfsKernelPkgs.zfs
+  ];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
+  swapDevices = lib.mkForce [
+    {
+      device = "/dev/disk/by-partuuid/34b759ea-2e88-4ea1-9cd5-f79cee42e952";
+      randomEncryption.enable = true;
+      options = ["nofail"];
+    }
+  ];
+
+  fileSystems."/var/lib/calibre" = {
+    device = appStateDatasets.calibre;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/calibre-web" = {
+    device = appStateDatasets.calibre-web;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/plex" = {
+    device = appStateDatasets.plex;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/qbittorrent" = {
+    device = appStateDatasets.qbittorrent;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/stash" = {
+    device = appStateDatasets.stash;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/steam-headless" = {
+    device = appStateDatasets.steam-headless;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+
+  # Disable discard/trim timers on this storage stack. A hard hang on 2026-05-18
+  # coincided with fstrim starting, and the post-reset boot left tank import
+  # blocked until manual recovery.
+  services.fstrim.enable = lib.mkForce false;
+  systemd.timers.fstrim.wantedBy = lib.mkForce [];
+  systemd.timers.zpool-trim.wantedBy = lib.mkForce [];
+  systemd.timers.fstrim.timerConfig = {
+    OnCalendar = lib.mkForce "Sat *-*-* 05:00:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
+  systemd.timers.zpool-trim.timerConfig = {
+    OnCalendar = lib.mkForce "Sat *-*-* 06:00:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
+
+  # Keep disruptive maintenance in the 04:00-07:00 local quiet window.
+  nix.gc = {
+    dates = lib.mkForce "Mon *-*-* 04:30:00";
+    persistent = lib.mkForce false;
+  };
+  systemd.timers.logrotate.timerConfig = {
+    OnCalendar = lib.mkForce "*-*-* 04:10:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
+  systemd.timers.systemd-tmpfiles-clean.timerConfig = {
+    OnCalendar = lib.mkForce "*-*-* 04:20:00";
+    Persistent = lib.mkForce false;
+    RandomizedDelaySec = lib.mkForce "0";
+  };
 
   systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
+
+  systemd.services.xyz-appstate-backup = {
+    description = "Replicate xyz appstate datasets to the local backup pool";
+    after = ["zfs-mount.service"];
+    requires = ["zfs-mount.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${appStateBackup}/bin/xyz-appstate-backup";
+    };
+  };
+
+  systemd.timers.xyz-appstate-backup = {
+    description = "Daily xyz appstate dataset backup";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = "*-*-* 05:20:00";
+      Persistent = false;
+      RandomizedDelaySec = "0";
+    };
+  };
 
   # Docker - ZFS relationship
 
@@ -152,23 +473,45 @@
   services.torrent.enable = true;
   services.plex.managed = {
     enable = true;
-    dataDir = "/ypool/appdata/plex";
-    mediaDir = "/ypool/media/plex";
+    mediaDir = "/tank/media/plex";
     transcodeDir = "/tmp/plex-transcode";
   };
   services.stash.managed = {
     enable = true;
-    dataDir = "/zpool/appdata/stash";
   };
   services.calibre-web.managed = {
     enable = true;
     configDir = "/var/lib/calibre-web/config";
     libraryDir = "/var/lib/calibre/config/libraries/Main";
   };
+
+  systemd.services.calibre-web = {
+    requires = [
+      "var-lib-calibre.mount"
+      "var-lib-calibre\\x2dweb.mount"
+    ];
+    after = [
+      "var-lib-calibre.mount"
+      "var-lib-calibre\\x2dweb.mount"
+    ];
+  };
+  systemd.services.plex = {
+    requires = ["var-lib-plex.mount"];
+    after = ["var-lib-plex.mount"];
+  };
+  systemd.services.qbittorrent = {
+    requires = ["var-lib-qbittorrent.mount"];
+    after = ["var-lib-qbittorrent.mount"];
+  };
+  systemd.services.stash = {
+    requires = ["var-lib-stash.mount"];
+    after = ["var-lib-stash.mount"];
+  };
+
   services.k8s-backup-s3 = {
     enable = true;
-    dataset = "ypool/k8s-backups";
-    dataDir = "/ypool/k8s-backups/rustfs";
+    dataset = "tank/k8s-backups";
+    dataDir = "/tank/k8s-backups/rustfs";
     quota = "1T";
     apiAddress = "192.168.1.10:9100";
     consoleAddress = "127.0.0.1:9101";
@@ -208,14 +551,22 @@
       # Shared state for gitops tools (tokens, cross-host config)
       {path = "/home/alc/.local/share/gitops-state";}
       # ZFS datasets
-      {path = "/ypool/media";}
-      {path = "/ypool/downloads";}
-      {path = "/ypool/games";}
-      {path = "/ypool/vault";}
+      {path = "/tank/media";}
+      {path = "/tank/downloads";}
+      {path = "/tank/games";}
+      {
+        path = "/tank/vault";
+        anonuid = 65534;
+        anongid = 65534;
+        allowedClients = ["192.168.1.0/24"];
+      }
     ];
   };
 
-  services.netbird.managed.enable = true;
+  services.netbird.managed = {
+    enable = true;
+    disableDns = true;
+  };
 
   services.forgejo-actions-runner = {
     enable = true;
@@ -229,14 +580,9 @@
   };
 
   k3s = {
-    enable = true;
+    enable = false;
     serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
-  };
-
-  systemd.services.k3s = {
-    requires = ["ext4.mount"];
-    after = ["ext4.mount"];
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
@@ -244,7 +590,31 @@
   # t3code server — only reachable via Netbird (wt0), not LAN
   networking.firewall.interfaces."wt0".allowedTCPPorts = [3773];
 
-  services.flatpak.enable = true;
+  services.flatpak.managed = {
+    enable = true;
+    packages = [
+      "com.heroicgameslauncher.hgl"
+    ];
+    overrides."com.heroicgameslauncher.hgl" = [
+      "--filesystem=/ext4"
+      "--filesystem=/nix/store:ro"
+      "--filesystem=home"
+    ];
+  };
+
+  services.heroicSideload = {
+    enable = true;
+    user = username;
+    apps.totem-quest = {
+      title = "Totem Quest";
+      appName = "rcFYseiJyPmfqM9tn2Di7a";
+      source = "/var/lib/xyz-games/sources/Totem-Quest_Win_EN_Full.zip";
+      installDir = "/ext4/games/Totem_Quest";
+      executable = "TotemQuest.exe";
+      art = "https://www.myabandonware.com/media/screenshots/t/totem-quest-1c8k/webp/totem-quest_1.webp";
+      protonPackage = pkgs.proton-ge-bin.steamcompattool;
+    };
+  };
 
   systemd.coredump.enable = true;
   systemd.coredump.settings.Coredump = {
@@ -253,9 +623,9 @@
   };
 
   # ==================== Virtualisation ====================
-  virtualisation.kvm.managed.enable = true;
+  virtualisation.kvm.managed.enable = false;
   virtualisation.kvm.gpu-passthrough = {
-    enable = true;
+    enable = false;
     vmName = "win11";
     gpuContainerStacks = [
       "/home/alc/src/infra/gitops/docker/xyz/steam"
@@ -301,10 +671,12 @@
 
   # ==================== Tmpfiles ====================
   systemd.tmpfiles.rules = [
-    "L+ /downloads - - - - /ypool/downloads"
-    "L+ /vault - - - - /ypool/vault"
-    "d /ypool/games 0770 root media - -"
-    "d /ypool/vault 0770 root media - -"
+    "d /tank 0755 root root - -"
+    "z /tank 0755 root root - -"
+    "L+ /downloads - - - - /tank/downloads"
+    "L+ /vault - - - - /tank/vault"
+    "d /tank/games 0770 root media - -"
+    "d /tank/vault 0770 root media - -"
 
     # Ensure the filtered input directory exists on boot (tmpfs)
     #"d /run/steam-headless-input 0755 root root - -"
