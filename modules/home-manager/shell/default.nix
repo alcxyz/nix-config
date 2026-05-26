@@ -28,7 +28,6 @@
     cd = "z";
     "," = "z";
     ",," = "z -";
-    ":" = "nix-shell -p";
     g = "gitui";
     gc = "git commit -m";
     gca = "git commit -am";
@@ -39,13 +38,18 @@
     t = "tmux";
     ta = "tmux a";
   };
+  nushellAliases = {
+    # Keep this out of Bash/Zsh: ':' is a POSIX no-op builtin used by prompt
+    # init scripts, and aliasing it corrupts Starship/Atuin Bash startup.
+    ":" = "nix-shell -p";
+  };
 
   xonshAliases =
     lib.concatStringsSep "\n"
     (lib.mapAttrsToList (
         name: value: "aliases[${builtins.toJSON name}] = ${builtins.toJSON value}"
       )
-      shellAliases);
+      (shellAliases // nushellAliases));
 
   xonshSessionVariables =
     lib.concatStringsSep "\n"
@@ -174,6 +178,7 @@ in {
 
     nushell = {
       enable = enableNushell;
+      shellAliases = nushellAliases;
 
       environmentVariables = {
         CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
