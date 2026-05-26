@@ -124,6 +124,12 @@ in {
     bash = {
       enable = enableBash;
       enableCompletion = true;
+      initExtra = lib.mkOrder 2000 ''
+        # Starship 1.25 emits Bash \[...\] prompt guards. In nested Bash
+        # sessions those guards can be rendered literally after ANSI stripping,
+        # so use Starship's plain ANSI prompt rendering for Bash too.
+        export STARSHIP_SHELL=unknown
+      '';
     };
 
     zsh = {
