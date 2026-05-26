@@ -217,7 +217,8 @@ in rec {
       #gemini-cli
       opencode
       claude-code
-      codex
+      codex-cli
+      codex-app-server
       t3code
     ];
 

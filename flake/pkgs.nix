@@ -21,6 +21,8 @@ in
               "kdash"
               "t3code"
               "claude-code"
+              "codex-app-server"
+              "codex-cli"
               "devlog"
               "agent-sync-check"
               "omniwm"
