@@ -121,7 +121,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dms-plugins.url = "github:alcxyz/dms-plugins/main";
+    dms-plugins.url = "path:/home/alc/src/tools/dms-plugins";
   };
 
   # ---- Outputs ----------------------------------------------------------

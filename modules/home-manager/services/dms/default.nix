@@ -38,6 +38,9 @@
   dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
   };
+  dankaiusagePkg = pkgs.callPackage "${plugins.aiusage}/default.nix" {
+    version = (builtins.fromJSON (builtins.readFile "${plugins.aiusage}/plugin.json")).version;
+  };
 in {
   options.services.dms = {
     enable = lib.mkEnableOption "Enable DankMaterialShell suite";
@@ -95,6 +98,7 @@ in {
   config = lib.mkIf cfg.enable {
     home.packages = [
       dankcalendarPkg
+      dankaiusagePkg
       pkgs.translate-shell
     ];
 
@@ -158,6 +162,10 @@ in {
         DankDiskUsage = {
           enable = true;
           src = plugins.diskusage;
+        };
+        DankAIUsage = {
+          enable = true;
+          src = plugins.aiusage;
         };
         # First-party plugins (AvengeMedia/dms-plugins monorepo)
         DankActions = {

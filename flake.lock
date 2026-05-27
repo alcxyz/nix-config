@@ -1,5 +1,19 @@
 {
   "nodes": {
+    "aiusage": {
+      "flake": false,
+      "locked": {
+        "path": "./DankAIUsage",
+        "type": "path"
+      },
+      "original": {
+        "path": "./DankAIUsage",
+        "type": "path"
+      },
+      "parent": [
+        "dms-plugins"
+      ]
+    },
     "aquamarine": {
       "inputs": {
         "hyprutils": [
@@ -185,6 +199,7 @@
     },
     "dms-plugins": {
       "inputs": {
+        "aiusage": "aiusage",
         "calculator": "calculator",
         "dankcalendar": "dankcalendar",
         "diskusage": "diskusage",
@@ -196,18 +211,14 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1778324725,
-        "narHash": "sha256-seZRtp6FCUg0W32YfFJjncC7nYkP0yJhwswm9ntHWp0=",
-        "owner": "alcxyz",
-        "repo": "dms-plugins",
-        "rev": "0371596b9c0de2398a0c6b596e11a761076d8b4b",
-        "type": "github"
+        "lastModified": 1779925755,
+        "narHash": "sha256-AeoA49IgtK3afff0epyV3j5gGSNgAihuUlUCZzAl8tE=",
+        "path": "/home/alc/src/tools/dms-plugins",
+        "type": "path"
       },
       "original": {
-        "owner": "alcxyz",
-        "ref": "main",
-        "repo": "dms-plugins",
-        "type": "github"
+        "path": "/home/alc/src/tools/dms-plugins",
+        "type": "path"
       }
     },
     "dsearch": {
