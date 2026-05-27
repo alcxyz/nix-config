@@ -5,15 +5,12 @@
   pkgs,
   username,
   ...
-}:
-
-let
+}: let
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
   sharedGroup = "media";
   qbConfigDir = "/var/lib/qbittorrent";
   qbConfigStateDir = "${qbConfigDir}/profile";
-  qbNativeDir = "${qbConfigStateDir}/qBittorrent";
   dataDir = "/tank/downloads";
 
   stashDir = "/tank/stash";
@@ -76,44 +73,14 @@ let
     ++ map (d: "z " + d.path + " 2775 " + d.owner + " " + sharedGroup + " - -") sharedMediaDirs
     ++ map (
       d: "a+ " + d.path + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
-    ) sharedMediaDirs;
-  qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
-    set -euo pipefail
-
-    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg serviceGroup} \
-      ${lib.escapeShellArg qbConfigDir}
-    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
-      ${lib.escapeShellArg qbConfigStateDir} \
-      ${lib.escapeShellArg qbNativeDir}
-    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
-      ${lib.escapeShellArg (qbNativeDir + "/config")} \
-      ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
-
-    for config_file in \
-      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")} \
-      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")}
-    do
-      if [ -f "$config_file" ]; then
-        ${pkgs.gnused}/bin/sed -i \
-          -e 's#/zpool/downloads#/tank/downloads#g' \
-          -e 's#/ypool/downloads#/tank/downloads#g' \
-          "$config_file"
-      fi
-    done
-
-    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg serviceGroup} ${lib.escapeShellArg qbConfigDir}
-    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} \
-      ${lib.escapeShellArg qbConfigStateDir} \
-      ${lib.escapeShellArg qbNativeDir}
-    chown -R ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} ${lib.escapeShellArg qbNativeDir}
-  '';
-in
-{
+    )
+    sharedMediaDirs;
+in {
   options.services.torrent.enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
 
   config = lib.mkIf config.services.torrent.enable {
-    users.groups.${sharedGroup} = { };
-    users.groups.${serviceGroup} = { };
+    users.groups.${sharedGroup} = {};
+    users.groups.${serviceGroup} = {};
     users.users.${serviceUser} = {
       isSystemUser = true;
       group = serviceGroup;
@@ -123,9 +90,9 @@ in
       createHome = true;
       home = qbConfigDir;
     };
-    users.users.${username}.extraGroups = [ serviceGroup ];
+    users.users.${username}.extraGroups = [serviceGroup];
 
-    users.groups.flood = { };
+    users.groups.flood = {};
     users.users.flood = {
       isSystemUser = true;
       group = "flood";
@@ -141,7 +108,7 @@ in
         8080
         51413
       ];
-      allowedUDPPorts = [ 51413 ];
+      allowedUDPPorts = [51413];
     };
 
     services.qbittorrent = {
@@ -162,9 +129,8 @@ in
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
       ];
-      conflicts = [ "docker-qbittorrent.service" ];
+      conflicts = ["docker-qbittorrent.service"];
       serviceConfig = {
-        ExecStartPre = [ "+${qbittorrentStateMigration}" ];
         PrivateUsers = lib.mkForce false;
         SupplementaryGroups = [
           serviceGroup
@@ -174,9 +140,9 @@ in
 
     systemd.services.torrent-shared-media-zfs-properties = {
       description = "Enable POSIX ACLs on shared media ZFS datasets";
-      wantedBy = [ "multi-user.target" ];
-      requires = [ "zfs-auto-unlock.service" ];
-      after = [ "zfs-auto-unlock.service" ];
+      wantedBy = ["multi-user.target"];
+      requires = ["zfs-auto-unlock.service"];
+      after = ["zfs-auto-unlock.service"];
       before = [
         "torrent-shared-media-permissions.service"
         "docker.service"
@@ -211,7 +177,7 @@ in
 
     systemd.services.torrent-shared-media-permissions = {
       description = "Apply shared media ACLs for torrent and media workloads";
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = ["multi-user.target"];
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-zfs-properties.service"
@@ -269,6 +235,5 @@ in
         fi
       '';
     };
-
   };
 }

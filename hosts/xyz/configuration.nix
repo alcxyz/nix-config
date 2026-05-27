@@ -24,100 +24,6 @@
   };
   appStateBackupPool = "hitachi";
   appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
-  appStateMigrate = pkgs.writeShellScriptBin "xyz-appstate-migrate" ''
-    set -euo pipefail
-
-    if [ "$(id -u)" -ne 0 ]; then
-      echo "xyz-appstate-migrate must run as root" >&2
-      exit 1
-    fi
-
-    export PATH=${
-      lib.makeBinPath [
-        pkgs.coreutils
-        pkgs.gnugrep
-        pkgs.rsync
-        pkgs.systemd
-        pkgs.util-linux
-        zfsKernelPkgs.zfs
-      ]
-    }
-
-    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-
-    systemctl stop calibre-web.service plex.service qbittorrent.service stash.service docker.service docker.socket || true
-
-    migrate_dataset() {
-      local name="$1"
-      local dataset="$2"
-      local target="$3"
-      local backup="''${target}.pre-appstate-''${stamp}"
-
-      if ! zfs list -H "$dataset" >/dev/null 2>&1; then
-        zfs create -p \
-          -o mountpoint=legacy \
-          -o compression=zstd \
-          -o atime=off \
-          "$dataset"
-      fi
-
-      zfs set mountpoint=legacy "$dataset"
-      zfs set compression=zstd "$dataset"
-      zfs set atime=off "$dataset"
-
-      echo "migrating $name: $target -> $dataset"
-
-      if mountpoint -q "$target"; then
-        echo "  unmounting existing dataset at $target"
-        umount "$target"
-      fi
-
-      if [ -e "$target" ]; then
-        echo "  moving current directory to $backup"
-        mv "$target" "$backup"
-      else
-        echo "  current directory missing; creating empty backup source $backup"
-        install -d -m 0755 "$backup"
-      fi
-
-      install -d -m 0755 "$target"
-      echo "  mounting $dataset at $target"
-      mount -t zfs "$dataset" "$target"
-
-      if [ -d "$backup" ]; then
-        echo "  copying $backup into $target"
-        rsync -aHAX --numeric-ids "$backup"/ "$target"/
-      fi
-
-      echo "migrated $name to $dataset at $target; old copy: $backup"
-    }
-
-    migrate_named() {
-      case "$1" in
-        calibre) migrate_dataset calibre xpool/appstate/calibre /var/lib/calibre ;;
-        calibre-web) migrate_dataset calibre-web xpool/appstate/calibre-web /var/lib/calibre-web ;;
-        plex) migrate_dataset plex xpool/appstate/plex /var/lib/plex ;;
-        qbittorrent) migrate_dataset qbittorrent xpool/appstate/qbittorrent /var/lib/qbittorrent ;;
-        stash) migrate_dataset stash xpool/appstate/stash /var/lib/stash ;;
-        steam-headless) migrate_dataset steam-headless xpool/appstate/steam-headless /var/lib/steam-headless ;;
-        *)
-          echo "unknown appstate dataset: $1" >&2
-          exit 1
-          ;;
-      esac
-    }
-
-    if [ "$#" -eq 0 ]; then
-      set -- calibre calibre-web plex qbittorrent stash steam-headless
-    fi
-
-    for name in "$@"; do
-      migrate_named "$name"
-    done
-
-    systemctl daemon-reload
-    echo "appstate migration complete; rebuild this host, then start the services"
-  '';
   appStateBackup = pkgs.writeShellScriptBin "xyz-appstate-backup" ''
     set -euo pipefail
 
@@ -349,7 +255,6 @@ in {
   # ==================== ZFS ====================
   environment.systemPackages = [
     appStateBackup
-    appStateMigrate
     zfsKernelPkgs.zfs
   ];
   boot.supportedFilesystems = ["zfs"];
