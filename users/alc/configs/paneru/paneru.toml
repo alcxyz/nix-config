@@ -5,7 +5,7 @@
 focus_follows_mouse = true
 mouse_follows_focus = true
 auto_center = false
-preset_column_widths = [0.166666, 0.25, 0.333333, 0.5, 0.666666, 1.0]
+preset_column_widths = [0.166, 0.25, 0.333, 0.5, 0.666, 1.0]
 window_resize_cycle = true
 window_hidden_ratio = 0.0
 sliver_width = 5
@@ -85,7 +85,7 @@ quit = ["alt + ctrl - r", "alt + shift - escape"]
 
 [windows.default]
 title = ".*"
-width = 0.333333
+width = 0.333
 
 [windows.settings]
 title = ".*"
