@@ -14,6 +14,7 @@
   reposJson = builtins.toJSON selectedRepos;
   dirs = [
     "apps"
+    "platform"
     "infra"
     "tools"
     "tools/dms-plugins"
