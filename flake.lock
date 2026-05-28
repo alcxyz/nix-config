@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1779977044,
-        "narHash": "sha256-oKWPSgoslpgBNhBIdwrCPUp3NyEPzdw8DBRXj7/eiIc=",
+        "lastModified": 1779978651,
+        "narHash": "sha256-bp9kiIqeKSmdfKXD4OFnqliymb2qKDFBuBSkuqdkT4o=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "678ae7ff6bbf5ba28d4ac150952fc5a0fe978ec7",
+        "rev": "19d634b63ecc92a3afbd782810f1509f0055fb26",
         "type": "github"
       },
       "original": {
@@ -214,8 +214,8 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1779977189,
-        "narHash": "sha256-1GJDiEzGRH4i0hd3L/OZCSossQgdWZOVFLk+YChKLvE=",
+        "lastModified": 1779978672,
+        "narHash": "sha256-m1QgP7j4TkZittbQjQDDXYUz2jHZvIzoJoR6ctu4+T4=",
         "path": "/home/alc/src/tools/dms-plugins",
         "type": "path"
       },
