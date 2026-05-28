@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1779978651,
-        "narHash": "sha256-bp9kiIqeKSmdfKXD4OFnqliymb2qKDFBuBSkuqdkT4o=",
+        "lastModified": 1779979631,
+        "narHash": "sha256-Fz9/h33//i7xgl5yzy8RNzleMteORQrBMUNZsIfhabw=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "19d634b63ecc92a3afbd782810f1509f0055fb26",
+        "rev": "7fa4e8636d84466f251b4ec2f124cdcc44613ecc",
         "type": "github"
       },
       "original": {
@@ -214,8 +214,8 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1779978672,
-        "narHash": "sha256-m1QgP7j4TkZittbQjQDDXYUz2jHZvIzoJoR6ctu4+T4=",
+        "lastModified": 1779979729,
+        "narHash": "sha256-GYjDv8NvxjeeFvQ34kPPnj3TOXOomlkP9Doh5wBusKc=",
         "path": "/home/alc/src/tools/dms-plugins",
         "type": "path"
       },
@@ -955,11 +955,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1779862103,
-        "narHash": "sha256-7bwX6ZMWNDdtP+FPGdwimJv0VnMThcSFQV53Gg1Gr5w=",
+        "lastModified": 1779948468,
+        "narHash": "sha256-BoZRo7931dthvjd7WMKUtZoatPmECVqjxslDRzmq51o=",
         "ref": "dev",
-        "rev": "2fafeea027483aa6865940842766e1c92219be7e",
-        "revCount": 234,
+        "rev": "7105a2e946eceeed9683b01cb3b2ac26359dbbb6",
+        "revCount": 237,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
