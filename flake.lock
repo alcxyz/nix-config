@@ -3,16 +3,19 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "path": "./DankAIUsage",
-        "type": "path"
+        "lastModified": 1779977044,
+        "narHash": "sha256-oKWPSgoslpgBNhBIdwrCPUp3NyEPzdw8DBRXj7/eiIc=",
+        "owner": "alcxyz",
+        "repo": "DankAIUsage",
+        "rev": "678ae7ff6bbf5ba28d4ac150952fc5a0fe978ec7",
+        "type": "github"
       },
       "original": {
-        "path": "./DankAIUsage",
-        "type": "path"
-      },
-      "parent": [
-        "dms-plugins"
-      ]
+        "owner": "alcxyz",
+        "ref": "main",
+        "repo": "DankAIUsage",
+        "type": "github"
+      }
     },
     "aquamarine": {
       "inputs": {
@@ -211,8 +214,8 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1779925755,
-        "narHash": "sha256-AeoA49IgtK3afff0epyV3j5gGSNgAihuUlUCZzAl8tE=",
+        "lastModified": 1779977189,
+        "narHash": "sha256-1GJDiEzGRH4i0hd3L/OZCSossQgdWZOVFLk+YChKLvE=",
         "path": "/home/alc/src/tools/dms-plugins",
         "type": "path"
       },
