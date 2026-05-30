@@ -28,7 +28,7 @@ in
 
   programs.wezterm.enable = true;
   programs.karabiner.managed.enable = true;
-  programs.paneru.managed.enable = true;
+  programs.paneru.managed.enable = false;
   programs.atuin.daemon.enable = false;
 
   home.sessionPath = [
