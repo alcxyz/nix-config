@@ -1,22 +1,22 @@
 # ADR-0047: Kubernetes API floating VIP
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-05-31: `xev` replaced `rpi0`)
 **Date:** 2026-05-12
-**Applies to:** `hosts/nux`, `hosts/nex`, `hosts/rpi0`, `hosts/xyz`, `modules/nixos/services/k8s-api-vip`, `modules/nixos/virtualisation/k3s`, `nix-secrets/cluster-bootstrap/k3s-kubeconfig.yaml`, `gitops/pihole`
+**Applies to:** `hosts/xev`, `hosts/nux`, `hosts/nex`, `hosts/xyz`, `modules/nixos/services/k8s-api-vip`, `modules/nixos/virtualisation/k3s`, `nix-secrets/cluster-bootstrap/k3s-kubeconfig.yaml`, `gitops/pihole`
 
 ## Context
 
 The k3s control plane now has three embedded-etcd server nodes:
 
+- `xev` at `192.168.1.13`
 - `nux` at `192.168.1.15`
 - `nex` at `192.168.1.16`
-- `rpi0` at `192.168.1.3`
 
 The cluster can tolerate one server-node failure as long as two embedded-etcd
 members remain available. Client access did not have the same property because
 the shared kubeconfig pointed at `https://nux:6443`. If `nux` was down,
 `kubectl` and joining agents targeted a dead host even when the control plane
-still had quorum through `nex` and `rpi0`.
+still had quorum through the other server nodes.
 
 k3s binds the API server on `*:6443` on each server node. That makes a local
 HAProxy listener on `VIP:6443` conflict with k3s on the same machines unless the
@@ -36,12 +36,12 @@ k8s-api.local -> 192.168.1.250
 192.168.1.250:6443 -> local k3s API on the current VIP holder
 ```
 
-`nux`, `nex`, and `rpi0` run keepalived through a reusable NixOS module:
+`xev`, `nux`, and `nex` run keepalived through a reusable NixOS module:
 
 - VRRP is unicast between the three server LAN addresses.
 - The VIP is assigned to the LAN interface on one server at a time.
 - keepalived tracks the local k3s API TCP listener on `127.0.0.1:6443`.
-- `nux` has the highest election priority, followed by `nex`, then `rpi0`.
+- `xev` has the highest election priority, followed by `nux`, then `nex`.
 - `nopreempt` avoids moving the VIP back just because a higher-priority node
   returns after a failover.
 
@@ -59,7 +59,7 @@ for Nix-managed k3s nodes while the Pi-hole record provides LAN-wide resolution.
 **Keep `https://nux:6443`** - rejected because it makes `nux` a client access
 single point of failure even after the control plane gained quorum redundancy.
 
-**DNS round-robin across `nux`, `nex`, and `rpi0`** - rejected because clients and
+**DNS round-robin across the server nodes** - rejected because clients and
 resolvers do not provide reliable health-aware failover for Kubernetes API
 traffic.
 
@@ -87,11 +87,11 @@ three server nodes should be a deliberate five-member control-plane decision.
 
 Rollout order matters:
 
-1. Deploy the keepalived VIP and k3s TLS SANs to `nux`.
-2. Verify `192.168.1.250:6443` serves the API and the certificate covers
-   `k8s-api.local`.
-3. Deploy `nex` and `rpi0` with `serverAddr = "https://k8s-api.local:6443"`.
-4. Deploy agent hosts such as `xyz` with the same stable server address.
-5. Apply the Pi-hole DNS record and update shared kubeconfig consumers.
-6. Test failover by stopping keepalived on the current VIP holder and verifying
+1. Verify current etcd health and take an on-demand snapshot before server-set
+   changes.
+2. Add the replacement server and verify it joins etcd before removing an
+   existing member.
+3. Deploy keepalived peer updates only after the final three-server set is
+   known.
+4. Test failover by stopping keepalived on the current VIP holder and verifying
    `kubectl get nodes` still works through `k8s-api.local`.

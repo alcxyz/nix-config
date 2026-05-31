@@ -110,7 +110,7 @@
       system = "x86_64-linux";
       platform = "nixos";
       role = "k8s-worker";
-      k8sRole = "stable-agent";
+      k8sRole = "server-worker";
       sshHostname = "192.168.1.13";
       configuration = ./hosts/xev/configuration.nix;
       osIcon = "";
@@ -147,7 +147,7 @@
       system = "aarch64-linux";
       platform = "nixos";
       role = "embedded";
-      k8sRole = "server-control-plane";
+      k8sRole = null;
       sshHostname = "192.168.1.3";
       configuration = ./hosts/rpi0/configuration.nix;
       osIcon = "";

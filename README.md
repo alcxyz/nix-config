@@ -9,9 +9,9 @@ Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, serv
 | xyz | x86_64-linux | Main workstation. Hyprland desktop, GPU passthrough, Docker services, ZFS pools |
 | nux | x86_64-linux | Server. Offloads builds to xyz; mac can orchestrate deploys while xyz is unavailable |
 | nex | x86_64-linux | NUC k3s server + stable workload host |
-| xev | x86_64-linux | Stable k3s worker with Longhorn prerequisites and primary Forgejo runner capacity |
+| xev | x86_64-linux | k3s server + stable workload host with Longhorn storage and primary Forgejo runner capacity |
 | xps | x86_64-linux | Dell XPS workstation; Kubernetes participation deferred until wired networking is reliable |
-| rpi0 | aarch64-linux | Rock Pi 4. Lightweight server, offloads builds to xyz; can be built by mac's Linux builder after mac is rebuilt |
+| rpi0 | aarch64-linux | Rock Pi 4. Host-native DNS/Pi-hole and standby UniFi; kept outside k3s |
 | mac | aarch64-darwin | MacBook. nix-darwin + Home Manager + bootstrapped aarch64 Linux builder |
 
 Planned hosts are documented before they are added to inventory:

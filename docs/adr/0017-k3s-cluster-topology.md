@@ -1,9 +1,9 @@
 # ADR-0017: k3s cluster topology for the current homelab phase
 
-**Status:** Accepted
+**Status:** Accepted (amended by ADR-0051)
 **Date:** 2026-04-26
-**Updated:** 2026-05-02
-**Applies to:** `hosts/nux`, `hosts/rpi0`, `hosts/xyz`, future `nex`, infrastructure
+**Updated:** 2026-05-31
+**Applies to:** `hosts/xev`, `hosts/nux`, `hosts/nex`, `hosts/rpi0`, `hosts/xyz`, infrastructure
 
 ## Context
 
@@ -27,10 +27,10 @@ network-critical services into the cluster?”
 Available hardware:
 
 - `nux` — x86_64 NUC, 32 GB RAM, current single-node k3s server and main workload host
-- `rpi0` — RK3399 SBC, 4 GB RAM, suitable for control-plane duty but not general workloads
+- `rpi0` — RK3399 SBC, 4 GB RAM, suitable for host-native DNS and standby network services
 - `xyz` — Ryzen 9 workstation, 64 GB RAM, suitable as opportunistic worker capacity but not a stable quorum member
 - `nex` — future x86_64 NUC, not yet installed/configured
-- `xev` — reserved for a later Ryzen 1700X machine, not part of the immediate step
+- `xev` — Ryzen 1700X server, suitable for stable workloads, Longhorn, and control-plane duty
 
 ## Decision
 
@@ -47,35 +47,23 @@ Keep `Pi-hole` and `UniFi` outside k3s, and evolve the cluster in stages:
 
 These services should not depend on the current cluster for availability.
 
-### Cluster topology: current next step
+### Cluster topology: current target
 
-Move from single-node k3s on `nux` to the following intermediate topology:
-
-| Node | Hardware | Role | Scheduling |
-|------|----------|------|------------|
-| `nux` | Intel NUC, 32 GB | `server + worker` | normal workload host |
-| `rpi0` | RK3399 SBC, 4 GB | `server` | tainted `NoSchedule` |
-| `xyz` | Ryzen 9 workstation, 64 GB | `agent` | opportunistic / burst compute |
-
-Notes:
-
-- `rpi0` joins the control plane but is not intended to run normal workloads
-- `xyz` adds x86_64 capacity immediately but is not counted as stable HA infrastructure
-- this improves the cluster materially, but it is still not the final HA target
-
-### Cluster topology: target after nex
-
-Once `nex` is installed and added to `nix-config`, the intended stable topology is:
+Run the steady-state three-server embedded-etcd topology on the more capable
+stable machines:
 
 | Node | Hardware | Role | Scheduling |
 |------|----------|------|------------|
+| `xev` | Ryzen 1700X server | `server + worker` | normal workload host |
 | `nux` | Intel NUC, 32 GB | `server + worker` | normal workload host |
-| `rpi0` | RK3399 SBC, 4 GB | `server` | tainted `NoSchedule` |
 | `nex` | Intel NUC, 16-32 GB | `server + worker` | normal workload host |
 | `xyz` | Ryzen 9 workstation, 64 GB | `agent` | opportunistic / burst compute |
+| `rpi0` | RK3399 SBC, 4 GB | no k3s role | host-native DNS and standby UniFi |
 
-At that point the cluster has the intended 3-server control plane, and can tolerate
-loss of one control-plane node while keeping quorum.
+The cluster keeps a three-server control plane and can tolerate loss of one
+control-plane node while keeping quorum. `rpi0` remains intentionally outside
+k3s so DNS and standby network services do not depend on cluster health and do
+not compete with k3s server state on a small root filesystem.
 
 ## Migration order
 
@@ -85,19 +73,12 @@ loss of one control-plane node while keeping quorum.
 2. Migrate the majority of application workloads from Docker Compose into k3s
 3. Leave `Pi-hole` and `UniFi` outside the cluster intentionally
 
-### Next step
+### Current migration
 
-1. Join `rpi0` as a k3s server
-2. Apply a `NoSchedule` taint to keep `rpi0` off the normal workload path
-3. Join `xyz` as a k3s agent
-4. Verify scheduling, API health, and failover behavior of the 2-server + 1-agent intermediate state
-
-### Later
-
-1. Install/configure `nex`
-2. Join `nex` as the third k3s server + worker
-3. Rebalance stateful workloads and storage choices as needed
-4. Optionally add `xev` as another agent
+1. Promote `xev` from stable agent to k3s server-worker.
+2. Verify the four-member transition state is healthy.
+3. Drain and remove `rpi0` from Kubernetes and embedded etcd.
+4. Deploy `rpi0` as host-native DNS/Pi-hole and standby UniFi only.
 
 ## Alternatives considered
 
@@ -111,10 +92,10 @@ while the control plane is still maturing.
 Rejected. UniFi is better treated as a host-native service until the cluster reaches
 its intended multi-server shape.
 
-### Keep `rpi0` out of k3s until nex exists
+### Keep `rpi0` out of k3s
 
-Rejected. `rpi0` is available now and is a useful immediate control-plane member,
-even if it is not a general workload host.
+Originally rejected before `nex` existed. Superseded by ADR-0051 after `xev`
+became available as a stronger replacement server.
 
 ### Count `xyz` as part of the HA control plane
 
@@ -128,9 +109,9 @@ Rejected. The whole point of the future `nex` addition is to complete the
 
 ## Consequences
 
-- **Better now:** immediate improvement over a single-node cluster once `rpi0` and
-  `xyz` join
-- **Still limited:** true control-plane HA still waits on `nex`
+- **Better now:** control-plane quorum runs on `xev`, `nux`, and `nex`
+- **Still limited:** three embedded-etcd members tolerate one server failure,
+  not two
 - **Safer networking:** `Pi-hole` and `UniFi` remain independent of cluster health
 - **Mixed-role reality:** the homelab remains hybrid for a while:
   - k3s for most apps

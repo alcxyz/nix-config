@@ -12,6 +12,7 @@
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
+    "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
   ];
@@ -42,6 +43,10 @@
     enable = true;
     serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
+    tlsSans = [
+      "k8s-api.local"
+      "192.168.1.250"
+    ];
   };
 
   fileSystems."/var/lib/longhorn" = {
@@ -57,6 +62,17 @@
   networking.hosts = {
     "192.168.1.13" = ["xev"];
     "192.168.1.250" = ["k8s-api.local"];
+  };
+
+  services.k8s-api-vip = {
+    enable = true;
+    interface = "enp6s0";
+    sourceIp = "192.168.1.13";
+    peers = [
+      "192.168.1.15"
+      "192.168.1.16"
+    ];
+    priority = 120;
   };
 
   services.forgejo-actions-runner = {
