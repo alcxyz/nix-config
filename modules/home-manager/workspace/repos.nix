@@ -134,7 +134,7 @@
   {
     path = "personal/journal";
     url = "git@git-ssh.alc.xyz:alcxyz/journal.git";
-    branch = "main";
+    branch = "dev";
     profiles = [ "personal" ];
   }
   {
