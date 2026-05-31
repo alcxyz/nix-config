@@ -101,6 +101,24 @@ in {
       "d ${cfg.logDirectory} 0700 pihole pihole - -"
     ];
 
+    services.logrotate.settings.pihole-native = {
+      files = [
+        "${cfg.logDirectory}/FTL.log"
+        "${cfg.logDirectory}/pihole.log"
+        "${cfg.logDirectory}/webserver.log"
+      ];
+      frequency = "daily";
+      rotate = 14;
+      maxsize = "100M";
+      compress = true;
+      delaycompress = true;
+      copytruncate = true;
+      missingok = true;
+      notifempty = true;
+      su = "pihole pihole";
+      create = "0640 pihole pihole";
+    };
+
     systemd.services.pihole-ftl = {
       description = "Pi-hole FTL";
       after = [
