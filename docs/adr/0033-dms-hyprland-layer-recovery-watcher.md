@@ -25,7 +25,7 @@ The watcher treats display sleep and wake as state, not as a single socket event
 - Hyprland reports no awake monitor via `hyprctl monitors -j`
 - socket2 emits `dpms>>off`
 - socket2 emits `monitorremoved`
-- socket2 emits `closelayer>>dms:bar`
+- socket2 emits `closelayer>>dms:bar` while Hyprland does not report an awake monitor
 
 Once armed, it waits until Hyprland reports a live, enabled, DPMS-on monitor for two stable checks. It then restarts DMS once, using `dms kill` plus a targeted fallback `pkill`, and relaunches `dms run`.
 
