@@ -148,16 +148,16 @@
     "dankcalendar": {
       "flake": false,
       "locked": {
-        "lastModified": 1777826819,
-        "narHash": "sha256-WzL9u4qb4RWE2Pm/+UuTM6+JxqACuN1wZEGExiXvL6w=",
+        "lastModified": 1779613472,
+        "narHash": "sha256-kxK01+Xg/oRiC5oJB690C3q8CJKM2SKaSDzrHBLM62I=",
         "owner": "alcxyz",
         "repo": "DankCalendar",
-        "rev": "245db3195972730c2c27b13efdbcb5c823d4d6f3",
+        "rev": "21e796e8caca1a1700be2de7ce479aeb6417f68b",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "feature/google-oauth-caldav-26",
         "repo": "DankCalendar",
         "type": "github"
       }
@@ -186,16 +186,16 @@
     "diskusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1777765438,
-        "narHash": "sha256-H+Yap8AgXmOK6w8NIr/HGSDUTK2MHwj0J2otTLOB6xs=",
+        "lastModified": 1778198677,
+        "narHash": "sha256-hEvWl6lx8f2Xu/r+dF3YWs2wxr6B0hTb5g6YwlH2snI=",
         "owner": "alcxyz",
         "repo": "DankDiskUsage",
-        "rev": "0c39eb869c7a3007136f12125b1527988c44858f",
+        "rev": "08998d23c6831a8b6d324aa598fc6f3311729919",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "fix/nix-closure-size",
         "repo": "DankDiskUsage",
         "type": "github"
       }
@@ -214,8 +214,8 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1779979729,
-        "narHash": "sha256-GYjDv8NvxjeeFvQ34kPPnj3TOXOomlkP9Doh5wBusKc=",
+        "lastModified": 1780167854,
+        "narHash": "sha256-mKEcYM+SahcuKjvplLp1IM3oVU3FZfjngpO8nWUledA=",
         "path": "/home/alc/src/tools/dms-plugins",
         "type": "path"
       },
