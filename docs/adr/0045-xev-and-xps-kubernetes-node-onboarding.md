@@ -1,8 +1,8 @@
 # ADR-0045: xev and xps Kubernetes node onboarding
 
-**Status:** Accepted (xev onboarded; xps workstation-only for now)
+**Status:** Accepted (xev onboarded with native runner; xps workstation-only for now)
 **Date:** 2026-05-11
-**Applies to:** `inventory.nix`, `hosts/xev/`, `hosts/xps/`, `modules/nixos/virtualisation/k3s`, `modules/nixos/virtualisation/longhorn-prereqs`, gitops cluster manifests
+**Applies to:** `inventory.nix`, `hosts/xev/`, `hosts/xps/`, `modules/nixos/virtualisation/k3s`, `modules/nixos/virtualisation/longhorn-prereqs`, Forgejo runner services, gitops cluster manifests
 
 ## Context
 
@@ -45,8 +45,8 @@ For `xev`:
   capacity are confirmed
 - include kubelet metrics firewall access
 - include Netbird if remote administration or mesh access is useful
-- add a native Forgejo Actions runner only after node capacity and Docker
-  policy are confirmed
+- run a native Forgejo Actions runner in the primary Docker-capable pool after
+  node capacity and Docker policy are confirmed
 - update gitops node/storage docs after the node is live
 
 For `xps`:
@@ -96,6 +96,8 @@ Implemented for `xev`:
 - the managed generation has been deployed
 - the host joins k3s as an agent and enables Longhorn host prerequisites
 - the normal deploy inventory includes `xev`
+- a native Forgejo Actions runner is enabled on `xev` with the primary
+  Docker-backed label policy from [ADR-0041](0041-native-forgejo-actions-runners.md)
 
 Implemented for `xps`:
 
@@ -140,8 +142,8 @@ capacity expectations. This is especially important for laptops.
 
 ## Consequences
 
-`xev` improves cluster workload and possibly storage capacity without changing
-control-plane quorum.
+`xev` improves cluster workload, Forgejo Actions capacity, and possibly storage
+capacity without changing control-plane quorum.
 
 The k8s role model needs a stable-agent role distinct from the current
 ephemeral `agent` role.

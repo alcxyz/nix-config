@@ -69,9 +69,8 @@
     name = "nex";
     capacity = 2;
     labels = [
-      "ubuntu-latest:docker://node:20-bookworm"
+      "forgejo-docker-secondary:docker://node:20-bookworm"
       "nex:docker://node:20-bookworm"
-      "docker:docker://node:20-bookworm"
     ];
   };
 

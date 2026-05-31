@@ -9,7 +9,7 @@ Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, serv
 | xyz | x86_64-linux | Main workstation. Hyprland desktop, GPU passthrough, Docker services, ZFS pools |
 | nux | x86_64-linux | Server. Offloads builds to xyz; mac can orchestrate deploys while xyz is unavailable |
 | nex | x86_64-linux | NUC k3s server + stable workload host |
-| xev | x86_64-linux | Stable k3s worker candidate with Longhorn prerequisites |
+| xev | x86_64-linux | Stable k3s worker with Longhorn prerequisites and primary Forgejo runner capacity |
 | xps | x86_64-linux | Dell XPS workstation; Kubernetes participation deferred until wired networking is reliable |
 | rpi0 | aarch64-linux | Rock Pi 4. Lightweight server, offloads builds to xyz; can be built by mac's Linux builder after mac is rebuilt |
 | mac | aarch64-darwin | MacBook. nix-darwin + Home Manager + bootstrapped aarch64 Linux builder |
@@ -188,6 +188,9 @@ nix-secrets/
   then xyz. If both remote builders are unavailable, hosts fall back to local
   builds where the target system is supported. mac remains an emergency deploy
   operator through its nix-darwin Linux builder.
+- **Forgejo Actions runners** — primary Docker-backed CI labels run on xyz and
+  xev; nux and nex keep secondary and host-specific labels for deliberate
+  fallback work.
 - **Encrypted storage** — Host storage integration with private bootstrap and recovery runbooks
 - **GPU passthrough** — Dynamic nvidia bind/unbind via libvirt hooks. Containers (steam, stash) stop/start automatically
 - **NFS + Avahi** — File sharing with Bonjour/Finder discovery, per-IP firewall rules

@@ -11,6 +11,7 @@
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
+    "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
   ];
@@ -56,6 +57,18 @@
   networking.hosts = {
     "192.168.1.13" = ["xev"];
     "192.168.1.250" = ["k8s-api.local"];
+  };
+
+  services.forgejo-actions-runner = {
+    enable = true;
+    name = "xev";
+    capacity = 4;
+    labels = [
+      "forgejo-docker-primary:docker://node:20-bookworm"
+      "ubuntu-latest:docker://node:20-bookworm"
+      "docker:docker://node:20-bookworm"
+      "xev:docker://node:20-bookworm"
+    ];
   };
 
   # xev was first installed from a NixOS 25.11 installer generation.

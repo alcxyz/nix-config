@@ -478,9 +478,10 @@ in {
     name = "xyz";
     capacity = 4;
     labels = [
+      "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"
-      "xyz:docker://node:20-bookworm"
       "docker:docker://node:20-bookworm"
+      "xyz:docker://node:20-bookworm"
     ];
   };
 
