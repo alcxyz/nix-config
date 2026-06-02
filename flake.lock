@@ -148,16 +148,16 @@
     "dankcalendar": {
       "flake": false,
       "locked": {
-        "lastModified": 1779613472,
-        "narHash": "sha256-kxK01+Xg/oRiC5oJB690C3q8CJKM2SKaSDzrHBLM62I=",
+        "lastModified": 1780426471,
+        "narHash": "sha256-5RXomHcF6+XDKt66HFswgWXQoDRYvRtbTRs1jDO+F+c=",
         "owner": "alcxyz",
         "repo": "DankCalendar",
-        "rev": "21e796e8caca1a1700be2de7ce479aeb6417f68b",
+        "rev": "01ac360a71eab84f09a0e172840916f9a65a8dce",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "feature/google-oauth-caldav-26",
+        "ref": "dev",
         "repo": "DankCalendar",
         "type": "github"
       }
@@ -186,16 +186,16 @@
     "diskusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1778198677,
-        "narHash": "sha256-hEvWl6lx8f2Xu/r+dF3YWs2wxr6B0hTb5g6YwlH2snI=",
+        "lastModified": 1780332174,
+        "narHash": "sha256-ewDvg4y+4yAtw1vFV+4AYg8+Aozy7XdXVW3AGzfz2Gk=",
         "owner": "alcxyz",
         "repo": "DankDiskUsage",
-        "rev": "08998d23c6831a8b6d324aa598fc6f3311729919",
+        "rev": "901be165bdeb8ab5955a6105945d3a57c62caec6",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "fix/nix-closure-size",
+        "ref": "main",
         "repo": "DankDiskUsage",
         "type": "github"
       }
@@ -214,8 +214,8 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1780167854,
-        "narHash": "sha256-mKEcYM+SahcuKjvplLp1IM3oVU3FZfjngpO8nWUledA=",
+        "lastModified": 1780426956,
+        "narHash": "sha256-rQnNpLvb68w1BuheumDqS+1tq5Nz7hKY2IeYrOhpG+U=",
         "path": "/home/alc/src/tools/dms-plugins",
         "type": "path"
       },
@@ -955,11 +955,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1779948468,
-        "narHash": "sha256-BoZRo7931dthvjd7WMKUtZoatPmECVqjxslDRzmq51o=",
+        "lastModified": 1780442913,
+        "narHash": "sha256-ghR6124Jj+OTtPSHDdhD1692JuBzgSbCo7sTAkbrdac=",
         "ref": "dev",
-        "rev": "7105a2e946eceeed9683b01cb3b2ac26359dbbb6",
-        "revCount": 237,
+        "rev": "4418032161517bc65fb66a3f61d550875de3762a",
+        "revCount": 254,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -976,11 +976,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780254378,
-        "narHash": "sha256-e4KU8h4KGaMoj8Gn8eA9S/jWMMrChzQHjbVZvU0ZF7s=",
+        "lastModified": 1780435589,
+        "narHash": "sha256-it71qBWzV4pN4WYw4HPAAMTggSGhpJ64hLwiCnmhlow=",
         "ref": "refs/heads/main",
-        "rev": "424363c03d95201f748790354a42c01fdac1d268",
-        "revCount": 160,
+        "rev": "702db0358b05cbac45f4fa64c84025181579282d",
+        "revCount": 164,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1191,11 +1191,11 @@
     "quicksearch": {
       "flake": false,
       "locked": {
-        "lastModified": 1778317374,
-        "narHash": "sha256-InNv8f7T1tafoWAeaHHoB0VrLL3cE4L7xV+2HtM8YK8=",
+        "lastModified": 1780334952,
+        "narHash": "sha256-HTkb4bngo28IX0fYKpegDLyGlbJ4ItaQXqr9WeaTVDE=",
         "owner": "alcxyz",
         "repo": "DankQuickSearch",
-        "rev": "46d4bf2a8f50f8c1ead1625c694aae12b907896f",
+        "rev": "f49ac0e2a8666425c1da1f8e78b146a2cd2e0139",
         "type": "github"
       },
       "original": {
