@@ -163,31 +163,31 @@
   }
   {
     path = "forks/NB.no-Downloader";
-    url = "git@github:alcxyz/NB.no-Downloader.git";
-    branch = "epub-output";
+    url = "git@github.com:alcxyz/NB.no-Downloader.git";
+    branch = "master";
     profiles = [ "forks" ];
   }
   {
     path = "forks/Terraform-Associate-Labs";
-    url = "git@git-ssh.alc.xyz:alcxyz/Terraform-Associate-Labs.git";
+    url = "git@github.com:alcxyz/Terraform-Associate-Labs.git";
     branch = "main";
     profiles = [ "forks" ];
   }
   {
     path = "forks/dms-plugin-registry";
-    url = "git@git-ssh.alc.xyz:alcxyz/dms-plugin-registry.git";
+    url = "git@github.com:alcxyz/dms-plugin-registry.git";
     branch = "add-dankcalendar";
     profiles = [ "forks" ];
   }
   {
     path = "forks/frappe_docker";
-    url = "git@git-ssh.alc.xyz:alcxyz/frappe_docker.git";
+    url = "git@github.com:alcxyz/frappe_docker.git";
     branch = "main";
     profiles = [ "forks" ];
   }
   {
     path = "forks/nvim-treesitter";
-    url = "git@git-ssh.alc.xyz:alcxyz/nvim-treesitter.git";
+    url = "git@github.com:alcxyz/nvim-treesitter.git";
     branch = "alc/fixes";
     profiles = [ "forks" ];
   }
