@@ -466,15 +466,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1777832915,
-        "narHash": "sha256-xIrRQKM2UA6NUv83zKoNtxRePIm6zjxfftCNZ8TtGEU=",
+        "lastModified": 1780435565,
+        "narHash": "sha256-h8kquhdcedxcpaPNknCu7xYi+A/oInQezYHsrtfj4mE=",
         "owner": "alcxyz",
         "repo": "grove",
-        "rev": "88db19c6d853f2ee1c8af649de8dabe645ff0b6f",
+        "rev": "20a5ece6aa3d0852f33feb006d0253ee66f0c4a3",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
+        "ref": "dev",
         "repo": "grove",
         "type": "github"
       }
@@ -976,11 +977,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780435589,
-        "narHash": "sha256-it71qBWzV4pN4WYw4HPAAMTggSGhpJ64hLwiCnmhlow=",
+        "lastModified": 1780487964,
+        "narHash": "sha256-T2fhqX5Kf57H8pRcindCHgGWMq45EumCZIYSkoOalJA=",
         "ref": "refs/heads/main",
-        "rev": "702db0358b05cbac45f4fa64c84025181579282d",
-        "revCount": 164,
+        "rev": "3406591ddd238a5cf9d0a3e39aac9006f4f29668",
+        "revCount": 165,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },

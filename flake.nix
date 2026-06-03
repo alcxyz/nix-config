@@ -112,7 +112,7 @@
     };
 
     grove = {
-      url = "github:alcxyz/grove?reg=dev";
+      url = "github:alcxyz/grove/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
