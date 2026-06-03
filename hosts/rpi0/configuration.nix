@@ -84,6 +84,8 @@
     upstream = "127.0.0.1#5335";
     stateDirectory = "/var/lib/pihole/etc";
     passwordFile = config.sops.secrets.pihole_secret_key.path;
+    disableWebPassword = true;
+    webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16";
   };
 
   services.unifi-native = {

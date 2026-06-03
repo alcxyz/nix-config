@@ -23,10 +23,22 @@
     export FTLCONF_files_log_dnsmasq="${cfg.logDirectory}/pihole.log"
     export FTLCONF_files_log_webserver="${cfg.logDirectory}/webserver.log"
     export FTLCONF_webserver_tls_cert="${cfg.stateDirectory}/tls.pem"
+    ${lib.optionalString (cfg.webAcl != "") ''
+      export FTLCONF_webserver_acl="${cfg.webAcl}"
+    ''}
 
-    if [[ -s "${cfg.passwordFile}" ]]; then
-      export FTLCONF_webserver_api_password="$(<"${cfg.passwordFile}")"
-    fi
+    ${
+      if cfg.disableWebPassword
+      then ''
+        export FTLCONF_webserver_api_password=""
+      ''
+      else
+        lib.optionalString (cfg.passwordFile != null) ''
+          if [[ -s "${cfg.passwordFile}" ]]; then
+            export FTLCONF_webserver_api_password="$(<"${cfg.passwordFile}")"
+          fi
+        ''
+    }
 
     exec ${lib.getExe pkgs.pihole-ftl} no-daemon
   '';
@@ -75,8 +87,21 @@ in {
     };
 
     passwordFile = lib.mkOption {
-      type = lib.types.path;
+      type = lib.types.nullOr lib.types.path;
+      default = null;
       description = "Runtime file containing the Pi-hole API/admin password.";
+    };
+
+    disableWebPassword = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Set an explicitly empty Pi-hole web/API password.";
+    };
+
+    webAcl = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Pi-hole webserver ACL. Empty means Pi-hole allows all sources.";
     };
   };
 
