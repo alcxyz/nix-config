@@ -173,7 +173,7 @@ in {
     stateDirectory = "/var/lib/pihole/etc";
     passwordFile = config.sops.secrets.pihole_secret_key.path;
     disableWebPassword = true;
-    webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16";
+    webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16,+192.168.1.23,+192.168.1.24";
   };
 
   services.unifi-native = {
