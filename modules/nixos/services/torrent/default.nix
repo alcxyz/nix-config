@@ -11,6 +11,23 @@
   sharedGroup = "media";
   qbConfigDir = "/var/lib/qbittorrent";
   qbConfigStateDir = "${qbConfigDir}/profile";
+  qbWebUiPort = 8080;
+  qbTorrentingPort = 51413;
+  qbWebUiTrustedClients = [
+    "10.42.0.0/16"
+    "192.168.1.10"
+    "192.168.1.13"
+    "192.168.1.15"
+    "192.168.1.16"
+    "192.168.1.23"
+    "192.168.1.24"
+  ];
+  qbWebUiTrustedClientsCsv = lib.concatStringsSep "," qbWebUiTrustedClients;
+  qbWebUiFirewallRules =
+    lib.concatMapStringsSep "\n" (ip: ''
+      iptables -A nixos-fw -p tcp --dport ${toString qbWebUiPort} -s ${ip} -j nixos-fw-accept
+    '')
+    qbWebUiTrustedClients;
   dataDir = "/tank/downloads";
 
   stashDir = "/tank/stash";
@@ -105,10 +122,10 @@ in {
 
     networking.firewall = {
       allowedTCPPorts = [
-        8080
-        51413
+        qbTorrentingPort
       ];
-      allowedUDPPorts = [51413];
+      allowedUDPPorts = [qbTorrentingPort];
+      extraCommands = qbWebUiFirewallRules;
     };
 
     services.qbittorrent = {
@@ -116,8 +133,8 @@ in {
       user = serviceUser;
       group = sharedGroup;
       profileDir = qbConfigStateDir;
-      webuiPort = 8080;
-      torrentingPort = 51413;
+      webuiPort = qbWebUiPort;
+      torrentingPort = qbTorrentingPort;
     };
 
     systemd.services.qbittorrent = {
@@ -130,6 +147,22 @@ in {
         "torrent-shared-media-permissions.service"
       ];
       conflicts = ["docker-qbittorrent.service"];
+      path = [
+        pkgs.coreutils
+        pkgs.crudini
+      ];
+      preStart = ''
+        conf=${lib.escapeShellArg "${qbConfigStateDir}/qBittorrent/config/qBittorrent.conf"}
+        mkdir -p "$(dirname "$conf")"
+        touch "$conf"
+        chmod 0600 "$conf"
+
+        crudini --set "$conf" Preferences 'WebUI\AuthSubnetWhitelistEnabled' true
+        crudini --set "$conf" Preferences 'WebUI\AuthSubnetWhitelist' ${lib.escapeShellArg qbWebUiTrustedClientsCsv}
+        crudini --set "$conf" Preferences 'WebUI\LocalHostAuth' false
+        crudini --set "$conf" Preferences 'WebUI\ReverseProxySupportEnabled' false
+        crudini --set "$conf" Preferences 'WebUI\UseUPnP' false
+      '';
       serviceConfig = {
         PrivateUsers = lib.mkForce false;
         SupplementaryGroups = [
