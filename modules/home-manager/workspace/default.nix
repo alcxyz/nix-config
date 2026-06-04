@@ -1,19 +1,21 @@
 {
   config,
+  inputs,
   lib,
   pkgs,
   hostRole,
-  configDir,
   ...
-}: let
+}:
+let
   cfg = config.programs.workspace;
-  allRepos = import ./repos.nix;
-  hasSelectedProfile = repo:
-    builtins.any (profile: builtins.elem profile cfg.profiles) repo.profiles;
+  allRepos = inputs.nix-secrets.repoInventory.workspaceRepos;
+  hasSelectedProfile = repo: builtins.any (profile: builtins.elem profile cfg.profiles) repo.profiles;
   selectedRepos = builtins.filter hasSelectedProfile cfg.repos;
   reposJson = builtins.toJSON selectedRepos;
+  repoInventoryJson = builtins.toJSON inputs.nix-secrets.repoInventory;
   dirs = [
     "apps"
+    "platform"
     "infra"
     "tools"
     "tools/dms-plugins"
@@ -30,7 +32,11 @@
 
   workspaceSync = pkgs.writeShellApplication {
     name = "workspace-sync";
-    runtimeInputs = [pkgs.coreutils pkgs.git pkgs.jq];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.git
+      pkgs.jq
+    ];
     text = ''
       set -euo pipefail
 
@@ -131,7 +137,8 @@
       fi
     '';
   };
-in {
+in
+{
   options.programs.workspace = {
     enable = lib.mkEnableOption "declarative source workspace bootstrap";
 
@@ -148,44 +155,47 @@ in {
     };
 
     repos = lib.mkOption {
-      type = lib.types.listOf (lib.types.submodule {
-        options = {
-          path = lib.mkOption {
-            type = lib.types.str;
-            description = "Path below the workspace root.";
-          };
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            path = lib.mkOption {
+              type = lib.types.str;
+              description = "Path below the workspace root.";
+            };
 
-          url = lib.mkOption {
-            type = lib.types.str;
-            description = "Git clone URL.";
-          };
+            url = lib.mkOption {
+              type = lib.types.str;
+              description = "Git clone URL.";
+            };
 
-          branch = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = "Branch to clone initially.";
-          };
+            branch = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Branch to clone initially.";
+            };
 
-          profiles = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            description = "Workspace profiles that include this repository.";
+            profiles = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Workspace profiles that include this repository.";
+            };
           };
-        };
-      });
+        }
+      );
       default = allRepos;
-      description = "Declarative repository catalog.";
+      description = "Declarative repository catalog from the private nix-secrets repo inventory.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [workspaceSync];
+    home.packages = [ workspaceSync ];
 
-    home.activation.workspaceDirs = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    home.activation.workspaceDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       mkdir -p "${cfg.root}"
       ${lib.concatMapStringsSep "\n" (dir: "mkdir -p \"${cfg.root}/${dir}\"") dirs}
     '';
 
     xdg.configFile."workspace/repos.json".text = reposJson;
+    xdg.configFile."workspace/repo-inventory.json".text = repoInventoryJson;
     xdg.configFile."workspace/profiles.json".text = builtins.toJSON cfg.profiles;
   };
 }

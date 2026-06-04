@@ -56,8 +56,13 @@ watch_socket() {
   while true; do
     while IFS= read -r line; do
       case "$line" in
-        dpms\>\>off* | monitorremoved\>\>* | "closelayer>>dms:bar")
+        dpms\>\>off* | monitorremoved\>\>*)
           mark_armed
+          ;;
+        "closelayer>>dms:bar")
+          if ! monitor_awake; then
+            mark_armed
+          fi
           ;;
       esac
     done < <(socat -U - UNIX-CONNECT:"$SOCKET" 2>/dev/null)

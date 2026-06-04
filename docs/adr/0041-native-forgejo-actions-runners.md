@@ -1,8 +1,8 @@
 # ADR-0041: Native Forgejo Actions runners
 
-**Status:** Implemented
+**Status:** Implemented (amended 2026-05-31: `xev` primary pool)
 **Date:** 2026-05-07
-**Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/nux`, `hosts/nex`
+**Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
 ## Context
 
@@ -34,9 +34,19 @@ The NixOS module should:
 - support Docker-backed job labels for clean per-job containers
 - fail the systemd unit if required tools, sockets, or secrets are unavailable
 
-Run native Docker-capable runners on `xyz`, `nux`, and `nex`. Normal jobs use
-Docker-backed labels. No host-backed labels are exposed unless a current trusted
-infrastructure workflow needs one.
+Run native Docker-capable runners on `xyz`, `xev`, `nux`, and `nex`. Normal
+jobs use Docker-backed labels. No host-backed labels are exposed unless a
+current trusted infrastructure workflow needs one.
+
+The default runner priority is represented with labels:
+
+- `forgejo-docker-primary` is exposed only by `xyz` and `xev`.
+- `forgejo-docker-secondary` is exposed by `nux` and `nex` for deliberate
+  fallback or diagnostics.
+- `ubuntu-latest` and `docker` remain compatibility labels only on the primary
+  pool.
+- host-specific Docker labels (`xyz`, `xev`, `nux`, `nex`) remain available for
+  workflows that intentionally need one host.
 
 ## Required Properties
 
@@ -48,6 +58,8 @@ infrastructure workflow needs one.
   environments.
 - Host-level labels are explicit and used only for trusted infrastructure
   workflows.
+- Primary and secondary scheduling intent is visible in labels instead of hidden
+  in runner capacity assumptions.
 
 ## Alternatives Considered
 
@@ -69,6 +81,9 @@ clean per-job environments. Host-level jobs should be explicit exceptions.
   instead of discovered after pod startup.
 - Docker-capable runners remain trusted infrastructure and must not be exposed to
   untrusted workloads.
+- Routine GitOps workflows target the primary `xyz`/`xev` runner pool. `nux`
+  and `nex` are kept available for explicit fallback work without taking normal
+  jobs from the larger hosts.
 
 ## Work Items
 
@@ -84,10 +99,12 @@ Nix-config-owned work:
   migrate runner secrets from Kubernetes to SOPS/NixOS.
 - [ ] [alcxyz/nix-config#53](https://git.alc.xyz/alcxyz/nix-config/issues/53) add
   rebuild QA guardrails for runner hosts.
+- [x] Add `xev` to the primary native Docker-capable runner pool. Completed
+  2026-05-31.
 
 GitOps-owned coordination work:
 
-- [ ] [alcxyz/gitops#212](https://git.alc.xyz/alcxyz/gitops/issues/212) retarget
+- [x] [alcxyz/gitops#212](https://git.alc.xyz/alcxyz/gitops/issues/212) retarget
   workflows to explicit runner labels.
 - [x] [alcxyz/gitops#213](https://git.alc.xyz/alcxyz/gitops/issues/213) remove
   Kubernetes runner deployments after native cutover.

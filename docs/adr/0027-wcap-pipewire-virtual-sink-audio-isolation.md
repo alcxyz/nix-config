@@ -1,10 +1,17 @@
-# ADR-0027: PipeWire virtual sink for per-app audio isolation (wcap)
+# ADR-0027: Retired PipeWire virtual sink for per-app audio isolation (wcap)
 
-**Status:** Accepted
+**Status:** Retired (2026-06-04)
 **Date:** 2026-05-01
 **Applies to:** `modules/nixos/common/`
 
 ## Context
+
+This decision is retired. The `wcap` window capture workflow is no longer used,
+so the repository no longer exposes the `wcap` package, installs
+`gpu-screen-recorder` for that workflow, or carries NixOS-side PipeWire
+configuration for a dedicated capture sink.
+
+The historical decision is kept below for context only.
 
 The `wcap` window capture tool needs to record audio from a specific application without that audio playing through the user's headphones. An optional monitoring mode (hear what's being recorded) should also be supported via a toggle. The audio isolation must only be active during recording — normal audio behaviour should be unaffected at all other times.
 

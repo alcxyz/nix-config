@@ -70,6 +70,24 @@ the closure before copying it to the target host. This is an operator workflow
 fallback, not a target-host distributed-build configuration: on macOS it still
 requires a working Linux builder before Linux targets can be built locally.
 
+Remote deploy phases are preflighted over SSH before building. Explicit single
+host deploys fail early when the required SSH endpoint is unreachable. Fleet
+deploys skip unreachable hosts for the affected phase by default, with
+`--fail-unreachable` available when the operator wants all-or-nothing behavior.
+`--no-preflight` remains available for bootstrap and debugging cases where the
+operator intentionally wants to attempt the deploy anyway.
+
+Deploy SSH endpoints come from `inventory.nix`. Fixed LAN targets use their
+reserved IP addresses as `sshHostname` values instead of relying on local name
+resolution, because deployment is also a recovery path when DNS-like services
+may be degraded.
+
+`nix-deploy` remains packaged inside `nix-config` while it is coupled to the
+public host inventory and flake output names. Moving it back to `nix-packages`
+would split the generic executable from the repository-specific host data it
+needs to generate its runtime host map. Reconsider moving it only if the tool is
+made generic enough to consume an external inventory interface at runtime.
+
 mac enables nix-darwin's stock Linux builder as a bootstrapping step. This
 creates a `linux-builder` build machine for `aarch64-linux`, which lets mac
 build and deploy rpi0 without asking rpi0 to compile locally. The builder is
@@ -77,6 +95,11 @@ left close to the nix-darwin default because changing the builder VM's NixOS
 configuration before the first activation makes mac try to build Linux
 derivations on Darwin. x86_64-linux emulation for nux/nex is intentionally a
 follow-up after the initial Linux builder is active.
+
+mac remains a cold-standby deploy/build coordinator, not normal fallback
+capacity. The `deploy --here` path stays available for operator failover and
+recovery drills, but the normal fleet workflow continues to prefer `xyz` as the
+operator and `xev`/`xyz` as Linux builders.
 
 ## Alternatives Considered
 
@@ -97,6 +120,14 @@ follow-up after the initial Linux builder is active.
   `xyz` out of the fleet batch. From mac, rpi0 is the first supported Linux
   target after the Linux builder is activated; nux/nex need either xyz or the
   follow-up x86_64-linux builder work.
+- mac is retained as a cold standby for emergency operation and validation
+  drills only. It is not part of the normal builder priority path while `xev`
+  and `xyz` are healthy.
+- Unavailable hosts no longer force every ordinary fleet deploy to fail before
+  useful reachable targets are updated. Strict fleet deploys can opt back into
+  failure with `--fail-unreachable`.
+- The local `nix-deploy` wrapper is intentionally owned by this repo for now,
+  because its behavior is generated from `inventory.nix`.
 - The build SSH key is declaratively deployed from each server host's SOPS file.
   Fresh installs still need enough SOPS bootstrap material to decrypt host
   secrets, but the build key itself is no longer a manual root dotfile.

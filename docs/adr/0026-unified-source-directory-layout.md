@@ -38,15 +38,20 @@ Adopt a single `~/src/` root with purpose-based subdirectories:
 │   ├── telegram-bot/
 │   ├── leantime-bot/
 │   ├── nssupply/
-│   ├── timebank/
 │   ├── kjekkmann/
 │   ├── beautyzone/
 │   └── ...
 │
-├── tools/                    # CLI utilities and developer tooling
-│   ├── paperless-tools/
+├── platform/                 # Platform modules and client-facing platform state
+│   ├── client-records/
+│   ├── nexus/
+│   ├── timebank/
 │   ├── regnskap/
 │   ├── digipost-sign/
+│   └── ...
+│
+├── tools/                    # CLI utilities and developer tooling
+│   ├── paperless-tools/
 │   └── ...
 │
 ├── orgs/                     # Repos owned by other GitHub/Forgejo orgs
@@ -73,15 +78,16 @@ Adopt a single `~/src/` root with purpose-based subdirectories:
 ### Key principles
 
 1. **Every repo is a standalone clone** — no submodules. The connection between source and deployment is the container registry, not a filesystem path.
-2. **Purpose-based grouping** — infra, apps, tools, lib. Not grouped by language, org, or host.
+2. **Purpose-based grouping** — infra, platform, apps, tools, lib. Not grouped by language, org, or host.
 3. **Consistent across all machines** — the same `~/src/` layout on xyz, nux, and mac. Not every machine needs every repo, but the paths are always the same.
 4. **gitops becomes pure infrastructure** — remove all submodules, keep only `k8s/`, `docker/`, `docs/`, and `tools/` (for infra-specific tools like leantime-tidy that live in the gitops repo).
 
 ### gitops cleanup
 
 Remove submodules from gitops:
-- `nssupply`, `telegram-bot`, `leantime-bot`, `timebank` → cloned under `~/src/apps/`
-- `paperless-tools`, `regnskap`, `digipost-sign` → cloned under `~/src/tools/`
+- `nssupply`, `telegram-bot`, `leantime-bot` → cloned under `~/src/apps/`
+- `timebank`, `regnskap`, `digipost-sign`, `nexus`, `client-records` → cloned under `~/src/platform/`
+- `paperless-tools` → cloned under `~/src/tools/`
 - `beautyzone`, `kjekkmann` → cloned under `~/src/apps/`
 
 The `tools/` directory inside gitops (tunnel) stays — these are infrastructure tools tightly coupled to gitops, not standalone repos. leantime-tidy has since been extracted to `~/src/tools/leantime-tidy/` (gitops ADR-011).

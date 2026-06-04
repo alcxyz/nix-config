@@ -14,8 +14,6 @@
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
     "${configDir}/modules/nixos/services/unifi-native/default.nix"
-    "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
-    "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -38,28 +36,7 @@
 
   services.netbird.managed.enable = true;
 
-  # Keep the HA join ports explicit on the host while we bring rpi0 into the
-  # embedded-etcd control plane. This avoids relying solely on shared-module
-  # firewall state during bootstrap/debug cycles.
-  networking.firewall.allowedTCPPorts = [
-    53
-    2379
-    2380
-    6443
-    8081
-  ];
-  networking.firewall.allowedUDPPorts = [
-    53
-    8472
-  ];
-
   sops.secrets = {
-    k3s_server_token = {
-      sopsFile = "${inputs.nix-secrets}/cluster-bootstrap/secrets.yaml";
-      key = "k3s_server_token";
-      owner = "root";
-      group = "root";
-    };
     pihole_secret_key = {
       sopsFile = "${inputs.nix-secrets}/apps/secrets.yaml";
       owner = "pihole";
@@ -105,8 +82,12 @@
     hostName = "pihole.rpi0.local";
     webPort = 8081;
     upstream = "127.0.0.1#5335";
+    rateLimitCount = 10000;
+    rateLimitInterval = 60;
     stateDirectory = "/var/lib/pihole/etc";
     passwordFile = config.sops.secrets.pihole_secret_key.path;
+    disableWebPassword = true;
+    webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16,+192.168.1.23,+192.168.1.24";
   };
 
   services.unifi-native = {
@@ -114,27 +95,6 @@
     role = "standby";
     openFirewall = true;
     maximumJavaHeapSize = 768;
-  };
-
-  k3s = {
-    enable = true;
-    serverAddr = "https://k8s-api.local:6443";
-    tokenFile = config.sops.secrets.k3s_server_token.path;
-    tlsSans = [
-      "k8s-api.local"
-      "192.168.1.250"
-    ];
-  };
-
-  services.k8s-api-vip = {
-    enable = true;
-    interface = "end0";
-    sourceIp = "192.168.1.3";
-    peers = [
-      "192.168.1.15"
-      "192.168.1.16"
-    ];
-    priority = 90;
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];

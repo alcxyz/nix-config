@@ -131,6 +131,7 @@ in rec {
       git-remote-gcrypt
       forge-mirror
       forgejo-cli
+      tea
       gh
       gh-dash
       lazygit
@@ -253,8 +254,6 @@ in rec {
       helium
       vlc
       obs-studio
-      gpu-screen-recorder
-      wcap
       kdePackages.kdenlive
       libreoffice
       calibre

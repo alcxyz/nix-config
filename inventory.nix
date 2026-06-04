@@ -3,7 +3,7 @@
     workstation = {
       homePackageSet = "workstation";
       systemPackageSet = "workstation";
-      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+      workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
 
     nuc = {
@@ -21,7 +21,7 @@
     laptop-workstation = {
       homePackageSet = "workstation";
       systemPackageSet = "workstation";
-      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+      workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
 
     family-gaming = {
@@ -39,7 +39,7 @@
     mac = {
       homePackageSet = "mac";
       systemPackageSet = "mac";
-      workspaceProfiles = ["base" "infra-admin" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+      workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
   };
 
@@ -102,6 +102,7 @@
       platform = "nixos";
       role = "nuc";
       k8sRole = "server-worker";
+      sshHostname = "192.168.1.16";
       configuration = ./hosts/nex/configuration.nix;
       osIcon = "";
     };
@@ -110,7 +111,7 @@
       system = "x86_64-linux";
       platform = "nixos";
       role = "k8s-worker";
-      k8sRole = "stable-agent";
+      k8sRole = "server-worker";
       sshHostname = "192.168.1.13";
       configuration = ./hosts/xev/configuration.nix;
       osIcon = "";
@@ -147,7 +148,7 @@
       system = "aarch64-linux";
       platform = "nixos";
       role = "embedded";
-      k8sRole = "server-control-plane";
+      k8sRole = null;
       sshHostname = "192.168.1.3";
       configuration = ./hosts/rpi0/configuration.nix;
       osIcon = "";

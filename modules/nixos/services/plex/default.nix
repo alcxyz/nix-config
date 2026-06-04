@@ -1,35 +1,12 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 with lib; let
   cfg = config.services.plex.managed;
   nativeDataDir = "${cfg.dataDir}/Library/Application Support";
   nativeDataDirTmpfiles = builtins.replaceStrings [" "] ["\\x20"] nativeDataDir;
-  legacyDataDir = "/var/lib/plex/Library/Application Support";
-  previousZpoolDataDir = "/zpool/appdata/plex/Library/Application Support";
-  plexStateMigration = pkgs.writeShellScript "plex-state-migration" ''
-    set -euo pipefail
-
-    install -d -m 0770 -o media -g media ${lib.escapeShellArg nativeDataDir}
-
-    if [ ! -e ${lib.escapeShellArg (nativeDataDir + "/Plex Media Server/Preferences.xml")} ]; then
-      install -d -m 0770 -o media -g media ${lib.escapeShellArg (nativeDataDir + "/Plex Media Server")}
-      for source_dir in \
-        ${lib.escapeShellArg (previousZpoolDataDir + "/Plex Media Server")} \
-        ${lib.escapeShellArg (legacyDataDir + "/Plex Media Server")}
-      do
-        if [ -d "$source_dir" ]; then
-          cp -a "$source_dir/." ${lib.escapeShellArg (nativeDataDir + "/Plex Media Server/")}
-          break
-        fi
-      done
-    fi
-
-    chown -R media:media ${lib.escapeShellArg cfg.dataDir}
-  '';
 in {
   options.services.plex.managed = {
     enable = mkEnableOption "Plex Media Server managed as a native systemd service";
@@ -88,9 +65,6 @@ in {
       environment = {
         LD_LIBRARY_PATH = mkForce "";
         PLEX_MEDIA_SERVER_TMPDIR = mkForce cfg.transcodeDir;
-      };
-      serviceConfig = {
-        ExecStartPre = ["+${plexStateMigration}"];
       };
     };
   };

@@ -28,7 +28,6 @@
     cd = "z";
     "," = "z";
     ",," = "z -";
-    ":" = "nix-shell -p";
     g = "gitui";
     gc = "git commit -m";
     gca = "git commit -am";
@@ -39,13 +38,18 @@
     t = "tmux";
     ta = "tmux a";
   };
+  nushellAliases = {
+    # Keep this out of Bash/Zsh: ':' is a POSIX no-op builtin used by prompt
+    # init scripts, and aliasing it corrupts Starship/Atuin Bash startup.
+    ":" = "nix-shell -p";
+  };
 
   xonshAliases =
     lib.concatStringsSep "\n"
     (lib.mapAttrsToList (
         name: value: "aliases[${builtins.toJSON name}] = ${builtins.toJSON value}"
       )
-      shellAliases);
+      (shellAliases // nushellAliases));
 
   xonshSessionVariables =
     lib.concatStringsSep "\n"
@@ -77,6 +81,7 @@
       | ${pkgs.gnused}/bin/sed 's/job spawn -t/job spawn -d/g' \
       > $out
   '';
+  nushellSessionPath = builtins.toJSON config.home.sessionPath;
 in {
   imports = [
     ../../shared/shell.nix
@@ -123,6 +128,12 @@ in {
     bash = {
       enable = enableBash;
       enableCompletion = true;
+      initExtra = lib.mkOrder 2000 ''
+        # Starship 1.25 emits Bash \[...\] prompt guards. In nested Bash
+        # sessions those guards can be rendered literally after ANSI stripping,
+        # so use Starship's plain ANSI prompt rendering for Bash too.
+        export STARSHIP_SHELL=unknown
+      '';
     };
 
     zsh = {
@@ -167,14 +178,26 @@ in {
 
     nushell = {
       enable = enableNushell;
+      shellAliases = nushellAliases;
 
       environmentVariables = {
         CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
         EDITOR = "nvim";
         LANG = "en_US.UTF-8";
         LC_ALL = "en_US.UTF-8";
-        PATH = config.home.sessionPath;
       };
+
+      extraEnv = ''
+        let hm_session_path = ${nushellSessionPath}
+        let inherited_path = (
+          if (($env.PATH? | default []) | describe) == "string" {
+            $env.PATH | split row (char esep)
+          } else {
+            $env.PATH? | default []
+          }
+        )
+        $env.PATH = ($hm_session_path | append $inherited_path | flatten | uniq)
+      '';
 
       extraConfig = ''
         # --- Common Nushell Configuration (Part 1) ---

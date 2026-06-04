@@ -43,9 +43,6 @@ in {
     ++ [
       pkgs.paperweight
     ];
-
-  programs.kubernetes.managed.wrap.leantimeTidy = true;
-
   # Symlink configs directly to repo checkout for live editing
   xdg.configFile."ncspot/config.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/ncspot/config.toml";
@@ -86,7 +83,10 @@ in {
   services.dms.idleLock = {
     enable = true;
     command = config.services.hyprlock.lockCommand;
+    acMonitorTimeout = 600;
+    batteryMonitorTimeout = 0;
   };
+  services.dms.pluginSettings.dankAIUsage.enabled = true;
   services.hyprlock.enable = true;
   services.udiskie = {
     enable = true;

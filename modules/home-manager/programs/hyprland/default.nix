@@ -11,6 +11,7 @@
 }:
 with lib; let
   cfg = config.programs.hyprland.managed;
+  localConfigDir = "${config.programs.workspace.root}/infra/nix-config";
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''
@@ -118,14 +119,14 @@ in {
     # effect immediately without a home-manager rebuild.
     xdg.configFile."hypr/hyprland.conf" = {
       force = true;
-      source = config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/hyprland.conf";
+      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf";
     };
     xdg.configFile."hypr/binds.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/binds.conf";
+      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds.conf";
     xdg.configFile."hypr/binds-scrolling.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/binds-scrolling.conf";
+      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf";
     xdg.configFile."hypr/binds-dwindle.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/hypr/binds-dwindle.conf";
+      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf";
 
     xdg.configFile."hypr/managed-overrides.conf".text = optionalString (cfg.inputSensitivity != null) ''
       input {
@@ -142,11 +143,11 @@ in {
     # DMS user-editable configs — live symlinks so edits take effect immediately.
     # colors.conf and layout.conf are excluded: DMS generates them at runtime.
     xdg.configFile."hypr/dms/cursor.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/dms/cursor.conf";
+      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/cursor.conf";
     xdg.configFile."hypr/dms/windowrules.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/dms/windowrules.conf";
+      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/windowrules.conf";
     xdg.configFile."hypr/dms/outputs.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/dms/outputs.conf";
+      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/outputs.conf";
 
     # Keep colors.conf generated from nix-colors
     xdg.configFile."hypr/colors.conf".text = ''

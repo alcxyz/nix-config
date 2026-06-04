@@ -5,15 +5,29 @@
   pkgs,
   username,
   ...
-}:
-
-let
+}: let
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
   sharedGroup = "media";
   qbConfigDir = "/var/lib/qbittorrent";
   qbConfigStateDir = "${qbConfigDir}/profile";
-  qbNativeDir = "${qbConfigStateDir}/qBittorrent";
+  qbWebUiPort = 8080;
+  qbTorrentingPort = 51413;
+  qbWebUiTrustedClients = [
+    "10.42.0.0/16"
+    "192.168.1.10"
+    "192.168.1.13"
+    "192.168.1.15"
+    "192.168.1.16"
+    "192.168.1.23"
+    "192.168.1.24"
+  ];
+  qbWebUiTrustedClientsCsv = lib.concatStringsSep "," qbWebUiTrustedClients;
+  qbWebUiFirewallRules =
+    lib.concatMapStringsSep "\n" (ip: ''
+      iptables -A nixos-fw -p tcp --dport ${toString qbWebUiPort} -s ${ip} -j nixos-fw-accept
+    '')
+    qbWebUiTrustedClients;
   dataDir = "/tank/downloads";
 
   stashDir = "/tank/stash";
@@ -76,44 +90,14 @@ let
     ++ map (d: "z " + d.path + " 2775 " + d.owner + " " + sharedGroup + " - -") sharedMediaDirs
     ++ map (
       d: "a+ " + d.path + " - - - - g:" + sharedGroup + ":rwx,d:g:" + sharedGroup + ":rwx,m::rwx,d:m::rwx"
-    ) sharedMediaDirs;
-  qbittorrentStateMigration = pkgs.writeShellScript "qbittorrent-state-migration" ''
-    set -euo pipefail
-
-    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg serviceGroup} \
-      ${lib.escapeShellArg qbConfigDir}
-    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
-      ${lib.escapeShellArg qbConfigStateDir} \
-      ${lib.escapeShellArg qbNativeDir}
-    install -d -m 0755 -o ${lib.escapeShellArg serviceUser} -g ${lib.escapeShellArg sharedGroup} \
-      ${lib.escapeShellArg (qbNativeDir + "/config")} \
-      ${lib.escapeShellArg (qbNativeDir + "/data/BT_backup")}
-
-    for config_file in \
-      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent.conf")} \
-      ${lib.escapeShellArg (qbNativeDir + "/config/qBittorrent-data.conf")}
-    do
-      if [ -f "$config_file" ]; then
-        ${pkgs.gnused}/bin/sed -i \
-          -e 's#/zpool/downloads#/tank/downloads#g' \
-          -e 's#/ypool/downloads#/tank/downloads#g' \
-          "$config_file"
-      fi
-    done
-
-    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg serviceGroup} ${lib.escapeShellArg qbConfigDir}
-    chown ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} \
-      ${lib.escapeShellArg qbConfigStateDir} \
-      ${lib.escapeShellArg qbNativeDir}
-    chown -R ${lib.escapeShellArg serviceUser}:${lib.escapeShellArg sharedGroup} ${lib.escapeShellArg qbNativeDir}
-  '';
-in
-{
+    )
+    sharedMediaDirs;
+in {
   options.services.torrent.enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
 
   config = lib.mkIf config.services.torrent.enable {
-    users.groups.${sharedGroup} = { };
-    users.groups.${serviceGroup} = { };
+    users.groups.${sharedGroup} = {};
+    users.groups.${serviceGroup} = {};
     users.users.${serviceUser} = {
       isSystemUser = true;
       group = serviceGroup;
@@ -123,9 +107,9 @@ in
       createHome = true;
       home = qbConfigDir;
     };
-    users.users.${username}.extraGroups = [ serviceGroup ];
+    users.users.${username}.extraGroups = [serviceGroup];
 
-    users.groups.flood = { };
+    users.groups.flood = {};
     users.users.flood = {
       isSystemUser = true;
       group = "flood";
@@ -138,10 +122,10 @@ in
 
     networking.firewall = {
       allowedTCPPorts = [
-        8080
-        51413
+        qbTorrentingPort
       ];
-      allowedUDPPorts = [ 51413 ];
+      allowedUDPPorts = [qbTorrentingPort];
+      extraCommands = qbWebUiFirewallRules;
     };
 
     services.qbittorrent = {
@@ -149,8 +133,8 @@ in
       user = serviceUser;
       group = sharedGroup;
       profileDir = qbConfigStateDir;
-      webuiPort = 8080;
-      torrentingPort = 51413;
+      webuiPort = qbWebUiPort;
+      torrentingPort = qbTorrentingPort;
     };
 
     systemd.services.qbittorrent = {
@@ -162,9 +146,24 @@ in
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
       ];
-      conflicts = [ "docker-qbittorrent.service" ];
+      conflicts = ["docker-qbittorrent.service"];
+      path = [
+        pkgs.coreutils
+        pkgs.crudini
+      ];
+      preStart = ''
+        conf=${lib.escapeShellArg "${qbConfigStateDir}/qBittorrent/config/qBittorrent.conf"}
+        mkdir -p "$(dirname "$conf")"
+        touch "$conf"
+        chmod 0600 "$conf"
+
+        crudini --set "$conf" Preferences 'WebUI\AuthSubnetWhitelistEnabled' true
+        crudini --set "$conf" Preferences 'WebUI\AuthSubnetWhitelist' ${lib.escapeShellArg qbWebUiTrustedClientsCsv}
+        crudini --set "$conf" Preferences 'WebUI\LocalHostAuth' false
+        crudini --set "$conf" Preferences 'WebUI\ReverseProxySupportEnabled' false
+        crudini --set "$conf" Preferences 'WebUI\UseUPnP' false
+      '';
       serviceConfig = {
-        ExecStartPre = [ "+${qbittorrentStateMigration}" ];
         PrivateUsers = lib.mkForce false;
         SupplementaryGroups = [
           serviceGroup
@@ -174,9 +173,9 @@ in
 
     systemd.services.torrent-shared-media-zfs-properties = {
       description = "Enable POSIX ACLs on shared media ZFS datasets";
-      wantedBy = [ "multi-user.target" ];
-      requires = [ "zfs-auto-unlock.service" ];
-      after = [ "zfs-auto-unlock.service" ];
+      wantedBy = ["multi-user.target"];
+      requires = ["zfs-auto-unlock.service"];
+      after = ["zfs-auto-unlock.service"];
       before = [
         "torrent-shared-media-permissions.service"
         "docker.service"
@@ -211,7 +210,7 @@ in
 
     systemd.services.torrent-shared-media-permissions = {
       description = "Apply shared media ACLs for torrent and media workloads";
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = ["multi-user.target"];
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-zfs-properties.service"
@@ -269,6 +268,5 @@ in
         fi
       '';
     };
-
   };
 }

@@ -56,8 +56,8 @@
     interface = "eno1";
     sourceIp = "192.168.1.16";
     peers = [
+      "192.168.1.13"
       "192.168.1.15"
-      "192.168.1.3"
     ];
     priority = 100;
   };
@@ -69,9 +69,8 @@
     name = "nex";
     capacity = 2;
     labels = [
-      "ubuntu-latest:docker://node:20-bookworm"
+      "forgejo-docker-secondary:docker://node:20-bookworm"
       "nex:docker://node:20-bookworm"
-      "docker:docker://node:20-bookworm"
     ];
   };
 

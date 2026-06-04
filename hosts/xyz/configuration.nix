@@ -24,100 +24,12 @@
   };
   appStateBackupPool = "hitachi";
   appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
-  appStateMigrate = pkgs.writeShellScriptBin "xyz-appstate-migrate" ''
-    set -euo pipefail
-
-    if [ "$(id -u)" -ne 0 ]; then
-      echo "xyz-appstate-migrate must run as root" >&2
-      exit 1
-    fi
-
-    export PATH=${
-      lib.makeBinPath [
-        pkgs.coreutils
-        pkgs.gnugrep
-        pkgs.rsync
-        pkgs.systemd
-        pkgs.util-linux
-        zfsKernelPkgs.zfs
-      ]
-    }
-
-    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-
-    systemctl stop calibre-web.service plex.service qbittorrent.service stash.service docker.service docker.socket || true
-
-    migrate_dataset() {
-      local name="$1"
-      local dataset="$2"
-      local target="$3"
-      local backup="''${target}.pre-appstate-''${stamp}"
-
-      if ! zfs list -H "$dataset" >/dev/null 2>&1; then
-        zfs create -p \
-          -o mountpoint=legacy \
-          -o compression=zstd \
-          -o atime=off \
-          "$dataset"
-      fi
-
-      zfs set mountpoint=legacy "$dataset"
-      zfs set compression=zstd "$dataset"
-      zfs set atime=off "$dataset"
-
-      echo "migrating $name: $target -> $dataset"
-
-      if mountpoint -q "$target"; then
-        echo "  unmounting existing dataset at $target"
-        umount "$target"
-      fi
-
-      if [ -e "$target" ]; then
-        echo "  moving current directory to $backup"
-        mv "$target" "$backup"
-      else
-        echo "  current directory missing; creating empty backup source $backup"
-        install -d -m 0755 "$backup"
-      fi
-
-      install -d -m 0755 "$target"
-      echo "  mounting $dataset at $target"
-      mount -t zfs "$dataset" "$target"
-
-      if [ -d "$backup" ]; then
-        echo "  copying $backup into $target"
-        rsync -aHAX --numeric-ids "$backup"/ "$target"/
-      fi
-
-      echo "migrated $name to $dataset at $target; old copy: $backup"
-    }
-
-    migrate_named() {
-      case "$1" in
-        calibre) migrate_dataset calibre xpool/appstate/calibre /var/lib/calibre ;;
-        calibre-web) migrate_dataset calibre-web xpool/appstate/calibre-web /var/lib/calibre-web ;;
-        plex) migrate_dataset plex xpool/appstate/plex /var/lib/plex ;;
-        qbittorrent) migrate_dataset qbittorrent xpool/appstate/qbittorrent /var/lib/qbittorrent ;;
-        stash) migrate_dataset stash xpool/appstate/stash /var/lib/stash ;;
-        steam-headless) migrate_dataset steam-headless xpool/appstate/steam-headless /var/lib/steam-headless ;;
-        *)
-          echo "unknown appstate dataset: $1" >&2
-          exit 1
-          ;;
-      esac
-    }
-
-    if [ "$#" -eq 0 ]; then
-      set -- calibre calibre-web plex qbittorrent stash steam-headless
-    fi
-
-    for name in "$@"; do
-      migrate_named "$name"
-    done
-
-    systemctl daemon-reload
-    echo "appstate migration complete; rebuild this host, then start the services"
-  '';
+  k8sBackupDataset = "tank/k8s-backups";
+  k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
+  homeBackupDataset = "xpool/home";
+  homeBackupRoot = "${appStateBackupPool}/xyz/home";
+  gamesDataset = "${appStateBackupPool}/games";
+  gamesMountpoint = "/hitachi/games";
   appStateBackup = pkgs.writeShellScriptBin "xyz-appstate-backup" ''
     set -euo pipefail
 
@@ -134,23 +46,16 @@
       ]
     }
 
-    source_dataset=xpool/appstate
     target_pool=${lib.escapeShellArg appStateBackupPool}
-    target_dataset=${lib.escapeShellArg appStateBackupRoot}
 
     if ! zpool list -H "$target_pool" >/dev/null 2>&1; then
-      echo "backup pool '$target_pool' is not imported; create/import it before running appstate backups" >&2
-      exit 1
-    fi
-
-    if ! zfs list -H "$source_dataset" >/dev/null 2>&1; then
-      echo "source dataset '$source_dataset' does not exist" >&2
+      echo "backup pool '$target_pool' is not imported; create/import it before running local backups" >&2
       exit 1
     fi
 
     target_pool_encryption="$(zfs get -H -o value encryption "$target_pool" 2>/dev/null || echo off)"
     if [ "$target_pool_encryption" = off ]; then
-      echo "backup pool '$target_pool' is not encrypted; refusing to write unencrypted appstate backups" >&2
+      echo "backup pool '$target_pool' is not encrypted; refusing to write unencrypted local backups" >&2
       exit 1
     fi
 
@@ -160,34 +65,108 @@
       exit 1
     fi
 
-    if ! zfs list -H "$target_dataset" >/dev/null 2>&1; then
+    ensure_backup_dataset() {
+      local target_dataset="$1"
+
+      if ! zfs list -H "$target_dataset" >/dev/null 2>&1; then
+        zfs create -p \
+          -o mountpoint=none \
+          -o canmount=off \
+          -o compression=zstd \
+          -o atime=off \
+          "$target_dataset"
+      fi
+
+      target_dataset_encryption="$(zfs get -H -o value encryption "$target_dataset" 2>/dev/null || echo off)"
+      if [ "$target_dataset_encryption" = off ]; then
+        echo "backup dataset '$target_dataset' is not encrypted; refusing to write unencrypted local backups" >&2
+        exit 1
+      fi
+
+      target_dataset_keystatus="$(zfs get -H -o value keystatus "$target_dataset" 2>/dev/null || echo unavailable)"
+      if [ "$target_dataset_keystatus" != available ]; then
+        echo "backup dataset '$target_dataset' key is not loaded; run: zfs load-key $target_dataset" >&2
+        exit 1
+      fi
+    }
+
+    replicate_dataset() {
+      local source_dataset="$1"
+      local target_dataset="$2"
+      local mode="$3"
+
+      if ! zfs list -H "$source_dataset" >/dev/null 2>&1; then
+        echo "source dataset '$source_dataset' does not exist" >&2
+        exit 1
+      fi
+
+      ensure_backup_dataset "$target_dataset"
+
+      syncoid_args=(
+        --recursive
+        --compress=none
+        --recvoptions="u o canmount=off o readonly=on"
+      )
+      if [ "$mode" = skip-parent ]; then
+        syncoid_args+=(--skip-parent)
+      fi
+
+      syncoid \
+        "''${syncoid_args[@]}" \
+        "$source_dataset" \
+        "$target_dataset"
+    }
+
+    replicate_dataset xpool/appstate ${lib.escapeShellArg appStateBackupRoot} skip-parent
+    replicate_dataset ${lib.escapeShellArg k8sBackupDataset} ${lib.escapeShellArg k8sBackupRoot} include-parent
+    replicate_dataset ${lib.escapeShellArg homeBackupDataset} ${lib.escapeShellArg homeBackupRoot} include-parent
+  '';
+  gamesDatasetPrepare = pkgs.writeShellScriptBin "xyz-games-dataset-prepare" ''
+    set -euo pipefail
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.util-linux
+        zfsKernelPkgs.zfs
+      ]
+    }
+
+    dataset=${lib.escapeShellArg gamesDataset}
+    mountpoint=${lib.escapeShellArg gamesMountpoint}
+    pool=${lib.escapeShellArg appStateBackupPool}
+
+    if ! zpool list -H "$pool" >/dev/null 2>&1; then
+      echo "games pool '$pool' is not imported" >&2
+      exit 1
+    fi
+
+    pool_encryption="$(zfs get -H -o value encryption "$pool" 2>/dev/null || echo off)"
+    pool_keystatus="$(zfs get -H -o value keystatus "$pool" 2>/dev/null || echo unavailable)"
+    if [ "$pool_encryption" != off ] && [ "$pool_keystatus" != available ]; then
+      echo "games pool '$pool' key is not loaded; run: zfs load-key $pool" >&2
+      exit 1
+    fi
+
+    install -d -m 0755 "$(dirname "$mountpoint")"
+
+    if ! zfs list -H "$dataset" >/dev/null 2>&1; then
       zfs create -p \
-        -o mountpoint=none \
-        -o canmount=off \
+        -o mountpoint="$mountpoint" \
         -o compression=zstd \
         -o atime=off \
-        "$target_dataset"
+        "$dataset"
+    else
+      zfs set mountpoint="$mountpoint" "$dataset"
+      zfs set compression=zstd "$dataset"
+      zfs set atime=off "$dataset"
     fi
 
-    target_dataset_encryption="$(zfs get -H -o value encryption "$target_dataset" 2>/dev/null || echo off)"
-    if [ "$target_dataset_encryption" = off ]; then
-      echo "backup dataset '$target_dataset' is not encrypted; refusing to write unencrypted appstate backups" >&2
-      exit 1
+    if ! findmnt -rn --target "$mountpoint" >/dev/null 2>&1; then
+      zfs mount "$dataset"
     fi
-
-    target_dataset_keystatus="$(zfs get -H -o value keystatus "$target_dataset" 2>/dev/null || echo unavailable)"
-    if [ "$target_dataset_keystatus" != available ]; then
-      echo "backup dataset '$target_dataset' key is not loaded; run: zfs load-key $target_dataset" >&2
-      exit 1
-    fi
-
-    syncoid \
-      --recursive \
-      --skip-parent \
-      --compress=none \
-      --recvoptions="u o canmount=off o readonly=on" \
-      "$source_dataset" \
-      "$target_dataset"
+    chown root:media "$mountpoint"
+    chmod 0770 "$mountpoint"
   '';
 in {
   imports = [
@@ -349,7 +328,7 @@ in {
   # ==================== ZFS ====================
   environment.systemPackages = [
     appStateBackup
-    appStateMigrate
+    gamesDatasetPrepare
     zfsKernelPkgs.zfs
   ];
   boot.supportedFilesystems = ["zfs"];
@@ -430,7 +409,7 @@ in {
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
 
   systemd.services.xyz-appstate-backup = {
-    description = "Replicate xyz appstate datasets to the local backup pool";
+    description = "Replicate xyz local backup datasets to the local backup pool";
     after = ["zfs-mount.service"];
     requires = ["zfs-mount.service"];
     serviceConfig = {
@@ -439,8 +418,20 @@ in {
     };
   };
 
+  systemd.services.xyz-games-dataset = {
+    description = "Prepare xyz games dataset on hitachi";
+    after = ["zfs-mount.service"];
+    requires = ["zfs-mount.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${gamesDatasetPrepare}/bin/xyz-games-dataset-prepare";
+    };
+  };
+
   systemd.timers.xyz-appstate-backup = {
-    description = "Daily xyz appstate dataset backup";
+    description = "Daily xyz local dataset backup";
     wantedBy = ["timers.target"];
     timerConfig = {
       OnCalendar = "*-*-* 05:20:00";
@@ -573,9 +564,10 @@ in {
     name = "xyz";
     capacity = 4;
     labels = [
+      "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"
-      "xyz:docker://node:20-bookworm"
       "docker:docker://node:20-bookworm"
+      "xyz:docker://node:20-bookworm"
     ];
   };
 
@@ -597,6 +589,7 @@ in {
     ];
     overrides."com.heroicgameslauncher.hgl" = [
       "--filesystem=/ext4"
+      "--filesystem=/hitachi"
       "--filesystem=/nix/store:ro"
       "--filesystem=home"
     ];
@@ -675,6 +668,7 @@ in {
     "z /tank 0755 root root - -"
     "L+ /downloads - - - - /tank/downloads"
     "L+ /vault - - - - /tank/vault"
+    "d /hitachi 0755 root root - -"
     "d /tank/games 0770 root media - -"
     "d /tank/vault 0770 root media - -"
 

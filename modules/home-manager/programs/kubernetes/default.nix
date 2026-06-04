@@ -219,11 +219,6 @@ in {
         description = "Install switcher and context helper wrappers that use the managed kubeconfig set.";
       };
 
-      leantimeTidy = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Install a leantime-tidy wrapper that supplies KUBECONFIG when unset.";
-      };
     };
 
   };
@@ -281,9 +276,6 @@ in {
         switcherCommand
         kubeContextCommand
         kubeNamespaceCommand
-      ]
-      ++ lib.optionals cfg.wrap.leantimeTidy [
-        (wrapCommand "leantime-tidy" pkgs.leantime-tidy "leantime-tidy")
       ];
 
     home.sessionVariables = lib.mkIf cfg.exportSessionVariable {

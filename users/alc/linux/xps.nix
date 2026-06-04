@@ -70,6 +70,7 @@ in {
       enable = true;
       command = config.services.hyprlock.lockCommand;
     };
+    pluginSettings.dankAIUsage.enabled = true;
   };
   services.hyprlock.enable = true;
   dconf.enable = false;

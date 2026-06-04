@@ -13,6 +13,8 @@
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  forgeMirrorGithubPrimaryRepos = lib.concatStringsSep "," inputs.nix-secrets.repoInventory.forgejoPrimaryExcludedRepoNames;
+  forgeMirrorGithubPrimaryReposFile = lib.concatStringsSep "\n" inputs.nix-secrets.repoInventory.forgejoPrimaryExcludedRepoNames + "\n";
   hostSopsFile = (
     assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"; "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
   );
@@ -101,6 +103,8 @@ in
     # ==================== Symlinked configs (live editing, all hosts) ====================
     xdg.configFile."television".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/television";
+
+    xdg.configFile."forge-mirror/github-primary-repos".text = forgeMirrorGithubPrimaryReposFile;
 
     xdg.configFile."llm/config.toml".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/llm/config.toml";
@@ -205,6 +209,7 @@ in
     # Forgejo. Runs on every home-manager switch; skips silently when offline.
     home.activation.forgejoPrimary = lib.hm.dag.entryAfter ["writeBoundary"] ''
       if command -v forge-mirror >/dev/null 2>&1; then
+        export FORGE_MIRROR_GITHUB_PRIMARY_REPOS="${forgeMirrorGithubPrimaryRepos}"
         forge-mirror primary 2>/dev/null || true
       fi
     '';

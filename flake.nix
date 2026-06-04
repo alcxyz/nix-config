@@ -91,11 +91,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    leantime-tidy = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/leantime-tidy.git";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     stashdb-pop = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -112,7 +107,7 @@
     };
 
     grove = {
-      url = "github:alcxyz/grove?reg=dev";
+      url = "github:alcxyz/grove/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -121,7 +116,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dms-plugins.url = "github:alcxyz/dms-plugins/main";
+    dms-plugins.url = "path:/home/alc/src/tools/dms-plugins";
   };
 
   # ---- Outputs ----------------------------------------------------------

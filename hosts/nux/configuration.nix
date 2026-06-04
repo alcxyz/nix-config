@@ -112,8 +112,8 @@ in {
     interface = "eno1";
     sourceIp = "192.168.1.15";
     peers = [
+      "192.168.1.13"
       "192.168.1.16"
-      "192.168.1.3"
     ];
     priority = 110;
   };
@@ -127,6 +127,7 @@ in {
     name = "nux";
     capacity = 1;
     labels = [
+      "forgejo-docker-secondary:docker://node:20-bookworm"
       "nux:docker://node:20-bookworm"
     ];
   };
@@ -169,8 +170,12 @@ in {
     hostName = "pihole.nux.local";
     webPort = 8081;
     upstream = "127.0.0.1#5335";
+    rateLimitCount = 10000;
+    rateLimitInterval = 60;
     stateDirectory = "/var/lib/pihole/etc";
     passwordFile = config.sops.secrets.pihole_secret_key.path;
+    disableWebPassword = true;
+    webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16,+192.168.1.23,+192.168.1.24";
   };
 
   services.unifi-native = {

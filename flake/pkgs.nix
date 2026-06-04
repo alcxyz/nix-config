@@ -29,11 +29,9 @@ in
               "zen-browser"
               "nix-deploy"
               "k8s-node-reboot"
-              "wcap"
               "xonsh-with-direnv"
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
-            lt = inputs.leantime-tidy.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
             videdupe = inputs.videdupe.packages.${system} or {};
@@ -47,13 +45,6 @@ in
                   ]
               )
               pt)
-            // (lib.filterAttrs (
-                n: _:
-                  builtins.elem n [
-                    "leantime-tidy"
-                  ]
-              )
-              lt)
             // lib.optionalAttrs (vidown ? default) {
               vidown = vidown.default;
             }

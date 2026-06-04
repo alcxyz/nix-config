@@ -124,9 +124,21 @@ in {
       '';
     }
 
-    # User-level ssh-agent only on Linux; macOS uses its own agent.
+    # User-level ssh-agent only on Linux; macOS uses its own agent. This is
+    # defined directly instead of services.ssh-agent because that module also
+    # injects Nushell init code that assumes XDG_RUNTIME_DIR always exists.
     (mkIf pkgs.stdenv.isLinux {
-      services.ssh-agent.enable = true;
+      systemd.user.services.ssh-agent = {
+        Install.WantedBy = ["default.target"];
+        Unit = {
+          Description = "SSH authentication agent";
+          Documentation = ["man:ssh-agent(1)"];
+        };
+        Service = {
+          ExecStart = "${pkgs.openssh}/bin/ssh-agent -D -a %t/ssh-agent";
+          SuccessExitStatus = 2;
+        };
+      };
     })
   ]);
 }

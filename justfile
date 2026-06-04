@@ -28,6 +28,14 @@ fmt:
 k8s-node-reboot HOST:
     kreboot {{HOST}}
 
+[group("ops")]
+ssd-health DEVICE:
+    sudo scripts/ops/ssd-health-check.sh {{DEVICE}}
+
+[group("ops")]
+ssd-health-thorough DEVICE:
+    sudo scripts/ops/ssd-health-check.sh --start-long --wait-long --read-scan {{DEVICE}}
+
 [group("building")]
 rebuild HOST=`hostname`:
     sudo nixos-rebuild switch --flake .#{{HOST}}
