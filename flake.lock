@@ -466,11 +466,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780493300,
-        "narHash": "sha256-RTRyvEel4ZRO2HPGNk9WERMZrAYEoqsycb2aBlREkt8=",
+        "lastModified": 1780576500,
+        "narHash": "sha256-WvEE1p08juHtHtq3/MxAFJlY6D6WAmPtIfPqAtlyhXM=",
         "owner": "alcxyz",
         "repo": "grove",
-        "rev": "c7f0be6be899c1dbdf0236f22f3f36e2c65ad4ef",
+        "rev": "286a77252d624896f6ee7fe3ba9a456ac393da61",
         "type": "github"
       },
       "original": {
