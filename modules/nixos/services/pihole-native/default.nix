@@ -12,6 +12,8 @@
     export FTLCONF_dns_interface="${cfg.listenInterface}"
     export FTLCONF_dns_listeningMode="BIND"
     export FTLCONF_dns_upstreams="${cfg.upstream}"
+    export FTLCONF_dns_rateLimit_count="${toString cfg.rateLimitCount}"
+    export FTLCONF_dns_rateLimit_interval="${toString cfg.rateLimitInterval}"
     export FTLCONF_misc_readOnly="false"
     export FTLCONF_webserver_domain="${cfg.hostName}"
     export FTLCONF_webserver_port="${toString cfg.webPort}o"
@@ -74,6 +76,18 @@ in {
       description = "Pi-hole upstream resolver.";
     };
 
+    rateLimitCount = lib.mkOption {
+      type = lib.types.addCheck lib.types.int (value: value >= 0);
+      default = 1000;
+      description = "Maximum Pi-hole DNS queries allowed per client during rateLimitInterval. Set to 0 with rateLimitInterval = 0 to disable rate limiting.";
+    };
+
+    rateLimitInterval = lib.mkOption {
+      type = lib.types.addCheck lib.types.int (value: value >= 0);
+      default = 60;
+      description = "Pi-hole DNS rate-limit interval in seconds. Set to 0 with rateLimitCount = 0 to disable rate limiting.";
+    };
+
     stateDirectory = lib.mkOption {
       type = lib.types.path;
       default = "/var/lib/pihole/etc";
@@ -106,6 +120,15 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion =
+          (cfg.rateLimitCount == 0 && cfg.rateLimitInterval == 0)
+          || (cfg.rateLimitCount > 0 && cfg.rateLimitInterval > 0);
+        message = "services.pihole-native rateLimitCount and rateLimitInterval must either both be 0 or both be positive.";
+      }
+    ];
+
     users.groups.pihole = {};
     users.users.pihole = {
       isSystemUser = true;

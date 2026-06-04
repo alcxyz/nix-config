@@ -82,6 +82,8 @@
     hostName = "pihole.rpi0.local";
     webPort = 8081;
     upstream = "127.0.0.1#5335";
+    rateLimitCount = 10000;
+    rateLimitInterval = 60;
     stateDirectory = "/var/lib/pihole/etc";
     passwordFile = config.sops.secrets.pihole_secret_key.path;
     disableWebPassword = true;
