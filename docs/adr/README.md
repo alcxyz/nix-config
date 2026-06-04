@@ -31,7 +31,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0024](0024-shared-postgres-cluster.md) | Shared Postgres cluster for k8s services | Proposed | k3s, databases |
 | [ADR-0025](0025-tooling-service-discovery-post-k8s.md) | Tooling service discovery after Docker-to-k8s migration | Accepted | tooling, gitops |
 | [ADR-0026](0026-unified-source-directory-layout.md) | Unified source directory layout across machines | Accepted, implemented on xyz | all hosts, home-manager |
-| [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | PipeWire virtual sink for per-app audio isolation (wcap) | Accepted | `modules/nixos/common/`, hyprland |
+| [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | Retired PipeWire virtual sink for per-app audio isolation (wcap) | Retired | `modules/nixos/common/`, hyprland |
 | [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Accepted | agent instructions, nix-packages, nix-secrets |
 | [ADR-0029](0029-shared-xdg-llm-config.md) | Shared XDG LLM config for local tooling | Accepted | local tooling, llm config, xdg |
 | [ADR-0030](0030-declarative-shared-user-policy-configs.md) | Declarative deployment for shared user policy configs | Accepted | home-manager, shared policy, config deployment |
