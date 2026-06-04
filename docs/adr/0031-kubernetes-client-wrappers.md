@@ -15,7 +15,7 @@ normal interactive shells, but it was brittle for:
 - plain shells that did not inherit Home Manager session variables
 - agent subprocesses
 - GUI-launched tools
-- tools that need cluster access indirectly, such as `leantime-tidy`
+- tools that need cluster access indirectly
 
 The secret itself was already handled correctly as a strict-permission
 sops-nix file. The weak points were relying on broad ambient environment
@@ -49,7 +49,6 @@ Managed wrappers currently include:
 - `k9s`
 - `kdash`
 - `switcher`
-- selected higher-level tools, currently `leantime-tidy` on `xyz`
 
 `switcher` and `kc` both persist context selections into the managed
 current-context file. `kc <context>` first checks the merged kubectl context
