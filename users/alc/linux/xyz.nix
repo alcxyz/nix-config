@@ -43,9 +43,6 @@ in {
     ++ [
       pkgs.paperweight
     ];
-
-  programs.kubernetes.managed.wrap.leantimeTidy = true;
-
   # Symlink configs directly to repo checkout for live editing
   xdg.configFile."ncspot/config.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/ncspot/config.toml";

@@ -91,11 +91,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    leantime-tidy = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/leantime-tidy.git";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     stashdb-pop = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git";
       inputs.nixpkgs.follows = "nixpkgs";
