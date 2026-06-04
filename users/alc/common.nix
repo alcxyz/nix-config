@@ -205,6 +205,7 @@ in
     # Forgejo. Runs on every home-manager switch; skips silently when offline.
     home.activation.forgejoPrimary = lib.hm.dag.entryAfter ["writeBoundary"] ''
       if command -v forge-mirror >/dev/null 2>&1; then
+        export FORGE_MIRROR_GITHUB_PRIMARY_REPOS="${lib.concatStringsSep "," inputs.nix-secrets.repoInventory.forgejoPrimaryExcludedRepoNames}"
         forge-mirror primary 2>/dev/null || true
       fi
     '';
