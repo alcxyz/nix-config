@@ -231,6 +231,12 @@ just darwin mac
 deploy --here --nixos rpi0
 deploy --here --all
 
+# Skip the SSH availability preflight only when intentionally bootstrapping/debugging
+deploy --no-preflight --nixos rpi0
+
+# Make --all abort instead of skipping unreachable remote hosts
+deploy --all --fail-unreachable
+
 # Update flake inputs
 just update
 

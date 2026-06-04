@@ -102,6 +102,7 @@
       platform = "nixos";
       role = "nuc";
       k8sRole = "server-worker";
+      sshHostname = "192.168.1.16";
       configuration = ./hosts/nex/configuration.nix;
       osIcon = "";
     };

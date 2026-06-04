@@ -30,6 +30,9 @@ The inventory owns stable host facts:
 - `k8sRole` — semantic cluster role, or `null` when not a node
 - `configuration` — host configuration path
 - `osIcon` — prompt/UI icon metadata
+- `sshHostname` — optional stable SSH endpoint for deploy and client config,
+  used when the deploy path should target something other than the canonical
+  inventory name
 
 The inventory also defines role metadata:
 
@@ -82,3 +85,9 @@ The future workspace module can select `~/src` checkout profiles from the same
 role metadata instead of introducing a separate host classification.
 
 k3s role intent becomes visible without reading each host's service flags.
+
+Deploy and SSH client tooling read host endpoints from inventory instead of
+carrying separate host maps. Fixed LAN infrastructure hosts should declare their
+reserved IP as `sshHostname` so recovery deploys do not depend on local name
+resolution. Hosts without a distinct stable endpoint may omit `sshHostname` and
+fall back to the canonical inventory name.

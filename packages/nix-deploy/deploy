@@ -5,12 +5,18 @@ set -euo pipefail
 SUDO_KEEPALIVE_PID=""
 COLOR_RESET=""
 BUILD_HERE=false
+PREFLIGHT=true
+FAIL_UNREACHABLE=false
 SELF_RAW="$(hostname -s)"
 SELF=""
 NIX_SSHOPTS="${NIX_SSHOPTS:--o ServerAliveInterval=10 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -o ConnectTimeout=30}"
+DEPLOY_SSH_CHECK_TIMEOUT="${DEPLOY_SSH_CHECK_TIMEOUT:-5}"
 export NIX_SSHOPTS
 # shellcheck disable=SC2206
 SSH_ARGS=(${NIX_SSHOPTS})
+PREFLIGHT_AVAILABLE_HOSTS=()
+PREFLIGHT_SKIPPED_HOSTS=()
+SSH_PREFLIGHT_ERROR=""
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_RESET=$'\033[0m'
@@ -18,14 +24,19 @@ fi
 
 usage() {
   cat <<EOF
-Usage: deploy [--here] [<host>]          Full rebuild (system + home-manager)
-       deploy [--here] --all             Parallel rebuild of provisioned hosts
-       deploy [--here] --nixos [<host>]  System rebuild only
-       deploy --hm [<host>]              Home Manager only
+Usage: deploy [--here] [--no-preflight] [<host>]
+       deploy [--here] [--no-preflight] [--fail-unreachable] --all
+       deploy [--here] [--no-preflight] --nixos [<host>]
+       deploy [--no-preflight] --hm [<host>]
 
 When <host> is omitted, deploys to the current machine.
 When <host> differs from the current machine, deploys remotely via SSH.
 Known hosts: ${KNOWN_HOSTS[*]}
+
+Remote phases are checked over SSH before building. A single unreachable phase
+fails early. For --all, unreachable hosts are skipped for that phase unless
+--fail-unreachable is set. Set DEPLOY_SSH_CHECK_TIMEOUT to tune the SSH
+preflight timeout.
 
 By default, --all runs from xyz for the canonical fleet workflow.
 Use --here to run --all from the current machine and build locally before
@@ -99,6 +110,7 @@ phase_label() {
   local phase="$1"
 
   case "$phase" in
+    check) color "166;227;161" "[check]" ;;   # Catppuccin green
     system) color "116;199;236" "[system]" ;; # Catppuccin sapphire
     hm) color "203;166;247" "[hm]" ;;         # Catppuccin mauve
     *) color "205;214;244" "[${phase}]" ;;    # Catppuccin text
@@ -144,6 +156,122 @@ start_sudo_keepalive() {
 stop_sudo_keepalive() {
   if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
     kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+  fi
+}
+
+check_ssh_endpoint() {
+  local endpoint="$1"
+  local output status
+
+  set +e
+  output="$(
+    ssh \
+      -o BatchMode=yes \
+      -o ConnectTimeout="$DEPLOY_SSH_CHECK_TIMEOUT" \
+      -o ConnectionAttempts=1 \
+      "${SSH_ARGS[@]}" \
+      "$endpoint" true 2>&1
+  )"
+  status=$?
+  set -e
+
+  SSH_PREFLIGHT_ERROR="$(printf '%s' "$output" | tr '\n' ' ' | sed -e 's/[[:space:]]\+/ /g' -e 's/^ //' -e 's/ $//')"
+  if [[ -z "$SSH_PREFLIGHT_ERROR" ]]; then
+    SSH_PREFLIGHT_ERROR="ssh exited with status ${status}"
+  fi
+
+  return "$status"
+}
+
+preflight_host() {
+  local host="$1" mode="$2"
+  local endpoints=()
+  local checked=()
+  local endpoint checked_endpoint seen endpoints_text
+
+  if [[ "$host" == "$SELF" || "$PREFLIGHT" != true ]]; then
+    return 0
+  fi
+
+  if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
+    endpoints+=("$(system_ssh_user "$host")@$(ssh_host "$host")")
+  fi
+
+  if [[ "$mode" == "hm" || "$mode" == "full" ]]; then
+    endpoints+=("alc@$(ssh_host "$host")")
+  fi
+
+  for endpoint in "${endpoints[@]}"; do
+    seen=false
+    for checked_endpoint in "${checked[@]}"; do
+      if [[ "$checked_endpoint" == "$endpoint" ]]; then
+        seen=true
+        break
+      fi
+    done
+    $seen && continue
+
+    checked+=("$endpoint")
+
+    if ! check_ssh_endpoint "$endpoint"; then
+      printf '%s %s unavailable via %s: %s\n' \
+        "$(phase_label check)" \
+        "$(host_label "$host")" \
+        "$endpoint" \
+        "$SSH_PREFLIGHT_ERROR" >&2
+      return 1
+    fi
+  done
+
+  endpoints_text="${checked[*]}"
+  printf '%s %s SSH available: %s\n' \
+    "$(phase_label check)" \
+    "$(host_label "$host")" \
+    "$endpoints_text"
+}
+
+filter_reachable_hosts() {
+  local mode="$1"
+  shift
+
+  local requested_hosts=("$@")
+  local host
+  PREFLIGHT_AVAILABLE_HOSTS=()
+  PREFLIGHT_SKIPPED_HOSTS=()
+
+  if [[ "$PREFLIGHT" != true ]]; then
+    PREFLIGHT_AVAILABLE_HOSTS=("${requested_hosts[@]}")
+    return 0
+  fi
+
+  section "preflight"
+
+  for host in "${requested_hosts[@]}"; do
+    if [[ "$host" == "$SELF" ]]; then
+      printf '%s %s local host\n' "$(phase_label check)" "$(host_label "$host")"
+      PREFLIGHT_AVAILABLE_HOSTS+=("$host")
+      continue
+    fi
+
+    if preflight_host "$host" "$mode"; then
+      PREFLIGHT_AVAILABLE_HOSTS+=("$host")
+    else
+      PREFLIGHT_SKIPPED_HOSTS+=("$host")
+    fi
+  done
+
+  if [[ ${#PREFLIGHT_SKIPPED_HOSTS[@]} -gt 0 ]]; then
+    if [[ "$FAIL_UNREACHABLE" == true ]]; then
+      echo "deploy: unreachable hosts: ${PREFLIGHT_SKIPPED_HOSTS[*]}" >&2
+      return 1
+    fi
+
+    echo "deploy: skipping unreachable hosts: ${PREFLIGHT_SKIPPED_HOSTS[*]}" >&2
+  fi
+
+  if [[ ${#PREFLIGHT_AVAILABLE_HOSTS[@]} -eq 0 ]]; then
+    echo "deploy: no reachable hosts to deploy" >&2
+    return 1
   fi
 }
 
@@ -233,7 +361,25 @@ do_deploy() {
   fi
 
   local is_local=false
+  local hm_preflight_done=false
   [[ "$host" == "$SELF" ]] && is_local=true
+
+  if [[ "$PREFLIGHT" == true && "$is_local" == false ]]; then
+    if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
+      section "preflight"
+      if ! preflight_host "$host" "nixos"; then
+        echo "deploy: ${host} is not reachable over SSH; use --no-preflight to attempt anyway" >&2
+        exit 1
+      fi
+    elif [[ "$mode" == "hm" ]]; then
+      section "preflight"
+      if ! preflight_host "$host" "hm"; then
+        echo "deploy: ${host} is not reachable over SSH; use --no-preflight to attempt anyway" >&2
+        exit 1
+      fi
+      hm_preflight_done=true
+    fi
+  fi
 
   if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
     section "$(phase_label system) $(host_label "$host") rebuild"
@@ -245,6 +391,14 @@ do_deploy() {
   fi
 
   if [[ "$mode" == "hm" || "$mode" == "full" ]]; then
+    if [[ "$PREFLIGHT" == true && "$is_local" == false && "$hm_preflight_done" == false ]]; then
+      section "preflight"
+      if ! preflight_host "$host" "hm"; then
+        echo "deploy: ${host} is not reachable for Home Manager over SSH; use --no-preflight to attempt anyway" >&2
+        exit 1
+      fi
+    fi
+
     section "$(phase_label hm) $(host_label "$host") switch"
     if $is_local; then
       hm_local "$host"
@@ -276,6 +430,9 @@ do_deploy_all() {
     local system_jobs=()
     local interactive_system_jobs=()
     local host cmd
+
+    filter_reachable_hosts "nixos" "${deploy_hosts[@]}"
+    deploy_hosts=("${PREFLIGHT_AVAILABLE_HOSTS[@]}")
 
     start_sudo_keepalive
     trap stop_sudo_keepalive EXIT
@@ -315,13 +472,16 @@ do_deploy_all() {
     local hm_jobs=()
     local host cmd
 
+    filter_reachable_hosts "hm" "${deploy_hosts[@]}"
+    deploy_hosts=("${PREFLIGHT_AVAILABLE_HOSTS[@]}")
+
     section "home-manager switches"
 
     for host in "${deploy_hosts[@]}"; do
       if [[ "$host" == "$SELF" ]]; then
         cmd="home-manager switch --flake .#alc-${host}"
       else
-        cmd="deploy --hm ${host}"
+        cmd="deploy --no-preflight --hm ${host}"
       fi
 
       hm_jobs+=("$(phase_label hm)"$'\t'"$(host_label "$host")"$'\t'"$cmd")
@@ -355,6 +515,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --here)
       BUILD_HERE=true
+      shift
+      ;;
+    --no-preflight)
+      PREFLIGHT=false
+      shift
+      ;;
+    --fail-unreachable)
+      FAIL_UNREACHABLE=true
       shift
       ;;
     --help | -h) usage ;;
