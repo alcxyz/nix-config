@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1779979631,
-        "narHash": "sha256-Fz9/h33//i7xgl5yzy8RNzleMteORQrBMUNZsIfhabw=",
+        "lastModified": 1780582621,
+        "narHash": "sha256-MWE0g6dUu5K3ZZcMgfQmw4hprroBb+CPMDHrCuf1xTw=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "7fa4e8636d84466f251b4ec2f124cdcc44613ecc",
+        "rev": "d61601fe02a3c496586404b93b332340844062dc",
         "type": "github"
       },
       "original": {
@@ -148,16 +148,16 @@
     "dankcalendar": {
       "flake": false,
       "locked": {
-        "lastModified": 1780426471,
-        "narHash": "sha256-5RXomHcF6+XDKt66HFswgWXQoDRYvRtbTRs1jDO+F+c=",
+        "lastModified": 1780431333,
+        "narHash": "sha256-N6jg38lKrIqqyNlvu0fKWWhFbTrmuRvbpke2YxGMMZM=",
         "owner": "alcxyz",
         "repo": "DankCalendar",
-        "rev": "01ac360a71eab84f09a0e172840916f9a65a8dce",
+        "rev": "ef2f44d55453679a021e7d03cbf4d78931ee6776",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "dev",
+        "ref": "main",
         "repo": "DankCalendar",
         "type": "github"
       }
@@ -186,11 +186,11 @@
     "diskusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1780332174,
-        "narHash": "sha256-ewDvg4y+4yAtw1vFV+4AYg8+Aozy7XdXVW3AGzfz2Gk=",
+        "lastModified": 1780422560,
+        "narHash": "sha256-sTlyO6lrHoO+xMjKmtkViLb/Z/aZBkLdEs3RtIeljTI=",
         "owner": "alcxyz",
         "repo": "DankDiskUsage",
-        "rev": "901be165bdeb8ab5955a6105945d3a57c62caec6",
+        "rev": "e3e39b98cbf134a704124033459edaeab5428126",
         "type": "github"
       },
       "original": {
@@ -214,8 +214,8 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1780426956,
-        "narHash": "sha256-rQnNpLvb68w1BuheumDqS+1tq5Nz7hKY2IeYrOhpG+U=",
+        "lastModified": 1780590729,
+        "narHash": "sha256-zJxJ6kUXOWvTYPQOK0rhBDaMbDjLg8/X2Q9fx9jAil8=",
         "path": "/home/alc/src/tools/dms-plugins",
         "type": "path"
       },
@@ -247,11 +247,11 @@
     "firstparty": {
       "flake": false,
       "locked": {
-        "lastModified": 1777324456,
-        "narHash": "sha256-QgeeB6Ix8L5oaqTUCopPvGu6vr0ECsF+jO3mQIxPKIw=",
+        "lastModified": 1780332225,
+        "narHash": "sha256-QkQPqP7Wmo5DLRyKNSY5NuOau4LSaSfz3DYdHDLxluA=",
         "owner": "AvengeMedia",
         "repo": "dms-plugins",
-        "rev": "9e2752586d79a6509b93c00c6fa4be0334ae4755",
+        "rev": "f4583449f12920e0a2f16808b00a860c27f0173d",
         "type": "github"
       },
       "original": {
@@ -1282,11 +1282,11 @@
     "spotify": {
       "flake": false,
       "locked": {
-        "lastModified": 1778317374,
-        "narHash": "sha256-r7Ye/jBUtvrpN54LTcv97QxJFhs4r3UCTwXpxMXVsO4=",
+        "lastModified": 1780428300,
+        "narHash": "sha256-PUsS/pWYQhs+MmsPWQL8hMvkZVOgzY6a8h2Wq5U5sOc=",
         "owner": "alcxyz",
         "repo": "DankSpotify",
-        "rev": "df591c1b44ebb3b58ecc904e4d14162f9132d577",
+        "rev": "2fa99c11a2212e607409f6edfcf0a37afb62a3e5",
         "type": "github"
       },
       "original": {
@@ -1409,11 +1409,11 @@
     "translate": {
       "flake": false,
       "locked": {
-        "lastModified": 1778317374,
-        "narHash": "sha256-4gu/UjGb28y0juK1sZ/Q75Ywht79l+3d8FSfGswIz+4=",
+        "lastModified": 1780428300,
+        "narHash": "sha256-yOOATUuC2mUCWGXLkIFQAzgHC001ztGT2k2xVcxDKCw=",
         "owner": "alcxyz",
         "repo": "DankTranslate",
-        "rev": "2ffa59f25f5e0f150ca284ff1edee34378887087",
+        "rev": "5d2588d42a577e2b2ad8dfbbc7a1749159cee864",
         "type": "github"
       },
       "original": {
@@ -1426,16 +1426,16 @@
     "vault": {
       "flake": false,
       "locked": {
-        "lastModified": 1778317374,
-        "narHash": "sha256-1qs00e+JdAAgT98iFvGt8jIITE8BFU18u3ayshdQpm0=",
+        "lastModified": 1780588984,
+        "narHash": "sha256-HbV9S2WpT+0k4O2vVY2aF9tUkrR84qpgHxy7S4zGWZE=",
         "owner": "alcxyz",
         "repo": "DankVault",
-        "rev": "85b240439fd4d907cdb3288df1d4cab58fdc312a",
+        "rev": "36a8a2006d2634e45e391e10f8909e5974c8996a",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "DankVault",
         "type": "github"
       }
