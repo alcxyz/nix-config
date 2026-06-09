@@ -917,11 +917,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1780596367,
-        "narHash": "sha256-fJUU+og4wYY1j/0sfNMTY2TaAPdqtTK6VM++BMr6/JE=",
+        "lastModified": 1780991498,
+        "narHash": "sha256-vRPvvl/TfSl3oYwbrEpbr0i2yO7tZQZCjBAAqGsFwLE=",
         "ref": "dev",
-        "rev": "050218e6bb1cf7601e9d4a8c8b332ba5e7872a62",
-        "revCount": 270,
+        "rev": "fc7c46dda1450fc077a431a042468249fb2df210",
+        "revCount": 281,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -938,11 +938,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780579731,
-        "narHash": "sha256-VszfGhwRuCXJYjQOC0849mAZSIl7ZOTxnWHC2AnWVr0=",
+        "lastModified": 1780989617,
+        "narHash": "sha256-8+AAiGMJIv6GsiHA5XKvIJb4Q16rBbqaxwHmWp4Bi1E=",
         "ref": "refs/heads/main",
-        "rev": "0c760322f497bceb669e0891dc24e00c70d20ed2",
-        "revCount": 166,
+        "rev": "078c25eba4eb4663f8835db420b3a608937f5734",
+        "revCount": 172,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1113,11 +1113,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777725888,
-        "narHash": "sha256-JrtAuJmN7Ihid/8XXDY+uKJCOy5Q6LJgYTLVHKH7pnc=",
+        "lastModified": 1780841447,
+        "narHash": "sha256-vY7f5zd+hmHoj52nZacJSeDIq7G3Njjtl74FNBg7CII=",
         "ref": "dev",
-        "rev": "e5794a6c4e067d61068f6cd14094ff6045704c2e",
-        "revCount": 35,
+        "rev": "8e05954a9afcb6a251b0fbd979088f0b25943957",
+        "revCount": 38,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       },
