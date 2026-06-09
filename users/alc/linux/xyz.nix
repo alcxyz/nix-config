@@ -83,14 +83,11 @@ in {
   services.dms.idleLock = {
     enable = true;
     command = config.services.hyprlock.lockCommand;
-    acMonitorTimeout = 600;
+    acMonitorTimeout = 360;
     batteryMonitorTimeout = 0;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
-  services.hyprlock = {
-    enable = true;
-    turnOffDisplaysOnLock = true;
-  };
+  services.hyprlock.enable = true;
   services.udiskie = {
     enable = true;
     tray = "never";
