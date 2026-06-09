@@ -87,7 +87,10 @@ in {
     batteryMonitorTimeout = 0;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
-  services.hyprlock.enable = true;
+  services.hyprlock = {
+    enable = true;
+    turnOffDisplaysOnLock = true;
+  };
   services.udiskie = {
     enable = true;
     tray = "never";

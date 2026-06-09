@@ -10,8 +10,11 @@
 SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 STATE_DIR="$XDG_RUNTIME_DIR/dms-resume-watcher"
 ARM_FILE="$STATE_DIR/armed"
+EXTERNAL_LOCK_FILE="$STATE_DIR/external-lock"
 LOG_TAG="dms-resume-watcher"
 COOLDOWN=10
+LOCK_SETTLE=3
+LAYER_CHECKS=5
 
 last_restart=0
 
@@ -22,7 +25,10 @@ log() {
 }
 
 mark_armed() {
-  : > "$ARM_FILE"
+  : >"$ARM_FILE"
+  if external_lock_active; then
+    : >"$EXTERNAL_LOCK_FILE"
+  fi
 }
 
 monitor_awake() {
@@ -30,10 +36,14 @@ monitor_awake() {
     jq -e 'length > 0 and any(.[]; (.disabled | not) and .dpmsStatus == true)' >/dev/null
 }
 
+external_lock_active() {
+  pgrep -u "$(id -u)" -x hyprlock >/dev/null 2>&1
+}
+
 wait_for_stable_wake() {
   local checks=0
 
-  while (( checks < 2 )); do
+  while ((checks < 2)); do
     sleep 1
     if monitor_awake; then
       ((checks++))
@@ -41,6 +51,33 @@ wait_for_stable_wake() {
       checks=0
     fi
   done
+}
+
+wait_for_external_lock_release() {
+  while external_lock_active; do
+    sleep 1
+  done
+
+  sleep "$LOCK_SETTLE"
+}
+
+dms_layers_present() {
+  hyprctl layers -j 2>/dev/null |
+    jq -e '[.. | objects | .namespace? // empty | select(startswith("dms:"))] | length > 0' >/dev/null
+}
+
+wait_for_dms_layers() {
+  local checks=0
+
+  while ((checks < LAYER_CHECKS)); do
+    if dms_layers_present; then
+      return 0
+    fi
+    sleep 1
+    ((checks++))
+  done
+
+  return 1
 }
 
 restart_dms() {
@@ -76,6 +113,7 @@ socket_watcher_pid=$!
 trap 'kill "$socket_watcher_pid" 2>/dev/null || true' EXIT
 
 armed=0
+external_lock=0
 
 while true; do
   if [[ -e "$ARM_FILE" ]]; then
@@ -83,19 +121,37 @@ while true; do
     rm -f "$ARM_FILE"
   fi
 
+  if [[ -e "$EXTERNAL_LOCK_FILE" ]]; then
+    external_lock=1
+    rm -f "$EXTERNAL_LOCK_FILE"
+  fi
+
   if ! monitor_awake; then
     armed=1
+    if external_lock_active; then
+      external_lock=1
+    fi
     sleep 2
     continue
   fi
 
-  if (( armed )); then
+  if ((armed)); then
     now=$(date +%s)
-    if (( now - last_restart >= COOLDOWN )); then
+    if ((now - last_restart >= COOLDOWN)); then
       wait_for_stable_wake
-      restart_dms
+      if ((external_lock)); then
+        wait_for_external_lock_release
+        if wait_for_dms_layers; then
+          log "DMS layers present after external lock wake; skipping restart"
+        else
+          restart_dms
+        fi
+      else
+        restart_dms
+      fi
     fi
     armed=0
+    external_lock=0
   fi
 
   sleep 2
