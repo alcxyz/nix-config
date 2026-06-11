@@ -69,7 +69,13 @@ in
     in
       import nixpkgs {
         inherit system overlays;
-        config.allowUnfree = true;
-        config.allowUnsupportedSystem = true;
+        config = {
+          allowUnfree = true;
+          allowUnsupportedSystem = true;
+          # Required by bitwarden-desktop 2026.5.0 until nixpkgs moves it off electron_39.
+          permittedInsecurePackages = lib.optionals (system == "x86_64-linux") [
+            "electron-39.8.10"
+          ];
+        };
       }
   )
