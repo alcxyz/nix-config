@@ -41,33 +41,57 @@ with lib; let
         '[.[] | select(.name | test($pattern)) | .name][0] // empty'
     }
 
-    external_output() {
+    internal_outputs() {
       monitors | jq -r \
-        '[.[] | select(.name | test("^(eDP|LVDS)-") | not) | .name] | sort[0] // empty'
+        '[.[] | select(.name | test("^(eDP|LVDS)-")) | .name] | sort[]'
+    }
+
+    external_outputs() {
+      monitors | jq -r \
+        '[.[] | select((.name | test("^(eDP|LVDS)-")) | not) | .name] | sort[]'
+    }
+
+    monitor_fingerprint() {
+      monitors | jq -c \
+        '[.[] | {name, disabled, width, height, refreshRate, scale, availableModes}] | sort_by(.name)'
     }
 
     apply_display_state() {
-      internal="$(first_output "^(eDP|LVDS)-")"
-      external="$(external_output)"
+      mapfile -t internals < <(internal_outputs)
+      mapfile -t externals < <(external_outputs)
 
-      if [ -n "$external" ]; then
-        hyprctl keyword monitor "$external, preferred, 0x0, 1" >/dev/null
+      if ((''${#externals[@]} > 0)); then
+        primary="''${externals[0]}"
+        hyprctl keyword monitor "$primary, preferred, 0x0, 1" >/dev/null
 
-        if [ -n "$internal" ]; then
+        for external in "''${externals[@]:1}"; do
+          hyprctl keyword monitor "$external, preferred, auto-right, 1" >/dev/null
+        done
+
+        for internal in "''${internals[@]}"; do
           if lid_closed; then
             hyprctl keyword monitor "$internal, disable" >/dev/null
           else
             hyprctl keyword monitor "$internal, preferred, auto-right, 1" >/dev/null
           fi
-        fi
-      elif [ -n "$internal" ]; then
-        hyprctl keyword monitor "$internal, preferred, 0x0, 1" >/dev/null
+        done
+
+        hyprctl dispatch focusmonitor "$primary" >/dev/null || true
+      elif ((''${#internals[@]} > 0)); then
+        primary="$(first_output "^(eDP|LVDS)-")"
+        hyprctl keyword monitor "$primary, preferred, 0x0, 1" >/dev/null
+
+        for internal in "''${internals[@]:1}"; do
+          hyprctl keyword monitor "$internal, preferred, auto-right, 1" >/dev/null
+        done
+
+        hyprctl dispatch focusmonitor "$primary" >/dev/null || true
       fi
     }
 
     last_state=""
     while true; do
-      state="$(monitors | jq -r '[.[] | .name] | sort | join(",")')"
+      state="$(monitor_fingerprint)"
       if lid_closed; then
         state="closed:$state"
       else
