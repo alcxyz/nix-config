@@ -60,6 +60,12 @@ let
     '') cfg.secretEnv
   );
 
+  secretChecksScript = lib.concatLines (
+    map (key: ''
+      test -s ${lib.escapeShellArg (secretPath key)}
+    '') secretKeys
+  );
+
   labelsWanted = lib.concatStringsSep "," cfg.labels;
 in
 {
@@ -172,6 +178,7 @@ in
           owner = "forgejo-runner";
           group = "forgejo-runner";
           mode = "0400";
+          restartUnits = [ "forgejo-actions-runner.service" ];
         };
       }) secretKeys
     );
@@ -215,7 +222,7 @@ in
 
         test -S /var/run/docker.sock
         docker version --format '{{.Server.Version}}' >/dev/null
-        test -s ${lib.escapeShellArg (secretPath "runner_token")}
+        ${secretChecksScript}
 
         install -d -m 0750 ${lib.escapeShellArg stateDir}
         env_tmp="$(mktemp ${lib.escapeShellArg runtimeDir}/env.XXXXXX)"
