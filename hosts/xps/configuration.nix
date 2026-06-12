@@ -22,7 +22,11 @@ in {
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
-  environment.systemPackages = pkgsets.system.${hostRole.systemPackageSet};
+  environment.systemPackages =
+    pkgsets.system.${hostRole.systemPackageSet}
+    ++ [
+      pkgs.bolt
+    ];
 
   hardware.enableRedistributableFirmware = true;
   hardware.nvidia.enable = true;
@@ -78,6 +82,7 @@ in {
   services.gnome.sushi.enable = true;
   services.udisks2.enable = true;
   services.gvfs.enable = true;
+  services.hardware.bolt.enable = true;
   security.polkit.enable = true;
   programs.dconf.enable = true;
 
@@ -115,18 +120,24 @@ in {
       RemainAfterExit = true;
     };
     script = ''
-      nmcli connection modify "Wired connection 1" \
-        ipv4.route-metric 50 ipv6.route-metric 50 || true
-
       nmcli -t -f NAME,TYPE connection show | while IFS=: read -r name type; do
-        if [ "$type" = "wifi" ]; then
-          nmcli connection modify "$name" \
-            ipv4.route-metric 600 ipv6.route-metric 600 || true
-        fi
+        case "$type" in
+          ethernet)
+            nmcli connection modify "$name" \
+              ipv4.route-metric 50 ipv6.route-metric 50 || true
+            ;;
+          wifi)
+            nmcli connection modify "$name" \
+              ipv4.route-metric 600 ipv6.route-metric 600 || true
+            ;;
+        esac
       done
 
-      nmcli device reapply enp0s20f0u2 || true
-      nmcli device reapply wlp59s0 || true
+      nmcli -t -f DEVICE,TYPE device status | while IFS=: read -r device type; do
+        if [ "$type" = "ethernet" ] || [ "$type" = "wifi" ]; then
+          nmcli device reapply "$device" || true
+        fi
+      done
     '';
   };
 

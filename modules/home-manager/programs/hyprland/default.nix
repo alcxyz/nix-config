@@ -41,12 +41,17 @@ with lib; let
         '[.[] | select(.name | test($pattern)) | .name][0] // empty'
     }
 
+    external_output() {
+      monitors | jq -r \
+        '[.[] | select(.name | test("^(eDP|LVDS)-") | not) | .name] | sort[0] // empty'
+    }
+
     apply_display_state() {
       internal="$(first_output "^(eDP|LVDS)-")"
-      hdmi="$(first_output "^HDMI-A-")"
+      external="$(external_output)"
 
-      if [ -n "$hdmi" ]; then
-        hyprctl keyword monitor "$hdmi, preferred, 0x0, 1" >/dev/null
+      if [ -n "$external" ]; then
+        hyprctl keyword monitor "$external, preferred, 0x0, 1" >/dev/null
 
         if [ -n "$internal" ]; then
           if lid_closed; then
@@ -87,7 +92,7 @@ in {
       description = "Optional Hyprland input sensitivity override in the range -1.0 to 1.0.";
     };
 
-    laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for HDMI and lid state";
+    laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for external outputs and lid state";
 
     extraConfig = mkOption {
       type = types.lines;
