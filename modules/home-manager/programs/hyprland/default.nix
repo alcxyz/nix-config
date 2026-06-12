@@ -56,33 +56,62 @@ with lib; let
         '[.[] | {name, disabled, width, height, refreshRate, scale, availableModes}] | sort_by(.name)'
     }
 
+    monitor_mode() {
+      monitors | jq -r --arg name "$1" '
+        ([.[] | select(.name == $name)][0] // {}) as $monitor
+        | if (($monitor.description // "") | contains("49M2C8900")) then
+            (
+              ($monitor.availableModes // [])
+              | map(
+                  select(startswith("5120x1440@"))
+                  | {
+                      mode: (sub("Hz$"; "")),
+                      refreshRate: (capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate | tonumber)
+                    }
+                )
+              | sort_by(.refreshRate)
+              | last.mode
+            ) // "preferred"
+          else
+            "preferred"
+          end
+      '
+    }
+
+    configure_monitor() {
+      output="$1"
+      position="$2"
+      mode="$(monitor_mode "$output")"
+      hyprctl keyword monitor "$output, $mode, $position, 1" >/dev/null
+    }
+
     apply_display_state() {
       mapfile -t internals < <(internal_outputs)
       mapfile -t externals < <(external_outputs)
 
       if ((''${#externals[@]} > 0)); then
         primary="''${externals[0]}"
-        hyprctl keyword monitor "$primary, preferred, 0x0, 1" >/dev/null
+        configure_monitor "$primary" "0x0"
 
         for external in "''${externals[@]:1}"; do
-          hyprctl keyword monitor "$external, preferred, auto-right, 1" >/dev/null
+          configure_monitor "$external" "auto-right"
         done
 
         for internal in "''${internals[@]}"; do
           if lid_closed; then
             hyprctl keyword monitor "$internal, disable" >/dev/null
           else
-            hyprctl keyword monitor "$internal, preferred, auto-right, 1" >/dev/null
+            configure_monitor "$internal" "auto-right"
           fi
         done
 
         hyprctl dispatch focusmonitor "$primary" >/dev/null || true
       elif ((''${#internals[@]} > 0)); then
         primary="$(first_output "^(eDP|LVDS)-")"
-        hyprctl keyword monitor "$primary, preferred, 0x0, 1" >/dev/null
+        configure_monitor "$primary" "0x0"
 
         for internal in "''${internals[@]:1}"; do
-          hyprctl keyword monitor "$internal, preferred, auto-right, 1" >/dev/null
+          configure_monitor "$internal" "auto-right"
         done
 
         hyprctl dispatch focusmonitor "$primary" >/dev/null || true
