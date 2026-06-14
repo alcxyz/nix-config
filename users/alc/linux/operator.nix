@@ -35,6 +35,12 @@
 
       export VISMA_ENV="sandbox"
       export VISMA_CONFIG="$accounts_toml"
+      export VISMA_API_URL="https://eaccountingapi.vismaonline.com/v2"
+      export VISMA_AUTH_URL="https://identity.vismaonline.com/connect/authorize"
+      export VISMA_TOKEN_URL="https://identity.vismaonline.com/connect/token"
+      export VISMA_SCOPES="ea:api ea:sales ea:purchase ea:accounting offline_access"
+      export VISMA_CLIENT_ID_FILE="''${VISMA_SANDBOX_CLIENT_ID_FILE:-$HOME/.config/sops-nix/secrets/visma_sandbox_client_id}"
+      export VISMA_CLIENT_SECRET_FILE="''${VISMA_SANDBOX_CLIENT_SECRET_FILE:-$HOME/.config/sops-nix/secrets/visma_sandbox_client_secret}"
       export PAPERLESS_URL="''${PAPERLESS_DEV_URL:-https://arq.dev.alc.xyz}"
       export PAPERLESS_ENV="''${PAPERLESS_DEV_ENV:-dev}"
       export PAPERLESS_API_TOKEN_FILE="$dev_token_file"
