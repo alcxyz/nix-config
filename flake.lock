@@ -921,11 +921,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1781334174,
-        "narHash": "sha256-xbUYwxN4Jb+71wgnTZMIQRXwbMjshPt8fZ+KPwdmWWA=",
+        "lastModified": 1781634868,
+        "narHash": "sha256-ICTV03pqt098gkbqN7IIuRbzzHAfjPnfv1hPsTgvLVE=",
         "ref": "dev",
-        "rev": "02e61546bae924fa9753f7f646603125fd1c4662",
-        "revCount": 298,
+        "rev": "24ce266390db1c28d4e944dd0cbd6419e73ce75b",
+        "revCount": 302,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1096,11 +1096,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780573062,
-        "narHash": "sha256-NAbzMRnvfKkLRdT3YSco6SBU/bZTB7HYPwm8j2vFUII=",
+        "lastModified": 1781682348,
+        "narHash": "sha256-YlgRZopRhNQzwyM/z8fkEDQxaKUAcOKHY64kSRiU+JE=",
         "owner": "alcxyz",
         "repo": "paperflow",
-        "rev": "86efd8c018409e2e102848a79169e2b6ec74e120",
+        "rev": "143be0b2a394e5fa388158f0736c4ed2338c6b4a",
         "type": "github"
       },
       "original": {
