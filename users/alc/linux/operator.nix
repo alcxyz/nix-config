@@ -14,9 +14,22 @@
     key = "paperless_dev_api_token";
   };
 
+  sops.secrets.paperless_crm_docs_api_token = {
+    sopsFile = inputs.nix-secrets.secrets.files.apps;
+    key = "paperless_crm_docs_api_token";
+  };
+
   home.sessionVariables.PAPERLESS_DEV_URL = "https://arq.dev.alc.xyz";
   home.sessionVariables.PAPERLESS_DEV_ENV = "dev";
   home.sessionVariables.PAPERLESS_DEV_API_TOKEN_FILE = config.sops.secrets.paperless_dev_api_token.path;
+  home.sessionVariables.PAPERLESS_CRM_DOCS_URL = "https://crm-docs.alc.xyz";
+  home.sessionVariables.PAPERLESS_CRM_DOCS_ENV = "crm-docs";
+  home.sessionVariables.PAPERLESS_CRM_DOCS_API_TOKEN_FILE =
+    config.sops.secrets.paperless_crm_docs_api_token.path;
+  home.sessionVariables.PAPERLESS_AI_URL = "https://crm-docs.alc.xyz";
+  home.sessionVariables.PAPERLESS_AI_ENV = "crm-docs";
+  home.sessionVariables.PAPERLESS_AI_API_TOKEN_FILE =
+    config.sops.secrets.paperless_crm_docs_api_token.path;
 
   home.file.".local/bin/bokfor-dev" = {
     executable = true;
@@ -56,5 +69,16 @@
 
   xdg.configFile."paperweight/config.toml".text = ''
     accounts_toml_path = "${config.programs.workspace.root}/platform/regnskap/cmd/bokfor/accounts.toml"
+
+    [paperless]
+    default_instance = "arq"
+
+    [paperless.instances.arq]
+    url = "https://arq.alc.xyz"
+    api_token_file = "${config.sops.secrets.paperless_api_token.path}"
+
+    [paperless.instances."crm-docs"]
+    url = "https://crm-docs.alc.xyz"
+    api_token_file = "${config.sops.secrets.paperless_crm_docs_api_token.path}"
   '';
 }
