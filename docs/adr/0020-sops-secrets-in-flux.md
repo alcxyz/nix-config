@@ -17,6 +17,19 @@ A Kubernetes-native secrets strategy is needed that:
 
 Use Flux's built-in SOPS decryption support in `kustomize-controller`. Kubernetes Secret manifests are committed to git encrypted with SOPS (age backend), and Flux decrypts them during reconciliation.
 
+### Source-of-truth boundary
+
+Flux-managed SOPS manifests are the Kubernetes runtime delivery mechanism. They
+are not automatically the canonical owner for every secret value they contain.
+
+Long-lived platform/provider credentials should remain canonical in
+`nix-secrets` when they are also operator-owned, shared across control planes, or
+need a private source outside the Kubernetes manifest shape. In that case, the
+GitOps `Secret` is a runtime projection of the canonical `nix-secrets` value.
+
+GitOps may still be canonical for a Kubernetes-only generated secret when a
+runbook or ADR explicitly declares that ownership.
+
 ### Flux gets a dedicated age keypair
 
 Flux uses its own standalone age identity, generated via `age-keygen` — not derived from nux's SSH host key. This decouples Flux decryption from host key rotation: if nux is reinstalled or its SSH key changes, the Flux key in the cluster continues to work.
