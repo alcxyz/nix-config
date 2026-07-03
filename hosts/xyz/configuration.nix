@@ -645,8 +645,14 @@ in {
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
-  # t3code server — only reachable via Netbird (wt0), not LAN
+  # t3code server — reachable via Netbird and the k8s oauth2-proxy route.
   networking.firewall.interfaces."wt0".allowedTCPPorts = [3773];
+  networking.firewall.extraCommands = lib.mkAfter ''
+    iptables -A nixos-fw -p tcp --dport 3773 -s 10.42.0.0/16 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.13 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.15 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.16 -j nixos-fw-accept
+  '';
 
   services.flatpak.managed = {
     enable = true;

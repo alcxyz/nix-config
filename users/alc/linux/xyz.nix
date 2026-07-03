@@ -104,7 +104,7 @@ in {
   services.devlog.weekly.enable = true;
 
   services.t3code.enable = false;
-  services.t3code.port = 3777;
+  services.t3code.port = 3773;
 
   programs.ai.enable = true;
   programs.stashdb-pop.enable = true;
