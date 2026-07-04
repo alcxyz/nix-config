@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1782121744,
-        "narHash": "sha256-RBKVHF4YQqj9uBo0eDm6jiZaekCtILTXLbQOhUOhcpQ=",
+        "lastModified": 1783042690,
+        "narHash": "sha256-8EnTQvdZL9grjI8mHOTTVoJr11NAIeVU8rya9weiyEo=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "019dd0f732adb044b0681404b8a91adc148ed705",
+        "rev": "7682d6623e3dae07af5c0b96fe5cacfd9fa7deca",
         "type": "github"
       },
       "original": {
@@ -148,11 +148,11 @@
     "dankcalendar": {
       "flake": false,
       "locked": {
-        "lastModified": 1780582625,
-        "narHash": "sha256-+LZpUz5uQTJkvlW3Vv3qKaFqIBPPZenFhEX4CPlzMjI=",
+        "lastModified": 1783022787,
+        "narHash": "sha256-obgQOpHScJ1uN21QuPIFTEVgTpDAUxblP77+4Tu3T5k=",
         "owner": "alcxyz",
         "repo": "DankCalendar",
-        "rev": "bce516c9898429618af38a94593864e4ea9041d7",
+        "rev": "0231693cbaf81a995147364a16eec623cb1233f4",
         "type": "github"
       },
       "original": {
@@ -214,16 +214,16 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1782043875,
-        "narHash": "sha256-2aEZRZvLfLiy98OSK6300pkWanstrVJ2QB4eeLP0XFU=",
+        "lastModified": 1783042846,
+        "narHash": "sha256-DISiyq81t0WP+swMj15cf8EQfynANWfL6cKDezRd+Ow=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "11a03c6fbea5ffda4cd869db8ccac6afeb023fbb",
+        "rev": "4fc64c829a5a973561b13710bf89c9ba7893fea5",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "dev",
+        "ref": "main",
         "repo": "dms-plugins",
         "type": "github"
       }
@@ -921,11 +921,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1782021955,
-        "narHash": "sha256-+FFMzKpTMDuaj3jqxg/gv8cU4SqkOfGgHpYbMASDONA=",
+        "lastModified": 1783088516,
+        "narHash": "sha256-gSYS1w2Nm8eT+fM2Sai66XOKwIgb53aKPX6agMivIGQ=",
         "ref": "dev",
-        "rev": "2f8344c6ca94cd80a0319545e73369ee7b371fcc",
-        "revCount": 312,
+        "rev": "33eaf9c3cead200dbfadc7406791fc350d6e79a8",
+        "revCount": 344,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },

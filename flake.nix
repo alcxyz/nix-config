@@ -116,7 +116,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dms-plugins.url = "github:alcxyz/dms-plugins/dev";
+    dms-plugins.url = "github:alcxyz/dms-plugins/main";
   };
 
   # ---- Outputs ----------------------------------------------------------
