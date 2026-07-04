@@ -41,6 +41,7 @@ in {
       programs.ssh = {
         # Don't use HM's built-in defaults; we define everything ourselves.
         enableDefaultConfig = false;
+        includes = ["~/.ssh/config.d/*.conf"];
 
         settings =
           managedHostSettings
