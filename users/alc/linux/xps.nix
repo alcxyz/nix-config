@@ -7,13 +7,15 @@
   configDir,
   hostRole,
   ...
-}: let
+}:
+let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
-in {
+in
+{
   imports = [
-    "${configDir}/users/alc/linux/common.nix"
+    "${configDir}/users/alc/linux/operator.nix"
 
     "${configDir}/modules/home-manager/programs/wayland-common/default.nix"
     "${configDir}/modules/home-manager/programs/hyprland/default.nix"
@@ -80,10 +82,10 @@ in {
   };
   systemd.user.services.udiskie = {
     Unit = {
-      After = lib.mkForce [];
-      PartOf = lib.mkForce [];
+      After = lib.mkForce [ ];
+      PartOf = lib.mkForce [ ];
     };
-    Install.WantedBy = lib.mkForce ["default.target"];
+    Install.WantedBy = lib.mkForce [ "default.target" ];
   };
 
   programs.ai.enable = true;
