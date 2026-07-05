@@ -88,12 +88,15 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [
-      pkgs.unifi
-      pkgs.mongodb-7_0
-      backupScript
-      legacyStopScript
-    ];
+    environment.systemPackages =
+      [
+        pkgs.unifi
+        pkgs.mongodb-7_0
+        backupScript
+      ]
+      ++ lib.optionals (cfg.role == "active") [
+        legacyStopScript
+      ];
 
     services.unifi = {
       enable = true;

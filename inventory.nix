@@ -32,7 +32,7 @@
 
     embedded = {
       homePackageSet = "embedded";
-      systemPackageSet = "server";
+      systemPackageSet = "embedded";
       workspaceProfiles = [];
     };
 

@@ -262,7 +262,9 @@ in {
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
 
-  boot.kernelPackages = zfsKernelPkgs.linuxPackages_latest;
+  # See docs/adr/0035-host-kernel-policy.md: xyz has ZFS root and should not
+  # track linuxPackages_latest unless the full system evaluates cleanly.
+  boot.kernelPackages = zfsKernelPkgs.linuxPackages;
   boot.zfs.package = zfsKernelPkgs.zfs;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   boot.kernelParams = ["usbcore.autosuspend=-1"];

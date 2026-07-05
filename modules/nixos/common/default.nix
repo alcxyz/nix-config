@@ -208,10 +208,12 @@ in {
   # ==================== Virtualisation ====================
   virtualisation.containers.enable = true;
   virtualisation.docker.enable = true;
-  systemd.services.docker.path = with pkgs; [
-    iptables
-    nftables
-  ];
+  systemd.services = lib.mkIf config.virtualisation.docker.enable {
+    docker.path = with pkgs; [
+      iptables
+      nftables
+    ];
+  };
 
   # ==================== sops/secrets ====================
   sops = {
