@@ -137,9 +137,7 @@ in {
     chown root:wheel "$tmp_file"
     chmod 0644 "$tmp_file"
     mv "$tmp_file" "$hosts_file"
-  '';
 
-  system.activationScripts.xyzNfsMounts.text = lib.mkAfter ''
     echo "configuring xyz nfs mounts..." >&2
 
     install -d -m 0755 /Volumes/stash

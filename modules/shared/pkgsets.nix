@@ -222,15 +222,18 @@ in rec {
     # wrapped with per-command KUBECONFIG handling.
     k8s = [];
 
-    ai = with pkgs; [
-      #gemini-cli
-      #opencode
-      herdr
-      claude-code
-      codex-cli
-      codex-app-server
-      t3code
-    ];
+    ai = with pkgs;
+      [
+        #gemini-cli
+        #opencode
+        claude-code
+        codex-cli
+        codex-app-server
+        t3code
+      ]
+      ++ lib.optionals stdenv.hostPlatform.isLinux [
+        herdr
+      ];
 
     gaming = with pkgs; [
       heroic
