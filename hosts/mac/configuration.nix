@@ -13,6 +13,7 @@
     inherit pkgs inputs;
   };
   networkName = hostInventory.darwinNetworkName or "mac";
+  xyzLanAddress = "192.168.1.10";
   shellPackages = {
     bash = pkgs.bashInteractive;
     nu = pkgs.nushell;
@@ -136,6 +137,39 @@ in {
     chown root:wheel "$tmp_file"
     chmod 0644 "$tmp_file"
     mv "$tmp_file" "$hosts_file"
+  '';
+
+  system.activationScripts.xyzNfsMounts.text = lib.mkAfter ''
+    echo "configuring xyz nfs mounts..." >&2
+
+    install -d -m 0755 /Volumes/stash
+
+    fstab_file=/etc/fstab
+    tmp_file="$(mktemp /tmp/nix-darwin-fstab.XXXXXX)"
+
+    if [ -f "$fstab_file" ]; then
+      awk '
+        /^# nix-config xyz nfs begin$/ { skip = 1; next }
+        /^# nix-config xyz nfs end$/ { skip = 0; next }
+        skip != 1 { print }
+      ' "$fstab_file" > "$tmp_file"
+    else
+      : > "$tmp_file"
+    fi
+
+    {
+      printf '\n# nix-config xyz nfs begin\n'
+      printf '${xyzLanAddress}:/tank/stash /Volumes/stash nfs rw,vers=4,tcp,resvport 0 0\n'
+      printf '# nix-config xyz nfs end\n'
+    } >> "$tmp_file"
+
+    chown root:wheel "$tmp_file"
+    chmod 0644 "$tmp_file"
+    mv "$tmp_file" "$fstab_file"
+
+    if [ -x /usr/sbin/automount ]; then
+      /usr/sbin/automount -vc >/dev/null || true
+    fi
   '';
 
   services.openssh.enable = true;

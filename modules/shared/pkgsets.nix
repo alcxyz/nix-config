@@ -224,7 +224,8 @@ in rec {
 
     ai = with pkgs; [
       #gemini-cli
-      opencode
+      #opencode
+      herdr
       claude-code
       codex-cli
       codex-app-server

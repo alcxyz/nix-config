@@ -370,7 +370,9 @@ in {
     isSystemUser = true;
     group = "media";
   };
-  users.groups.media = {};
+  users.groups.media = {
+    gid = 983;
+  };
 
   users.groups.steamheadless = {
     gid = 2001;
@@ -611,6 +613,10 @@ in {
       {path = "/home/alc/.local/share/gitops-state";}
       # ZFS datasets
       {path = "/tank/media";}
+      {
+        path = "/tank/stash";
+        anongid = config.users.groups.media.gid;
+      }
       {path = "/tank/downloads";}
       {path = "/tank/games";}
       {
