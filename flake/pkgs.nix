@@ -31,30 +31,12 @@ in
               "k8s-node-reboot"
               "xonsh-with-direnv"
             ];
-            nixPackages = lib.filterAttrs (n: _: builtins.elem n wanted) np;
             pt = inputs.paperless-tools.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
             videdupe = inputs.videdupe.packages.${system} or {};
           in
-            nixPackages
-            // lib.optionalAttrs (nixPackages ? t3code && nixPackages ? codex-cli) {
-              # nixpkgs' t3code defaults to nixpkgs.codex, which currently pulls
-              # livekit-libwebrtc into the build closure and fails to link on
-              # aarch64-darwin. Use the prebuilt Codex CLI package exported from
-              # nix-packages instead.
-              t3code =
-                (nixPackages.t3code.override {
-                  t3code = _prev.t3code.override {
-                    codex = nixPackages.codex-cli;
-                  };
-                })
-                .overrideAttrs (_: {
-                  # Darwin's strip pass crawls the bundled node_modules tree.
-                  # That is slow and low-value for this Electron/Node package.
-                  dontStrip = true;
-                });
-            }
+            (lib.filterAttrs (n: _: builtins.elem n wanted) np)
             // (lib.filterAttrs (
                 n: _:
                   builtins.elem n [
