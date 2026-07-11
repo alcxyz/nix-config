@@ -64,7 +64,11 @@ in {
         timeout = 1;
         fall = 2;
         rise = 2;
-        weight = -80;
+        # A zero-weight track script puts the instance into FAULT when the
+        # local API listener fails. A negative weight only lowers election
+        # priority; with nopreempt, backups will not take the VIP from an
+        # unhealthy master.
+        weight = 0;
         user = "root";
       };
 
