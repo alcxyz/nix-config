@@ -921,11 +921,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1783766429,
-        "narHash": "sha256-CKRdQC/juuHEX331704sK9rOmaOWw0pzKI7xmlGX5kI=",
+        "lastModified": 1783771535,
+        "narHash": "sha256-lW5eDpaSAwT9Pkz47wa2GIjpW5drUZV83IFxIuwIvJs=",
         "ref": "dev",
-        "rev": "5def71e733f9f72f66c0f51ebe335389f7460c0d",
-        "revCount": 362,
+        "rev": "2bdeeab10ca200ab673709b0b532b403cd059c47",
+        "revCount": 363,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
