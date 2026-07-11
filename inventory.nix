@@ -64,6 +64,7 @@
       role = "server";
       schedulable = true;
       extraFlags = [
+        "--disable=coredns"
         "--node-label=workload-class=stable"
       ];
     };
