@@ -94,5 +94,14 @@ in {
         '';
       };
     };
+
+    # Flannel chooses its VXLAN source address when k3s starts. Keep the
+    # floating API address off this node until that selection is complete,
+    # then allow keepalived to participate in the VIP election again.
+    systemd.services.keepalived = {
+      after = ["k3s.service"];
+      partOf = ["k3s.service"];
+    };
+    systemd.services.k3s.wants = ["keepalived.service"];
   };
 }

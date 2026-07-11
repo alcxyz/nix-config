@@ -87,9 +87,6 @@ in {
         extraFlags =
           inventoryExtraFlags
           ++ optional (cfg.nodeIp != null) "--node-ip=${cfg.nodeIp}"
-          # Flannel accepts an IP as its interface selector. Using the stable
-          # node address disambiguates the physical interface from its API VIP.
-          ++ optional (cfg.nodeIp != null) "--flannel-iface=${cfg.nodeIp}"
           ++ concatMap (san: ["--tls-san" san]) cfg.tlsSans
           ++ cfg.extraFlags;
       }
