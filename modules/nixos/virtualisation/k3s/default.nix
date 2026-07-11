@@ -79,6 +79,10 @@ in {
     # Ensure rpcbind is enabled, often a dependency for Kubernetes components
     services.rpcbind.enable = true;
 
+    # Bound the final reboot phase if firmware or a kernel driver wedges after
+    # userspace has shut down. Runtime watchdog policy remains host-specific.
+    systemd.settings.Manager.RebootWatchdogSec = "3min";
+
     # Configure K3s service
     services.k3s =
       {
