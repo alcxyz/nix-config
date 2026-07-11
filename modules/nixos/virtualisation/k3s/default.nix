@@ -38,6 +38,12 @@ in {
       description = "Extra flags to pass to the K3s server/agent binary.";
     };
 
+    nodeIp = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Stable node address advertised by K3s and used as the Flannel VXLAN endpoint.";
+    };
+
     tlsSans = mkOption {
       type = types.listOf types.str;
       default = [];
@@ -80,6 +86,7 @@ in {
         role = cfg.role;
         extraFlags =
           inventoryExtraFlags
+          ++ optional (cfg.nodeIp != null) "--node-ip=${cfg.nodeIp}"
           ++ concatMap (san: ["--tls-san" san]) cfg.tlsSans
           ++ cfg.extraFlags;
       }

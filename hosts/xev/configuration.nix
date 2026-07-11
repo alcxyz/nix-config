@@ -41,6 +41,7 @@
 
   k3s = {
     enable = true;
+    nodeIp = "192.168.1.13";
     serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
     tlsSans = [
