@@ -13,6 +13,11 @@
     inherit pkgs inputs;
   };
   networkName = hostInventory.darwinNetworkName or "mac";
+  netbirdHostname = "mac";
+  netbirdClient = pkgs.writeShellScriptBin "netbird" ''
+    export NB_HOSTNAME="''${NB_HOSTNAME:-${netbirdHostname}}"
+    exec ${pkgs.netbird}/bin/netbird "$@"
+  '';
   xyzLanAddress = "192.168.1.10";
   shellPackages = {
     bash = pkgs.bashInteractive;
@@ -176,7 +181,7 @@ in {
   launchd.daemons.netbird = {
     serviceConfig = {
       ProgramArguments = [
-        "${pkgs.netbird}/bin/netbird"
+        "${netbirdClient}/bin/netbird"
         "service"
         "run"
       ];
@@ -186,6 +191,7 @@ in {
       StandardErrorPath = "/var/log/netbird.log";
       EnvironmentVariables = {
         NB_CONFIG = "/var/lib/netbird/config.json";
+        NB_HOSTNAME = netbirdHostname;
         NB_LOG_FILE = "console";
       };
     };
@@ -207,7 +213,7 @@ in {
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = pkgsets.system.mac ++ [pkgs.netbird];
+    systemPackages = pkgsets.system.mac ++ [netbirdClient];
     shells = with pkgs; [
       bash
       nushell

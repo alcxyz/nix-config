@@ -7,6 +7,7 @@
   inputs,
   lib,
   pkgs,
+  hostName,
   username,
   ...
 }:
@@ -31,6 +32,12 @@ in {
       default = false;
       description = "Disable NetBird DNS management so system DNS remains owned by the host network.";
     };
+
+    hostname = mkOption {
+      type = types.str;
+      default = hostName;
+      description = "Stable hostname presented to NetBird when enrolling this peer.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -45,6 +52,11 @@ in {
     services.netbird.clients.default.config = mkIf cfg.disableDns {
       DisableDNS = true;
     };
+
+    # Do not let an inherited NetBird state directory or an early bootstrap
+    # hostname determine the peer name. The value is also passed explicitly to
+    # `netbird up` below because hostnames are applied during enrollment.
+    services.netbird.clients.default.environment.NB_HOSTNAME = cfg.hostname;
 
     sops.secrets.netbird_setup_key = mkIf (cfg.setupKeyFile == null) {
       sopsFile = "${inputs.nix-secrets}/operators/secrets.yaml";
@@ -87,18 +99,32 @@ in {
         ''}
         }
 
-        status="$(netbird status 2>&1 || true)"
+        # Wait for the daemon to settle. A transient management outage must not
+        # be mistaken for an unregistered peer and create another identity.
+        attempts=0
+        while [ "$attempts" -lt 30 ]; do
+          status="$(netbird status 2>&1 || true)"
 
-        if printf '%s\n' "$status" | grep -q ': Connected'; then
-          cleanup_dns
-          exit 0
+          if printf '%s\n' "$status" | grep -q ': Connected'; then
+            cleanup_dns
+            exit 0
+          fi
+
+          if printf '%s\n' "$status" | grep -q 'NeedsLogin'; then
+            break
+          fi
+
+          attempts=$((attempts + 1))
+          sleep 1
+        done
+
+        if ! printf '%s\n' "$status" | grep -q 'NeedsLogin'; then
+          printf 'NetBird did not reach Connected or NeedsLogin; refusing to replace its peer identity.\n' >&2
+          exit 1
         fi
 
-        if printf '%s\n' "$status" | grep -qi 'expired'; then
-          netbird deregister || true
-        fi
-
-        netbird up --setup-key-file ${setupKeyFile} ${optionalString cfg.disableDns "--disable-dns"}
+        netbird up --hostname ${escapeShellArg cfg.hostname} \
+          --setup-key-file ${setupKeyFile} ${optionalString cfg.disableDns "--disable-dns"}
         cleanup_dns
       '';
     };

@@ -17,6 +17,7 @@ in {
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
+    "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
   boot.initrd.systemd.enable = true;
@@ -106,8 +107,7 @@ in {
   };
   services.printing.enable = true;
   services.flatpak.enable = true;
-  services.netbird.enable = true;
-  services.netbird.useRoutingFeatures = "client";
+  services.netbird.managed.enable = true;
 
   systemd.services.xps-network-route-metrics = {
     description = "Prefer wired routing and keep Wi-Fi as fallback";
