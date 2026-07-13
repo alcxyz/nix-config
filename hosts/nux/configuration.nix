@@ -101,12 +101,14 @@ in {
   fileSystems."/var/lib/longhorn" = {
     device = "/dev/disk/by-label/nux-longhorn";
     fsType = "ext4";
+    options = [
+      "nofail"
+      "x-systemd.device-timeout=30s"
+      "x-systemd.mount-timeout=30s"
+    ];
   };
 
-  systemd.services.k3s = {
-    requires = ["var-lib-longhorn.mount"];
-    after = ["var-lib-longhorn.mount"];
-  };
+  alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
 
   services.k8s-api-vip = {
     enable = true;

@@ -53,12 +53,14 @@
   fileSystems."/var/lib/longhorn" = {
     device = "/dev/disk/by-label/xev-longhorn";
     fsType = "ext4";
+    options = [
+      "nofail"
+      "x-systemd.device-timeout=30s"
+      "x-systemd.mount-timeout=30s"
+    ];
   };
 
-  systemd.services.k3s = {
-    requires = ["var-lib-longhorn.mount"];
-    after = ["var-lib-longhorn.mount"];
-  };
+  alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
 
   networking.hosts = {
     "192.168.1.13" = ["xev"];
