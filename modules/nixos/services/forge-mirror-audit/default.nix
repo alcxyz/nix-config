@@ -29,6 +29,12 @@ in
       description = "User to run the service as.";
     };
 
+    forgejoUrl = lib.mkOption {
+      type = lib.types.str;
+      default = "http://git.local";
+      description = "Base URL for the Forgejo API.";
+    };
+
     credentials = {
       sopsFile = lib.mkOption {
         type = lib.types.nullOr (
@@ -123,7 +129,7 @@ in
           export FORGEJO_TOKEN_FILE="${config.sops.secrets.forge_mirror_forgejo_token.path}"
           export GITHUB_MIRROR_PAT="$(cat ${config.sops.secrets.forge_mirror_github_token.path})"
           export CODEBERG_MIRROR_PAT_FILE="${config.sops.secrets.forge_mirror_codeberg_token.path}"
-          export FORGEJO_URL="http://git.local"
+          export FORGEJO_URL=${lib.escapeShellArg cfg.forgejoUrl}
           exec ${pkgs.forge-mirror}/bin/forge-mirror audit
         '';
 

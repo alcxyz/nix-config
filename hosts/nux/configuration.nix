@@ -84,6 +84,7 @@ in {
 
   services.forge-mirror-audit = {
     enable = true;
+    forgejoUrl = "https://git.alc.xyz";
     schedule = "*-*-* 00/8:00:00"; # every 8 hours
   };
 
