@@ -23,7 +23,8 @@
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-label/boot";
+    # The incoming nex system disk has no FAT filesystem label.
+    device = "/dev/disk/by-uuid/5810-2F7B";
     fsType = "vfat";
     options = [
       "fmask=0077"
