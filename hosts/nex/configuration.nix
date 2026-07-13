@@ -20,6 +20,25 @@
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  # The incoming XG6 has a single large ext4 root filesystem. Use it
+  # deliberately for Longhorn while preserving the mountpoint guard: the bind
+  # mount distinguishes intentional root-backed storage from an accidental
+  # ordinary directory at /var/lib/longhorn.
+  system.activationScripts.longhornDataDirectory.text = ''
+    install -d -m 0755 /var/lib/longhorn-data
+  '';
+
+  fileSystems."/var/lib/longhorn" = {
+    device = "/var/lib/longhorn-data";
+    fsType = "none";
+    options = [
+      "bind"
+      "nofail"
+    ];
+  };
+
+  alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
+
   alc.distributedBuildClient.enable = true;
 
   sops.secrets = {
