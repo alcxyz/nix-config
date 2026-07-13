@@ -16,7 +16,9 @@ SSH_TIMEOUT_SECONDS=900
 POLL_SECONDS=5
 REQUIRE_LONGHORN_BACKUP_TARGET=false
 MIN_FREE_POD_SLOTS=20
+MIN_LONGHORN_REPLICAS=3
 REMOTE_BOOT_ID=""
+WORKLOADS_FILE=""
 
 usage() {
   cat <<'EOF'
@@ -59,6 +61,12 @@ log() {
 die() {
   printf 'error: %s\n' "$*" >&2
   exit 1
+}
+
+cleanup_workloads_file() {
+  if [[ -n "$WORKLOADS_FILE" ]]; then
+    rm -f -- "$WORKLOADS_FILE"
+  fi
 }
 
 need_command() {
@@ -344,6 +352,7 @@ wait_for_longhorn_health() {
   local bad_volumes
   local backup_available
   local backup_reason
+  local under_replicated
 
   if ! kubectl get namespace longhorn-system >/dev/null 2>&1; then
     log "longhorn-system namespace not found; skipping Longhorn checks"
@@ -353,6 +362,20 @@ wait_for_longhorn_health() {
   if ! kubectl -n longhorn-system get volumes.longhorn.io >/dev/null 2>&1; then
     log "Longhorn volume CRDs not found; skipping Longhorn checks"
     return 0
+  fi
+
+  log "checking attached Longhorn replica floor (${MIN_LONGHORN_REPLICAS})"
+  under_replicated=$(
+    kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r \
+      --argjson minimum "$MIN_LONGHORN_REPLICAS" '
+        .items[]
+        | select(.status.state == "attached" or .status.state == "attaching")
+        | select((.spec.numberOfReplicas // 0) < $minimum)
+        | "\(.metadata.name)\tdesired=\(.spec.numberOfReplicas // 0)\t\(.status.state)\t\(.status.kubernetesStatus.namespace // "")/\(.status.kubernetesStatus.pvcName // "")"'
+  )
+  if [[ -n "$under_replicated" ]]; then
+    printf '%s\n' "$under_replicated" >&2
+    die "attached Longhorn volumes are below the replica policy floor"
   fi
 
   log "waiting for attached Longhorn volumes to be healthy"
@@ -406,8 +429,8 @@ check_stable_node_pod_slots() {
 
   log "checking stable-node Pod slot floor (${MIN_FREE_POD_SLOTS})"
   report=$(
-    kubectl get nodes -l workload-class=stable -o json \
-      | jq -r --argjson required "$MIN_FREE_POD_SLOTS" --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
+    kubectl get nodes -l workload-class=stable -o json |
+      jq -r --argjson required "$MIN_FREE_POD_SLOTS" --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
           .items[] as $node
           | ([
               $pods[0].items[]
@@ -656,11 +679,10 @@ prepare_node_for_disruption() {
 }
 
 run_reboot() {
-  local workloads_file
-  workloads_file=$(mktemp)
-  trap 'rm -f "$workloads_file"' EXIT
+  WORKLOADS_FILE=$(mktemp)
+  trap cleanup_workloads_file EXIT
 
-  prepare_node_for_disruption "$workloads_file"
+  prepare_node_for_disruption "$WORKLOADS_FILE"
   reboot_host
   wait_for_ssh_down
   wait_for_ssh_up
@@ -674,18 +696,17 @@ run_reboot() {
   else
     log "uncordoning ${NODE}"
     kubectl uncordon "$NODE"
-    settle_cluster "$workloads_file"
+    settle_cluster "$WORKLOADS_FILE"
   fi
 
   log "done"
 }
 
 run_poweroff() {
-  local workloads_file
-  workloads_file=$(mktemp)
-  trap 'rm -f "$workloads_file"' EXIT
+  WORKLOADS_FILE=$(mktemp)
+  trap cleanup_workloads_file EXIT
 
-  prepare_node_for_disruption "$workloads_file"
+  prepare_node_for_disruption "$WORKLOADS_FILE"
   poweroff_host
   wait_for_ssh_down
 
