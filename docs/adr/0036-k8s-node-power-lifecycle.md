@@ -17,11 +17,17 @@ Routine k3s node power operations use the shared Kubernetes-aware helpers.
 Before a power action, the helper must:
 
 1. pass cluster health checks;
-2. cordon and drain the node unless explicitly told to skip the drain;
+2. cordon and drain application workloads unless explicitly told to skip the
+   drain, while leaving the node-local Longhorn instance-manager in place;
 3. wait for controller-owned workloads to settle;
 4. verify that no Longhorn volume is attached to the node; and
 5. verify that the host has no residual Longhorn CSI global mount or iSCSI
    session.
+
+The Longhorn instance-manager is excluded from eviction with a Pod selector.
+Its PDB remains authoritative, but does not prevent application workloads from
+being drained or require healthy replica processes to be deleted before a
+short host reboot. The storage-detach and host-session gates remain mandatory.
 
 For reboot, the helper records the host boot ID before the action. SSH must
 become unavailable, return within the configured timeout, and expose a different
