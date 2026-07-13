@@ -218,6 +218,10 @@ in {
 
   # GPU runtime
   hardware.nvidia-container-toolkit.enable = true;
+  # This oneshot uses NVML and fails during live switches when the NVIDIA
+  # userspace package changes but the old kernel module is still loaded.
+  # Let it regenerate CDI specs on boot, after the matching module is loaded.
+  systemd.services.nvidia-container-toolkit-cdi-generator.restartIfChanged = false;
 
   # ==================== Keyboard Remapping ====================
   services.kanata = {

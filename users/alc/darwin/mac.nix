@@ -45,6 +45,26 @@ in
     "/sbin"
   ];
 
+  # The official app identifies itself as "T3 Code (Alpha)", while the
+  # previous source build stored its project state under "t3code". Keep the
+  # established profile as the canonical one across package variants.
+  home.activation.reuseT3CodeProfile = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    canonical="$HOME/Library/Application Support/t3code"
+    official="$HOME/Library/Application Support/T3 Code (Alpha)"
+    backup="$HOME/Library/Application Support/T3 Code (Alpha).pre-nix-profile"
+
+    if [ -d "$canonical" ] && [ ! -L "$official" ]; then
+      if [ -e "$official" ]; then
+        if [ -e "$backup" ]; then
+          echo "Refusing to replace T3 Code profile: backup already exists at $backup" >&2
+          exit 1
+        fi
+        mv "$official" "$backup"
+      fi
+      ln -s "$canonical" "$official"
+    fi
+  '';
+
   home.shellAliases = {
     nxsw = "sudo /run/current-system/sw/bin/darwin-rebuild switch --flake .#mac";
   };

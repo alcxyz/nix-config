@@ -71,7 +71,7 @@
   '';
   plugins = inputs.dms-plugins.srcs;
   dsearchPkg = inputs.dsearch.packages.${pkgs.stdenv.hostPlatform.system}.dsearch.overrideAttrs {
-    vendorHash = "sha256-scvZWbMHAhpYWCU0xZK1E6h6sAkoXegqI1iYS44fcCg=";
+    vendorHash = "sha256-Gq3tVwe39m5KGfkI3DEnQEQEGs/cLDCiwx6XFM61f6c=";
   };
   dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;

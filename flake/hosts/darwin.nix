@@ -15,10 +15,9 @@
         (hostLib.specialArgsFor hostName hostAttrs)
         // {
           hostK8sRole = null;
-          pkgs = pkgsFor.${hostAttrs.system};
         };
       modules = [
-        {nixpkgs.hostPlatform = hostAttrs.system;}
+        {nixpkgs.pkgs = pkgsFor.${hostAttrs.system};}
         hostAttrs.configuration
         inputs.sops-nix.darwinModules.sops
       ];

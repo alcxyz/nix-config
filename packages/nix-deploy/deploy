@@ -11,12 +11,18 @@ SELF_RAW="$(hostname -s)"
 SELF=""
 NIX_SSHOPTS="${NIX_SSHOPTS:--o ServerAliveInterval=10 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -o ConnectTimeout=30}"
 DEPLOY_SSH_CHECK_TIMEOUT="${DEPLOY_SSH_CHECK_TIMEOUT:-5}"
+DEPLOY_REMOTE_MIN_FREE_KIB="${DEPLOY_REMOTE_MIN_FREE_KIB:-4194304}"
 export NIX_SSHOPTS
 # shellcheck disable=SC2206
 SSH_ARGS=(${NIX_SSHOPTS})
 PREFLIGHT_AVAILABLE_HOSTS=()
 PREFLIGHT_SKIPPED_HOSTS=()
 SSH_PREFLIGHT_ERROR=""
+
+if ! [[ "$DEPLOY_REMOTE_MIN_FREE_KIB" =~ ^[0-9]+$ ]]; then
+  echo "deploy: DEPLOY_REMOTE_MIN_FREE_KIB must be an integer number of KiB" >&2
+  exit 1
+fi
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_RESET=$'\033[0m'
@@ -33,10 +39,13 @@ When <host> is omitted, deploys to the current machine.
 When <host> differs from the current machine, deploys remotely via SSH.
 Known hosts: ${KNOWN_HOSTS[*]}
 
-Remote phases are checked over SSH before building. A single unreachable phase
-fails early. For --all, unreachable hosts are skipped for that phase unless
---fail-unreachable is set. Set DEPLOY_SSH_CHECK_TIMEOUT to tune the SSH
-preflight timeout.
+Remote phases are checked over SSH before building. A single failed preflight
+phase fails early. For --all, hosts that fail preflight are skipped for that
+phase unless --fail-unreachable is set. Set DEPLOY_SSH_CHECK_TIMEOUT to tune the
+SSH preflight timeout.
+
+Remote NixOS phases also require free space on the target filesystem backing
+/nix. Set DEPLOY_REMOTE_MIN_FREE_KIB to tune the threshold, or 0 to disable it.
 
 By default, --all runs from xyz for the canonical fleet workflow.
 Use --here to run --all from the current machine and build locally before
@@ -183,6 +192,58 @@ check_ssh_endpoint() {
   return "$status"
 }
 
+format_kib_gib() {
+  local kib="$1"
+  printf '%d.%01d GiB' "$((kib / 1048576))" "$((((kib % 1048576) * 10) / 1048576))"
+}
+
+check_remote_nix_capacity() {
+  local host="$1"
+  local endpoint output status free_kib
+
+  if [[ "$DEPLOY_REMOTE_MIN_FREE_KIB" -eq 0 ]]; then
+    return 0
+  fi
+
+  endpoint="$(system_ssh_user "$host")@$(ssh_host "$host")"
+
+  set +e
+  output="$(
+    ssh \
+      -o BatchMode=yes \
+      -o ConnectTimeout="$DEPLOY_SSH_CHECK_TIMEOUT" \
+      -o ConnectionAttempts=1 \
+      "${SSH_ARGS[@]}" \
+      "$endpoint" "df -Pk /nix | awk 'NR == 2 { print \$4 }'" 2>&1
+  )"
+  status=$?
+  set -e
+
+  free_kib="$(printf '%s' "$output" | tail -n 1 | tr -d '[:space:]')"
+  if [[ $status -ne 0 || ! "$free_kib" =~ ^[0-9]+$ ]]; then
+    printf '%s %s cannot check free space on %s: %s\n' \
+      "$(phase_label check)" \
+      "$(host_label "$host")" \
+      "$endpoint" \
+      "$(printf '%s' "$output" | tr '\n' ' ' | sed -e 's/[[:space:]]\+/ /g' -e 's/^ //' -e 's/ $//')" >&2
+    return 1
+  fi
+
+  if [[ "$free_kib" -lt "$DEPLOY_REMOTE_MIN_FREE_KIB" ]]; then
+    printf '%s %s only %s free on /nix filesystem; need at least %s. Clean old generations or set DEPLOY_REMOTE_MIN_FREE_KIB=0 to override.\n' \
+      "$(phase_label check)" \
+      "$(host_label "$host")" \
+      "$(format_kib_gib "$free_kib")" \
+      "$(format_kib_gib "$DEPLOY_REMOTE_MIN_FREE_KIB")" >&2
+    return 1
+  fi
+
+  printf '%s %s free on /nix filesystem: %s\n' \
+    "$(phase_label check)" \
+    "$(host_label "$host")" \
+    "$(format_kib_gib "$free_kib")"
+}
+
 preflight_host() {
   local host="$1" mode="$2"
   local endpoints=()
@@ -228,6 +289,10 @@ preflight_host() {
     "$(phase_label check)" \
     "$(host_label "$host")" \
     "$endpoints_text"
+
+  if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
+    check_remote_nix_capacity "$host"
+  fi
 }
 
 filter_reachable_hosts() {
@@ -262,11 +327,11 @@ filter_reachable_hosts() {
 
   if [[ ${#PREFLIGHT_SKIPPED_HOSTS[@]} -gt 0 ]]; then
     if [[ "$FAIL_UNREACHABLE" == true ]]; then
-      echo "deploy: unreachable hosts: ${PREFLIGHT_SKIPPED_HOSTS[*]}" >&2
+      echo "deploy: hosts failed preflight: ${PREFLIGHT_SKIPPED_HOSTS[*]}" >&2
       return 1
     fi
 
-    echo "deploy: skipping unreachable hosts: ${PREFLIGHT_SKIPPED_HOSTS[*]}" >&2
+    echo "deploy: skipping hosts that failed preflight: ${PREFLIGHT_SKIPPED_HOSTS[*]}" >&2
   fi
 
   if [[ ${#PREFLIGHT_AVAILABLE_HOSTS[@]} -eq 0 ]]; then
@@ -368,13 +433,13 @@ do_deploy() {
     if [[ "$mode" == "nixos" || "$mode" == "full" ]]; then
       section "preflight"
       if ! preflight_host "$host" "nixos"; then
-        echo "deploy: ${host} is not reachable over SSH; use --no-preflight to attempt anyway" >&2
+        echo "deploy: ${host} failed system preflight; use --no-preflight to attempt anyway" >&2
         exit 1
       fi
     elif [[ "$mode" == "hm" ]]; then
       section "preflight"
       if ! preflight_host "$host" "hm"; then
-        echo "deploy: ${host} is not reachable over SSH; use --no-preflight to attempt anyway" >&2
+        echo "deploy: ${host} failed Home Manager preflight; use --no-preflight to attempt anyway" >&2
         exit 1
       fi
       hm_preflight_done=true
@@ -394,7 +459,7 @@ do_deploy() {
     if [[ "$PREFLIGHT" == true && "$is_local" == false && "$hm_preflight_done" == false ]]; then
       section "preflight"
       if ! preflight_host "$host" "hm"; then
-        echo "deploy: ${host} is not reachable for Home Manager over SSH; use --no-preflight to attempt anyway" >&2
+        echo "deploy: ${host} failed Home Manager preflight; use --no-preflight to attempt anyway" >&2
         exit 1
       fi
     fi

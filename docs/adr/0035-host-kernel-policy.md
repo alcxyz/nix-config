@@ -83,7 +83,8 @@ Kernel rollout should still be staged:
 
 Do not use a raw host reboot for schedulable k3s nodes during routine
 maintenance. The helper is responsible for cordon/drain, Longhorn-aware health
-checks, workload settle checks, and uncordon.
+checks, storage-detach gates, boot identity verification, workload settle
+checks, and uncordon. See ADR-0036 for the full node power lifecycle.
 
 `xyz` can be reconsidered for `linuxPackages_latest` when a dry-run of the full
 system no longer fails on ZFS for the latest kernel.

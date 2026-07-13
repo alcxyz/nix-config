@@ -30,17 +30,25 @@
   homeBackupRoot = "${appStateBackupPool}/xyz/home";
   gamesDataset = "${appStateBackupPool}/games";
   gamesMountpoint = "/hitachi/games";
-  appStateBackup = pkgs.writeShellScriptBin "xyz-appstate-backup" ''
+  localBackup = pkgs.writeShellScriptBin "xyz-local-backup" ''
     set -euo pipefail
 
     if [ "$(id -u)" -ne 0 ]; then
-      echo "xyz-appstate-backup must run as root" >&2
+      echo "xyz-local-backup must run as root" >&2
       exit 1
     fi
+
+    if [ "$#" -ne 1 ]; then
+      echo "usage: xyz-local-backup {appstate|k8s|home}" >&2
+      exit 64
+    fi
+
+    backup_name="$1"
 
     export PATH=${
       lib.makeBinPath [
         pkgs.coreutils
+        pkgs.util-linux
         pkgs.sanoid
         zfsKernelPkgs.zfs
       ]
@@ -64,6 +72,13 @@
       echo "backup pool '$target_pool' key is not loaded; run: zfs load-key $target_pool" >&2
       exit 1
     fi
+
+    lock_dir=/run/lock
+    mkdir -p "$lock_dir"
+    exec 9>"$lock_dir/xyz-local-backup-hitachi.lock"
+    echo "waiting for hitachi backup lock for $backup_name"
+    flock 9
+    echo "acquired hitachi backup lock for $backup_name"
 
     ensure_backup_dataset() {
       local target_dataset="$1"
@@ -111,16 +126,61 @@
         syncoid_args+=(--skip-parent)
       fi
 
+      if [ "$mode" = include-parent ]; then
+        target_snapshot_count="$(zfs list -H -t snapshot -o name -r "$target_dataset" 2>/dev/null | wc -l)"
+        target_referenced_bytes="$(zfs get -Hp -o value referenced "$target_dataset" 2>/dev/null || echo 0)"
+
+        if [ "$target_snapshot_count" -eq 0 ]; then
+          if [ "$target_referenced_bytes" -gt 1048576 ]; then
+            echo "target dataset '$target_dataset' has no snapshots but references data; refusing initial seed" >&2
+            exit 1
+          fi
+
+          syncoid_args+=(--force-delete)
+        fi
+      fi
+
       syncoid \
         "''${syncoid_args[@]}" \
         "$source_dataset" \
         "$target_dataset"
     }
 
-    replicate_dataset xpool/appstate ${lib.escapeShellArg appStateBackupRoot} skip-parent
-    replicate_dataset ${lib.escapeShellArg k8sBackupDataset} ${lib.escapeShellArg k8sBackupRoot} include-parent
-    replicate_dataset ${lib.escapeShellArg homeBackupDataset} ${lib.escapeShellArg homeBackupRoot} include-parent
+    case "$backup_name" in
+      appstate)
+        replicate_dataset xpool/appstate ${lib.escapeShellArg appStateBackupRoot} skip-parent
+        ;;
+      k8s)
+        replicate_dataset ${lib.escapeShellArg k8sBackupDataset} ${lib.escapeShellArg k8sBackupRoot} include-parent
+        ;;
+      home)
+        replicate_dataset ${lib.escapeShellArg homeBackupDataset} ${lib.escapeShellArg homeBackupRoot} include-parent
+        ;;
+      *)
+        echo "unknown backup target '$backup_name'; expected appstate, k8s, or home" >&2
+        exit 64
+        ;;
+    esac
   '';
+  mkLocalBackupService = backupName: description: {
+    inherit description;
+    after = ["zfs-mount.service"];
+    requires = ["zfs-mount.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${localBackup}/bin/xyz-local-backup ${backupName}";
+      TimeoutStartSec = "12h";
+    };
+  };
+  mkLocalBackupTimer = onCalendar: description: {
+    inherit description;
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnCalendar = onCalendar;
+      Persistent = false;
+      RandomizedDelaySec = "0";
+    };
+  };
   gamesDatasetPrepare = pkgs.writeShellScriptBin "xyz-games-dataset-prepare" ''
     set -euo pipefail
 
@@ -202,7 +262,9 @@ in {
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
 
-  boot.kernelPackages = zfsKernelPkgs.linuxPackages_latest;
+  # See docs/adr/0035-host-kernel-policy.md: xyz has ZFS root and should not
+  # track linuxPackages_latest unless the full system evaluates cleanly.
+  boot.kernelPackages = zfsKernelPkgs.linuxPackages;
   boot.zfs.package = zfsKernelPkgs.zfs;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   boot.kernelParams = ["usbcore.autosuspend=-1"];
@@ -308,7 +370,9 @@ in {
     isSystemUser = true;
     group = "media";
   };
-  users.groups.media = {};
+  users.groups.media = {
+    gid = 983;
+  };
 
   users.groups.steamheadless = {
     gid = 2001;
@@ -327,7 +391,7 @@ in {
 
   # ==================== ZFS ====================
   environment.systemPackages = [
-    appStateBackup
+    localBackup
     gamesDatasetPrepare
     zfsKernelPkgs.zfs
   ];
@@ -408,15 +472,18 @@ in {
   systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
 
-  systemd.services.xyz-appstate-backup = {
-    description = "Replicate xyz local backup datasets to the local backup pool";
-    after = ["zfs-mount.service"];
-    requires = ["zfs-mount.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${appStateBackup}/bin/xyz-appstate-backup";
-    };
-  };
+  systemd.services.xyz-appstate-backup =
+    mkLocalBackupService
+    "appstate"
+    "Replicate xyz appstate datasets to the local backup pool";
+  systemd.services.xyz-k8s-backup =
+    mkLocalBackupService
+    "k8s"
+    "Replicate xyz k8s backup dataset to the local backup pool";
+  systemd.services.xyz-home-backup =
+    mkLocalBackupService
+    "home"
+    "Replicate xyz home dataset to the local backup pool";
 
   systemd.services.xyz-games-dataset = {
     description = "Prepare xyz games dataset on hitachi";
@@ -430,15 +497,18 @@ in {
     };
   };
 
-  systemd.timers.xyz-appstate-backup = {
-    description = "Daily xyz local dataset backup";
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnCalendar = "*-*-* 05:20:00";
-      Persistent = false;
-      RandomizedDelaySec = "0";
-    };
-  };
+  systemd.timers.xyz-appstate-backup =
+    mkLocalBackupTimer
+    "*-*-* 05:20:00"
+    "Daily xyz appstate backup";
+  systemd.timers.xyz-k8s-backup =
+    mkLocalBackupTimer
+    "*-*-* 05:35:00"
+    "Daily xyz k8s backup replication";
+  systemd.timers.xyz-home-backup =
+    mkLocalBackupTimer
+    "*-*-* 05:50:00"
+    "Daily xyz home backup";
 
   # Docker - ZFS relationship
 
@@ -543,6 +613,10 @@ in {
       {path = "/home/alc/.local/share/gitops-state";}
       # ZFS datasets
       {path = "/tank/media";}
+      {
+        path = "/tank/stash";
+        anongid = config.users.groups.media.gid;
+      }
       {path = "/tank/downloads";}
       {path = "/tank/games";}
       {
@@ -579,8 +653,14 @@ in {
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
-  # t3code server — only reachable via Netbird (wt0), not LAN
+  # t3code server — reachable via Netbird and the k8s oauth2-proxy route.
   networking.firewall.interfaces."wt0".allowedTCPPorts = [3773];
+  networking.firewall.extraCommands = lib.mkAfter ''
+    iptables -A nixos-fw -p tcp --dport 3773 -s 10.42.0.0/16 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.13 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.15 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.16 -j nixos-fw-accept
+  '';
 
   services.flatpak.managed = {
     enable = true;

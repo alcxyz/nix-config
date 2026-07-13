@@ -83,7 +83,7 @@ in {
   services.dms.idleLock = {
     enable = true;
     command = config.services.hyprlock.lockCommand;
-    acMonitorTimeout = 600;
+    acMonitorTimeout = 360;
     batteryMonitorTimeout = 0;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
@@ -104,7 +104,7 @@ in {
   services.devlog.weekly.enable = true;
 
   services.t3code.enable = false;
-  services.t3code.port = 3777;
+  services.t3code.port = 3773;
 
   programs.ai.enable = true;
   programs.stashdb-pop.enable = true;

@@ -15,6 +15,7 @@ SETTLE_TIMEOUT="15m"
 SSH_TIMEOUT_SECONDS=900
 POLL_SECONDS=5
 REQUIRE_LONGHORN_BACKUP_TARGET=false
+REMOTE_BOOT_ID=""
 
 usage() {
   cat <<'EOF'
@@ -391,6 +392,57 @@ wait_for_longhorn_health() {
   fi
 }
 
+wait_for_node_storage_detach() {
+  local deadline
+  local timeout_seconds
+  local attached_volumes=""
+
+  if kubectl -n longhorn-system get volumes.longhorn.io >/dev/null 2>&1; then
+    log "waiting for Longhorn volumes to detach from ${NODE}"
+    timeout_seconds=$(duration_to_seconds "$DRAIN_TIMEOUT")
+    deadline=$((SECONDS + timeout_seconds))
+
+    while ((SECONDS < deadline)); do
+      attached_volumes=$(
+        kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r --arg node "$NODE" '
+          .items[]
+          | select(.status.currentNodeID == $node or .spec.nodeID == $node)
+          | select(.status.state != "detached")
+          | "\(.metadata.name)\t\(.status.state)\t\(.status.kubernetesStatus.namespace // \"\")/\(.status.kubernetesStatus.pvcName // \"\")"'
+      )
+
+      [[ -n "$attached_volumes" ]] || break
+      printf '%s\n' "$attached_volumes" >&2
+      sleep "$POLL_SECONDS"
+    done
+
+    [[ -z "$attached_volumes" ]] || die "Longhorn volumes remain attached to ${NODE}"
+  fi
+
+  log "checking ${SSH_TARGET} for residual Longhorn mounts and iSCSI sessions"
+  if ! ssh -o BatchMode=yes "$SSH_TARGET" 'sudo bash -s' <<'EOF'; then
+set -euo pipefail
+
+command -v findmnt >/dev/null
+command -v iscsiadm >/dev/null
+
+mounts=$(
+  findmnt -rn -o TARGET \
+    | grep -E '^/var/lib/kubelet/plugins/kubernetes.io/csi/driver\.longhorn\.io/.+/globalmount$' \
+    || true
+)
+sessions=$(iscsiadm -m session 2>/dev/null | grep -F 'io.longhorn' || true)
+
+if [[ -n "$mounts" || -n "$sessions" ]]; then
+  [[ -z "$mounts" ]] || printf 'Residual Longhorn mounts:\n%s\n' "$mounts" >&2
+  [[ -z "$sessions" ]] || printf 'Residual Longhorn iSCSI sessions:\n%s\n' "$sessions" >&2
+  exit 1
+fi
+EOF
+    die "residual Longhorn storage is still active on ${SSH_TARGET}"
+  fi
+}
+
 warn_for_longhorn_health() {
   local bad_volumes
 
@@ -438,7 +490,7 @@ wait_for_ssh_down() {
     sleep "$POLL_SECONDS"
   done
 
-  log "SSH did not drop; continuing to wait for it to become available"
+  die "SSH did not drop; the power action was not verified and ${NODE} remains cordoned"
 }
 
 wait_for_ssh_up() {
@@ -461,10 +513,13 @@ wait_for_ssh_up() {
 reboot_host() {
   local status
 
+  REMOTE_BOOT_ID=$(ssh -o BatchMode=yes "$SSH_TARGET" cat /proc/sys/kernel/random/boot_id)
+  [[ -n "$REMOTE_BOOT_ID" ]] || die "could not read the current boot ID from ${SSH_TARGET}"
+
   log "rebooting ${SSH_TARGET}"
 
   set +e
-  ssh -t "$SSH_TARGET" 'sudo systemctl reboot'
+  ssh -t "$SSH_TARGET" 'sudo systemctl reboot --no-block'
   status=$?
   set -e
 
@@ -476,6 +531,15 @@ reboot_host() {
       die "remote reboot command failed before reboot started"
       ;;
   esac
+}
+
+verify_new_boot() {
+  local current_boot_id
+
+  current_boot_id=$(ssh -o BatchMode=yes "$SSH_TARGET" cat /proc/sys/kernel/random/boot_id)
+  [[ -n "$current_boot_id" ]] || die "could not read the boot ID after ${SSH_TARGET} returned"
+  [[ "$current_boot_id" != "$REMOTE_BOOT_ID" ]] ||
+    die "${SSH_TARGET} returned without rebooting; ${NODE} remains cordoned"
 }
 
 poweroff_host() {
@@ -540,6 +604,8 @@ prepare_node_for_disruption() {
 
     settle_cluster "$workloads_file"
   fi
+
+  wait_for_node_storage_detach
 }
 
 run_reboot() {
@@ -551,6 +617,7 @@ run_reboot() {
   reboot_host
   wait_for_ssh_down
   wait_for_ssh_up
+  verify_new_boot
 
   log "waiting for ${NODE} to report Ready"
   kubectl wait "node/${NODE}" --for=condition=Ready --timeout="$READY_TIMEOUT"

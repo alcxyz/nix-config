@@ -27,7 +27,9 @@ The watcher treats display sleep and wake as state, not as a single socket event
 - socket2 emits `monitorremoved`
 - socket2 emits `closelayer>>dms:bar` while Hyprland does not report an awake monitor
 
-Once armed, it waits until Hyprland reports a live, enabled, DPMS-on monitor for two stable checks. It then restarts DMS once, using `dms kill` plus a targeted fallback `pkill`, and relaunches `dms run`.
+Once armed, it waits until Hyprland reports a live, enabled, DPMS-on monitor for two stable checks. For plain display sleep it then restarts DMS once, using `dms kill` plus a targeted fallback `pkill`, and relaunches `dms run`.
+
+For display sleep caused by the external Hyprlock wrapper, it waits until Hyprlock exits, gives the compositor a short settle window, and checks whether DMS layer namespaces are present again. If they are present, it skips the restart so the wallpaper background layer is not torn down during unlock recovery. If the DMS layers are still absent, it restarts DMS as the recovery fallback.
 
 ## Alternatives Considered
 
@@ -41,5 +43,6 @@ Once armed, it waits until Hyprland reports a live, enabled, DPMS-on monitor for
 
 - DMS overlay recovery is tied to Hyprland's actual monitor state instead of one fragile event.
 - The watcher remains Hyprland-specific and should not be reused for Niri without a separate compositor-specific implementation.
-- DMS still restarts after monitor wake, so transient shell state may reset.
+- DMS still restarts after plain monitor wake, so transient shell state may reset.
+- Hyprlock-driven wake avoids a DMS restart when DMS layers have already recovered, preserving wallpaper recovery across unlock.
 - The cooldown and two stable monitor checks reduce restart loops, but future Hyprland or Quickshell changes may require adjusting the watched events.

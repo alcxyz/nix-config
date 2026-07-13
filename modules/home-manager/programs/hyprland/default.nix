@@ -11,7 +11,13 @@
 }:
 with lib; let
   cfg = config.programs.hyprland.managed;
-  localConfigDir = "${config.programs.workspace.root}/infra/nix-config";
+  # Operator profiles use their live workspace checkout. Smaller profiles such
+  # as madsil do not import the workspace module and retain the immutable flake
+  # source behavior that predates the live-symlink optimization.
+  localConfigDir =
+    if lib.hasAttrByPath ["programs" "workspace" "root"] options
+    then "${config.programs.workspace.root}/infra/nix-config"
+    else toString configDir;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''
@@ -41,28 +47,86 @@ with lib; let
         '[.[] | select(.name | test($pattern)) | .name][0] // empty'
     }
 
+    internal_outputs() {
+      monitors | jq -r \
+        '[.[] | select(.name | test("^(eDP|LVDS)-")) | .name] | sort[]'
+    }
+
+    external_outputs() {
+      monitors | jq -r \
+        '[.[] | select((.name | test("^(eDP|LVDS)-")) | not) | .name] | sort[]'
+    }
+
+    monitor_fingerprint() {
+      monitors | jq -c \
+        '[.[] | {name, disabled, width, height, refreshRate, scale, availableModes}] | sort_by(.name)'
+    }
+
+    monitor_mode() {
+      monitors | jq -r --arg name "$1" '
+        ([.[] | select(.name == $name)][0] // {}) as $monitor
+        | if (($monitor.description // "") | contains("49M2C8900")) then
+            (
+              ($monitor.availableModes // [])
+              | map(
+                  select(startswith("5120x1440@"))
+                  | {
+                      mode: (sub("Hz$"; "")),
+                      refreshRate: (capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate | tonumber)
+                    }
+                )
+              | sort_by(.refreshRate)
+              | last.mode
+            ) // "preferred"
+          else
+            "preferred"
+          end
+      '
+    }
+
+    configure_monitor() {
+      output="$1"
+      position="$2"
+      mode="$(monitor_mode "$output")"
+      hyprctl keyword monitor "$output, $mode, $position, 1" >/dev/null
+    }
+
     apply_display_state() {
-      internal="$(first_output "^(eDP|LVDS)-")"
-      hdmi="$(first_output "^HDMI-A-")"
+      mapfile -t internals < <(internal_outputs)
+      mapfile -t externals < <(external_outputs)
 
-      if [ -n "$hdmi" ]; then
-        hyprctl keyword monitor "$hdmi, preferred, 0x0, 1" >/dev/null
+      if ((''${#externals[@]} > 0)); then
+        primary="''${externals[0]}"
+        configure_monitor "$primary" "0x0"
 
-        if [ -n "$internal" ]; then
+        for external in "''${externals[@]:1}"; do
+          configure_monitor "$external" "auto-right"
+        done
+
+        for internal in "''${internals[@]}"; do
           if lid_closed; then
             hyprctl keyword monitor "$internal, disable" >/dev/null
           else
-            hyprctl keyword monitor "$internal, preferred, auto-right, 1" >/dev/null
+            configure_monitor "$internal" "auto-right"
           fi
-        fi
-      elif [ -n "$internal" ]; then
-        hyprctl keyword monitor "$internal, preferred, 0x0, 1" >/dev/null
+        done
+
+        hyprctl dispatch focusmonitor "$primary" >/dev/null || true
+      elif ((''${#internals[@]} > 0)); then
+        primary="$(first_output "^(eDP|LVDS)-")"
+        configure_monitor "$primary" "0x0"
+
+        for internal in "''${internals[@]:1}"; do
+          configure_monitor "$internal" "auto-right"
+        done
+
+        hyprctl dispatch focusmonitor "$primary" >/dev/null || true
       fi
     }
 
     last_state=""
     while true; do
-      state="$(monitors | jq -r '[.[] | .name] | sort | join(",")')"
+      state="$(monitor_fingerprint)"
       if lid_closed; then
         state="closed:$state"
       else
@@ -87,7 +151,7 @@ in {
       description = "Optional Hyprland input sensitivity override in the range -1.0 to 1.0.";
     };
 
-    laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for HDMI and lid state";
+    laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for external outputs and lid state";
 
     extraConfig = mkOption {
       type = types.lines;

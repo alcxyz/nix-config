@@ -19,6 +19,7 @@
 
   boot.loader.grub.enable = false;
   boot.loader.generic-extlinux-compatible.enable = true;
+  boot.loader.generic-extlinux-compatible.configurationLimit = 2;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   nix.settings.require-sigs = false;
@@ -26,6 +27,20 @@
   # derivations when the configured builder is unavailable.
   nix.settings.max-jobs = 1;
   alc.distributedBuildClient.enable = true;
+
+  # Keep the embedded fallback host small enough for its SD-card root.
+  fonts.packages = lib.mkForce [];
+  programs.nix-ld.enable = lib.mkForce false;
+  programs.nix-ld.libraries = lib.mkForce [];
+  services.pcscd.enable = lib.mkForce false;
+  security.rtkit.enable = lib.mkForce false;
+  services.pipewire.enable = lib.mkForce false;
+  services.pipewire.alsa.enable = lib.mkForce false;
+  services.pipewire.alsa.support32Bit = lib.mkForce false;
+  services.pipewire.pulse.enable = lib.mkForce false;
+  services.pipewire.wireplumber.enable = lib.mkForce false;
+  hardware.bluetooth.enable = lib.mkForce false;
+  virtualisation.docker.enable = lib.mkForce false;
 
   services.journald.extraConfig = ''
     Storage=persistent

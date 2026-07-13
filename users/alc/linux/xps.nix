@@ -13,7 +13,7 @@
   };
 in {
   imports = [
-    "${configDir}/users/alc/linux/common.nix"
+    "${configDir}/users/alc/linux/operator.nix"
 
     "${configDir}/modules/home-manager/programs/wayland-common/default.nix"
     "${configDir}/modules/home-manager/programs/hyprland/default.nix"

@@ -20,7 +20,9 @@ let
       $HYPRLOCK &
       lock_pid="$!"
       ${pkgs.coreutils}/bin/sleep ${toString cfg.displayOffDelay}
-      $HYPRCTL dispatch dpms off
+      if kill -0 "$lock_pid" 2>/dev/null; then
+        $HYPRCTL dispatch dpms off
+      fi
       wait "$lock_pid"
     else
       exec $HYPRLOCK

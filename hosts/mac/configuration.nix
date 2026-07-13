@@ -13,6 +13,12 @@
     inherit pkgs inputs;
   };
   networkName = hostInventory.darwinNetworkName or "mac";
+  netbirdHostname = "mac";
+  netbirdClient = pkgs.writeShellScriptBin "netbird" ''
+    export NB_HOSTNAME="''${NB_HOSTNAME:-${netbirdHostname}}"
+    exec ${pkgs.netbird}/bin/netbird "$@"
+  '';
+  xyzLanAddress = "192.168.1.10";
   shellPackages = {
     bash = pkgs.bashInteractive;
     nu = pkgs.nushell;
@@ -105,8 +111,6 @@ in {
     };
   };
 
-  nixpkgs.config.allowUnfree = true;
-
   # ============================================================================
   # System Information
   # ============================================================================
@@ -136,6 +140,37 @@ in {
     chown root:wheel "$tmp_file"
     chmod 0644 "$tmp_file"
     mv "$tmp_file" "$hosts_file"
+
+    echo "configuring xyz nfs mounts..." >&2
+
+    install -d -m 0755 /Volumes/stash
+
+    fstab_file=/etc/fstab
+    tmp_file="$(mktemp /tmp/nix-darwin-fstab.XXXXXX)"
+
+    if [ -f "$fstab_file" ]; then
+      awk '
+        /^# nix-config xyz nfs begin$/ { skip = 1; next }
+        /^# nix-config xyz nfs end$/ { skip = 0; next }
+        skip != 1 { print }
+      ' "$fstab_file" > "$tmp_file"
+    else
+      : > "$tmp_file"
+    fi
+
+    {
+      printf '\n# nix-config xyz nfs begin\n'
+      printf '${xyzLanAddress}:/tank/stash /Volumes/stash nfs rw,vers=4,tcp,resvport 0 0\n'
+      printf '# nix-config xyz nfs end\n'
+    } >> "$tmp_file"
+
+    chown root:wheel "$tmp_file"
+    chmod 0644 "$tmp_file"
+    mv "$tmp_file" "$fstab_file"
+
+    if [ -x /usr/sbin/automount ]; then
+      /usr/sbin/automount -vc >/dev/null || true
+    fi
   '';
 
   services.openssh.enable = true;
@@ -146,7 +181,7 @@ in {
   launchd.daemons.netbird = {
     serviceConfig = {
       ProgramArguments = [
-        "${pkgs.netbird}/bin/netbird"
+        "${netbirdClient}/bin/netbird"
         "service"
         "run"
       ];
@@ -156,6 +191,7 @@ in {
       StandardErrorPath = "/var/log/netbird.log";
       EnvironmentVariables = {
         NB_CONFIG = "/var/lib/netbird/config.json";
+        NB_HOSTNAME = netbirdHostname;
         NB_LOG_FILE = "console";
       };
     };
@@ -177,7 +213,7 @@ in {
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = pkgsets.system.mac ++ [pkgs.netbird];
+    systemPackages = pkgsets.system.mac ++ [netbirdClient];
     shells = with pkgs; [
       bash
       nushell

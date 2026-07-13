@@ -32,7 +32,7 @@
 
     embedded = {
       homePackageSet = "embedded";
-      systemPackageSet = "server";
+      systemPackageSet = "embedded";
       workspaceProfiles = [];
     };
 
@@ -64,6 +64,7 @@
       role = "server";
       schedulable = true;
       extraFlags = [
+        "--disable=coredns"
         "--node-label=workload-class=stable"
       ];
     };

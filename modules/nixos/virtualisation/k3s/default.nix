@@ -38,6 +38,12 @@ in {
       description = "Extra flags to pass to the K3s server/agent binary.";
     };
 
+    nodeIp = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Stable node address advertised by K3s and used as the Flannel VXLAN endpoint.";
+    };
+
     tlsSans = mkOption {
       type = types.listOf types.str;
       default = [];
@@ -73,6 +79,10 @@ in {
     # Ensure rpcbind is enabled, often a dependency for Kubernetes components
     services.rpcbind.enable = true;
 
+    # Bound the final reboot phase if firmware or a kernel driver wedges after
+    # userspace has shut down. Runtime watchdog policy remains host-specific.
+    systemd.settings.Manager.RebootWatchdogSec = "3min";
+
     # Configure K3s service
     services.k3s =
       {
@@ -80,6 +90,7 @@ in {
         role = cfg.role;
         extraFlags =
           inventoryExtraFlags
+          ++ optional (cfg.nodeIp != null) "--node-ip=${cfg.nodeIp}"
           ++ concatMap (san: ["--tls-san" san]) cfg.tlsSans
           ++ cfg.extraFlags;
       }
@@ -98,10 +109,12 @@ in {
       6443 # K3s API Server
       2379 # K3s etcd client port
       2380 # K3s etcd peer port
+      7946 # MetalLB speaker memberlist
       10250 # Kubelet metrics endpoint for Metrics Server
     ];
     networking.firewall.allowedUDPPorts = [
       8472 # Flannel VXLAN backend
+      7946 # MetalLB speaker memberlist
     ];
 
     # Pod and service traffic traverses the node over the CNI bridge and

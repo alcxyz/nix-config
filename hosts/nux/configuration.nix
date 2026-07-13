@@ -90,6 +90,7 @@ in {
   k3s = {
     enable = true;
     clusterInit = true;
+    nodeIp = "192.168.1.15";
     tokenFile = config.sops.secrets.k3s_server_token.path;
     tlsSans = [
       "k8s-api.local"

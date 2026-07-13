@@ -42,6 +42,13 @@ in rec {
       nix-prefetch-git
     ];
 
+    # Headless SBCs should keep their system path small; host services add
+    # their own runtime packages explicitly.
+    linuxEmbedded = with pkgs; [
+      smartmontools
+      gptfdisk
+    ];
+
     # Linux workstation extras (pulls in QEMU etc.)
     linuxWorkstation = with pkgs; [
       lima
@@ -64,6 +71,7 @@ in rec {
   system = {
     workstation = sys.base ++ sys.linux ++ sys.linuxWorkstation ++ sys.linuxDesktop;
     server = sys.base ++ sys.linux;
+    embedded = sys.base ++ sys.linuxEmbedded;
     mac = sys.base;
   };
 
@@ -214,14 +222,18 @@ in rec {
     # wrapped with per-command KUBECONFIG handling.
     k8s = [];
 
-    ai = with pkgs; [
-      #gemini-cli
-      opencode
-      claude-code
-      codex-cli
-      codex-app-server
-      t3code
-    ];
+    ai = with pkgs;
+      [
+        #gemini-cli
+        #opencode
+        claude-code
+        codex-cli
+        codex-app-server
+        t3code
+      ]
+      ++ lib.optionals stdenv.hostPlatform.isLinux [
+        herdr
+      ];
 
     gaming = with pkgs; [
       heroic

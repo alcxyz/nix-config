@@ -1,5 +1,11 @@
 # modules/home-manager/programs/ai/default.nix
-{ config, lib, pkgs, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
 
 with lib;
 
@@ -28,11 +34,11 @@ in
       };
     };
 
-    programs.gemini-cli = {
-      enable = true;
-    };
+    # programs.gemini-cli = {
+    #   enable = true;
+    # };
 
-    home.activation.claudeStatusline = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    home.activation.claudeStatusline = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       settings_file="${config.home.homeDirectory}/.claude/settings.json"
       settings_tmp="$settings_file.tmp"
 
