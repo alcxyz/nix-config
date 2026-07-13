@@ -11,7 +11,13 @@
 }:
 with lib; let
   cfg = config.programs.hyprland.managed;
-  localConfigDir = "${config.programs.workspace.root}/infra/nix-config";
+  # Operator profiles use their live workspace checkout. Smaller profiles such
+  # as madsil do not import the workspace module and retain the immutable flake
+  # source behavior that predates the live-symlink optimization.
+  localConfigDir =
+    if lib.hasAttrByPath ["programs" "workspace" "root"] options
+    then "${config.programs.workspace.root}/infra/nix-config"
+    else toString configDir;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''

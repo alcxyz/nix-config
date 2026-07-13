@@ -420,7 +420,7 @@ wait_for_node_storage_detach() {
   fi
 
   log "checking ${SSH_TARGET} for residual Longhorn mounts and iSCSI sessions"
-  if ! ssh -o BatchMode=yes "$SSH_TARGET" 'sudo bash -s' <<'EOF'
+  if ! ssh -o BatchMode=yes "$SSH_TARGET" 'sudo bash -s' <<'EOF'; then
 set -euo pipefail
 
 command -v findmnt >/dev/null
@@ -439,7 +439,6 @@ if [[ -n "$mounts" || -n "$sessions" ]]; then
   exit 1
 fi
 EOF
-  then
     die "residual Longhorn storage is still active on ${SSH_TARGET}"
   fi
 }
@@ -539,8 +538,8 @@ verify_new_boot() {
 
   current_boot_id=$(ssh -o BatchMode=yes "$SSH_TARGET" cat /proc/sys/kernel/random/boot_id)
   [[ -n "$current_boot_id" ]] || die "could not read the boot ID after ${SSH_TARGET} returned"
-  [[ "$current_boot_id" != "$REMOTE_BOOT_ID" ]] \
-    || die "${SSH_TARGET} returned without rebooting; ${NODE} remains cordoned"
+  [[ "$current_boot_id" != "$REMOTE_BOOT_ID" ]] ||
+    die "${SSH_TARGET} returned without rebooting; ${NODE} remains cordoned"
 }
 
 poweroff_host() {
