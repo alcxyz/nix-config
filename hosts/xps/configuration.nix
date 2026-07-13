@@ -127,11 +127,11 @@ in {
     script = ''
       nmcli -t -f NAME,TYPE connection show | while IFS=: read -r name type; do
         case "$type" in
-          ethernet)
+          802-3-ethernet|ethernet)
             nmcli connection modify "$name" \
               ipv4.route-metric 50 ipv6.route-metric 50 || true
             ;;
-          wifi)
+          802-11-wireless|wifi)
             nmcli connection modify "$name" \
               ipv4.route-metric 600 ipv6.route-metric 600 || true
             ;;
