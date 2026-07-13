@@ -13,6 +13,10 @@ with lib; let
     if hostK8sRole == null
     then "server"
     else hostK8sRole.role;
+  roleMaxPods =
+    if hostK8sRole == null
+    then 110
+    else hostK8sRole.maxPods or 110;
   inventoryExtraFlags =
     if hostK8sRole == null
     then []
@@ -36,6 +40,12 @@ in {
       type = types.listOf types.str;
       default = [];
       description = "Extra flags to pass to the K3s server/agent binary.";
+    };
+
+    maxPods = mkOption {
+      type = types.ints.positive;
+      default = roleMaxPods;
+      description = "Maximum number of Pods the kubelet may schedule on this node.";
     };
 
     nodeIp = mkOption {
@@ -91,6 +101,7 @@ in {
         extraFlags =
           inventoryExtraFlags
           ++ optional (cfg.nodeIp != null) "--node-ip=${cfg.nodeIp}"
+          ++ optional (cfg.maxPods != 110) "--kubelet-arg=max-pods=${toString cfg.maxPods}"
           ++ concatMap (san: ["--tls-san" san]) cfg.tlsSans
           ++ cfg.extraFlags;
       }

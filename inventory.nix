@@ -63,6 +63,7 @@
     server-worker = {
       role = "server";
       schedulable = true;
+      maxPods = 200;
       extraFlags = [
         "--disable=coredns"
         "--node-label=workload-class=stable"
