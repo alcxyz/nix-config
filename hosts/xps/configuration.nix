@@ -23,6 +23,11 @@ in {
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  # Keep recovery TTYs usable with the laptop's Norwegian keyboard. Graphical
+  # sessions manage their own us/no layout and toggle independently.
+  console.useXkbConfig = lib.mkForce false;
+  console.keyMap = "no";
+
   environment.systemPackages =
     pkgsets.system.${hostRole.systemPackageSet}
     ++ [
