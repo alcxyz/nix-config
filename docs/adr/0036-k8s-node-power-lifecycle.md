@@ -24,6 +24,15 @@ Before a power action, the helper must:
 5. verify that the host has no residual Longhorn CSI global mount or iSCSI
    session.
 
+The Longhorn health gate requires every attached or attaching volume to have a
+live desired replica count of at least three before it waits for `healthy`
+robustness. This is checked separately and fails immediately: changing a
+StorageClass default does not update an existing Volume object, and waiting
+cannot repair that policy drift while rebuild admission is deliberately
+closed. Detached retained volumes do not block a node power operation because
+they are outside the active attachment path; the GitOps replica-policy audit
+owns their migration or retirement decision.
+
 The Longhorn instance-manager is excluded from eviction with a Pod selector.
 Its PDB remains authoritative, but does not prevent application workloads from
 being drained or require healthy replica processes to be deleted before a
