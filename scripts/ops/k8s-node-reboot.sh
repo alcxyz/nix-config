@@ -630,6 +630,7 @@ prepare_node_for_disruption() {
       drain "$NODE"
       --ignore-daemonsets
       --delete-emptydir-data
+      '--pod-selector=longhorn.io/component!=instance-manager'
       --timeout="$DRAIN_TIMEOUT"
     )
 
