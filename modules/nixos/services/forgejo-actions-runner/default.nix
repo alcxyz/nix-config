@@ -4,11 +4,10 @@
   pkgs,
   inputs,
   ...
-}:
-let
+}: let
   cfg = config.services.forgejo-actions-runner;
 
-  settingsFormat = pkgs.formats.yaml { };
+  settingsFormat = pkgs.formats.yaml {};
   stateDir = "/var/lib/forgejo/runner";
   runtimeDir = "/run/forgejo-runner";
   envFile = "${runtimeDir}/${cfg.name}.env";
@@ -18,7 +17,7 @@ let
   secretName = key: "forgejo_runner_${key}";
   secretPath = key: "/run/secrets/${secretName key}";
 
-  secretKeys = lib.unique ([ "runner_token" ] ++ lib.attrValues cfg.secretEnv);
+  secretKeys = lib.unique (["runner_token"] ++ lib.attrValues cfg.secretEnv);
 
   allEnvNames = lib.unique ((lib.attrNames cfg.jobEnv) ++ (lib.attrNames cfg.secretEnv));
   containerOptions = lib.concatStringsSep " " (map (name: "-e ${name}") allEnvNames);
@@ -39,7 +38,7 @@ let
       privileged = false;
       options = containerOptions;
       workdir_parent = null;
-      valid_volumes = [ "/var/run/docker.sock" ];
+      valid_volumes = ["/var/run/docker.sock"];
       docker_host = cfg.dockerHost;
       force_pull = false;
     };
@@ -49,7 +48,8 @@ let
   literalEnvScript = lib.concatLines (
     lib.mapAttrsToList (name: value: ''
       printf '%s=%s\n' ${lib.escapeShellArg name} ${lib.escapeShellArg value} >> "$env_tmp"
-    '') cfg.jobEnv
+    '')
+    cfg.jobEnv
   );
 
   secretEnvScript = lib.concatLines (
@@ -57,22 +57,23 @@ let
       printf '%s=' ${lib.escapeShellArg name} >> "$env_tmp"
       ${pkgs.coreutils}/bin/tr -d '\n' < ${lib.escapeShellArg (secretPath key)} >> "$env_tmp"
       printf '\n' >> "$env_tmp"
-    '') cfg.secretEnv
+    '')
+    cfg.secretEnv
   );
 
   secretChecksScript = lib.concatLines (
     map (key: ''
       test -s ${lib.escapeShellArg (secretPath key)}
-    '') secretKeys
+    '')
+    secretKeys
   );
 
   labelsWanted = lib.concatStringsSep "," cfg.labels;
-in
-{
+in {
   options.services.forgejo-actions-runner = {
     enable = lib.mkEnableOption "native Forgejo Actions runner";
 
-    package = lib.mkPackageOption pkgs "forgejo-runner" { };
+    package = lib.mkPackageOption pkgs "forgejo-runner" {};
 
     name = lib.mkOption {
       type = lib.types.str;
@@ -94,7 +95,7 @@ in
 
     labels = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ ];
+      default = [];
       description = "Forgejo runner labels and execution backends.";
     };
 
@@ -123,13 +124,13 @@ in
 
     jobEnv = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = { };
+      default = {};
       description = "Literal environment values written to the runner job env file.";
     };
 
     secretEnv = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = { };
+      default = {};
       description = "Mapping from job env variable names to keys in the runner SOPS file.";
     };
 
@@ -152,7 +153,7 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.labels != [ ];
+        assertion = cfg.labels != [];
         message = "services.forgejo-actions-runner.labels must not be empty.";
       }
       {
@@ -161,11 +162,24 @@ in
       }
     ];
 
-    users.groups.forgejo-runner = { };
+    users.groups.forgejo-runner = {};
     users.users.forgejo-runner = {
       isSystemUser = true;
       group = "forgejo-runner";
-      extraGroups = [ "docker" ];
+      extraGroups = ["docker"];
+    };
+
+    # Runner jobs leave build cache and pulled images in the host Docker
+    # daemon. Keep one week for repeat builds, then reclaim only unused data.
+    # Volumes are deliberately excluded from this generic policy.
+    virtualisation.docker.autoPrune = {
+      enable = lib.mkDefault true;
+      dates = lib.mkDefault "weekly";
+      randomizedDelaySec = lib.mkDefault "6h";
+      flags = lib.mkDefault [
+        "--all"
+        "--filter=until=168h"
+      ];
     };
 
     sops.secrets = lib.listToAttrs (
@@ -178,9 +192,10 @@ in
           owner = "forgejo-runner";
           group = "forgejo-runner";
           mode = "0400";
-          restartUnits = [ "forgejo-actions-runner.service" ];
+          restartUnits = ["forgejo-actions-runner.service"];
         };
-      }) secretKeys
+      })
+      secretKeys
     );
 
     systemd.tmpfiles.rules = [
@@ -191,7 +206,7 @@ in
 
     systemd.services.forgejo-actions-runner = {
       description = "Forgejo Actions Runner (${cfg.name})";
-      wants = [ "network-online.target" ];
+      wants = ["network-online.target"];
       after = [
         "network-online.target"
         "docker.service"
@@ -199,8 +214,8 @@ in
       requires = [
         "docker.service"
       ];
-      wantedBy = [ "multi-user.target" ];
-      path = [ cfg.package ] ++ cfg.extraPackages;
+      wantedBy = ["multi-user.target"];
+      path = [cfg.package] ++ cfg.extraPackages;
       environment = {
         HOME = stateDir;
         DOCKER_HOST = cfg.dockerHost;
@@ -208,7 +223,7 @@ in
       serviceConfig = {
         User = "forgejo-runner";
         Group = "forgejo-runner";
-        SupplementaryGroups = [ "docker" ];
+        SupplementaryGroups = ["docker"];
         WorkingDirectory = stateDir;
         RuntimeDirectory = "forgejo-runner";
         RuntimeDirectoryMode = "0750";
