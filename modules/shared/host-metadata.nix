@@ -61,6 +61,10 @@ in {
                 type = types.bool;
                 default = false;
               };
+              maxPods = mkOption {
+                type = types.nullOr types.ints.positive;
+                default = null;
+              };
               labels = mkOption {
                 type = types.listOf types.str;
                 default = [];
@@ -99,6 +103,10 @@ in {
         if k8sEnabled
         then hostK8sRole.schedulable or true
         else false;
+      maxPods =
+        if k8sEnabled
+        then hostK8sRole.maxPods or 110
+        else null;
       labels = nodeLabels;
       taints = nodeTaints;
       extraFlags = k8sExtraFlags;

@@ -15,6 +15,7 @@ SETTLE_TIMEOUT="15m"
 SSH_TIMEOUT_SECONDS=900
 POLL_SECONDS=5
 REQUIRE_LONGHORN_BACKUP_TARGET=false
+MIN_FREE_POD_SLOTS=20
 REMOTE_BOOT_ID=""
 
 usage() {
@@ -43,6 +44,8 @@ Options:
   --ssh-timeout <seconds>  SSH return timeout. Default: 900.
   --require-longhorn-backup-target
                            Fail if the Longhorn backup target is unavailable.
+  --min-free-pod-slots N   Require N unused Pod slots on every stable node.
+                           Default: 20.
   -h, --help               Show this help.
 
 Requires kubectl access to the target cluster and SSH sudo rights on the host.
@@ -136,6 +139,12 @@ parse_args() {
       --require-longhorn-backup-target)
         REQUIRE_LONGHORN_BACKUP_TARGET=true
         shift
+        ;;
+      --min-free-pod-slots)
+        [[ $# -ge 2 ]] || die "--min-free-pod-slots requires a value"
+        [[ "$2" =~ ^[1-9][0-9]*$ ]] || die "--min-free-pod-slots must be a positive integer"
+        MIN_FREE_POD_SLOTS="$2"
+        shift 2
         ;;
       -h | --help)
         usage
@@ -392,6 +401,42 @@ wait_for_longhorn_health() {
   fi
 }
 
+check_stable_node_pod_slots() {
+  local report
+
+  log "checking stable-node Pod slot floor (${MIN_FREE_POD_SLOTS})"
+  report=$(
+    kubectl get nodes -l workload-class=stable -o json \
+      | jq -r --argjson required "$MIN_FREE_POD_SLOTS" --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
+          .items[] as $node
+          | ([
+              $pods[0].items[]
+              | select(
+                  .spec.nodeName == $node.metadata.name
+                  and .status.phase != "Succeeded"
+                  and .status.phase != "Failed"
+                )
+            ] | length) as $scheduled
+          | ($node.status.allocatable.pods | tonumber) as $allocatable
+          | ($allocatable - $scheduled) as $free
+          | [
+              $node.metadata.name,
+              ($scheduled | tostring),
+              ($allocatable | tostring),
+              ($free | tostring),
+              (if $free >= $required then "pass" else "insufficient" end)
+            ]
+          | @tsv'
+  )
+
+  [[ -n "$report" ]] || die "no stable nodes found for Pod slot audit"
+  printf 'node\tscheduled\tallocatable\tfree\tstatus\n%s\n' "$report"
+
+  if awk -F '\t' '$5 != "pass" { found=1 } END { exit !found }' <<<"$report"; then
+    die "one or more stable nodes are below the Pod slot floor"
+  fi
+}
+
 wait_for_node_storage_detach() {
   local deadline
   local timeout_seconds
@@ -571,6 +616,7 @@ prepare_node_for_disruption() {
   log "running preflight cluster health checks"
   wait_for_longhorn_health
   wait_for_no_bad_pods
+  check_stable_node_pod_slots
 
   collect_displaced_workloads >"$workloads_file"
 
@@ -668,6 +714,7 @@ main() {
   need_command kubectl
   need_command ssh
   need_command jq
+  need_command awk
 
   case "$ACTION" in
     reboot)
