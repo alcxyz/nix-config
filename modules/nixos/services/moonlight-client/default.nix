@@ -106,6 +106,7 @@
       cfg.package
       pkgs.coreutils
       pkgs.hyprland
+      pkgs.jq
     ];
     text =
       if cfg.relaunchOnExit
@@ -114,7 +115,33 @@
         ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
         while true; do
-          ${moonlightInvocation} || true
+          # Moonlight is a child of this launcher, so Hyprland's exec-once
+          # workspace rule does not apply when the stream process is relaunched.
+          hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
+          ${moonlightInvocation} &
+          moonlight_pid=$!
+          seen_window=0
+          missing_window_checks=0
+
+          while kill -0 "$moonlight_pid" >/dev/null 2>&1; do
+            if hyprctl -j clients 2>/dev/null \
+              | jq -e 'any(.[]; .class == "com.moonlight_stream.Moonlight" and .mapped)' \
+                >/dev/null 2>&1; then
+              seen_window=1
+              missing_window_checks=0
+            elif [ "$seen_window" -eq 1 ]; then
+              missing_window_checks=$((missing_window_checks + 1))
+              if [ "$missing_window_checks" -ge 5 ]; then
+                kill "$moonlight_pid" >/dev/null 2>&1 || true
+                sleep 1
+                kill -KILL "$moonlight_pid" >/dev/null 2>&1 || true
+                break
+              fi
+            fi
+            sleep 2
+          done
+
+          wait "$moonlight_pid" || true
           sleep 1
         done
       ''
@@ -122,6 +149,7 @@
         ${lib.getExe displayModeSetup}
         ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
+        hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
         status=0
         ${moonlightInvocation} || status=$?
         hyprctl dispatch exit >/dev/null 2>&1 || true
