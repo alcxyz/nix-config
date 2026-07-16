@@ -23,8 +23,8 @@
   };
 
   fileSystems."/boot" = {
-    # The incoming nex system disk has no FAT filesystem label.
-    device = "/dev/disk/by-uuid/5810-2F7B";
+    # The swapped-in system disk exposes a stable GPT partition label.
+    device = "/dev/disk/by-partlabel/EFI";
     fsType = "vfat";
     options = [
       "fmask=0077"
