@@ -7,9 +7,7 @@
   pkgs,
   modulesPath,
   ...
-}:
-
-{
+}: {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
@@ -24,9 +22,9 @@
     "tpm_crb"
     "tpm_tis"
   ];
-  boot.initrd.kernelModules = [ ];
-  boot.kernelModules = [ "kvm-amd" ];
-  boot.extraModulePackages = [ ];
+  boot.initrd.kernelModules = [];
+  boot.kernelModules = ["kvm-amd"];
+  boot.extraModulePackages = [];
 
   fileSystems."/" = {
     device = "xpool/root";
@@ -39,7 +37,7 @@
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-uuid/AC99-803C";
+    device = "/dev/disk/by-label/xyz-boot";
     fsType = "vfat";
     options = [
       "fmask=0077"
