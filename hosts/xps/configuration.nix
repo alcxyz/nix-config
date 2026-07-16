@@ -17,6 +17,7 @@ in {
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
+    "${configDir}/modules/nixos/services/moonlight-client/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -62,9 +63,24 @@ in {
   services.greetd = {
     enable = true;
     settings.default_session = {
-      command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --sessions /run/current-system/sw/share/wayland-sessions";
+      command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --remember-session --sessions /run/current-system/sw/share/wayland-sessions";
       user = "greeter";
     };
+  };
+
+  services.moonlight-client = {
+    enable = true;
+    autoLoginUser = username;
+    desktopSessionCommand = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
+    defaultSessionMode = "couch";
+    disableInternalDisplay = true;
+    enableDms = true;
+    enableKdeConnect = true;
+    outputMode = "2560x1440@60";
+    fallbackOutputMode = "1920x1080@60";
+    outputScale = 1.0;
+    preferHdmiAudio = true;
+    relaunchOnExit = true;
   };
 
   systemd.services.greetd.serviceConfig = {
@@ -75,6 +91,37 @@ in {
     TTYReset = true;
     TTYVHangup = true;
     TTYVTDisallocate = true;
+  };
+
+  # DMS owns idle handling for this user. Prevent the package-provided
+  # hypridle unit from failing under UWSM when it has no standalone config.
+  systemd.user.services.hypridle = {
+    overrideStrategy = "asDropin";
+    unitConfig.ConditionPathExists = "/run/xps-enable-hypridle";
+  };
+
+  # DMS exits with SIGTERM's conventional 143 status when its graphical
+  # session is stopped; treat that normal lifecycle as successful.
+  systemd.user.services.dms = {
+    overrideStrategy = "asDropin";
+    path = [inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default];
+    serviceConfig.SuccessExitStatus = 143;
+  };
+
+  # UWSM owns graphical-session.target. Start desktop-only companions from the
+  # target so they do not interfere with the fixed-output couch session.
+  systemd.user.services.xps-desktop-session-setup = {
+    description = "Start XPS desktop session companions";
+    partOf = ["graphical-session.target"];
+    after = ["graphical-session.target"];
+    wantedBy = ["graphical-session.target"];
+    serviceConfig.Type = "oneshot";
+    path = [pkgs.coreutils pkgs.systemd];
+    script = ''
+      if [ "$(tr -d '[:space:]' < /var/lib/moonlight-client/session-mode 2>/dev/null || true)" = desktop ]; then
+        systemctl --user start dms.service hypr-laptop-display-autoswitch.service
+      fi
+    '';
   };
 
   services.xserver.enable = true;

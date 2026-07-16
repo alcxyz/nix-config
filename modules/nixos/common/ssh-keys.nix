@@ -6,6 +6,7 @@
     alc_nux = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ0jGXFKy82JnUagVgPVbBuUBlYqfbFGwcLoOnaabG+S alc@nux";
     alc_nex = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIME9egqxg1z9e+Ef8M6866vlmjV7erNpfKJvSg+x/btI alc@nex";
     alc_rpi0 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+l1wZzNjZ8vyopSUTGqziqif96bdfDoGJf0Iz82VHM alc@rpi0";
+    alc_xps = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVSl1Tsy5xsIbV5R4Dnn4+Qk5qbfy3pOkRqZSGpWrNg alc@xps";
     alc_yubikey_sk = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIMDqhZG24+O0aJzsfiRY1AbNHcb62apx2F7DPTAJf9olAAAABHNzaDo=";
     nux_buildhost_xyz = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOCqmPEzDy4Nc2ZcRggLVAfYsay6dMoPJrVBR52MskrD nix-build@nux-to-xyz";
     nex_buildhost_xyz = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8qgxpjQ82ktYwBKBatdI0bQlfFx0UPwCpJ6maVuhQL nix-build@nex-to-xyz";
@@ -21,6 +22,7 @@
       keys.alc_nux
       keys.alc_nex
       keys.alc_rpi0
+      keys.alc_xps
       keys.alc_mac
       keys.alc_yubikey_sk
     ];

@@ -31,6 +31,7 @@ with lib; let
     ]}
 
     lid_closed() {
+      local state
       for state in /proc/acpi/button/lid/*/state; do
         [ -r "$state" ] || continue
         grep -qi closed "$state" && return 0
@@ -78,6 +79,38 @@ with lib; let
               | sort_by(.refreshRate)
               | last.mode
             ) // "preferred"
+          elif (
+            try (
+              (($monitor.availableModes // [])[0] // "")
+              | capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate
+              | tonumber
+            ) catch 60
+          ) < 50 then
+            (
+              ($monitor.availableModes // [])
+              | map(
+                  select(startswith("2560x1440@"))
+                  | {
+                      mode: (sub("Hz$"; "")),
+                      refreshRate: (capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate | tonumber)
+                    }
+                  | select(.refreshRate >= 59)
+                )
+              | sort_by(.refreshRate)
+              | last.mode
+            ) // (
+              ($monitor.availableModes // [])
+              | map(
+                  select(startswith("1920x1080@"))
+                  | {
+                      mode: (sub("Hz$"; "")),
+                      refreshRate: (capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate | tonumber)
+                    }
+                  | select(.refreshRate >= 59)
+                )
+              | sort_by(.refreshRate)
+              | last.mode
+            ) // "preferred"
           else
             "preferred"
           end
@@ -88,7 +121,18 @@ with lib; let
       output="$1"
       position="$2"
       mode="$(monitor_mode "$output")"
-      hyprctl keyword monitor "$output, $mode, $position, 1" >/dev/null
+      result="$(hyprctl eval "hl.monitor({ output = \"$output\", mode = \"$mode\", position = \"$position\", scale = \"1\", disabled = false })" 2>&1 || true)"
+      if [ "$result" != ok ]; then
+        hyprctl keyword monitor "$output, $mode, $position, 1" >/dev/null
+      fi
+    }
+
+    disable_monitor() {
+      output="$1"
+      result="$(hyprctl eval "hl.monitor({ output = \"$output\", disabled = true })" 2>&1 || true)"
+      if [ "$result" != ok ]; then
+        hyprctl keyword monitor "$output, disable" >/dev/null
+      fi
     }
 
     apply_display_state() {
@@ -105,7 +149,7 @@ with lib; let
 
         for internal in "''${internals[@]}"; do
           if lid_closed; then
-            hyprctl keyword monitor "$internal, disable" >/dev/null
+            disable_monitor "$internal"
           else
             configure_monitor "$internal" "auto-right"
           fi
@@ -153,6 +197,12 @@ in {
 
     laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for external outputs and lid state";
 
+    manageLegacyConfig = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Install the legacy hyprland.conf configuration and its fragments.";
+    };
+
     extraConfig = mkOption {
       type = types.lines;
       default = "";
@@ -179,46 +229,73 @@ in {
       executable = true;
     };
 
-    # Symlink hyprland configs directly to the repo checkout so edits take
-    # effect immediately without a home-manager rebuild.
-    xdg.configFile."hypr/hyprland.conf" = {
+    # Symlink legacy Hyprland configs directly to the repo checkout so edits
+    # take effect immediately without a home-manager rebuild.
+    xdg.configFile."hypr/hyprland.conf" = mkIf cfg.manageLegacyConfig {
       force = true;
       source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf";
     };
-    xdg.configFile."hypr/binds.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds.conf";
-    xdg.configFile."hypr/binds-scrolling.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf";
-    xdg.configFile."hypr/binds-dwindle.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf";
+    xdg.configFile."hypr/binds.conf" = mkIf cfg.manageLegacyConfig {
+      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds.conf";
+    };
+    xdg.configFile."hypr/binds-scrolling.conf" = mkIf cfg.manageLegacyConfig {
+      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf";
+    };
+    xdg.configFile."hypr/binds-dwindle.conf" = mkIf cfg.manageLegacyConfig {
+      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf";
+    };
 
-    xdg.configFile."hypr/managed-overrides.conf".text = optionalString (cfg.inputSensitivity != null) ''
-      input {
-        sensitivity = ${toString cfg.inputSensitivity}
-      }
-    '';
-
-    xdg.configFile."hypr/host.conf".text =
-      cfg.extraConfig
-      + optionalString cfg.laptopDisplayAutoSwitch.enable ''
-        exec-once = ~/.config/hypr/scripts/laptop_display_autoswitch.sh
+    xdg.configFile."hypr/managed-overrides.conf" = mkIf cfg.manageLegacyConfig {
+      text = optionalString (cfg.inputSensitivity != null) ''
+        input {
+          sensitivity = ${toString cfg.inputSensitivity}
+        }
       '';
+    };
 
-    # DMS user-editable configs — live symlinks so edits take effect immediately.
-    # colors.conf and layout.conf are excluded: DMS generates them at runtime.
-    xdg.configFile."hypr/dms/cursor.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/cursor.conf";
-    xdg.configFile."hypr/dms/windowrules.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/windowrules.conf";
-    xdg.configFile."hypr/dms/outputs.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/outputs.conf";
+    xdg.configFile."hypr/host.conf" = mkIf cfg.manageLegacyConfig {
+      text =
+        cfg.extraConfig
+        + optionalString cfg.laptopDisplayAutoSwitch.enable ''
+          exec-once = ${laptopDisplayScript}
+        '';
+    };
+
+    # DMS generates colors.conf and layout.conf at runtime.
+    xdg.configFile."hypr/dms/cursor.conf" = mkIf cfg.manageLegacyConfig {
+      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/cursor.conf";
+    };
+    xdg.configFile."hypr/dms/windowrules.conf" = mkIf cfg.manageLegacyConfig {
+      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/windowrules.conf";
+    };
+    xdg.configFile."hypr/dms/outputs.conf" = mkIf cfg.manageLegacyConfig {
+      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/outputs.conf";
+    };
 
     # Keep colors.conf generated from nix-colors
-    xdg.configFile."hypr/colors.conf".text = ''
-      general {
-        col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
-        col.inactive_border = 0xff${colors.base00}
-      }
-    '';
+    xdg.configFile."hypr/colors.conf" = mkIf cfg.manageLegacyConfig {
+      text = ''
+        general {
+          col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
+          col.inactive_border = 0xff${colors.base00}
+        }
+      '';
+    };
+
+    # XPS starts this explicitly only for its normal desktop session. Keeping
+    # the unit out of WantedBy prevents it from changing the dedicated couch
+    # session's fixed display layout.
+    systemd.user.services.hypr-laptop-display-autoswitch = mkIf cfg.laptopDisplayAutoSwitch.enable {
+      Unit = {
+        Description = "Adjust Hyprland outputs for laptop and dock state";
+        PartOf = ["graphical-session.target"];
+        After = ["graphical-session.target"];
+      };
+      Service = {
+        ExecStart = laptopDisplayScript;
+        Restart = "on-failure";
+        RestartSec = 2;
+      };
+    };
   };
 }
