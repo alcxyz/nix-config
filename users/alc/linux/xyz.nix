@@ -92,7 +92,20 @@ in {
   # Hyprland's portal does not provide RemoteDesktop. Run KDE Connect through
   # XWayland so phone pointer and keyboard events use XTest instead of evdev;
   # this also keeps them entirely outside Kanata's device-grab path.
-  systemd.user.services.kdeconnect.Service.Environment = ["QT_QPA_PLATFORM=xcb"];
+  systemd.user.services.kdeconnect.Service = {
+    Type = "dbus";
+    BusName = "org.kde.kdeconnect";
+    Environment = ["QT_QPA_PLATFORM=xcb"];
+    Restart = lib.mkForce "on-failure";
+  };
+  # The package's stock D-Bus service starts a second unmanaged daemon. Route
+  # activation to the supervised XWayland unit instead.
+  xdg.dataFile."dbus-1/services/org.kde.kdeconnect.service".text = ''
+    [D-BUS Service]
+    Name=org.kde.kdeconnect
+    Exec=${pkgs.systemd}/bin/systemctl --user start kdeconnect.service
+    SystemdService=kdeconnect.service
+  '';
   services.udiskie = {
     enable = true;
     tray = "never";
