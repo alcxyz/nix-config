@@ -9,22 +9,22 @@
 
   modeStateDirectory = "/var/lib/moonlight-client";
   modeStateFile = "${modeStateDirectory}/session-mode";
-  dmsKioskSettings = pkgs.writeText "dms-couch-kiosk-settings.json" (builtins.toJSON {
-    acLockTimeout = 0;
-    batteryLockTimeout = 0;
-    acMonitorTimeout = 0;
-    batteryMonitorTimeout = 0;
-    acSuspendTimeout = 0;
-    batterySuspendTimeout = 0;
-    acPostLockMonitorTimeout = 0;
-    batteryPostLockMonitorTimeout = 0;
-    customPowerActionLock = lib.getExe' pkgs.coreutils "true";
-    fadeToLockEnabled = false;
-    fadeToDpmsEnabled = false;
-    lockAtStartup = false;
-    lockBeforeSuspend = false;
-    loginctlLockIntegration = false;
-  });
+  directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
+  moonlightInvocation =
+    if directStreamEnabled
+    then
+      lib.escapeShellArgs (
+        [
+          (lib.getExe cfg.package)
+          "stream"
+        ]
+        ++ cfg.streamArguments
+        ++ [
+          cfg.streamHost
+          cfg.streamApplication
+        ]
+      )
+    else lib.getExe cfg.package;
 
   displayModeSetup = pkgs.writeShellApplication {
     name = "moonlight-display-mode";
@@ -114,7 +114,7 @@
         ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
         while true; do
-          moonlight || true
+          ${moonlightInvocation} || true
           sleep 1
         done
       ''
@@ -123,7 +123,7 @@
         ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
         status=0
-        moonlight || status=$?
+        ${moonlightInvocation} || status=$?
         hyprctl dispatch exit >/dev/null 2>&1 || true
         exit "$status"
       '';
@@ -159,64 +159,12 @@
 
   dmsSession = pkgs.writeShellApplication {
     name = "couch-dms";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.findutils
-      pkgs.jq
-    ];
     text = ''
       dms="$HOME/.nix-profile/bin/dms"
       if [ ! -x "$dms" ]; then
         echo "DMS is not installed in the user profile" >&2
         exit 1
       fi
-
-      ${lib.optionalString cfg.dmsKioskMode ''
-        normal_config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
-        couch_config_home="''${XDG_STATE_HOME:-$HOME/.local/state}/moonlight-client/dms-config"
-        normal_dms_dir="$normal_config_home/DankMaterialShell"
-        couch_dms_dir="$couch_config_home/DankMaterialShell"
-
-        mkdir -p "$couch_config_home" "$couch_dms_dir"
-
-        # Preserve access to normal application configuration while keeping
-        # DMS's mutable settings isolated from the desktop session.
-        while IFS= read -r -d "" entry; do
-          name="$(basename "$entry")"
-          if [ "$name" = DankMaterialShell ]; then
-            continue
-          fi
-
-          target="$couch_config_home/$name"
-          if [ -L "$target" ]; then
-            ln -sfn "$entry" "$target"
-          elif [ ! -e "$target" ]; then
-            ln -s "$entry" "$target"
-          fi
-        done < <(find "$normal_config_home" -mindepth 1 -maxdepth 1 -print0)
-
-        settings_tmp="$(mktemp "$couch_dms_dir/settings.json.XXXXXX")"
-        if [ -f "$normal_dms_dir/settings.json" ] \
-          && jq -e 'type == "object"' "$normal_dms_dir/settings.json" >/dev/null 2>&1; then
-          jq -s '.[0] * .[1]' \
-            "$normal_dms_dir/settings.json" \
-            ${dmsKioskSettings} > "$settings_tmp"
-        else
-          cp ${dmsKioskSettings} "$settings_tmp"
-        fi
-        chmod 0600 "$settings_tmp"
-        mv -f "$settings_tmp" "$couch_dms_dir/settings.json"
-
-        if [ -f "$normal_dms_dir/plugin_settings.json" ]; then
-          plugin_tmp="$(mktemp "$couch_dms_dir/plugin_settings.json.XXXXXX")"
-          cp "$normal_dms_dir/plugin_settings.json" "$plugin_tmp"
-          chmod 0600 "$plugin_tmp"
-          mv -f "$plugin_tmp" "$couch_dms_dir/plugin_settings.json"
-        fi
-
-        export XDG_CONFIG_HOME="$couch_config_home"
-      ''}
-
       exec "$dms" run
     '';
   };
@@ -424,16 +372,34 @@ in {
       description = "Relaunch Moonlight when it exits so the session remains controller accessible.";
     };
 
+    streamHost = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Paired Moonlight host to stream immediately, or null to open the host chooser.";
+    };
+
+    streamApplication = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Moonlight application to launch on streamHost, or null to open the host chooser.";
+    };
+
+    streamArguments = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Additional arguments passed to the direct Moonlight stream command.";
+    };
+
     enableDms = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = "Start DMS from the user's Home Manager profile in the dedicated session.";
     };
 
-    dmsKioskMode = lib.mkOption {
+    enableBluetoothControllerReconnect = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Run couch-session DMS with isolated settings that disable locking, display power-off, and suspend idle actions.";
+      description = "Continuously reconnect paired and trusted Bluetooth game controllers.";
     };
 
     enableKdeConnect = lib.mkOption {
@@ -529,6 +495,46 @@ in {
 
     programs.kdeconnect.enable = cfg.enableKdeConnect;
 
+    systemd.services.moonlight-controller-reconnect = lib.mkIf cfg.enableBluetoothControllerReconnect {
+      description = "Reconnect trusted Bluetooth game controllers";
+      after = ["bluetooth.service"];
+      wants = ["bluetooth.service"];
+      wantedBy = ["multi-user.target"];
+      path = [
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.systemd
+      ];
+      serviceConfig = {
+        Restart = "always";
+        RestartSec = "5s";
+      };
+      script = ''
+        prop() {
+          busctl get-property org.bluez "$1" org.bluez.Device1 "$2" 2>/dev/null || true
+        }
+
+        while true; do
+          while read -r device; do
+            [ "$(prop "$device" Icon)" = 's "input-gaming"' ] || continue
+            [ "$(prop "$device" Paired)" = "b true" ] || continue
+            [ "$(prop "$device" Trusted)" = "b true" ] || continue
+            [ "$(prop "$device" Connected)" = "b false" ] || continue
+
+            busctl --timeout=5s call \
+              org.bluez "$device" org.bluez.Device1 Connect \
+              >/dev/null 2>&1 || true
+          done < <(
+            busctl tree --list org.bluez \
+              | grep -E '^/org/bluez/hci[0-9]+/dev_[^/]+$' \
+              || true
+          )
+
+          sleep 5
+        done
+      '';
+    };
+
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
       command =
         if cfg.desktopSessionCommand == null
@@ -567,6 +573,10 @@ in {
       {
         assertion = cfg.desktopSessionCommand == null || cfg.autoLoginUser != null;
         message = "services.moonlight-client.desktopSessionCommand requires autoLoginUser";
+      }
+      {
+        assertion = (cfg.streamHost == null) == (cfg.streamApplication == null);
+        message = "services.moonlight-client.streamHost and streamApplication must be set together";
       }
     ];
   };
