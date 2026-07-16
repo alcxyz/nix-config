@@ -15,6 +15,8 @@
     then
       lib.escapeShellArgs (
         [
+          "${pkgs.coreutils}/bin/env"
+          "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
           (lib.getExe cfg.package)
           "stream"
         ]
@@ -24,7 +26,12 @@
           cfg.streamApplication
         ]
       )
-    else lib.getExe cfg.package;
+    else
+      lib.escapeShellArgs [
+        "${pkgs.coreutils}/bin/env"
+        "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
+        (lib.getExe cfg.package)
+      ];
 
   displayModeSetup = pkgs.writeShellApplication {
     name = "moonlight-display-mode";
@@ -152,7 +159,7 @@
         hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
         status=0
         ${moonlightInvocation} || status=$?
-        hyprctl dispatch exit >/dev/null 2>&1 || true
+        hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
         exit "$status"
       '';
   };
@@ -165,6 +172,7 @@
       exec ${lib.getExe cfg.browserPackage} \
         --user-data-dir="$HOME/.local/share/${cfg.browserProfileDirectory}" \
         --ozone-platform=x11 \
+        --password-store=basic \
         --start-fullscreen \
         "$@"
     '';
@@ -179,10 +187,165 @@
         exec ${lib.getExe cfg.fallbackBrowserPackage} \
           --user-data-dir="$HOME/.local/share/${cfg.fallbackBrowserProfileDirectory}" \
           --ozone-platform=x11 \
+          --password-store=basic \
           --start-fullscreen \
           "$@"
       '';
     };
+  };
+
+  moonlightStreamStart = pkgs.writeShellApplication {
+    name = "couch-moonlight-start";
+    runtimeInputs = [
+      pkgs.netcat-openbsd
+    ];
+    text = ''
+      host_ready=0
+      ${lib.optionalString (cfg.streamReadinessHost != null) ''
+        if nc -z -w 1 ${lib.escapeShellArg cfg.streamReadinessHost} ${toString cfg.streamReadinessPort} \
+          >/dev/null 2>&1; then
+          host_ready=1
+        fi
+      ''}
+
+      ${lib.optionalString (cfg.streamHostStartCommand != null) ''
+        if [ "$host_ready" -eq 0 ]; then
+          ${cfg.streamHostStartCommand}
+        fi
+      ''}
+
+      ${lib.optionalString (cfg.streamReadinessHost != null) ''
+        host_ready=0
+        for ((attempt = 0; attempt < ${toString cfg.streamStartupTimeout}; attempt++)); do
+          if nc -z -w 1 ${lib.escapeShellArg cfg.streamReadinessHost} ${toString cfg.streamReadinessPort} \
+            >/dev/null 2>&1; then
+            host_ready=1
+            break
+          fi
+          sleep 1
+        done
+
+        if [ "$host_ready" -eq 0 ]; then
+          echo "stream host did not become ready" >&2
+          exit 1
+        fi
+      ''}
+
+      exec ${lib.getExe moonlightSession}
+    '';
+  };
+
+  couchStreamControl = pkgs.writeShellApplication {
+    name = "couch-stream-control";
+    runtimeInputs = [
+      pkgs.hyprland
+      pkgs.procps
+      pkgs.systemd
+    ];
+    text = ''
+      case "''${1:-}" in
+        start)
+          systemctl --user start couch-moonlight-stream.service
+          ;;
+        browser)
+          systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
+          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+
+          if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
+            >/dev/null 2>&1; then
+            ${lib.getExe couchBrowser} >/dev/null 2>&1 &
+          fi
+          ;;
+        *)
+          echo "usage: couch-stream-control {start|browser}" >&2
+          exit 2
+          ;;
+      esac
+    '';
+  };
+
+  controllerPython = pkgs.python3.withPackages (pythonPackages: [pythonPackages.evdev]);
+  controllerDaemonSource = pkgs.writeText "couch-controller.py" ''
+    import select
+    import subprocess
+    import time
+
+    from evdev import InputDevice, ecodes, list_devices
+
+
+    DEVICE_NAME = ${builtins.toJSON cfg.controllerDeviceName}
+    HOLD_SECONDS = ${toString cfg.controllerHoldSeconds}
+    ACTIONS = {
+        "start": {ecodes.BTN_MODE, ecodes.BTN_EAST},
+        "browser": {ecodes.BTN_THUMBL, ecodes.BTN_THUMBR},
+    }
+    COMMANDS = {
+        "start": [${builtins.toJSON (lib.getExe couchStreamControl)}, "start"],
+        "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
+    }
+
+
+    def find_controller():
+        for path in list_devices():
+            device = InputDevice(path)
+            if device.name == DEVICE_NAME and ecodes.EV_KEY in device.capabilities():
+                return device
+            device.close()
+        return None
+
+
+    def run_action(action):
+        subprocess.Popen(
+            COMMANDS[action],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+
+    while True:
+        controller = find_controller()
+        if controller is None:
+            time.sleep(2)
+            continue
+
+        pressed = set()
+        started_at = {}
+        triggered = set()
+
+        try:
+            while True:
+                readable, _, _ = select.select([controller.fd], [], [], 0.1)
+                if readable:
+                    for event in controller.read():
+                        if event.type != ecodes.EV_KEY:
+                            continue
+                        if event.value:
+                            pressed.add(event.code)
+                        else:
+                            pressed.discard(event.code)
+
+                now = time.monotonic()
+                for action, buttons in ACTIONS.items():
+                    if buttons.issubset(pressed):
+                        started_at.setdefault(action, now)
+                        if action not in triggered and now - started_at[action] >= HOLD_SECONDS:
+                            run_action(action)
+                            triggered.add(action)
+                    else:
+                        started_at.pop(action, None)
+                        triggered.discard(action)
+        except (OSError, ValueError):
+            controller.close()
+            time.sleep(1)
+  '';
+
+  controllerDaemon = pkgs.writeShellApplication {
+    name = "couch-controller";
+    text = ''
+      exec ${controllerPython}/bin/python ${controllerDaemonSource}
+    '';
   };
 
   dmsSession = pkgs.writeShellApplication {
@@ -289,7 +452,10 @@
     env = QT_QPA_PLATFORMTHEME,gtk3
     env = QT_QPA_PLATFORMTHEME_QT6,gtk3
 
-    exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}
+    exec-once = ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
+    ${lib.optionalString cfg.autoStartBrowser "exec-once = ${lib.getExe couchBrowser}"}
+    ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
+    ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
     # Hyprland's portal does not implement RemoteDesktop. Keep KDE Connect and
     # couch browsers on XWayland so its phone keyboard and touchpad can inject
     # input through XTest instead.
@@ -337,8 +503,12 @@
 
     bind = SUPER, 1, workspace, 1
     bind = SUPER, 2, workspace, 2
-    bind = SUPER, M, workspace, 1
-    bind = SUPER, B, exec, ${lib.getExe couchBrowser}
+    ${
+      if cfg.enableControllerShortcuts
+      then "bind = SUPER, M, exec, ${lib.getExe couchStreamControl} start"
+      else "bind = SUPER, M, workspace, 1"
+    }
+    bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
     ${lib.optionalString cfg.enableDms "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
     bind = SUPER, W, killactive
 
@@ -400,6 +570,24 @@ in {
       description = "Relaunch Moonlight when it exits so the session remains controller accessible.";
     };
 
+    autoStartStream = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Launch Moonlight when the couch session starts.";
+    };
+
+    autoStartBrowser = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Launch the couch browser when the couch session starts.";
+    };
+
+    moonlightPlatform = lib.mkOption {
+      type = lib.types.enum ["wayland" "xcb"];
+      default = "wayland";
+      description = "Qt platform used by Moonlight; xcb permits KDE Connect XTest input.";
+    };
+
     streamHost = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -416,6 +604,48 @@ in {
       type = lib.types.listOf lib.types.str;
       default = [];
       description = "Additional arguments passed to the direct Moonlight stream command.";
+    };
+
+    streamHostStartCommand = lib.mkOption {
+      type = lib.types.nullOr lib.types.lines;
+      default = null;
+      description = "Optional command that starts the remote stream host before Moonlight.";
+    };
+
+    streamReadinessHost = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Host whose Sunshine port must become reachable before Moonlight starts.";
+    };
+
+    streamReadinessPort = lib.mkOption {
+      type = lib.types.port;
+      default = 47989;
+      description = "TCP port used to determine whether the stream host is ready.";
+    };
+
+    streamStartupTimeout = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 90;
+      description = "Seconds to wait for the stream host after requesting startup.";
+    };
+
+    enableControllerShortcuts = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Listen for held controller shortcuts that start streaming or return to the browser.";
+    };
+
+    controllerDeviceName = lib.mkOption {
+      type = lib.types.str;
+      default = "Pro Controller";
+      description = "Linux input device name used for couch controller shortcuts.";
+    };
+
+    controllerHoldSeconds = lib.mkOption {
+      type = lib.types.float;
+      default = 1.0;
+      description = "Time a controller shortcut must be held before it is activated.";
     };
 
     enableDms = lib.mkOption {
@@ -506,7 +736,10 @@ in {
         cfg.browserPackage
         couchBrowser
         couchApplications
+        couchStreamControl
+        moonlightStreamStart
       ]
+      ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
       ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
@@ -516,6 +749,16 @@ in {
     hardware.steam-hardware.enable = true;
 
     programs.kdeconnect.enable = cfg.enableKdeConnect;
+
+    systemd.user.services.couch-moonlight-stream = lib.mkIf cfg.enableControllerShortcuts {
+      description = "Controller-launched Moonlight stream";
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = lib.getExe moonlightStreamStart;
+        ExecStopPost = "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2";
+        TimeoutStartSec = cfg.streamStartupTimeout + 30;
+      };
+    };
 
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
       command =
@@ -559,6 +802,14 @@ in {
       {
         assertion = (cfg.streamHost == null) == (cfg.streamApplication == null);
         message = "services.moonlight-client.streamHost and streamApplication must be set together";
+      }
+      {
+        assertion = !cfg.enableControllerShortcuts || directStreamEnabled;
+        message = "services.moonlight-client.enableControllerShortcuts requires a direct stream host and application";
+      }
+      {
+        assertion = cfg.controllerHoldSeconds > 0.0;
+        message = "services.moonlight-client.controllerHoldSeconds must be positive";
       }
     ];
   };

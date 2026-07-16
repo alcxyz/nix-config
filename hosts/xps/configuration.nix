@@ -12,6 +12,15 @@
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  steamHeadlessStartCommand = lib.escapeShellArgs [
+    "${pkgs.openssh}/bin/ssh"
+    "-o"
+    "BatchMode=yes"
+    "-o"
+    "ConnectTimeout=5"
+    "xyz"
+    "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"
+  ];
 in {
   imports = [
     ./hardware-configuration.nix
@@ -76,13 +85,19 @@ in {
     disableInternalDisplay = true;
     enableDms = false;
     enableKdeConnect = true;
+    enableControllerShortcuts = true;
+    autoStartBrowser = true;
+    autoStartStream = false;
+    moonlightPlatform = "xcb";
     outputMode = "2560x1440@60";
     fallbackOutputMode = "1920x1080@60";
     outputScale = 1.0;
     preferHdmiAudio = true;
-    relaunchOnExit = true;
+    relaunchOnExit = false;
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
+    streamHostStartCommand = steamHeadlessStartCommand;
+    streamReadinessHost = "xyz";
     streamArguments = [
       "--1440"
       "--fps"
