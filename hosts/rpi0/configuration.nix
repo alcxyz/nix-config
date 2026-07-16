@@ -80,8 +80,49 @@
     };
   };
 
+  # Bootstrap time without DNS so Unbound can validate DNSSEC after a cold boot.
+  networking.timeServers = [
+    "162.159.200.1"
+    "162.159.200.123"
+  ];
+
+  systemd.services.dns-time-bootstrap = {
+    description = "Wait for DNS-independent network time";
+    after = [
+      "network-online.target"
+      "systemd-timesyncd.service"
+    ];
+    wants = [
+      "network-online.target"
+      "systemd-timesyncd.service"
+    ];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "dns-time-bootstrap" ''
+        set -euo pipefail
+
+        for _ in $(${pkgs.coreutils}/bin/seq 1 180); do
+          if [[ -e /run/systemd/timesync/synchronized ]]; then
+            exit 0
+          fi
+
+          ${pkgs.coreutils}/bin/sleep 1
+        done
+
+        echo "Network time did not synchronize before the DNS startup deadline" >&2
+        exit 1
+      '';
+      RemainAfterExit = true;
+      Restart = "on-failure";
+      RestartSec = 5;
+      TimeoutStartSec = 190;
+    };
+  };
+
   systemd.services.unbound = {
     after = [
+      "dns-time-bootstrap.service"
       "network-online.target"
       "time-sync.target"
     ];
@@ -89,6 +130,7 @@
       "network-online.target"
       "time-sync.target"
     ];
+    requires = ["dns-time-bootstrap.service"];
   };
 
   services.pihole-native = {
