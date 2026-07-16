@@ -257,6 +257,7 @@ in {
   # ==================== Host-specific Settings ====================
 
   programs.hyprlock.enable = true;
+  programs.kdeconnect.enable = true;
   security.pam.services.hyprlock.u2f.enable = true;
 
   # Prevent ZFS warning - stable host ID

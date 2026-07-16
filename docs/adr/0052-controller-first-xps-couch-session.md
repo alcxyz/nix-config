@@ -98,8 +98,12 @@ saved credentials. Its basic password store is a deliberate kiosk trade-off;
 credential-heavy browsing should use the normal desktop session.
 
 SteamHeadless must expose a working virtual keyboard to its X server. That
-container-side input classification is maintained in its GitOps configuration,
-not in the XPS module.
+integration has two boundaries: a system-wide host remapper must ignore the
+synthetic `Keyboard passthrough` device, while the SteamHeadless container owns
+the stream-specific delivery path. The container's headless Xorg has no active
+virtual terminal, so its GitOps configuration relays only Sunshine's named
+virtual keyboard and pointer devices through XTest. Physical host input is not
+attached to the container's X server.
 
 ## Tracking
 

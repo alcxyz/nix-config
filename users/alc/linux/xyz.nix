@@ -88,6 +88,11 @@ in {
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
   services.hyprlock.enable = true;
+  services.kdeconnect.enable = true;
+  # Hyprland's portal does not provide RemoteDesktop. Run KDE Connect through
+  # XWayland so phone pointer and keyboard events use XTest instead of evdev;
+  # this also keeps them entirely outside Kanata's device-grab path.
+  systemd.user.services.kdeconnect.Service.Environment = ["QT_QPA_PLATFORM=xcb"];
   services.udiskie = {
     enable = true;
     tray = "never";
