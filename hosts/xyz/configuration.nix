@@ -399,7 +399,7 @@ in {
   boot.zfs.devNodes = "/dev/disk/by-id";
   swapDevices = lib.mkForce [
     {
-      device = "/dev/disk/by-partuuid/34b759ea-2e88-4ea1-9cd5-f79cee42e952";
+      device = "/dev/disk/by-partlabel/xyz-swap";
       randomEncryption.enable = true;
       options = ["nofail"];
     }
