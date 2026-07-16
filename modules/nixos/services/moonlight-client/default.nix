@@ -594,7 +594,7 @@
     }
 
     cursor {
-      inactive_timeout = 0
+      inactive_timeout = 3
     }
 
     windowrule = match:class com.moonlight_stream.Moonlight, fullscreen true

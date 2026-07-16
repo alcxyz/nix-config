@@ -54,7 +54,8 @@ of couch mode because DMS is not part of that session.
 KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
 XWayland clients, but its pointer warp does not move Hyprland's compositor
 cursor. While KDE Connect is enabled, mirror changed XWayland root-pointer
-coordinates into Hyprland and keep the couch cursor visible.
+coordinates into Hyprland; let Hyprland hide the couch cursor after a short
+idle period and reveal it again when pointer input resumes.
 
 Use Chromium's basic password store for the isolated couch browser profiles.
 Passwordless graphical auto-login cannot unlock the normal login keyring, and
