@@ -6,20 +6,23 @@
   pkgs,
   configDir,
   ...
-}: {
+}:
+{
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
+    "${configDir}/modules/nixos/services/k8s-backup-replica/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
+    inputs.nix-secrets.nixosModules.xevK8sBackupReplica
   ];
 
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  boot.binfmt.emulatedSystems = ["aarch64-linux"];
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
   # ---- Nix Settings ----
   # Allow this host to build for remote machines via SSH.
@@ -60,11 +63,37 @@
     ];
   };
 
+  fileSystems."/var/lib/k8s-backup-replica" = {
+    device = "/dev/disk/by-label/xev-k8s-backup";
+    fsType = "ext4";
+    options = [
+      "nofail"
+      "x-systemd.device-timeout=15s"
+      "x-systemd.mount-timeout=30s"
+    ];
+  };
+
+  fileSystems."/var/lib/longhorn-ssd2" = {
+    device = "/dev/disk/by-label/xev-longhorn-ssd2";
+    fsType = "ext4";
+    options = [
+      "nofail"
+      "x-systemd.device-timeout=15s"
+      "x-systemd.mount-timeout=30s"
+    ];
+  };
+
   alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
+  alc.longhornPrereqs.additionalStorageTargets = [
+    {
+      path = "/var/lib/longhorn-ssd2";
+      mountUnit = "var-lib-longhorn\\x2dssd2.mount";
+    }
+  ];
 
   networking.hosts = {
-    "192.168.1.13" = ["xev"];
-    "192.168.1.250" = ["k8s-api.local"];
+    "192.168.1.13" = [ "xev" ];
+    "192.168.1.250" = [ "k8s-api.local" ];
   };
 
   services.k8s-api-vip = {
