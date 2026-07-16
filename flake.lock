@@ -942,11 +942,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783974382,
-        "narHash": "sha256-mFNcaj+dKllrDGpzr4hS6Rm7krHHA5oH9SCeSDHKPhk=",
+        "lastModified": 1784155722,
+        "narHash": "sha256-0hgXeFBzekoGGkuyBzE6euCnKS0TRbLBWsfTYuz8RHI=",
         "ref": "refs/heads/main",
-        "rev": "02d167793e3e33d931eeee539ba21140be55f638",
-        "revCount": 195,
+        "rev": "1f10ca6739516d33ca20c698e8e2616baf6ee049",
+        "revCount": 197,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1117,11 +1117,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782221911,
-        "narHash": "sha256-KOq5mDm+BfH+ERu9Ufq2bO2zKvaRl0i3XynWRBFltRs=",
+        "lastModified": 1784062400,
+        "narHash": "sha256-FjVe0HdDQi7G5vcDfA7kysmNK4kZRsvPww221sFC80Q=",
         "ref": "dev",
-        "rev": "3642a493769d45c74f4dc39f641690b0520faa1f",
-        "revCount": 44,
+        "rev": "60e932a33f1c01650e8a5d9133ecefe82a8ec5dc",
+        "revCount": 48,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       },

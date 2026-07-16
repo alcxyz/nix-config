@@ -43,6 +43,9 @@ in {
     enable = true;
     inputSensitivity = 0.0;
     laptopDisplayAutoSwitch.enable = true;
+    # Hyprland 0.55 and DMS use the Lua configuration on XPS. DMS deliberately
+    # archives legacy .conf files when both formats exist.
+    manageLegacyConfig = false;
   };
   programs.niri.managed.enable = true;
 
