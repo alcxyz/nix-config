@@ -74,7 +74,6 @@ in {
     desktopSessionCommand = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
     defaultSessionMode = "couch";
     disableInternalDisplay = true;
-    enableBluetoothControllerReconnect = true;
     enableDms = false;
     enableKdeConnect = true;
     outputMode = "2560x1440@60";
