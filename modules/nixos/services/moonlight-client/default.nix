@@ -9,6 +9,22 @@
 
   modeStateDirectory = "/var/lib/moonlight-client";
   modeStateFile = "${modeStateDirectory}/session-mode";
+  dmsKioskSettings = pkgs.writeText "dms-couch-kiosk-settings.json" (builtins.toJSON {
+    acLockTimeout = 0;
+    batteryLockTimeout = 0;
+    acMonitorTimeout = 0;
+    batteryMonitorTimeout = 0;
+    acSuspendTimeout = 0;
+    batterySuspendTimeout = 0;
+    acPostLockMonitorTimeout = 0;
+    batteryPostLockMonitorTimeout = 0;
+    customPowerActionLock = lib.getExe' pkgs.coreutils "true";
+    fadeToLockEnabled = false;
+    fadeToDpmsEnabled = false;
+    lockAtStartup = false;
+    lockBeforeSuspend = false;
+    loginctlLockIntegration = false;
+  });
 
   displayModeSetup = pkgs.writeShellApplication {
     name = "moonlight-display-mode";
@@ -143,12 +159,64 @@
 
   dmsSession = pkgs.writeShellApplication {
     name = "couch-dms";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.jq
+    ];
     text = ''
       dms="$HOME/.nix-profile/bin/dms"
       if [ ! -x "$dms" ]; then
         echo "DMS is not installed in the user profile" >&2
         exit 1
       fi
+
+      ${lib.optionalString cfg.dmsKioskMode ''
+        normal_config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
+        couch_config_home="''${XDG_STATE_HOME:-$HOME/.local/state}/moonlight-client/dms-config"
+        normal_dms_dir="$normal_config_home/DankMaterialShell"
+        couch_dms_dir="$couch_config_home/DankMaterialShell"
+
+        mkdir -p "$couch_config_home" "$couch_dms_dir"
+
+        # Preserve access to normal application configuration while keeping
+        # DMS's mutable settings isolated from the desktop session.
+        while IFS= read -r -d "" entry; do
+          name="$(basename "$entry")"
+          if [ "$name" = DankMaterialShell ]; then
+            continue
+          fi
+
+          target="$couch_config_home/$name"
+          if [ -L "$target" ]; then
+            ln -sfn "$entry" "$target"
+          elif [ ! -e "$target" ]; then
+            ln -s "$entry" "$target"
+          fi
+        done < <(find "$normal_config_home" -mindepth 1 -maxdepth 1 -print0)
+
+        settings_tmp="$(mktemp "$couch_dms_dir/settings.json.XXXXXX")"
+        if [ -f "$normal_dms_dir/settings.json" ] \
+          && jq -e 'type == "object"' "$normal_dms_dir/settings.json" >/dev/null 2>&1; then
+          jq -s '.[0] * .[1]' \
+            "$normal_dms_dir/settings.json" \
+            ${dmsKioskSettings} > "$settings_tmp"
+        else
+          cp ${dmsKioskSettings} "$settings_tmp"
+        fi
+        chmod 0600 "$settings_tmp"
+        mv -f "$settings_tmp" "$couch_dms_dir/settings.json"
+
+        if [ -f "$normal_dms_dir/plugin_settings.json" ]; then
+          plugin_tmp="$(mktemp "$couch_dms_dir/plugin_settings.json.XXXXXX")"
+          cp "$normal_dms_dir/plugin_settings.json" "$plugin_tmp"
+          chmod 0600 "$plugin_tmp"
+          mv -f "$plugin_tmp" "$couch_dms_dir/plugin_settings.json"
+        fi
+
+        export XDG_CONFIG_HOME="$couch_config_home"
+      ''}
+
       exec "$dms" run
     '';
   };
@@ -360,6 +428,12 @@ in {
       type = lib.types.bool;
       default = false;
       description = "Start DMS from the user's Home Manager profile in the dedicated session.";
+    };
+
+    dmsKioskMode = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Run couch-session DMS with isolated settings that disable locking, display power-off, and suspend idle actions.";
     };
 
     enableKdeConnect = lib.mkOption {

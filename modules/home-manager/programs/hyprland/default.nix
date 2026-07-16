@@ -20,6 +20,25 @@ with lib; let
     else toString configDir;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
+  managedOverridesConfig = pkgs.writeText "hyprland-managed-overrides.conf" (
+    optionalString (cfg.inputSensitivity != null) ''
+      input {
+        sensitivity = ${toString cfg.inputSensitivity}
+      }
+    ''
+  );
+  hostConfig = pkgs.writeText "hyprland-host.conf" (
+    cfg.extraConfig
+    + optionalString cfg.laptopDisplayAutoSwitch.enable ''
+      exec-once = ${laptopDisplayScript}
+    ''
+  );
+  colorsConfig = pkgs.writeText "hyprland-colors.conf" ''
+    general {
+      col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
+      col.inactive_border = 0xff${colors.base00}
+    }
+  '';
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''
     set -eu
 
@@ -229,58 +248,44 @@ in {
       executable = true;
     };
 
-    # Symlink legacy Hyprland configs directly to the repo checkout so edits
-    # take effect immediately without a home-manager rebuild.
-    xdg.configFile."hypr/hyprland.conf" = mkIf cfg.manageLegacyConfig {
-      force = true;
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf";
-    };
-    xdg.configFile."hypr/binds.conf" = mkIf cfg.manageLegacyConfig {
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds.conf";
-    };
-    xdg.configFile."hypr/binds-scrolling.conf" = mkIf cfg.manageLegacyConfig {
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf";
-    };
-    xdg.configFile."hypr/binds-dwindle.conf" = mkIf cfg.manageLegacyConfig {
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf";
-    };
+    # Hyprland watches its configuration tree and reloads immediately. Home
+    # Manager normally unlinks the old generation before linking the new one,
+    # which exposes a briefly incomplete configuration to the running
+    # compositor. Keep these links outside linkGeneration and replace each one
+    # atomically instead. Repo-backed files still update live without a rebuild.
+    home.activation.hyprlandLegacyConfig = mkIf cfg.manageLegacyConfig (
+      lib.hm.dag.entryAfter ["linkGeneration"] ''
+        hypr_dir=${escapeShellArg "${config.home.homeDirectory}/.config/hypr"}
+        dms_dir="$hypr_dir/dms"
+        mkdir -p "$hypr_dir" "$dms_dir"
 
-    xdg.configFile."hypr/managed-overrides.conf" = mkIf cfg.manageLegacyConfig {
-      text = optionalString (cfg.inputSensitivity != null) ''
-        input {
-          sensitivity = ${toString cfg.inputSensitivity}
+        install_link() {
+          source_path="$1"
+          target_path="$2"
+
+          if [ -L "$target_path" ] \
+            && [ "$(readlink "$target_path")" = "$source_path" ]; then
+            return
+          fi
+
+          temporary_path="$target_path.home-manager-new"
+          rm -f "$temporary_path"
+          ln -s "$source_path" "$temporary_path"
+          mv -Tf "$temporary_path" "$target_path"
         }
-      '';
-    };
 
-    xdg.configFile."hypr/host.conf" = mkIf cfg.manageLegacyConfig {
-      text =
-        cfg.extraConfig
-        + optionalString cfg.laptopDisplayAutoSwitch.enable ''
-          exec-once = ${laptopDisplayScript}
-        '';
-    };
-
-    # DMS generates colors.conf and layout.conf at runtime.
-    xdg.configFile."hypr/dms/cursor.conf" = mkIf cfg.manageLegacyConfig {
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/cursor.conf";
-    };
-    xdg.configFile."hypr/dms/windowrules.conf" = mkIf cfg.manageLegacyConfig {
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/windowrules.conf";
-    };
-    xdg.configFile."hypr/dms/outputs.conf" = mkIf cfg.manageLegacyConfig {
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/outputs.conf";
-    };
-
-    # Keep colors.conf generated from nix-colors
-    xdg.configFile."hypr/colors.conf" = mkIf cfg.manageLegacyConfig {
-      text = ''
-        general {
-          col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
-          col.inactive_border = 0xff${colors.base00}
-        }
-      '';
-    };
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf"} "$hypr_dir/hyprland.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds.conf"} "$hypr_dir/binds.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf"} "$hypr_dir/binds-scrolling.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf"} "$hypr_dir/binds-dwindle.conf"
+        install_link ${escapeShellArg "${managedOverridesConfig}"} "$hypr_dir/managed-overrides.conf"
+        install_link ${escapeShellArg "${hostConfig}"} "$hypr_dir/host.conf"
+        install_link ${escapeShellArg "${colorsConfig}"} "$hypr_dir/colors.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/cursor.conf"} "$dms_dir/cursor.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/windowrules.conf"} "$dms_dir/windowrules.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/outputs.conf"} "$dms_dir/outputs.conf"
+      ''
+    );
 
     # XPS starts this explicitly only for its normal desktop session. Keeping
     # the unit out of WantedBy prevents it from changing the dedicated couch
