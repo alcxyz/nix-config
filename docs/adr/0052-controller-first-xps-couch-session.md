@@ -45,6 +45,17 @@ reach the focused Moonlight window and be forwarded by the normal streaming
 input path. Keep the normal desktop session as a separately persisted boot
 mode.
 
+Keep a compact keyboard escape hatch aligned with the normal workstation
+bindings: open a terminal, create a fresh browser window, manage fullscreen and
+floating windows, navigate or move between the stream and browser workspaces,
+and control audio directly through PipeWire. DMS-specific shortcuts remain out
+of couch mode because DMS is not part of that session.
+
+KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
+XWayland clients, but its pointer warp does not move Hyprland's compositor
+cursor. While KDE Connect is enabled, mirror changed XWayland root-pointer
+coordinates into Hyprland and keep the couch cursor visible.
+
 Use Chromium's basic password store for the isolated couch browser profiles.
 Passwordless graphical auto-login cannot unlock the normal login keyring, and
 an unlock dialog is unacceptable in a controller-first session. The normal

@@ -178,6 +178,22 @@
     '';
   };
 
+  couchBrowserNewWindow = pkgs.writeShellApplication {
+    name = "couch-browser-new-window";
+    text = ''
+      exec ${lib.getExe couchBrowser} --new-window "$@"
+    '';
+  };
+
+  couchTerminal = pkgs.writeShellApplication {
+    name = "couch-terminal";
+    runtimeInputs = [pkgs.hyprland];
+    text = ''
+      hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+      exec ${lib.getExe cfg.terminalPackage}
+    '';
+  };
+
   couchFallbackBrowser = lib.optionalAttrs (cfg.fallbackBrowserPackage != null) {
     package = pkgs.writeShellApplication {
       name = "couch-browser-fallback";
@@ -348,6 +364,87 @@
     '';
   };
 
+  pointerSyncSource = pkgs.writeText "couch-pointer-sync.py" ''
+    import ctypes
+    import subprocess
+    import time
+
+
+    x11 = ctypes.CDLL(${builtins.toJSON "${pkgs.libx11}/lib/libX11.so.6"})
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+    x11.XDefaultRootWindow.restype = ctypes.c_ulong
+    x11.XQueryPointer.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_uint),
+    ]
+    x11.XQueryPointer.restype = ctypes.c_int
+
+
+    display = None
+    while not display:
+        display = x11.XOpenDisplay(b":0")
+        if not display:
+            time.sleep(0.5)
+
+    root = x11.XDefaultRootWindow(display)
+    last_position = None
+
+    while True:
+        root_return = ctypes.c_ulong()
+        child_return = ctypes.c_ulong()
+        root_x = ctypes.c_int()
+        root_y = ctypes.c_int()
+        window_x = ctypes.c_int()
+        window_y = ctypes.c_int()
+        mask = ctypes.c_uint()
+
+        if x11.XQueryPointer(
+            display,
+            root,
+            ctypes.byref(root_return),
+            ctypes.byref(child_return),
+            ctypes.byref(root_x),
+            ctypes.byref(root_y),
+            ctypes.byref(window_x),
+            ctypes.byref(window_y),
+            ctypes.byref(mask),
+        ):
+            position = (root_x.value, root_y.value)
+            if position != last_position:
+                subprocess.run(
+                    [
+                        ${builtins.toJSON (lib.getExe' pkgs.hyprland "hyprctl")},
+                        "dispatch",
+                        "movecursor",
+                        str(position[0]),
+                        str(position[1]),
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                last_position = position
+
+        time.sleep(1 / 60)
+  '';
+
+  pointerSync = pkgs.writeShellApplication {
+    name = "couch-pointer-sync";
+    text = ''
+      exec ${pkgs.python3}/bin/python ${pointerSyncSource}
+    '';
+  };
+
   dmsSession = pkgs.writeShellApplication {
     name = "couch-dms";
     text = ''
@@ -460,6 +557,7 @@
     # couch browsers on XWayland so its phone keyboard and touchpad can inject
     # input through XTest instead.
     ${lib.optionalString cfg.enableKdeConnect "exec-once = ${pkgs.coreutils}/bin/env QT_QPA_PLATFORM=xcb ${lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd"}"}
+    ${lib.optionalString cfg.enableKdeConnect "exec-once = ${lib.getExe pointerSync}"}
     ${lib.optionalString cfg.enableDms "exec-once = ${lib.getExe dmsSession}"}
 
     input {
@@ -496,7 +594,7 @@
     }
 
     cursor {
-      inactive_timeout = 3
+      inactive_timeout = 0
     }
 
     windowrule = match:class com.moonlight_stream.Moonlight, fullscreen true
@@ -509,10 +607,33 @@
       else "bind = SUPER, M, workspace, 1"
     }
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
+    bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}
+    bind = ALT, RETURN, exec, ${lib.getExe couchTerminal}
     ${lib.optionalString cfg.enableDms "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
     bind = SUPER, W, killactive
+    bind = SUPER, RETURN, fullscreen
+    bind = SUPER, S, togglefloating
+
+    bind = SUPER, J, workspace, r-1
+    bind = SUPER, K, workspace, r+1
+    bind = SUPER, down, workspace, r-1
+    bind = SUPER, up, workspace, r+1
+    bind = SUPER, TAB, workspace, previous
+
+    bind = SUPER SHIFT, J, movetoworkspace, r-1
+    bind = SUPER SHIFT, K, movetoworkspace, r+1
+    bind = SUPER SHIFT, down, movetoworkspace, r-1
+    bind = SUPER SHIFT, up, movetoworkspace, r+1
+
+    bindel = , XF86AudioRaiseVolume, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%+
+    bindel = , XF86AudioLowerVolume, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%-
+    bindl = , XF86AudioMute, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-mute @DEFAULT_AUDIO_SINK@ toggle
+    bindel = , F10, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%+
+    bindel = , F9, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%-
+    bindl = , F8, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-mute @DEFAULT_AUDIO_SINK@ toggle
 
     # Emergency exit back to greetd if the couch session cannot be closed normally.
+    bind = SUPER SHIFT, escape, exit
     bind = SUPER SHIFT, Q, exit
   '';
 
@@ -667,6 +788,13 @@ in {
       description = "Browser package used by the couch browser launcher.";
     };
 
+    terminalPackage = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.foot;
+      defaultText = lib.literalExpression "pkgs.foot";
+      description = "Terminal package opened by the couch-session terminal shortcut.";
+    };
+
     browserProfileDirectory = lib.mkOption {
       type = lib.types.str;
       default = "helium-couch";
@@ -734,12 +862,16 @@ in {
       [
         cfg.package
         cfg.browserPackage
+        cfg.terminalPackage
         couchBrowser
+        couchBrowserNewWindow
+        couchTerminal
         couchApplications
         couchStreamControl
         moonlightStreamStart
       ]
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
+      ++ lib.optional cfg.enableKdeConnect pointerSync
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
       ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
