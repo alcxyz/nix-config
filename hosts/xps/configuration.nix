@@ -75,6 +75,7 @@ in {
     defaultSessionMode = "couch";
     disableInternalDisplay = true;
     enableDms = true;
+    dmsKioskMode = true;
     enableKdeConnect = true;
     outputMode = "2560x1440@60";
     fallbackOutputMode = "1920x1080@60";
