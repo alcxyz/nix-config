@@ -396,12 +396,6 @@ in {
       description = "Start DMS from the user's Home Manager profile in the dedicated session.";
     };
 
-    enableBluetoothControllerReconnect = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Continuously reconnect paired and trusted Bluetooth game controllers.";
-    };
-
     enableKdeConnect = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -494,46 +488,6 @@ in {
     hardware.steam-hardware.enable = true;
 
     programs.kdeconnect.enable = cfg.enableKdeConnect;
-
-    systemd.services.moonlight-controller-reconnect = lib.mkIf cfg.enableBluetoothControllerReconnect {
-      description = "Reconnect trusted Bluetooth game controllers";
-      after = ["bluetooth.service"];
-      wants = ["bluetooth.service"];
-      wantedBy = ["multi-user.target"];
-      path = [
-        pkgs.coreutils
-        pkgs.gnugrep
-        pkgs.systemd
-      ];
-      serviceConfig = {
-        Restart = "always";
-        RestartSec = "5s";
-      };
-      script = ''
-        prop() {
-          busctl get-property org.bluez "$1" org.bluez.Device1 "$2" 2>/dev/null || true
-        }
-
-        while true; do
-          while read -r device; do
-            [ "$(prop "$device" Icon)" = 's "input-gaming"' ] || continue
-            [ "$(prop "$device" Paired)" = "b true" ] || continue
-            [ "$(prop "$device" Trusted)" = "b true" ] || continue
-            [ "$(prop "$device" Connected)" = "b false" ] || continue
-
-            busctl --timeout=5s call \
-              org.bluez "$device" org.bluez.Device1 Connect \
-              >/dev/null 2>&1 || true
-          done < <(
-            busctl tree --list org.bluez \
-              | grep -E '^/org/bluez/hci[0-9]+/dev_[^/]+$' \
-              || true
-          )
-
-          sleep 5
-        done
-      '';
-    };
 
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
       command =
