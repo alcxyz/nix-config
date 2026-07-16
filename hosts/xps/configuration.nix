@@ -74,14 +74,34 @@ in {
     desktopSessionCommand = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
     defaultSessionMode = "couch";
     disableInternalDisplay = true;
-    enableDms = true;
-    dmsKioskMode = true;
+    enableBluetoothControllerReconnect = true;
+    enableDms = false;
     enableKdeConnect = true;
     outputMode = "2560x1440@60";
     fallbackOutputMode = "1920x1080@60";
     outputScale = 1.0;
     preferHdmiAudio = true;
     relaunchOnExit = true;
+    streamHost = "SteamHeadless";
+    streamApplication = "Steam Big Picture";
+    streamArguments = [
+      "--1440"
+      "--fps"
+      "60"
+      "--bitrate"
+      "40000"
+      "--display-mode"
+      "fullscreen"
+      "--audio-config"
+      "stereo"
+      "--video-codec"
+      "HEVC"
+      "--video-decoder"
+      "hardware"
+      "--no-hdr"
+      "--frame-pacing"
+      "--swap-gamepad-buttons"
+    ];
   };
 
   systemd.services.greetd.serviceConfig = {
