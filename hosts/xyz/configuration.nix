@@ -397,6 +397,7 @@ in {
   ];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
+  boot.zfs.forceImportRoot = false;
   swapDevices = lib.mkForce [
     {
       device = "/dev/disk/by-partlabel/xyz-swap";
