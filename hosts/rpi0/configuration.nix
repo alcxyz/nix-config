@@ -88,6 +88,10 @@
 
   systemd.services.dns-time-bootstrap = {
     description = "Wait for DNS-independent network time";
+    # A failed dependency job is not retried when this restarting oneshot
+    # eventually succeeds. Explicitly enqueue Pi-hole on success; its existing
+    # requirement pulls in Unbound and preserves the intended start ordering.
+    unitConfig.OnSuccess = ["pihole-ftl.service"];
     after = [
       "network-online.target"
       "systemd-timesyncd.service"
