@@ -51,6 +51,13 @@ in {
       ];
       publicKey = sshKeys.keys.xev_host_ed25519;
     };
+    nex = {
+      hostNames = [
+        "nex"
+        "192.168.1.16"
+      ];
+      publicKey = sshKeys.keys.nex_host_ed25519;
+    };
   };
 
   nix = {
