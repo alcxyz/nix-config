@@ -99,13 +99,20 @@ in {
     ];
   };
 
+  # The target 1 TB NVMe deliberately shares its root filesystem with
+  # Longhorn. The bind mount distinguishes intentional root-backed storage
+  # from an accidental ordinary directory at /var/lib/longhorn and lets the
+  # fail-closed storage guard remain authoritative.
+  system.activationScripts.longhornDataDirectory.text = ''
+    install -d -m 0755 /var/lib/longhorn-data
+  '';
+
   fileSystems."/var/lib/longhorn" = {
-    device = "/dev/disk/by-label/nux-longhorn";
-    fsType = "ext4";
+    device = "/var/lib/longhorn-data";
+    fsType = "none";
     options = [
+      "bind"
       "nofail"
-      "x-systemd.device-timeout=30s"
-      "x-systemd.mount-timeout=30s"
     ];
   };
 

@@ -4,11 +4,52 @@
   lib,
   pkgs,
   ...
-}: let
+}:
+let
   host = config.networking.hostName;
   cfg = config.alc.longhornPrereqs;
-  storagePath = lib.escapeShellArg cfg.storagePath;
-in {
+  storageTargets = [
+    {
+      path = cfg.storagePath;
+      mountUnit = cfg.storageMountUnit;
+    }
+  ]
+  ++ cfg.additionalStorageTargets;
+  storageMountUnits = lib.unique (
+    lib.filter (unit: unit != null) (map (target: target.mountUnit) storageTargets)
+  );
+  guardStorageTargets = lib.concatImapStringsSep "\n" (
+    index: target:
+    let
+      storagePath = lib.escapeShellArg target.path;
+      fallback = "$RUNTIME_DIRECTORY/empty-${toString index}";
+      marker = "$RUNTIME_DIRECTORY/fallback-${toString index}-mounted";
+    in
+    ''
+      install -d -m 0755 ${storagePath}
+      install -d -m 0755 "${fallback}"
+
+      if ! mountpoint --quiet ${storagePath}; then
+        mount --bind "${fallback}" ${storagePath}
+        mount --options remount,bind,ro ${storagePath}
+        touch "${marker}"
+      fi
+    ''
+  ) storageTargets;
+  unguardStorageTargets = lib.concatImapStringsSep "\n" (
+    index: target:
+    let
+      storagePath = lib.escapeShellArg target.path;
+      marker = "$RUNTIME_DIRECTORY/fallback-${toString index}-mounted";
+    in
+    ''
+      if test -e "${marker}"; then
+        umount ${storagePath}
+      fi
+    ''
+  ) storageTargets;
+in
+{
   options.alc.longhornPrereqs = {
     storagePath = lib.mkOption {
       type = lib.types.str;
@@ -21,10 +62,30 @@ in {
       default = null;
       description = "Optional systemd mount unit to attempt before protecting the Longhorn storage path.";
     };
+
+    additionalStorageTargets = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            path = lib.mkOption {
+              type = lib.types.str;
+              description = "Additional host path used by Longhorn for replica storage.";
+            };
+            mountUnit = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Optional systemd mount unit for the additional Longhorn storage path.";
+            };
+          };
+        }
+      );
+      default = [ ];
+      description = "Additional Longhorn storage paths protected against accidental root-filesystem use.";
+    };
   };
 
   config = {
-    boot.kernelModules = ["dm_crypt"];
+    boot.kernelModules = [ "dm_crypt" ];
 
     services.openiscsi = {
       enable = true;
@@ -60,11 +121,9 @@ in {
     # directory over the storage path and remount it read-only before k3s starts.
     systemd.services.longhorn-storage-guard = {
       description = "Protect an unavailable Longhorn storage path";
-      before = ["k3s.service"];
-      after =
-        ["local-fs.target"]
-        ++ lib.optional (cfg.storageMountUnit != null) cfg.storageMountUnit;
-      wants = lib.optional (cfg.storageMountUnit != null) cfg.storageMountUnit;
+      before = [ "k3s.service" ];
+      after = [ "local-fs.target" ] ++ storageMountUnits;
+      wants = storageMountUnits;
       path = [
         pkgs.coreutils
         pkgs.util-linux
@@ -75,27 +134,16 @@ in {
         RuntimeDirectory = "longhorn-storage-guard";
       };
       script = ''
-        install -d -m 0755 ${storagePath}
-        install -d -m 0755 "$RUNTIME_DIRECTORY/empty"
-
-        if mountpoint --quiet ${storagePath}; then
-          exit 0
-        fi
-
-        mount --bind "$RUNTIME_DIRECTORY/empty" ${storagePath}
-        mount --options remount,bind,ro ${storagePath}
-        touch "$RUNTIME_DIRECTORY/fallback-mounted"
+        ${guardStorageTargets}
       '';
       preStop = ''
-        if test -e "$RUNTIME_DIRECTORY/fallback-mounted"; then
-          umount ${storagePath}
-        fi
+        ${unguardStorageTargets}
       '';
     };
 
     systemd.services.k3s = {
-      requires = ["longhorn-storage-guard.service"];
-      after = ["longhorn-storage-guard.service"];
+      requires = [ "longhorn-storage-guard.service" ];
+      after = [ "longhorn-storage-guard.service" ];
     };
 
     assertions = [
