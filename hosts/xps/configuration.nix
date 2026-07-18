@@ -92,6 +92,8 @@ in {
     outputMode = "2560x1440@60";
     fallbackOutputMode = "1920x1080@60";
     outputScale = 1.0;
+    mirrorOutputs.DP-9 = "DP-5";
+    mirrorOutputMode = "1920x1080@60";
     preferHdmiAudio = true;
     relaunchOnExit = false;
     streamHost = "SteamHeadless";

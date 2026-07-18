@@ -10,6 +10,11 @@
   modeStateDirectory = "/var/lib/moonlight-client";
   modeStateFile = "${modeStateDirectory}/session-mode";
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
+  mirrorOutputMode =
+    if cfg.mirrorOutputMode == null
+    then cfg.outputMode
+    else cfg.mirrorOutputMode;
+  mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
   moonlightInvocation =
     if directStreamEnabled
     then
@@ -540,6 +545,18 @@
 
   hyprlandConfig = pkgs.writeText "moonlight-hyprland.conf" ''
     monitor = , ${cfg.outputMode}, auto, ${toString cfg.outputScale}
+    ${lib.concatMapStringsSep "\n" (
+      output:
+        "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}"
+    )
+    mirrorSourceOutputs}
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        output: source:
+          "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}, mirror, ${source}"
+      )
+      cfg.mirrorOutputs
+    )}
     ${lib.optionalString cfg.disableInternalDisplay ''
       monitor = eDP-1, disable
       monitor = LVDS-1, disable
@@ -844,6 +861,21 @@ in {
       description = "Hyprland mode used for the Moonlight display.";
     };
 
+    mirrorOutputs = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = {};
+      example = {
+        "DP-2" = "DP-1";
+      };
+      description = "External outputs to mirror, expressed as target-to-source connector mappings.";
+    };
+
+    mirrorOutputMode = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Shared mode for mirrored outputs, or null to use outputMode.";
+    };
+
     fallbackOutputMode = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -942,6 +974,10 @@ in {
       {
         assertion = cfg.controllerHoldSeconds > 0.0;
         message = "services.moonlight-client.controllerHoldSeconds must be positive";
+      }
+      {
+        assertion = lib.all (output: output != cfg.mirrorOutputs.${output}) (lib.attrNames cfg.mirrorOutputs);
+        message = "services.moonlight-client.mirrorOutputs cannot mirror an output to itself";
       }
     ];
   };
