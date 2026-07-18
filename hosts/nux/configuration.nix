@@ -90,8 +90,10 @@ in {
 
   k3s = {
     enable = true;
-    clusterInit = true;
     nodeIp = "192.168.1.15";
+    # nex is the retained authoritative member during nux root replacement.
+    # A clean nux must join it, never initialize an independent etcd cluster.
+    serverAddr = "https://192.168.1.16:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
     tlsSans = [
       "k8s-api.local"
@@ -173,6 +175,17 @@ in {
       "network-online.target"
       "time-sync.target"
     ];
+  };
+
+  # Pi-hole and UniFi also persist timestamps and certificates.  On a clean
+  # install they must not start while the RTC still reports a historical date.
+  systemd.services.pihole-ftl = {
+    requires = ["k3s-clock-sanity.service"];
+    after = ["k3s-clock-sanity.service"];
+  };
+  systemd.services.unifi = {
+    requires = ["k3s-clock-sanity.service"];
+    after = ["k3s-clock-sanity.service"];
   };
 
   services.pihole-native = {

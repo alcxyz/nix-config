@@ -9,7 +9,8 @@
   configDir,
   lib,
   ...
-}: let
+}:
+let
   zfsKernelPkgs = import inputs.nixpkgs-zfs-master {
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
@@ -164,8 +165,8 @@
   '';
   mkLocalBackupService = backupName: description: {
     inherit description;
-    after = ["zfs-mount.service"];
-    requires = ["zfs-mount.service"];
+    after = [ "zfs-mount.service" ];
+    requires = [ "zfs-mount.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${localBackup}/bin/xyz-local-backup ${backupName}";
@@ -174,7 +175,7 @@
   };
   mkLocalBackupTimer = onCalendar: description: {
     inherit description;
-    wantedBy = ["timers.target"];
+    wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = onCalendar;
       Persistent = false;
@@ -228,7 +229,8 @@
     chown root:media "$mountpoint"
     chmod 0770 "$mountpoint"
   '';
-in {
+in
+{
   imports = [
     ./hardware-configuration.nix
 
@@ -266,8 +268,8 @@ in {
   # track linuxPackages_latest unless the full system evaluates cleanly.
   boot.kernelPackages = zfsKernelPkgs.linuxPackages;
   boot.zfs.package = zfsKernelPkgs.zfs;
-  boot.binfmt.emulatedSystems = ["aarch64-linux"];
-  boot.kernelParams = ["usbcore.autosuspend=-1"];
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+  boot.kernelParams = [ "usbcore.autosuspend=-1" ];
   boot.extraModprobeConfig = ''
     options btusb reset=1 enable_autosuspend=0
     options mt7925e disable_aspm=1
@@ -275,9 +277,9 @@ in {
 
   systemd.services.bluetooth-keyboard-reconnect = {
     description = "Reconnect trusted Bluetooth keyboards";
-    after = ["bluetooth.service"];
-    wants = ["bluetooth.service"];
-    wantedBy = ["multi-user.target"];
+    after = [ "bluetooth.service" ];
+    wants = [ "bluetooth.service" ];
+    wantedBy = [ "multi-user.target" ];
     path = [
       pkgs.coreutils
       pkgs.gnugrep
@@ -312,7 +314,7 @@ in {
   };
 
   # ---- Nix Settings ----
-  nix.settings.secret-key-files = ["/etc/nix/signing-key"];
+  nix.settings.secret-key-files = [ "/etc/nix/signing-key" ];
   # Allow this host to build for remote machines via SSH
   nix.settings.allowed-uris = [
     "ssh-ng://*"
@@ -363,7 +365,7 @@ in {
           > /var/lib/AccountsService/users/${username}
       fi
     '';
-    deps = [];
+    deps = [ ];
   };
 
   users.users.media = {
@@ -395,54 +397,54 @@ in {
     gamesDatasetPrepare
     zfsKernelPkgs.zfs
   ];
-  boot.supportedFilesystems = ["zfs"];
+  boot.supportedFilesystems = [ "zfs" ];
   boot.zfs.devNodes = "/dev/disk/by-id";
   boot.zfs.forceImportRoot = false;
   swapDevices = lib.mkForce [
     {
       device = "/dev/disk/by-partlabel/xyz-swap";
       randomEncryption.enable = true;
-      options = ["nofail"];
+      options = [ "nofail" ];
     }
   ];
 
   fileSystems."/var/lib/calibre" = {
     device = appStateDatasets.calibre;
     fsType = "zfs";
-    options = ["nofail"];
+    options = [ "nofail" ];
   };
   fileSystems."/var/lib/calibre-web" = {
     device = appStateDatasets.calibre-web;
     fsType = "zfs";
-    options = ["nofail"];
+    options = [ "nofail" ];
   };
   fileSystems."/var/lib/plex" = {
     device = appStateDatasets.plex;
     fsType = "zfs";
-    options = ["nofail"];
+    options = [ "nofail" ];
   };
   fileSystems."/var/lib/qbittorrent" = {
     device = appStateDatasets.qbittorrent;
     fsType = "zfs";
-    options = ["nofail"];
+    options = [ "nofail" ];
   };
   fileSystems."/var/lib/stash" = {
     device = appStateDatasets.stash;
     fsType = "zfs";
-    options = ["nofail"];
+    options = [ "nofail" ];
   };
   fileSystems."/var/lib/steam-headless" = {
     device = appStateDatasets.steam-headless;
     fsType = "zfs";
-    options = ["nofail"];
+    options = [ "nofail" ];
   };
 
   # Disable discard/trim timers on this storage stack. A hard hang on 2026-05-18
   # coincided with fstrim starting, and the post-reset boot left tank import
   # blocked until manual recovery.
   services.fstrim.enable = lib.mkForce false;
-  systemd.timers.fstrim.wantedBy = lib.mkForce [];
-  systemd.timers.zpool-trim.wantedBy = lib.mkForce [];
+  systemd.timers.fstrim.wantedBy = lib.mkForce [ ];
+  systemd.timers.zpool-trim.wantedBy = lib.mkForce [ ];
   systemd.timers.fstrim.timerConfig = {
     OnCalendar = lib.mkForce "Sat *-*-* 05:00:00";
     Persistent = lib.mkForce false;
@@ -470,27 +472,18 @@ in {
     RandomizedDelaySec = lib.mkForce "0";
   };
 
-  systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
-  systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
+  systemd.services."zfs-mount".after = [ "zfs-auto-unlock.service" ];
+  systemd.services."zfs-mount".requires = [ "zfs-auto-unlock.service" ];
 
-  systemd.services.xyz-appstate-backup =
-    mkLocalBackupService
-    "appstate"
-    "Replicate xyz appstate datasets to the local backup pool";
-  systemd.services.xyz-k8s-backup =
-    mkLocalBackupService
-    "k8s"
-    "Replicate xyz k8s backup dataset to the local backup pool";
-  systemd.services.xyz-home-backup =
-    mkLocalBackupService
-    "home"
-    "Replicate xyz home dataset to the local backup pool";
+  systemd.services.xyz-appstate-backup = mkLocalBackupService "appstate" "Replicate xyz appstate datasets to the local backup pool";
+  systemd.services.xyz-k8s-backup = mkLocalBackupService "k8s" "Replicate xyz k8s backup dataset to the local backup pool";
+  systemd.services.xyz-home-backup = mkLocalBackupService "home" "Replicate xyz home dataset to the local backup pool";
 
   systemd.services.xyz-games-dataset = {
     description = "Prepare xyz games dataset on hitachi";
-    after = ["zfs-mount.service"];
-    requires = ["zfs-mount.service"];
-    wantedBy = ["multi-user.target"];
+    after = [ "zfs-mount.service" ];
+    requires = [ "zfs-mount.service" ];
+    wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -498,18 +491,9 @@ in {
     };
   };
 
-  systemd.timers.xyz-appstate-backup =
-    mkLocalBackupTimer
-    "*-*-* 05:20:00"
-    "Daily xyz appstate backup";
-  systemd.timers.xyz-k8s-backup =
-    mkLocalBackupTimer
-    "*-*-* 05:35:00"
-    "Daily xyz k8s backup replication";
-  systemd.timers.xyz-home-backup =
-    mkLocalBackupTimer
-    "*-*-* 05:50:00"
-    "Daily xyz home backup";
+  systemd.timers.xyz-appstate-backup = mkLocalBackupTimer "*-*-* 05:20:00" "Daily xyz appstate backup";
+  systemd.timers.xyz-k8s-backup = mkLocalBackupTimer "*-*-* 06:45:00" "Daily xyz k8s backup replication";
+  systemd.timers.xyz-home-backup = mkLocalBackupTimer "*-*-* 05:50:00" "Daily xyz home backup";
 
   # Docker - ZFS relationship
 
@@ -526,10 +510,38 @@ in {
     ];
   };
 
+  # xyz provides host-level services on 192.168.1.10. The replacement-system
+  # boot exposed that this address previously depended on an implicit DHCP
+  # lease: NetworkManager accepted 192.168.1.200 while RustFS remained bound to
+  # the now-unassigned service address. Keep the host identity declarative and
+  # tied to the physical Ethernet adapter.
+  networking.networkmanager = {
+    settings.main.no-auto-default = "9c:6b:00:7e:74:65";
+    ensureProfiles.profiles.xyz-wired = {
+      connection = {
+        id = "xyz-wired";
+        uuid = "8e724127-a8d6-3154-a8a3-66a91da6c626";
+        type = "ethernet";
+        interface-name = "enp8s0";
+        autoconnect = true;
+        autoconnect-priority = 100;
+      };
+      ethernet.mac-address = "9c:6b:00:7e:74:65";
+      ipv4 = {
+        method = "manual";
+        addresses = "192.168.1.10/24";
+        gateway = "192.168.1.1";
+        dns = "192.168.1.15;192.168.1.3;";
+        dns-search = "local;";
+      };
+      ipv6.method = "auto";
+    };
+  };
+
   # ==================== Services ====================
   services.printing = {
     enable = true;
-    drivers = [pkgs.hplipWithPlugin];
+    drivers = [ pkgs.hplipWithPlugin ];
   };
 
   services.torrent.enable = true;
@@ -558,16 +570,16 @@ in {
     ];
   };
   systemd.services.plex = {
-    requires = ["var-lib-plex.mount"];
-    after = ["var-lib-plex.mount"];
+    requires = [ "var-lib-plex.mount" ];
+    after = [ "var-lib-plex.mount" ];
   };
   systemd.services.qbittorrent = {
-    requires = ["var-lib-qbittorrent.mount"];
-    after = ["var-lib-qbittorrent.mount"];
+    requires = [ "var-lib-qbittorrent.mount" ];
+    after = [ "var-lib-qbittorrent.mount" ];
   };
   systemd.services.stash = {
-    requires = ["var-lib-stash.mount"];
-    after = ["var-lib-stash.mount"];
+    requires = [ "var-lib-stash.mount" ];
+    after = [ "var-lib-stash.mount" ];
   };
 
   services.k8s-backup-s3 = {
@@ -579,6 +591,8 @@ in {
     consoleAddress = "127.0.0.1:9101";
     accessKeyFile = config.sops.secrets.k8s_backup_s3_root_user.path;
     secretKeyFile = config.sops.secrets.k8s_backup_s3_root_password.path;
+    mirrorSourceEndpoint = "http://192.168.1.13:9200";
+    mirrorSchedule = "*-*-* 06:10:00";
   };
 
   # NFS mount from nux — shared directory for paperless-ingest and future services
@@ -602,29 +616,29 @@ in {
     ];
     shares = [
       # Home directories
-      {path = "/home/alc/Documents";}
-      {path = "/home/alc/Downloads";}
-      {path = "/home/alc/Pictures";}
-      {path = "/home/alc/Music";}
-      {path = "/home/alc/Cloud";}
-      {path = "/home/alc/Public";}
+      { path = "/home/alc/Documents"; }
+      { path = "/home/alc/Downloads"; }
+      { path = "/home/alc/Pictures"; }
+      { path = "/home/alc/Music"; }
+      { path = "/home/alc/Cloud"; }
+      { path = "/home/alc/Public"; }
       # Paperless consumption
-      {path = "/home/alc/paperless-ingest";}
+      { path = "/home/alc/paperless-ingest"; }
       # Shared state for gitops tools (tokens, cross-host config)
-      {path = "/home/alc/.local/share/gitops-state";}
+      { path = "/home/alc/.local/share/gitops-state"; }
       # ZFS datasets
-      {path = "/tank/media";}
+      { path = "/tank/media"; }
       {
         path = "/tank/stash";
         anongid = config.users.groups.media.gid;
       }
-      {path = "/tank/downloads";}
-      {path = "/tank/games";}
+      { path = "/tank/downloads"; }
+      { path = "/tank/games"; }
       {
         path = "/tank/vault";
         anonuid = 65534;
         anongid = 65534;
-        allowedClients = ["192.168.1.0/24"];
+        allowedClients = [ "192.168.1.0/24" ];
       }
     ];
   };
@@ -652,10 +666,10 @@ in {
     tokenFile = config.sops.secrets.k3s_server_token.path;
   };
 
-  networking.hosts."192.168.1.250" = ["k8s-api.local"];
+  networking.hosts."192.168.1.250" = [ "k8s-api.local" ];
 
   # t3code server — reachable via Netbird and the k8s oauth2-proxy route.
-  networking.firewall.interfaces."wt0".allowedTCPPorts = [3773];
+  networking.firewall.interfaces."wt0".allowedTCPPorts = [ 3773 ];
   networking.firewall.extraCommands = lib.mkAfter ''
     iptables -A nixos-fw -p tcp --dport 3773 -s 10.42.0.0/16 -j nixos-fw-accept
     iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.13 -j nixos-fw-accept
@@ -704,7 +718,7 @@ in {
     gpuContainerStacks = [
       "/home/alc/src/infra/gitops/docker/xyz/steam"
     ];
-    gpuSystemdServices = ["stash.service"];
+    gpuSystemdServices = [ "stash.service" ];
   };
 
   # ==================== Gaming ====================
