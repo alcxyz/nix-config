@@ -589,6 +589,10 @@ in
     quota = "1T";
     apiAddress = "192.168.1.10:9100";
     consoleAddress = "127.0.0.1:9101";
+    # Preserve the existing RustFS group ownership of the ZFS object tree.
+    # Changing this during the role reversal would require an unnecessary
+    # recursive metadata rewrite across the backup dataset.
+    serviceGid = 986;
     accessKeyFile = config.sops.secrets.k8s_backup_s3_root_user.path;
     secretKeyFile = config.sops.secrets.k8s_backup_s3_root_password.path;
     mirrorSourceEndpoint = "http://192.168.1.13:9200";
