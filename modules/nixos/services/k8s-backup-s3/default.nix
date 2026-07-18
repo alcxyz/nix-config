@@ -4,12 +4,32 @@
   lib,
   pkgs,
   ...
-}: let
+}:
+let
   cfg = config.services.k8s-backup-s3;
   rustfsPackage = inputs.rustfs.packages.${pkgs.stdenv.hostPlatform.system}.default;
-in {
+  localEndpoint = "http://${cfg.apiAddress}";
+  mirrorEnabled = cfg.mirrorSourceEndpoint != null;
+  apiPort = lib.toInt (lib.last (lib.splitString ":" cfg.apiAddress));
+in
+{
   options.services.k8s-backup-s3 = {
     enable = lib.mkEnableOption "host-level RustFS S3 target for Kubernetes backups";
+
+    storageMode = lib.mkOption {
+      type = lib.types.enum [
+        "zfs"
+        "mounted-filesystem"
+      ];
+      default = "zfs";
+      description = "Whether the object directory is prepared as ZFS or lives on an existing dedicated mount.";
+    };
+
+    storageUnit = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Systemd mount unit required when storageMode is mounted-filesystem.";
+    };
 
     dataset = lib.mkOption {
       type = lib.types.str;
@@ -51,6 +71,42 @@ in {
       description = "Secret file containing the RustFS secret key.";
     };
 
+    serviceUser = lib.mkOption {
+      type = lib.types.str;
+      default = "rustfs";
+      description = "Local system user that owns and serves the object tree.";
+    };
+
+    serviceGroup = lib.mkOption {
+      type = lib.types.str;
+      default = "rustfs";
+      description = "Local system group that owns and serves the object tree.";
+    };
+
+    serviceUid = lib.mkOption {
+      type = lib.types.int;
+      default = 10001;
+      description = "Stable numeric UID for the RustFS service user.";
+    };
+
+    serviceGid = lib.mkOption {
+      type = lib.types.int;
+      default = 10001;
+      description = "Stable numeric GID for the RustFS service group.";
+    };
+
+    mirrorSourceEndpoint = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional authoritative S3 endpoint to mirror into this target.";
+    };
+
+    mirrorSchedule = lib.mkOption {
+      type = lib.types.str;
+      default = "*-*-* 06:10:00";
+      description = "Calendar schedule for mirroring the authoritative target.";
+    };
+
     openFirewall = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -59,70 +115,127 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [rustfsPackage];
+    assertions = [
+      {
+        assertion = cfg.storageMode != "mounted-filesystem" || cfg.storageUnit != null;
+        message = "services.k8s-backup-s3.storageUnit is required for mounted-filesystem storage.";
+      }
+      {
+        assertion = cfg.mirrorSourceEndpoint == null || cfg.mirrorSourceEndpoint != localEndpoint;
+        message = "The Kubernetes backup source and local S3 endpoints must differ.";
+      }
+    ];
 
-    users.users.rustfs = {
+    environment.systemPackages = [
+      pkgs.minio-client
+      rustfsPackage
+    ];
+
+    users.users.${cfg.serviceUser} = {
       isSystemUser = true;
-      uid = 10001;
-      group = "rustfs";
+      uid = cfg.serviceUid;
+      group = cfg.serviceGroup;
       home = cfg.dataDir;
     };
-    users.groups.rustfs = {};
+    users.groups.${cfg.serviceGroup}.gid = cfg.serviceGid;
 
-    systemd.services.k8s-backup-s3-dataset = {
-      description = "Prepare quota-limited ZFS dataset for k8s backups";
-      after = [
-        "zfs-auto-unlock.service"
-        "zfs-mount.service"
-      ];
-      requires = [
-        "zfs-auto-unlock.service"
-        "zfs-mount.service"
-      ];
-      before = ["k8s-backup-rustfs.service"];
-      requiredBy = ["k8s-backup-rustfs.service"];
-      path = [
-        pkgs.coreutils
-        pkgs.zfs
-      ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-      };
-      script = ''
-        set -euo pipefail
+    systemd.services.k8s-backup-s3-storage =
+      if cfg.storageMode == "zfs" then
+        {
+          description = "Prepare quota-limited ZFS dataset for k8s backups";
+          after = [
+            "zfs-auto-unlock.service"
+            "zfs-mount.service"
+          ];
+          requires = [
+            "zfs-auto-unlock.service"
+            "zfs-mount.service"
+          ];
+          before = [ "k8s-backup-rustfs.service" ];
+          requiredBy = [ "k8s-backup-rustfs.service" ];
+          path = [
+            pkgs.coreutils
+            pkgs.zfs
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
+          script = ''
+            set -euo pipefail
 
-        if ! zfs list -H ${lib.escapeShellArg cfg.dataset} >/dev/null 2>&1; then
-          zfs create \
-            -o mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} \
-            -o quota=${lib.escapeShellArg cfg.quota} \
-            -o compression=zstd \
-            -o atime=off \
-            ${lib.escapeShellArg cfg.dataset}
-        else
-          zfs set mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} ${lib.escapeShellArg cfg.dataset}
-          zfs set quota=${lib.escapeShellArg cfg.quota} ${lib.escapeShellArg cfg.dataset}
-          zfs set compression=zstd ${lib.escapeShellArg cfg.dataset}
-          zfs set atime=off ${lib.escapeShellArg cfg.dataset}
-        fi
+            if ! zfs list -H ${lib.escapeShellArg cfg.dataset} >/dev/null 2>&1; then
+              zfs create \
+                -o mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} \
+                -o quota=${lib.escapeShellArg cfg.quota} \
+                -o compression=zstd \
+                -o atime=off \
+                ${lib.escapeShellArg cfg.dataset}
+            else
+              zfs set mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} ${lib.escapeShellArg cfg.dataset}
+              zfs set quota=${lib.escapeShellArg cfg.quota} ${lib.escapeShellArg cfg.dataset}
+              zfs set compression=zstd ${lib.escapeShellArg cfg.dataset}
+              zfs set atime=off ${lib.escapeShellArg cfg.dataset}
+            fi
 
-        install -d -m 0750 -o rustfs -g rustfs ${lib.escapeShellArg (toString cfg.dataDir)}
-      '';
-    };
+            install -d -m 0750 \
+              -o ${lib.escapeShellArg cfg.serviceUser} \
+              -g ${lib.escapeShellArg cfg.serviceGroup} \
+              ${lib.escapeShellArg (toString cfg.dataDir)}
+          '';
+        }
+      else
+        {
+          description = "Validate the dedicated mounted filesystem for k8s backups";
+          after = [ cfg.storageUnit ];
+          requires = [ cfg.storageUnit ];
+          before = [ "k8s-backup-rustfs.service" ];
+          requiredBy = [ "k8s-backup-rustfs.service" ];
+          path = [
+            pkgs.coreutils
+            pkgs.findutils
+            pkgs.gnugrep
+            pkgs.util-linux
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
+          script = ''
+            set -euo pipefail
+
+            data=${lib.escapeShellArg (toString cfg.dataDir)}
+            root_source="$(findmnt -n -o SOURCE -T /)"
+            backup_source="$(findmnt -n -o SOURCE -T "$data")"
+            if [ "$root_source" = "$backup_source" ]; then
+              echo "$data is on the root filesystem; refusing to start the backup target" >&2
+              exit 1
+            fi
+
+            install -d -m 0750 \
+              -o ${lib.escapeShellArg cfg.serviceUser} \
+              -g ${lib.escapeShellArg cfg.serviceGroup} \
+              "$data"
+            if find "$data" -mindepth 1 -maxdepth 1 ! -user ${lib.escapeShellArg cfg.serviceUser} -print -quit | grep -q .; then
+              echo "$data contains objects not owned by ${cfg.serviceUser}; refusing an unsafe partial ownership change" >&2
+              exit 1
+            fi
+          '';
+        };
 
     systemd.services.k8s-backup-rustfs = {
       description = "RustFS backup target for Kubernetes";
-      wantedBy = ["multi-user.target"];
+      wantedBy = [ "multi-user.target" ];
       after = [
         "network-online.target"
-        "k8s-backup-s3-dataset.service"
+        "k8s-backup-s3-storage.service"
       ];
-      wants = ["network-online.target"];
-      requires = ["k8s-backup-s3-dataset.service"];
+      wants = [ "network-online.target" ];
+      requires = [ "k8s-backup-s3-storage.service" ];
       serviceConfig = {
         Type = "simple";
-        User = "rustfs";
-        Group = "rustfs";
+        User = cfg.serviceUser;
+        Group = cfg.serviceGroup;
         LoadCredential = [
           "rustfs_access_key:${cfg.accessKeyFile}"
           "rustfs_secret_key:${cfg.secretKeyFile}"
@@ -134,13 +247,111 @@ in {
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = true;
-        ReadWritePaths = [cfg.dataDir];
+        ReadWritePaths = [ cfg.dataDir ];
         StateDirectory = "k8s-backup-rustfs";
       };
     };
 
-    networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [
-      (lib.toInt (builtins.elemAt (lib.splitString ":" cfg.apiAddress) 1))
-    ];
+    systemd.services.k8s-backup-s3-mirror = lib.mkIf mirrorEnabled {
+      description = "Mirror and verify the authoritative Kubernetes S3 backups";
+      after = [
+        "network-online.target"
+        "k8s-backup-rustfs.service"
+      ];
+      wants = [ "network-online.target" ];
+      requires = [ "k8s-backup-rustfs.service" ];
+      path = [
+        pkgs.coreutils
+        pkgs.jq
+        pkgs.minio-client
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        LoadCredential = [
+          "s3_access_key:${cfg.accessKeyFile}"
+          "s3_secret_key:${cfg.secretKeyFile}"
+        ];
+        TimeoutStartSec = "12h";
+        Nice = 15;
+        IOSchedulingClass = "idle";
+        CPUSchedulingPolicy = "idle";
+      };
+      script = ''
+        set -euo pipefail
+        umask 077
+
+        MC_CONFIG_DIR="$(mktemp -d)"
+        export MC_CONFIG_DIR
+        trap 'rm -rf "$MC_CONFIG_DIR"' EXIT
+
+        import_alias() {
+          local name="$1"
+          local endpoint="$2"
+          local credential_json="$MC_CONFIG_DIR/$name.json"
+
+          jq -n \
+            --arg url "$endpoint" \
+            --rawfile access "$CREDENTIALS_DIRECTORY/s3_access_key" \
+            --rawfile secret "$CREDENTIALS_DIRECTORY/s3_secret_key" \
+            '{
+              url: $url,
+              accessKey: ($access | rtrimstr("\n")),
+              secretKey: ($secret | rtrimstr("\n")),
+              api: "s3v4",
+              path: "auto"
+            }' >"$credential_json"
+          mc alias import "$name" "$credential_json" >/dev/null
+          rm -f "$credential_json"
+        }
+
+        import_alias source ${lib.escapeShellArg cfg.mirrorSourceEndpoint}
+        import_alias replica ${lib.escapeShellArg localEndpoint}
+
+        for attempt in $(seq 1 30); do
+          if mc ls replica >/dev/null 2>&1; then
+            break
+          fi
+          if [ "$attempt" -eq 30 ]; then
+            echo "replica S3 endpoint did not become ready" >&2
+            exit 1
+          fi
+          sleep 2
+        done
+
+        mapfile -t buckets < <(mc ls --json source | jq -r 'select(.type == "folder") | .key | rtrimstr("/")')
+        if [ "''${#buckets[@]}" -eq 0 ]; then
+          echo "authoritative backup target contains no buckets; refusing an empty mirror" >&2
+          exit 1
+        fi
+
+        for bucket in "''${buckets[@]}"; do
+          mc mb --ignore-existing "replica/$bucket"
+          mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket"
+
+          source_stats="$(mc du --json "source/$bucket")"
+          replica_stats="$(mc du --json "replica/$bucket")"
+          source_size="$(jq -r '.size' <<<"$source_stats")"
+          replica_size="$(jq -r '.size' <<<"$replica_stats")"
+          source_objects="$(jq -r '.objects' <<<"$source_stats")"
+          replica_objects="$(jq -r '.objects' <<<"$replica_stats")"
+          if [ "$source_size" != "$replica_size" ] || [ "$source_objects" != "$replica_objects" ]; then
+            echo "replica verification failed for bucket $bucket: source=$source_size bytes/$source_objects objects replica=$replica_size bytes/$replica_objects objects" >&2
+            exit 1
+          fi
+        done
+      '';
+    };
+
+    systemd.timers.k8s-backup-s3-mirror = lib.mkIf mirrorEnabled {
+      description = "Daily independent replica of Kubernetes backups";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = cfg.mirrorSchedule;
+        Persistent = false;
+        RandomizedDelaySec = "0";
+      };
+    };
+
+    networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [ apiPort ];
   };
 }
