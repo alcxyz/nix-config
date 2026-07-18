@@ -51,10 +51,12 @@ floating windows, navigate or move between the stream and browser workspaces,
 and control audio directly through PipeWire. DMS-specific shortcuts remain out
 of couch mode because DMS is not part of that session.
 
-Allow couch-mode external outputs to declare target-to-source mirrors and a
-shared mode supported by every mirrored display. This lets a TV and a secondary
-display show the same workspace without extending the couch desktop or forcing
-an unstable custom timing.
+Allow both native target-to-source mirrors and supervised fullscreen software
+mirrors. Native mirroring is appropriate when every display shares a useful
+mode. A software mirror keeps the streaming TV at its preferred mode while a
+secondary display uses its own native mode and scale; relaunch the mirror after
+either output disconnects and returns. Pin stream and browser workspaces to the
+TV and reserve a separate secondary-output workspace for the mirror client.
 
 KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
 XWayland clients, but its pointer warp does not move Hyprland's compositor

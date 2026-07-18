@@ -92,8 +92,16 @@ in {
     outputMode = "2560x1440@60";
     fallbackOutputMode = "1920x1080@60";
     outputScale = 1.0;
-    mirrorOutputs.DP-9 = "DP-5";
-    mirrorOutputMode = "1920x1080@60";
+    extraMonitorRules = [
+      "DP-5, 2560x1440@60, 0x0, 1"
+      "DP-9, 3840x2160@30, 2560x0, 2"
+    ];
+    extraWorkspaceRules = [
+      "1, monitor:DP-5, default:true"
+      "2, monitor:DP-5"
+      "10, monitor:DP-9, default:true"
+    ];
+    softwareMirrorOutputs.DP-9 = "DP-5";
     preferHdmiAudio = true;
     relaunchOnExit = false;
     streamHost = "SteamHeadless";

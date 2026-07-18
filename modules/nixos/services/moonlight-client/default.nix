@@ -450,6 +450,33 @@
     '';
   };
 
+  softwareMirror = pkgs.writeShellApplication {
+    name = "couch-software-mirror";
+    runtimeInputs = [
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.wl-mirror
+    ];
+    text = ''
+      target="$1"
+      source="$2"
+
+      while true; do
+        monitors="$(hyprctl -j monitors 2>/dev/null || true)"
+        if jq -e --arg target "$target" --arg source "$source" \
+          'any(.[]; .name == $target) and any(.[]; .name == $source)' \
+          <<<"$monitors" >/dev/null 2>&1; then
+          wl-mirror \
+            --fullscreen-output "$target" \
+            --scaling fit \
+            --title "Couch mirror $source" \
+            "$source" || true
+        fi
+        sleep 2
+      done
+    '';
+  };
+
   dmsSession = pkgs.writeShellApplication {
     name = "couch-dms";
     text = ''
@@ -557,6 +584,8 @@
       )
       cfg.mirrorOutputs
     )}
+    ${lib.concatStringsSep "\n" (map (rule: "monitor = ${rule}") cfg.extraMonitorRules)}
+    ${lib.concatStringsSep "\n" (map (rule: "workspace = ${rule}") cfg.extraWorkspaceRules)}
     ${lib.optionalString cfg.disableInternalDisplay ''
       monitor = eDP-1, disable
       monitor = LVDS-1, disable
@@ -575,6 +604,13 @@
     # input through XTest instead.
     ${lib.optionalString cfg.enableKdeConnect "exec-once = ${pkgs.coreutils}/bin/env QT_QPA_PLATFORM=xcb ${lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd"}"}
     ${lib.optionalString cfg.enableKdeConnect "exec-once = ${lib.getExe pointerSync}"}
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        output: source:
+          "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
+      )
+      cfg.softwareMirrorOutputs
+    )}
     ${lib.optionalString cfg.enableDms "exec-once = ${lib.getExe dmsSession}"}
 
     input {
@@ -876,6 +912,29 @@ in {
       description = "Shared mode for mirrored outputs, or null to use outputMode.";
     };
 
+    extraMonitorRules = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      example = ["DP-2, 3840x2160@60, 2560x0, 2"];
+      description = "Additional Hyprland monitor rule bodies applied after the default and native mirror rules.";
+    };
+
+    extraWorkspaceRules = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      example = ["10, monitor:DP-2, default:true"];
+      description = "Additional Hyprland workspace rule bodies for fixed multi-output couch layouts.";
+    };
+
+    softwareMirrorOutputs = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = {};
+      example = {
+        "DP-2" = "DP-1";
+      };
+      description = "Outputs mirrored in a supervised fullscreen wl-mirror client, expressed as target-to-source mappings.";
+    };
+
     fallbackOutputMode = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -904,6 +963,7 @@ in {
       ]
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableKdeConnect pointerSync
+      ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
       ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
@@ -978,6 +1038,10 @@ in {
       {
         assertion = lib.all (output: output != cfg.mirrorOutputs.${output}) (lib.attrNames cfg.mirrorOutputs);
         message = "services.moonlight-client.mirrorOutputs cannot mirror an output to itself";
+      }
+      {
+        assertion = lib.all (output: output != cfg.softwareMirrorOutputs.${output}) (lib.attrNames cfg.softwareMirrorOutputs);
+        message = "services.moonlight-client.softwareMirrorOutputs cannot mirror an output to itself";
       }
     ];
   };
