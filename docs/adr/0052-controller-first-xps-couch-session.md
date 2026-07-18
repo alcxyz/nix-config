@@ -60,6 +60,11 @@ TV and reserve a separate secondary-output workspace for the mirror client.
 Prefer a stable 60 Hz secondary mode over its native resolution when the
 available dock path cannot sustain that native mode reliably.
 
+Do not persist dock connector names or display identities. Discover the TV as
+the physically largest active external output, keep unmatched outputs on the
+stable secondary mode, and atomically regenerate transient monitor and
+workspace rules whenever the dock renames a connector after a link flap.
+
 KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
 XWayland clients, but its pointer warp does not move Hyprland's compositor
 cursor. While KDE Connect is enabled, mirror changed XWayland root-pointer

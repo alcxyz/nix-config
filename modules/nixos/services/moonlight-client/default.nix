@@ -9,7 +9,13 @@
 
   modeStateDirectory = "/var/lib/moonlight-client";
   modeStateFile = "${modeStateDirectory}/session-mode";
+  runtimeStateDirectory = "/run/moonlight-client";
+  dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
+  defaultOutputMode =
+    if cfg.autoMirrorExternalOutputs
+    then cfg.autoMirrorSecondaryMode
+    else cfg.outputMode;
   mirrorOutputMode =
     if cfg.mirrorOutputMode == null
     then cfg.outputMode
@@ -175,6 +181,7 @@
     text = ''
       hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
       exec ${lib.getExe cfg.browserPackage} \
+        --class=CouchBrowser \
         --user-data-dir="$HOME/.local/share/${cfg.browserProfileDirectory}" \
         --ozone-platform=x11 \
         --password-store=basic \
@@ -477,6 +484,142 @@
     '';
   };
 
+  autoMirrorExternalOutputs = pkgs.writeShellApplication {
+    name = "couch-auto-mirror-outputs";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.wl-mirror
+    ];
+    text = ''
+      config_file=${lib.escapeShellArg dynamicMonitorConfigFile}
+      layout_key=""
+      mirror_pid=""
+
+      stop_mirror() {
+        if [ -n "$mirror_pid" ] && kill -0 "$mirror_pid" 2>/dev/null; then
+          kill "$mirror_pid" 2>/dev/null || true
+          wait "$mirror_pid" 2>/dev/null || true
+        fi
+        mirror_pid=""
+      }
+
+      write_layout() {
+        source_output="$1"
+        target_output="$2"
+        temporary_file="$config_file.tmp"
+
+        {
+          if [ -n "$source_output" ]; then
+            printf 'monitor = %s, %s, 0x0, %s\n' \
+              "$source_output" \
+              ${lib.escapeShellArg cfg.outputMode} \
+              ${lib.escapeShellArg (toString cfg.outputScale)}
+            printf 'workspace = 1, monitor:%s, default:true\n' "$source_output"
+            printf 'workspace = 2, monitor:%s\n' "$source_output"
+          fi
+          if [ -n "$target_output" ]; then
+            printf 'monitor = %s, %s, %s, %s\n' \
+              "$target_output" \
+              ${lib.escapeShellArg cfg.autoMirrorSecondaryMode} \
+              ${lib.escapeShellArg cfg.autoMirrorSecondaryPosition} \
+              ${lib.escapeShellArg (toString cfg.autoMirrorSecondaryScale)}
+            printf 'workspace = %s, monitor:%s, default:true\n' \
+              ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
+              "$target_output"
+          fi
+        } >"$temporary_file"
+
+        if ! cmp -s "$temporary_file" "$config_file"; then
+          mv "$temporary_file" "$config_file"
+          hyprctl reload >/dev/null 2>&1 || true
+          sleep 0.5
+        else
+          rm -f "$temporary_file"
+        fi
+
+        if [ -n "$source_output" ]; then
+          hyprctl dispatch moveworkspacetomonitor 1 "$source_output" >/dev/null 2>&1 || true
+          hyprctl dispatch moveworkspacetomonitor 2 "$source_output" >/dev/null 2>&1 || true
+        fi
+        if [ -n "$target_output" ]; then
+          # Workspace rules do not create an absent workspace. Activate the
+          # dedicated workspace once so wl-mirror cannot inherit whichever
+          # workspace happened to be visible during compositor startup.
+          hyprctl dispatch focusmonitor "$target_output" >/dev/null 2>&1 || true
+          hyprctl dispatch workspace \
+            ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
+            >/dev/null 2>&1 || true
+          hyprctl dispatch moveworkspacetomonitor \
+            ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
+            "$target_output" \
+            >/dev/null 2>&1 || true
+        fi
+        if [ -n "$source_output" ]; then
+          hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
+          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+        fi
+      }
+
+      trap stop_mirror EXIT INT TERM
+
+      while true; do
+        monitors="$(hyprctl -j monitors all 2>/dev/null || printf '[]')"
+        external_monitors="$(
+          jq -c '[.[] | select(
+            .name != "eDP-1" and .name != "LVDS-1" and .disabled == false
+          )]' <<<"$monitors" 2>/dev/null || printf '[]'
+        )"
+        source_output="$(
+          jq -r --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoMirrorPrimaryMinPhysicalWidth)} '
+            if length == 0 then ""
+            else
+              max_by(.physicalWidth * .physicalHeight)
+              | if .physicalWidth >= $minimum_width then .name else "" end
+            end
+          ' <<<"$external_monitors"
+        )"
+        target_output=""
+        if [ -n "$source_output" ]; then
+          target_output="$(
+            jq -r --arg source "$source_output" '
+              [.[] | select(.name != $source)]
+              | if length == 0 then ""
+                else min_by(.physicalWidth * .physicalHeight).name end
+            ' <<<"$external_monitors"
+          )"
+        fi
+
+        new_layout_key="$source_output:$target_output"
+        if [ "$new_layout_key" != "$layout_key" ]; then
+          stop_mirror
+          write_layout "$source_output" "$target_output"
+          layout_key="$new_layout_key"
+        fi
+
+        if [ -n "$source_output" ] && [ -n "$target_output" ] \
+          && { [ -z "$mirror_pid" ] || ! kill -0 "$mirror_pid" 2>/dev/null; }; then
+          hyprctl dispatch focusmonitor "$target_output" >/dev/null 2>&1 || true
+          hyprctl dispatch workspace \
+            ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
+            >/dev/null 2>&1 || true
+          wl-mirror \
+            --fullscreen-output "$target_output" \
+            --scaling fit \
+            --title "Couch mirror $source_output" \
+            "$source_output" &
+          mirror_pid=$!
+          sleep 0.5
+          hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
+          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+        fi
+
+        sleep 1
+      done
+    '';
+  };
+
   dmsSession = pkgs.writeShellApplication {
     name = "couch-dms";
     text = ''
@@ -571,7 +714,7 @@
   '';
 
   hyprlandConfig = pkgs.writeText "moonlight-hyprland.conf" ''
-    monitor = , ${cfg.outputMode}, auto, ${toString cfg.outputScale}
+    monitor = , ${defaultOutputMode}, auto, ${toString cfg.outputScale}
     ${lib.concatMapStringsSep "\n" (
       output:
         "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}"
@@ -586,6 +729,7 @@
     )}
     ${lib.concatStringsSep "\n" (map (rule: "monitor = ${rule}") cfg.extraMonitorRules)}
     ${lib.concatStringsSep "\n" (map (rule: "workspace = ${rule}") cfg.extraWorkspaceRules)}
+    ${lib.optionalString cfg.autoMirrorExternalOutputs "source = ${dynamicMonitorConfigFile}"}
     ${lib.optionalString cfg.disableInternalDisplay ''
       monitor = eDP-1, disable
       monitor = LVDS-1, disable
@@ -596,6 +740,7 @@
     env = QT_QPA_PLATFORMTHEME_QT6,gtk3
 
     exec-once = ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
+    ${lib.optionalString cfg.autoMirrorExternalOutputs "exec-once = ${lib.getExe autoMirrorExternalOutputs}"}
     ${lib.optionalString cfg.autoStartBrowser "exec-once = ${lib.getExe couchBrowser}"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
@@ -651,6 +796,8 @@
     }
 
     windowrule = match:class com.moonlight_stream.Moonlight, fullscreen true
+    windowrule = match:class CouchBrowser, workspace 2
+    windowrule = match:class CouchBrowser, fullscreen true
 
     bind = SUPER, 1, workspace, 1
     bind = SUPER, 2, workspace, 2
@@ -935,6 +1082,42 @@ in {
       description = "Outputs mirrored in a supervised fullscreen wl-mirror client, expressed as target-to-source mappings.";
     };
 
+    autoMirrorExternalOutputs = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Discover a physically large primary external output and supervise a software mirror on a secondary output across connector renames.";
+    };
+
+    autoMirrorSecondaryMode = lib.mkOption {
+      type = lib.types.str;
+      default = "1920x1080@60";
+      description = "Stable mode used by the automatically discovered software-mirror target and by unmatched external outputs.";
+    };
+
+    autoMirrorSecondaryPosition = lib.mkOption {
+      type = lib.types.str;
+      default = "2560x0";
+      description = "Hyprland position used by the automatically discovered software-mirror target.";
+    };
+
+    autoMirrorSecondaryScale = lib.mkOption {
+      type = lib.types.float;
+      default = 1.0;
+      description = "Hyprland scale used by the automatically discovered software-mirror target.";
+    };
+
+    autoMirrorPrimaryMinPhysicalWidth = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 1000;
+      description = "Minimum reported physical width in millimetres for an external output to become the automatic mirror source.";
+    };
+
+    autoMirrorWorkspace = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 10;
+      description = "Dedicated workspace used by the automatic fullscreen software mirror.";
+    };
+
     fallbackOutputMode = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -964,6 +1147,7 @@ in {
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableKdeConnect pointerSync
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
+      ++ lib.optional cfg.autoMirrorExternalOutputs autoMirrorExternalOutputs
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
       ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
@@ -992,7 +1176,11 @@ in {
       user = cfg.autoLoginUser;
     };
 
-    systemd.tmpfiles.rules = lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -" ++ lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}";
+    systemd.tmpfiles.rules =
+      lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
+      ++ lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional (cfg.autoLoginUser != null && cfg.autoMirrorExternalOutputs) "d ${runtimeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
+      ++ lib.optional (cfg.autoLoginUser != null && cfg.autoMirrorExternalOutputs) "f ${dynamicMonitorConfigFile} 0644 ${cfg.autoLoginUser} root -";
 
     systemd.paths.couch-session-mode-switch = lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) {
       description = "Watch for XPS couch/desktop session mode changes";
@@ -1042,6 +1230,10 @@ in {
       {
         assertion = lib.all (output: output != cfg.softwareMirrorOutputs.${output}) (lib.attrNames cfg.softwareMirrorOutputs);
         message = "services.moonlight-client.softwareMirrorOutputs cannot mirror an output to itself";
+      }
+      {
+        assertion = !cfg.autoMirrorExternalOutputs || cfg.autoLoginUser != null;
+        message = "services.moonlight-client.autoMirrorExternalOutputs requires autoLoginUser";
       }
     ];
   };
