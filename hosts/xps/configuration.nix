@@ -94,7 +94,7 @@ in {
     outputScale = 1.0;
     extraMonitorRules = [
       "DP-5, 2560x1440@60, 0x0, 1"
-      "DP-9, 3840x2160@30, 2560x0, 2"
+      "DP-9, 1920x1080@60, 2560x0, 1"
     ];
     extraWorkspaceRules = [
       "1, monitor:DP-5, default:true"

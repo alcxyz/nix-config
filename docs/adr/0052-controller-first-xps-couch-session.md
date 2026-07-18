@@ -57,6 +57,8 @@ mode. A software mirror keeps the streaming TV at its preferred mode while a
 secondary display uses its own native mode and scale; relaunch the mirror after
 either output disconnects and returns. Pin stream and browser workspaces to the
 TV and reserve a separate secondary-output workspace for the mirror client.
+Prefer a stable 60 Hz secondary mode over its native resolution when the
+available dock path cannot sustain that native mode reliably.
 
 KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
 XWayland clients, but its pointer warp does not move Hyprland's compositor
