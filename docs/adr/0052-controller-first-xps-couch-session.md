@@ -60,14 +60,14 @@ floating windows, navigate or move between the stream and browser workspaces,
 and control audio directly through PipeWire. DMS-specific shortcuts remain out
 of couch mode because DMS is not part of that session.
 
-Allow both native target-to-source mirrors and supervised fullscreen software
-mirrors. Native mirroring is appropriate when every display shares a useful
-mode. A software mirror keeps the streaming TV at its preferred mode while a
-secondary display uses its own native mode and scale; relaunch the mirror after
-either output disconnects and returns. Pin stream and browser workspaces to the
-TV and reserve a separate secondary-output workspace for the mirror client.
-Prefer a stable 60 Hz secondary mode over its native resolution when the
-available dock path cannot sustain that native mode reliably.
+Keep an attached secondary display independent by default. Assign persistent
+workspaces 1–5 to the TV and 6–10 to the secondary display; when the secondary
+is absent, move its workspace set back to the TV, and restore the split when it
+returns. Retain native target-to-source mirroring and supervised fullscreen
+software mirroring as optional module capabilities. A software mirror can keep
+the streaming TV at its preferred mode while a secondary uses its own stable
+mode and scale. Prefer a stable 60 Hz secondary mode over its native resolution
+when the available dock path cannot sustain that native mode reliably.
 
 Do not persist dock connector names or display identities. Discover the TV as
 the physically largest active external output, keep unmatched outputs on the

@@ -16,9 +16,10 @@
     builtins.toJSON cfg.mergedDmsSettings
   );
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
+  dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
-    if cfg.autoMirrorExternalOutputs
-    then cfg.autoMirrorSecondaryMode
+    if dynamicExternalLayoutEnabled
+    then cfg.autoLayoutSecondaryMode
     else cfg.outputMode;
   mirrorOutputMode =
     if cfg.mirrorOutputMode == null
@@ -489,14 +490,13 @@
     '';
   };
 
-  autoMirrorExternalOutputs = pkgs.writeShellApplication {
-    name = "couch-auto-mirror-outputs";
+  autoLayoutExternalOutputs = pkgs.writeShellApplication {
+    name = "couch-auto-layout-outputs";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.hyprland
       pkgs.jq
-      pkgs.wl-mirror
-    ];
+    ] ++ lib.optional cfg.autoMirrorExternalOutputs pkgs.wl-mirror;
     text = ''
       config_file=${lib.escapeShellArg dynamicMonitorConfigFile}
       layout_key=""
@@ -521,18 +521,35 @@
               "$source_output" \
               ${lib.escapeShellArg cfg.outputMode} \
               ${lib.escapeShellArg (toString cfg.outputScale)}
-            printf 'workspace = 1, monitor:%s, default:true\n' "$source_output"
-            printf 'workspace = 2, monitor:%s\n' "$source_output"
+            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutPrimaryWorkspaces)}; do
+              default=""
+              if [ "$workspace" = ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutPrimaryWorkspaces))} ]; then
+                default=", default:true"
+              fi
+              printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
+                "$workspace" "$source_output" "$default"
+            done
+            if [ -z "$target_output" ]; then
+              for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
+                printf 'workspace = %s, monitor:%s, persistent:true\n' \
+                  "$workspace" "$source_output"
+              done
+            fi
           fi
           if [ -n "$target_output" ]; then
             printf 'monitor = %s, %s, %s, %s\n' \
               "$target_output" \
-              ${lib.escapeShellArg cfg.autoMirrorSecondaryMode} \
-              ${lib.escapeShellArg cfg.autoMirrorSecondaryPosition} \
-              ${lib.escapeShellArg (toString cfg.autoMirrorSecondaryScale)}
-            printf 'workspace = %s, monitor:%s, default:true\n' \
-              ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
-              "$target_output"
+              ${lib.escapeShellArg cfg.autoLayoutSecondaryMode} \
+              ${lib.escapeShellArg cfg.autoLayoutSecondaryPosition} \
+              ${lib.escapeShellArg (toString cfg.autoLayoutSecondaryScale)}
+            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
+              default=""
+              if [ "$workspace" = ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutSecondaryWorkspaces))} ]; then
+                default=", default:true"
+              fi
+              printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
+                "$workspace" "$target_output" "$default"
+            done
           fi
         } >"$temporary_file"
 
@@ -545,21 +562,26 @@
         fi
 
         if [ -n "$source_output" ]; then
-          hyprctl dispatch moveworkspacetomonitor 1 "$source_output" >/dev/null 2>&1 || true
-          hyprctl dispatch moveworkspacetomonitor 2 "$source_output" >/dev/null 2>&1 || true
+          for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutPrimaryWorkspaces)}; do
+            hyprctl dispatch moveworkspacetomonitor \
+              "$workspace" "$source_output" >/dev/null 2>&1 || true
+          done
+          if [ -z "$target_output" ]; then
+            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
+              hyprctl dispatch moveworkspacetomonitor \
+                "$workspace" "$source_output" >/dev/null 2>&1 || true
+            done
+          fi
         fi
         if [ -n "$target_output" ]; then
-          # Workspace rules do not create an absent workspace. Activate the
-          # dedicated workspace once so wl-mirror cannot inherit whichever
-          # workspace happened to be visible during compositor startup.
           hyprctl dispatch focusmonitor "$target_output" >/dev/null 2>&1 || true
           hyprctl dispatch workspace \
-            ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
+            ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutSecondaryWorkspaces))} \
             >/dev/null 2>&1 || true
-          hyprctl dispatch moveworkspacetomonitor \
-            ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
-            "$target_output" \
-            >/dev/null 2>&1 || true
+          for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
+            hyprctl dispatch moveworkspacetomonitor \
+              "$workspace" "$target_output" >/dev/null 2>&1 || true
+          done
         fi
         if [ -n "$source_output" ]; then
           hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
@@ -577,7 +599,7 @@
           )]' <<<"$monitors" 2>/dev/null || printf '[]'
         )"
         source_output="$(
-          jq -r --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoMirrorPrimaryMinPhysicalWidth)} '
+          jq -r --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
             if length == 0 then ""
             else
               max_by(.physicalWidth * .physicalHeight)
@@ -603,7 +625,8 @@
           layout_key="$new_layout_key"
         fi
 
-        if [ -n "$source_output" ] && [ -n "$target_output" ] \
+        ${lib.optionalString cfg.autoMirrorExternalOutputs ''
+          if [ -n "$source_output" ] && [ -n "$target_output" ] \
           && { [ -z "$mirror_pid" ] || ! kill -0 "$mirror_pid" 2>/dev/null; }; then
           hyprctl dispatch focusmonitor "$target_output" >/dev/null 2>&1 || true
           hyprctl dispatch workspace \
@@ -618,7 +641,8 @@
           sleep 0.5
           hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-        fi
+          fi
+        ''}
 
         sleep 1
       done
@@ -819,7 +843,7 @@
     )}
     ${lib.concatStringsSep "\n" (map (rule: "monitor = ${rule}") cfg.extraMonitorRules)}
     ${lib.concatStringsSep "\n" (map (rule: "workspace = ${rule}") cfg.extraWorkspaceRules)}
-    ${lib.optionalString cfg.autoMirrorExternalOutputs "source = ${dynamicMonitorConfigFile}"}
+    ${lib.optionalString dynamicExternalLayoutEnabled "source = ${dynamicMonitorConfigFile}"}
     ${lib.optionalString cfg.disableInternalDisplay ''
       monitor = eDP-1, disable
       monitor = LVDS-1, disable
@@ -830,7 +854,7 @@
     env = QT_QPA_PLATFORMTHEME_QT6,gtk3
 
     exec-once = ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
-    ${lib.optionalString cfg.autoMirrorExternalOutputs "exec-once = ${lib.getExe autoMirrorExternalOutputs}"}
+    ${lib.optionalString dynamicExternalLayoutEnabled "exec-once = ${lib.getExe autoLayoutExternalOutputs}"}
     ${lib.optionalString cfg.autoStartBrowser "exec-once = ${lib.getExe couchBrowser}"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
@@ -892,6 +916,14 @@
 
     bind = SUPER, 1, workspace, 1
     bind = SUPER, 2, workspace, 2
+    bind = SUPER, 3, workspace, 3
+    bind = SUPER, 4, workspace, 4
+    bind = SUPER, 5, workspace, 5
+    bind = SUPER, 6, workspace, 6
+    bind = SUPER, 7, workspace, 7
+    bind = SUPER, 8, workspace, 8
+    bind = SUPER, 9, workspace, 9
+    bind = SUPER, 0, workspace, 10
     ${
       if cfg.enableControllerShortcuts
       then "bind = SUPER, M, exec, ${lib.getExe couchStreamControl} start"
@@ -915,6 +947,16 @@
     bind = SUPER SHIFT, K, movetoworkspace, r+1
     bind = SUPER SHIFT, down, movetoworkspace, r-1
     bind = SUPER SHIFT, up, movetoworkspace, r+1
+    bind = SUPER SHIFT, 1, movetoworkspace, 1
+    bind = SUPER SHIFT, 2, movetoworkspace, 2
+    bind = SUPER SHIFT, 3, movetoworkspace, 3
+    bind = SUPER SHIFT, 4, movetoworkspace, 4
+    bind = SUPER SHIFT, 5, movetoworkspace, 5
+    bind = SUPER SHIFT, 6, movetoworkspace, 6
+    bind = SUPER SHIFT, 7, movetoworkspace, 7
+    bind = SUPER SHIFT, 8, movetoworkspace, 8
+    bind = SUPER SHIFT, 9, movetoworkspace, 9
+    bind = SUPER SHIFT, 0, movetoworkspace, 10
 
     bindel = , XF86AudioRaiseVolume, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%+
     bindel = , XF86AudioLowerVolume, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%-
@@ -1239,31 +1281,49 @@ in {
     autoMirrorExternalOutputs = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Discover a physically large primary external output and supervise a software mirror on a secondary output across connector renames.";
+      description = "Supervise a software mirror from the discovered primary external output to the secondary output.";
     };
 
-    autoMirrorSecondaryMode = lib.mkOption {
+    autoLayoutExternalOutputs = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Dynamically lay out external outputs and move their workspace sets across connector changes.";
+    };
+
+    autoLayoutSecondaryMode = lib.mkOption {
       type = lib.types.str;
       default = "1920x1080@60";
-      description = "Stable mode used by the automatically discovered software-mirror target and by unmatched external outputs.";
+      description = "Stable mode used by the automatically discovered secondary output and by unmatched external outputs.";
     };
 
-    autoMirrorSecondaryPosition = lib.mkOption {
+    autoLayoutSecondaryPosition = lib.mkOption {
       type = lib.types.str;
       default = "2560x0";
-      description = "Hyprland position used by the automatically discovered software-mirror target.";
+      description = "Hyprland position used by the automatically discovered secondary output.";
     };
 
-    autoMirrorSecondaryScale = lib.mkOption {
+    autoLayoutSecondaryScale = lib.mkOption {
       type = lib.types.float;
       default = 1.0;
-      description = "Hyprland scale used by the automatically discovered software-mirror target.";
+      description = "Hyprland scale used by the automatically discovered secondary output.";
     };
 
-    autoMirrorPrimaryMinPhysicalWidth = lib.mkOption {
+    autoLayoutPrimaryMinPhysicalWidth = lib.mkOption {
       type = lib.types.ints.positive;
       default = 1000;
       description = "Minimum reported physical width in millimetres for an external output to become the automatic mirror source.";
+    };
+
+    autoLayoutPrimaryWorkspaces = lib.mkOption {
+      type = lib.types.nonEmptyListOf lib.types.ints.positive;
+      default = [1 2 3 4 5];
+      description = "Persistent workspaces assigned to the discovered primary output.";
+    };
+
+    autoLayoutSecondaryWorkspaces = lib.mkOption {
+      type = lib.types.nonEmptyListOf lib.types.ints.positive;
+      default = [6 7 8 9 10];
+      description = "Persistent workspaces assigned to the secondary output, or to the primary while no secondary is connected.";
     };
 
     autoMirrorWorkspace = lib.mkOption {
@@ -1303,7 +1363,7 @@ in {
       ++ lib.optional cfg.enableMergedProfile mergedDmsSession
       ++ lib.optional cfg.enableMergedProfile mergedUiControl
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
-      ++ lib.optional cfg.autoMirrorExternalOutputs autoMirrorExternalOutputs
+      ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
       ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
@@ -1339,8 +1399,8 @@ in {
     systemd.tmpfiles.rules =
       lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
       ++ lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
-      ++ lib.optional (cfg.autoLoginUser != null && cfg.autoMirrorExternalOutputs) "d ${runtimeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
-      ++ lib.optional (cfg.autoLoginUser != null && cfg.autoMirrorExternalOutputs) "f ${dynamicMonitorConfigFile} 0644 ${cfg.autoLoginUser} root -";
+      ++ lib.optional (cfg.autoLoginUser != null && dynamicExternalLayoutEnabled) "d ${runtimeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
+      ++ lib.optional (cfg.autoLoginUser != null && dynamicExternalLayoutEnabled) "f ${dynamicMonitorConfigFile} 0644 ${cfg.autoLoginUser} root -";
 
     systemd.paths.couch-session-mode-switch = lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) {
       description = "Watch for XPS session mode changes";
@@ -1396,8 +1456,20 @@ in {
         message = "services.moonlight-client.softwareMirrorOutputs cannot mirror an output to itself";
       }
       {
-        assertion = !cfg.autoMirrorExternalOutputs || cfg.autoLoginUser != null;
-        message = "services.moonlight-client.autoMirrorExternalOutputs requires autoLoginUser";
+        assertion = !dynamicExternalLayoutEnabled || cfg.autoLoginUser != null;
+        message = "services.moonlight-client automatic external-output layout requires autoLoginUser";
+      }
+      {
+        assertion = lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutSecondaryWorkspaces == [];
+        message = "services.moonlight-client automatic primary and secondary workspace sets must not overlap";
+      }
+      {
+        assertion = lib.elem 1 cfg.autoLayoutPrimaryWorkspaces && lib.elem 2 cfg.autoLayoutPrimaryWorkspaces;
+        message = "services.moonlight-client automatic primary workspace set must contain stream workspace 1 and browser workspace 2";
+      }
+      {
+        assertion = !cfg.autoMirrorExternalOutputs || lib.elem cfg.autoMirrorWorkspace cfg.autoLayoutSecondaryWorkspaces;
+        message = "services.moonlight-client.autoMirrorWorkspace must belong to the secondary workspace set";
       }
     ];
   };
