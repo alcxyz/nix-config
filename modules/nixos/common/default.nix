@@ -44,6 +44,13 @@ in {
       ];
       publicKey = sshKeys.keys.xyz_host_ed25519;
     };
+    nux = {
+      hostNames = [
+        "nux"
+        "192.168.1.15"
+      ];
+      publicKey = sshKeys.keys.nux_host_ed25519;
+    };
     xev = {
       hostNames = [
         "xev"

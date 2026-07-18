@@ -1,6 +1,6 @@
 # ADR-0039: xyz ZFS-backed S3 target for cluster backups
 
-**Status:** Superseded by the `tank` storage rebuild
+**Status:** Superseded by ADR-0052
 **Date:** 2026-05-06
 **Applies to:** `hosts/xyz`, `modules/nixos/services/k8s-backup-s3`, k3s backup posture
 

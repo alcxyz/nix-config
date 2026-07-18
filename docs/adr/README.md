@@ -43,7 +43,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0036](0036-host-inventory-source-of-truth.md) | Host inventory as source of truth | Accepted | hosts, roles, packages, workspace, k3s |
 | [ADR-0037](0037-flake-parts-output-structure.md) | Flake output structure via flake-parts | Accepted | `flake.nix`, `flake/` |
 | [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Accepted | unifi, nux, rpi0 |
-| [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Accepted | xyz, ZFS, k3s backups |
+| [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by ADR-0052 | xyz, ZFS, k3s backups |
 | [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Proposed | unifi, nux, rpi0, failover |
 | [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Implemented | forgejo, runners, systemd, docker |
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Accepted | media, torrent, stash, xyz |
@@ -56,3 +56,4 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0049](0049-xyz-sensitive-host-bootstrap-boundary.md) | xyz sensitive host bootstrap boundary | Accepted | xyz, private runbooks |
 | [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted | xyz, ZFS, backups |
 | [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) | xev replaces rpi0 as a k3s server | Accepted | k3s, xev, rpi0, etcd |
+| [ADR-0052](0052-xev-primary-k8s-backup-target.md) | xev primary Kubernetes backup target with xyz ZFS replica | Accepted, staged | xev, xyz, k3s backups |

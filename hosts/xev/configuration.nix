@@ -13,7 +13,7 @@
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
-    "${configDir}/modules/nixos/services/k8s-backup-replica/default.nix"
+    "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
@@ -74,7 +74,9 @@
   };
 
   fileSystems."/var/lib/longhorn-ssd2" = {
-    device = "/dev/disk/by-label/xev-longhorn-ssd2";
+    # ext4 labels are limited to 16 bytes; keep this stable label below that
+    # limit so mkfs and e2label cannot silently truncate the mount identity.
+    device = "/dev/disk/by-label/xev-lh-ssd2";
     fsType = "ext4";
     options = [
       "nofail"
