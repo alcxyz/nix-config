@@ -84,6 +84,7 @@ in {
     defaultSessionMode = "couch";
     disableInternalDisplay = true;
     enableDms = false;
+    enableMergedProfile = true;
     enableKdeConnect = true;
     enableControllerShortcuts = true;
     autoStartBrowser = true;

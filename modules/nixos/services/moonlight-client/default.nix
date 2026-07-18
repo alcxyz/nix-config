@@ -11,6 +11,10 @@
   modeStateFile = "${modeStateDirectory}/session-mode";
   runtimeStateDirectory = "/run/moonlight-client";
   dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
+  mergedDmsConfigDirectory = "${runtimeStateDirectory}/dms-merged";
+  mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (
+    builtins.toJSON cfg.mergedDmsSettings
+  );
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
   defaultOutputMode =
     if cfg.autoMirrorExternalOutputs
@@ -277,6 +281,7 @@
           ;;
         browser)
           systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
+          ${lib.getExe mergedUiControl} browser
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
 
           if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
@@ -632,6 +637,78 @@
     '';
   };
 
+  mergedDmsSession = pkgs.writeShellApplication {
+    name = "couch-merged-dms";
+    runtimeInputs = [pkgs.coreutils];
+    text = ''
+      mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
+      if [ "$mode" != merged ]; then
+        exit 0
+      fi
+
+      dms="$HOME/.nix-profile/bin/dms"
+      if [ ! -x "$dms" ]; then
+        echo "DMS is not installed in the user profile" >&2
+        exit 1
+      fi
+
+      config_home=${lib.escapeShellArg mergedDmsConfigDirectory}
+      settings_directory="$config_home/DankMaterialShell"
+      rm -rf "$config_home"
+      install -d -m 0700 "$settings_directory"
+      install -m 0600 ${mergedDmsSettingsFile} "$settings_directory/settings.json"
+
+      plugin_settings="$HOME/.config/DankMaterialShell/plugin_settings.json"
+      if [ -e "$plugin_settings" ]; then
+        ln -s "$plugin_settings" "$settings_directory/plugin_settings.json"
+      fi
+
+      export XDG_CONFIG_HOME="$config_home"
+      exec "$dms" run
+    '';
+  };
+
+  mergedUiControl = pkgs.writeShellApplication {
+    name = "couch-merged-ui";
+    runtimeInputs = [pkgs.coreutils];
+    text = ''
+      mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
+      if [ "$mode" != merged ]; then
+        exit 0
+      fi
+
+      dms="$HOME/.nix-profile/bin/dms"
+      if [ ! -x "$dms" ]; then
+        exit 0
+      fi
+
+      case "''${1:-}" in
+        game)
+          "$dms" ipc call notifications enableDoNotDisturbIndefinitely >/dev/null 2>&1 || true
+          "$dms" ipc call notifications dismissAllPopups >/dev/null 2>&1 || true
+          "$dms" ipc call bar hide index 0 >/dev/null 2>&1 || true
+          "$dms" ipc call dock hide >/dev/null 2>&1 || true
+          ;;
+        browser)
+          for ((attempt = 0; attempt < 20; attempt++)); do
+            if "$dms" ipc call bar reveal index 0 >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.1
+          done
+          "$dms" ipc call bar autoHide index 0 >/dev/null 2>&1 || true
+          "$dms" ipc call dock reveal >/dev/null 2>&1 || true
+          "$dms" ipc call dock autoHide >/dev/null 2>&1 || true
+          "$dms" ipc call notifications disableDoNotDisturb >/dev/null 2>&1 || true
+          ;;
+        *)
+          echo "usage: couch-merged-ui {game|browser}" >&2
+          exit 2
+          ;;
+      esac
+    '';
+  };
+
   sessionMode = pkgs.writeShellApplication {
     name = "xps-session-mode";
     runtimeInputs = [pkgs.coreutils];
@@ -645,7 +722,7 @@
       fi
 
       case "$1" in
-        couch | desktop)
+        couch | desktop${lib.optionalString cfg.enableMergedProfile " | merged"})
           if [ "$1" = "$current" ]; then
             printf 'XPS is already configured for %s mode\n' "$1"
             exit 0
@@ -654,7 +731,7 @@
           printf 'Switching XPS to %s mode\n' "$1"
           ;;
         *)
-          echo "usage: xps-session-mode [couch|desktop]" >&2
+          echo "usage: xps-session-mode [couch|desktop${lib.optionalString cfg.enableMergedProfile "|merged"}]" >&2
           exit 2
           ;;
       esac
@@ -710,6 +787,19 @@
       Type=Application
       Categories=System;
       EOF
+
+      ${lib.optionalString cfg.enableMergedProfile ''
+        cat > "$out/share/applications/xps-merged-mode.desktop" <<EOF
+        [Desktop Entry]
+        Name=Switch to Merged Couch Mode
+        Comment=Use the controller-first TV session with an auto-hiding DMS shell
+        Exec=${lib.getExe sessionMode} merged
+        Icon=video-display
+        Terminal=false
+        Type=Application
+        Categories=System;
+        EOF
+      ''}
     ''}
   '';
 
@@ -757,6 +847,7 @@
       cfg.softwareMirrorOutputs
     )}
     ${lib.optionalString cfg.enableDms "exec-once = ${lib.getExe dmsSession}"}
+    ${lib.optionalString cfg.enableMergedProfile "exec-once = ${lib.getExe mergedDmsSession}"}
 
     input {
       kb_layout = us,no
@@ -809,7 +900,7 @@
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
     bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}
     bind = ALT, RETURN, exec, ${lib.getExe couchTerminal}
-    ${lib.optionalString cfg.enableDms "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
+    ${lib.optionalString (cfg.enableDms || cfg.enableMergedProfile) "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
     bind = SUPER, W, killactive
     bind = SUPER, RETURN, fullscreen
     bind = SUPER, S, togglefloating
@@ -862,6 +953,11 @@
         desktop)
           exec ${cfg.desktopSessionCommand}
           ;;
+        ${lib.optionalString cfg.enableMergedProfile ''
+          merged)
+            exec ${sessionCommand}
+            ;;
+        ''}
         couch | *)
           exec ${sessionCommand}
           ;;
@@ -975,6 +1071,64 @@ in {
       description = "Start DMS from the user's Home Manager profile in the dedicated session.";
     };
 
+    enableMergedProfile = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Offer a third dedicated session profile with isolated, couch-friendly DMS settings.";
+    };
+
+    mergedDmsSettings = lib.mkOption {
+      type = lib.types.attrsOf lib.types.anything;
+      default = {
+        acMonitorTimeout = 0;
+        acLockTimeout = 0;
+        acSuspendTimeout = 0;
+        acPostLockMonitorTimeout = 0;
+        batteryMonitorTimeout = 0;
+        batteryLockTimeout = 0;
+        batterySuspendTimeout = 0;
+        batteryPostLockMonitorTimeout = 0;
+        loginctlLockIntegration = false;
+        lockBeforeSuspend = false;
+        lockAtStartup = false;
+        fadeToLockEnabled = false;
+        fadeToDpmsEnabled = false;
+        soundsEnabled = false;
+        showDock = true;
+        dockAutoHide = true;
+        dockSmartAutoHide = true;
+        notificationOverlayEnabled = false;
+        barConfigs = [
+          {
+            id = "merged";
+            name = "Couch Bar";
+            enabled = true;
+            position = 0;
+            screenPreferences = ["all"];
+            showOnLastDisplay = true;
+            leftWidgets = ["launcherButton" "workspaceSwitcher" "focusedWindow"];
+            centerWidgets = ["music" "clock"];
+            rightWidgets = ["systemTray" "notificationButton" "battery" "controlCenterButton"];
+            spacing = 4;
+            innerPadding = 4;
+            bottomGap = 0;
+            transparency = 1.0;
+            widgetTransparency = 1.0;
+            autoHide = true;
+            autoHideStrict = true;
+            autoHideDelay = 250;
+            showOnWindowsOpen = false;
+            openOnOverview = false;
+            visible = true;
+            popupGapsAuto = true;
+            popupGapsManual = 4;
+            useOverlayLayer = false;
+          }
+        ];
+      };
+      description = "DMS settings used only by the isolated merged couch profile.";
+    };
+
     enableKdeConnect = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -1021,7 +1175,7 @@ in {
     };
 
     defaultSessionMode = lib.mkOption {
-      type = lib.types.enum ["couch" "desktop"];
+      type = lib.types.enum ["couch" "desktop" "merged"];
       default = "couch";
       description = "Session mode used until the user selects and persists another mode.";
     };
@@ -1146,6 +1300,8 @@ in {
       ]
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableKdeConnect pointerSync
+      ++ lib.optional cfg.enableMergedProfile mergedDmsSession
+      ++ lib.optional cfg.enableMergedProfile mergedUiControl
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
       ++ lib.optional cfg.autoMirrorExternalOutputs autoMirrorExternalOutputs
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
@@ -1162,8 +1318,12 @@ in {
       description = "Controller-launched Moonlight stream";
       serviceConfig = {
         Type = "simple";
+        ExecStartPre = "-${lib.getExe mergedUiControl} game";
         ExecStart = lib.getExe moonlightStreamStart;
-        ExecStopPost = "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2";
+        ExecStopPost = [
+          "-${lib.getExe mergedUiControl} browser"
+          "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
+        ];
         TimeoutStartSec = cfg.streamStartupTimeout + 30;
       };
     };
@@ -1183,7 +1343,7 @@ in {
       ++ lib.optional (cfg.autoLoginUser != null && cfg.autoMirrorExternalOutputs) "f ${dynamicMonitorConfigFile} 0644 ${cfg.autoLoginUser} root -";
 
     systemd.paths.couch-session-mode-switch = lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) {
-      description = "Watch for XPS couch/desktop session mode changes";
+      description = "Watch for XPS session mode changes";
       wantedBy = ["multi-user.target"];
       pathConfig = {
         PathChanged = modeStateFile;
@@ -1210,6 +1370,10 @@ in {
       {
         assertion = cfg.desktopSessionCommand == null || cfg.autoLoginUser != null;
         message = "services.moonlight-client.desktopSessionCommand requires autoLoginUser";
+      }
+      {
+        assertion = cfg.defaultSessionMode != "merged" || cfg.enableMergedProfile;
+        message = "services.moonlight-client.defaultSessionMode = merged requires enableMergedProfile";
       }
       {
         assertion = (cfg.streamHost == null) == (cfg.streamApplication == null);

@@ -45,6 +45,15 @@ reach the focused Moonlight window and be forwarded by the normal streaming
 input path. Keep the normal desktop session as a separately persisted boot
 mode.
 
+Keep the known-good couch and desktop profiles intact and offer a third
+`merged` profile for the combined experience. The merged profile reuses the
+controller-first Hyprland session while running DMS against an isolated
+runtime configuration: disable idle locking, monitor power-off, suspension,
+login lock integration, and shell sounds; keep the bar and dock strictly
+auto-hidden. Entering a stream hides both shell surfaces and enables DMS do-not-
+disturb, while returning to the browser reveals their auto-hiding forms. This
+switch happens without restarting Hyprland or discarding browser state.
+
 Keep a compact keyboard escape hatch aligned with the normal workstation
 bindings: open a terminal, create a fresh browser window, manage fullscreen and
 floating windows, navigate or move between the stream and browser workspaces,
