@@ -11,7 +11,7 @@
   modeStateFile = "${modeStateDirectory}/session-mode";
   runtimeStateDirectory = "/run/moonlight-client";
   dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
-  mirrorStateFile = "${runtimeStateDirectory}/mirror-enabled";
+  mirrorStateFile = "${modeStateDirectory}/mirror-enabled";
   displayLayoutStateFile = "${modeStateDirectory}/display-layout";
   mergedDmsConfigDirectory = "${runtimeStateDirectory}/dms-merged";
   mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (

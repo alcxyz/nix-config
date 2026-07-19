@@ -78,6 +78,10 @@ stream out to the two TV-class display sinks. This pairs naturally with TV
 mirroring, but remains an explicit audio choice so toggling a display mode never
 changes volume or routing unexpectedly.
 
+Persist the explicit mirroring choice alongside the selected display layout.
+Default it off for a fresh host, but preserve an operator toggle across reboots
+so a requested dual-TV mirrored session actually returns in that state.
+
 Publish the controller and keyboard reference as a generated DMS cheatsheet.
 Toggle the native DMS modal from either input type so it follows the focused
 display without adding a separate desktop dialog or placement workaround.

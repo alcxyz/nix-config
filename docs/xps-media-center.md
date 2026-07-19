@@ -70,7 +70,7 @@ Linux while powered off.
 
 Mirroring is separate from layout selection. Equal-resolution TVs use native
 Hyprland mirroring; unlike-resolution displays use a supervised `wl-mirror`
-fallback.
+fallback. The selected mirror state persists across reboots until toggled again.
 
 ## Audio outputs
 
