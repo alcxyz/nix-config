@@ -9,6 +9,8 @@ SKIP_DRAIN=false
 FORCE_DRAIN=false
 BYPASS_PDB=false
 LEAVE_CORDONED=false
+RESUME_MAINTENANCE=false
+CHECK_ONLY=false
 DRAIN_TIMEOUT="10m"
 READY_TIMEOUT="10m"
 SETTLE_TIMEOUT="15m"
@@ -17,6 +19,7 @@ POLL_SECONDS=5
 REQUIRE_LONGHORN_BACKUP_TARGET=false
 MIN_FREE_POD_SLOTS=20
 MIN_LONGHORN_REPLICAS=3
+MIN_SURVIVING_LONGHORN_REPLICAS=2
 REMOTE_BOOT_ID=""
 WORKLOADS_FILE=""
 
@@ -40,6 +43,11 @@ Options:
   --force-drain            Pass --force to kubectl drain for unmanaged pods.
   --bypass-pdb             Use pod deletion instead of eviction; ignores PDBs.
   --leave-cordoned         Keep the node cordoned after it returns.
+  --resume-maintenance     Reuse an already cordoned, drained, and detached
+                           node for another power cycle. Fails closed if the
+                           maintenance-state gates do not pass.
+  --check-only             Validate preflight or resumed-maintenance gates
+                           without cordoning, draining, or powering the host.
   --drain-timeout <dur>    kubectl drain duration. Default: 10m.
   --ready-timeout <dur>    kubectl wait duration. Default: 10m.
   --settle-timeout <dur>   Workload/Longhorn health wait duration. Default: 15m.
@@ -123,6 +131,14 @@ parse_args() {
         ;;
       --leave-cordoned)
         LEAVE_CORDONED=true
+        shift
+        ;;
+      --resume-maintenance)
+        RESUME_MAINTENANCE=true
+        shift
+        ;;
+      --check-only)
+        CHECK_ONLY=true
         shift
         ;;
       --drain-timeout)
@@ -311,6 +327,77 @@ wait_for_workloads() {
   [[ "$failed" == false ]] || die "one or more displaced workloads did not settle"
 }
 
+wait_for_controller_ready_floor() {
+  local namespace="$1"
+  local workload="$2"
+  local minimum_ready="$3"
+  local deadline
+  local ready
+
+  deadline=$((SECONDS + $(duration_to_seconds "$SETTLE_TIMEOUT")))
+
+  while ((SECONDS < deadline)); do
+    ready=$(
+      kubectl -n "$namespace" get "$workload" \
+        -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true
+    )
+    ready="${ready:-0}"
+
+    if ((ready >= minimum_ready)); then
+      return 0
+    fi
+
+    sleep "$POLL_SECONDS"
+  done
+
+  die "${namespace}/${workload} has ${ready} Ready replicas; maintenance requires ${minimum_ready}"
+}
+
+wait_for_displaced_workload_survivability() {
+  local workloads_file="$1"
+  local namespace
+  local workload
+  local desired
+  local minimum_ready
+
+  [[ -s "$workloads_file" ]] || {
+    log "no controller-owned workloads need maintenance checks"
+    return 0
+  }
+
+  log "checking displaced workload availability"
+
+  while IFS=$'\t' read -r namespace workload; do
+    [[ -n "$namespace" && -n "$workload" ]] || continue
+
+    case "$workload" in
+      deployment/* | replicaset/*)
+        desired=$(
+          kubectl -n "$namespace" get "$workload" \
+            -o jsonpath='{.spec.replicas}' 2>/dev/null || true
+        )
+        desired="${desired:-1}"
+        wait_for_controller_ready_floor "$namespace" "$workload" "$desired"
+        ;;
+      statefulset/*)
+        desired=$(
+          kubectl -n "$namespace" get "$workload" \
+            -o jsonpath='{.spec.replicas}' 2>/dev/null || true
+        )
+        desired="${desired:-1}"
+        minimum_ready=1
+        if ((desired > 1)); then
+          minimum_ready=$((desired - 1))
+        fi
+        wait_for_controller_ready_floor "$namespace" "$workload" "$minimum_ready"
+        ;;
+      *)
+        log "using a dedicated availability gate for ${namespace}/${workload}"
+        ;;
+    esac
+  done <"$workloads_file"
+}
+
 wait_for_no_bad_pods() {
   local deadline
   local settle_seconds
@@ -345,6 +432,114 @@ wait_for_no_bad_pods() {
   done
 
   die "unhealthy pods remained after waiting"
+}
+
+verify_node_is_cordoned() {
+  local unschedulable
+
+  unschedulable=$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')
+  [[ "$unschedulable" == "true" ]] ||
+    die "${NODE} is not cordoned; --resume-maintenance requires an existing maintenance cordon"
+}
+
+verify_node_has_only_maintenance_pods() {
+  local bad_pods
+
+  bad_pods=$(
+    kubectl get pods --all-namespaces \
+      --field-selector "spec.nodeName=${NODE}" \
+      -o json | jq -r '
+        .items[]
+        | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+        | select(
+            (.metadata.ownerReferences[0].kind // "") != "DaemonSet"
+            and ((
+              .metadata.namespace == "longhorn-system"
+              and .metadata.labels["longhorn.io/component"] == "instance-manager"
+            ) | not)
+          )
+        | "\(.metadata.namespace)/\(.metadata.name)\towner=\(.metadata.ownerReferences[0].kind // "none")\tphase=\(.status.phase)"'
+  )
+
+  if [[ -n "$bad_pods" ]]; then
+    printf '%s\n' "$bad_pods" >&2
+    die "non-maintenance Pods remain on ${NODE}"
+  fi
+}
+
+wait_for_cloudnativepg_survivability() {
+  local deadline
+  local bad_clusters=""
+
+  if ! kubectl get clusters.postgresql.cnpg.io --all-namespaces >/dev/null 2>&1; then
+    log "CloudNativePG clusters not found; skipping database maintenance gate"
+    return 0
+  fi
+
+  log "checking CloudNativePG one-node-down availability"
+  deadline=$((SECONDS + $(duration_to_seconds "$SETTLE_TIMEOUT")))
+
+  while ((SECONDS < deadline)); do
+    bad_clusters=$(
+      kubectl get clusters.postgresql.cnpg.io --all-namespaces -o json | jq -r \
+        --arg node "$NODE" \
+        --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
+          ($pods[0].items
+            | map({key: (.metadata.namespace + "/" + .metadata.name), value: .})
+            | from_entries) as $pod_index
+          | .items[]
+          | (.spec.instances // 1) as $desired
+          | (if $desired > 1 then $desired - 1 else 1 end) as $minimum_ready
+          | (.status.readyInstances // 0) as $ready
+          | (.status.currentPrimary // "") as $primary
+          | ($pod_index[.metadata.namespace + "/" + $primary] // {}) as $primary_pod
+          | select(
+              $ready < $minimum_ready
+              or $primary == ""
+              or ($primary_pod.metadata.name // "") != $primary
+              or ($primary_pod.spec.nodeName // "") == $node
+              or ($primary_pod.status.phase // "") != "Running"
+              or ($primary_pod.status.containerStatuses // [] | length) == 0
+              or ($primary_pod.status.containerStatuses // [] | any(.ready != true))
+            )
+          | "\(.metadata.namespace)/\(.metadata.name)\tready=\($ready)/\($desired)\tminimum=\($minimum_ready)\tprimary=\($primary)\tprimaryNode=\($primary_pod.spec.nodeName // "missing")"'
+    )
+
+    [[ -n "$bad_clusters" ]] || return 0
+    printf '%s\n' "$bad_clusters" >&2
+    sleep "$POLL_SECONDS"
+  done
+
+  die "CloudNativePG maintenance availability gate did not pass"
+}
+
+wait_for_cloudnativepg_health() {
+  local deadline
+  local bad_clusters=""
+
+  if ! kubectl get clusters.postgresql.cnpg.io --all-namespaces >/dev/null 2>&1; then
+    return 0
+  fi
+
+  log "waiting for CloudNativePG clusters to become fully healthy"
+  deadline=$((SECONDS + $(duration_to_seconds "$SETTLE_TIMEOUT")))
+
+  while ((SECONDS < deadline)); do
+    bad_clusters=$(
+      kubectl get clusters.postgresql.cnpg.io --all-namespaces -o json | jq -r '
+        .items[]
+        | (.spec.instances // 1) as $desired
+        | (.status.readyInstances // 0) as $ready
+        | select($ready != $desired or .status.phase != "Cluster in healthy state")
+        | "\(.metadata.namespace)/\(.metadata.name)\tready=\($ready)/\($desired)\tphase=\(.status.phase // "unknown")"'
+    )
+
+    [[ -n "$bad_clusters" ]] || return 0
+    printf '%s\n' "$bad_clusters" >&2
+    sleep "$POLL_SECONDS"
+  done
+
+  die "CloudNativePG clusters did not return to full health"
 }
 
 wait_for_longhorn_health() {
@@ -533,6 +728,58 @@ check_stable_node_pod_slots() {
   [[ "$status" == "pass" ]] || die "remaining stable nodes do not have enough aggregate Pod slots"
 }
 
+wait_for_longhorn_survivability() {
+  local deadline
+  local bad_volumes=""
+
+  if ! kubectl -n longhorn-system get volumes.longhorn.io >/dev/null 2>&1; then
+    return 0
+  fi
+
+  log "checking Longhorn one-node-down replica floor (${MIN_SURVIVING_LONGHORN_REPLICAS})"
+  deadline=$((SECONDS + $(duration_to_seconds "$SETTLE_TIMEOUT")))
+
+  while ((SECONDS < deadline)); do
+    bad_volumes=$(
+      kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r \
+        --arg node "$NODE" \
+        --argjson minimum "$MIN_SURVIVING_LONGHORN_REPLICAS" \
+        --slurpfile replicas <(kubectl -n longhorn-system get replicas.longhorn.io -o json) '
+          ($replicas[0].items
+            | group_by(.spec.volumeName)
+            | map({key: .[0].spec.volumeName, value: .})
+            | from_entries) as $replica_index
+          | .items[]
+          | select(.status.state == "attached" or .status.state == "attaching")
+          | . as $volume
+          | ([
+              ($replica_index[.metadata.name] // [])[]
+              | select(
+                  .spec.nodeID != $node
+                  and .status.currentState == "running"
+                  and (.spec.failedAt // "") == ""
+                )
+              | .spec.nodeID
+            ] | unique) as $surviving_nodes
+          | select(
+              (.spec.numberOfReplicas // 0) < 3
+              or .status.state != "attached"
+              or .status.robustness == "faulted"
+              or (.status.currentNodeID // "") == $node
+              or (.spec.nodeID // "") == $node
+              or ($surviving_nodes | length) < $minimum
+            )
+          | "\(.metadata.name)\t\(.status.kubernetesStatus.namespace // "")/\(.status.kubernetesStatus.pvcName // "")\tstate=\(.status.state)\trobustness=\(.status.robustness)\tattachment=\(.status.currentNodeID // "")\tsurvivingNodes=\($surviving_nodes | join(","))"'
+    )
+
+    [[ -n "$bad_volumes" ]] || return 0
+    printf '%s\n' "$bad_volumes" >&2
+    sleep "$POLL_SECONDS"
+  done
+
+  die "Longhorn one-node-down availability gate did not pass"
+}
+
 wait_for_node_storage_detach() {
   local deadline
   local timeout_seconds
@@ -618,6 +865,35 @@ settle_cluster() {
   else
     wait_for_longhorn_health
   fi
+  wait_for_cloudnativepg_health
+  wait_for_no_bad_pods
+}
+
+verify_returned_node_network() {
+  local internal_ip
+  local flannel_ip
+
+  internal_ip=$(
+    kubectl get node "$NODE" \
+      -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+  )
+  flannel_ip=$(
+    kubectl get node "$NODE" \
+      -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/public-ip}'
+  )
+
+  [[ -n "$internal_ip" ]] || die "${NODE} has no Kubernetes InternalIP"
+  [[ "$flannel_ip" == "$internal_ip" ]] ||
+    die "${NODE} Flannel public IP (${flannel_ip:-missing}) does not match InternalIP (${internal_ip})"
+}
+
+verify_resumed_maintenance_state() {
+  log "validating resumed maintenance state for ${NODE}"
+  verify_node_is_cordoned
+  verify_node_has_only_maintenance_pods
+  wait_for_node_storage_detach
+  wait_for_longhorn_survivability
+  wait_for_cloudnativepg_survivability
   wait_for_no_bad_pods
 }
 
@@ -668,8 +944,7 @@ reboot_host() {
     0 | 255)
       ;;
     *)
-      kubectl uncordon "$NODE" || true
-      die "remote reboot command failed before reboot started"
+      die "remote reboot command failed before reboot started; ${NODE} remains cordoned"
       ;;
   esac
 }
@@ -704,13 +979,24 @@ poweroff_host() {
 
 prepare_node_for_disruption() {
   local workloads_file
+  local unschedulable
   workloads_file="$1"
 
   log "checking Kubernetes node ${NODE}"
   kubectl get node "$NODE" >/dev/null
 
+  if [[ "$RESUME_MAINTENANCE" == true ]]; then
+    verify_resumed_maintenance_state
+    return 0
+  fi
+
+  unschedulable=$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')
+  [[ "$unschedulable" != "true" ]] ||
+    die "${NODE} is already cordoned; use --resume-maintenance for another power cycle"
+
   log "running preflight cluster health checks"
   wait_for_longhorn_health
+  wait_for_cloudnativepg_health
   wait_for_no_bad_pods
   check_pdb_eviction_blockers
   check_stable_node_pod_slots
@@ -741,15 +1027,16 @@ prepare_node_for_disruption() {
 
     log "draining ${NODE}"
     if ! kubectl "${drain_args[@]}"; then
-      log "drain failed; uncordoning ${NODE}"
-      kubectl uncordon "$NODE" || true
-      die "drain failed; node disruption was not started"
+      die "drain failed; node disruption was not started and ${NODE} remains cordoned"
     fi
 
-    settle_cluster "$workloads_file"
+    wait_for_displaced_workload_survivability "$workloads_file"
+    wait_for_no_bad_pods
   fi
 
   wait_for_node_storage_detach
+  wait_for_longhorn_survivability
+  wait_for_cloudnativepg_survivability
 }
 
 run_reboot() {
@@ -764,6 +1051,9 @@ run_reboot() {
 
   log "waiting for ${NODE} to report Ready"
   kubectl wait "node/${NODE}" --for=condition=Ready --timeout="$READY_TIMEOUT"
+  verify_returned_node_network
+  wait_for_longhorn_survivability
+  wait_for_cloudnativepg_survivability
 
   if [[ "$LEAVE_CORDONED" == true ]]; then
     log "leaving ${NODE} cordoned"
@@ -795,14 +1085,41 @@ run_poweron_finalize() {
 
   log "waiting for ${NODE} to report Ready"
   kubectl wait "node/${NODE}" --for=condition=Ready --timeout="$READY_TIMEOUT"
+  verify_node_is_cordoned
+  verify_returned_node_network
+  wait_for_longhorn_survivability
+  wait_for_cloudnativepg_survivability
 
   log "uncordoning ${NODE}"
   kubectl uncordon "$NODE"
 
   wait_for_longhorn_health
+  wait_for_cloudnativepg_health
   wait_for_no_bad_pods
 
   log "done"
+}
+
+run_check_only() {
+  local unschedulable
+
+  log "checking Kubernetes node ${NODE} without changing cluster or host state"
+  kubectl get node "$NODE" >/dev/null
+
+  if [[ "$RESUME_MAINTENANCE" == true ]]; then
+    verify_resumed_maintenance_state
+  else
+    unschedulable=$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')
+    [[ "$unschedulable" != "true" ]] ||
+      die "${NODE} is already cordoned; use --resume-maintenance for maintenance-state checks"
+    wait_for_longhorn_health
+    wait_for_cloudnativepg_health
+    wait_for_no_bad_pods
+    check_pdb_eviction_blockers
+    check_stable_node_pod_slots
+  fi
+
+  log "checks passed; no changes were made"
 }
 
 main() {
@@ -811,6 +1128,19 @@ main() {
   need_command ssh
   need_command jq
   need_command awk
+
+  if [[ "$RESUME_MAINTENANCE" == true && "$ACTION" == "on" ]]; then
+    die "--resume-maintenance is for reboot/off cycles; use kon to finalize maintenance"
+  fi
+
+  if [[ "$RESUME_MAINTENANCE" == true && "$SKIP_DRAIN" == true ]]; then
+    die "--resume-maintenance and --skip-drain cannot be combined"
+  fi
+
+  if [[ "$CHECK_ONLY" == true ]]; then
+    run_check_only
+    return 0
+  fi
 
   case "$ACTION" in
     reboot)

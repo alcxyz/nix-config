@@ -29,6 +29,26 @@ k8s-node-reboot HOST:
     kreboot {{HOST}}
 
 [group("ops")]
+k8s-node-preflight HOST:
+    kreboot --check-only {{HOST}}
+
+[group("ops")]
+k8s-node-maintenance-check HOST:
+    koff --resume-maintenance --check-only {{HOST}}
+
+[group("ops")]
+k8s-node-poweroff HOST:
+    koff {{HOST}}
+
+[group("ops")]
+k8s-node-poweroff-again HOST:
+    koff --resume-maintenance {{HOST}}
+
+[group("ops")]
+k8s-node-poweron HOST:
+    kon {{HOST}}
+
+[group("ops")]
 ssd-health DEVICE:
     sudo scripts/ops/ssd-health-check.sh {{DEVICE}}
 
