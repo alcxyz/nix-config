@@ -47,6 +47,8 @@ global.shutdown = global.mode == "shutdown" || global.mode == "reboot";
 global.frame = 0;
 global.boot_progress = 0;
 global.visual_progress = 0;
+global.animation_started = 0;
+global.force_complete = 0;
 
 # A KMS handoff changes Plymouth's virtual canvas. Rebuild every scaled sprite
 # against the new bounds so the same centered composition appears on every
@@ -132,6 +134,16 @@ fun setup_layout()
           global.letters[index].sprite.SetOpacity(0);
         global.letters[2].sprite.SetX(global.word_center_x);
         global.letters[5].sprite.SetX(global.word_center_x);
+
+        # Until userspace has settled the dock-backed outputs, present a
+        # deliberate static mark rather than letting the off-screen animation
+        # expose an arbitrary late frame when a display appears.
+        if (!global.animation_started)
+          {
+            watermark.sprite.SetOpacity(0.10);
+            global.letters[2].sprite.SetOpacity(1);
+            global.letters[5].sprite.SetOpacity(1);
+          }
       }
   }
 
@@ -157,10 +169,68 @@ fun boot_progress_callback(duration, progress)
 
 Plymouth.SetBootProgressFunction(boot_progress_callback);
 
+fun show_complete_boot_lockup()
+  {
+    watermark.sprite.SetOpacity(0.05);
+    subtitle.sprite.SetOpacity(1);
+    progress_track.sprite.SetOpacity(1);
+
+    for (index = 0; index < 6; index++)
+      {
+        global.letters[index].sprite.SetX(global.letters[index].final_x);
+        global.letters[index].sprite.SetOpacity(1);
+      }
+
+    local.fill_image = progress_fill.original.Scale(
+      progress_track.width,
+      progress_track.height
+    );
+    progress_fill.sprite.SetImage(local.fill_image);
+    progress_fill.sprite.SetOpacity(1);
+  }
+
+# The XPS boot sequencer uses messages as renderer-independent stage signals.
+# Reloading the theme restores the static prelude; the start signal begins a
+# fresh visible epoch, while the completion signal guarantees a coherent final
+# lockup even when a high-resolution output cannot sustain the requested rate.
+fun display_message_callback(message)
+  {
+    if (message == "nixbox:start")
+      {
+        global.animation_started = 1;
+        global.force_complete = 0;
+        global.frame = 0;
+        global.visual_progress = 0;
+        setup_layout();
+      }
+
+    if (message == "nixbox:complete")
+      {
+        global.animation_started = 1;
+        global.force_complete = 1;
+        show_complete_boot_lockup();
+      }
+  }
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+
 fun refresh_callback()
   {
+    if (!global.shutdown && !global.animation_started)
+      return;
+
+    if (!global.shutdown && global.force_complete)
+      {
+        show_complete_boot_lockup();
+        return;
+      }
+
     global.frame += 1;
-    local.time = global.frame / 60;
+    # The external 4K path advances Plymouth's refresh callback at roughly
+    # 24 frames per second despite a 60 Hz request. Pace the designed motion
+    # against that observed renderer rate; the explicit completion stage above
+    # remains the hard wall-clock guarantee.
+    local.time = global.frame / 24;
 
     if (global.shutdown)
       {
@@ -247,24 +317,7 @@ Plymouth.SetRefreshFunction(refresh_callback);
 fun quit_callback()
   {
     if (!global.shutdown)
-      {
-        watermark.sprite.SetOpacity(0.05);
-        subtitle.sprite.SetOpacity(1);
-        progress_track.sprite.SetOpacity(1);
-
-        for (index = 0; index < 6; index++)
-          {
-            global.letters[index].sprite.SetX(global.letters[index].final_x);
-            global.letters[index].sprite.SetOpacity(1);
-          }
-
-        local.fill_image = progress_fill.original.Scale(
-          progress_track.width,
-          progress_track.height
-        );
-        progress_fill.sprite.SetImage(local.fill_image);
-        progress_fill.sprite.SetOpacity(1);
-      }
+      show_complete_boot_lockup();
   }
 
 Plymouth.SetQuitFunction(quit_callback);

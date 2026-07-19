@@ -29,9 +29,11 @@ reveals N/I/B/O and `MEDIA CENTER`, fills the progress track, and raises a faint
 Nix watermark behind the completed lockup. Plymouth still starts on the early
 firmware surface to cover diagnostic boot. Once the existing display-pipeline
 allocator has settled the dock-backed outputs, a boot-only theme reload starts
-the bounded eight-second sequence from frame zero on the visible displays. A
-missing Plymouth timing estimate falls back to the approved design fill curve,
-so the final bar and quit frame are complete.
+the bounded eight-second sequence from frame zero on the visible displays.
+Before that point, a static Nix/X mark prevents a completed wordmark from
+flashing before its own intro. Explicit start and completion stage signals
+guarantee the final subtitle, bar, watermark, and quit frame even when the
+high-resolution Plymouth renderer advances below its requested refresh rate.
 
 Once Hyprland has a usable output, a distinct NIXBOX Quickshell overlay presents
 only the `STARTING SESSION` transition on every active display and fades into

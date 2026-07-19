@@ -74,7 +74,10 @@ in {
     script = ''
       if plymouth --ping; then
         plymouth reload
-        sleep 8
+        plymouth display-message --text=nixbox:start
+        sleep 7
+        plymouth display-message --text=nixbox:complete
+        sleep 1
       fi
     '';
   };

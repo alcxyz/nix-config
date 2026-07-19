@@ -36,8 +36,11 @@ display-hotplug callback rebuilds scaled sprites for the current virtual canvas
 without changing the animation epoch. After the existing display-pipeline
 allocator has allowed dock authorization and connector discovery to settle, a
 boot-only oneshot uses Plymouth's supported theme reload operation to give the
-visible pixel displays a deliberate frame-zero start. Graphical login remains
-ordered behind the bounded eight-second sequence.
+visible pixel displays a deliberate frame-zero start. Before that signal, the
+theme holds a static Nix/X prelude rather than exposing an arbitrary late frame.
+The oneshot sends explicit start and completion stage messages around the
+bounded eight-second sequence, so graphical login cannot cut off the final
+lockup when a high-resolution renderer advances below the requested rate.
 
 Prefer Plymouth's measured boot estimate for the progress fill. When no timing
 estimate is available, use the approved design prototype's bounded fill curve
@@ -74,7 +77,9 @@ fallback policy before the visible theme epoch and greetd, while Hyprland
 continues to own dynamic output selection, workspaces, and mirroring. The
 deliberate visible epoch adds at most eight seconds to graphical startup when
 Plymouth is active, in exchange for avoiding an off-screen animation that only
-exposes its final frame after a dock display appears.
+exposes its final frame after a dock display appears. Plymouth does not expose a
+monotonic clock to script themes, so smooth intermediate motion remains
+refresh-driven while the externally signalled final frame is wall-clock bound.
 
 Boot, session start, and graphical power actions retain separate renderer
 lifecycles and meanings. A DMS restart cannot replay either startup animation,
