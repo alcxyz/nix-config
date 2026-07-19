@@ -102,7 +102,7 @@ in {
     "monitor.bluez.rules" = [
       {
         matches = [{"device.form-factor" = "speaker";}];
-        actions."update-props"."bluez5.auto-connect" = ["a2dp_source"];
+        actions."update-props"."device.profile" = "a2dp-sink";
       }
     ];
   };

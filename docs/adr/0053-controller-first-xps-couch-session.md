@@ -68,9 +68,10 @@ TV paths and auxiliary display as independent sinks without changing the whole
 card profile on every selection. Connected Bluetooth speakers join the same
 PipeWire sink list. Cycle available sinks with held controller Select plus the
 west face button or `Super+Shift+A`; retain DMS's normal output picker for phone
-and pointer use. Bluetooth devices that identify as speakers automatically
-activate their A2DP playback path, while pairing and trust data remain host
-state rather than public configuration.
+and pointer use. When a Bluetooth device that identifies as a speaker is
+manually connected, activate its A2DP playback path but leave output selection
+manual. Pairing and trust data remain host state rather than public
+configuration.
 
 Keep attached secondary and tertiary displays independent in the all-output
 layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
