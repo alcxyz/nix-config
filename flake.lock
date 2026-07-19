@@ -200,12 +200,30 @@
         "type": "github"
       }
     },
+    "displaycontrol": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1784473286,
+        "narHash": "sha256-07ZLud8as9NXEwwMjeRdR8CpvEdTP1uKgtElR93PCJ8=",
+        "owner": "alcxyz",
+        "repo": "DankDisplayControl",
+        "rev": "788226cf09c6e1f68582fb0937c3df323c843f8c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "ref": "dev",
+        "repo": "DankDisplayControl",
+        "type": "github"
+      }
+    },
     "dms-plugins": {
       "inputs": {
         "aiusage": "aiusage",
         "calculator": "calculator",
         "dankcalendar": "dankcalendar",
         "diskusage": "diskusage",
+        "displaycontrol": "displaycontrol",
         "firstparty": "firstparty",
         "quicksearch": "quicksearch",
         "spotify": "spotify",
@@ -214,11 +232,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1783070701,
-        "narHash": "sha256-V5moZ+r1VRm1jqGFcvjxRTsTGJY08QHd5dkD7iEhRBU=",
+        "lastModified": 1784473423,
+        "narHash": "sha256-qxIOx6qUC9hovcXHnrzxi+u+m5vPoFo/R33NARn04e8=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "a6af81f3d509b31b6fd0a89848e2354e74e076eb",
+        "rev": "447ed315f395ae47b174b820f08262436e2f4197",
         "type": "github"
       },
       "original": {

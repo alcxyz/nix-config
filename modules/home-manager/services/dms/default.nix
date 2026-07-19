@@ -274,6 +274,10 @@ in {
           enable = true;
           src = plugins.aiusage;
         };
+        DankDisplayControl = {
+          enable = true;
+          src = plugins.displaycontrol;
+        };
         # First-party plugins (AvengeMedia/dms-plugins monorepo)
         DankActions = {
           enable = true;

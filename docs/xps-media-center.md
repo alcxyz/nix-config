@@ -9,6 +9,12 @@ holding `Minus+B` on the Switch Pro controller. DMS places the modal on the
 currently focused display and uses couch-scaled typography; repeat the shortcut
 to close it.
 
+The DMS bar also includes a `Display control` pill. Its popout separates the
+persisted layout policy from the outputs Hyprland is actually presenting, and
+shows whether mirroring is active or merely armed until another TV becomes
+available. Use its couch-sized rows to select any layout directly, toggle
+mirroring, or cycle audio without stepping through intermediate states.
+
 ## Controller controls
 
 Hold each combination until the action triggers.
@@ -138,12 +144,14 @@ the default output.
 ## Browser, phone, and desktop use
 
 The couch browser and Moonlight use XWayland so KDE Connect can provide phone
-keyboard, clicks, scrolling, and pointer movement. The protected Brave launcher
-opens an encrypted profile after a password prompt; normal browsing remains
-available without unlocking it. Browsers use Hyprland's normal tiled layout;
-they do not request browser-level fullscreen, avoiding its broken couch pointer
-and click behaviour. Their chrome and page contents use a couch-friendly 1.5x
-device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
+keyboard, clicks, and scrolling. Phone pointer movement is not currently
+supported; an X11-to-Hyprland pointer bridge was removed because it interfered
+with physical mouse movement over XWayland windows. The protected Brave
+launcher opens an encrypted profile after a password prompt; normal browsing
+remains available without unlocking it. Browsers use Hyprland's normal tiled
+layout; they do not request browser-level fullscreen, avoiding its broken couch
+pointer and click behaviour. Their chrome and page contents use a couch-friendly
+1.5x device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 
 XPS retains separate `couch`, `merged`, and normal `desktop` profiles. The
 merged profile is the media-center default in use here; desktop mode remains a
@@ -156,6 +164,7 @@ These commands report the current persisted choices without changing them:
 ```sh
 xps-session-mode
 couch-display-layout status
+couch-display-mirror status
 couch-audio-output status
 ```
 

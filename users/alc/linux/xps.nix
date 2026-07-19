@@ -93,7 +93,10 @@ in {
       enable = true;
       command = config.services.hyprlock.lockCommand;
     };
-    pluginSettings.dankAIUsage.enabled = true;
+    pluginSettings = {
+      dankAIUsage.enabled = true;
+      dankDisplayControl.enabled = true;
+    };
   };
   services.hyprlock.enable = true;
   services.waynergy = {

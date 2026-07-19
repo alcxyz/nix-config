@@ -737,87 +737,6 @@
     '';
   };
 
-  pointerSyncSource = pkgs.writeText "couch-pointer-sync.py" ''
-    import ctypes
-    import subprocess
-    import time
-
-
-    x11 = ctypes.CDLL(${builtins.toJSON "${pkgs.libx11}/lib/libX11.so.6"})
-    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
-    x11.XOpenDisplay.restype = ctypes.c_void_p
-    x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
-    x11.XDefaultRootWindow.restype = ctypes.c_ulong
-    x11.XQueryPointer.argtypes = [
-        ctypes.c_void_p,
-        ctypes.c_ulong,
-        ctypes.POINTER(ctypes.c_ulong),
-        ctypes.POINTER(ctypes.c_ulong),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_uint),
-    ]
-    x11.XQueryPointer.restype = ctypes.c_int
-
-
-    display = None
-    while not display:
-        display = x11.XOpenDisplay(b":0")
-        if not display:
-            time.sleep(0.5)
-
-    root = x11.XDefaultRootWindow(display)
-    last_position = None
-
-    while True:
-        root_return = ctypes.c_ulong()
-        child_return = ctypes.c_ulong()
-        root_x = ctypes.c_int()
-        root_y = ctypes.c_int()
-        window_x = ctypes.c_int()
-        window_y = ctypes.c_int()
-        mask = ctypes.c_uint()
-
-        if x11.XQueryPointer(
-            display,
-            root,
-            ctypes.byref(root_return),
-            ctypes.byref(child_return),
-            ctypes.byref(root_x),
-            ctypes.byref(root_y),
-            ctypes.byref(window_x),
-            ctypes.byref(window_y),
-            ctypes.byref(mask),
-        ):
-            position = (root_x.value, root_y.value)
-            if position != last_position:
-                subprocess.run(
-                    [
-                        ${builtins.toJSON (lib.getExe' pkgs.hyprland "hyprctl")},
-                        "dispatch",
-                        "movecursor",
-                        str(position[0]),
-                        str(position[1]),
-                    ],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                )
-                last_position = position
-
-        time.sleep(1 / 60)
-  '';
-
-  pointerSync = pkgs.writeShellApplication {
-    name = "couch-pointer-sync";
-    text = ''
-      exec ${pkgs.python3}/bin/python ${pointerSyncSource}
-    '';
-  };
-
   softwareMirror = pkgs.writeShellApplication {
     name = "couch-software-mirror";
     runtimeInputs = [
@@ -1579,7 +1498,13 @@
 
   mergedDmsSession = pkgs.writeShellApplication {
     name = "couch-merged-dms";
-    runtimeInputs = [pkgs.coreutils];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+      displayLayoutControl
+      displayMirrorToggle
+      audioOutputControl
+    ];
     text = ''
       mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
       if [ "$mode" != merged ]; then
@@ -1605,6 +1530,11 @@
       plugin_settings="$HOME/.config/DankMaterialShell/plugin_settings.json"
       if [ -e "$plugin_settings" ]; then
         ln -s "$plugin_settings" "$settings_directory/plugin_settings.json"
+      fi
+
+      plugins_directory="$HOME/.config/DankMaterialShell/plugins"
+      if [ -d "$plugins_directory" ]; then
+        ln -s "$plugins_directory" "$settings_directory/plugins"
       fi
 
       export XDG_CONFIG_HOME="$config_home"
@@ -1812,10 +1742,10 @@
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
     ${lib.optionalString cfg.enableAudioOutputCycle "exec-once = ${lib.getExe audioOutputControl} initialize"}
     # Hyprland's portal does not implement RemoteDesktop. Keep KDE Connect and
-    # couch browsers on XWayland so its phone keyboard and touchpad can inject
-    # input through XTest instead.
+    # couch browsers on XWayland so its phone keyboard, clicks, and scrolling
+    # can be injected through XTest. Do not mirror the X11 pointer into
+    # Hyprland: doing so fights physical pointer motion over XWayland surfaces.
     ${lib.optionalString cfg.enableKdeConnect "exec-once = ${pkgs.coreutils}/bin/env QT_QPA_PLATFORM=xcb ${lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd"}"}
-    ${lib.optionalString cfg.enableKdeConnect "exec-once = ${lib.getExe pointerSync}"}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
         output: source: "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
@@ -2130,6 +2060,7 @@ in {
               "clock"
             ];
             rightWidgets = [
+              "dankDisplayControl"
               "systemTray"
               "notificationButton"
               "battery"
@@ -2484,7 +2415,6 @@ in {
       ]
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
-      ++ lib.optional cfg.enableKdeConnect pointerSync
       ++ lib.optional cfg.enableMergedProfile mergedDmsSession
       ++ lib.optional cfg.enableMergedProfile mergedUiControl
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror

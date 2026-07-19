@@ -13,8 +13,8 @@ offline, a relaunch loop can leave the TV on an empty workspace and makes the
 browser a secondary recovery path rather than a normal couch application.
 
 The couch session must also remain usable without a keyboard. KDE Connect can
-provide phone keyboard and pointer input through XTest, but those events only
-reach XWayland clients. A physical controller therefore needs stable local
+provide phone keyboard, click, and scroll input through XTest, but those events
+only reach XWayland clients. A physical controller therefore needs stable local
 shortcuts for entering and leaving the stream, while the browser and Moonlight
 need a compatible local input path.
 
@@ -86,6 +86,16 @@ Publish the controller and keyboard reference as a generated DMS cheatsheet.
 Toggle the native DMS modal from either input type so it follows the focused
 display without adding a separate desktop dialog or placement workaround.
 
+Expose display management through a DMS bar plugin in the merged profile. Keep
+the host commands authoritative for applying layout, mirror, and audio policy;
+the plugin is a presentation layer that reads effective outputs directly from
+Hyprland. Show persisted policy separately from the active display set so a
+hotplug fallback or armed mirror request is not mistaken for the visible state.
+Use couch-sized full-row actions and direct layout choices instead of requiring
+users to remember or repeatedly cycle keyboard and controller shortcuts. Share
+the normal plugin directory with the isolated merged DMS configuration and put
+the required host commands explicitly in that service's execution path.
+
 Use DMS's built-in Polkit agent for privileged graphical authentication and
 enable NixOS's setuid `pkexec` wrapper on XPS. Administrative couch actions can
 therefore request authorization through a DMS-owned modal instead of binding a
@@ -152,9 +162,11 @@ extended outputs.
 
 KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
 XWayland clients, but its pointer warp does not move Hyprland's compositor
-cursor. While KDE Connect is enabled, mirror changed XWayland root-pointer
-coordinates into Hyprland; let Hyprland hide the couch cursor after a short
-idle period and reveal it again when pointer input resumes.
+cursor. Do not mirror XWayland root-pointer coordinates into Hyprland: that
+feedback loop also reacts to physical pointer movement over an XWayland window
+and makes the compositor cursor disappear. Phone pointer movement remains a
+separate Wayland-injection problem; preserve reliable physical pointer input
+and the KDE Connect input types that work without the bridge.
 
 Expose the credential-bearing couch browser only through a password-gated
 launcher backed by an encrypted profile directory. Keep the unrestricted
@@ -228,5 +240,6 @@ attached to the container's X server.
 ## Tracking
 
 - Issue #140 tracks the initial controller-first rollout and live validation.
-- Issue #141 tracks optional controller-native browser navigation and a
-  deliberate remote shutdown action.
+- Issue #141 tracks optional controller-native browser navigation, a proper
+  Wayland-compatible phone pointer path, and a deliberate remote shutdown
+  action.
