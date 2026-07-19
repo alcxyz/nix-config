@@ -99,6 +99,12 @@ in {
         };
       }
     ];
+    "monitor.bluez.rules" = [
+      {
+        matches = [{"device.form-factor" = "speaker";}];
+        actions."update-props"."bluez5.auto-connect" = ["a2dp_source"];
+      }
+    ];
   };
 
   users.users.${username}.extraGroups = [
