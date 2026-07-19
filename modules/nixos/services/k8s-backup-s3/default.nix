@@ -327,19 +327,29 @@ in
 
         for bucket in "''${buckets[@]}"; do
           mc mb --ignore-existing "replica/$bucket"
-          mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket" >/dev/null
 
-          source_stats="$(mc du --json "source/$bucket")"
-          replica_stats="$(mc du --json "replica/$bucket")"
-          source_size="$(jq -r '.size' <<<"$source_stats")"
-          replica_size="$(jq -r '.size' <<<"$replica_stats")"
-          source_objects="$(jq -r '.objects' <<<"$source_stats")"
-          replica_objects="$(jq -r '.objects' <<<"$replica_stats")"
-          if [ "$source_size" != "$replica_size" ] || [ "$source_objects" != "$replica_objects" ]; then
-            echo "replica verification failed for bucket $bucket: source=$source_size bytes/$source_objects objects replica=$replica_size bytes/$replica_objects objects" >&2
-            exit 1
-          fi
-          echo "verified bucket=$bucket bytes=$source_size objects=$source_objects"
+          for attempt in $(seq 1 5); do
+            mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket" >/dev/null
+
+            source_stats="$(mc du --json "source/$bucket")"
+            replica_stats="$(mc du --json "replica/$bucket")"
+            source_size="$(jq -r '.size' <<<"$source_stats")"
+            replica_size="$(jq -r '.size' <<<"$replica_stats")"
+            source_objects="$(jq -r '.objects' <<<"$source_stats")"
+            replica_objects="$(jq -r '.objects' <<<"$replica_stats")"
+            if [ "$source_size" = "$replica_size" ] && [ "$source_objects" = "$replica_objects" ]; then
+              echo "verified bucket=$bucket bytes=$source_size objects=$source_objects attempts=$attempt"
+              break
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "replica verification failed for changing bucket $bucket after $attempt attempts: source=$source_size bytes/$source_objects objects replica=$replica_size bytes/$replica_objects objects" >&2
+              exit 1
+            fi
+
+            echo "bucket $bucket changed during verification attempt $attempt; reconciling the delta" >&2
+            sleep 2
+          done
         done
       '';
     };
