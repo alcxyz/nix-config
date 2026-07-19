@@ -38,7 +38,7 @@ Commands:
 
 Options:
   --node <name>            Kubernetes node name. Defaults to <host>.
-  --ssh-target <target>    SSH target. Defaults to <host>.
+  --ssh-target <target>    SSH target. Defaults to root@<host>.
   --skip-drain             Cordon only, then reboot. Use for intentional disruption.
   --force-drain            Pass --force to kubectl drain for unmanaged pods.
   --bypass-pdb             Use pod deletion instead of eviction; ignores PDBs.
@@ -192,7 +192,7 @@ parse_args() {
   }
 
   NODE="${NODE:-$HOST}"
-  SSH_TARGET="${SSH_TARGET:-$HOST}"
+  SSH_TARGET="${SSH_TARGET:-root@$HOST}"
 
   ACTION="${K8S_NODE_POWER_ACTION:-}"
 
@@ -780,6 +780,27 @@ wait_for_longhorn_survivability() {
   die "Longhorn one-node-down availability gate did not pass"
 }
 
+verify_remote_privilege() {
+  log "checking privileged SSH access on ${SSH_TARGET}"
+  if ! ssh -o BatchMode=yes "$SSH_TARGET" '
+    if [[ $(id -u) -eq 0 ]]; then
+      exit 0
+    fi
+    exec sudo -n true
+  '; then
+    die "${SSH_TARGET} does not provide noninteractive root access; no cluster state was changed"
+  fi
+}
+
+remote_root_shell() {
+  ssh -o BatchMode=yes "$SSH_TARGET" '
+    if [[ $(id -u) -eq 0 ]]; then
+      exec bash -s
+    fi
+    exec sudo -n bash -s
+  '
+}
+
 wait_for_node_storage_detach() {
   local deadline
   local timeout_seconds
@@ -796,7 +817,7 @@ wait_for_node_storage_detach() {
           .items[]
           | select(.status.currentNodeID == $node or .spec.nodeID == $node)
           | select(.status.state != "detached")
-          | "\(.metadata.name)\t\(.status.state)\t\(.status.kubernetesStatus.namespace // \"\")/\(.status.kubernetesStatus.pvcName // \"\")"'
+          | "\(.metadata.name)\t\(.status.state)\t\(.status.kubernetesStatus.namespace // "")/\(.status.kubernetesStatus.pvcName // "")"'
       )
 
       [[ -n "$attached_volumes" ]] || break
@@ -808,7 +829,7 @@ wait_for_node_storage_detach() {
   fi
 
   log "checking ${SSH_TARGET} for residual Longhorn mounts and iSCSI sessions"
-  if ! ssh -o BatchMode=yes "$SSH_TARGET" 'sudo bash -s' <<'EOF'; then
+  if ! remote_root_shell <<'EOF'; then
 set -euo pipefail
 
 command -v findmnt >/dev/null
@@ -936,7 +957,12 @@ reboot_host() {
   log "rebooting ${SSH_TARGET}"
 
   set +e
-  ssh -t "$SSH_TARGET" 'sudo systemctl reboot --no-block'
+  ssh -T "$SSH_TARGET" '
+    if [[ $(id -u) -eq 0 ]]; then
+      exec systemctl reboot --no-block
+    fi
+    exec sudo -n systemctl reboot --no-block
+  '
   status=$?
   set -e
 
@@ -964,7 +990,12 @@ poweroff_host() {
   log "powering off ${SSH_TARGET}"
 
   set +e
-  ssh -t "$SSH_TARGET" 'sudo systemctl poweroff'
+  ssh -T "$SSH_TARGET" '
+    if [[ $(id -u) -eq 0 ]]; then
+      exec systemctl poweroff
+    fi
+    exec sudo -n systemctl poweroff
+  '
   status=$?
   set -e
 
@@ -984,6 +1015,7 @@ prepare_node_for_disruption() {
 
   log "checking Kubernetes node ${NODE}"
   kubectl get node "$NODE" >/dev/null
+  verify_remote_privilege
 
   if [[ "$RESUME_MAINTENANCE" == true ]]; then
     verify_resumed_maintenance_state
@@ -1105,6 +1137,7 @@ run_check_only() {
 
   log "checking Kubernetes node ${NODE} without changing cluster or host state"
   kubectl get node "$NODE" >/dev/null
+  verify_remote_privilege
 
   if [[ "$RESUME_MAINTENANCE" == true ]]; then
     verify_resumed_maintenance_state
