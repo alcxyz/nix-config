@@ -13,7 +13,12 @@ ShellRoot {
     readonly property real subtitleProgress: easeOutCubic(clamp((elapsed - 0.45) / 0.7))
     readonly property real fadeProgress: easeInCubic(clamp((elapsed - 2.4) / 0.7))
     readonly property real overlayOpacity: 1 - fadeProgress
-    property double startedAt: Date.now()
+    property double startedAt: 0
+
+    function beginAnimation() {
+        if (startedAt === 0)
+            startedAt = Date.now();
+    }
 
     function clamp(value) {
         return Math.max(0, Math.min(1, value));
@@ -29,7 +34,7 @@ ShellRoot {
 
     Timer {
         interval: 16
-        running: true
+        running: root.startedAt > 0
         repeat: true
         onTriggered: {
             root.elapsed = (Date.now() - root.startedAt) / 1000;
@@ -66,6 +71,8 @@ ShellRoot {
                 width: 0
                 height: 0
             }
+
+            Component.onCompleted: Qt.callLater(root.beginAnimation)
 
             Rectangle {
                 anchors.fill: parent

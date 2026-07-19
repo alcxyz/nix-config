@@ -46,7 +46,15 @@ in {
     enable = true;
     theme = "nixbox";
     themePackages = [pkgs.nixbox-plymouth-theme];
+    # The boot menu already owns a working firmware framebuffer on the chosen
+    # couch display. Use it immediately while i915 discovers dock outputs.
+    extraConfig = "UseSimpledrmNoLuks=1";
   };
+
+  # Activation can legitimately request wrapper regeneration several times
+  # during early boot. Every run is idempotent; do not report a false failure
+  # merely because systemd's default start-rate limit was reached.
+  systemd.services.suid-sgid-wrappers.unitConfig.StartLimitIntervalSec = 0;
 
   # Keep recovery TTYs usable with the laptop's Norwegian keyboard. Graphical
   # sessions manage their own us/no layout and toggle independently.
