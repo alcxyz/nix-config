@@ -509,6 +509,9 @@
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
       "layout": {ecodes.BTN_SELECT, ecodes.BTN_NORTH},
     ''}
+        ${lib.optionalString cfg.enableAudioOutputCycle ''
+      "audio": {ecodes.BTN_SELECT, ecodes.BTN_WEST},
+    ''}
     }
     COMMANDS = {
         "start": [${builtins.toJSON (lib.getExe couchStreamControl)}, "start"],
@@ -518,6 +521,9 @@
     ''}
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
       "layout": [${builtins.toJSON (lib.getExe displayLayoutControl)}, "cycle"],
+    ''}
+        ${lib.optionalString cfg.enableAudioOutputCycle ''
+      "audio": [${builtins.toJSON (lib.getExe audioOutputControl)}, "cycle"],
     ''}
     }
 
@@ -693,6 +699,127 @@
     '';
   };
 
+  audioOutputControl = pkgs.writeShellApplication {
+    name = "couch-audio-output";
+    runtimeInputs = [
+      pkgs.gnused
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.pipewire
+      pkgs.wireplumber
+    ];
+    text = ''
+      get_sinks() {
+        pw-dump | jq -c '
+          [
+            .[]
+            | select(
+                .type == "PipeWire:Interface:Node"
+                and (.info.props["media.class"] // "") == "Audio/Sink"
+              )
+            | {
+                id,
+                description: (.info.props["node.description"] // .info.props["node.nick"] // .info.props["node.name"]),
+                priority: (.info.props["priority.session"] // 0),
+                api: (.info.props["device.api"] // ""),
+                name: (.info.props["node.name"] // "")
+              }
+          ]
+          | sort_by([-.priority, .description])
+        '
+      }
+
+      sinks="$(get_sinks)"
+      if [ "$(jq 'length' <<<"$sinks")" -eq 0 ]; then
+        echo "no audio outputs are available" >&2
+        exit 1
+      fi
+
+      current_id="$(
+        wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null \
+          | sed -n 's/^id \([0-9][0-9]*\),.*/\1/p' \
+          | head -n1
+      )"
+
+      follow_layout() {
+        current_api="$(
+          jq -r --argjson current "''${current_id:--1}" \
+            '.[] | select(.id == $current) | .api' <<<"$sinks"
+        )"
+        if [ "$current_api" = bluez5 ]; then
+          return
+        fi
+
+        layout="$(tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true)"
+        case "$layout" in
+          solo-primary) target="Primary TV" ;;
+          solo-secondary) target="Secondary TV" ;;
+          solo-tertiary) target="Auxiliary display" ;;
+          *) return ;;
+        esac
+        target_id="$(
+          jq -r --arg target "$target" \
+            '[.[] | select(.description == $target)][0].id // ""' <<<"$sinks"
+        )"
+        if [ -n "$target_id" ]; then
+          wpctl set-default "$target_id"
+        fi
+      }
+
+      case "''${1:-cycle}" in
+        initialize)
+          for ((attempt = 0; attempt < 20; attempt++)); do
+            if [ "$(jq '[.[] | select(.name | test("playback[.][0387][.]0$"))] | length' <<<"$sinks")" -ge 4 ]; then
+              break
+            fi
+            sleep 0.25
+            sinks="$(get_sinks)"
+          done
+          while IFS= read -r sink_id; do
+            wpctl set-volume "$sink_id" ${lib.escapeShellArg "${toString cfg.audioOutputStartupVolumePercent}%"}
+          done < <(
+            jq -r '.[] | select(.name | test("playback[.][0387][.]0$")) | .id' \
+              <<<"$sinks"
+          )
+          follow_layout
+          exit 0
+          ;;
+        follow-layout)
+          follow_layout
+          exit 0
+          ;;
+        status)
+          jq -r --argjson current "''${current_id:--1}" \
+            '.[] | select(.id == $current) | .description' <<<"$sinks"
+          exit 0
+          ;;
+        cycle)
+          next_id="$(
+            jq -r --argjson current "''${current_id:--1}" '
+              (map(.id) | index($current)) as $index
+              | if $index == null then .[0].id
+                else .[(($index + 1) % length)].id
+                end
+            ' <<<"$sinks"
+          )"
+          ;;
+        *)
+          echo "usage: couch-audio-output {initialize|follow-layout|cycle|status}" >&2
+          exit 2
+          ;;
+      esac
+
+      description="$(
+        jq -r --argjson id "$next_id" '.[] | select(.id == $id) | .description' \
+          <<<"$sinks"
+      )"
+      wpctl set-default "$next_id"
+      hyprctl notify 1 3000 'rgb(a6e3a1)' "Audio output: $description" \
+        >/dev/null 2>&1 || true
+      printf '%s\n' "$description"
+    '';
+  };
+
   displayLayoutControl = pkgs.writeShellApplication {
     name = "couch-display-layout";
     runtimeInputs = [
@@ -737,6 +864,9 @@
       temporary_file="$state_file.tmp"
       printf '%s\n' "$requested" > "$temporary_file"
       mv "$temporary_file" "$state_file"
+      ${lib.optionalString cfg.enableAudioOutputCycle ''
+        ${lib.getExe audioOutputControl} follow-layout >/dev/null 2>&1 || true
+      ''}
       hyprctl notify 1 3000 'rgb(89b4fa)' "Display layout: $requested" \
         >/dev/null 2>&1 || true
       printf '%s\n' "$requested"
@@ -1446,6 +1576,7 @@
     ${lib.optionalString cfg.autoStartBrowser "exec-once = ${lib.getExe couchBrowser}"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
+    ${lib.optionalString cfg.enableAudioOutputCycle "exec-once = ${lib.getExe audioOutputControl} initialize"}
     # Hyprland's portal does not implement RemoteDesktop. Keep KDE Connect and
     # couch browsers on XWayland so its phone keyboard and touchpad can inject
     # input through XTest instead.
@@ -1518,6 +1649,7 @@
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
     ${lib.optionalString cfg.enableMirrorToggle "bind = SUPER SHIFT, M, exec, ${lib.getExe displayMirrorToggle} toggle"}
     ${lib.optionalString cfg.enableAdaptiveDisplayLayout "bind = SUPER SHIFT, D, exec, ${lib.getExe displayLayoutControl} cycle"}
+    ${lib.optionalString cfg.enableAudioOutputCycle "bind = SUPER SHIFT, A, exec, ${lib.getExe audioOutputControl} cycle"}
     bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}
     ${lib.optionalString (
       cfg.protectedBrowserPackage != null
@@ -1968,6 +2100,18 @@ in {
       description = "Preserve the currently active external output with persistent all-output and solo-output recovery modes.";
     };
 
+    enableAudioOutputCycle = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable keyboard and controller shortcuts that cycle the available PipeWire audio sinks.";
+    };
+
+    audioOutputStartupVolumePercent = lib.mkOption {
+      type = lib.types.ints.between 0 100;
+      default = 40;
+      description = "Safe startup volume applied to the persistent local couch audio sinks.";
+    };
+
     autoLayoutExternalOutputs = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -2083,6 +2227,7 @@ in {
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
       ++ lib.optional cfg.enableMirrorToggle displayMirrorToggle
       ++ lib.optional cfg.enableAdaptiveDisplayLayout displayLayoutControl
+      ++ lib.optional cfg.enableAudioOutputCycle audioOutputControl
       ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package

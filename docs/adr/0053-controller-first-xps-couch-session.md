@@ -62,6 +62,15 @@ floating windows, navigate or move between the stream and browser workspaces,
 and control audio directly through PipeWire. DMS-specific shortcuts remain out
 of couch mode because DMS is not part of that session.
 
+Expose the laptop's display-audio PCMs simultaneously through WirePlumber's
+pro-audio profile and label them by display role. This lets DMS present the two
+TV paths and auxiliary display as independent sinks without changing the whole
+card profile on every selection. Connected Bluetooth speakers join the same
+PipeWire sink list. Cycle available sinks with held controller Select plus the
+west face button or `Super+Shift+A`; retain DMS's normal output picker for phone
+and pointer use. Pairing and trust data remain host state rather than public
+configuration.
+
 Keep attached secondary and tertiary displays independent in the all-output
 layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
 outputs; in a solo layout, return all workspace sets to the selected output.

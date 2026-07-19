@@ -46,6 +46,61 @@ in {
 
   hardware.enableRedistributableFirmware = true;
   hardware.nvidia.enable = true;
+
+  # The Intel HDA controller exposes one PCM per physical display path. Keep
+  # them simultaneous so DMS and the couch shortcuts can select an output
+  # without changing the whole card profile first.
+  services.pipewire.wireplumber.extraConfig."51-xps-couch-audio" = {
+    "monitor.alsa.rules" = [
+      {
+        matches = [
+          {
+            "device.name" = "~alsa_card.pci-.*";
+            "api.alsa.card.name" = "HDA Intel PCH";
+          }
+        ];
+        actions."update-props" = {
+          "api.alsa.use-acp" = false;
+          "device.profile" = "pro-audio";
+          "api.acp.auto-profile" = false;
+          "api.acp.auto-port" = false;
+        };
+      }
+      {
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]0[.]0";}];
+        actions."update-props" = {
+          "node.description" = "XPS speakers";
+          "node.nick" = "XPS speakers";
+          "priority.session" = 900;
+        };
+      }
+      {
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]3[.]0";}];
+        actions."update-props" = {
+          "node.description" = "Primary TV";
+          "node.nick" = "Primary TV";
+          "priority.session" = 1100;
+        };
+      }
+      {
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]7[.]0";}];
+        actions."update-props" = {
+          "node.description" = "Secondary TV";
+          "node.nick" = "Secondary TV";
+          "priority.session" = 1200;
+        };
+      }
+      {
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]8[.]0";}];
+        actions."update-props" = {
+          "node.description" = "Auxiliary display";
+          "node.nick" = "Auxiliary display";
+          "priority.session" = 1000;
+        };
+      }
+    ];
+  };
+
   users.users.${username}.extraGroups = [
     "video"
     "render"
@@ -130,10 +185,11 @@ in {
       9
     ];
     enableAdaptiveDisplayLayout = true;
+    enableAudioOutputCycle = true;
     autoMirrorExternalOutputs = false;
     enableMirrorToggle = true;
     autoMirrorWorkspace = 10;
-    preferHdmiAudio = true;
+    preferHdmiAudio = false;
     relaunchOnExit = false;
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
