@@ -38,6 +38,27 @@ in {
     "i915"
   ];
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  boot.plymouth = {
+    enable = true;
+    theme = "nixbox";
+    themePackages = [pkgs.nixbox-plymouth-theme];
+    # Start on the early DRM surface. The theme rebuilds its layout and resets
+    # only its unfinished intro when the real KMS outputs hotplug.
+    extraConfig = "UseSimpledrmNoLuks=1";
+  };
+
+  # Preserve the completed boot lockup until Hyprland takes ownership, then
+  # let the distinct Quickshell STARTING SESSION animation cover the handoff.
+  systemd.services.plymouth-quit.serviceConfig.ExecStart = lib.mkForce [
+    ""
+    "${lib.getExe' pkgs.plymouth "plymouth"} quit --retain-splash"
+  ];
+
+  # DMS power actions already run the approved compositor-owned reverse
+  # animation. Do not replay a second power transition after Hyprland exits.
+  systemd.services.plymouth-poweroff.wantedBy = lib.mkForce [];
+  systemd.services.plymouth-reboot.wantedBy = lib.mkForce [];
+  systemd.services.plymouth-halt.wantedBy = lib.mkForce [];
 
   # Activation can legitimately request wrapper regeneration several times
   # during early boot. Every run is idempotent; do not report a false failure

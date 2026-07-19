@@ -23,16 +23,20 @@ generic message.
 
 ## Startup and shutdown
 
-XPS keeps the normal NixOS boot console visible. Once Hyprland has a usable
-output, a NIXBOX Quickshell overlay presents the `STARTING SESSION` transition
-on every active display and fades into the couch session. It intentionally has
-no loading bar: the system has already booted, so the animation represents the
-graphical handoff rather than fictional progress. The overlay never captures
-input and has a hard timeout so a display or animation failure cannot delay the
-browser, DMS, or controller controls.
+The boot and graphical-session transitions are deliberately separate. Plymouth
+starts with one centered X, separates it into the two NIXBOX X positions,
+reveals N/I/B/O and `MEDIA CENTER`, fills the progress track, and raises a faint
+Nix watermark behind the completed lockup. When real KMS outputs replace the
+firmware surface, the unfinished intro restarts against the new display canvas
+instead of resuming halfway through. A missing Plymouth timing estimate falls
+back to the approved design fill curve, so the final bar and quit frame are
+complete.
 
-The initrd retains the proven Intel and Thunderbolt display path so that console
-diagnostics can reach external outputs as early as their links become usable.
+Once Hyprland has a usable output, a distinct NIXBOX Quickshell overlay presents
+only the `STARTING SESSION` transition on every active display and fades into
+the couch session. It has no loading bar. The overlay never captures input and
+has a hard timeout so a display or animation failure cannot delay the browser,
+DMS, or controller controls.
 
 The display-pipeline allocator still runs before greetd and preserves the
 three-external/internal-panel fallback behavior. Hyprland then owns the dynamic
@@ -41,10 +45,11 @@ display layout, workspaces, and mirroring exactly as before.
 DMS power-off and reboot actions run the matching reverse animation while
 Hyprland still owns the displays, then request the selected system action. This
 keeps power transitions on the same proven renderer instead of handing the
-external outputs to a separate boot renderer.
+external outputs back to Plymouth for a second animation.
 
-Hyprland's startup diagnostics remain available in its runtime log, while boot
-and recovery status remains visible on the console intentionally.
+Hyprland's startup diagnostics remain available in its runtime log. Normal boot
+verbosity remains logged, and Plymouth's details view retains access to it for
+diagnosis and recovery.
 
 ## Controller controls
 

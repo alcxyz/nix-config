@@ -46,87 +46,113 @@ global.mode = Plymouth.GetMode();
 global.shutdown = global.mode == "shutdown" || global.mode == "reboot";
 global.frame = 0;
 global.boot_progress = 0;
+global.visual_progress = 0;
+global.intro_complete = 0;
 
-global.layout_scale = Window.GetWidth() / 1920;
-height_scale = Window.GetHeight() / 1080;
-if (height_scale < global.layout_scale)
-  global.layout_scale = height_scale;
-
-global.slot_width = 104 * global.layout_scale;
-global.word_width = 624 * global.layout_scale;
-global.word_x = Window.GetX() + Window.GetWidth() / 2 - global.word_width / 2;
-global.word_y = Window.GetY() + Window.GetHeight() / 2 - 116 * global.layout_scale;
-global.word_center_x = Window.GetX() + Window.GetWidth() / 2 - 52 * global.layout_scale;
-
-setup_letter(0, "letter-N.png");
-setup_letter(1, "letter-I.png");
-setup_letter(2, "letter-X.png");
-setup_letter(3, "letter-B.png");
-setup_letter(4, "letter-O.png");
-setup_letter(5, "letter-X.png");
-
-watermark.original = Image("nix-snowflake-white.png");
-watermark.size = Math.Int(Window.GetWidth() * 0.58);
-watermark.image = watermark.original.Scale(watermark.size, watermark.size);
-watermark.sprite = Sprite(watermark.image);
-watermark.sprite.SetPosition(
-  Window.GetX() + Window.GetWidth() / 2 - watermark.size / 2,
-  Window.GetY() + Window.GetHeight() / 2 - watermark.size / 2,
-  10
-);
-
-if (global.shutdown)
-  subtitle.original = Image("subtitle-powering-off.png");
-else
-  subtitle.original = Image("subtitle-media-center.png");
-subtitle.width = Math.Int(600 * global.layout_scale);
-subtitle.height = Math.Int(36 * global.layout_scale);
-subtitle.image = subtitle.original.Scale(subtitle.width, subtitle.height);
-subtitle.sprite = Sprite(subtitle.image);
-subtitle.sprite.SetPosition(
-  Window.GetX() + Window.GetWidth() / 2 - subtitle.width / 2,
-  Window.GetY() + Window.GetHeight() / 2 + 44 * global.layout_scale,
-  20
-);
-
-progress_track.original = Image("progress-track.png");
-progress_track.width = Math.Int(520 * global.layout_scale);
-progress_track.height = Math.Int(3 * global.layout_scale);
-if (progress_track.height < 1)
-  progress_track.height = 1;
-progress_track.image = progress_track.original.Scale(
-  progress_track.width,
-  progress_track.height
-);
-progress_track.sprite = Sprite(progress_track.image);
-progress_track.x = Window.GetX() + Window.GetWidth() / 2 - progress_track.width / 2;
-progress_track.y = Window.GetY() + Window.GetHeight() / 2 + 112 * global.layout_scale;
-progress_track.sprite.SetPosition(progress_track.x, progress_track.y, 20);
-
-progress_fill.original = Image("progress-fill.png");
-progress_fill.sprite = Sprite();
-progress_fill.sprite.SetPosition(progress_track.x, progress_track.y, 21);
-
-if (global.shutdown)
+# A KMS handoff changes Plymouth's virtual canvas. Rebuild every scaled sprite
+# against the new bounds so the same centered composition appears on every
+# pixel display instead of retaining the transient framebuffer geometry.
+fun setup_layout()
   {
-    watermark.sprite.SetOpacity(0.05);
-    subtitle.sprite.SetOpacity(1);
-    progress_track.sprite.SetOpacity(0);
-    progress_fill.sprite.SetOpacity(0);
-    for (index = 0; index < 6; index++)
-      global.letters[index].sprite.SetOpacity(1);
+    global.layout_scale = Window.GetWidth() / 1920;
+    local.height_scale = Window.GetHeight() / 1080;
+    if (local.height_scale < global.layout_scale)
+      global.layout_scale = local.height_scale;
+
+    global.slot_width = 104 * global.layout_scale;
+    global.word_width = 624 * global.layout_scale;
+    global.word_x = Window.GetX() + Window.GetWidth() / 2 - global.word_width / 2;
+    global.word_y = Window.GetY() + Window.GetHeight() / 2 - 116 * global.layout_scale;
+    global.word_center_x = Window.GetX() + Window.GetWidth() / 2 - 52 * global.layout_scale;
+
+    setup_letter(0, "letter-N.png");
+    setup_letter(1, "letter-I.png");
+    setup_letter(2, "letter-X.png");
+    setup_letter(3, "letter-B.png");
+    setup_letter(4, "letter-O.png");
+    setup_letter(5, "letter-X.png");
+
+    watermark.original = Image("nix-snowflake-white.png");
+    watermark.size = Math.Int(Window.GetWidth() * 0.58);
+    watermark.image = watermark.original.Scale(watermark.size, watermark.size);
+    watermark.sprite = Sprite(watermark.image);
+    watermark.sprite.SetPosition(
+      Window.GetX() + Window.GetWidth() / 2 - watermark.size / 2,
+      Window.GetY() + Window.GetHeight() / 2 - watermark.size / 2,
+      10
+    );
+
+    if (global.shutdown)
+      subtitle.original = Image("subtitle-powering-off.png");
+    else
+      subtitle.original = Image("subtitle-media-center.png");
+    subtitle.width = Math.Int(600 * global.layout_scale);
+    subtitle.height = Math.Int(36 * global.layout_scale);
+    subtitle.image = subtitle.original.Scale(subtitle.width, subtitle.height);
+    subtitle.sprite = Sprite(subtitle.image);
+    subtitle.sprite.SetPosition(
+      Window.GetX() + Window.GetWidth() / 2 - subtitle.width / 2,
+      Window.GetY() + Window.GetHeight() / 2 + 44 * global.layout_scale,
+      20
+    );
+
+    progress_track.original = Image("progress-track.png");
+    progress_track.width = Math.Int(520 * global.layout_scale);
+    progress_track.height = Math.Int(3 * global.layout_scale);
+    if (progress_track.height < 1)
+      progress_track.height = 1;
+    progress_track.image = progress_track.original.Scale(
+      progress_track.width,
+      progress_track.height
+    );
+    progress_track.sprite = Sprite(progress_track.image);
+    progress_track.x = Window.GetX() + Window.GetWidth() / 2 - progress_track.width / 2;
+    progress_track.y = Window.GetY() + Window.GetHeight() / 2 + 112 * global.layout_scale;
+    progress_track.sprite.SetPosition(progress_track.x, progress_track.y, 20);
+
+    progress_fill.original = Image("progress-fill.png");
+    progress_fill.sprite = Sprite();
+    progress_fill.sprite.SetPosition(progress_track.x, progress_track.y, 21);
+
+    if (global.shutdown)
+      {
+        watermark.sprite.SetOpacity(0.05);
+        subtitle.sprite.SetOpacity(1);
+        progress_track.sprite.SetOpacity(0);
+        progress_fill.sprite.SetOpacity(0);
+        for (index = 0; index < 6; index++)
+          global.letters[index].sprite.SetOpacity(1);
+      }
+    else
+      {
+        watermark.sprite.SetOpacity(0);
+        subtitle.sprite.SetOpacity(0);
+        progress_track.sprite.SetOpacity(0);
+        progress_fill.sprite.SetOpacity(0);
+        for (index = 0; index < 6; index++)
+          global.letters[index].sprite.SetOpacity(0);
+        global.letters[2].sprite.SetX(global.word_center_x);
+        global.letters[5].sprite.SetX(global.word_center_x);
+      }
   }
-else
+
+setup_layout();
+
+# The firmware framebuffer is replaced by i915 and dock-backed pixel displays
+# shortly after Plymouth starts. Restart only the unfinished intro when that
+# happens, then lock the timeline once the assembled lockup is visible so a
+# later connector event cannot send the animation back to frame zero.
+fun display_hotplug_callback()
   {
-    watermark.sprite.SetOpacity(0);
-    subtitle.sprite.SetOpacity(0);
-    progress_track.sprite.SetOpacity(0);
-    progress_fill.sprite.SetOpacity(0);
-    for (index = 0; index < 6; index++)
-      global.letters[index].sprite.SetOpacity(0);
-    global.letters[2].sprite.SetX(global.word_center_x);
-    global.letters[5].sprite.SetX(global.word_center_x);
+    if (!global.shutdown && !global.intro_complete)
+      {
+        global.frame = 0;
+        global.visual_progress = 0;
+      }
+    setup_layout();
   }
+
+Plymouth.SetDisplayHotplugFunction(display_hotplug_callback);
 
 fun boot_progress_callback(duration, progress)
   {
@@ -177,6 +203,9 @@ fun refresh_callback()
       }
     else
       {
+        if (local.time >= 4.3)
+          global.intro_complete = 1;
+
         local.x_opacity = ease_out((local.time - 0.1) / 0.5);
         global.letters[2].sprite.SetOpacity(local.x_opacity);
         global.letters[5].sprite.SetOpacity(local.x_opacity);
@@ -196,12 +225,20 @@ fun refresh_callback()
         subtitle.sprite.SetOpacity(ease_out((local.time - 3.0) / 1.0));
         progress_track.sprite.SetOpacity(ease_out((local.time - 3.5) / 0.8));
 
-        local.visual_progress = global.boot_progress;
+        # Prefer Plymouth's measured boot estimate when it is available. The
+        # Fable prototype supplies the visual fallback so a missing timing
+        # cache cannot leave the final lockup with an empty bar.
+        local.prototype_progress = ease_out((local.time - 3.7) / 4.0);
+        local.progress_target = global.boot_progress;
+        if (local.prototype_progress > local.progress_target)
+          local.progress_target = local.prototype_progress;
+        if (local.progress_target > global.visual_progress)
+          global.visual_progress = local.progress_target;
 
-        local.watermark_progress = ease_out((local.time - 3.0) / 1.0);
+        local.watermark_progress = clamp((global.visual_progress - 0.2) / 0.62);
         watermark.sprite.SetOpacity(0.05 * local.watermark_progress);
 
-        local.fill_width = Math.Int(progress_track.width * local.visual_progress);
+        local.fill_width = Math.Int(progress_track.width * global.visual_progress);
         if (local.fill_width > 0)
           {
             local.fill_image = progress_fill.original.Scale(local.fill_width, progress_track.height);

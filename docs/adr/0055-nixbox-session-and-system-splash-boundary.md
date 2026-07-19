@@ -1,4 +1,4 @@
-# ADR-0055: Keep the NIXBOX splash at the graphical-session boundary
+# ADR-0055: Stage the NIXBOX splash across boot and graphical session
 
 **Status:** Accepted
 **Date:** 2026-07-19
@@ -20,31 +20,44 @@ display, and failure constraints.
 
 ## Decision
 
-Keep the normal NixOS boot console visible. Plymouth was tested on the firmware
-framebuffer, with early Intel and Thunderbolt KMS, and after settling the
-external connector topology. On this hardware the animation timeline still ran
-before the active external output became usable, then appeared late and added
-black frames, mode switches, and a misleading empty progress bar. Delaying
-Plymouth until the outputs settled merely prolonged the visible console phase.
+Implement the three distinct transitions from the design handoff:
 
-Begin NIXBOX branding only after Hyprland owns a usable output. A standalone
-Quickshell overlay identifies the graphical session and fades into the couch
-desktop. Power-off and reboot reverse the motion before DMS requests the system
-action. The Quickshell component must render on every active output, use one
+- Plymouth assembles the boot wordmark from one overlapped X, separates the two
+  X positions, reveals the remaining letters and `MEDIA CENTER`, fills the
+  progress track, and raises the Nix watermark behind the lockup.
+- A standalone Quickshell overlay begins only after Hyprland owns a usable
+  output and presents `STARTING SESSION` without a progress bar.
+- Power-off and reboot reverse the wordmark motion while the compositor still
+  owns the outputs, before DMS requests the system action.
+
+Load the Intel and Thunderbolt display path in the initrd, but do not delay
+Plymouth while waiting for a preferred connector topology. The script plugin's
+display-hotplug callback rebuilds scaled sprites for the current virtual canvas
+and restarts only an unfinished intro when the firmware surface is replaced by
+real KMS outputs. Once the assembled lockup is visible, later connector events
+must not reset the animation.
+
+Prefer Plymouth's measured boot estimate for the progress fill. When no timing
+estimate is available, use the approved design prototype's bounded fill curve
+so the final lockup cannot remain empty; the quit frame is always complete. The
+watermark opacity follows the handoff's progress formula and reaches at most
+five percent.
+
+The Quickshell component must render on every active output, use one
 process-wide animation epoch, avoid keyboard and pointer focus, and terminate
 through both its normal animation deadline and a hard watchdog. Display hotplug
-may add or remove a surface without restarting the animation. Failure to launch
-or finish the splash must never block the browser, DMS, or the Hyprland session.
+may add or remove a session surface without restarting its animation. Failure
+to launch or finish the session splash must never block the browser, DMS, or the
+Hyprland session.
 
 Keep the compositor background aligned with the splash background so that slow
 applications and display relayout do not expose a bright transition. Preserve
 asset licensing and attribution in the packaged output.
 
-Keep the normal boot verbosity rather than using a quiet kernel command line.
-This preserves visible diagnostics and avoids a long, uninformative black boot.
-Retain the now-proven early Intel and Thunderbolt module inventory so the
-diagnostic console can reach external displays; do not narrow the host's
-known-good initrd hardware module set for branding.
+Keep the normal boot verbosity rather than using a quiet kernel command line so
+diagnostics remain logged and Plymouth's details view can expose them. Retain
+the proven initrd module inventory; do not narrow the host's hardware module set
+for branding.
 
 ## Consequences
 
@@ -52,14 +65,16 @@ Session branding remains available in couch profiles that run DMS and those
 that do not. A DMS restart cannot replay the splash, and a splash failure cannot
 take down the desktop shell.
 
-Boot remains diagnosable and does not depend on early graphical output routing.
-The existing userspace display-pipeline service still applies the
-three-external/internal-panel fallback policy before greetd; the dynamic
-Hyprland layout continues to own output selection, workspaces, and mirroring.
-User-initiated power actions keep their coherent transition while the
-compositor owns the outputs; emergency and non-graphical shutdown paths remain
-unbranded and diagnosable.
+The early boot renderer adapts to the pixel displays Plymouth actually exposes;
+it does not encode a preferred TV or monitor. The existing userspace
+display-pipeline service still applies the three-external/internal-panel
+fallback policy before greetd, while Hyprland continues to own dynamic output
+selection, workspaces, and mirroring.
+
+Boot, session start, and graphical power actions retain separate renderer
+lifecycles and meanings. A DMS restart cannot replay either startup animation,
+and the session animation does not pretend to represent boot progress.
 
 ## Tracking
 
-- Issue #157 tracks the session implementation and the rejected Plymouth trial.
+- Issue #157 tracks the staged boot and session implementation.
