@@ -34,6 +34,12 @@ Before that point, a static Nix/X mark prevents a completed wordmark from
 flashing before its own intro. Explicit start and completion stage signals
 guarantee the final subtitle, bar, watermark, and quit frame even when the
 high-resolution Plymouth renderer advances below its requested refresh rate.
+The quit frame is gated on that completion signal because Plymouth also invokes
+the theme's quit callback during reload.
+
+Systemd-boot keeps the newest six configurations on the EFI system partition.
+This bounds copied boot artifacts without deleting NixOS profile generations,
+so several rollback choices remain while new generations can still be written.
 
 Once Hyprland has a usable output, a distinct NIXBOX Quickshell overlay presents
 only the `STARTING SESSION` transition on every active display and fades into

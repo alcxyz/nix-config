@@ -311,12 +311,12 @@ fun refresh_callback()
 
 Plymouth.SetRefreshFunction(refresh_callback);
 
-# Plymouth only renders one frame after invoking the quit callback. Use that
-# frame as the completed handoff state; Hyprland then starts the matching
-# Quickshell outro from exactly the same composition.
+# Plymouth also invokes this callback while reloading a theme. Paint the final
+# handoff only after the userspace sequencer has explicitly completed the
+# visible epoch; an ordinary reload must preserve the static Nix/X prelude.
 fun quit_callback()
   {
-    if (!global.shutdown)
+    if (!global.shutdown && global.force_complete)
       show_complete_boot_lockup();
   }
 

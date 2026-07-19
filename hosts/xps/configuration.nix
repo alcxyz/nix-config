@@ -38,6 +38,10 @@ in {
     "i915"
   ];
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  # Keep several rollback choices without allowing copied kernels and initrds
+  # to exhaust the EFI system partition. Profile generations remain intact;
+  # this limit applies only to entries materialized under /boot.
+  boot.loader.systemd-boot.configurationLimit = 6;
   boot.plymouth = {
     enable = true;
     theme = "nixbox";

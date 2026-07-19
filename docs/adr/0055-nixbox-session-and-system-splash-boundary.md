@@ -41,6 +41,8 @@ theme holds a static Nix/X prelude rather than exposing an arbitrary late frame.
 The oneshot sends explicit start and completion stage messages around the
 bounded eight-second sequence, so graphical login cannot cut off the final
 lockup when a high-resolution renderer advances below the requested rate.
+Plymouth also invokes the theme's quit callback during reload, so the final
+lockup is gated on that completion signal and cannot flash ahead of its intro.
 
 Prefer Plymouth's measured boot estimate for the progress fill. When no timing
 estimate is available, use the approved design prototype's bounded fill curve
@@ -80,6 +82,9 @@ Plymouth is active, in exchange for avoiding an off-screen animation that only
 exposes its final frame after a dock display appears. Plymouth does not expose a
 monotonic clock to script themes, so smooth intermediate motion remains
 refresh-driven while the externally signalled final frame is wall-clock bound.
+Systemd-boot materializes only the newest six configurations on the EFI system
+partition. Nix profile generations remain available, while stale copied
+kernels and initrds cannot crowd out a newly selected boot generation.
 
 Boot, session start, and graphical power actions retain separate renderer
 lifecycles and meanings. A DMS restart cannot replay either startup animation,
