@@ -130,7 +130,9 @@ else
 
 fun boot_progress_callback(duration, progress)
   {
-    global.boot_progress = clamp(progress);
+    local.progress = clamp(progress);
+    if (local.progress > global.boot_progress)
+      global.boot_progress = local.progress;
   }
 
 Plymouth.SetBootProgressFunction(boot_progress_callback);
@@ -194,12 +196,9 @@ fun refresh_callback()
         subtitle.sprite.SetOpacity(ease_out((local.time - 3.0) / 1.0));
         progress_track.sprite.SetOpacity(ease_out((local.time - 3.5) / 0.8));
 
-        local.timeline_progress = clamp((local.time - 3.5) / 1.4);
         local.visual_progress = global.boot_progress;
-        if (local.timeline_progress > local.visual_progress)
-          local.visual_progress = local.timeline_progress;
 
-        local.watermark_progress = clamp((local.visual_progress - 0.2) / 0.62);
+        local.watermark_progress = ease_out((local.time - 3.0) / 1.0);
         watermark.sprite.SetOpacity(0.05 * local.watermark_progress);
 
         local.fill_width = Math.Int(progress_track.width * local.visual_progress);
@@ -213,6 +212,34 @@ fun refresh_callback()
   }
 
 Plymouth.SetRefreshFunction(refresh_callback);
+
+# Plymouth only renders one frame after invoking the quit callback. Use that
+# frame as the completed handoff state; Hyprland then starts the matching
+# Quickshell outro from exactly the same composition.
+fun quit_callback()
+  {
+    if (!global.shutdown)
+      {
+        watermark.sprite.SetOpacity(0.05);
+        subtitle.sprite.SetOpacity(1);
+        progress_track.sprite.SetOpacity(1);
+
+        for (index = 0; index < 6; index++)
+          {
+            global.letters[index].sprite.SetX(global.letters[index].final_x);
+            global.letters[index].sprite.SetOpacity(1);
+          }
+
+        local.fill_image = progress_fill.original.Scale(
+          progress_track.width,
+          progress_track.height
+        );
+        progress_fill.sprite.SetImage(local.fill_image);
+        progress_fill.sprite.SetOpacity(1);
+      }
+  }
+
+Plymouth.SetQuitFunction(quit_callback);
 
 # Keep password prompts usable if an encrypted or recovery path needs them.
 fun display_password_callback(prompt, bullets)

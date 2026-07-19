@@ -1,4 +1,4 @@
-# ADR-0055: Keep NIXBOX splash at the graphical-session boundary
+# ADR-0055: Stage the NIXBOX splash across boot and graphical session
 
 **Status:** Accepted
 **Date:** 2026-07-19
@@ -20,25 +20,32 @@ display, and failure constraints.
 
 ## Decision
 
-Implement a standalone, mode-aware Quickshell splash launched before the couch
-browser and by DMS power actions. Startup expands the central X mark into the
-NIXBOX wordmark without a progress bar. Power-off and reboot reverse that
-motion before requesting the system action. It must render on every active
-output, use one process-wide animation epoch, avoid keyboard and pointer focus,
-and terminate through both its normal animation deadline and a hard watchdog.
-Display hotplug may add or remove a surface without restarting the animation.
-Failure to launch or finish the splash must never block the browser, DMS, or the
-Hyprland session.
+Split boot into renderer-owned stages. Plymouth renders a short intro on the
+firmware framebuffer, holds the completed NIXBOX composition while a loading
+bar follows Plymouth's monotonic system boot estimate, and leaves one completed
+frame when the daemon exits. The progress bar must not advance from an
+animation timeline or claim to map one-to-one to console messages.
+
+After Hyprland owns the displays, a standalone Quickshell overlay begins from
+the same completed composition, changes the subtitle to identify the graphical
+session, and fades away. Power-off and reboot reverse the motion before DMS
+requests the system action; the later Plymouth power units remain disabled so
+the transition is not played twice. The Quickshell component must render on
+every active output, use one process-wide animation epoch, avoid keyboard and
+pointer focus, and terminate through both its normal animation deadline and a
+hard watchdog. Display hotplug may add or remove a surface without restarting
+the animation. Failure to launch or finish the splash must never block the
+browser, DMS, or the Hyprland session.
 
 Keep the compositor background aligned with the splash background so that slow
 applications and display relayout do not expose a bright transition. Preserve
 asset licensing and attribution in the packaged output.
 
-Keep the normal NixOS boot console instead of enabling Plymouth on XPS. The
-Plymouth renderer could run and hand off successfully but did not produce a
-visible surface on the active external-display path. Hiding the console
-therefore created an uninformative black boot. Retaining visible boot progress
-is preferable to branding that cannot be presented reliably.
+Keep the normal boot verbosity rather than using a quiet kernel command line.
+This preserves logged diagnostics and Plymouth's details view while allowing
+the graphical view to replace the scrolling console during the normal path.
+Do not narrow or otherwise modify the host's known-good initrd hardware module
+set to improve splash timing.
 
 ## Consequences
 
@@ -46,13 +53,13 @@ Session branding remains available in couch profiles that run DMS and those
 that do not. A DMS restart cannot replay the splash, and a splash failure cannot
 take down the desktop shell.
 
-Boot remains diagnosable and does not depend on early graphical output routing.
-NIXBOX branding begins only after Hyprland has a usable output, where the same
-renderer is already proven across the supported display layouts. User-initiated
-power actions gain a coherent transition while the compositor still owns those
-outputs; emergency and non-graphical shutdown paths remain unbranded and
-diagnosable.
+Plymouth owns only the early boot surface; it releases DRM while retaining its
+last pixels so the compositor can replace them. The firmware framebuffer may
+still be interrupted by an output mode-set on some display paths, but boot does
+not wait on the graphical handoff. User-initiated power actions gain a coherent
+transition while the compositor still owns the outputs; emergency and
+non-graphical shutdown paths remain unbranded and diagnosable.
 
 ## Tracking
 
-- Issue #157 tracks the session implementation and the rejected Plymouth trial.
+- Issue #157 tracks the staged boot and session implementation.

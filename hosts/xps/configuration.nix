@@ -32,6 +32,28 @@ in {
 
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  boot.plymouth = {
+    enable = true;
+    theme = "nixbox";
+    themePackages = [pkgs.nixbox-plymouth-theme];
+    # Render the lightweight intro and genuine progress hold on the firmware
+    # framebuffer. The compositor owns the animated outro after boot.
+    extraConfig = "UseSimpledrmNoLuks=1";
+  };
+
+  # Standard Plymouth teardown leaves a gap before greetd launches the
+  # compositor. Retain the completed frame while releasing DRM ownership so
+  # Hyprland can replace it directly with the matching Quickshell outro.
+  systemd.services.plymouth-quit.serviceConfig.ExecStart = lib.mkForce [
+    ""
+    "${lib.getExe' pkgs.plymouth "plymouth"} quit --retain-splash"
+  ];
+
+  # The couch power actions already animate while Hyprland owns the outputs.
+  # Do not start a second Plymouth animation after the compositor exits.
+  systemd.services.plymouth-poweroff.wantedBy = lib.mkForce [];
+  systemd.services.plymouth-reboot.wantedBy = lib.mkForce [];
+  systemd.services.plymouth-halt.wantedBy = lib.mkForce [];
 
   # Activation can legitimately request wrapper regeneration several times
   # during early boot. Every run is idempotent; do not report a false failure

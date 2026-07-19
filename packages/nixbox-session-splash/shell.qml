@@ -9,8 +9,8 @@ ShellRoot {
 
     readonly property string mode: Quickshell.env("NIXBOX_SPLASH_MODE") || "startup"
     readonly property bool powerTransition: mode === "shutdown" || mode === "reboot"
-    readonly property string subtitle: mode === "shutdown" ? "POWERING OFF" : mode === "reboot" ? "RESTARTING" : "MEDIA CENTER"
-    readonly property real duration: powerTransition ? 4.1 : 4.85
+    readonly property string powerSubtitle: mode === "shutdown" ? "POWERING OFF" : "RESTARTING"
+    readonly property real duration: powerTransition ? 4.1 : 3.45
     property real elapsed: 0
     property double startedAt: 0
     readonly property int settleDelayMs: {
@@ -42,13 +42,6 @@ ShellRoot {
             startedAt = Date.now();
     }
 
-    function startupLetterOpacity(index) {
-        if (index === 2 || index === 5)
-            return easeOutCubic((elapsed - 0.1) / 0.5);
-        const order = index === 0 ? 0 : index === 1 ? 1 : index === 3 ? 2 : 3;
-        return easeOutCubic((elapsed - 2.3 - order * 0.12) / 0.7);
-    }
-
     function powerLetterOpacity(index) {
         if (index === 2 || index === 5)
             return 1 - easeInCubic((elapsed - 3.0) / 0.6);
@@ -75,7 +68,7 @@ ShellRoot {
 
             required property var modelData
             readonly property real layoutScale: Math.min(width / 1920, height / 1080)
-            readonly property real startupFade: root.easeInCubic((root.elapsed - 4.2) / 0.65)
+            readonly property real startupFade: root.easeInCubic((root.elapsed - 2.7) / 0.7)
 
             screen: modelData
             color: "transparent"
@@ -117,8 +110,8 @@ ShellRoot {
                     fillMode: Image.PreserveAspectFit
                     opacity: root.powerTransition
                         ? 0.05 * (1 - root.easeInCubic((root.elapsed - 0.6) / 1.8))
-                        : 0.05 * root.easeOutCubic((root.elapsed - 3.0) / 1.0)
-                    scale: root.powerTransition ? 1 : 0.97 + 0.03 * root.easeOutCubic((root.elapsed - 3.0) / 1.0)
+                        : 0.05
+                    scale: 1
                     smooth: true
                 }
 
@@ -143,7 +136,7 @@ ShellRoot {
                                 readonly property real centerX: wordmark.width / 2 - slotWidth / 2
                                 readonly property real travel: root.powerTransition
                                     ? root.smooth((root.elapsed - 1.7) / 1.1)
-                                    : root.smooth((root.elapsed - 0.9) / 1.3)
+                                    : 1
 
                                 x: (index === 2 || index === 5)
                                     ? (root.powerTransition
@@ -161,23 +154,55 @@ ShellRoot {
                                 font.pixelSize: 88 * splashWindow.layoutScale
                                 opacity: root.powerTransition
                                     ? root.powerLetterOpacity(index)
-                                    : root.startupLetterOpacity(index)
+                                    : 1
                             }
                         }
                     }
 
-                    Text {
+                    Item {
+                        width: 600 * splashWindow.layoutScale
+                        height: 36 * splashWindow.layoutScale
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.powerTransition ? root.powerSubtitle : "MEDIA CENTER"
+                            color: "#5c6470"
+                            font.family: "Space Grotesk"
+                            font.weight: Font.Normal
+                            font.capitalization: Font.AllUppercase
+                            font.pixelSize: 24 * splashWindow.layoutScale
+                            font.letterSpacing: 8.16 * splashWindow.layoutScale
+                            opacity: root.powerTransition
+                                ? 1 - root.easeInCubic((root.elapsed - 1.2) / 0.8)
+                                : 1 - root.easeInCubic((root.elapsed - 0.35) / 0.55)
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: !root.powerTransition
+                            text: "STARTING SESSION"
+                            color: "#5c6470"
+                            font.family: "Space Grotesk"
+                            font.weight: Font.Normal
+                            font.capitalization: Font.AllUppercase
+                            font.pixelSize: 24 * splashWindow.layoutScale
+                            font.letterSpacing: 8.16 * splashWindow.layoutScale
+                            opacity: root.easeOutCubic((root.elapsed - 0.75) / 0.65)
+                        }
+                    }
+
+                    Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: root.subtitle
-                        color: "#5c6470"
-                        font.family: "Space Grotesk"
-                        font.weight: Font.Normal
-                        font.capitalization: Font.AllUppercase
-                        font.pixelSize: 24 * splashWindow.layoutScale
-                        font.letterSpacing: 8.16 * splashWindow.layoutScale
-                        opacity: root.powerTransition
-                            ? 1 - root.easeInCubic((root.elapsed - 1.2) / 0.8)
-                            : root.easeOutCubic((root.elapsed - 3.0) / 0.8)
+                        visible: !root.powerTransition
+                        width: 520 * splashWindow.layoutScale
+                        height: Math.max(1, 3 * splashWindow.layoutScale)
+                        color: "#252a32"
+                        opacity: 1 - root.easeInCubic((root.elapsed - 0.15) / 0.55)
+
+                        Rectangle {
+                            anchors.fill: parent
+                            color: "#e9edf4"
+                        }
                     }
                 }
             }

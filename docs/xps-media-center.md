@@ -23,21 +23,27 @@ generic message.
 
 ## Startup and shutdown
 
-XPS keeps the normal NixOS boot console visible. Once Hyprland has a usable
-output, a NIXBOX Quickshell overlay expands the center X mark into the full
-wordmark and identifies the media-center session. It intentionally has no
-loading bar: the system has already booted, so the animation represents the
-graphical handoff rather than fictional progress. The overlay never captures
-input and has a hard timeout so a display or animation failure cannot delay the
-browser, DMS, or controller controls.
+XPS stages startup across the renderer that owns the display at each point.
+Plymouth first expands the center X mark into the NIXBOX wordmark, then holds
+that composition while its loading bar follows Plymouth's monotonic boot
+progress estimate. At boot completion it leaves a fully completed frame in the
+firmware framebuffer instead of exposing a console-to-session gap.
+
+Once Hyprland has a usable output, a matching NIXBOX Quickshell overlay starts
+from that completed frame, changes the subtitle to `STARTING SESSION`, and
+fades into the couch session. This second stage intentionally does not pretend
+to measure progress. It never captures input and has a hard timeout so a
+display or animation failure cannot delay the browser, DMS, or controller
+controls.
 
 DMS power-off and reboot actions run the matching reverse animation while
 Hyprland still owns the displays, then request the selected system action. This
 keeps power transitions on the same proven renderer instead of handing the
-external outputs back to an early-boot splash process.
+external outputs back to Plymouth for a second animation.
 
-Hyprland's startup diagnostics remain available in its runtime log, while boot
-and recovery status remains visible on the console intentionally.
+Hyprland's startup diagnostics remain available in its runtime log. Plymouth
+does not use a quiet kernel command line, so boot diagnostics remain logged and
+its details view can expose them when troubleshooting is needed.
 
 ## Controller controls
 
