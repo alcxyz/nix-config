@@ -82,25 +82,56 @@ in {
     autoLoginUser = username;
     desktopSessionCommand = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
     defaultSessionMode = "couch";
-    disableInternalDisplay = true;
+    # A boot-time pipeline check hides this panel only when all three external
+    # displays are connected. With fewer externals it remains available for
+    # local maintenance and debugging.
+    disableInternalDisplay = false;
     enableDms = false;
     enableMergedProfile = true;
     enableKdeConnect = true;
     enableControllerShortcuts = true;
+    keyboardLayouts = "no,us";
+    keyboardOptions = "grp:alt_shift_toggle";
     autoStartBrowser = true;
     autoStartStream = false;
+    fallbackBrowserPackage = null;
+    protectedBrowserPackage = pkgs.brave;
+    protectedBrowserName = "Brave (Private)";
+    protectedBrowserIcon = "${pkgs.brave}/opt/brave.com/brave/product_logo_256.png";
+    protectedBrowserCommandName = "brave";
+    protectedBrowserEncryptedDirectory = "brave-couch-private";
+    protectedBrowserLegacyProfileDirectory = "/run/moonlight-client/dms-merged/BraveSoftware/Brave-Browser";
     moonlightPlatform = "xcb";
     outputMode = "2560x1440@60";
     fallbackOutputMode = "1920x1080@60";
     outputScale = 1.0;
     autoLayoutExternalOutputs = true;
-    autoLayoutSecondaryMode = "1920x1080@60";
+    autoLayoutSecondaryModes = [
+      "2560x1440@60"
+      "1920x1080@60"
+    ];
     autoLayoutSecondaryPosition = "2560x0";
     autoLayoutSecondaryScale = 1.0;
+    autoLayoutTertiaryPosition = "5120x0";
+    autoLayoutTertiaryScale = 1.0;
     autoLayoutPrimaryMinPhysicalWidth = 1000;
-    autoLayoutPrimaryWorkspaces = [1 2 3 4 5];
-    autoLayoutSecondaryWorkspaces = [6 7 8 9 10];
+    autoLayoutPrimaryWorkspaces = [
+      1
+      2
+      3
+    ];
+    autoLayoutSecondaryWorkspaces = [
+      4
+      5
+      6
+    ];
+    autoLayoutTertiaryWorkspaces = [
+      7
+      8
+      9
+    ];
     autoMirrorExternalOutputs = false;
+    enableMirrorToggle = true;
     autoMirrorWorkspace = 10;
     preferHdmiAudio = true;
     relaunchOnExit = false;
@@ -126,6 +157,60 @@ in {
       "--frame-pacing"
       "--swap-gamepad-buttons"
     ];
+  };
+
+  # Intel exposes three display pipelines. The firmware initially assigns one
+  # to the built-in panel even when Hyprland disables it. Before the graphical
+  # session starts, reserve that pipeline for external displays only when all
+  # three are physically connected; otherwise leave the panel detectable.
+  systemd.services.xps-display-pipeline-setup = {
+    description = "Allocate XPS display pipelines for couch outputs";
+    before = ["greetd.service"];
+    wantedBy = ["multi-user.target"];
+    path = [pkgs.coreutils];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      internal_connector=""
+      for attempt in $(seq 1 50); do
+        for candidate in /sys/class/drm/card*-eDP-1; do
+          if [ -w "$candidate/status" ]; then
+            internal_connector="$candidate"
+            break 2
+          fi
+        done
+        sleep 0.1
+      done
+
+      if [ -z "$internal_connector" ]; then
+        echo "internal display connector did not appear" >&2
+        exit 1
+      fi
+
+      # Allow dock authorization and EDID probing to settle. Stop waiting as
+      # soon as all three external connectors are visible.
+      external_count=0
+      for attempt in $(seq 1 50); do
+        external_count=0
+        for status_file in /sys/class/drm/card*-*/status; do
+          case "$status_file" in
+            *-eDP-* | *-LVDS-*) continue ;;
+          esac
+          if [ "$(cat "$status_file")" = connected ]; then
+            external_count=$((external_count + 1))
+          fi
+        done
+        if [ "$external_count" -ge 3 ]; then
+          break
+        fi
+        sleep 0.1
+      done
+
+      if [ "$external_count" -ge 3 ]; then
+        printf off > "$internal_connector/status"
+      else
+        printf detect > "$internal_connector/status"
+      fi
+    '';
   };
 
   systemd.services.greetd.serviceConfig = {
@@ -161,7 +246,10 @@ in {
     after = ["graphical-session.target"];
     wantedBy = ["graphical-session.target"];
     serviceConfig.Type = "oneshot";
-    path = [pkgs.coreutils pkgs.systemd];
+    path = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
     script = ''
       if [ "$(tr -d '[:space:]' < /var/lib/moonlight-client/session-mode 2>/dev/null || true)" = desktop ]; then
         systemctl --user start dms.service hypr-laptop-display-autoswitch.service

@@ -20,6 +20,7 @@ in {
     "${configDir}/modules/home-manager/programs/niri/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
     "${configDir}/modules/home-manager/services/hyprlock/default.nix"
+    "${configDir}/modules/home-manager/services/waynergy/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
@@ -28,7 +29,10 @@ in {
     inputs.hyprscratch.homeModules.default
   ];
 
-  home.packages = pkgsets.home.${hostRole.homePackageSet};
+  # XPS exposes Brave only through the password-gated couch launcher. The
+  # browser package remains in that launcher's closure, but its unrestricted
+  # executable and desktop entries are not placed in the user profile.
+  home.packages = lib.remove pkgs.brave pkgsets.home.${hostRole.homePackageSet};
 
   xdg.configFile."ncspot/config.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/ncspot/config.toml";
@@ -42,6 +46,8 @@ in {
   programs.hyprland.managed = {
     enable = true;
     inputSensitivity = 0.0;
+    inputLayouts = "no,us";
+    inputOptions = "grp:alt_shift_toggle";
     laptopDisplayAutoSwitch.enable = true;
     # Hyprland 0.55 and DMS use the Lua configuration on XPS. DMS deliberately
     # archives legacy .conf files when both formats exist.
@@ -76,6 +82,12 @@ in {
     pluginSettings.dankAIUsage.enabled = true;
   };
   services.hyprlock.enable = true;
+  services.waynergy = {
+    enable = true;
+    serverAddress = "mac";
+    screenName = "xps";
+    sourceKeyboard = "mac";
+  };
   dconf.enable = false;
   services.udiskie = {
     enable = true;

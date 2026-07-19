@@ -11,6 +11,7 @@
   modeStateFile = "${modeStateDirectory}/session-mode";
   runtimeStateDirectory = "/run/moonlight-client";
   dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
+  mirrorStateFile = "${runtimeStateDirectory}/mirror-enabled";
   mergedDmsConfigDirectory = "${runtimeStateDirectory}/dms-merged";
   mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (
     builtins.toJSON cfg.mergedDmsSettings
@@ -19,7 +20,7 @@
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
     if dynamicExternalLayoutEnabled
-    then cfg.autoLayoutSecondaryMode
+    then lib.last cfg.autoLayoutSecondaryModes
     else cfg.outputMode;
   mirrorOutputMode =
     if cfg.mirrorOutputMode == null
@@ -227,6 +228,164 @@
     };
   };
 
+  protectedBrowserPasswordPrompt = pkgs.writeShellApplication {
+    name = "couch-protected-browser-password";
+    runtimeInputs = [pkgs.zenity];
+    text = ''
+      export GDK_BACKEND=x11
+      case "''${1:-unlock}" in
+        create)
+          prompt=${lib.escapeShellArg "Choose a password for the protected ${cfg.protectedBrowserName} profile"}
+          ;;
+        confirm)
+          prompt=${lib.escapeShellArg "Confirm the password for the protected ${cfg.protectedBrowserName} profile"}
+          ;;
+        *)
+          prompt=${lib.escapeShellArg "Enter the password for the protected ${cfg.protectedBrowserName} profile"}
+          ;;
+      esac
+      exec zenity \
+        --password \
+        --title=${lib.escapeShellArg "Unlock ${cfg.protectedBrowserName}"} \
+        --text="$prompt"
+    '';
+  };
+
+  protectedBrowser = pkgs.writeShellApplication {
+    name = cfg.protectedBrowserCommandName;
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gocryptfs
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.util-linux
+      pkgs.zenity
+    ];
+    text = ''
+      # FUSE mounts on NixOS must use the privileged wrappers, not the
+      # unwrapped fusermount binaries from a package dependency.
+      export PATH="/run/wrappers/bin:$PATH"
+
+      cipher_directory="$HOME/.local/share/${cfg.protectedBrowserEncryptedDirectory}"
+      runtime_directory="''${XDG_RUNTIME_DIR:-/run/user/$UID}/${cfg.protectedBrowserRuntimeDirectory}"
+      mountpoint="$runtime_directory/profile"
+      mounted_here=false
+      initial_password=""
+      launch_workspace="$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // 2')"
+
+      focus_launch_workspace() {
+        hyprctl dispatch workspace "$launch_workspace" >/dev/null 2>&1 || true
+      }
+
+      show_error() {
+        GDK_BACKEND=x11 zenity \
+          --error \
+          --title=${lib.escapeShellArg cfg.protectedBrowserName} \
+          --text="$1" >/dev/null 2>&1 || true
+      }
+
+      # shellcheck disable=SC2329 # Invoked by the trap below.
+      cleanup() {
+        if [ "$mounted_here" = true ] && mountpoint -q "$mountpoint"; then
+          if ! /run/wrappers/bin/fusermount3 -u "$mountpoint"; then
+            show_error ${lib.escapeShellArg "${cfg.protectedBrowserName} has closed, but its encrypted profile is still mounted. Close any remaining browser processes and run this launcher again to finish locking it."}
+          fi
+        fi
+      }
+      trap cleanup EXIT HUP INT TERM
+
+      install -d -m 0700 "$cipher_directory" "$runtime_directory" "$mountpoint"
+      exec 9>"$runtime_directory/launcher.lock"
+      flock 9
+      focus_launch_workspace
+
+      if [ ! -e "$cipher_directory/gocryptfs.conf" ]; then
+        GDK_BACKEND=x11 zenity \
+          --info \
+          --title=${lib.escapeShellArg "Protect ${cfg.protectedBrowserName}"} \
+          --text=${lib.escapeShellArg "Choose a password for the protected browser. You will be asked for it twice during this one-time setup. The profile can be recovered through browser sync if this password is lost."} \
+          >/dev/null 2>&1 || true
+
+        initial_password="$(${lib.getExe protectedBrowserPasswordPrompt} create)" || exit 1
+        confirmation="$(${lib.getExe protectedBrowserPasswordPrompt} confirm)" || exit 1
+        if [ -z "$initial_password" ] || [ "$initial_password" != "$confirmation" ]; then
+          unset confirmation initial_password
+          show_error ${lib.escapeShellArg "The passwords were empty or did not match. The protected profile was not initialized."}
+          exit 1
+        fi
+        unset confirmation
+
+        if ! printf '%s\n' "$initial_password" | gocryptfs \
+          -q \
+          -init \
+          -passfile /dev/stdin \
+          "$cipher_directory"; then
+          unset initial_password
+          show_error ${lib.escapeShellArg "The encrypted browser profile could not be initialized."}
+          exit 1
+        fi
+      fi
+
+      if ! mountpoint -q "$mountpoint"; then
+        if [ -n "$initial_password" ]; then
+          printf '%s\n' "$initial_password" | gocryptfs \
+            -q \
+            -passfile /dev/stdin \
+            "$cipher_directory" \
+            "$mountpoint" || mount_status=$?
+        else
+          gocryptfs \
+            -q \
+            -extpass ${lib.escapeShellArg (lib.getExe protectedBrowserPasswordPrompt)} \
+            "$cipher_directory" \
+            "$mountpoint" || mount_status=$?
+        fi
+        unset initial_password
+        if [ "''${mount_status:-0}" -ne 0 ]; then
+          show_error ${lib.escapeShellArg "The protected browser profile could not be unlocked or mounted. Check the password and try again; if it persists, inspect the mount service."}
+          exit 1
+        fi
+        mounted_here=true
+      fi
+
+      ${lib.optionalString (cfg.protectedBrowserLegacyProfileDirectory != null) ''
+        legacy_profile=${lib.escapeShellArg cfg.protectedBrowserLegacyProfileDirectory}
+        if [ -e "$legacy_profile/Local State" ] \
+          && [ -z "$(find "$mountpoint" -mindepth 1 -print -quit)" ]; then
+          legacy_lock="$(readlink "$legacy_profile/SingletonLock" 2>/dev/null || true)"
+          legacy_pid="''${legacy_lock##*-}"
+          if [ -n "$legacy_lock" ] \
+            && [ "$legacy_pid" != "$legacy_lock" ] \
+            && kill -0 "$legacy_pid" 2>/dev/null; then
+            show_error ${lib.escapeShellArg "Close the existing Brave window first. Its temporary profile is safe and will be migrated on the next protected launch."}
+            exit 1
+          fi
+
+          cp -a --reflink=auto "$legacy_profile/." "$mountpoint/"
+          rm -f \
+            "$mountpoint/SingletonCookie" \
+            "$mountpoint/SingletonLock" \
+            "$mountpoint/SingletonSocket"
+          touch "$mountpoint/.couch-profile-migrated"
+        fi
+      ''}
+
+      flock -u 9
+      focus_launch_workspace
+
+      status=0
+      ${lib.getExe cfg.protectedBrowserPackage} \
+        --class=ProtectedBrowser \
+        --user-data-dir="$mountpoint" \
+        --ozone-platform=x11 \
+        --password-store=basic \
+        --disable-background-mode \
+        "$@" || status=$?
+      exit "$status"
+    '';
+  };
+
   moonlightStreamStart = pkgs.writeShellApplication {
     name = "couch-moonlight-start";
     runtimeInputs = [
@@ -312,10 +471,16 @@
     ACTIONS = {
         "start": {ecodes.BTN_MODE, ecodes.BTN_EAST},
         "browser": {ecodes.BTN_THUMBL, ecodes.BTN_THUMBR},
+        ${lib.optionalString cfg.enableMirrorToggle ''
+      "mirror": {ecodes.BTN_SELECT, ecodes.BTN_START},
+    ''}
     }
     COMMANDS = {
         "start": [${builtins.toJSON (lib.getExe couchStreamControl)}, "start"],
         "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
+        ${lib.optionalString cfg.enableMirrorToggle ''
+      "mirror": [${builtins.toJSON (lib.getExe displayMirrorToggle)}, "toggle"],
+    ''}
     }
 
 
@@ -490,15 +655,77 @@
     '';
   };
 
-  autoLayoutExternalOutputs = pkgs.writeShellApplication {
-    name = "couch-auto-layout-outputs";
+  displayMirrorToggle = pkgs.writeShellApplication {
+    name = "couch-display-mirror";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.hyprland
       pkgs.jq
-    ] ++ lib.optional cfg.autoMirrorExternalOutputs pkgs.wl-mirror;
+    ];
+    text = ''
+      state_file=${lib.escapeShellArg mirrorStateFile}
+      current="$(tr -d '[:space:]' < "$state_file" 2>/dev/null || true)"
+
+      case "''${1:-toggle}" in
+        toggle)
+          if [ "$current" = 1 ]; then
+            requested=0
+          else
+            requested=1
+          fi
+          ;;
+        on)
+          requested=1
+          ;;
+        off)
+          requested=0
+          ;;
+        status)
+          if [ "$current" = 1 ]; then
+            echo on
+          else
+            echo off
+          fi
+          exit 0
+          ;;
+        *)
+          echo "usage: couch-display-mirror {toggle|on|off|status}" >&2
+          exit 2
+          ;;
+      esac
+
+      if [ "$requested" = 1 ]; then
+        external_outputs="$(
+          hyprctl -j monitors all 2>/dev/null \
+            | jq '[.[] | select(
+                .name != "eDP-1" and .name != "LVDS-1" and .disabled == false
+              )] | length' 2>/dev/null \
+            || printf '0\n'
+        )"
+        if [ "$external_outputs" -lt 2 ]; then
+          echo "display mirroring requires two connected external outputs" >&2
+          exit 1
+        fi
+      fi
+
+      temporary_file="$state_file.tmp"
+      printf '%s\n' "$requested" > "$temporary_file"
+      mv "$temporary_file" "$state_file"
+    '';
+  };
+
+  autoLayoutExternalOutputs = pkgs.writeShellApplication {
+    name = "couch-auto-layout-outputs";
+    runtimeInputs =
+      [
+        pkgs.coreutils
+        pkgs.hyprland
+        pkgs.jq
+      ]
+      ++ lib.optional (cfg.autoMirrorExternalOutputs || cfg.enableMirrorToggle) pkgs.wl-mirror;
     text = ''
       config_file=${lib.escapeShellArg dynamicMonitorConfigFile}
+      mirror_state_file=${lib.escapeShellArg mirrorStateFile}
       layout_key=""
       mirror_pid=""
 
@@ -510,9 +737,49 @@
         mirror_pid=""
       }
 
+      select_auxiliary_mode() {
+        output="$1"
+        for candidate in ${lib.escapeShellArgs cfg.autoLayoutSecondaryModes}; do
+          dimensions="''${candidate%@*}"
+          refresh="''${candidate##*@}"
+          if jq -e \
+            --arg output "$output" \
+            --arg dimensions "$dimensions" \
+            --argjson refresh "$refresh" '
+              [.[] | select(.name == $output)][0].availableModes // []
+              | any(.[];
+                  startswith($dimensions + "@")
+                  and (
+                    try (
+                      (capture("@(?<refresh>[0-9.]+)Hz$").refresh | tonumber) - $refresh
+                      | fabs < 1.0
+                    ) catch false
+                  )
+                )
+            ' <<<"$monitors" >/dev/null; then
+            printf '%s\n' "$candidate"
+            return
+          fi
+        done
+        printf '%s\n' preferred
+      }
+
+      restore_secondary_workspace() {
+        target_output="$1"
+        [ -n "$target_output" ] || return
+        hyprctl dispatch focusmonitor "$target_output" >/dev/null 2>&1 || true
+        hyprctl dispatch workspace \
+          ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutSecondaryWorkspaces))} \
+          >/dev/null 2>&1 || true
+      }
+
       write_layout() {
         source_output="$1"
-        target_output="$2"
+        secondary_output="$2"
+        secondary_mode="$3"
+        tertiary_output="$4"
+        tertiary_mode="$5"
+        native_mirror="$6"
         temporary_file="$config_file.tmp"
 
         {
@@ -529,26 +796,60 @@
               printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
                 "$workspace" "$source_output" "$default"
             done
-            if [ -z "$target_output" ]; then
+            if [ -z "$secondary_output" ]; then
               for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
                 printf 'workspace = %s, monitor:%s, persistent:true\n' \
                   "$workspace" "$source_output"
               done
             fi
+            if [ -z "$tertiary_output" ]; then
+              for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
+                printf 'workspace = %s, monitor:%s, persistent:true\n' \
+                  "$workspace" "$source_output"
+              done
+            fi
           fi
-          if [ -n "$target_output" ]; then
+          if [ -n "$secondary_output" ]; then
+            if [ "$native_mirror" = 1 ]; then
+              printf 'monitor = %s, %s, 0x0, %s, mirror, %s\n' \
+                "$secondary_output" \
+                "$secondary_mode" \
+                ${lib.escapeShellArg (toString cfg.autoLayoutSecondaryScale)} \
+                "$source_output"
+            else
+              printf 'monitor = %s, %s, %s, %s\n' \
+                "$secondary_output" \
+                "$secondary_mode" \
+                ${lib.escapeShellArg cfg.autoLayoutSecondaryPosition} \
+                ${lib.escapeShellArg (toString cfg.autoLayoutSecondaryScale)}
+              for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
+                default=""
+                if [ "$workspace" = ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutSecondaryWorkspaces))} ]; then
+                  default=", default:true"
+                fi
+                printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
+                  "$workspace" "$secondary_output" "$default"
+              done
+            fi
+          fi
+          if [ -n "$tertiary_output" ]; then
+            if [ "$native_mirror" = 1 ]; then
+              tertiary_position=${lib.escapeShellArg cfg.autoLayoutSecondaryPosition}
+            else
+              tertiary_position=${lib.escapeShellArg cfg.autoLayoutTertiaryPosition}
+            fi
             printf 'monitor = %s, %s, %s, %s\n' \
-              "$target_output" \
-              ${lib.escapeShellArg cfg.autoLayoutSecondaryMode} \
-              ${lib.escapeShellArg cfg.autoLayoutSecondaryPosition} \
-              ${lib.escapeShellArg (toString cfg.autoLayoutSecondaryScale)}
-            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
+              "$tertiary_output" \
+              "$tertiary_mode" \
+              "$tertiary_position" \
+              ${lib.escapeShellArg (toString cfg.autoLayoutTertiaryScale)}
+            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
               default=""
-              if [ "$workspace" = ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutSecondaryWorkspaces))} ]; then
+              if [ "$workspace" = ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutTertiaryWorkspaces))} ]; then
                 default=", default:true"
               fi
               printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
-                "$workspace" "$target_output" "$default"
+                "$workspace" "$tertiary_output" "$default"
             done
           fi
         } >"$temporary_file"
@@ -566,21 +867,42 @@
             hyprctl dispatch moveworkspacetomonitor \
               "$workspace" "$source_output" >/dev/null 2>&1 || true
           done
-          if [ -z "$target_output" ]; then
+          if [ -z "$secondary_output" ]; then
             for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
               hyprctl dispatch moveworkspacetomonitor \
                 "$workspace" "$source_output" >/dev/null 2>&1 || true
             done
           fi
+          if [ -z "$tertiary_output" ]; then
+            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
+              hyprctl dispatch moveworkspacetomonitor \
+                "$workspace" "$source_output" >/dev/null 2>&1 || true
+            done
+          fi
         fi
-        if [ -n "$target_output" ]; then
-          hyprctl dispatch focusmonitor "$target_output" >/dev/null 2>&1 || true
+        if [ -n "$secondary_output" ] && [ "$native_mirror" != 1 ]; then
+          hyprctl dispatch focusmonitor "$secondary_output" >/dev/null 2>&1 || true
           hyprctl dispatch workspace \
             ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutSecondaryWorkspaces))} \
             >/dev/null 2>&1 || true
           for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
             hyprctl dispatch moveworkspacetomonitor \
-              "$workspace" "$target_output" >/dev/null 2>&1 || true
+              "$workspace" "$secondary_output" >/dev/null 2>&1 || true
+          done
+        elif [ "$native_mirror" = 1 ] && [ -n "$source_output" ]; then
+          for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
+            hyprctl dispatch moveworkspacetomonitor \
+              "$workspace" "$source_output" >/dev/null 2>&1 || true
+          done
+        fi
+        if [ -n "$tertiary_output" ]; then
+          hyprctl dispatch focusmonitor "$tertiary_output" >/dev/null 2>&1 || true
+          hyprctl dispatch workspace \
+            ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutTertiaryWorkspaces))} \
+            >/dev/null 2>&1 || true
+          for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
+            hyprctl dispatch moveworkspacetomonitor \
+              "$workspace" "$tertiary_output" >/dev/null 2>&1 || true
           done
         fi
         if [ -n "$source_output" ]; then
@@ -607,42 +929,96 @@
             end
           ' <<<"$external_monitors"
         )"
-        target_output=""
+        secondary_output=""
+        secondary_mode=""
+        tertiary_output=""
+        tertiary_mode=""
         if [ -n "$source_output" ]; then
-          target_output="$(
+          mapfile -t auxiliary_outputs < <(
             jq -r --arg source "$source_output" '
               [.[] | select(.name != $source)]
-              | if length == 0 then ""
-                else min_by(.physicalWidth * .physicalHeight).name end
+              | sort_by(.physicalWidth * .physicalHeight)
+              | reverse
+              | .[:2][].name
             ' <<<"$external_monitors"
-          )"
+          )
+          secondary_output="''${auxiliary_outputs[0]:-}"
+          tertiary_output="''${auxiliary_outputs[1]:-}"
+          if [ -n "$secondary_output" ]; then
+            secondary_mode="$(select_auxiliary_mode "$secondary_output")"
+          fi
+          if [ -n "$tertiary_output" ]; then
+            tertiary_mode="$(select_auxiliary_mode "$tertiary_output")"
+          fi
         fi
 
-        new_layout_key="$source_output:$target_output"
+        native_mirror_requested=0
+        ${lib.optionalString cfg.enableMirrorToggle ''
+        native_mirror_requested="$(tr -d '[:space:]' < "$mirror_state_file" 2>/dev/null || true)"
+        if [ "$native_mirror_requested" != 1 ]; then
+          native_mirror_requested=0
+        fi
+      ''}
+        native_mirror=0
+        primary_dimensions=${lib.escapeShellArg (builtins.head (lib.splitString "@" cfg.outputMode))}
+        secondary_dimensions="''${secondary_mode%@*}"
+        if [ "$native_mirror_requested" = 1 ] \
+          && [ -n "$secondary_output" ] \
+          && [ "$secondary_dimensions" = "$primary_dimensions" ]; then
+          native_mirror=1
+        fi
+
+        new_layout_key="$source_output:$secondary_output:$secondary_mode:$tertiary_output:$tertiary_mode:$native_mirror"
         if [ "$new_layout_key" != "$layout_key" ]; then
           stop_mirror
-          write_layout "$source_output" "$target_output"
+          write_layout \
+            "$source_output" \
+            "$secondary_output" \
+            "$secondary_mode" \
+            "$tertiary_output" \
+            "$tertiary_mode" \
+            "$native_mirror"
           layout_key="$new_layout_key"
         fi
 
+        ${lib.optionalString (cfg.autoMirrorExternalOutputs || cfg.enableMirrorToggle) ''
+        software_mirror=0
         ${lib.optionalString cfg.autoMirrorExternalOutputs ''
-          if [ -n "$source_output" ] && [ -n "$target_output" ] \
-          && { [ -z "$mirror_pid" ] || ! kill -0 "$mirror_pid" 2>/dev/null; }; then
-          hyprctl dispatch focusmonitor "$target_output" >/dev/null 2>&1 || true
-          hyprctl dispatch workspace \
-            ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
-            >/dev/null 2>&1 || true
-          wl-mirror \
-            --fullscreen-output "$target_output" \
-            --scaling fit \
-            --title "Couch mirror $source_output" \
-            "$source_output" &
-          mirror_pid=$!
-          sleep 0.5
-          hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
-          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          software_mirror=1
+        ''}
+        ${lib.optionalString cfg.enableMirrorToggle ''
+          if [ "$native_mirror_requested" = 1 ] && [ "$native_mirror" != 1 ]; then
+            software_mirror=1
           fi
         ''}
+
+        if [ "$software_mirror" = 1 ] \
+          && [ -n "$source_output" ] \
+          && [ -n "$secondary_output" ]; then
+          if [ -z "$mirror_pid" ] || ! kill -0 "$mirror_pid" 2>/dev/null; then
+            hyprctl dispatch focusmonitor "$secondary_output" >/dev/null 2>&1 || true
+            hyprctl dispatch workspace \
+              ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
+              >/dev/null 2>&1 || true
+            wl-mirror \
+              --fullscreen-output "$secondary_output" \
+              --scaling fit \
+              --title "Couch mirror $source_output" \
+              "$source_output" &
+            mirror_pid=$!
+            sleep 0.5
+            hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
+            hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          fi
+        elif [ -n "$mirror_pid" ]; then
+          stop_mirror
+          restore_secondary_workspace "$secondary_output"
+          if [ -n "$source_output" ]; then
+            hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
+            hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          fi
+        fi
+      ''}
 
         sleep 1
       done
@@ -789,6 +1165,19 @@
       EOF
     ''}
 
+    ${lib.optionalString (cfg.protectedBrowserPackage != null) ''
+      cat > "$out/share/applications/couch-protected-browser.desktop" <<EOF
+      [Desktop Entry]
+      Name=${cfg.protectedBrowserName}
+      Comment=Unlock and open the encrypted private browser
+      Exec=${lib.getExe protectedBrowser}
+      Icon=${cfg.protectedBrowserIcon}
+      Terminal=false
+      Type=Application
+      Categories=Network;WebBrowser;
+      EOF
+    ''}
+
     ${lib.optionalString (cfg.desktopSessionCommand != null) ''
       cat > "$out/share/applications/xps-desktop-mode.desktop" <<EOF
       [Desktop Entry]
@@ -830,14 +1219,12 @@
   hyprlandConfig = pkgs.writeText "moonlight-hyprland.conf" ''
     monitor = , ${defaultOutputMode}, auto, ${toString cfg.outputScale}
     ${lib.concatMapStringsSep "\n" (
-      output:
-        "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}"
-    )
-    mirrorSourceOutputs}
+        output: "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}"
+      )
+      mirrorSourceOutputs}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
-        output: source:
-          "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}, mirror, ${source}"
+        output: source: "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}, mirror, ${source}"
       )
       cfg.mirrorOutputs
     )}
@@ -865,8 +1252,7 @@
     ${lib.optionalString cfg.enableKdeConnect "exec-once = ${lib.getExe pointerSync}"}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
-        output: source:
-          "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
+        output: source: "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
       )
       cfg.softwareMirrorOutputs
     )}
@@ -874,8 +1260,8 @@
     ${lib.optionalString cfg.enableMergedProfile "exec-once = ${lib.getExe mergedDmsSession}"}
 
     input {
-      kb_layout = us,no
-      kb_options = grp:alt_shift_toggle
+      kb_layout = ${cfg.keyboardLayouts}
+      kb_options = ${cfg.keyboardOptions}
       numlock_by_default = true
 
       touchpad {
@@ -913,7 +1299,6 @@
     windowrule = match:class com.moonlight_stream.Moonlight, fullscreen true
     windowrule = match:class CouchBrowser, workspace 2
     windowrule = match:class CouchBrowser, fullscreen true
-
     bind = SUPER, 1, workspace, 1
     bind = SUPER, 2, workspace, 2
     bind = SUPER, 3, workspace, 3
@@ -930,9 +1315,15 @@
       else "bind = SUPER, M, workspace, 1"
     }
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
+    ${lib.optionalString cfg.enableMirrorToggle "bind = SUPER SHIFT, M, exec, ${lib.getExe displayMirrorToggle} toggle"}
     bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}
+    ${lib.optionalString (
+      cfg.protectedBrowserPackage != null
+    ) "bind = SUPER, Z, exec, ${lib.getExe protectedBrowser}"}
     bind = ALT, RETURN, exec, ${lib.getExe couchTerminal}
-    ${lib.optionalString (cfg.enableDms || cfg.enableMergedProfile) "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
+    ${lib.optionalString (
+      cfg.enableDms || cfg.enableMergedProfile
+    ) "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
     bind = SUPER, W, killactive
     bind = SUPER, RETURN, fullscreen
     bind = SUPER, S, togglefloating
@@ -996,10 +1387,10 @@
           exec ${cfg.desktopSessionCommand}
           ;;
         ${lib.optionalString cfg.enableMergedProfile ''
-          merged)
-            exec ${sessionCommand}
-            ;;
-        ''}
+        merged)
+          exec ${sessionCommand}
+          ;;
+      ''}
         couch | *)
           exec ${sessionCommand}
           ;;
@@ -1042,7 +1433,10 @@ in {
     };
 
     moonlightPlatform = lib.mkOption {
-      type = lib.types.enum ["wayland" "xcb"];
+      type = lib.types.enum [
+        "wayland"
+        "xcb"
+      ];
       default = "wayland";
       description = "Qt platform used by Moonlight; xcb permits KDE Connect XTest input.";
     };
@@ -1148,9 +1542,21 @@ in {
             position = 0;
             screenPreferences = ["all"];
             showOnLastDisplay = true;
-            leftWidgets = ["launcherButton" "workspaceSwitcher" "focusedWindow"];
-            centerWidgets = ["music" "clock"];
-            rightWidgets = ["systemTray" "notificationButton" "battery" "controlCenterButton"];
+            leftWidgets = [
+              "launcherButton"
+              "workspaceSwitcher"
+              "focusedWindow"
+            ];
+            centerWidgets = [
+              "music"
+              "clock"
+            ];
+            rightWidgets = [
+              "systemTray"
+              "notificationButton"
+              "battery"
+              "controlCenterButton"
+            ];
             spacing = 4;
             innerPadding = 4;
             bottomGap = 0;
@@ -1175,6 +1581,18 @@ in {
       type = lib.types.bool;
       default = false;
       description = "Enable KDE Connect and start its daemon in the dedicated session.";
+    };
+
+    keyboardLayouts = lib.mkOption {
+      type = lib.types.str;
+      default = "us,no";
+      description = "Comma-separated XKB layouts used by the dedicated couch session, in default-first order.";
+    };
+
+    keyboardOptions = lib.mkOption {
+      type = lib.types.str;
+      default = "grp:alt_shift_toggle";
+      description = "XKB options used by the dedicated couch session.";
     };
 
     browserPackage = lib.mkOption {
@@ -1210,6 +1628,48 @@ in {
       description = "Directory below ~/.local/share used for the fallback browser profile.";
     };
 
+    protectedBrowserPackage = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = null;
+      description = "Browser package whose data directory is kept in a password-protected gocryptfs mount.";
+    };
+
+    protectedBrowserName = lib.mkOption {
+      type = lib.types.str;
+      default = "Private browser";
+      description = "Name shown for the password-protected browser launcher.";
+    };
+
+    protectedBrowserIcon = lib.mkOption {
+      type = lib.types.str;
+      default = "web-browser";
+      description = "Icon name or absolute path used by the protected browser desktop entry.";
+    };
+
+    protectedBrowserCommandName = lib.mkOption {
+      type = lib.types.str;
+      default = "couch-protected-browser";
+      description = "Command name installed for the protected browser launcher.";
+    };
+
+    protectedBrowserEncryptedDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "couch-protected-browser";
+      description = "Directory below ~/.local/share that stores the encrypted browser data.";
+    };
+
+    protectedBrowserRuntimeDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "couch-protected-browser";
+      description = "Directory below XDG_RUNTIME_DIR used for the unlocked browser mount.";
+    };
+
+    protectedBrowserLegacyProfileDirectory = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional existing browser data directory to migrate into an empty protected profile.";
+    };
+
     desktopSessionCommand = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -1217,7 +1677,11 @@ in {
     };
 
     defaultSessionMode = lib.mkOption {
-      type = lib.types.enum ["couch" "desktop" "merged"];
+      type = lib.types.enum [
+        "couch"
+        "desktop"
+        "merged"
+      ];
       default = "couch";
       description = "Session mode used until the user selects and persists another mode.";
     };
@@ -1284,16 +1748,22 @@ in {
       description = "Supervise a software mirror from the discovered primary external output to the secondary output.";
     };
 
+    enableMirrorToggle = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable an on-demand mirror toggle from the primary to the secondary external output, using native mirroring for matching modes and software mirroring otherwise.";
+    };
+
     autoLayoutExternalOutputs = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = "Dynamically lay out external outputs and move their workspace sets across connector changes.";
     };
 
-    autoLayoutSecondaryMode = lib.mkOption {
-      type = lib.types.str;
-      default = "1920x1080@60";
-      description = "Stable mode used by the automatically discovered secondary output and by unmatched external outputs.";
+    autoLayoutSecondaryModes = lib.mkOption {
+      type = lib.types.nonEmptyListOf lib.types.str;
+      default = ["1920x1080@60"];
+      description = "Preferred modes for automatically discovered auxiliary outputs, in priority order.";
     };
 
     autoLayoutSecondaryPosition = lib.mkOption {
@@ -1308,6 +1778,18 @@ in {
       description = "Hyprland scale used by the automatically discovered secondary output.";
     };
 
+    autoLayoutTertiaryPosition = lib.mkOption {
+      type = lib.types.str;
+      default = "5120x0";
+      description = "Hyprland position used by the automatically discovered tertiary output.";
+    };
+
+    autoLayoutTertiaryScale = lib.mkOption {
+      type = lib.types.float;
+      default = 1.0;
+      description = "Hyprland scale used by the automatically discovered tertiary output.";
+    };
+
     autoLayoutPrimaryMinPhysicalWidth = lib.mkOption {
       type = lib.types.ints.positive;
       default = 1000;
@@ -1316,14 +1798,36 @@ in {
 
     autoLayoutPrimaryWorkspaces = lib.mkOption {
       type = lib.types.nonEmptyListOf lib.types.ints.positive;
-      default = [1 2 3 4 5];
+      default = [
+        1
+        2
+        3
+        4
+        5
+      ];
       description = "Persistent workspaces assigned to the discovered primary output.";
     };
 
     autoLayoutSecondaryWorkspaces = lib.mkOption {
       type = lib.types.nonEmptyListOf lib.types.ints.positive;
-      default = [6 7 8 9 10];
+      default = [
+        6
+        7
+        8
+        9
+        10
+      ];
       description = "Persistent workspaces assigned to the secondary output, or to the primary while no secondary is connected.";
+    };
+
+    autoLayoutTertiaryWorkspaces = lib.mkOption {
+      type = lib.types.nonEmptyListOf lib.types.ints.positive;
+      default = [
+        11
+        12
+        13
+      ];
+      description = "Persistent workspaces assigned to the tertiary output, or to the primary while no tertiary output is connected.";
     };
 
     autoMirrorWorkspace = lib.mkOption {
@@ -1363,9 +1867,11 @@ in {
       ++ lib.optional cfg.enableMergedProfile mergedDmsSession
       ++ lib.optional cfg.enableMergedProfile mergedUiControl
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
+      ++ lib.optional cfg.enableMirrorToggle displayMirrorToggle
       ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
+      ++ lib.optional (cfg.protectedBrowserPackage != null) protectedBrowser
       ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
     services.displayManager.sessionPackages = [sessionPackage];
 
@@ -1397,30 +1903,45 @@ in {
     };
 
     systemd.tmpfiles.rules =
-      lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
-      ++ lib.optional (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
-      ++ lib.optional (cfg.autoLoginUser != null && dynamicExternalLayoutEnabled) "d ${runtimeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
-      ++ lib.optional (cfg.autoLoginUser != null && dynamicExternalLayoutEnabled) "f ${dynamicMonitorConfigFile} 0644 ${cfg.autoLoginUser} root -";
+      lib.optional (
+        cfg.autoLoginUser != null && cfg.desktopSessionCommand != null
+      ) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
+      ++ lib.optional (
+        cfg.autoLoginUser != null && cfg.desktopSessionCommand != null
+      ) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional (
+        cfg.autoLoginUser != null && dynamicExternalLayoutEnabled
+      ) "d ${runtimeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
+      ++ lib.optional (
+        cfg.autoLoginUser != null && dynamicExternalLayoutEnabled
+      ) "f ${dynamicMonitorConfigFile} 0644 ${cfg.autoLoginUser} root -"
+      ++ lib.optional (
+        cfg.autoLoginUser != null && cfg.enableMirrorToggle
+      ) "f ${mirrorStateFile} 0644 ${cfg.autoLoginUser} root - 0";
 
-    systemd.paths.couch-session-mode-switch = lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) {
-      description = "Watch for XPS session mode changes";
-      wantedBy = ["multi-user.target"];
-      pathConfig = {
-        PathChanged = modeStateFile;
-        Unit = "couch-session-mode-switch.service";
+    systemd.paths.couch-session-mode-switch =
+      lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null)
+      {
+        description = "Watch for XPS session mode changes";
+        wantedBy = ["multi-user.target"];
+        pathConfig = {
+          PathChanged = modeStateFile;
+          Unit = "couch-session-mode-switch.service";
+        };
       };
-    };
 
-    systemd.services.couch-session-mode-switch = lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null) {
-      description = "Restart greetd after an XPS session mode change";
-      serviceConfig.Type = "oneshot";
-      script = ''
-        # initial_session runs once per boot unless greetd's ephemeral marker is
-        # cleared. A deliberate mode change should auto-login immediately.
-        rm -f /run/greetd.run
-        ${pkgs.systemd}/bin/systemctl try-restart greetd.service
-      '';
-    };
+    systemd.services.couch-session-mode-switch =
+      lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null)
+      {
+        description = "Restart greetd after an XPS session mode change";
+        serviceConfig.Type = "oneshot";
+        script = ''
+          # initial_session runs once per boot unless greetd's ephemeral marker is
+          # cleared. A deliberate mode change should auto-login immediately.
+          rm -f /run/greetd.run
+          ${pkgs.systemd}/bin/systemctl try-restart greetd.service
+        '';
+      };
 
     assertions = [
       {
@@ -1448,11 +1969,15 @@ in {
         message = "services.moonlight-client.controllerHoldSeconds must be positive";
       }
       {
-        assertion = lib.all (output: output != cfg.mirrorOutputs.${output}) (lib.attrNames cfg.mirrorOutputs);
+        assertion = lib.all (output: output != cfg.mirrorOutputs.${output}) (
+          lib.attrNames cfg.mirrorOutputs
+        );
         message = "services.moonlight-client.mirrorOutputs cannot mirror an output to itself";
       }
       {
-        assertion = lib.all (output: output != cfg.softwareMirrorOutputs.${output}) (lib.attrNames cfg.softwareMirrorOutputs);
+        assertion = lib.all (output: output != cfg.softwareMirrorOutputs.${output}) (
+          lib.attrNames cfg.softwareMirrorOutputs
+        );
         message = "services.moonlight-client.softwareMirrorOutputs cannot mirror an output to itself";
       }
       {
@@ -1460,16 +1985,35 @@ in {
         message = "services.moonlight-client automatic external-output layout requires autoLoginUser";
       }
       {
-        assertion = lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutSecondaryWorkspaces == [];
+        assertion =
+          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutSecondaryWorkspaces == [];
         message = "services.moonlight-client automatic primary and secondary workspace sets must not overlap";
       }
       {
-        assertion = lib.elem 1 cfg.autoLayoutPrimaryWorkspaces && lib.elem 2 cfg.autoLayoutPrimaryWorkspaces;
+        assertion =
+          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutTertiaryWorkspaces
+          == []
+          && lib.intersectLists cfg.autoLayoutSecondaryWorkspaces cfg.autoLayoutTertiaryWorkspaces == [];
+        message = "services.moonlight-client automatic tertiary workspace set must not overlap the primary or secondary sets";
+      }
+      {
+        assertion =
+          lib.elem 1 cfg.autoLayoutPrimaryWorkspaces && lib.elem 2 cfg.autoLayoutPrimaryWorkspaces;
         message = "services.moonlight-client automatic primary workspace set must contain stream workspace 1 and browser workspace 2";
       }
       {
-        assertion = !cfg.autoMirrorExternalOutputs || lib.elem cfg.autoMirrorWorkspace cfg.autoLayoutSecondaryWorkspaces;
+        assertion =
+          !cfg.autoMirrorExternalOutputs
+          || lib.elem cfg.autoMirrorWorkspace cfg.autoLayoutSecondaryWorkspaces;
         message = "services.moonlight-client.autoMirrorWorkspace must belong to the secondary workspace set";
+      }
+      {
+        assertion = !cfg.enableMirrorToggle || cfg.autoLayoutExternalOutputs;
+        message = "services.moonlight-client.enableMirrorToggle requires autoLayoutExternalOutputs";
+      }
+      {
+        assertion = !cfg.enableMirrorToggle || !cfg.autoMirrorExternalOutputs;
+        message = "services.moonlight-client on-demand and automatic mirroring are mutually exclusive";
       }
     ];
   };

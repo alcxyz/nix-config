@@ -66,6 +66,7 @@ in
               });
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
+              synergy1 = _prev.callPackage ../packages/synergy1 {};
               paneru = inputs.paneru.packages.${system}.default;
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.

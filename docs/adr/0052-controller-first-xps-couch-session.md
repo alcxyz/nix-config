@@ -60,14 +60,21 @@ floating windows, navigate or move between the stream and browser workspaces,
 and control audio directly through PipeWire. DMS-specific shortcuts remain out
 of couch mode because DMS is not part of that session.
 
-Keep an attached secondary display independent by default. Assign persistent
-workspaces 1–5 to the TV and 6–10 to the secondary display; when the secondary
-is absent, move its workspace set back to the TV, and restore the split when it
-returns. Retain native target-to-source mirroring and supervised fullscreen
-software mirroring as optional module capabilities. A software mirror can keep
-the streaming TV at its preferred mode while a secondary uses its own stable
-mode and scale. Prefer a stable 60 Hz secondary mode over its native resolution
-when the available dock path cannot sustain that native mode reliably.
+Keep attached secondary and tertiary displays independent by default. Assign
+persistent workspaces 1–3, 4–6, and 7–9 across the three external outputs; when
+an output is absent, return its workspace set to the primary TV and restore the
+split when it reappears. An on-demand mirror toggle uses Hyprland's native
+mirror path when the two selected displays have matching pixel dimensions, and
+falls back to a supervised fullscreen `wl-mirror` client when they do not. This
+keeps equal-mode TVs on the compositor's direct mirror path while allowing a
+lower-resolution auxiliary display to receive a scaled copy. Prefer a stable
+60 Hz auxiliary mode over native resolution when the available dock path cannot
+sustain that native mode reliably.
+
+Treat display-pipeline allocation separately from logical Hyprland layout. If
+all three external displays are connected during boot, release the internal
+panel before the graphical session starts; with fewer external displays, keep
+the internal panel available as a local maintenance fallback.
 
 Do not persist dock connector names or display identities. Discover the TV as
 the physically largest active external output, keep unmatched outputs on the
@@ -80,10 +87,13 @@ cursor. While KDE Connect is enabled, mirror changed XWayland root-pointer
 coordinates into Hyprland; let Hyprland hide the couch cursor after a short
 idle period and reveal it again when pointer input resumes.
 
-Use Chromium's basic password store for the isolated couch browser profiles.
-Passwordless graphical auto-login cannot unlock the normal login keyring, and
-an unlock dialog is unacceptable in a controller-first session. The normal
-desktop browser and keyring configuration are unchanged.
+Expose the credential-bearing couch browser only through a password-gated
+launcher backed by an encrypted profile directory. Keep the unrestricted
+browser executable and desktop entry out of the user profile. The browser uses
+its basic password store inside that encrypted directory because passwordless
+graphical auto-login cannot unlock the normal login keyring without an
+unacceptable unlock dialog. The normal desktop browser and keyring
+configuration are unchanged.
 
 The public module exposes generic startup, readiness, controller, and Qt
 platform options. Authentication material and private operational details must
@@ -128,9 +138,10 @@ Moonlight uses XWayland in couch mode to support phone input. Hardware decoding
 remains enabled, but the XWayland presentation path should be retained only
 while it meets latency and rendering expectations.
 
-The couch browser profile must not be treated as a secure store for sensitive
-saved credentials. Its basic password store is a deliberate kiosk trade-off;
-credential-heavy browsing should use the normal desktop session.
+The protected couch browser profile is encrypted while closed, but becomes
+available to the logged-in couch session while the launcher is running. It is
+an access boundary for casual use, not a substitute for separate user accounts
+or full-session locking.
 
 SteamHeadless must expose a working virtual keyboard to its X server. That
 integration has two boundaries: a system-wide host remapper must ignore the

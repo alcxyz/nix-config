@@ -21,6 +21,7 @@ in {
     "${configDir}/modules/home-manager/programs/niri/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
     "${configDir}/modules/home-manager/services/hyprlock/default.nix"
+    "${configDir}/modules/home-manager/services/waynergy/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
@@ -88,6 +89,12 @@ in {
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
   services.hyprlock.enable = true;
+  services.waynergy = {
+    enable = true;
+    serverAddress = "mac";
+    screenName = "xyz";
+    sourceKeyboard = "mac";
+  };
   services.kdeconnect.enable = true;
   # Hyprland's portal does not provide RemoteDesktop. Run KDE Connect through
   # XWayland so phone pointer and keyboard events use XTest instead of evdev;

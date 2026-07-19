@@ -27,6 +27,21 @@ with lib; let
       }
     ''
   );
+  inputDefaultsScript = pkgs.writeShellScript "hyprland-input-defaults" ''
+    set -eu
+
+    for _attempt in $(${pkgs.coreutils}/bin/seq 1 50); do
+      if ${pkgs.hyprland}/bin/hyprctl keyword input:kb_layout ${escapeShellArg cfg.inputLayouts} >/dev/null 2>&1; then
+        ${pkgs.hyprland}/bin/hyprctl keyword input:kb_options ${escapeShellArg cfg.inputOptions} >/dev/null
+        ${pkgs.hyprland}/bin/hyprctl switchxkblayout all 0 >/dev/null
+        exit 0
+      fi
+      ${pkgs.coreutils}/bin/sleep 0.1
+    done
+
+    echo "Hyprland was not ready for keyboard input defaults" >&2
+    exit 1
+  '';
   hostConfig = pkgs.writeText "hyprland-host.conf" (
     cfg.extraConfig
     + optionalString cfg.laptopDisplayAutoSwitch.enable ''
@@ -214,6 +229,18 @@ in {
       description = "Optional Hyprland input sensitivity override in the range -1.0 to 1.0.";
     };
 
+    inputLayouts = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Optional comma-separated XKB layouts applied when the Hyprland graphical session starts.";
+    };
+
+    inputOptions = mkOption {
+      type = types.str;
+      default = "grp:alt_shift_toggle";
+      description = "XKB options applied when the Hyprland graphical session starts.";
+    };
+
     laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for external outputs and lid state";
 
     manageLegacyConfig = mkOption {
@@ -301,6 +328,19 @@ in {
         Restart = "on-failure";
         RestartSec = 2;
       };
+    };
+
+    systemd.user.services.hyprland-input-defaults = mkIf (cfg.inputLayouts != null) {
+      Unit = {
+        Description = "Apply Hyprland keyboard layout defaults";
+        PartOf = ["graphical-session.target"];
+        After = ["graphical-session.target"];
+      };
+      Service = {
+        Type = "oneshot";
+        ExecStart = inputDefaultsScript;
+      };
+      Install.WantedBy = ["graphical-session.target"];
     };
   };
 }

@@ -33,6 +33,7 @@
       "modules/nixos/common/distributed-build-client.nix"
       "modules/nixos/common/pkgsets.nix"
       "modules/nixos/common/server.nix"
+      "modules/home-manager/services/waynergy/default.nix"
       "modules/nixos/common/ssh-keys.nix"
       "modules/nixos/services/flatpak/default.nix"
       "modules/nixos/services/heroic-sideload/default.nix"
@@ -42,6 +43,7 @@
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
+      "packages/synergy1/default.nix"
       "users/alc/common.nix"
       "users/alc/linux/madsil.nix"
       "users/alc/linux/common.nix"
@@ -89,6 +91,9 @@
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
         stashdb-pop = pkgs.stashdb-pop;
+      }
+      // lib.optionalAttrs (system == "aarch64-darwin") {
+        synergy1 = pkgs.synergy1;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
         # Cross-compiled U-Boot for Rock Pi 4 (RK3399).
