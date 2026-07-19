@@ -262,6 +262,7 @@ in
       requires = [ "k8s-backup-rustfs.service" ];
       path = [
         pkgs.coreutils
+        pkgs.getent
         pkgs.jq
         pkgs.minio-client
       ];
