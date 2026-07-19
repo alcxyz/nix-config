@@ -327,7 +327,7 @@ in
 
         for bucket in "''${buckets[@]}"; do
           mc mb --ignore-existing "replica/$bucket"
-          mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket"
+          mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket" >/dev/null
 
           source_stats="$(mc du --json "source/$bucket")"
           replica_stats="$(mc du --json "replica/$bucket")"
@@ -339,6 +339,7 @@ in
             echo "replica verification failed for bucket $bucket: source=$source_size bytes/$source_objects objects replica=$replica_size bytes/$replica_objects objects" >&2
             exit 1
           fi
+          echo "verified bucket=$bucket bytes=$source_size objects=$source_objects"
         done
       '';
     };
