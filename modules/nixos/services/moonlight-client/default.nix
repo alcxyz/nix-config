@@ -1618,6 +1618,11 @@
     runtimeInputs = [waitForStableOutputs];
     text = ''
       couch-wait-for-stable-outputs
+      # The compositor can render before a dock-connected TV has completed its
+      # physical link recovery. Retained XPS boot timings put that gap at about
+      # three seconds; keep the overlay loaded but do not consume its animation
+      # clock during that interval.
+      export NIXBOX_SPLASH_SETTLE_MS=3000
       exec ${
         if cfg.sessionSplashCommand == null
         then "${pkgs.coreutils}/bin/true"

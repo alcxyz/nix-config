@@ -40,7 +40,7 @@ fun setup_letter(index, filename)
 
 Window.SetBackgroundTopColor(0.043, 0.047, 0.059);
 Window.SetBackgroundBottomColor(0.043, 0.047, 0.059);
-Plymouth.SetRefreshRate(50);
+Plymouth.SetRefreshRate(60);
 
 global.mode = Plymouth.GetMode();
 global.shutdown = global.mode == "shutdown" || global.mode == "reboot";
@@ -138,7 +138,7 @@ Plymouth.SetBootProgressFunction(boot_progress_callback);
 fun refresh_callback()
   {
     global.frame += 1;
-    local.time = global.frame / 50;
+    local.time = global.frame / 60;
 
     if (global.shutdown)
       {

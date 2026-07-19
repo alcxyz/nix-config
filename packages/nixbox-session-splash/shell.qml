@@ -13,6 +13,10 @@ ShellRoot {
     readonly property real subtitleProgress: easeOutCubic(clamp((elapsed - 0.45) / 0.7))
     readonly property real fadeProgress: easeInCubic(clamp((elapsed - 2.4) / 0.7))
     readonly property real overlayOpacity: 1 - fadeProgress
+    readonly property int settleDelayMs: {
+        const configured = Number(Quickshell.env("NIXBOX_SPLASH_SETTLE_MS"));
+        return Number.isFinite(configured) && configured >= 0 ? configured : 250;
+    }
     property double startedAt: 0
 
     function beginAnimation() {
@@ -76,7 +80,7 @@ ShellRoot {
             // the display. Wait until Quickshell reports that its real backing
             // window is visible, then allow one frame-settle interval.
             Timer {
-                interval: 250
+                interval: root.settleDelayMs
                 running: splashWindow.backingWindowVisible && root.startedAt === 0
                 repeat: false
                 onTriggered: root.beginAnimation()

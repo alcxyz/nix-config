@@ -45,12 +45,11 @@ in {
     enable = true;
     theme = "nixbox";
     themePackages = [pkgs.nixbox-plymouth-theme];
-    # The boot menu already owns a working firmware framebuffer on the chosen
-    # couch display. Keep rendering there until normal hardware discovery loads
-    # i915; forcing i915 into the initrd tears down the splash after its first
-    # frame, before dock-connected outputs are ready for the replacement DRM
-    # renderer.
-    extraConfig = "UseSimpledrmNoLuks=1";
+    # The retained boot timelines show that the reliable graphical window
+    # starts when native i915 KMS takes over at roughly 7.6 seconds. Do not
+    # animate on the earlier firmware framebuffer: its teardown is visible on
+    # dock-connected displays and its software rendering is uneven.
+    extraConfig = "UseSimpledrmNoLuks=0";
   };
 
   # Activation can legitimately request wrapper regeneration several times
