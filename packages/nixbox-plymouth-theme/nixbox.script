@@ -46,6 +46,8 @@ global.mode = Plymouth.GetMode();
 global.shutdown = global.mode == "shutdown" || global.mode == "reboot";
 global.frame = 0;
 global.boot_progress = 0;
+global.status_progress = 0;
+global.visual_progress = 0;
 
 global.layout_scale = Window.GetWidth() / 1920;
 height_scale = Window.GetHeight() / 1080;
@@ -137,6 +139,26 @@ fun boot_progress_callback(duration, progress)
 
 Plymouth.SetBootProgressFunction(boot_progress_callback);
 
+# NixOS cannot embed the previous mutable Plymouth timing cache in a
+# reproducible initrd. Advance from actual completed unit notifications until
+# the real-root cache becomes available, then take the greater of both signals.
+fun update_status_callback(status)
+  {
+    global.status_progress += 0.012;
+    if (global.status_progress > 0.90)
+      global.status_progress = 0.90;
+  }
+
+Plymouth.SetUpdateStatusFunction(update_status_callback);
+
+fun root_mounted_callback()
+  {
+    if (global.status_progress < 0.42)
+      global.status_progress = 0.42;
+  }
+
+Plymouth.SetRootMountedFunction(root_mounted_callback);
+
 fun refresh_callback()
   {
     global.frame += 1;
@@ -196,12 +218,18 @@ fun refresh_callback()
         subtitle.sprite.SetOpacity(ease_out((local.time - 3.0) / 1.0));
         progress_track.sprite.SetOpacity(ease_out((local.time - 3.5) / 0.8));
 
-        local.visual_progress = global.boot_progress;
+        local.progress_target = global.boot_progress;
+        if (global.status_progress > local.progress_target)
+          local.progress_target = global.status_progress;
+
+        # Smooth discrete unit completion events without inventing time-based
+        # progress. The target itself only advances when boot work completes.
+        global.visual_progress += (local.progress_target - global.visual_progress) * 0.08;
 
         local.watermark_progress = ease_out((local.time - 3.0) / 1.0);
         watermark.sprite.SetOpacity(0.05 * local.watermark_progress);
 
-        local.fill_width = Math.Int(progress_track.width * local.visual_progress);
+        local.fill_width = Math.Int(progress_track.width * global.visual_progress);
         if (local.fill_width > 0)
           {
             local.fill_image = progress_fill.original.Scale(local.fill_width, progress_track.height);

@@ -25,16 +25,19 @@ generic message.
 
 XPS stages startup across the renderer that owns the display at each point.
 Plymouth first expands the center X mark into the NIXBOX wordmark, then holds
-that composition while its loading bar follows Plymouth's monotonic boot
-progress estimate. At boot completion it leaves a fully completed frame in the
-firmware framebuffer instead of exposing a console-to-session gap.
+that composition while its loading bar advances from completed systemd boot
+units and Plymouth's monotonic timing estimate after the real root is mounted.
+At boot completion it leaves a fully completed frame on the early DRM surface
+instead of exposing a console-to-session gap.
 
 The initrd loads the Intel display and Thunderbolt path early so Plymouth sees
-the real connector set while boot is still in progress. It presents the splash
-on every active DRM output rather than selecting a media-center primary; an
-output that is powered off or disconnected simply joins no early-boot surface.
-This early driver timing does not replace the dynamic Hyprland layout policy
-that takes ownership later.
+the real connector set while boot is still in progress. It settles the same
+three-external/internal-fallback pipeline policy before starting Plymouth, then
+presents the splash on every active DRM output rather than selecting a
+media-center primary. An output that is powered off or disconnected simply
+joins no early-boot surface. A normal-userspace fallback repeats the pipeline
+check only when a dock appeared too late for the initrd. This does not replace
+the dynamic Hyprland layout policy that takes ownership later.
 
 Once Hyprland has a usable output, a matching NIXBOX Quickshell overlay starts
 from that completed frame, changes the subtitle to `STARTING SESSION`, and
