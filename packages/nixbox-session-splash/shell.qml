@@ -72,7 +72,15 @@ ShellRoot {
                 height: 0
             }
 
-            Component.onCompleted: Qt.callLater(root.beginAnimation)
+            // Object construction does not mean the layer surface has reached
+            // the display. Wait until Quickshell reports that its real backing
+            // window is visible, then allow one frame-settle interval.
+            Timer {
+                interval: 250
+                running: splashWindow.backingWindowVisible && root.startedAt === 0
+                repeat: false
+                onTriggered: root.beginAnimation()
+            }
 
             Rectangle {
                 anchors.fill: parent

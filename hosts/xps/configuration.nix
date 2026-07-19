@@ -31,7 +31,6 @@ in {
   ];
 
   boot.initrd.systemd.enable = true;
-  boot.initrd.kernelModules = ["i915"];
   boot.initrd.verbose = false;
   boot.kernelPackages = pkgs.linuxPackages_latest;
   boot.consoleLogLevel = 3;
@@ -47,7 +46,10 @@ in {
     theme = "nixbox";
     themePackages = [pkgs.nixbox-plymouth-theme];
     # The boot menu already owns a working firmware framebuffer on the chosen
-    # couch display. Use it immediately while i915 discovers dock outputs.
+    # couch display. Keep rendering there until normal hardware discovery loads
+    # i915; forcing i915 into the initrd tears down the splash after its first
+    # frame, before dock-connected outputs are ready for the replacement DRM
+    # renderer.
     extraConfig = "UseSimpledrmNoLuks=1";
   };
 
