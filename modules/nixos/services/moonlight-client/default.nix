@@ -1568,15 +1568,77 @@
     '';
   };
 
+  waitForStableOutputs = pkgs.writeShellApplication {
+    name = "couch-wait-for-stable-outputs";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+    ];
+    text = ''
+      # Give the layout daemon the first scheduling turn, then require the
+      # visible output geometry to remain unchanged for one full second.
+      sleep 0.5
+      previous=""
+      stable=0
+      for _attempt in $(seq 1 100); do
+        current="$(
+          hyprctl -j monitors all 2>/dev/null \
+            | jq -c '[
+                .[]
+                | select(.disabled == false and .dpmsStatus == true)
+                | {
+                    name,
+                    x,
+                    y,
+                    width,
+                    height,
+                    refreshRate,
+                    scale
+                  }
+              ] | sort_by(.name)' 2>/dev/null \
+            || printf '[]\n'
+        )"
+        if [ "$current" != '[]' ] && [ "$current" = "$previous" ]; then
+          stable=$((stable + 1))
+        else
+          stable=0
+        fi
+        previous="$current"
+        if [ "$stable" -ge 10 ]; then
+          exit 0
+        fi
+        sleep 0.1
+      done
+    '';
+  };
+
+  sessionSplashLaunch = pkgs.writeShellApplication {
+    name = "couch-session-splash-launch";
+    runtimeInputs = [waitForStableOutputs];
+    text = ''
+      couch-wait-for-stable-outputs
+      exec ${
+        if cfg.sessionSplashCommand == null
+        then "${pkgs.coreutils}/bin/true"
+        else cfg.sessionSplashCommand
+      }
+    '';
+  };
+
   mergedDmsServiceControl = pkgs.writeShellApplication {
     name = "couch-merged-dms-service-control";
-    runtimeInputs = [pkgs.systemd];
+    runtimeInputs = [
+      pkgs.systemd
+      waitForStableOutputs
+    ];
     text = ''
       systemctl --user import-environment \
         WAYLAND_DISPLAY \
         HYPRLAND_INSTANCE_SIGNATURE \
         XDG_CURRENT_DESKTOP \
         DBUS_SESSION_BUS_ADDRESS
+      couch-wait-for-stable-outputs
       exec systemctl --user restart couch-merged-dms.service
     '';
   };
@@ -1754,8 +1816,8 @@
     env = QT_QPA_PLATFORMTHEME_QT6,gtk3
 
     exec-once = ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
-    ${lib.optionalString (cfg.sessionSplashCommand != null) "exec-once = ${cfg.sessionSplashCommand}"}
     ${lib.optionalString dynamicExternalLayoutEnabled "exec-once = ${lib.getExe autoLayoutExternalOutputs}"}
+    ${lib.optionalString (cfg.sessionSplashCommand != null) "exec-once = ${lib.getExe sessionSplashLaunch}"}
     ${lib.optionalString cfg.autoStartBrowser "exec-once = ${lib.getExe couchBrowser}"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}

@@ -194,10 +194,15 @@ fun refresh_callback()
         subtitle.sprite.SetOpacity(ease_out((local.time - 3.0) / 1.0));
         progress_track.sprite.SetOpacity(ease_out((local.time - 3.5) / 0.8));
 
-        local.watermark_progress = clamp((global.boot_progress - 0.2) / 0.62);
+        local.timeline_progress = clamp((local.time - 3.5) / 1.4);
+        local.visual_progress = global.boot_progress;
+        if (local.timeline_progress > local.visual_progress)
+          local.visual_progress = local.timeline_progress;
+
+        local.watermark_progress = clamp((local.visual_progress - 0.2) / 0.62);
         watermark.sprite.SetOpacity(0.05 * local.watermark_progress);
 
-        local.fill_width = Math.Int(progress_track.width * global.boot_progress);
+        local.fill_width = Math.Int(progress_track.width * local.visual_progress);
         if (local.fill_width > 0)
           {
             local.fill_image = progress_fill.original.Scale(local.fill_width, progress_track.height);
