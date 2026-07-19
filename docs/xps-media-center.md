@@ -23,11 +23,18 @@ generic message.
 
 ## Startup and shutdown
 
-XPS keeps the normal NixOS boot console visible. A short NIXBOX Quickshell
-overlay begins after Hyprland has a usable output and bridges graphical startup
-into the browser session on every active output. The session overlay never
-captures input and has a hard timeout so a display or animation failure cannot
-delay the browser, DMS, or controller controls.
+XPS keeps the normal NixOS boot console visible. Once Hyprland has a usable
+output, a NIXBOX Quickshell overlay expands the center X mark into the full
+wordmark and identifies the media-center session. It intentionally has no
+loading bar: the system has already booted, so the animation represents the
+graphical handoff rather than fictional progress. The overlay never captures
+input and has a hard timeout so a display or animation failure cannot delay the
+browser, DMS, or controller controls.
+
+DMS power-off and reboot actions run the matching reverse animation while
+Hyprland still owns the displays, then request the selected system action. This
+keeps power transitions on the same proven renderer instead of handing the
+external outputs back to an early-boot splash process.
 
 Hyprland's startup diagnostics remain available in its runtime log, while boot
 and recovery status remains visible on the console intentionally.

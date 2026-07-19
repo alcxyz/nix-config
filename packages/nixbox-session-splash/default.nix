@@ -35,6 +35,7 @@ stdenvNoCC.mkDerivation {
     install -Dm644 "$snowflake" "$out/share/nixbox-session-splash/nix-snowflake-white.svg"
     install -Dm644 "$spaceGrotesk" "$out/share/fonts/truetype/SpaceGrotesk.ttf"
     makeWrapper ${coreutils}/bin/timeout "$out/bin/nixbox-session-splash" \
+      --run 'mode="''${1:-startup}"; case "$mode" in startup|shutdown|reboot) export NIXBOX_SPLASH_MODE="$mode"; if [ "$#" -gt 0 ]; then shift; fi ;; *) echo "usage: nixbox-session-splash [startup|shutdown|reboot]" >&2; exit 2 ;; esac' \
       --run 'for attempt in $(${coreutils}/bin/seq 1 100); do monitors="$(${hyprland}/bin/hyprctl -j monitors 2>/dev/null || true)"; if printf %s "$monitors" | ${jq}/bin/jq -e "any(.[]; .dpmsStatus == true)" >/dev/null 2>&1; then break; fi; ${coreutils}/bin/sleep 0.1; done' \
       --add-flags "15 ${quickshell}/bin/quickshell -p $out/share/nixbox-session-splash" \
       --set QT_QPA_FONTDIR "$out/share/fonts/truetype"
@@ -43,7 +44,7 @@ stdenvNoCC.mkDerivation {
   '';
 
   meta = {
-    description = "Non-blocking NIXBOX graphical-session splash";
+    description = "NIXBOX graphical startup and power-transition splash";
     license = [lib.licenses.mit lib.licenses.cc-by-40];
     platforms = lib.platforms.linux;
     mainProgram = "nixbox-session-splash";

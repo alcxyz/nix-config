@@ -14,8 +14,16 @@
   mirrorStateFile = "${modeStateDirectory}/mirror-enabled";
   displayLayoutStateFile = "${modeStateDirectory}/display-layout";
   mergedDmsConfigDirectory = "${runtimeStateDirectory}/dms-merged";
+  effectiveMergedDmsSettings =
+    lib.recursiveUpdate (
+      lib.optionalAttrs (cfg.sessionSplashCommand != null) {
+        customPowerActionReboot = "${lib.getExe sessionPowerAction} reboot";
+        customPowerActionPowerOff = "${lib.getExe sessionPowerAction} poweroff";
+      }
+    )
+    cfg.mergedDmsSettings;
   mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (
-    builtins.toJSON cfg.mergedDmsSettings
+    builtins.toJSON effectiveMergedDmsSettings
   );
   mergedDmsCheatsheetFile = pkgs.writeText "xps-media-center.json" (
     builtins.toJSON {
@@ -1628,6 +1636,41 @@
         then "${pkgs.coreutils}/bin/true"
         else cfg.sessionSplashCommand
       }
+    '';
+  };
+
+  sessionPowerAction = pkgs.writeShellApplication {
+    name = "couch-session-power-action";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
+    text = ''
+      case "''${1:-}" in
+        reboot)
+          action=reboot
+          mode=reboot
+          ;;
+        poweroff)
+          action=poweroff
+          mode=shutdown
+          ;;
+        *)
+          echo "usage: couch-session-power-action {reboot|poweroff}" >&2
+          exit 2
+          ;;
+      esac
+
+      export NIXBOX_SPLASH_SETTLE_MS=0
+      ${cfg.sessionSplashCommand} "$mode" &
+      splash_pid=$!
+      sleep 3.7
+      if ! systemctl "$action"; then
+        kill "$splash_pid" 2>/dev/null || true
+        wait "$splash_pid" 2>/dev/null || true
+        exit 1
+      fi
+      wait "$splash_pid" 2>/dev/null || true
     '';
   };
 

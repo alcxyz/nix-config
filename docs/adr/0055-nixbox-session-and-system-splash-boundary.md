@@ -20,8 +20,10 @@ display, and failure constraints.
 
 ## Decision
 
-Implement a standalone Quickshell session splash launched before the couch
-browser. It must render on every active
+Implement a standalone, mode-aware Quickshell splash launched before the couch
+browser and by DMS power actions. Startup expands the central X mark into the
+NIXBOX wordmark without a progress bar. Power-off and reboot reverse that
+motion before requesting the system action. It must render on every active
 output, use one process-wide animation epoch, avoid keyboard and pointer focus,
 and terminate through both its normal animation deadline and a hard watchdog.
 Display hotplug may add or remove a surface without restarting the animation.
@@ -46,7 +48,10 @@ take down the desktop shell.
 
 Boot remains diagnosable and does not depend on early graphical output routing.
 NIXBOX branding begins only after Hyprland has a usable output, where the same
-renderer is already proven across the supported display layouts.
+renderer is already proven across the supported display layouts. User-initiated
+power actions gain a coherent transition while the compositor still owns those
+outputs; emergency and non-graphical shutdown paths remain unbranded and
+diagnosable.
 
 ## Tracking
 
