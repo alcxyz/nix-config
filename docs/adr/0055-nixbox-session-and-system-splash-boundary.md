@@ -39,9 +39,12 @@ applications and display relayout do not expose a bright transition. Preserve
 asset licensing and attribution in the packaged output.
 
 Add Plymouth only after the session implementation has been validated on the
-real display combinations. Enable early Intel KMS as part of that stage and do
-not make greetd, hyprlock, DMS theming, or stream transitions part of this
-decision.
+real display combinations. Start its theme when native KMS becomes available,
+rather than letting the animation timeline elapse on a transient firmware
+framebuffer. Keep the completed Plymouth frame visible while greetd prepares
+the initial session, then release Plymouth immediately before the selected
+graphical-session command starts. This gives one continuous visual owner across
+boot without coupling the animation to DMS, hyprlock, or stream transitions.
 
 ## Consequences
 
@@ -53,6 +56,14 @@ The two renderers require small parallel implementations because Plymouth and
 Qt Quick do not share an animation runtime. Reusing assets, fixed wordmark
 geometry, colors, and timing keeps the visible result coherent without forcing
 an unreliable cross-runtime abstraction.
+
+The host supplies one canonical Plymouth configuration to both the initrd and
+the running system. The initial-session wrapper and a privileged path unit form
+a narrow handoff: the wrapper requests release, Plymouth quits while retaining
+its last rendered pixels, and the compositor starts only after Plymouth has
+relinquished the display. Plymouth's normal target-driven quit units are not
+used on this host because they would create an uncovered interval before the
+graphical session.
 
 ## Tracking
 

@@ -21,6 +21,30 @@
     "xyz"
     "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"
   ];
+  plymouthHandoffRequest = pkgs.writeShellApplication {
+    name = "xps-plymouth-handoff-request";
+    runtimeInputs = [pkgs.coreutils];
+    text = ''
+      request=/run/moonlight-client/plymouth-handoff
+      touch "$request"
+
+      # The root path unit releases Plymouth while retaining its final pixels.
+      # Do not start the compositor until it has relinquished DRM ownership.
+      for _attempt in $(seq 1 100); do
+        if [ ! -e /run/plymouth/pid ]; then
+          exit 0
+        fi
+        sleep 0.05
+      done
+    '';
+  };
+  plymouthConfig = pkgs.writeText "xps-plymouthd.conf" ''
+    [Daemon]
+    ShowDelay=5.8
+    DeviceTimeout=8
+    Theme=nixbox
+    UseSimpledrmNoLuks=0
+  '';
 in {
   imports = [
     ./hardware-configuration.nix
@@ -49,8 +73,12 @@ in {
     # starts when native i915 KMS takes over at roughly 7.6 seconds. Do not
     # animate on the earlier firmware framebuffer: its teardown is visible on
     # dock-connected displays and its software rendering is uneven.
-    extraConfig = "UseSimpledrmNoLuks=0";
   };
+  # The upstream NixOS module hard-codes ShowDelay=0 before extraConfig, while
+  # Plymouth keeps the first duplicate key. Supply one canonical file to both
+  # the initrd and the running system so the native-KMS delay is effective.
+  environment.etc."plymouth/plymouthd.conf".source = lib.mkForce plymouthConfig;
+  boot.initrd.systemd.contents."/etc/plymouth/plymouthd.conf".source = lib.mkForce plymouthConfig;
 
   # Activation can legitimately request wrapper regeneration several times
   # during early boot. Every run is idempotent; do not report a false failure
@@ -197,6 +225,10 @@ in {
   services.displayManager.gdm.enable = false;
   services.greetd = {
     enable = true;
+    # Keep the boot splash visible while greetd performs its authenticated
+    # initial-session handoff. The session wrapper releases it immediately
+    # before starting Hyprland.
+    greeterManagesPlymouth = true;
     settings.default_session = {
       command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --remember-session --sessions /run/current-system/sw/share/wayland-sessions";
       user = "greeter";
@@ -219,6 +251,7 @@ in {
     keyboardLayouts = "no,us";
     keyboardOptions = "grp:alt_shift_toggle";
     browserScaleFactor = 1.5;
+    sessionPreLaunchCommand = lib.getExe plymouthHandoffRequest;
     sessionSplashCommand = lib.getExe pkgs.nixbox-session-splash;
     autoStartBrowser = true;
     autoStartStream = false;
@@ -291,6 +324,24 @@ in {
       "--frame-pacing"
       "--swap-gamepad-buttons"
     ];
+  };
+
+  # NixOS normally quits Plymouth at multi-user.target, before greetd's
+  # five-second initial-session handoff. Retain the completed frame instead and
+  # release it only when the selected graphical session is ready to launch.
+  systemd.services.plymouth-quit.wantedBy = lib.mkForce [];
+  systemd.services.plymouth-quit-wait.wantedBy = lib.mkForce [];
+  systemd.paths.xps-plymouth-session-handoff = {
+    wantedBy = ["multi-user.target"];
+    pathConfig.PathExists = "/run/moonlight-client/plymouth-handoff";
+  };
+  systemd.services.xps-plymouth-session-handoff = {
+    description = "Retain the boot splash through the XPS graphical handoff";
+    serviceConfig.Type = "oneshot";
+    script = ''
+      ${lib.getExe' pkgs.plymouth "plymouth"} quit --retain-splash || true
+      rm -f /run/moonlight-client/plymouth-handoff
+    '';
   };
 
   # Intel exposes three display pipelines. The firmware initially assigns one

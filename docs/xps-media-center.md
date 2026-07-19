@@ -23,9 +23,10 @@ generic message.
 
 ## Startup and shutdown
 
-XPS uses two independent NIXBOX visuals. Plymouth owns the quiet boot, reboot,
-and shutdown phase from early Intel graphics initialization onward. A short
-Quickshell overlay then bridges Hyprland startup into the browser session on
+XPS uses two independent NIXBOX visuals. Plymouth starts its boot animation on
+the native Intel display rather than a temporary firmware framebuffer, then
+retains the completed frame until the graphical session is ready to take over.
+A short Quickshell overlay bridges Hyprland startup into the browser session on
 every active output. The session overlay waits until Hyprland reports a usable
 output, never captures input, and has a hard timeout so a display or animation
 failure cannot delay the browser, DMS, or controller controls.

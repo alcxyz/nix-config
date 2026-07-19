@@ -1977,6 +1977,9 @@
       pkgs.systemd
     ];
     text = ''
+      ${lib.optionalString (cfg.sessionPreLaunchCommand != null) ''
+        ${cfg.sessionPreLaunchCommand}
+      ''}
       mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
       if [ "$mode" != merged ]; then
         systemctl --user stop couch-merged-dms.service >/dev/null 2>&1 || true
@@ -2035,6 +2038,12 @@ in {
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = "Optional non-blocking command launched before couch-session applications.";
+    };
+
+    sessionPreLaunchCommand = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional blocking command run immediately before the selected graphical session starts.";
     };
 
     moonlightPlatform = lib.mkOption {
