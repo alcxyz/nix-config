@@ -33,9 +33,11 @@ Implement the three distinct transitions from the design handoff:
 Load the Intel and Thunderbolt display path in the initrd, but do not delay
 Plymouth while waiting for a preferred connector topology. The script plugin's
 display-hotplug callback rebuilds scaled sprites for the current virtual canvas
-and restarts only an unfinished intro when the firmware surface is replaced by
-real KMS outputs. Once the assembled lockup is visible, later connector events
-must not reset the animation.
+without changing the animation epoch. After the existing display-pipeline
+allocator has allowed dock authorization and connector discovery to settle, a
+boot-only oneshot uses Plymouth's supported theme reload operation to give the
+visible pixel displays a deliberate frame-zero start. Graphical login remains
+ordered behind the bounded eight-second sequence.
 
 Prefer Plymouth's measured boot estimate for the progress fill. When no timing
 estimate is available, use the approved design prototype's bounded fill curve
@@ -68,8 +70,11 @@ take down the desktop shell.
 The early boot renderer adapts to the pixel displays Plymouth actually exposes;
 it does not encode a preferred TV or monitor. The existing userspace
 display-pipeline service still applies the three-external/internal-panel
-fallback policy before greetd, while Hyprland continues to own dynamic output
-selection, workspaces, and mirroring.
+fallback policy before the visible theme epoch and greetd, while Hyprland
+continues to own dynamic output selection, workspaces, and mirroring. The
+deliberate visible epoch adds at most eight seconds to graphical startup when
+Plymouth is active, in exchange for avoiding an off-screen animation that only
+exposes its final frame after a dock display appears.
 
 Boot, session start, and graphical power actions retain separate renderer
 lifecycles and meanings. A DMS restart cannot replay either startup animation,

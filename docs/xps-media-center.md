@@ -26,11 +26,12 @@ generic message.
 The boot and graphical-session transitions are deliberately separate. Plymouth
 starts with one centered X, separates it into the two NIXBOX X positions,
 reveals N/I/B/O and `MEDIA CENTER`, fills the progress track, and raises a faint
-Nix watermark behind the completed lockup. When real KMS outputs replace the
-firmware surface, the unfinished intro restarts against the new display canvas
-instead of resuming halfway through. A missing Plymouth timing estimate falls
-back to the approved design fill curve, so the final bar and quit frame are
-complete.
+Nix watermark behind the completed lockup. Plymouth still starts on the early
+firmware surface to cover diagnostic boot. Once the existing display-pipeline
+allocator has settled the dock-backed outputs, a boot-only theme reload starts
+the bounded eight-second sequence from frame zero on the visible displays. A
+missing Plymouth timing estimate falls back to the approved design fill curve,
+so the final bar and quit frame are complete.
 
 Once Hyprland has a usable output, a distinct NIXBOX Quickshell overlay presents
 only the `STARTING SESSION` transition on every active display and fades into

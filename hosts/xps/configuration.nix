@@ -42,9 +42,41 @@ in {
     enable = true;
     theme = "nixbox";
     themePackages = [pkgs.nixbox-plymouth-theme];
-    # Start on the early DRM surface. The theme rebuilds its layout and resets
-    # only its unfinished intro when the real KMS outputs hotplug.
+    # Start on the early DRM surface. The theme rebuilds its layout when the
+    # real KMS outputs hotplug; a later boot service deliberately restarts the
+    # timeline after the external-display pipeline has settled.
     extraConfig = "UseSimpledrmNoLuks=1";
+  };
+
+  # Plymouth starts early enough to cover the diagnostic boot, but the dock's
+  # visible pixel display arrives near the end of that interval. Reloading the
+  # active theme after output discovery gives the real display a frame-zero
+  # start, then holds graphical login until the approved sequence completes.
+  # `plymouth reload` recreates only the theme plugin; it does not restart the
+  # daemon, switch VTs, or alter the DRM connector allocation below.
+  systemd.services.xps-plymouth-visible-boot = {
+    description = "Play the complete NIXBOX boot sequence on settled outputs";
+    after = [
+      "plymouth-start.service"
+      "xps-display-pipeline-setup.service"
+    ];
+    wants = ["xps-display-pipeline-setup.service"];
+    before = [
+      "plymouth-quit.service"
+      "greetd.service"
+    ];
+    wantedBy = ["multi-user.target"];
+    path = [
+      pkgs.coreutils
+      pkgs.plymouth
+    ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      if plymouth --ping; then
+        plymouth reload
+        sleep 8
+      fi
+    '';
   };
 
   # Preserve the completed boot lockup until Hyprland takes ownership, then

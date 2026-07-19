@@ -47,7 +47,6 @@ global.shutdown = global.mode == "shutdown" || global.mode == "reboot";
 global.frame = 0;
 global.boot_progress = 0;
 global.visual_progress = 0;
-global.intro_complete = 0;
 
 # A KMS handoff changes Plymouth's virtual canvas. Rebuild every scaled sprite
 # against the new bounds so the same centered composition appears on every
@@ -139,16 +138,11 @@ fun setup_layout()
 setup_layout();
 
 # The firmware framebuffer is replaced by i915 and dock-backed pixel displays
-# shortly after Plymouth starts. Restart only the unfinished intro when that
-# happens, then lock the timeline once the assembled lockup is visible so a
-# later connector event cannot send the animation back to frame zero.
+# shortly after Plymouth starts. Rebuild the composition for each new canvas;
+# the XPS boot sequencer reloads the theme once output discovery has settled,
+# which gives the visible display a deliberate frame-zero start.
 fun display_hotplug_callback()
   {
-    if (!global.shutdown && !global.intro_complete)
-      {
-        global.frame = 0;
-        global.visual_progress = 0;
-      }
     setup_layout();
   }
 
@@ -203,9 +197,6 @@ fun refresh_callback()
       }
     else
       {
-        if (local.time >= 4.3)
-          global.intro_complete = 1;
-
         local.x_opacity = ease_out((local.time - 0.1) / 0.5);
         global.letters[2].sprite.SetOpacity(local.x_opacity);
         global.letters[5].sprite.SetOpacity(local.x_opacity);
