@@ -17,6 +17,116 @@
   mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (
     builtins.toJSON cfg.mergedDmsSettings
   );
+  mergedDmsCheatsheetFile = pkgs.writeText "xps-media-center.json" (
+    builtins.toJSON {
+      title = "XPS media center";
+      provider = "xps-media-center";
+      binds = {
+        Controller = [
+          {
+            key = "Home A";
+            desc = "Steam/Moonlight";
+          }
+          {
+            key = "L3 R3";
+            desc = "Back to Helium";
+          }
+          {
+            key = "Minus Plus";
+            desc = "Mirror toggle";
+          }
+          {
+            key = "Minus X";
+            desc = "Next layout";
+          }
+          {
+            key = "Minus Y";
+            desc = "Next audio";
+          }
+          {
+            key = "Minus B";
+            desc = "Show guide";
+          }
+        ];
+        "Apps · ◆ = Super" = [
+          {
+            key = "◆ M";
+            desc = "Steam/Moonlight";
+          }
+          {
+            key = "◆ B";
+            desc = "Back to Helium";
+          }
+          {
+            key = "◆ ⇧ M";
+            desc = "Mirror toggle";
+          }
+          {
+            key = "◆ ⇧ D";
+            desc = "Next layout";
+          }
+          {
+            key = "◆ ⇧ A";
+            desc = "Next audio";
+          }
+          {
+            key = "◆ V";
+            desc = "New Helium";
+          }
+          {
+            key = "◆ Z";
+            desc = "Private Brave";
+          }
+          {
+            key = "Alt Enter";
+            desc = "Terminal";
+          }
+          {
+            key = "◆ Space";
+            desc = "DMS search";
+          }
+        ];
+        "Windows & audio" = [
+          {
+            key = "◆ Enter";
+            desc = "Fullscreen";
+          }
+          {
+            key = "◆ S";
+            desc = "Floating";
+          }
+          {
+            key = "◆ W";
+            desc = "Close";
+          }
+          {
+            key = "◆ 1–0";
+            desc = "Workspace";
+          }
+          {
+            key = "◆ J/K";
+            desc = "Previous / next";
+          }
+          {
+            key = "◆ ⇧ 1–0";
+            desc = "Move window";
+          }
+          {
+            key = "F8 F9 F10";
+            desc = "Volume controls";
+          }
+          {
+            key = "Alt Shift";
+            desc = "NO / US layout";
+          }
+          {
+            key = "◆ H";
+            desc = "Show guide";
+          }
+        ];
+      };
+    }
+  );
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
@@ -192,7 +302,7 @@
         --user-data-dir="$HOME/.local/share/${cfg.browserProfileDirectory}" \
         --ozone-platform=x11 \
         --password-store=basic \
-        --start-fullscreen \
+        --force-device-scale-factor=${toString cfg.browserScaleFactor} \
         "$@"
     '';
   };
@@ -223,7 +333,7 @@
           --user-data-dir="$HOME/.local/share/${cfg.fallbackBrowserProfileDirectory}" \
           --ozone-platform=x11 \
           --password-store=basic \
-          --start-fullscreen \
+          --force-device-scale-factor=${toString cfg.browserScaleFactor} \
           "$@"
       '';
     };
@@ -412,6 +522,7 @@
         --user-data-dir="$mountpoint" \
         --ozone-platform=x11 \
         --password-store=basic \
+        --force-device-scale-factor=${toString cfg.browserScaleFactor} \
         --disable-background-mode \
         "$@" || status=$?
       exit "$status"
@@ -489,6 +600,19 @@
     '';
   };
 
+  couchControlHelp = pkgs.writeShellApplication {
+    name = "couch-control-help";
+    text = ''
+      dms="$HOME/.nix-profile/bin/dms"
+      if [ ! -x "$dms" ]; then
+        echo "DMS is not installed in the user profile" >&2
+        exit 1
+      fi
+
+      exec "$dms" ipc call keybinds toggle xps-media-center
+    '';
+  };
+
   controllerPython = pkgs.python3.withPackages (pythonPackages: [pythonPackages.evdev]);
   controllerDaemonSource = pkgs.writeText "couch-controller.py" ''
     import select
@@ -503,6 +627,7 @@
     ACTIONS = {
         "start": {ecodes.BTN_MODE, ecodes.BTN_EAST},
         "browser": {ecodes.BTN_THUMBL, ecodes.BTN_THUMBR},
+        "help": {ecodes.BTN_SELECT, ecodes.BTN_SOUTH},
         ${lib.optionalString cfg.enableMirrorToggle ''
       "mirror": {ecodes.BTN_SELECT, ecodes.BTN_START},
     ''}
@@ -516,6 +641,7 @@
     COMMANDS = {
         "start": [${builtins.toJSON (lib.getExe couchStreamControl)}, "start"],
         "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
+        "help": [${builtins.toJSON (lib.getExe couchControlHelp)}],
         ${lib.optionalString cfg.enableMirrorToggle ''
       "mirror": [${builtins.toJSON (lib.getExe displayMirrorToggle)}, "toggle"],
     ''}
@@ -1382,9 +1508,12 @@
 
       config_home=${lib.escapeShellArg mergedDmsConfigDirectory}
       settings_directory="$config_home/DankMaterialShell"
+      cheatsheets_directory="$settings_directory/cheatsheets"
       rm -rf "$config_home"
-      install -d -m 0700 "$settings_directory"
+      install -d -m 0700 "$settings_directory" "$cheatsheets_directory"
       install -m 0600 ${mergedDmsSettingsFile} "$settings_directory/settings.json"
+      install -m 0600 ${mergedDmsCheatsheetFile} \
+        "$cheatsheets_directory/xps-media-center.json"
 
       plugin_settings="$HOME/.config/DankMaterialShell/plugin_settings.json"
       if [ -e "$plugin_settings" ]; then
@@ -1648,7 +1777,6 @@
 
     windowrule = match:class com.moonlight_stream.Moonlight, fullscreen true
     windowrule = match:class CouchBrowser, workspace 2
-    windowrule = match:class CouchBrowser, fullscreen true
     bind = SUPER, 1, workspace, 1
     bind = SUPER, 2, workspace, 2
     bind = SUPER, 3, workspace, 3
@@ -1668,6 +1796,7 @@
     ${lib.optionalString cfg.enableMirrorToggle "bind = SUPER SHIFT, M, exec, ${lib.getExe displayMirrorToggle} toggle"}
     ${lib.optionalString cfg.enableAdaptiveDisplayLayout "bind = SUPER SHIFT, D, exec, ${lib.getExe displayLayoutControl} cycle"}
     ${lib.optionalString cfg.enableAudioOutputCycle "bind = SUPER SHIFT, A, exec, ${lib.getExe audioOutputControl} cycle"}
+    bind = SUPER, H, exec, ${lib.getExe couchControlHelp}
     bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}
     ${lib.optionalString (
       cfg.protectedBrowserPackage != null
@@ -1888,6 +2017,10 @@ in {
         fadeToLockEnabled = false;
         fadeToDpmsEnabled = false;
         soundsEnabled = false;
+        # DMS's native surfaces are otherwise too small to read at couch
+        # distance on a 1440p television. This config is isolated from the
+        # normal desktop profile.
+        fontScale = 2.0;
         showDock = true;
         dockAutoHide = true;
         dockSmartAutoHide = true;
@@ -1958,6 +2091,12 @@ in {
       default = pkgs.helium;
       defaultText = lib.literalExpression "pkgs.helium";
       description = "Browser package used by the couch browser launcher.";
+    };
+
+    browserScaleFactor = lib.mkOption {
+      type = lib.types.float;
+      default = 1.0;
+      description = "Chromium device scale factor used by couch browser launchers.";
     };
 
     terminalPackage = lib.mkOption {
@@ -2239,6 +2378,7 @@ in {
         moonlightStreamStart
       ]
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
+      ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
       ++ lib.optional cfg.enableKdeConnect pointerSync
       ++ lib.optional cfg.enableMergedProfile mergedDmsSession
       ++ lib.optional cfg.enableMergedProfile mergedUiControl
@@ -2362,6 +2502,10 @@ in {
       {
         assertion = cfg.controllerHoldSeconds > 0.0;
         message = "services.moonlight-client.controllerHoldSeconds must be positive";
+      }
+      {
+        assertion = cfg.browserScaleFactor > 0.0;
+        message = "services.moonlight-client.browserScaleFactor must be positive";
       }
       {
         assertion = lib.all (output: output != cfg.mirrorOutputs.${output}) (

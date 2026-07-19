@@ -73,6 +73,15 @@ manually connected, activate its A2DP playback path but leave output selection
 manual. Pairing and trust data remain host state rather than public
 configuration.
 
+Expose a latency-compensated `Both TVs` virtual PipeWire sink that fans a stereo
+stream out to the two TV-class display sinks. This pairs naturally with TV
+mirroring, but remains an explicit audio choice so toggling a display mode never
+changes volume or routing unexpectedly.
+
+Publish the controller and keyboard reference as a generated DMS cheatsheet.
+Toggle the native DMS modal from either input type so it follows the focused
+display without adding a separate desktop dialog or placement workaround.
+
 Keep attached secondary and tertiary displays independent in the all-output
 layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
 outputs; in a solo layout, return all workspace sets to the selected output.
@@ -131,6 +140,10 @@ graphical auto-login cannot unlock the normal login keyring without an
 unacceptable unlock dialog. The normal desktop browser and keyring
 configuration are unchanged. Capture the focused workspace when the launcher is
 invoked, then place and centre its password prompt and browser windows there.
+Launch couch browsers as ordinary tiled windows rather than requesting browser
+or compositor fullscreen, because Chromium fullscreen interferes with couch
+pointer and click handling. Apply an explicit browser device scale for readable
+chrome and page content without reducing the stream or workspace resolution.
 
 The public module exposes generic startup, readiness, controller, and Qt
 platform options. Authentication material and private operational details must
