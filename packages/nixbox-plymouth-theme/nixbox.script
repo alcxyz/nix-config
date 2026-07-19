@@ -140,7 +140,7 @@ fun setup_layout()
         # expose an arbitrary late frame when a display appears.
         if (!global.animation_started)
           {
-            watermark.sprite.SetOpacity(0.10);
+            watermark.sprite.SetOpacity(0.16);
             global.letters[2].sprite.SetOpacity(1);
             global.letters[5].sprite.SetOpacity(1);
           }
@@ -171,7 +171,7 @@ Plymouth.SetBootProgressFunction(boot_progress_callback);
 
 fun show_complete_boot_lockup()
   {
-    watermark.sprite.SetOpacity(0.05);
+    watermark.sprite.SetOpacity(0.20);
     subtitle.sprite.SetOpacity(1);
     progress_track.sprite.SetOpacity(1);
 
@@ -297,7 +297,7 @@ fun refresh_callback()
           global.visual_progress = local.progress_target;
 
         local.watermark_progress = clamp((global.visual_progress - 0.2) / 0.62);
-        watermark.sprite.SetOpacity(0.05 * local.watermark_progress);
+        watermark.sprite.SetOpacity(0.14 + 0.06 * local.watermark_progress);
 
         local.fill_width = Math.Int(progress_track.width * global.visual_progress);
         if (local.fill_width > 0)

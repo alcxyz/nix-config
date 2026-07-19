@@ -47,8 +47,8 @@ lockup is gated on that completion signal and cannot flash ahead of its intro.
 Prefer Plymouth's measured boot estimate for the progress fill. When no timing
 estimate is available, use the approved design prototype's bounded fill curve
 so the final lockup cannot remain empty; the quit frame is always complete. The
-watermark opacity follows the handoff's progress formula and reaches at most
-five percent.
+watermark remains behind the entire boot composition and strengthens from
+fourteen to twenty percent opacity so it stays perceptible at TV distance.
 
 The Quickshell component must render on every active output, use one
 process-wide animation epoch, avoid keyboard and pointer focus, and terminate
@@ -60,6 +60,11 @@ Hyprland session.
 Keep the compositor background aligned with the splash background so that slow
 applications and display relayout do not expose a bright transition. Preserve
 asset licensing and attribution in the packaged output.
+
+Retain Plymouth's completed framebuffer while greetd starts. Keep greetd's TTY
+reset and hangup behavior, but do not deallocate the VT because that operation
+explicitly clears the retained frame. Hyprland replaces it when the compositor
+claims the output; a brief hardware mode set may still be visible.
 
 Keep the normal boot verbosity rather than using a quiet kernel command line so
 diagnostics remain logged and Plymouth's details view can expose them. Retain

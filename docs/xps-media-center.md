@@ -37,6 +37,12 @@ high-resolution Plymouth renderer advances below its requested refresh rate.
 The quit frame is gated on that completion signal because Plymouth also invokes
 the theme's quit callback during reload.
 
+The Nix watermark stays visible behind the centered X and the complete boot
+assembly, strengthening from fourteen to twenty percent opacity for TV viewing.
+The completed frame is held explicitly for two seconds, then retained in the
+framebuffer while greetd starts. Greetd does not deallocate and clear that VT;
+Hyprland replaces it when the compositor takes ownership of the output.
+
 Systemd-boot keeps the newest six configurations on the EFI system partition.
 This bounds copied boot artifacts without deleting NixOS profile generations,
 so several rollback choices remain while new generations can still be written.

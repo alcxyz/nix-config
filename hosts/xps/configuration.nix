@@ -81,7 +81,7 @@ in {
         plymouth display-message --text=nixbox:start
         sleep 7
         plymouth display-message --text=nixbox:complete
-        sleep 1
+        sleep 2
       fi
     '';
   };
@@ -401,7 +401,10 @@ in {
     StandardError = "journal";
     TTYReset = true;
     TTYVHangup = true;
-    TTYVTDisallocate = true;
+    # `plymouth quit --retain-splash` leaves the completed lockup in the
+    # framebuffer. Do not explicitly clear that VT while greetd starts;
+    # Hyprland will replace it when the compositor owns the output.
+    TTYVTDisallocate = false;
   };
 
   # DMS owns idle handling for this user. Prevent the package-provided
