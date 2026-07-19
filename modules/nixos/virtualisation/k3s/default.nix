@@ -77,6 +77,15 @@ in {
       default = false;
       description = "Initialize or migrate the cluster to embedded etcd on this server.";
     };
+
+    rebootWatchdogSec = mkOption {
+      type = types.str;
+      default = "3min";
+      description = ''
+        systemd reboot watchdog timeout. Set to "0" on hosts whose firmware
+        reset path has not been qualified or is known to wedge during reboot.
+      '';
+    };
   };
 
   # Apply configuration if k3s.enable is true
@@ -91,7 +100,7 @@ in {
 
     # Bound the final reboot phase if firmware or a kernel driver wedges after
     # userspace has shut down. Runtime watchdog policy remains host-specific.
-    systemd.settings.Manager.RebootWatchdogSec = "3min";
+    systemd.settings.Manager.RebootWatchdogSec = cfg.rebootWatchdogSec;
 
     # A newly installed host may start with a reset RTC.  time-sync.target is
     # only an ordering target and does not itself prove that NTP has corrected
