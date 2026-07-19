@@ -115,9 +115,13 @@ selected displays have matching pixel dimensions, and otherwise uses a
 supervised fullscreen `wl-mirror` client. Allow a host to force the supervised
 path even for matching modes: XPS reports a valid native mirror relationship but
 leaves the physical source panel blank, while the software path preserves both
-1440p TV signals correctly. Prefer a stable 60 Hz auxiliary mode over native
-resolution when the available dock path cannot sustain that native mode
-reliably.
+TV signals correctly. The supervised path negotiates the compositor's DMA-BUF
+capture backend, keeping the copied frames GPU-backed. Use a shared 1080p60 mode
+while browser playback is mirrored: validation showed that decoding 1080p into
+two 1440p compositor outputs dropped frames heavily, while matching the video
+and output modes did not. Restore 1440p60 when mirroring is disabled. Prefer a
+stable 60 Hz auxiliary mode over native resolution when the available dock path
+cannot sustain that native mode reliably.
 
 Treat display-pipeline allocation separately from logical Hyprland layout. If
 all three external displays are connected during boot, release the internal

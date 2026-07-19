@@ -206,6 +206,7 @@ in {
     protectedBrowserLegacyProfileDirectory = "/run/moonlight-client/dms-merged/BraveSoftware/Brave-Browser";
     moonlightPlatform = "xcb";
     outputMode = "2560x1440@60";
+    mirrorOutputMode = "1920x1080@60";
     fallbackOutputMode = "1920x1080@60";
     outputScale = 1.0;
     autoLayoutExternalOutputs = true;
@@ -214,6 +215,7 @@ in {
       "1920x1080@60"
     ];
     autoLayoutSecondaryPosition = "2560x0";
+    autoMirrorSecondaryPosition = "1920x0";
     autoLayoutSecondaryScale = 1.0;
     autoLayoutTertiaryPosition = "5120x0";
     autoLayoutTertiaryScale = 1.0;

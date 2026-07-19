@@ -137,6 +137,14 @@
     if cfg.mirrorOutputMode == null
     then cfg.outputMode
     else cfg.mirrorOutputMode;
+  autoMirrorOutputMode =
+    if cfg.mirrorOutputMode == null
+    then ""
+    else cfg.mirrorOutputMode;
+  autoMirrorSecondaryPosition =
+    if cfg.autoMirrorSecondaryPosition == null
+    then cfg.autoLayoutSecondaryPosition
+    else cfg.autoMirrorSecondaryPosition;
   mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
   moonlightInvocation =
     if directStreamEnabled
@@ -433,13 +441,20 @@
           fi
         fi
       }
-      trap cleanup EXIT HUP INT TERM
+      trap cleanup EXIT
+      trap 'exit 0' HUP INT TERM
 
       install -d -m 0700 "$cipher_directory" "$runtime_directory" "$mountpoint"
       exec 9>"$runtime_directory/launcher.lock"
-      flock 9
+      if ! flock -n 9; then
+        show_error ${lib.escapeShellArg "The protected browser is already opening or running."}
+        exit 1
+      fi
       focus_launch_workspace
-      place_protected_windows &
+      # The event listener must not inherit the launcher lock. Otherwise a
+      # failed password prompt can leave socat holding the lock after this
+      # shell exits, permanently blocking every later attempt.
+      place_protected_windows 9>&- &
       placement_pid=$!
 
       if [ ! -e "$cipher_directory/gocryptfs.conf" ]; then
@@ -514,6 +529,7 @@
       ''}
 
       flock -u 9
+      exec 9>&-
       focus_launch_workspace
 
       status=0
@@ -1085,26 +1101,36 @@
         mirror_pid=""
       }
 
+      mode_available() {
+        output="$1"
+        candidate="$2"
+        case "$candidate" in
+          *@[0-9]*) ;;
+          *) return 1 ;;
+        esac
+        dimensions="''${candidate%@*}"
+        refresh="''${candidate##*@}"
+        jq -e \
+          --arg output "$output" \
+          --arg dimensions "$dimensions" \
+          --argjson refresh "$refresh" '
+            [.[] | select(.name == $output)][0].availableModes // []
+            | any(.[];
+                startswith($dimensions + "@")
+                and (
+                  try (
+                    (capture("@(?<refresh>[0-9.]+)Hz$").refresh | tonumber) - $refresh
+                    | fabs < 1.0
+                  ) catch false
+                )
+              )
+          ' <<<"$monitors" >/dev/null
+      }
+
       select_auxiliary_mode() {
         output="$1"
         for candidate in ${lib.escapeShellArgs cfg.autoLayoutSecondaryModes}; do
-          dimensions="''${candidate%@*}"
-          refresh="''${candidate##*@}"
-          if jq -e \
-            --arg output "$output" \
-            --arg dimensions "$dimensions" \
-            --argjson refresh "$refresh" '
-              [.[] | select(.name == $output)][0].availableModes // []
-              | any(.[];
-                  startswith($dimensions + "@")
-                  and (
-                    try (
-                      (capture("@(?<refresh>[0-9.]+)Hz$").refresh | tonumber) - $refresh
-                      | fabs < 1.0
-                    ) catch false
-                  )
-                )
-            ' <<<"$monitors" >/dev/null; then
+          if mode_available "$output" "$candidate"; then
             printf '%s\n' "$candidate"
             return
           fi
@@ -1130,6 +1156,10 @@
         tertiary_mode="$6"
         native_mirror="$7"
         temporary_file="$config_file.tmp"
+        secondary_position=${lib.escapeShellArg cfg.autoLayoutSecondaryPosition}
+        if [ "$native_mirror_requested" = 1 ]; then
+          secondary_position=${lib.escapeShellArg autoMirrorSecondaryPosition}
+        fi
 
         {
           parked_index=1
@@ -1178,7 +1208,7 @@
               printf 'monitor = %s, %s, %s, %s\n' \
                 "$secondary_output" \
                 "$secondary_mode" \
-                ${lib.escapeShellArg cfg.autoLayoutSecondaryPosition} \
+                "$secondary_position" \
                 ${lib.escapeShellArg (toString cfg.autoLayoutSecondaryScale)}
               for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
                 default=""
@@ -1410,8 +1440,22 @@
           native_mirror_requested=0
         fi
       ''}
+        mirror_output_mode=${lib.escapeShellArg autoMirrorOutputMode}
+        if [ "$native_mirror_requested" = 1 ] \
+          && [ -n "$mirror_output_mode" ] \
+          && [ -n "$source_output" ] \
+          && [ -n "$secondary_output" ] \
+          && mode_available "$source_output" "$mirror_output_mode" \
+          && mode_available "$secondary_output" "$mirror_output_mode"; then
+          source_mode="$mirror_output_mode"
+          secondary_mode="$mirror_output_mode"
+        fi
         native_mirror=0
-        native_mirror_allowed=${if cfg.forceSoftwareMirror then "0" else "1"}
+        native_mirror_allowed=${
+        if cfg.forceSoftwareMirror
+        then "0"
+        else "1"
+      }
         primary_dimensions="''${source_mode%@*}"
         secondary_dimensions="''${secondary_mode%@*}"
         if [ "$native_mirror_requested" = 1 ] \
@@ -2294,6 +2338,12 @@ in {
       type = lib.types.str;
       default = "2560x0";
       description = "Hyprland position used by the automatically discovered secondary output.";
+    };
+
+    autoMirrorSecondaryPosition = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Hyprland position used by the secondary output while on-demand mirroring is enabled, or null to retain autoLayoutSecondaryPosition.";
     };
 
     autoLayoutSecondaryScale = lib.mkOption {

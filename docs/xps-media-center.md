@@ -71,8 +71,19 @@ Linux while powered off.
 Mirroring is separate from layout selection. XPS uses a supervised fullscreen
 `wl-mirror` client from the primary TV to the secondary TV, including when their
 resolutions match; native Hyprland mirroring left the physical source blank on
-this connector pair. The selected mirror state persists across reboots until
-toggled again.
+this connector pair. The client uses Hyprland's DMA-BUF capture protocol, so
+frames remain GPU-backed instead of being copied through system memory. The
+selected mirror state persists across reboots until toggled again. Enabling it
+switches both TVs to 1080p60, which keeps browser playback smooth while the
+compositor captures and presents the second copy; disabling it restores the
+normal 1440p60 extended layout. If either TV is unplugged, mirroring becomes
+dormant and the remaining display receives all workspace groups; it resumes
+when a second eligible display returns.
+
+The secondary TV input must use its pixel-preserving custom picture-size mode
+at 1080p. A conventional 16:9 television mode may apply overscan and crop the
+outer browser edges even though Hyprland and `wl-mirror` are presenting the
+complete frame.
 
 ## Audio outputs
 
