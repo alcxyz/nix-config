@@ -31,19 +31,6 @@ in {
   ];
 
   boot.initrd.systemd.enable = true;
-  # The media keyboard receiver can block usbhid probing long enough to hold
-  # stage 1. Root lives on NVMe and the built-in keyboard uses i8042, so keep
-  # USB HID drivers in the normal system instead of the initrd.
-  boot.initrd.availableKernelModules = lib.mkForce [
-    "xhci_pci"
-    "ahci"
-    "nvme"
-    "usb_storage"
-    "sd_mod"
-    "rtsx_pci_sdmmc"
-    "i8042"
-    "atkbd"
-  ];
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   # Activation can legitimately request wrapper regeneration several times
