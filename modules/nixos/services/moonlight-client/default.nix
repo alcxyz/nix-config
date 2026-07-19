@@ -1410,9 +1410,11 @@
         fi
       ''}
         native_mirror=0
+        native_mirror_allowed=${if cfg.forceSoftwareMirror then "0" else "1"}
         primary_dimensions="''${source_mode%@*}"
         secondary_dimensions="''${secondary_mode%@*}"
         if [ "$native_mirror_requested" = 1 ] \
+          && [ "$native_mirror_allowed" = 1 ] \
           && [ -n "$secondary_output" ] \
           && [ "$secondary_dimensions" = "$primary_dimensions" ]; then
           native_mirror=1
@@ -2251,6 +2253,12 @@ in {
       description = "Enable an on-demand mirror toggle from the primary to the secondary external output, using native mirroring for matching modes and software mirroring otherwise.";
     };
 
+    forceSoftwareMirror = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Use the supervised wl-mirror path for on-demand mirroring even when output modes match.";
+    };
+
     enableAdaptiveDisplayLayout = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -2549,6 +2557,10 @@ in {
       {
         assertion = !cfg.enableMirrorToggle || cfg.autoLayoutExternalOutputs;
         message = "services.moonlight-client.enableMirrorToggle requires autoLayoutExternalOutputs";
+      }
+      {
+        assertion = !cfg.forceSoftwareMirror || cfg.enableMirrorToggle;
+        message = "services.moonlight-client.forceSoftwareMirror requires enableMirrorToggle";
       }
       {
         assertion = !cfg.enableAdaptiveDisplayLayout || cfg.autoLayoutExternalOutputs;

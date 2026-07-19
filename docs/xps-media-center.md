@@ -68,9 +68,11 @@ Cable presence is detectable, but panel power is not reliable through every
 adapter. Use an explicit layout when a connected television remains visible to
 Linux while powered off.
 
-Mirroring is separate from layout selection. Equal-resolution TVs use native
-Hyprland mirroring; unlike-resolution displays use a supervised `wl-mirror`
-fallback. The selected mirror state persists across reboots until toggled again.
+Mirroring is separate from layout selection. XPS uses a supervised fullscreen
+`wl-mirror` client from the primary TV to the secondary TV, including when their
+resolutions match; native Hyprland mirroring left the physical source blank on
+this connector pair. The selected mirror state persists across reboots until
+toggled again.
 
 ## Audio outputs
 

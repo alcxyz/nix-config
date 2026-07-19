@@ -237,6 +237,7 @@ in {
     enableAudioOutputCycle = true;
     autoMirrorExternalOutputs = false;
     enableMirrorToggle = true;
+    forceSoftwareMirror = true;
     autoMirrorWorkspace = 10;
     preferHdmiAudio = false;
     relaunchOnExit = false;

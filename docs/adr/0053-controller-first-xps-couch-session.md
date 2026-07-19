@@ -110,13 +110,14 @@ requested display falls back by role to the highest-priority available TV, then
 to an auxiliary display. This avoids presenting unreliable power heuristics as
 automatic detection.
 
-An on-demand mirror toggle uses Hyprland's native mirror path when the two
-selected displays have matching pixel dimensions, and falls back to a
-supervised fullscreen `wl-mirror` client when they do not. This keeps equal-mode
-TVs on the compositor's direct mirror path while allowing a lower-resolution
-auxiliary display to receive a scaled copy. Prefer a stable 60 Hz auxiliary mode
-over native resolution when the available dock path cannot sustain that native
-mode reliably.
+An on-demand mirror toggle can use Hyprland's native mirror path when the two
+selected displays have matching pixel dimensions, and otherwise uses a
+supervised fullscreen `wl-mirror` client. Allow a host to force the supervised
+path even for matching modes: XPS reports a valid native mirror relationship but
+leaves the physical source panel blank, while the software path preserves both
+1440p TV signals correctly. Prefer a stable 60 Hz auxiliary mode over native
+resolution when the available dock path cannot sustain that native mode
+reliably.
 
 Treat display-pipeline allocation separately from logical Hyprland layout. If
 all three external displays are connected during boot, release the internal
