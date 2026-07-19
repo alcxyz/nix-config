@@ -145,6 +145,10 @@
     if cfg.autoMirrorSecondaryPosition == null
     then cfg.autoLayoutSecondaryPosition
     else cfg.autoMirrorSecondaryPosition;
+  autoMirrorTertiaryPosition =
+    if cfg.autoMirrorTertiaryPosition == null
+    then cfg.autoLayoutTertiaryPosition
+    else cfg.autoMirrorTertiaryPosition;
   mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
   moonlightInvocation =
     if directStreamEnabled
@@ -894,8 +898,8 @@
 
         layout="$(tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true)"
         case "$layout" in
-          solo-primary) target="Primary TV" ;;
-          solo-secondary) target="Secondary TV" ;;
+          solo-primary | primary-aux) target="Primary TV" ;;
+          solo-secondary | secondary-aux) target="Secondary TV" ;;
           solo-tertiary) target="Auxiliary display" ;;
           *) return ;;
         esac
@@ -976,7 +980,7 @@
         fi
       )"
       case "$current" in
-        adaptive | all | dual-tvs | solo-primary | solo-secondary | solo-tertiary) ;;
+        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-tertiary) ;;
         *) current=adaptive ;;
       esac
 
@@ -989,17 +993,19 @@
           case "$current" in
             adaptive) requested=all ;;
             all) requested=dual-tvs ;;
-            dual-tvs) requested=solo-primary ;;
+            dual-tvs) requested=primary-aux ;;
+            primary-aux) requested=secondary-aux ;;
+            secondary-aux) requested=solo-primary ;;
             solo-primary) requested=solo-secondary ;;
             solo-secondary) requested=solo-tertiary ;;
             *) requested=adaptive ;;
           esac
           ;;
-        adaptive | all | dual-tvs | solo-primary | solo-secondary | solo-tertiary)
+        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-tertiary)
           requested="$1"
           ;;
         *)
-          echo "usage: couch-display-layout {status|cycle|adaptive|all|dual-tvs|solo-primary|solo-secondary|solo-tertiary}" >&2
+          echo "usage: couch-display-layout {status|cycle|adaptive|all|dual-tvs|primary-aux|secondary-aux|solo-primary|solo-secondary|solo-tertiary}" >&2
           exit 2
           ;;
       esac
@@ -1157,8 +1163,15 @@
         native_mirror="$7"
         temporary_file="$config_file.tmp"
         secondary_position=${lib.escapeShellArg cfg.autoLayoutSecondaryPosition}
-        if [ "$native_mirror_requested" = 1 ]; then
+        tertiary_position=${lib.escapeShellArg cfg.autoLayoutTertiaryPosition}
+        if [ -z "$secondary_output" ] && [ -n "$tertiary_output" ]; then
+          tertiary_position=${lib.escapeShellArg cfg.autoLayoutSecondaryPosition}
+        elif [ "$native_mirror_requested" = 1 ]; then
           secondary_position=${lib.escapeShellArg autoMirrorSecondaryPosition}
+          tertiary_position=${lib.escapeShellArg autoMirrorTertiaryPosition}
+        fi
+        if [ "$native_mirror" = 1 ]; then
+          tertiary_position=${lib.escapeShellArg autoMirrorSecondaryPosition}
         fi
 
         {
@@ -1221,11 +1234,6 @@
             fi
           fi
           if [ -n "$tertiary_output" ]; then
-            if [ "$native_mirror" = 1 ]; then
-              tertiary_position=${lib.escapeShellArg cfg.autoLayoutSecondaryPosition}
-            else
-              tertiary_position=${lib.escapeShellArg cfg.autoLayoutTertiaryPosition}
-            fi
             printf 'monitor = %s, %s, %s, %s\n' \
               "$tertiary_output" \
               "$tertiary_mode" \
@@ -1322,7 +1330,7 @@
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
         display_layout="$(tr -d '[:space:]' < "$display_layout_state_file" 2>/dev/null || true)"
         case "$display_layout" in
-          adaptive | all | dual-tvs | solo-primary | solo-secondary | solo-tertiary) ;;
+          adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-tertiary) ;;
           *) display_layout=adaptive ;;
         esac
       ''}
@@ -1364,6 +1372,28 @@
                   | if ($tvs | length) > 0 then $tvs[:2]
                     else $ranked[:1]
                     end
+                end
+              ' <<<"$connected_external_monitors"
+            )"
+            ;;
+          primary-aux | secondary-aux)
+            external_monitors="$(
+              jq -c \
+                --arg layout "$display_layout" \
+                --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
+                if length == 0 then []
+                else
+                  (sort_by(.physicalWidth * .physicalHeight) | reverse) as $ranked
+                  | ([$ranked[] | select(.physicalWidth >= $minimum_width)]) as $tvs
+                  | ([$ranked[] | select(.physicalWidth < $minimum_width)]) as $auxiliary
+                  | (if $layout == "primary-aux" then
+                       ($tvs[0] // $ranked[0])
+                     else
+                       ($tvs[1] // $tvs[0] // $ranked[0])
+                     end) as $tv
+                  | [$tv, $auxiliary[0]]
+                  | map(select(. != null))
+                  | unique_by(.name)
                 end
               ' <<<"$connected_external_monitors"
             )"
@@ -1415,16 +1445,26 @@
         source_mode=""
         if [ -n "$source_output" ]; then
           source_mode="$(select_auxiliary_mode "$source_output")"
-          mapfile -t auxiliary_outputs < <(
-            jq -r --arg source "$source_output" '
-              [.[] | select(.name != $source)]
-              | sort_by(.physicalWidth * .physicalHeight)
-              | reverse
-              | .[:2][].name
+          secondary_output="$(
+            jq -r \
+              --arg source "$source_output" \
+              --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
+              [.[] | select(
+                .name != $source and .physicalWidth >= $minimum_width
+              )]
+              | max_by(.physicalWidth * .physicalHeight).name // ""
             ' <<<"$external_monitors"
-          )
-          secondary_output="''${auxiliary_outputs[0]:-}"
-          tertiary_output="''${auxiliary_outputs[1]:-}"
+          )"
+          tertiary_output="$(
+            jq -r \
+              --arg source "$source_output" \
+              --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
+              [.[] | select(
+                .name != $source and .physicalWidth < $minimum_width
+              )]
+              | max_by(.physicalWidth * .physicalHeight).name // ""
+            ' <<<"$external_monitors"
+          )"
           if [ -n "$secondary_output" ]; then
             secondary_mode="$(select_auxiliary_mode "$secondary_output")"
           fi
@@ -2356,6 +2396,12 @@ in {
       type = lib.types.str;
       default = "5120x0";
       description = "Hyprland position used by the automatically discovered tertiary output.";
+    };
+
+    autoMirrorTertiaryPosition = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Hyprland position used by the tertiary output while on-demand mirroring is enabled, or null to retain autoLayoutTertiaryPosition.";
     };
 
     autoLayoutTertiaryScale = lib.mkOption {

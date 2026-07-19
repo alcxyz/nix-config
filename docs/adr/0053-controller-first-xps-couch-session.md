@@ -86,6 +86,13 @@ Publish the controller and keyboard reference as a generated DMS cheatsheet.
 Toggle the native DMS modal from either input type so it follows the focused
 display without adding a separate desktop dialog or placement workaround.
 
+Use DMS's built-in Polkit agent for privileged graphical authentication and
+enable NixOS's setuid `pkexec` wrapper on XPS. Administrative couch actions can
+therefore request authorization through a DMS-owned modal instead of binding a
+sudo password prompt to an SSH terminal. This does not replace application
+secret prompts such as the encrypted Brave profile password, which are not
+Polkit authorization requests.
+
 Keep attached secondary and tertiary displays independent in the all-output
 layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
 outputs; in a solo layout, return all workspace sets to the selected output.
@@ -96,11 +103,16 @@ connection while the panel is in standby.
 Persist the selected layout across reboots. Adaptive mode preserves the sole
 active output and falls back to the physically largest connected output; also
 provide an explicit dual-TV layout that activates the two largest TV-class
-outputs while parking an attached auxiliary display. Keep all-output and ranked
-solo-output modes as deterministic recovery controls. Cycle those modes with
-held controller Select plus the north face button or `Super+Shift+D` on a
-keyboard. Changing between multi-output layouts does not override a manually
-selected audio sink.
+outputs while parking an attached auxiliary display. Also provide explicit
+primary-TV-plus-auxiliary and secondary-TV-plus-auxiliary layouts. Classify the
+second TV and auxiliary output by physical role instead of merely taking the
+next ranked connector; this preserves workspaces 4–6 for the second TV and
+7–9 for the auxiliary display, and prevents a persisted TV-mirror request from
+targeting the auxiliary display when only one TV is selected. Keep all-output
+and ranked solo-output modes as deterministic recovery controls. Cycle those
+modes with held controller Select plus the north face button or
+`Super+Shift+D` on a keyboard. Changing between multi-output layouts does not
+override a manually selected audio sink.
 
 Treat cable presence as a hard availability signal, but do not infer panel
 power from it. A powered-off panel behind an adapter can continue reporting as
@@ -119,9 +131,12 @@ TV signals correctly. The supervised path negotiates the compositor's DMA-BUF
 capture backend, keeping the copied frames GPU-backed. Use a shared 1080p60 mode
 while browser playback is mirrored: validation showed that decoding 1080p into
 two 1440p compositor outputs dropped frames heavily, while matching the video
-and output modes did not. Restore 1440p60 when mirroring is disabled. Prefer a
-stable 60 Hz auxiliary mode over native resolution when the available dock path
-cannot sustain that native mode reliably.
+and output modes did not. A single 1440p compositor output reduced but did not
+eliminate the regression, and 1440p video increased it further. Restore
+1440p60 when mirroring is disabled for sharper desktop use, while retaining
+1080p60 as the validated smooth-playback path. Prefer a stable 60 Hz auxiliary
+mode over native resolution when the available dock path cannot sustain that
+native mode reliably.
 
 Treat display-pipeline allocation separately from logical Hyprland layout. If
 all three external displays are connected during boot, release the internal

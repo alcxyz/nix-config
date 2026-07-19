@@ -218,6 +218,7 @@ in {
     autoMirrorSecondaryPosition = "1920x0";
     autoLayoutSecondaryScale = 1.0;
     autoLayoutTertiaryPosition = "5120x0";
+    autoMirrorTertiaryPosition = "3840x0";
     autoLayoutTertiaryScale = 1.0;
     autoLayoutPrimaryMinPhysicalWidth = 1000;
     autoLayoutPrimaryWorkspaces = [
@@ -377,7 +378,20 @@ in {
   services.udisks2.enable = true;
   services.gvfs.enable = true;
   services.hardware.bolt.enable = true;
-  security.polkit.enable = true;
+  security.polkit = {
+    enable = true;
+    # DMS provides the graphical Polkit agent in the merged couch session.
+    # Install pkexec's privileged wrapper so administrative launchers can use
+    # that modal instead of falling back to a terminal-bound sudo prompt.
+    enablePkexecWrapper = true;
+  };
+  # A live NixOS switch can restart polkit after DMS has registered its agent.
+  # Refresh the already-running couch shell so the next graphical request is
+  # not left waiting on a stale agent registration. Failure is expected before
+  # the user's graphical session exists during boot.
+  systemd.services.polkit.serviceConfig.ExecStartPost = lib.mkAfter [
+    "-+${pkgs.systemd}/bin/systemctl --user --machine=${username}@.host try-restart couch-merged-dms.service"
+  ];
   programs.dconf.enable = true;
 
   xdg.portal = {

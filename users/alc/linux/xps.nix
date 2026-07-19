@@ -43,6 +43,20 @@ in {
   };
 
   programs.foot.enable = true;
+  programs.dank-material-shell.package =
+    inputs.dankMaterialShell.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
+    (old: {
+      postInstall =
+        (old.postInstall or "")
+        + ''
+          # Upstream fixes the Polkit window at 460x220 even when fontScale
+          # doubles the couch UI. Give the enlarged text enough layout space.
+          substituteInPlace \
+            "$out/share/quickshell/dms/Modals/PolkitAuthModal.qml" \
+            --replace-fail 'minimumSize: Qt.size(460, 220)' 'minimumSize: Qt.size(920, 440)' \
+            --replace-fail 'maximumSize: Qt.size(460, 220)' 'maximumSize: Qt.size(920, 440)'
+        '';
+    });
   programs.hyprland.managed = {
     enable = true;
     inputSensitivity = 0.0;

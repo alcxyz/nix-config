@@ -55,14 +55,18 @@ cycles through:
 | `adaptive` | Preserve one active output, with the largest connected display as fallback |
 | `all` | Enable every connected external display |
 | `dual-tvs` | Enable the two TV-class outputs and park the auxiliary display |
+| `primary-aux` | Enable the primary TV and auxiliary display |
+| `secondary-aux` | Enable the secondary TV and auxiliary display |
 | `solo-primary` | Use only the largest TV-class output |
 | `solo-secondary` | Use only the second TV-class output |
 | `solo-tertiary` | Use the auxiliary display, with a TV fallback |
 
 The dual-TV layout assigns workspaces 1–3 to the primary TV and 4–6 to the
-secondary TV. Workspaces without an active dedicated display fall back to the
-primary output. Parked displays are moved outside the usable desktop before
-DPMS is disabled, preventing the cursor from disappearing onto them.
+secondary TV. The auxiliary display uses workspaces 7–9 and is placed directly
+beside the selected TV when the other TV is parked. Workspaces without an
+active dedicated display fall back to the primary output. Parked displays are
+moved outside the usable desktop before DPMS is disabled, preventing the
+cursor from disappearing onto them.
 
 Cable presence is detectable, but panel power is not reliable through every
 adapter. Use an explicit layout when a connected television remains visible to
@@ -84,6 +88,39 @@ The secondary TV input must use its pixel-preserving custom picture-size mode
 at 1080p. A conventional 16:9 television mode may apply overscan and crop the
 outer browser edges even though Hyprland and `wl-mirror` are presenting the
 complete frame.
+
+### Browser playback matrix
+
+Measurements use the logged-in Helium couch profile and the same 60 fps YouTube
+wildlife video. A 500 ms in-page sampler discards intervals containing ads,
+pauses, resolution changes, or frame-counter resets. Each table row therefore
+reports one uninterrupted playback segment.
+
+| Active topology | Mirrored | Output modes | Video | Clean sample | Dropped frames |
+|---|---:|---|---:|---:|---:|
+| Primary TV only | No | 1440p60 | 1080p60 | 104.5 s | 489/6,270 (7.80%) |
+| Primary TV only | No | 1440p60 | 1440p60 | 219.5 s | 3,340/13,169 (25.36%) |
+| Secondary TV only | No | 1440p60 | 1080p60 | 80.0 s | 323/4,800 (6.73%) |
+| Secondary TV only | No | 1440p60 | 1440p60 | 107.5 s | 1,636/6,447 (25.38%) |
+| Primary TV plus Philips | No | 1440p60 + 1080p60 | 1080p60 | 76.0 s | 1,714/4,561 (37.58%) |
+| Primary TV plus Philips | No | 1440p60 + 1080p60 | 1440p60 | 117.5 s | 3,098/7,225 (42.88%) |
+| Secondary TV plus Philips | No | 1440p60 + 1080p60 | 1080p60 | 87.5 s | 1,905/5,249 (36.29%) |
+| Secondary TV plus Philips | No | 1440p60 + 1080p60 | 1440p60 | 119.0 s | 3,104/7,421 (41.83%) |
+| Two TVs; Philips parked | Yes | 2×1080p60 | 1080p60 | 122.5 s | 2/7,350 (0.027%) |
+| Two TVs; Philips parked | No | 2×1440p60 | 1080p60 | 69.5 s | 1,887/4,170 (45.25%) |
+| Two TVs; Philips parked | No | 2×1440p60 | 1440p60 | 130.5 s | 4,038/7,828 (51.58%) |
+| Two TVs plus Philips | No | 2×1440p60 + 1080p60 | 1080p60 | 77.5 s | 2,176/4,650 (46.80%) |
+| Two TVs plus Philips | No | 2×1440p60 + 1080p60 | 1440p60 | 75.5 s | 2,217/4,531 (48.93%) |
+| Two TVs plus Philips | TVs only | 3×1080p60 | 1080p60 | 85.0 s | 31/5,100 (0.61%) |
+
+The measurements establish that the large regression follows multiple 1440p
+compositor outputs even when `wl-mirror` is stopped. A single 1440p output is
+substantially better but still drops more frames when the video is also 1440p.
+Adding Philips beside either 1440p TV raises drops to roughly 36–38% for 1080p
+video and 42% for 1440p video; the TV or connector chosen does not materially
+change the result. Matching all active TV and video modes at 1080p60 restores
+smooth playback; an independent 1080p Philips output in that matched mirrored
+topology adds a small but acceptable cost.
 
 ## Audio outputs
 
