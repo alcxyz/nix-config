@@ -23,17 +23,14 @@ generic message.
 
 ## Startup and shutdown
 
-XPS uses two independent NIXBOX visuals. Plymouth starts its boot animation on
-the native Intel display rather than a temporary firmware framebuffer, then
-retains the completed frame until the graphical session is ready to take over.
-A short Quickshell overlay bridges Hyprland startup into the browser session on
-every active output. The session overlay waits until Hyprland reports a usable
-output, never captures input, and has a hard timeout so a display or animation
-failure cannot delay the browser, DMS, or controller controls.
+XPS keeps the normal NixOS boot console visible. A short NIXBOX Quickshell
+overlay begins after Hyprland has a usable output and bridges graphical startup
+into the browser session on every active output. The session overlay never
+captures input and has a hard timeout so a display or animation failure cannot
+delay the browser, DMS, or controller controls.
 
-Hyprland's startup diagnostics remain available in its runtime log, but its
-launch banner is not written onto the media-center display. Boot failures and
-recovery paths may still reveal console status intentionally.
+Hyprland's startup diagnostics remain available in its runtime log, while boot
+and recovery status remains visible on the console intentionally.
 
 ## Controller controls
 
