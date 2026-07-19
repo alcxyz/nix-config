@@ -23,37 +23,28 @@ generic message.
 
 ## Startup and shutdown
 
-XPS stages startup across the renderer that owns the display at each point.
-Plymouth first expands the center X mark into the NIXBOX wordmark, then holds
-that composition while its loading bar advances from completed systemd boot
-units and Plymouth's monotonic timing estimate after the real root is mounted.
-At boot completion it leaves a fully completed frame on the early DRM surface
-instead of exposing a console-to-session gap.
+XPS keeps the normal NixOS boot console visible. Once Hyprland has a usable
+output, a NIXBOX Quickshell overlay presents the `STARTING SESSION` transition
+on every active display and fades into the couch session. It intentionally has
+no loading bar: the system has already booted, so the animation represents the
+graphical handoff rather than fictional progress. The overlay never captures
+input and has a hard timeout so a display or animation failure cannot delay the
+browser, DMS, or controller controls.
 
-The initrd loads the Intel display and Thunderbolt path early so Plymouth sees
-the real connector set while boot is still in progress. It settles the same
-three-external/internal-fallback pipeline policy before starting Plymouth, then
-presents the splash on every active DRM output rather than selecting a
-media-center primary. An output that is powered off or disconnected simply
-joins no early-boot surface. A normal-userspace fallback repeats the pipeline
-check only when a dock appeared too late for the initrd. This does not replace
-the dynamic Hyprland layout policy that takes ownership later.
+The initrd retains the proven Intel and Thunderbolt display path so that console
+diagnostics can reach external outputs as early as their links become usable.
 
-Once Hyprland has a usable output, a matching NIXBOX Quickshell overlay starts
-from that completed frame, changes the subtitle to `STARTING SESSION`, and
-fades into the couch session. This second stage intentionally does not pretend
-to measure progress. It never captures input and has a hard timeout so a
-display or animation failure cannot delay the browser, DMS, or controller
-controls.
+The display-pipeline allocator still runs before greetd and preserves the
+three-external/internal-panel fallback behavior. Hyprland then owns the dynamic
+display layout, workspaces, and mirroring exactly as before.
 
 DMS power-off and reboot actions run the matching reverse animation while
 Hyprland still owns the displays, then request the selected system action. This
 keeps power transitions on the same proven renderer instead of handing the
-external outputs back to Plymouth for a second animation.
+external outputs to a separate boot renderer.
 
-Hyprland's startup diagnostics remain available in its runtime log. Plymouth
-does not use a quiet kernel command line, so boot diagnostics remain logged and
-its details view can expose them when troubleshooting is needed.
+Hyprland's startup diagnostics remain available in its runtime log, while boot
+and recovery status remains visible on the console intentionally.
 
 ## Controller controls
 

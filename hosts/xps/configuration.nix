@@ -21,52 +21,6 @@
     "xyz"
     "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"
   ];
-  displayPipelineSetupScript = ''
-    internal_connector=""
-    for attempt in $(seq 1 "''${XPS_DISPLAY_PIPELINE_ATTEMPTS:-50}"); do
-      for candidate in /sys/class/drm/card*-eDP-1; do
-        if [ -w "$candidate/status" ]; then
-          internal_connector="$candidate"
-          break 2
-        fi
-      done
-      sleep 0.1
-    done
-
-    if [ -z "$internal_connector" ]; then
-      echo "internal display connector did not appear" >&2
-      exit 1
-    fi
-
-    # Allow dock authorization and EDID probing to settle. Stop waiting as
-    # soon as all three external connectors are visible.
-    external_count=0
-    for attempt in $(seq 1 "''${XPS_DISPLAY_PIPELINE_ATTEMPTS:-50}"); do
-      external_count=0
-      for status_file in /sys/class/drm/card*-*/status; do
-        case "$status_file" in
-          *-eDP-* | *-LVDS-*) continue ;;
-        esac
-        if [ "$(cat "$status_file")" = connected ]; then
-          external_count=$((external_count + 1))
-        fi
-      done
-      if [ "$external_count" -ge 3 ]; then
-        break
-      fi
-      sleep 0.1
-    done
-
-    if [ "$external_count" -ge 3 ]; then
-      printf off > "$internal_connector/status"
-    else
-      printf detect > "$internal_connector/status"
-    fi
-
-    if [ -n "''${XPS_DISPLAY_PIPELINE_MARKER:-}" ]; then
-      printf '%s\n' "$external_count" > "$XPS_DISPLAY_PIPELINE_MARKER"
-    fi
-  '';
 in {
   imports = [
     ./hardware-configuration.nix
@@ -77,62 +31,13 @@ in {
   ];
 
   boot.initrd.systemd.enable = true;
-  # Plymouth can mirror across every DRM head it knows about, but the external
-  # Intel/dock connectors otherwise appear only near the end of userspace boot.
-  # Load (and include) this display path in the initrd so the splash is visible
-  # while boot progress is actually happening. Keep the broad hardware module
-  # inventory from hardware-configuration.nix unchanged.
+  # Keep the proven early display path so the diagnostic console can reach
+  # external outputs without coupling boot to a graphical splash renderer.
   boot.initrd.kernelModules = lib.mkAfter [
     "thunderbolt"
     "i915"
   ];
-  # Let the early drivers finish connector discovery and apply the same
-  # three-external/internal-fallback policy before Plymouth starts. This keeps
-  # pipeline reallocation from interrupting the visible boot animation.
-  boot.initrd.systemd.services.xps-display-pipeline-setup = {
-    description = "Prepare XPS display pipelines for the boot splash";
-    before = ["plymouth-start.service"];
-    after = [
-      "systemd-modules-load.service"
-      "systemd-udev-trigger.service"
-    ];
-    wantedBy = ["sysinit.target"];
-    path = [pkgs.coreutils];
-    environment = {
-      XPS_DISPLAY_PIPELINE_ATTEMPTS = "20";
-      XPS_DISPLAY_PIPELINE_MARKER = "/run/xps-display-pipeline-external-count";
-    };
-    unitConfig.DefaultDependencies = false;
-    serviceConfig.Type = "oneshot";
-    script = displayPipelineSetupScript;
-  };
-  boot.initrd.systemd.services.plymouth-start = {
-    requires = ["xps-display-pipeline-setup.service"];
-    after = ["xps-display-pipeline-setup.service"];
-  };
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  boot.plymouth = {
-    enable = true;
-    theme = "nixbox";
-    themePackages = [pkgs.nixbox-plymouth-theme];
-    # Render the lightweight intro and genuine progress hold on the firmware
-    # framebuffer. The compositor owns the animated outro after boot.
-    extraConfig = "UseSimpledrmNoLuks=1";
-  };
-
-  # Standard Plymouth teardown leaves a gap before greetd launches the
-  # compositor. Retain the completed frame while releasing DRM ownership so
-  # Hyprland can replace it directly with the matching Quickshell outro.
-  systemd.services.plymouth-quit.serviceConfig.ExecStart = lib.mkForce [
-    ""
-    "${lib.getExe' pkgs.plymouth "plymouth"} quit --retain-splash"
-  ];
-
-  # The couch power actions already animate while Hyprland owns the outputs.
-  # Do not start a second Plymouth animation after the compositor exits.
-  systemd.services.plymouth-poweroff.wantedBy = lib.mkForce [];
-  systemd.services.plymouth-reboot.wantedBy = lib.mkForce [];
-  systemd.services.plymouth-halt.wantedBy = lib.mkForce [];
 
   # Activation can legitimately request wrapper regeneration several times
   # during early boot. Every run is idempotent; do not report a false failure
@@ -386,11 +291,45 @@ in {
     path = [pkgs.coreutils];
     serviceConfig.Type = "oneshot";
     script = ''
-      # The initrd normally settles this before Plymouth starts. Retain the
-      # userspace pass as a fallback for a dock that appears unusually late.
-      early_external_count="$(cat /run/xps-display-pipeline-external-count 2>/dev/null || printf 0)"
-      if [ "$early_external_count" -lt 3 ]; then
-        ${displayPipelineSetupScript}
+      internal_connector=""
+      for attempt in $(seq 1 50); do
+        for candidate in /sys/class/drm/card*-eDP-1; do
+          if [ -w "$candidate/status" ]; then
+            internal_connector="$candidate"
+            break 2
+          fi
+        done
+        sleep 0.1
+      done
+
+      if [ -z "$internal_connector" ]; then
+        echo "internal display connector did not appear" >&2
+        exit 1
+      fi
+
+      # Allow dock authorization and EDID probing to settle. Stop waiting as
+      # soon as all three external connectors are visible.
+      external_count=0
+      for attempt in $(seq 1 50); do
+        external_count=0
+        for status_file in /sys/class/drm/card*-*/status; do
+          case "$status_file" in
+            *-eDP-* | *-LVDS-*) continue ;;
+          esac
+          if [ "$(cat "$status_file")" = connected ]; then
+            external_count=$((external_count + 1))
+          fi
+        done
+        if [ "$external_count" -ge 3 ]; then
+          break
+        fi
+        sleep 0.1
+      done
+
+      if [ "$external_count" -ge 3 ]; then
+        printf off > "$internal_connector/status"
+      else
+        printf detect > "$internal_connector/status"
       fi
     '';
   };
