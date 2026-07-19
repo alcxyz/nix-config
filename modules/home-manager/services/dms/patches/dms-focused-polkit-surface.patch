@@ -33,7 +33,7 @@ index f72e020..b0c321a 100644
  import Quickshell.Io
  import qs.Common
  import qs.Services
-@@ -12,6 +13,24 @@ FocusScope {
+@@ -12,6 +13,19 @@ FocusScope {
      property bool isLoading: false
      property bool awaitingFprintForPassword: false
      property var windowControls: null
@@ -45,26 +45,23 @@ index f72e020..b0c321a 100644
 +    readonly property bool hasTechnicalDetails: requestAction !== "" || requestCommand !== "" || requestIdentity !== ""
 +    property bool technicalDetailsExpanded: false
 +    property var elevationContext: ({})
-+    readonly property string requestEnvelope: (currentFlow?.message ?? "") + " " + requestCommand
-+    readonly property bool hasElevationContext: {
-+        const context = elevationContext;
-+        if (!context || !context.requestId || !context.title || !context.reason)
-+            return false;
-+        return requestEnvelope.includes(context.requestId);
-+    }
++    property bool elevationContextAccepted: false
++    readonly property bool hasElevationContext: elevationContextAccepted && requestAction === "org.freedesktop.policykit.exec"
 +    readonly property string requestTitle: hasElevationContext ? elevationContext.title : I18n.tr("Administrator permission required")
 +    readonly property string requestReason: hasElevationContext ? elevationContext.reason : (currentFlow?.message ?? "")
 +    readonly property string requestImpact: hasElevationContext ? (elevationContext.impact ?? "") : ""
 +    readonly property string requestCommandLabel: hasElevationContext ? (elevationContext.commandLabel ?? "") : ""
  
      property string polkitEtcPamText: ""
-@@ -69,3 +88,5 @@ FocusScope {
+@@ -69,3 +83,7 @@ FocusScope {
++        elevationContext = ({});
++        elevationContextAccepted = false;
 +        elevationContextFile.reload();
          isLoading = false;
          awaitingFprintForPassword = false;
 +        technicalDetailsExpanded = false;
      }
-@@ -122,3 +143,19 @@ FocusScope {
+@@ -122,3 +140,30 @@ FocusScope {
 +    FileView {
 +        id: elevationContextFile
 +
@@ -72,19 +69,30 @@ index f72e020..b0c321a 100644
 +        printErrors: false
 +        watchChanges: true
 +        onLoaded: {
++            root.elevationContextAccepted = false;
 +            try {
-+                root.elevationContext = JSON.parse(text());
++                const context = JSON.parse(text());
++                const age = Date.now() - Number(context.createdAt ?? 0);
++                if (context.requestId && context.title && context.reason && age >= -2000 && age <= 30000) {
++                    root.elevationContext = context;
++                    root.elevationContextAccepted = true;
++                } else {
++                    root.elevationContext = ({});
++                }
 +            } catch (error) {
 +                root.elevationContext = ({});
 +            }
 +        }
-+        onLoadFailed: root.elevationContext = ({})
++        onLoadFailed: {
++            root.elevationContext = ({});
++            root.elevationContextAccepted = false;
++        }
 +    }
 +
      Item {
          id: headerSection
          anchors.left: parent.left
-@@ -153,6 +190,10 @@ FocusScope {
+@@ -153,6 +198,10 @@ FocusScope {
              StyledText {
 -                text: I18n.tr("Authentication Required")
 +                text: root.requestTitle
@@ -96,7 +104,7 @@ index f72e020..b0c321a 100644
 +                maximumLineCount: 2
 +                elide: Text.ElideRight
              }
-@@ -160,10 +201,19 @@ FocusScope {
+@@ -160,10 +209,19 @@ FocusScope {
              StyledText {
 -                text: root.currentFlow?.message ?? ""
 +                text: root.requestReason
@@ -117,7 +125,7 @@ index f72e020..b0c321a 100644
 +                wrapMode: Text.Wrap
 +                visible: root.hasElevationContext && text !== ""
 +            }
-@@ -251,5 +301,125 @@ FocusScope {
+@@ -251,5 +309,125 @@ FocusScope {
          }
      }
  
@@ -243,7 +251,7 @@ index f72e020..b0c321a 100644
 +
      Column {
          id: bottomSection
-@@ -351,7 +521,7 @@ FocusScope {
+@@ -351,7 +529,7 @@ FocusScope {
                      StyledText {
                          id: authText
                          anchors.centerIn: parent

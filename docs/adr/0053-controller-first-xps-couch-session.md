@@ -107,11 +107,12 @@ Route first-party administrative actions through a shared contextual elevation
 helper. The caller supplies a short purpose, a plain-language reason, the
 expected effect, and a safe operation label. DMS presents that context as the
 primary consent message while retaining the authority-provided identity,
-action, and command under a collapsed technical disclosure. Correlate each
-context file to its Polkit request with a short-lived one-time identifier;
-unmatched, expired, and third-party requests fall back to the unmodified Polkit
-message. Treat this context as presentation only: it must never participate in
-the authorization decision.
+action, and command under a collapsed technical disclosure. Accept context only
+when DMS loads a fresh, short-lived file for an active Polkit execution request;
+the helper removes that file when its request finishes. Missing, expired, and
+third-party requests fall back to the unmodified Polkit message. Treat this
+context as presentation only: it must never participate in the authorization
+decision.
 
 Keep attached secondary and tertiary displays independent in the all-output
 layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
