@@ -834,7 +834,7 @@
         fi
       )"
       case "$current" in
-        adaptive | all | solo-primary | solo-secondary | solo-tertiary) ;;
+        adaptive | all | dual-tvs | solo-primary | solo-secondary | solo-tertiary) ;;
         *) current=adaptive ;;
       esac
 
@@ -846,17 +846,18 @@
         cycle)
           case "$current" in
             adaptive) requested=all ;;
-            all) requested=solo-primary ;;
+            all) requested=dual-tvs ;;
+            dual-tvs) requested=solo-primary ;;
             solo-primary) requested=solo-secondary ;;
             solo-secondary) requested=solo-tertiary ;;
             *) requested=adaptive ;;
           esac
           ;;
-        adaptive | all | solo-primary | solo-secondary | solo-tertiary)
+        adaptive | all | dual-tvs | solo-primary | solo-secondary | solo-tertiary)
           requested="$1"
           ;;
         *)
-          echo "usage: couch-display-layout {status|cycle|adaptive|all|solo-primary|solo-secondary|solo-tertiary}" >&2
+          echo "usage: couch-display-layout {status|cycle|adaptive|all|dual-tvs|solo-primary|solo-secondary|solo-tertiary}" >&2
           exit 2
           ;;
       esac
@@ -1164,7 +1165,7 @@
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
         display_layout="$(tr -d '[:space:]' < "$display_layout_state_file" 2>/dev/null || true)"
         case "$display_layout" in
-          adaptive | all | solo-primary | solo-secondary | solo-tertiary) ;;
+          adaptive | all | dual-tvs | solo-primary | solo-secondary | solo-tertiary) ;;
           *) display_layout=adaptive ;;
         esac
       ''}
@@ -1194,6 +1195,21 @@
             ;;
           all)
             external_monitors="$connected_external_monitors"
+            ;;
+          dual-tvs)
+            external_monitors="$(
+              jq -c \
+                --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
+                if length == 0 then []
+                else
+                  (sort_by(.physicalWidth * .physicalHeight) | reverse) as $ranked
+                  | ([$ranked[] | select(.physicalWidth >= $minimum_width)]) as $tvs
+                  | if ($tvs | length) > 0 then $tvs[:2]
+                    else $ranked[:1]
+                    end
+                end
+              ' <<<"$connected_external_monitors"
+            )"
             ;;
           solo-primary | solo-secondary | solo-tertiary)
             external_monitors="$(

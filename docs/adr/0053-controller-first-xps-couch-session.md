@@ -82,9 +82,12 @@ connection while the panel is in standby.
 
 Persist the selected layout across reboots. Adaptive mode preserves the sole
 active output and falls back to the physically largest connected output; also
-provide explicit all-output and ranked solo-output modes as deterministic
-recovery controls. Cycle those modes with held controller Select plus the north
-face button or `Super+Shift+D` on a keyboard.
+provide an explicit dual-TV layout that activates the two largest TV-class
+outputs while parking an attached auxiliary display. Keep all-output and ranked
+solo-output modes as deterministic recovery controls. Cycle those modes with
+held controller Select plus the north face button or `Super+Shift+D` on a
+keyboard. Changing between multi-output layouts does not override a manually
+selected audio sink.
 
 Treat cable presence as a hard availability signal, but do not infer panel
 power from it. A powered-off panel behind an adapter can continue reporting as
