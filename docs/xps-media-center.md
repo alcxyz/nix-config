@@ -29,6 +29,13 @@ that composition while its loading bar follows Plymouth's monotonic boot
 progress estimate. At boot completion it leaves a fully completed frame in the
 firmware framebuffer instead of exposing a console-to-session gap.
 
+The initrd loads the Intel display and Thunderbolt path early so Plymouth sees
+the real connector set while boot is still in progress. It presents the splash
+on every active DRM output rather than selecting a media-center primary; an
+output that is powered off or disconnected simply joins no early-boot surface.
+This early driver timing does not replace the dynamic Hyprland layout policy
+that takes ownership later.
+
 Once Hyprland has a usable output, a matching NIXBOX Quickshell overlay starts
 from that completed frame, changes the subtitle to `STARTING SESSION`, and
 fades into the couch session. This second stage intentionally does not pretend

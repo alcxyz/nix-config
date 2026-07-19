@@ -26,6 +26,13 @@ bar follows Plymouth's monotonic system boot estimate, and leaves one completed
 frame when the daemon exits. The progress bar must not advance from an
 animation timeline or claim to map one-to-one to console messages.
 
+Load the Intel display and Thunderbolt modules in the initrd so Plymouth can
+discover the real external connector set before normal userspace. Plymouth's
+multi-head renderer presents the same centered composition on every active DRM
+output; it must not encode a preferred TV or monitor. This changes early driver
+availability only. Hyprland retains full ownership of dynamic output selection,
+layout, workspaces, mirroring, and internal-panel fallback after login.
+
 After Hyprland owns the displays, a standalone Quickshell overlay begins from
 the same completed composition, changes the subtitle to identify the graphical
 session, and fades away. Power-off and reboot reverse the motion before DMS
@@ -59,6 +66,11 @@ still be interrupted by an output mode-set on some display paths, but boot does
 not wait on the graphical handoff. User-initiated power actions gain a coherent
 transition while the compositor still owns the outputs; emergency and
 non-graphical shutdown paths remain unbranded and diagnosable.
+
+Early KMS enlarges the initrd with the Intel display driver, its dependencies
+and firmware, and the Thunderbolt driver. It does not remove any generated
+hardware module, and the resulting system closure outside the initrd remains
+unchanged.
 
 ## Tracking
 

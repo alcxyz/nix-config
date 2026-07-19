@@ -31,6 +31,15 @@ in {
   ];
 
   boot.initrd.systemd.enable = true;
+  # Plymouth can mirror across every DRM head it knows about, but the external
+  # Intel/dock connectors otherwise appear only near the end of userspace boot.
+  # Load (and include) this display path in the initrd so the splash is visible
+  # while boot progress is actually happening. Keep the broad hardware module
+  # inventory from hardware-configuration.nix unchanged.
+  boot.initrd.kernelModules = lib.mkAfter [
+    "thunderbolt"
+    "i915"
+  ];
   boot.kernelPackages = pkgs.linuxPackages_latest;
   boot.plymouth = {
     enable = true;
