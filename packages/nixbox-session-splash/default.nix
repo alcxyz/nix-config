@@ -3,6 +3,7 @@
   lib,
   makeWrapper,
   coreutils,
+  hyprland,
   quickshell,
   fetchurl,
 }:
@@ -33,6 +34,7 @@ stdenvNoCC.mkDerivation {
     install -Dm644 "$snowflake" "$out/share/nixbox-session-splash/nix-snowflake-white.svg"
     install -Dm644 "$spaceGrotesk" "$out/share/fonts/truetype/SpaceGrotesk.ttf"
     makeWrapper ${coreutils}/bin/timeout "$out/bin/nixbox-session-splash" \
+      --run 'for attempt in $(${coreutils}/bin/seq 1 100); do monitors="$(${hyprland}/bin/hyprctl -j monitors 2>/dev/null || true)"; if test -n "$monitors" && test "$monitors" != "[]"; then break; fi; ${coreutils}/bin/sleep 0.1; done' \
       --add-flags "15 ${quickshell}/bin/quickshell -p $out/share/nixbox-session-splash" \
       --set QT_QPA_FONTDIR "$out/share/fonts/truetype"
 

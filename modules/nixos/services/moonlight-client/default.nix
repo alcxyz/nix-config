@@ -1879,6 +1879,14 @@
     bind = SUPER SHIFT, Q, exit
   '';
 
+  sessionLauncher = pkgs.writeShellScript "moonlight-hyprland-session" ''
+    # Hyprland writes its startup banner and backend discovery to the launch
+    # TTY before the first frame. Its own per-session log remains available
+    # under XDG_RUNTIME_DIR, so keep the media-center handoff visually quiet.
+    exec ${pkgs.hyprland}/bin/start-hyprland -- --config ${hyprlandConfig} \
+      >/dev/null 2>&1
+  '';
+
   sessionPackage = pkgs.writeTextFile {
     name = "moonlight-hyprland-session";
     destination = "/share/wayland-sessions/moonlight-hyprland.desktop";
@@ -1887,13 +1895,13 @@
       [Desktop Entry]
       Name=Couch (Hyprland)
       Comment=Moonlight, browser, and phone-friendly TV session
-      Exec=${pkgs.hyprland}/bin/start-hyprland -- --config ${hyprlandConfig}
+      Exec=${sessionLauncher}
       Type=Application
       DesktopNames=Hyprland
     '';
   };
 
-  sessionCommand = "${pkgs.hyprland}/bin/start-hyprland -- --config ${hyprlandConfig}";
+  sessionCommand = sessionLauncher;
 
   sessionDispatcher = pkgs.writeShellApplication {
     name = "couch-session-dispatcher";

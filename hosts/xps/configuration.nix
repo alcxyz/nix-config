@@ -31,7 +31,22 @@ in {
   ];
 
   boot.initrd.systemd.enable = true;
+  boot.initrd.kernelModules = ["i915"];
+  boot.initrd.verbose = false;
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  boot.consoleLogLevel = 3;
+  boot.kernelParams = [
+    "quiet"
+    "udev.log_level=3"
+    "rd.udev.log_level=3"
+    "systemd.show_status=auto"
+    "rd.systemd.show_status=auto"
+  ];
+  boot.plymouth = {
+    enable = true;
+    theme = "nixbox";
+    themePackages = [pkgs.nixbox-plymouth-theme];
+  };
 
   # Keep recovery TTYs usable with the laptop's Norwegian keyboard. Graphical
   # sessions manage their own us/no layout and toggle independently.

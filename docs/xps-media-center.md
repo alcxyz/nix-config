@@ -21,6 +21,19 @@ expected effect before asking for the password; raw Polkit and command data stay
 under `Technical details`. Unmatched third-party requests retain Polkit's
 generic message.
 
+## Startup and shutdown
+
+XPS uses two independent NIXBOX visuals. Plymouth owns the quiet boot, reboot,
+and shutdown phase from early Intel graphics initialization onward. A short
+Quickshell overlay then bridges Hyprland startup into the browser session on
+every active output. The session overlay waits until Hyprland reports a usable
+output, never captures input, and has a hard timeout so a display or animation
+failure cannot delay the browser, DMS, or controller controls.
+
+Hyprland's startup diagnostics remain available in its runtime log, but its
+launch banner is not written onto the media-center display. Boot failures and
+recovery paths may still reveal console status intentionally.
+
 ## Controller controls
 
 Hold each combination until the action triggers.

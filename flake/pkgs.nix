@@ -67,6 +67,7 @@ in
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
               synergy1 = _prev.callPackage ../packages/synergy1 {};
+              nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
                 quickshell = inputs.quickshell.packages.${system}.default;
               };

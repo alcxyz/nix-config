@@ -44,6 +44,7 @@
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
+      "packages/nixbox-plymouth-theme/default.nix"
       "packages/nixbox-session-splash/default.nix"
       "packages/synergy1/default.nix"
       "users/alc/common.nix"
@@ -92,6 +93,7 @@
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
+        nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;
         nixbox-session-splash = pkgs.nixbox-session-splash;
         stashdb-pop = pkgs.stashdb-pop;
       }
