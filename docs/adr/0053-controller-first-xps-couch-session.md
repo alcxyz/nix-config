@@ -52,7 +52,9 @@ runtime configuration: disable idle locking, monitor power-off, suspension,
 login lock integration, and shell sounds; keep the bar and dock strictly
 auto-hidden. Entering a stream hides both shell surfaces and enables DMS do-not-
 disturb, while returning to the browser reveals their auto-hiding forms. This
-switch happens without restarting Hyprland or discarding browser state.
+switch happens without restarting Hyprland or discarding browser state. Run the
+isolated DMS process as a restartable user service so a shell crash or display
+transition cannot silently remove it for the rest of the session.
 
 Keep a compact keyboard escape hatch aligned with the normal workstation
 bindings: open a terminal, create a fresh browser window, manage fullscreen and
@@ -70,9 +72,16 @@ connection while the panel is in standby.
 Persist the selected layout across reboots. Adaptive mode preserves the sole
 active output and falls back to the physically largest connected output; also
 provide explicit all-output and ranked solo-output modes as deterministic
-recovery controls. Cycle those modes from either a held controller shortcut or
-a keyboard binding. This avoids treating EDID presence, compositor DPMS state,
-or an incomplete hardware power signal as proof that a panel is visibly on.
+recovery controls. Cycle those modes with held controller Select plus the north
+face button or `Super+Shift+D` on a keyboard.
+
+Treat cable presence as a hard availability signal, but do not infer panel
+power from it. A powered-off panel behind an adapter can continue reporting as
+connected and DPMS-on without exposing CEC or DDC/CI state. Consequently, a
+cabled display change requires deliberate layout selection; an unplugged
+requested display falls back by role to the highest-priority available TV, then
+to an auxiliary display. This avoids presenting unreliable power heuristics as
+automatic detection.
 
 An on-demand mirror toggle uses Hyprland's native mirror path when the two
 selected displays have matching pixel dimensions, and falls back to a

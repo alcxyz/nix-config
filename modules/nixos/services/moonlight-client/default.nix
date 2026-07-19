@@ -1066,16 +1066,23 @@
             external_monitors="$connected_external_monitors"
             ;;
           solo-primary | solo-secondary | solo-tertiary)
-            case "$display_layout" in
-              solo-primary) solo_index=0 ;;
-              solo-secondary) solo_index=1 ;;
-              *) solo_index=2 ;;
-            esac
             external_monitors="$(
-              jq -c --argjson index "$solo_index" '
-                sort_by(.physicalWidth * .physicalHeight)
-                | reverse
-                | if length == 0 then [] else [.[($index % length)]] end
+              jq -c \
+                --arg layout "$display_layout" \
+                --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
+                if length == 0 then []
+                else
+                  (sort_by(.physicalWidth * .physicalHeight) | reverse) as $ranked
+                  | ([$ranked[] | select(.physicalWidth >= $minimum_width)]) as $tvs
+                  | ([$ranked[] | select(.physicalWidth < $minimum_width)]) as $auxiliary
+                  | if $layout == "solo-primary" then
+                      [($tvs[0] // $ranked[0])]
+                    elif $layout == "solo-secondary" then
+                      [($tvs[1] // $tvs[0] // $ranked[0])]
+                    else
+                      [($auxiliary[0] // $tvs[0] // $ranked[0])]
+                    end
+                end
               ' <<<"$connected_external_monitors"
             )"
             ;;
@@ -1238,6 +1245,27 @@
 
       export XDG_CONFIG_HOME="$config_home"
       exec "$dms" run
+    '';
+  };
+
+  mergedDmsCondition = pkgs.writeShellApplication {
+    name = "couch-merged-dms-condition";
+    runtimeInputs = [pkgs.gnugrep];
+    text = ''
+      grep -qx merged ${lib.escapeShellArg modeStateFile}
+    '';
+  };
+
+  mergedDmsServiceControl = pkgs.writeShellApplication {
+    name = "couch-merged-dms-service-control";
+    runtimeInputs = [pkgs.systemd];
+    text = ''
+      systemctl --user import-environment \
+        WAYLAND_DISPLAY \
+        HYPRLAND_INSTANCE_SIGNATURE \
+        XDG_CURRENT_DESKTOP \
+        DBUS_SESSION_BUS_ADDRESS
+      exec systemctl --user restart couch-merged-dms.service
     '';
   };
 
@@ -1430,7 +1458,7 @@
       cfg.softwareMirrorOutputs
     )}
     ${lib.optionalString cfg.enableDms "exec-once = ${lib.getExe dmsSession}"}
-    ${lib.optionalString cfg.enableMergedProfile "exec-once = ${lib.getExe mergedDmsSession}"}
+    ${lib.optionalString cfg.enableMergedProfile "exec-once = ${lib.getExe mergedDmsServiceControl}"}
 
     input {
       kb_layout = ${cfg.keyboardLayouts}
@@ -1553,9 +1581,15 @@
 
   sessionDispatcher = pkgs.writeShellApplication {
     name = "couch-session-dispatcher";
-    runtimeInputs = [pkgs.coreutils];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
     text = ''
       mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
+      if [ "$mode" != merged ]; then
+        systemctl --user stop couch-merged-dms.service >/dev/null 2>&1 || true
+      fi
       case "$mode" in
         desktop)
           exec ${cfg.desktopSessionCommand}
@@ -2072,6 +2106,18 @@ in {
           "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
         ];
         TimeoutStartSec = cfg.streamStartupTimeout + 30;
+      };
+    };
+
+    systemd.user.services.couch-merged-dms = lib.mkIf cfg.enableMergedProfile {
+      description = "Supervised DMS shell for the merged couch session";
+      serviceConfig = {
+        Type = "simple";
+        ExecCondition = lib.getExe mergedDmsCondition;
+        ExecStart = lib.getExe mergedDmsSession;
+        Restart = "always";
+        RestartSec = 2;
+        SuccessExitStatus = 143;
       };
     };
 
