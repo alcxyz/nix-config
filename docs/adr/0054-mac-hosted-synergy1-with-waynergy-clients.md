@@ -1,4 +1,4 @@
-# ADR-0053: Mac-hosted Synergy 1 with Waynergy clients
+# ADR-0054: Mac-hosted Synergy 1 with Waynergy clients
 
 **Status:** Accepted
 **Date:** 2026-07-19

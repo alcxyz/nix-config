@@ -185,7 +185,13 @@ in {
         zfs
         util-linux
       ];
-      serviceConfig.Type = "oneshot";
+      serviceConfig = {
+        Type = "oneshot";
+        # Several consumers require this prerequisite during boot. Keep the
+        # successful result active so concurrent consumers do not repeatedly
+        # start the same oneshot and exhaust its start limit.
+        RemainAfterExit = true;
+      };
       script = ''
         set -euo pipefail
 
@@ -234,6 +240,9 @@ in {
       serviceConfig = {
         Type = "oneshot";
         StateDirectory = "torrent-shared-media";
+        # This is a prerequisite for several long-running services. Preserve
+        # the successful state instead of rerunning it for each consumer.
+        RemainAfterExit = true;
       };
       script = ''
         set -euo pipefail

@@ -46,7 +46,8 @@ Options:
   --ssh-timeout <seconds>  SSH return timeout. Default: 900.
   --require-longhorn-backup-target
                            Fail if the Longhorn backup target is unavailable.
-  --min-free-pod-slots N   Require N unused Pod slots on every stable node.
+  --min-free-pod-slots N   Require N aggregate Pod slots after evacuation on
+                           the remaining stable nodes.
                            Default: 20.
   -h, --help               Show this help.
 
@@ -424,40 +425,112 @@ wait_for_longhorn_health() {
   fi
 }
 
-check_stable_node_pod_slots() {
+check_pdb_eviction_blockers() {
   local report
 
-  log "checking stable-node Pod slot floor (${MIN_FREE_POD_SLOTS})"
+  log "checking PodDisruptionBudgets on ${NODE}"
+  report=$(
+    kubectl get poddisruptionbudgets.policy --all-namespaces -o json |
+      jq -r --arg node "$NODE" --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
+        def selector_matches($labels; $selector):
+          (($selector.matchLabels // {}) | to_entries | all(
+            . as $entry | ($labels[$entry.key] // null) == $entry.value
+          ))
+          and
+          (($selector.matchExpressions // []) | all(
+            . as $expression
+            | ($labels[$expression.key] // null) as $value
+            | if $expression.operator == "In" then
+                $value != null and (($expression.values // []) | index($value) != null)
+              elif $expression.operator == "NotIn" then
+                $value != null and (($expression.values // []) | index($value) == null)
+              elif $expression.operator == "Exists" then
+                $labels | has($expression.key)
+              elif $expression.operator == "DoesNotExist" then
+                ($labels | has($expression.key)) | not
+              else
+                false
+              end
+          ));
+
+        .items[] as $pdb
+        | select(($pdb.status.disruptionsAllowed // 0) < 1)
+        | $pods[0].items[]
+        | select(.spec.nodeName == $node)
+        | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+        | select((.metadata.ownerReferences // [] | map(.kind) | index("DaemonSet")) | not)
+        | select((.metadata.labels["longhorn.io/component"] // "") != "instance-manager")
+        | select(selector_matches(.metadata.labels // {}; $pdb.spec.selector // {}))
+        | [
+            .metadata.namespace,
+            $pdb.metadata.name,
+            .metadata.name,
+            ((.metadata.labels["cnpg.io/instanceRole"] // "-") | tostring)
+          ]
+        | @tsv'
+  )
+
+  if [[ -n "$report" ]]; then
+    printf 'namespace\tpdb\tpod\tinstance-role\n%s\n' "$report" >&2
+    die "PodDisruptionBudgets block eviction; restore replicas or switchover primaries before disrupting ${NODE}"
+  fi
+}
+
+check_stable_node_pod_slots() {
+  local report
+  local status
+
+  log "checking remaining stable-node aggregate Pod capacity (${MIN_FREE_POD_SLOTS} slots reserved)"
   report=$(
     kubectl get nodes -l workload-class=stable -o json |
-      jq -r --argjson required "$MIN_FREE_POD_SLOTS" --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
-          .items[] as $node
+      jq -r \
+        --arg target "$NODE" \
+        --argjson required "$MIN_FREE_POD_SLOTS" \
+        --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
+          def active_pod:
+            .status.phase != "Succeeded" and .status.phase != "Failed";
+          def daemonset_pod:
+            (.metadata.ownerReferences // [] | map(.kind) | index("DaemonSet")) != null;
+          def mirror_pod:
+            (.metadata.annotations["kubernetes.io/config.mirror"] // "") != "";
+
+          [
+            .items[]
+            | select(.metadata.name != $target)
+            | select(.spec.unschedulable != true)
+            | select(.status.conditions | any(.type == "Ready" and .status == "True"))
+          ] as $remaining
+          | ($remaining | map(.metadata.name)) as $remaining_names
+          | ($remaining | map(.status.allocatable.pods | tonumber) | add // 0) as $allocatable
           | ([
               $pods[0].items[]
-              | select(
-                  .spec.nodeName == $node.metadata.name
-                  and .status.phase != "Succeeded"
-                  and .status.phase != "Failed"
-                )
+              | select(active_pod)
+              | select(.spec.nodeName as $node | $remaining_names | index($node) != null)
             ] | length) as $scheduled
-          | ($node.status.allocatable.pods | tonumber) as $allocatable
-          | ($allocatable - $scheduled) as $free
+          | ([
+              $pods[0].items[]
+              | select(active_pod)
+              | select(.spec.nodeName == $target)
+              | select(daemonset_pod | not)
+              | select(mirror_pod | not)
+            ] | length) as $displaced
+          | ($allocatable - $scheduled - $displaced) as $free_after
           | [
-              $node.metadata.name,
+              ($remaining_names | join(",")),
               ($scheduled | tostring),
+              ($displaced | tostring),
               ($allocatable | tostring),
-              ($free | tostring),
-              (if $free >= $required then "pass" else "insufficient" end)
+              ($free_after | tostring),
+              (if ($remaining | length) > 0 and $free_after >= $required then "pass" else "insufficient" end)
             ]
           | @tsv'
   )
 
-  [[ -n "$report" ]] || die "no stable nodes found for Pod slot audit"
-  printf 'node\tscheduled\tallocatable\tfree\tstatus\n%s\n' "$report"
+  [[ -n "$report" ]] || die "no remaining stable nodes found for Pod capacity audit"
+  printf 'remaining-nodes\tscheduled\tdisplaced\tallocatable\tfree-after\tstatus\n%s\n' "$report"
 
-  if awk -F '\t' '$5 != "pass" { found=1 } END { exit !found }' <<<"$report"; then
-    die "one or more stable nodes are below the Pod slot floor"
-  fi
+  status=$(awk -F '\t' '{ print $6 }' <<<"$report")
+  [[ "$status" == "pass" ]] || die "remaining stable nodes do not have enough aggregate Pod slots"
 }
 
 wait_for_node_storage_detach() {
@@ -639,6 +712,7 @@ prepare_node_for_disruption() {
   log "running preflight cluster health checks"
   wait_for_longhorn_health
   wait_for_no_bad_pods
+  check_pdb_eviction_blockers
   check_stable_node_pod_slots
 
   collect_displaced_workloads >"$workloads_file"

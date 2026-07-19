@@ -6,6 +6,25 @@
 }: let
   cfg = config.services.pihole-native;
 
+  waitForListenInterface = pkgs.writeShellScript "pihole-wait-for-listen-interface" ''
+    set -euo pipefail
+
+    interface=${lib.escapeShellArg cfg.listenInterface}
+
+    for _ in $(${pkgs.coreutils}/bin/seq 1 120); do
+      if ${pkgs.iproute2}/bin/ip link show dev "$interface" >/dev/null 2>&1 \
+        && ${pkgs.iproute2}/bin/ip -o -4 address show dev "$interface" scope global \
+          | ${pkgs.gnugrep}/bin/grep -q ' inet '; then
+        exit 0
+      fi
+
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+
+    echo "Pi-hole listen interface $interface did not acquire a global IPv4 address" >&2
+    exit 1
+  '';
+
   piholeStart = pkgs.writeShellScript "pihole-ftl-start" ''
     set -euo pipefail
 
@@ -122,6 +141,10 @@ in {
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        assertion = cfg.listenInterface != "";
+        message = "services.pihole-native.listenInterface must be set when Pi-hole is enabled.";
+      }
+      {
         assertion =
           (cfg.rateLimitCount == 0 && cfg.rateLimitInterval == 0)
           || (cfg.rateLimitCount > 0 && cfg.rateLimitInterval > 0);
@@ -192,7 +215,10 @@ in {
         Type = "simple";
         User = "pihole";
         Group = "pihole";
-        ExecStartPre = "+${pkgs.coreutils}/bin/chown -R pihole:pihole ${cfg.stateDirectory} ${cfg.logDirectory}";
+        ExecStartPre = [
+          waitForListenInterface
+          "+${pkgs.coreutils}/bin/chown -R pihole:pihole ${cfg.stateDirectory} ${cfg.logDirectory}"
+        ];
         ExecStart = piholeStart;
         Restart = "on-failure";
         RestartSec = 1;

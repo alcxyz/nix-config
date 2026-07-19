@@ -12,7 +12,9 @@
     nex_buildhost_xyz = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8qgxpjQ82ktYwBKBatdI0bQlfFx0UPwCpJ6maVuhQL nix-build@nex-to-xyz";
     rpi0_buildhost_xyz = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBtfjE0ipO2T87jT0FB+CpMDpKPCSrehWlYmKUZN6txF nix-build@rpi0-to-xyz";
     xyz_host_ed25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEztyNrJk03TzMyLgwYd0BmUtUR5acWpgJf8obeGG1bS";
-    xev_host_ed25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJfbxhVZERpD22eVkP486unzTTV68tMf8YRgut2BDmSj";
+    nux_host_ed25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoS0qOGAZsbkOZYqhk2X+G81SMhOJiAmMnonlBZZ1km";
+    nex_host_ed25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHDD69n8CTSvA2av9tqMSfas5Q5C7gBuQVq/Vm94lSUk";
+    xev_host_ed25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJFj/fFTJv9FmOeCFS04iDAFxjw3O6w5wXi+43Du0lCE";
     docker_app = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKkMvn8LGAG3tBwNmABBXifXKVTs54TzE1cpX4TcadT docker@iphone";
   };
 

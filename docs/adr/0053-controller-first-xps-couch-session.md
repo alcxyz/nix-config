@@ -1,4 +1,4 @@
-# ADR-0052: Controller-first XPS couch session
+# ADR-0053: Controller-first XPS couch session
 
 **Status:** Accepted
 **Date:** 2026-07-16
