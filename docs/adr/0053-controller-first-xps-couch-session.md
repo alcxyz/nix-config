@@ -60,26 +60,39 @@ floating windows, navigate or move between the stream and browser workspaces,
 and control audio directly through PipeWire. DMS-specific shortcuts remain out
 of couch mode because DMS is not part of that session.
 
-Keep attached secondary and tertiary displays independent by default. Assign
-persistent workspaces 1–3, 4–6, and 7–9 across the three external outputs; when
-an output is absent, return its workspace set to the primary TV and restore the
-split when it reappears. An on-demand mirror toggle uses Hyprland's native
-mirror path when the two selected displays have matching pixel dimensions, and
-falls back to a supervised fullscreen `wl-mirror` client when they do not. This
-keeps equal-mode TVs on the compositor's direct mirror path while allowing a
-lower-resolution auxiliary display to receive a scaled copy. Prefer a stable
-60 Hz auxiliary mode over native resolution when the available dock path cannot
-sustain that native mode reliably.
+Keep attached secondary and tertiary displays independent in the all-output
+layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
+outputs; in a solo layout, return all workspace sets to the selected output.
+Park inactive-but-connected outputs outside the usable desktop before powering
+them down so the cursor cannot escape onto a display whose adapter retains its
+connection while the panel is in standby.
+
+Persist the selected layout across reboots. Adaptive mode preserves the sole
+active output and falls back to the physically largest connected output; also
+provide explicit all-output and ranked solo-output modes as deterministic
+recovery controls. Cycle those modes from either a held controller shortcut or
+a keyboard binding. This avoids treating EDID presence, compositor DPMS state,
+or an incomplete hardware power signal as proof that a panel is visibly on.
+
+An on-demand mirror toggle uses Hyprland's native mirror path when the two
+selected displays have matching pixel dimensions, and falls back to a
+supervised fullscreen `wl-mirror` client when they do not. This keeps equal-mode
+TVs on the compositor's direct mirror path while allowing a lower-resolution
+auxiliary display to receive a scaled copy. Prefer a stable 60 Hz auxiliary mode
+over native resolution when the available dock path cannot sustain that native
+mode reliably.
 
 Treat display-pipeline allocation separately from logical Hyprland layout. If
 all three external displays are connected during boot, release the internal
 panel before the graphical session starts; with fewer external displays, keep
 the internal panel available as a local maintenance fallback.
 
-Do not persist dock connector names or display identities. Discover the TV as
-the physically largest active external output, keep unmatched outputs on the
-stable secondary mode, and atomically regenerate transient monitor and
-workspace rules whenever the dock renames a connector after a link flap.
+Do not persist dock connector names or display identities. Rank connected
+outputs by physical area, keep unmatched outputs on the stable secondary mode,
+and atomically regenerate transient monitor and workspace rules whenever the
+dock renames a connector after a link flap. Write parked-output positions before
+active-output positions so a live transition never temporarily overlaps two
+extended outputs.
 
 KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
 XWayland clients, but its pointer warp does not move Hyprland's compositor
@@ -93,7 +106,8 @@ browser executable and desktop entry out of the user profile. The browser uses
 its basic password store inside that encrypted directory because passwordless
 graphical auto-login cannot unlock the normal login keyring without an
 unacceptable unlock dialog. The normal desktop browser and keyring
-configuration are unchanged.
+configuration are unchanged. Capture the focused workspace when the launcher is
+invoked, then place and centre its password prompt and browser windows there.
 
 The public module exposes generic startup, readiness, controller, and Qt
 platform options. Authentication material and private operational details must

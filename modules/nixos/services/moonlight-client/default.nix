@@ -12,6 +12,7 @@
   runtimeStateDirectory = "/run/moonlight-client";
   dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
   mirrorStateFile = "${runtimeStateDirectory}/mirror-enabled";
+  displayLayoutStateFile = "${modeStateDirectory}/display-layout";
   mergedDmsConfigDirectory = "${runtimeStateDirectory}/dms-merged";
   mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (
     builtins.toJSON cfg.mergedDmsSettings
@@ -259,6 +260,7 @@
       pkgs.gocryptfs
       pkgs.hyprland
       pkgs.jq
+      pkgs.socat
       pkgs.util-linux
       pkgs.zenity
     ];
@@ -272,10 +274,34 @@
       mountpoint="$runtime_directory/profile"
       mounted_here=false
       initial_password=""
+      placement_pid=""
       launch_workspace="$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // 2')"
 
       focus_launch_workspace() {
         hyprctl dispatch workspace "$launch_workspace" >/dev/null 2>&1 || true
+      }
+
+      place_protected_windows() {
+        event_socket="''${XDG_RUNTIME_DIR:-/run/user/$UID}/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+        socat -u "UNIX-CONNECT:$event_socket" - 2>/dev/null |
+          while IFS= read -r event; do
+            case "$event" in
+              openwindow\>\>*) ;;
+              *) continue ;;
+            esac
+
+            window_data="''${event#openwindow>>}"
+            IFS=, read -r address _workspace window_class window_title <<<"$window_data"
+            if { [ "$window_class" = zenity ] \
+                && [[ "$window_title" == *${lib.escapeShellArg cfg.protectedBrowserName}* ]]; } \
+              || [ "$window_class" = ProtectedBrowser ]; then
+              address="0x''${address#0x}"
+              hyprctl dispatch movetoworkspacesilent \
+                "$launch_workspace,address:$address" >/dev/null 2>&1 || true
+              hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1 || true
+              hyprctl dispatch centerwindow >/dev/null 2>&1 || true
+            fi
+          done
       }
 
       show_error() {
@@ -287,6 +313,10 @@
 
       # shellcheck disable=SC2329 # Invoked by the trap below.
       cleanup() {
+        if [ -n "$placement_pid" ]; then
+          kill "$placement_pid" 2>/dev/null || true
+          wait "$placement_pid" 2>/dev/null || true
+        fi
         if [ "$mounted_here" = true ] && mountpoint -q "$mountpoint"; then
           if ! /run/wrappers/bin/fusermount3 -u "$mountpoint"; then
             show_error ${lib.escapeShellArg "${cfg.protectedBrowserName} has closed, but its encrypted profile is still mounted. Close any remaining browser processes and run this launcher again to finish locking it."}
@@ -299,6 +329,8 @@
       exec 9>"$runtime_directory/launcher.lock"
       flock 9
       focus_launch_workspace
+      place_protected_windows &
+      placement_pid=$!
 
       if [ ! -e "$cipher_directory/gocryptfs.conf" ]; then
         GDK_BACKEND=x11 zenity \
@@ -474,12 +506,18 @@
         ${lib.optionalString cfg.enableMirrorToggle ''
       "mirror": {ecodes.BTN_SELECT, ecodes.BTN_START},
     ''}
+        ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
+      "layout": {ecodes.BTN_SELECT, ecodes.BTN_NORTH},
+    ''}
     }
     COMMANDS = {
         "start": [${builtins.toJSON (lib.getExe couchStreamControl)}, "start"],
         "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
         ${lib.optionalString cfg.enableMirrorToggle ''
       "mirror": [${builtins.toJSON (lib.getExe displayMirrorToggle)}, "toggle"],
+    ''}
+        ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
+      "layout": [${builtins.toJSON (lib.getExe displayLayoutControl)}, "cycle"],
     ''}
     }
 
@@ -655,6 +693,56 @@
     '';
   };
 
+  displayLayoutControl = pkgs.writeShellApplication {
+    name = "couch-display-layout";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+    ];
+    text = ''
+      state_file=${lib.escapeShellArg displayLayoutStateFile}
+      current="$(
+        if [ -r "$state_file" ]; then
+          tr -d '[:space:]' < "$state_file"
+        fi
+      )"
+      case "$current" in
+        adaptive | all | solo-primary | solo-secondary | solo-tertiary) ;;
+        *) current=adaptive ;;
+      esac
+
+      case "''${1:-status}" in
+        status)
+          printf '%s\n' "$current"
+          exit 0
+          ;;
+        cycle)
+          case "$current" in
+            adaptive) requested=all ;;
+            all) requested=solo-primary ;;
+            solo-primary) requested=solo-secondary ;;
+            solo-secondary) requested=solo-tertiary ;;
+            *) requested=adaptive ;;
+          esac
+          ;;
+        adaptive | all | solo-primary | solo-secondary | solo-tertiary)
+          requested="$1"
+          ;;
+        *)
+          echo "usage: couch-display-layout {status|cycle|adaptive|all|solo-primary|solo-secondary|solo-tertiary}" >&2
+          exit 2
+          ;;
+      esac
+
+      temporary_file="$state_file.tmp"
+      printf '%s\n' "$requested" > "$temporary_file"
+      mv "$temporary_file" "$state_file"
+      hyprctl notify 1 3000 'rgb(89b4fa)' "Display layout: $requested" \
+        >/dev/null 2>&1 || true
+      printf '%s\n' "$requested"
+    '';
+  };
+
   displayMirrorToggle = pkgs.writeShellApplication {
     name = "couch-display-mirror";
     runtimeInputs = [
@@ -698,7 +786,8 @@
         external_outputs="$(
           hyprctl -j monitors all 2>/dev/null \
             | jq '[.[] | select(
-                .name != "eDP-1" and .name != "LVDS-1" and .disabled == false
+                .name != "eDP-1" and .name != "LVDS-1"
+                and .disabled == false and .dpmsStatus == true
               )] | length' 2>/dev/null \
             || printf '0\n'
         )"
@@ -721,11 +810,13 @@
         pkgs.coreutils
         pkgs.hyprland
         pkgs.jq
+        pkgs.xrandr
       ]
       ++ lib.optional (cfg.autoMirrorExternalOutputs || cfg.enableMirrorToggle) pkgs.wl-mirror;
     text = ''
       config_file=${lib.escapeShellArg dynamicMonitorConfigFile}
       mirror_state_file=${lib.escapeShellArg mirrorStateFile}
+      display_layout_state_file=${lib.escapeShellArg displayLayoutStateFile}
       layout_key=""
       mirror_pid=""
 
@@ -775,18 +866,28 @@
 
       write_layout() {
         source_output="$1"
-        secondary_output="$2"
-        secondary_mode="$3"
-        tertiary_output="$4"
-        tertiary_mode="$5"
-        native_mirror="$6"
+        source_mode="$2"
+        secondary_output="$3"
+        secondary_mode="$4"
+        tertiary_output="$5"
+        tertiary_mode="$6"
+        native_mirror="$7"
         temporary_file="$config_file.tmp"
 
         {
+          parked_index=1
+          while IFS= read -r parked_output; do
+            parked_mode="$(select_auxiliary_mode "$parked_output")"
+            parked_position="$((parked_index * 10000))x0"
+            printf 'monitor = %s, %s, %s, 1\n' \
+              "$parked_output" "$parked_mode" "$parked_position"
+            parked_index=$((parked_index + 1))
+          done < <(jq -r '.[].name' <<<"$parked_outputs")
+
           if [ -n "$source_output" ]; then
             printf 'monitor = %s, %s, 0x0, %s\n' \
               "$source_output" \
-              ${lib.escapeShellArg cfg.outputMode} \
+              "$source_mode" \
               ${lib.escapeShellArg (toString cfg.outputScale)}
             for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutPrimaryWorkspaces)}; do
               default=""
@@ -862,6 +963,13 @@
           rm -f "$temporary_file"
         fi
 
+        while IFS= read -r parked_output; do
+          hyprctl dispatch dpms off "$parked_output" >/dev/null 2>&1 || true
+        done < <(jq -r '.[].name' <<<"$parked_outputs")
+        while IFS= read -r active_output; do
+          hyprctl dispatch dpms on "$active_output" >/dev/null 2>&1 || true
+        done < <(jq -r '.[].name' <<<"$external_monitors")
+
         if [ -n "$source_output" ]; then
           for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutPrimaryWorkspaces)}; do
             hyprctl dispatch moveworkspacetomonitor \
@@ -908,6 +1016,7 @@
         if [ -n "$source_output" ]; then
           hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          DISPLAY=:0 xrandr --output "$source_output" --primary >/dev/null 2>&1 || true
         fi
       }
 
@@ -915,17 +1024,77 @@
 
       while true; do
         monitors="$(hyprctl -j monitors all 2>/dev/null || printf '[]')"
-        external_monitors="$(
+        connected_external_monitors="$(
           jq -c '[.[] | select(
             .name != "eDP-1" and .name != "LVDS-1" and .disabled == false
           )]' <<<"$monitors" 2>/dev/null || printf '[]'
+        )"
+
+        display_layout=all
+        ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
+        display_layout="$(tr -d '[:space:]' < "$display_layout_state_file" 2>/dev/null || true)"
+        case "$display_layout" in
+          adaptive | all | solo-primary | solo-secondary | solo-tertiary) ;;
+          *) display_layout=adaptive ;;
+        esac
+      ''}
+
+        case "$display_layout" in
+          adaptive)
+            external_monitors="$(
+              jq -c '
+                [.[] | select(.dpmsStatus == true)]
+                | sort_by(.physicalWidth * .physicalHeight)
+                | reverse
+                | .[:1]
+              ' <<<"$connected_external_monitors"
+            )"
+            # An empty external layout is never valid. If no output is already
+            # enabled, retain the physically largest connected output as the
+            # primary fallback.
+            if [ "$(jq 'length' <<<"$external_monitors")" -eq 0 ]; then
+              external_monitors="$(
+                jq -c '
+                  sort_by(.physicalWidth * .physicalHeight)
+                  | reverse
+                  | .[:1]
+                ' <<<"$connected_external_monitors"
+              )"
+            fi
+            ;;
+          all)
+            external_monitors="$connected_external_monitors"
+            ;;
+          solo-primary | solo-secondary | solo-tertiary)
+            case "$display_layout" in
+              solo-primary) solo_index=0 ;;
+              solo-secondary) solo_index=1 ;;
+              *) solo_index=2 ;;
+            esac
+            external_monitors="$(
+              jq -c --argjson index "$solo_index" '
+                sort_by(.physicalWidth * .physicalHeight)
+                | reverse
+                | if length == 0 then [] else [.[($index % length)]] end
+              ' <<<"$connected_external_monitors"
+            )"
+            ;;
+        esac
+
+        active_output_names="$(jq -c '[.[].name]' <<<"$external_monitors")"
+        parked_outputs="$(
+          jq -c --argjson active "$active_output_names" '
+            [.[] | select(.name as $name | ($active | index($name) | not))]
+          ' <<<"$connected_external_monitors"
         )"
         source_output="$(
           jq -r --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
             if length == 0 then ""
             else
-              max_by(.physicalWidth * .physicalHeight)
-              | if .physicalWidth >= $minimum_width then .name else "" end
+              (map(select(.physicalWidth >= $minimum_width))) as $preferred
+              | (if ($preferred | length) > 0 then $preferred else . end)
+              | max_by(.physicalWidth * .physicalHeight)
+              | .name
             end
           ' <<<"$external_monitors"
         )"
@@ -933,7 +1102,9 @@
         secondary_mode=""
         tertiary_output=""
         tertiary_mode=""
+        source_mode=""
         if [ -n "$source_output" ]; then
+          source_mode="$(select_auxiliary_mode "$source_output")"
           mapfile -t auxiliary_outputs < <(
             jq -r --arg source "$source_output" '
               [.[] | select(.name != $source)]
@@ -960,7 +1131,7 @@
         fi
       ''}
         native_mirror=0
-        primary_dimensions=${lib.escapeShellArg (builtins.head (lib.splitString "@" cfg.outputMode))}
+        primary_dimensions="''${source_mode%@*}"
         secondary_dimensions="''${secondary_mode%@*}"
         if [ "$native_mirror_requested" = 1 ] \
           && [ -n "$secondary_output" ] \
@@ -968,11 +1139,13 @@
           native_mirror=1
         fi
 
-        new_layout_key="$source_output:$secondary_output:$secondary_mode:$tertiary_output:$tertiary_mode:$native_mirror"
+        parked_output_names="$(jq -r '[.[].name] | join(",")' <<<"$parked_outputs")"
+        new_layout_key="$display_layout:$source_output:$source_mode:$secondary_output:$secondary_mode:$tertiary_output:$tertiary_mode:$parked_output_names:$native_mirror"
         if [ "$new_layout_key" != "$layout_key" ]; then
           stop_mirror
           write_layout \
             "$source_output" \
+            "$source_mode" \
             "$secondary_output" \
             "$secondary_mode" \
             "$tertiary_output" \
@@ -1316,6 +1489,7 @@
     }
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
     ${lib.optionalString cfg.enableMirrorToggle "bind = SUPER SHIFT, M, exec, ${lib.getExe displayMirrorToggle} toggle"}
+    ${lib.optionalString cfg.enableAdaptiveDisplayLayout "bind = SUPER SHIFT, D, exec, ${lib.getExe displayLayoutControl} cycle"}
     bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}
     ${lib.optionalString (
       cfg.protectedBrowserPackage != null
@@ -1754,6 +1928,12 @@ in {
       description = "Enable an on-demand mirror toggle from the primary to the secondary external output, using native mirroring for matching modes and software mirroring otherwise.";
     };
 
+    enableAdaptiveDisplayLayout = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Preserve the currently active external output with persistent all-output and solo-output recovery modes.";
+    };
+
     autoLayoutExternalOutputs = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -1868,6 +2048,7 @@ in {
       ++ lib.optional cfg.enableMergedProfile mergedUiControl
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
       ++ lib.optional cfg.enableMirrorToggle displayMirrorToggle
+      ++ lib.optional cfg.enableAdaptiveDisplayLayout displayLayoutControl
       ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
       ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
       ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
@@ -1904,11 +2085,16 @@ in {
 
     systemd.tmpfiles.rules =
       lib.optional (
-        cfg.autoLoginUser != null && cfg.desktopSessionCommand != null
+        cfg.autoLoginUser
+        != null
+        && (cfg.desktopSessionCommand != null || cfg.enableAdaptiveDisplayLayout)
       ) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
       ++ lib.optional (
         cfg.autoLoginUser != null && cfg.desktopSessionCommand != null
       ) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional (
+        cfg.autoLoginUser != null && cfg.enableAdaptiveDisplayLayout
+      ) "f ${displayLayoutStateFile} 0644 ${cfg.autoLoginUser} root - adaptive"
       ++ lib.optional (
         cfg.autoLoginUser != null && dynamicExternalLayoutEnabled
       ) "d ${runtimeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
@@ -2010,6 +2196,10 @@ in {
       {
         assertion = !cfg.enableMirrorToggle || cfg.autoLayoutExternalOutputs;
         message = "services.moonlight-client.enableMirrorToggle requires autoLayoutExternalOutputs";
+      }
+      {
+        assertion = !cfg.enableAdaptiveDisplayLayout || cfg.autoLayoutExternalOutputs;
+        message = "services.moonlight-client.enableAdaptiveDisplayLayout requires autoLayoutExternalOutputs";
       }
       {
         assertion = !cfg.enableMirrorToggle || !cfg.autoMirrorExternalOutputs;

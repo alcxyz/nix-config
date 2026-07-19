@@ -46,7 +46,6 @@ in {
 
   hardware.enableRedistributableFirmware = true;
   hardware.nvidia.enable = true;
-
   users.users.${username}.extraGroups = [
     "video"
     "render"
@@ -130,6 +129,7 @@ in {
       8
       9
     ];
+    enableAdaptiveDisplayLayout = true;
     autoMirrorExternalOutputs = false;
     enableMirrorToggle = true;
     autoMirrorWorkspace = 10;
