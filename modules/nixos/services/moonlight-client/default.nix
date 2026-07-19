@@ -1277,7 +1277,8 @@
         fi
       }
 
-      trap stop_mirror EXIT INT TERM
+      trap stop_mirror EXIT
+      trap 'exit 0' HUP INT TERM
 
       while true; do
         monitors="$(hyprctl -j monitors all 2>/dev/null || printf '[]')"
