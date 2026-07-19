@@ -1343,6 +1343,7 @@
         echo "DMS is not installed in the user profile" >&2
         exit 1
       fi
+      export PATH="$HOME/.nix-profile/bin:$PATH"
       exec "$dms" run
     '';
   };
@@ -1361,6 +1362,7 @@
         echo "DMS is not installed in the user profile" >&2
         exit 1
       fi
+      export PATH="$HOME/.nix-profile/bin:$PATH"
 
       config_home=${lib.escapeShellArg mergedDmsConfigDirectory}
       settings_directory="$config_home/DankMaterialShell"
