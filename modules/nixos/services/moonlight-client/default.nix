@@ -374,8 +374,8 @@
     '';
   };
 
-  protectedBrowser = pkgs.writeShellApplication {
-    name = cfg.protectedBrowserCommandName;
+  protectedBrowserSession = pkgs.writeShellApplication {
+    name = "${cfg.protectedBrowserCommandName}-session";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.findutils
@@ -546,6 +546,24 @@
         --disable-background-mode \
         "$@" || status=$?
       exit "$status"
+    '';
+  };
+
+  protectedBrowser = pkgs.writeShellApplication {
+    name = cfg.protectedBrowserCommandName;
+    runtimeInputs = [
+      pkgs.hyprland
+      pkgs.systemd
+    ];
+    text = ''
+      unit=couch-protected-browser.service
+      if systemctl --user --quiet is-active "$unit"; then
+        hyprctl dispatch focuswindow 'class:^(ProtectedBrowser)$' >/dev/null 2>&1 || true
+        exit 0
+      fi
+
+      systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+      exec systemctl --user start "$unit"
     '';
   };
 
@@ -1736,6 +1754,7 @@
     env = QT_QPA_PLATFORMTHEME_QT6,gtk3
 
     exec-once = ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
+    ${lib.optionalString (cfg.sessionSplashCommand != null) "exec-once = ${cfg.sessionSplashCommand}"}
     ${lib.optionalString dynamicExternalLayoutEnabled "exec-once = ${lib.getExe autoLayoutExternalOutputs}"}
     ${lib.optionalString cfg.autoStartBrowser "exec-once = ${lib.getExe couchBrowser}"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
@@ -1786,6 +1805,7 @@
     misc {
       disable_hyprland_logo = true
       disable_splash_rendering = true
+      background_color = rgb(0b0c0f)
     }
 
     cursor {
@@ -1934,6 +1954,12 @@ in {
       type = lib.types.bool;
       default = false;
       description = "Launch the couch browser when the couch session starts.";
+    };
+
+    sessionSplashCommand = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional non-blocking command launched before couch-session applications.";
     };
 
     moonlightPlatform = lib.mkOption {
@@ -2444,6 +2470,14 @@ in {
           "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
         ];
         TimeoutStartSec = cfg.streamStartupTimeout + 30;
+      };
+    };
+
+    systemd.user.services.couch-protected-browser = lib.mkIf (cfg.protectedBrowserPackage != null) {
+      description = "Independent protected couch browser supervisor";
+      serviceConfig = {
+        Type = "exec";
+        ExecStart = lib.getExe protectedBrowserSession;
       };
     };
 

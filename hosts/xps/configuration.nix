@@ -195,6 +195,7 @@ in {
     keyboardLayouts = "no,us";
     keyboardOptions = "grp:alt_shift_toggle";
     browserScaleFactor = 1.5;
+    sessionSplashCommand = lib.getExe pkgs.nixbox-session-splash;
     autoStartBrowser = true;
     autoStartStream = false;
     fallbackBrowserPackage = null;

@@ -54,6 +54,111 @@
   managedPluginSettingsFile = pkgs.writeText "dms-managed-plugin-settings.json" (
     builtins.toJSON managedPluginSettings
   );
+  elevationPkg = pkgs.writeShellApplication {
+    name = "dms-elevate";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      usage() {
+        echo "Usage: dms-elevate --title TITLE --reason REASON [--impact IMPACT] [--command-label LABEL] -- COMMAND [ARG ...]" >&2
+        exit 2
+      }
+
+      if [[ ''${1:-} == "--execute" ]]; then
+        shift
+        [[ ''${1:-} == "--request-id" && -n ''${2:-} ]] || usage
+        shift 2
+        [[ ''${1:-} == "--" ]] || usage
+        shift
+        (( $# > 0 )) || usage
+        [[ $(id -u) -eq 0 ]] || {
+          echo "dms-elevate: the executor must be started through Polkit" >&2
+          exit 1
+        }
+        exec "$@"
+      fi
+
+      title=""
+      reason=""
+      impact=""
+      command_label=""
+      while (( $# > 0 )); do
+        case "$1" in
+          --title)
+            [[ -n ''${2:-} ]] || usage
+            title="$2"
+            shift 2
+            ;;
+          --reason)
+            [[ -n ''${2:-} ]] || usage
+            reason="$2"
+            shift 2
+            ;;
+          --impact)
+            [[ -n ''${2:-} ]] || usage
+            impact="$2"
+            shift 2
+            ;;
+          --command-label)
+            [[ -n ''${2:-} ]] || usage
+            command_label="$2"
+            shift 2
+            ;;
+          --)
+            shift
+            break
+            ;;
+          *) usage ;;
+        esac
+      done
+
+      [[ -n "$title" && -n "$reason" ]] || usage
+      (( $# > 0 )) || usage
+      [[ -n ''${XDG_RUNTIME_DIR:-} && -d "$XDG_RUNTIME_DIR" ]] || {
+        echo "dms-elevate: XDG_RUNTIME_DIR is unavailable" >&2
+        exit 1
+      }
+
+      request_id="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+      context_file="$XDG_RUNTIME_DIR/dms-elevation-context.json"
+      context_tmp="$(mktemp "$XDG_RUNTIME_DIR/.dms-elevation-context.XXXXXX")"
+      self="$(readlink -f "$0")"
+      umask 077
+
+      cleanup() {
+        rm -f "$context_tmp"
+        if [[ -f "$context_file" ]] && [[ "$(jq -r '.requestId // empty' "$context_file" 2>/dev/null)" == "$request_id" ]]; then
+          rm -f "$context_file"
+        fi
+      }
+      trap cleanup EXIT HUP INT TERM
+
+      jq -n \
+        --arg title "$title" \
+        --arg reason "$reason" \
+        --arg impact "$impact" \
+        --arg commandLabel "$command_label" \
+        --arg requestId "$request_id" \
+        --argjson createdAt "$(date +%s%3N)" \
+        '{title: $title, reason: $reason, impact: $impact, commandLabel: $commandLabel, requestId: $requestId, createdAt: $createdAt}' \
+        > "$context_tmp"
+      chmod 0600 "$context_tmp"
+      mv -f "$context_tmp" "$context_file"
+
+      pkexec_path="/run/wrappers/bin/pkexec"
+      if [[ ! -x "$pkexec_path" ]]; then
+        pkexec_path="$(command -v pkexec || true)"
+      fi
+      [[ -n "$pkexec_path" ]] || {
+        echo "dms-elevate: pkexec is unavailable" >&2
+        exit 1
+      }
+
+      "$pkexec_path" "$self" --execute --request-id "$request_id" -- "$@"
+    '';
+  };
   mergeJsonInto = targetFile: managedFile: ''
     settings_file="${targetFile}"
     settings_tmp="$settings_file.tmp"
@@ -79,6 +184,32 @@
   dankaiusagePkg = pkgs.callPackage "${plugins.aiusage}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.aiusage}/plugin.json")).version;
   };
+  quickshellBasePkg = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  quickshellUnwrappedPkg = quickshellBasePkg.unwrapped.overrideAttrs (old: {
+    patches =
+      (old.patches or [])
+      ++ [
+        ./patches/quickshell-polkit-details.patch
+      ];
+  });
+  quickshellPkg = quickshellBasePkg.overrideAttrs (_: {
+    installPhase = ''
+      mkdir -p "$out"
+      cp -r ${quickshellUnwrappedPkg}/* "$out"
+    '';
+    passthru = (quickshellBasePkg.passthru or {}) // {unwrapped = quickshellUnwrappedPkg;};
+  });
+  dmsPkg = inputs.dankMaterialShell.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs (old: {
+    postInstall =
+      (old.postInstall or "")
+      + ''
+        chmod -R u+w "$out/share/quickshell/dms"
+        patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
+        substituteInPlace "$out/share/quickshell/dms/Modals/PolkitAuthSurfaceModal.qml" \
+          --subst-var-by polkitModalWidth ${toString cfg.polkitDialog.width} \
+          --subst-var-by polkitModalHeight ${toString cfg.polkitDialog.height}
+      '';
+  });
 in {
   options.services.dms = {
     enable = lib.mkEnableOption "Enable DankMaterialShell suite";
@@ -198,6 +329,20 @@ in {
         description = "Whether the DMS dock should auto-hide.";
       };
     };
+
+    polkitDialog = {
+      width = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 560;
+        description = "Width of the focused-screen DMS authorization surface.";
+      };
+
+      height = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 340;
+        description = "Height of the focused-screen DMS authorization surface.";
+      };
+    };
   };
 
   imports = [
@@ -209,6 +354,7 @@ in {
     home.packages = [
       dankcalendarPkg
       dankaiusagePkg
+      elevationPkg
       pkgs.translate-shell
     ];
 
@@ -222,9 +368,9 @@ in {
 
     programs.dank-material-shell = {
       enable = true;
+      package = dmsPkg;
 
-      #quickshell.package = pkgs.quickshell;
-      quickshell.package = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      quickshell.package = quickshellPkg;
 
       systemd = {
         enable = false;

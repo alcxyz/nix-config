@@ -15,6 +15,12 @@ shows whether mirroring is active or merely armed until another TV becomes
 available. Use its couch-sized rows to select any layout directly, toggle
 mirroring, or cycle audio without stepping through intermediate states.
 
+First-party administrative actions use the focused-screen DMS authorization
+dialog. The prompt states the requested operation, why it is needed, and its
+expected effect before asking for the password; raw Polkit and command data stay
+under `Technical details`. Unmatched third-party requests retain Polkit's
+generic message.
+
 ## Controller controls
 
 Hold each combination until the action triggers.
@@ -148,10 +154,12 @@ keyboard, clicks, and scrolling. Phone pointer movement is not currently
 supported; an X11-to-Hyprland pointer bridge was removed because it interfered
 with physical mouse movement over XWayland windows. The protected Brave
 launcher opens an encrypted profile after a password prompt; normal browsing
-remains available without unlocking it. Browsers use Hyprland's normal tiled
-layout; they do not request browser-level fullscreen, avoiding its broken couch
-pointer and click behaviour. Their chrome and page contents use a couch-friendly
-1.5x device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
+remains available without unlocking it. Its encrypted-profile supervisor runs
+as an independent user service, so DMS restarts do not terminate an active
+private browser session. Browsers use Hyprland's normal tiled layout; they do
+not request browser-level fullscreen, avoiding its broken couch pointer and
+click behaviour. Their chrome and page contents use a couch-friendly 1.5x
+device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 
 XPS retains separate `couch`, `merged`, and normal `desktop` profiles. The
 merged profile is the media-center default in use here; desktop mode remains a

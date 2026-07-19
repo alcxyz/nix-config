@@ -1,0 +1,101 @@
+diff --git a/src/services/polkit/flow.hpp b/src/services/polkit/flow.hpp
+index 88a6ddf..f04dd75 100644
+--- a/src/services/polkit/flow.hpp
++++ b/src/services/polkit/flow.hpp
+@@ -3,6 +3,7 @@
+ #include <qobject.h>
+ #include <qproperty.h>
+ #include <qqmlintegration.h>
++#include <qvariantmap.h>
+ 
+ #include "../../core/retainable.hpp"
+ #include "identity.hpp"
+@@ -35,6 +36,11 @@ class AuthFlow
+ 	/// This is a machine-readable identifier.
+ 	Q_PROPERTY(QString actionId READ actionId CONSTANT);
+ 
++	/// Technical details supplied by the authority for this request.
++	///
++	/// Detail keys and values are authority-specific.
++	Q_PROPERTY(QVariantMap details READ details CONSTANT);
++
+ 	/// A cookie that identifies this authentication request.
+ 	///
+ 	/// This is an internal identifier and not recommended to show to users.
+@@ -94,6 +100,7 @@ public:
+ 	[[nodiscard]] const QString& message() const { return this->mRequest->message; };
+ 	[[nodiscard]] const QString& iconName() const { return this->mRequest->iconName; };
+ 	[[nodiscard]] const QString& actionId() const { return this->mRequest->actionId; };
++	[[nodiscard]] const QVariantMap& details() const { return this->mRequest->details; };
+ 	[[nodiscard]] const QString& cookie() const { return this->mRequest->cookie; };
+ 	[[nodiscard]] const QList<Identity*>& identities() const { return this->mIdentities; };
+ 
+diff --git a/src/services/polkit/listener.cpp b/src/services/polkit/listener.cpp
+index 620bd4a..90f87bc 100644
+--- a/src/services/polkit/listener.cpp
++++ b/src/services/polkit/listener.cpp
+@@ -9,5 +9,6 @@
+ #include <qlogging.h>
+ #include <qloggingcategory.h>
++#include <qvariantmap.h>
+ #include <unistd.h>
+ 
+ #include "../../core/logcat.hpp"
+@@ -149,7 +150,7 @@ static void initiate_authentication(
+     const gchar* actionId,
+     const gchar* message,
+     const gchar* iconName,
+-    PolkitDetails* /*unused*/,
++    PolkitDetails* details,
+     const gchar* cookie,
+     GList* identities,
+     GCancellable* cancellable,
+@@ -173,12 +174,26 @@ static void initiate_authentication(
+ 		identityVector.emplace_back(identity);
+ 	}
+ 
++	QVariantMap detailMap;
++	if (details != nullptr) {
++		auto** keys = polkit_details_get_keys(details);
++		for (auto** key = keys; key != nullptr && *key != nullptr; key++) {
++			const auto* value = polkit_details_lookup(details, *key);
++			detailMap.insert(
++			    QString::fromUtf8(*key),
++			    value == nullptr ? QString() : QString::fromUtf8(value)
++			);
++		}
++		g_strfreev(keys);
++	}
++
+ 	// The original strings are freed by the caller after we return, so we
+ 	// copy them into QStrings.
+ 	auto* request = new qs::service::polkit::AuthRequest {
+ 	    .actionId = QString::fromUtf8(actionId),
+ 	    .message = QString::fromUtf8(message),
+ 	    .iconName = QString::fromUtf8(iconName),
++	    .details = std::move(detailMap),
+ 	    .cookie = QString::fromUtf8(cookie),
+ 	    .identities = std::move(identityVector),
+ 
+diff --git a/src/services/polkit/listener.hpp b/src/services/polkit/listener.hpp
+index 546c521..12f05e0 100644
+--- a/src/services/polkit/listener.hpp
++++ b/src/services/polkit/listener.hpp
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <qstring.h>
++#include <qvariantmap.h>
+ 
+ #define POLKIT_AGENT_I_KNOW_API_IS_SUBJECT_TO_CHANGE
+ // This causes a problem with variables of the name.
+@@ -21,7 +22,8 @@ struct AuthRequest {
+ 	QString message;
+ 	//! Icon name according to the FreeDesktop specification. May be empty.
+ 	QString iconName;
+-	// Details intentionally omitted because nothing seems to use them.
++	//! Authority-specific technical details for the request.
++	QVariantMap details;
+ 	QString cookie;
+ 	//! List of users/groups that can be used for authentication.
+ 	std::vector<GObjectRef<PolkitIdentity>> identities;

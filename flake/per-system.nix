@@ -34,6 +34,7 @@
       "modules/nixos/common/pkgsets.nix"
       "modules/nixos/common/server.nix"
       "modules/home-manager/services/waynergy/default.nix"
+      "modules/home-manager/services/dms/default.nix"
       "modules/nixos/common/ssh-keys.nix"
       "modules/nixos/services/flatpak/default.nix"
       "modules/nixos/services/heroic-sideload/default.nix"
@@ -43,6 +44,7 @@
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
+      "packages/nixbox-session-splash/default.nix"
       "packages/synergy1/default.nix"
       "users/alc/common.nix"
       "users/alc/linux/madsil.nix"
@@ -90,6 +92,7 @@
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
+        nixbox-session-splash = pkgs.nixbox-session-splash;
         stashdb-pop = pkgs.stashdb-pop;
       }
       // lib.optionalAttrs (system == "aarch64-darwin") {

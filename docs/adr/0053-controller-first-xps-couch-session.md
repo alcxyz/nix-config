@@ -103,6 +103,16 @@ sudo password prompt to an SSH terminal. This does not replace application
 secret prompts such as the encrypted Brave profile password, which are not
 Polkit authorization requests.
 
+Route first-party administrative actions through a shared contextual elevation
+helper. The caller supplies a short purpose, a plain-language reason, the
+expected effect, and a safe operation label. DMS presents that context as the
+primary consent message while retaining the authority-provided identity,
+action, and command under a collapsed technical disclosure. Correlate each
+context file to its Polkit request with a short-lived one-time identifier;
+unmatched, expired, and third-party requests fall back to the unmodified Polkit
+message. Treat this context as presentation only: it must never participate in
+the authorization decision.
+
 Keep attached secondary and tertiary displays independent in the all-output
 layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
 outputs; in a solo layout, return all workspace sets to the selected output.
@@ -180,6 +190,12 @@ Launch couch browsers as ordinary tiled windows rather than requesting browser
 or compositor fullscreen, because Chromium fullscreen interferes with couch
 pointer and click handling. Apply an explicit browser device scale for readable
 chrome and page content without reducing the stream or workspace resolution.
+
+Run the protected-browser supervisor as an independent user service. DMS and
+Hyprland launch only a short-lived service-control wrapper, so restarting either
+presentation layer does not terminate the browser or prematurely unmount its
+encrypted profile. Repeated launch requests focus the existing protected window
+instead of starting a second supervisor.
 
 The public module exposes generic startup, readiness, controller, and Qt
 platform options. Authentication material and private operational details must
