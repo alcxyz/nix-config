@@ -219,6 +219,11 @@ image and home and will only be exposed through a PIN-protected Wolf profile.
 Neither browser is installed on the XEV host, and the two images share their
 common GoW runtime layers rather than duplicating a desktop stack.
 
+The protected profile is provisioned from a root-only runtime credential. Its
+identity and PIN remain in the private configuration and out of the public Nix
+store; the reconciler preserves Wolf's pairings and any applications it does
+not own.
+
 The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
 client bitrate. Local XPS browsers remain available as a fallback until Helium,
 protected Brave, and their couch launch actions complete acceptance testing.

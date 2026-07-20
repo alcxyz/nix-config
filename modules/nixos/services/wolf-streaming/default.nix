@@ -123,6 +123,15 @@
     ];
     apps = managedMoonlightApps;
   });
+  protectedBrowserAppsFile = pkgs.writeText "wolf-managed-protected-browser-apps.json" (builtins.toJSON {
+    managedTitles = ["Brave"];
+    apps = lib.optional browserCfg.brave.enable (mkMoonlightBrowserApp {
+      title = "Brave";
+      runnerName = "WolfBrave";
+      image = browserCfg.brave.image;
+      icon = "https://brave.com/static-assets/images/brave-logo-sans-text.svg";
+    });
+  });
   reconcileWolfApps = pkgs.writeShellApplication {
     name = "reconcile-wolf-apps";
     runtimeInputs = [
@@ -130,6 +139,15 @@
     ];
     text = ''
       exec python3 ${./reconcile-apps.py} "$@"
+    '';
+  };
+  reconcileWolfProtectedProfile = pkgs.writeShellApplication {
+    name = "reconcile-wolf-protected-profile";
+    runtimeInputs = [
+      (pkgs.python3.withPackages (pythonPackages: [pythonPackages.tomlkit]))
+    ];
+    text = ''
+      exec python3 ${./reconcile-protected-profile.py} "$@"
     '';
   };
   buildBrowserImages = pkgs.writeShellApplication {
@@ -253,6 +271,18 @@ in {
         };
       };
     };
+
+    protectedProfile.definitionFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/run/credentials/docker-wolf.service/protected-profile";
+      description = ''
+        Root-only runtime JSON file defining the protected Wolf profile id,
+        display name, and PIN. Keep this file outside the Nix store. When set,
+        Brave is published only inside that profile and the file is loaded as a
+        systemd credential before Wolf starts.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -276,6 +306,17 @@ in {
       {
         assertion = lib.length browserCfg.keyboardLayouts == lib.length (lib.unique browserCfg.keyboardLayouts);
         message = "services.wolf-streaming.browserImages.keyboardLayouts must not contain duplicates";
+      }
+      {
+        assertion = cfg.protectedProfile.definitionFile == null || browserCfg.brave.enable;
+        message = "services.wolf-streaming.protectedProfile requires the Brave browser image";
+      }
+      {
+        assertion =
+          cfg.protectedProfile.definitionFile
+          == null
+          || lib.hasPrefix "/" cfg.protectedProfile.definitionFile;
+        message = "services.wolf-streaming.protectedProfile.definitionFile must be an absolute runtime path";
       }
     ];
 
@@ -334,16 +375,29 @@ in {
     };
 
     systemd.services.docker-wolf = {
-      after = [
-        "docker.service"
-        "nvidia-container-toolkit-cdi-generator.service"
-      ];
+      after =
+        [
+          "docker.service"
+          "nvidia-container-toolkit-cdi-generator.service"
+        ]
+        ++ lib.optional (cfg.protectedProfile.definitionFile != null) "sops-install-secrets.service";
       requires = ["docker.service"];
-      preStart = lib.mkIf browserCfg.enable ''
-        ${lib.getExe reconcileWolfApps} \
-          ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} \
-          ${lib.escapeShellArg managedMoonlightAppsFile}
-      '';
+      serviceConfig.LoadCredential = lib.mkIf (cfg.protectedProfile.definitionFile != null) [
+        "wolf-protected-profile:${cfg.protectedProfile.definitionFile}"
+      ];
+      preStart = lib.mkIf browserCfg.enable (
+        ''
+          ${lib.getExe reconcileWolfApps} \
+            ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} \
+            ${lib.escapeShellArg managedMoonlightAppsFile}
+        ''
+        + lib.optionalString (cfg.protectedProfile.definitionFile != null) ''
+          ${lib.getExe reconcileWolfProtectedProfile} \
+            ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} \
+            "$CREDENTIALS_DIRECTORY/wolf-protected-profile" \
+            ${lib.escapeShellArg protectedBrowserAppsFile}
+        ''
+      );
     };
 
     systemd.services.wolf-browser-images = lib.mkIf browserCfg.enable {
