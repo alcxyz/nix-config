@@ -253,7 +253,10 @@ without consuming streamed input.
 Remote browser homes persist across disposable application containers. Startup
 serializes access to each home and repairs stale Chromium singleton state. If a
 Moonlight process stalls without a usable window, its user service terminates
-the process so the same launcher can recover on the next attempt.
+the process so the same launcher can recover on the next attempt. Browser
+streams also request remote-app shutdown when Moonlight exits, preventing a
+stale Helium, Brave, or Wolf UI session from prompting to replace itself at the
+next launch.
 
 Moonlight opens as a normal tiled window on the workspace and display that are
 focused when it is launched. It requests a 2560×1440 stream independently of

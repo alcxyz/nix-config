@@ -338,6 +338,7 @@ in
       "--absolute-mouse"
       "--capture-system-keys"
       "never"
+      "--quit-after"
     ];
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
