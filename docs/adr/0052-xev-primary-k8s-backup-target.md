@@ -42,6 +42,15 @@ This is deliberately not an active-active or two-way object-store design.
 Backup writers have one endpoint, replication has one direction, and a role
 reversal is an explicit recovery procedure.
 
+Pin RustFS to a reviewed release rather than an arbitrary moving-branch
+revision. The backup service uses RustFS 1.0.0-beta.10 or newer because beta.9
+changed foreground object listings from a total wall-clock walk timeout to a
+per-filesystem-call stall budget. Earlier builds can repeatedly fail recursive
+listings of a large healthy bucket merely because the complete walk exceeds
+five seconds. Use RustFS's `high_latency` drive-timeout profile for these
+HDD-backed backup targets; this widens individual drive-operation liveness
+budgets without restoring the unsafe whole-listing deadline.
+
 ## Cutover Gate
 
 Do not redirect any writer until all of these pass:
