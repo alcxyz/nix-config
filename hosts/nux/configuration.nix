@@ -91,6 +91,7 @@ in {
   k3s = {
     enable = true;
     nodeIp = "192.168.1.15";
+    nodeInterface = "eno1";
     # nex is the retained authoritative member during nux root replacement.
     # A clean nux must join it, never initialize an independent etcd cluster.
     serverAddr = "https://192.168.1.16:6443";
