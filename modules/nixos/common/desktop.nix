@@ -236,6 +236,10 @@ in
       configFile = "${configDir}/users/${username}/configs/kanata/kanata.kbd";
     };
   };
+  systemd.services.kanata-main.serviceConfig = {
+    Restart = "on-failure";
+    RestartSec = "2s";
+  };
 
   virtualisation.docker = {
     enable = true;
