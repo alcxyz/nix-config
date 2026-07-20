@@ -6,8 +6,7 @@
   pkgs,
   configDir,
   ...
-}:
-{
+}: {
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
@@ -15,6 +14,8 @@
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
+    "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
+    "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     inputs.nix-secrets.nixosModules.xevK8sBackupReplica
@@ -22,7 +23,10 @@
 
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+  boot.binfmt.emulatedSystems = ["aarch64-linux"];
+
+  hardware.nvidia.enable = true;
+  services.wolf-streaming.enable = true;
 
   # ---- Nix Settings ----
   # Allow this host to build for remote machines via SSH.
@@ -94,8 +98,8 @@
   ];
 
   networking.hosts = {
-    "192.168.1.13" = [ "xev" ];
-    "192.168.1.250" = [ "k8s-api.local" ];
+    "192.168.1.13" = ["xev"];
+    "192.168.1.250" = ["k8s-api.local"];
   };
 
   services.k8s-api-vip = {

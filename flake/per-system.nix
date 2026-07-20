@@ -39,6 +39,7 @@
       "modules/nixos/services/flatpak/default.nix"
       "modules/nixos/services/heroic-sideload/default.nix"
       "modules/nixos/services/k8s-api-vip/default.nix"
+      "modules/nixos/services/wolf-streaming/default.nix"
       "modules/nixos/virtualisation/k3s/default.nix"
       "modules/shared/host-metadata.nix"
       "modules/shared/pkgsets.nix"
