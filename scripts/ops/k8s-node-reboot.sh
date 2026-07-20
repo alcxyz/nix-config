@@ -14,9 +14,10 @@ CHECK_ONLY=false
 DRAIN_TIMEOUT="10m"
 READY_TIMEOUT="10m"
 # Longhorn deliberately waits up to 30 minutes for a returning node so it can
-# reuse failed replicas instead of creating replacements. Leave enough time
-# for that interval plus a bounded delta/fast rebuild.
-SETTLE_TIMEOUT="45m"
+# reuse failed replicas instead of creating replacements. A cluster with
+# automatic rebuild admission disabled then needs time for its guarded,
+# sequential recovery queue.
+SETTLE_TIMEOUT="90m"
 SSH_TIMEOUT_SECONDS=900
 POLL_SECONDS=5
 REQUIRE_LONGHORN_BACKUP_TARGET=false
@@ -53,7 +54,7 @@ Options:
                            without cordoning, draining, or powering the host.
   --drain-timeout <dur>    kubectl drain duration. Default: 10m.
   --ready-timeout <dur>    kubectl wait duration. Default: 10m.
-  --settle-timeout <dur>   Workload/Longhorn health wait duration. Default: 45m.
+  --settle-timeout <dur>   Workload/Longhorn health wait duration. Default: 90m.
   --ssh-timeout <seconds>  SSH return timeout. Default: 900.
   --require-longhorn-backup-target
                            Fail if the Longhorn backup target is unavailable.
@@ -553,6 +554,7 @@ wait_for_longhorn_health() {
   local last_bad_count=-1
   local backup_available
   local backup_reason
+  local replica_rebuild_limit
   local replica_reuse_wait
   local under_replicated
 
@@ -589,6 +591,14 @@ wait_for_longhorn_health() {
   )
   if [[ "$replica_reuse_wait" =~ ^[0-9]+$ ]]; then
     log "Longhorn failed-replica reuse window is ${replica_reuse_wait}s; health timeout is ${settle_seconds}s"
+  fi
+  replica_rebuild_limit=$(
+    kubectl -n longhorn-system get settings.longhorn.io \
+      concurrent-replica-rebuild-per-node-limit \
+      -o jsonpath='{.value}' 2>/dev/null || true
+  )
+  if [[ "$replica_rebuild_limit" == 0 ]]; then
+    log "Longhorn automatic rebuild admission is disabled; degraded volumes require the guarded sequential recovery procedure"
   fi
   deadline=$((SECONDS + settle_seconds))
 
