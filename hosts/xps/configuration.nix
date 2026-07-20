@@ -13,15 +13,17 @@ let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
-  steamHeadlessStartCommand = lib.escapeShellArgs [
-    "${pkgs.openssh}/bin/ssh"
-    "-o"
-    "BatchMode=yes"
-    "-o"
-    "ConnectTimeout=5"
-    "xyz"
-    "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"
-  ];
+  steamHeadlessStartCommand = ''
+    ${
+      lib.escapeShellArgs [
+        "${pkgs.openssh}/bin/ssh"
+        "-o"
+        "BatchMode=yes"
+        "-o"
+        "ConnectTimeout=5"
+      ]
+    } -o "Hostname=$COUCH_STREAM_START_TARGET" -o HostKeyAlias=xyz xyz ${lib.escapeShellArg "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"}
+  '';
 in
 {
   imports = [

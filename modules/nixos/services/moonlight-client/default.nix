@@ -230,6 +230,14 @@ let
   streamEndpointPolicyEnabled = cfg.streamLocalAddress != null && cfg.streamRemoteAddress != null;
   browserStreamEndpointPolicyEnabled =
     cfg.browserStreamLocalAddress != null && cfg.browserStreamRemoteAddress != null;
+  streamReadinessHosts =
+    if streamEndpointPolicyEnabled then
+      [
+        cfg.streamLocalAddress
+        cfg.streamRemoteAddress
+      ]
+    else
+      lib.optional (cfg.streamReadinessHost != null) cfg.streamReadinessHost;
   reconcileMoonlightEndpoints = pkgs.writeShellApplication {
     name = "reconcile-moonlight-endpoints";
     runtimeInputs = [ pkgs.python3 ];
@@ -634,40 +642,81 @@ let
   moonlightStreamStart = pkgs.writeShellApplication {
     name = "couch-moonlight-start";
     runtimeInputs = [
+      pkgs.hyprland
       pkgs.netcat-openbsd
     ];
     text = ''
-      host_ready=0
-      ${lib.optionalString (cfg.streamReadinessHost != null) ''
-        if nc -z -w 1 ${lib.escapeShellArg cfg.streamReadinessHost} ${toString cfg.streamReadinessPort} \
-          >/dev/null 2>&1; then
-          host_ready=1
+      stream_hosts=(${lib.concatMapStringsSep " " lib.escapeShellArg streamReadinessHosts})
+
+      show_status() {
+        level="$1"
+        message="$2"
+        details="$3"
+        dms="$HOME/.nix-profile/bin/dms"
+        if [ -x "$dms" ]; then
+          "$dms" ipc call toast "''${level}With" \
+            "$message" "$details" "" "media-center" >/dev/null 2>&1 || true
+        else
+          hyprctl notify 1 5000 'rgb(89b4fa)' "$message — $details" \
+            >/dev/null 2>&1 || true
         fi
-      ''}
+      }
+
+      find_ready_host() {
+        local host
+        for host in "''${stream_hosts[@]}"; do
+          if nc -z -w 1 "$host" ${toString cfg.streamReadinessPort} \
+            >/dev/null 2>&1; then
+            printf '%s\n' "$host"
+            return 0
+          fi
+        done
+        return 1
+      }
+
+      ready_host="$(find_ready_host || true)"
 
       ${lib.optionalString (cfg.streamHostStartCommand != null) ''
-        if [ "$host_ready" -eq 0 ]; then
+        if [ -z "$ready_host" ]; then
+          start_target=""
+          for host in "''${stream_hosts[@]}"; do
+            if nc -z -w 1 "$host" ${toString cfg.streamHostControlPort} \
+              >/dev/null 2>&1; then
+              start_target="$host"
+              break
+            fi
+          done
+          if [ -z "$start_target" ] && [ "''${#stream_hosts[@]}" -gt 0 ]; then
+            start_target="''${stream_hosts[0]}"
+          fi
+          export COUCH_STREAM_START_TARGET="$start_target"
+          show_status info "Starting Steam" \
+            "Starting the remote Steam host. A cold start can take up to ${toString cfg.streamStartupTimeout} seconds."
           ${cfg.streamHostStartCommand}
+          show_status info "Steam container started" \
+            "Waiting for the streaming service to become ready."
         fi
       ''}
 
-      ${lib.optionalString (cfg.streamReadinessHost != null) ''
-        host_ready=0
+      ${lib.optionalString (streamReadinessHosts != [ ]) ''
+        ready_host=""
         for ((attempt = 0; attempt < ${toString cfg.streamStartupTimeout}; attempt++)); do
-          if nc -z -w 1 ${lib.escapeShellArg cfg.streamReadinessHost} ${toString cfg.streamReadinessPort} \
-            >/dev/null 2>&1; then
-            host_ready=1
+          ready_host="$(find_ready_host || true)"
+          if [ -n "$ready_host" ]; then
             break
           fi
           sleep 1
         done
 
-        if [ "$host_ready" -eq 0 ]; then
+        if [ -z "$ready_host" ]; then
+          show_status error "Steam did not start" \
+            "The streaming service was not ready after ${toString cfg.streamStartupTimeout} seconds."
           echo "stream host did not become ready" >&2
           exit 1
         fi
       ''}
 
+      show_status info "Steam is ready" "Connecting Moonlight now."
       exec ${lib.getExe moonlightSession}
     '';
   };
@@ -2403,6 +2452,15 @@ in
       type = lib.types.port;
       default = 47989;
       description = "TCP port used to determine whether the stream host is ready.";
+    };
+
+    streamHostControlPort = lib.mkOption {
+      type = lib.types.port;
+      default = 22;
+      description = ''
+        TCP port used to choose the LAN-first host address exported to the
+        stream host start command as COUCH_STREAM_START_TARGET.
+      '';
     };
 
     streamStartupTimeout = lib.mkOption {
