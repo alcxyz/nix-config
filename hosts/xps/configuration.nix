@@ -329,7 +329,8 @@ in
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
     browserStreamHost = "Wolf";
-    browserStreamApplication = "Wolf UI";
+    browserStreamApplication = "Helium";
+    browserStreamSelectorApplication = "Wolf UI";
     browserStreamArguments = [
       "--absolute-mouse"
       "--capture-system-keys"

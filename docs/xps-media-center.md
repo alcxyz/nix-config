@@ -73,7 +73,7 @@ Hold each combination until the action triggers.
 | Controller | Action |
 |---|---|
 | `Home+A` | Start the remote Steam session and Moonlight |
-| `Home+X` | Open the remote browser/profile selector on XEV |
+| `Home+X` | Open the remote Helium browser on XEV |
 | `L3+R3` | Stop Moonlight and return to the browser |
 | `Minus+Plus` | Toggle display mirroring |
 | `Minus+X` | Cycle display layouts |
@@ -89,7 +89,8 @@ input.
 | Keyboard | Action |
 |---|---|
 | `Super+M` / `Super+B` | Start the stream / return to the browser |
-| `Super+R` | Open the remote browser/profile selector on XEV |
+| `Super+R` | Open the remote Helium browser on XEV |
+| `Super+Shift+R` | Open the PIN-protected remote `User` selector |
 | `Super+Shift+M` | Toggle display mirroring |
 | `Super+Shift+D` | Cycle display layouts |
 | `Super+Shift+A` | Cycle audio outputs |
@@ -225,9 +226,20 @@ identity and PIN remain in the private configuration and out of the public Nix
 store; the reconciler preserves Wolf's pairings and any applications it does
 not own.
 
-Launch `Wolf UI` through Moonlight to choose a protected profile and then an
-application. The same screen can be restored from a running Wolf application
-with `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
+Launch public Helium directly with `Home+X`, `Super+R`, or the
+`Helium (Remote)` menu entry. The neutral `User (Remote)` menu entry and
+`Super+Shift+R` open Wolf UI, which exposes only the PIN-protected user
+profile. The private shortcut is deliberately omitted from the on-screen
+guide. Wolf UI can also be restored from a running Wolf application with
+`Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
+
+Steam is available through `Home+A`, `Super+M`, and the `Steam Stream` menu
+entry.
+
+Remote browser homes persist across disposable application containers. Startup
+serializes access to each home and repairs stale Chromium singleton state. If a
+Moonlight process stalls without a usable window, its user service terminates
+the process so the same launcher can recover on the next attempt.
 
 Moonlight opens as a normal tiled window on the workspace and display that are
 focused when it is launched. It requests a 2560×1440 stream independently of

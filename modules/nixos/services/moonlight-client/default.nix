@@ -37,7 +37,7 @@ let
           }
           {
             key = "Home X";
-            desc = "Remote browser";
+            desc = "Remote Helium";
           }
           {
             key = "L3 R3";
@@ -67,7 +67,7 @@ let
           }
           {
             key = "◆ R";
-            desc = "Remote browser";
+            desc = "Remote Helium";
           }
           {
             key = "◆ B";
@@ -141,6 +141,7 @@ let
   );
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
   browserStreamEnabled = cfg.browserStreamHost != null && cfg.browserStreamApplication != null;
+  browserSelectorEnabled = browserStreamEnabled && cfg.browserStreamSelectorApplication != null;
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
     if dynamicExternalLayoutEnabled then lib.last cfg.autoLayoutSecondaryModes else cfg.outputMode;
@@ -185,8 +186,48 @@ let
   browserMoonlightInvocation = lib.optionalString browserStreamEnabled (
     mkMoonlightInvocation cfg.browserStreamArguments cfg.browserStreamHost cfg.browserStreamApplication
   );
-  streamEndpointPolicyEnabled =
-    cfg.streamLocalAddress != null && cfg.streamRemoteAddress != null;
+  browserSelectorMoonlightInvocation = lib.optionalString browserSelectorEnabled (
+    mkMoonlightInvocation cfg.browserStreamArguments cfg.browserStreamHost
+      cfg.browserStreamSelectorApplication
+  );
+  superviseMoonlightWindow = ''
+    seen_window=0
+    startup_window_checks=0
+    missing_window_checks=0
+
+    terminate_moonlight() {
+      kill "$moonlight_pid" >/dev/null 2>&1 || true
+      sleep 1
+      kill -KILL "$moonlight_pid" >/dev/null 2>&1 || true
+    }
+
+    while kill -0 "$moonlight_pid" >/dev/null 2>&1; do
+      if hyprctl -j clients 2>/dev/null \
+        | jq -e 'any(.[]; .class == "com.moonlight_stream.Moonlight" and .mapped)' \
+          >/dev/null 2>&1; then
+        seen_window=1
+        startup_window_checks=0
+        missing_window_checks=0
+      elif [ "$seen_window" -eq 1 ]; then
+        missing_window_checks=$((missing_window_checks + 1))
+        if [ "$missing_window_checks" -ge 5 ]; then
+          terminate_moonlight
+          break
+        fi
+      else
+        startup_window_checks=$((startup_window_checks + 1))
+        if [ "$startup_window_checks" -ge 30 ]; then
+          terminate_moonlight
+          break
+        fi
+      fi
+      sleep 1
+    done
+
+    status=0
+    wait "$moonlight_pid" || status=$?
+  '';
+  streamEndpointPolicyEnabled = cfg.streamLocalAddress != null && cfg.streamRemoteAddress != null;
   browserStreamEndpointPolicyEnabled =
     cfg.browserStreamLocalAddress != null && cfg.browserStreamRemoteAddress != null;
   reconcileMoonlightEndpoints = pkgs.writeShellApplication {
@@ -309,28 +350,7 @@ let
           while true; do
             ${moonlightInvocation} &
             moonlight_pid=$!
-            seen_window=0
-            missing_window_checks=0
-
-            while kill -0 "$moonlight_pid" >/dev/null 2>&1; do
-              if hyprctl -j clients 2>/dev/null \
-                | jq -e 'any(.[]; .class == "com.moonlight_stream.Moonlight" and .mapped)' \
-                  >/dev/null 2>&1; then
-                seen_window=1
-                missing_window_checks=0
-              elif [ "$seen_window" -eq 1 ]; then
-                missing_window_checks=$((missing_window_checks + 1))
-                if [ "$missing_window_checks" -ge 5 ]; then
-                  kill "$moonlight_pid" >/dev/null 2>&1 || true
-                  sleep 1
-                  kill -KILL "$moonlight_pid" >/dev/null 2>&1 || true
-                  break
-                fi
-              fi
-              sleep 2
-            done
-
-            wait "$moonlight_pid" || true
+            ${superviseMoonlightWindow}
             sleep 1
           done
         ''
@@ -340,8 +360,9 @@ let
           ${lib.getExe displayModeSetup}
           ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
-          status=0
-          ${moonlightInvocation} || status=$?
+          ${moonlightInvocation} &
+          moonlight_pid=$!
+          ${superviseMoonlightWindow}
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
           exit "$status"
         '';
@@ -651,18 +672,26 @@ let
     '';
   };
 
-  moonlightBrowserSession = pkgs.writeShellApplication {
-    name = "moonlight-browser-session";
-    runtimeInputs = [ pkgs.hyprland ];
-    text = ''
-      ${lib.getExe moonlightEndpointSetup}
-      ${lib.getExe displayModeSetup}
-      status=0
-      ${browserMoonlightInvocation} || status=$?
-      hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-      exit "$status"
-    '';
-  };
+  mkMoonlightBrowserSession =
+    name: invocation:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [
+        pkgs.hyprland
+        pkgs.jq
+      ];
+      text = ''
+        ${lib.getExe moonlightEndpointSetup}
+        ${lib.getExe displayModeSetup}
+        ${invocation} &
+        moonlight_pid=$!
+        ${superviseMoonlightWindow}
+        hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+        exit "$status"
+      '';
+    };
+  moonlightBrowserSession = mkMoonlightBrowserSession "moonlight-browser-session" browserMoonlightInvocation;
+  moonlightBrowserSelectorSession = mkMoonlightBrowserSession "moonlight-browser-selector-session" browserSelectorMoonlightInvocation;
 
   couchStreamControl = pkgs.writeShellApplication {
     name = "couch-stream-control";
@@ -675,10 +704,12 @@ let
       case "''${1:-}" in
         start)
           systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
+          systemctl --user stop couch-moonlight-browser-selector.service >/dev/null 2>&1 || true
           systemctl --user start couch-moonlight-stream.service
           ;;
         remote-browser)
           systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
+          systemctl --user stop couch-moonlight-browser-selector.service >/dev/null 2>&1 || true
           systemctl --user start couch-moonlight-browser-stream.service
           # Starting an already-active unit is intentionally a no-op. Still
           # focus its window so the launch shortcut never appears to do
@@ -686,9 +717,17 @@ let
           hyprctl dispatch focuswindow \
             'class:^(com.moonlight_stream.Moonlight)$' >/dev/null 2>&1 || true
           ;;
+        private-browser)
+          systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
+          systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
+          systemctl --user start couch-moonlight-browser-selector.service
+          hyprctl dispatch focuswindow \
+            'class:^(com.moonlight_stream.Moonlight)$' >/dev/null 2>&1 || true
+          ;;
         browser)
           systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
           systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
+          systemctl --user stop couch-moonlight-browser-selector.service >/dev/null 2>&1 || true
           ${lib.getExe mergedUiControl} browser
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
 
@@ -698,7 +737,7 @@ let
           fi
           ;;
         *)
-          echo "usage: couch-stream-control {start|remote-browser|browser}" >&2
+          echo "usage: couch-stream-control {start|remote-browser|private-browser|browser}" >&2
           exit 2
           ;;
       esac
@@ -1947,13 +1986,39 @@ let
     ${lib.optionalString browserStreamEnabled ''
       cat > "$out/share/applications/couch-remote-browser.desktop" <<EOF
       [Desktop Entry]
-      Name=Remote Browser (Wolf)
-      Comment=Stream the remote browser through Moonlight and Wolf
+      Name=Helium (Remote)
+      Comment=Stream the public Helium browser through Moonlight and Wolf
       Exec=${lib.getExe couchStreamControl} remote-browser
-      Icon=moonlight
+      Icon=helium
       Terminal=false
       Type=Application
       Categories=Network;WebBrowser;
+      EOF
+    ''}
+
+    ${lib.optionalString browserSelectorEnabled ''
+      cat > "$out/share/applications/couch-private-browser.desktop" <<EOF
+      [Desktop Entry]
+      Name=User (Remote)
+      Comment=Open the PIN-protected remote user profile
+      Exec=${lib.getExe couchStreamControl} private-browser
+      Icon=system-users
+      Terminal=false
+      Type=Application
+      Categories=Network;WebBrowser;
+      EOF
+    ''}
+
+    ${lib.optionalString cfg.enableControllerShortcuts ''
+      cat > "$out/share/applications/couch-steam-stream.desktop" <<EOF
+      [Desktop Entry]
+      Name=Steam Stream
+      Comment=Start Steam Big Picture through Moonlight
+      Exec=${lib.getExe couchStreamControl} start
+      Icon=steam
+      Terminal=false
+      Type=Application
+      Categories=Game;
       EOF
     ''}
 
@@ -2103,6 +2168,7 @@ let
     }
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
     ${lib.optionalString browserStreamEnabled "bind = SUPER, R, exec, ${lib.getExe couchStreamControl} remote-browser"}
+    ${lib.optionalString browserSelectorEnabled "bind = SUPER SHIFT, R, exec, ${lib.getExe couchStreamControl} private-browser"}
     ${lib.optionalString cfg.enableMirrorToggle "bind = SUPER SHIFT, M, exec, ${lib.getExe displayMirrorToggle} toggle"}
     ${lib.optionalString cfg.enableAdaptiveDisplayLayout "bind = SUPER SHIFT, D, exec, ${lib.getExe displayLayoutControl} cycle"}
     ${lib.optionalString cfg.enableAudioOutputCycle "bind = SUPER SHIFT, A, exec, ${lib.getExe audioOutputControl} cycle"}
@@ -2285,7 +2351,16 @@ in
     browserStreamApplication = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Moonlight application used as the remote browser and protected-profile selector.";
+      description = "Moonlight application used as the public remote browser.";
+    };
+
+    browserStreamSelectorApplication = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Optional Moonlight application used as a separate protected-profile
+        selector on the same remote browser host.
+      '';
     };
 
     browserStreamLocalAddress = lib.mkOption {
@@ -2808,6 +2883,19 @@ in
       };
     };
 
+    systemd.user.services.couch-moonlight-browser-selector = lib.mkIf browserSelectorEnabled {
+      description = "PIN-protected remote browser selector";
+      serviceConfig = {
+        Type = "simple";
+        ExecStartPre = "-${lib.getExe mergedUiControl} game";
+        ExecStart = lib.getExe moonlightBrowserSelectorSession;
+        ExecStopPost = [
+          "-${lib.getExe mergedUiControl} browser"
+          "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
+        ];
+      };
+    };
+
     systemd.user.services.couch-protected-browser = lib.mkIf (cfg.protectedBrowserPackage != null) {
       description = "Independent protected couch browser supervisor";
       serviceConfig = {
@@ -2908,13 +2996,16 @@ in
         message = "services.moonlight-client stream endpoint policy requires a direct stream";
       }
       {
-        assertion =
-          (cfg.browserStreamLocalAddress == null) == (cfg.browserStreamRemoteAddress == null);
+        assertion = (cfg.browserStreamLocalAddress == null) == (cfg.browserStreamRemoteAddress == null);
         message = "services.moonlight-client browser stream local and remote addresses must be set together";
       }
       {
         assertion = !browserStreamEndpointPolicyEnabled || browserStreamEnabled;
         message = "services.moonlight-client browser endpoint policy requires a browser stream";
+      }
+      {
+        assertion = cfg.browserStreamSelectorApplication == null || browserStreamEnabled;
+        message = "services.moonlight-client browser selector requires a browser stream host and application";
       }
       {
         assertion = !cfg.enableControllerShortcuts || directStreamEnabled;

@@ -181,10 +181,18 @@ low-latency video, audio, and controller integration already used by Moonlight.
   redundant stock profile is removed.
 - Shared auto-hidden browser-session status bar: implemented.
 - Pinned Wolf UI profile selector and local API socket: implemented and
-  accepted over an XPS HEVC/NVENC stream.
+  accepted over an XPS HEVC/NVENC stream. Public XPS shortcuts launch Helium
+  directly; a neutral menu entry and separate keyboard shortcut open Wolf UI
+  for the PIN-protected profile without putting that path in the on-screen
+  guide.
 - Direct application catalog reduced to Wolf UI and Helium; the upstream
   Firefox baseline and test-pattern entries are declaratively pruned after
   acceptance without deleting their dormant application homes.
+- Browser homes are locked while in use and stale Chromium singleton files are
+  removed before launch. Wolf coordinator restarts remove only orphaned
+  containers created by the managed browser runners, while Moonlight sessions
+  terminate themselves if their window never appears or disappears while the
+  client process remains stuck.
 - LAN-first streaming with managed-VPN remote fallback: implemented for both
   the browser and Steam pairings; the active XPS browser stream was verified on
   the direct LAN path. The equivalent macOS endpoint reconciler is implemented
