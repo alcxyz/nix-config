@@ -51,6 +51,15 @@ The browser containers relax Docker's default seccomp profile so Chromium can
 create its unprivileged user namespace and retain its own renderer sandbox;
 they do not use Chromium's `--no-sandbox` escape hatch.
 
+Moonlight transports keyboard scan codes but does not tell Wolf which input
+layout is active on the client. Expose Norwegian, US, and Russian in each
+browser session, in that order, and use `Alt+Shift` to cycle layouts inside the
+remote compositor. Keep one Moonlight application per browser so every layout
+uses the same persistent browser home. Do not publish one application variant
+per layout: the pinned Wolf release derives application state from the title
+and does not honor an app-level state-folder override, which would silently
+split the browser profile.
+
 The module reconciles only explicitly managed applications in Wolf's Moonlight
 profile. It writes the generated TOML atomically and preserves every unowned
 application, paired client, certificate, profile, PIN, and home. Helium is
@@ -121,5 +130,8 @@ low-latency video, audio, and controller integration already used by Moonlight.
   implemented.
 - Firefox HEVC transport baseline: accepted.
 - Shared GoW browser runtime and distinct pinned Helium/Brave images:
-  implemented, awaiting deployed application testing.
+  implemented; Helium passed deployed application testing.
+- Norwegian, US, and Russian layouts in the shared browser session:
+  implemented; automatic client-layout inheritance is unavailable in the
+  Moonlight protocol, so layout selection is explicit with `Alt+Shift`.
 - Protected Brave profile and XPS launch integration: pending.

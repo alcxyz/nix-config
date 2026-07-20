@@ -220,6 +220,12 @@ The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
 client bitrate. Local XPS browsers remain available as a fallback until Helium,
 protected Brave, and their couch launch actions complete acceptance testing.
 
+The remote browser session provides Norwegian, US, and Russian layouts in that
+order. Press `Alt+Shift` inside the session to cycle them. Moonlight transports
+key positions rather than the client's active layout name, so XPS, XYZ, and
+macOS cannot select it automatically. One Helium entry is retained so all
+layouts use the same persistent browser profile.
+
 XPS retains separate `couch`, `merged`, and normal `desktop` profiles. The
 merged profile is the media-center default in use here; desktop mode remains a
 recovery and workstation option rather than changing the couch configuration.

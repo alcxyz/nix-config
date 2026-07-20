@@ -95,6 +95,8 @@
         "RUN_SWAY=1"
         "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
         "NIXBOX_BROWSER_SCALE=1.5"
+        "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
+        "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle"
       ];
       devices = [];
       ports = [];
@@ -209,6 +211,20 @@ in {
     browserImages = {
       enable = lib.mkEnableOption "locally built Wolf browser application images";
 
+      keyboardLayouts = lib.mkOption {
+        type = lib.types.nonEmptyListOf (lib.types.enum [
+          "no"
+          "us"
+          "ru"
+        ]);
+        default = [
+          "no"
+          "us"
+          "ru"
+        ];
+        description = "Ordered XKB layouts exposed inside each streamed browser; Alt+Shift cycles them.";
+      };
+
       helium = {
         enable = lib.mkEnableOption "the Helium Wolf application image";
         publish = lib.mkOption {
@@ -256,6 +272,10 @@ in {
       {
         assertion = !browserCfg.enable || browserImages != [];
         message = "services.wolf-streaming.browserImages requires at least one browser image";
+      }
+      {
+        assertion = lib.length browserCfg.keyboardLayouts == lib.length (lib.unique browserCfg.keyboardLayouts);
+        message = "services.wolf-streaming.browserImages.keyboardLayouts must not contain duplicates";
       }
     ];
 
