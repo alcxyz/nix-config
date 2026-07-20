@@ -551,7 +551,7 @@ wait_for_longhorn_health() {
   local settle_seconds
   local bad_volumes
   local bad_count
-  local last_bad_count=-1
+  local last_report_seconds=-300
   local backup_available
   local backup_reason
   local replica_rebuild_limit
@@ -616,9 +616,9 @@ wait_for_longhorn_health() {
     fi
 
     bad_count=$(wc -l <<<"$bad_volumes")
-    if [[ "$bad_count" -ne "$last_bad_count" ]]; then
+    if ((SECONDS - last_report_seconds >= 300)); then
       log "${bad_count} attached Longhorn volume(s) are still reconciling"
-      last_bad_count="$bad_count"
+      last_report_seconds=$SECONDS
     fi
     sleep "$POLL_SECONDS"
   done

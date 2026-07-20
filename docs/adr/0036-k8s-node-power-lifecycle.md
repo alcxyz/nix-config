@@ -62,9 +62,11 @@ disabled and the retained replicas require the cluster's guarded sequential
 recovery procedure. A full storage-node restart can therefore need the reuse
 interval plus the complete one-volume-at-a-time queue; the default health wait
 allows 90 minutes and reports the disabled admission state. Recovery output is
-aggregated by the number of unhealthy attached volumes; the complete list is
-printed only if the deadline expires. This keeps the helper waiting on the real
-safety gate without flooding the operator while expected recovery is active.
+aggregated by the number of unhealthy attached volumes and rate-limited to one
+progress report every five minutes; the complete list is printed only if the
+deadline expires. This keeps the helper waiting on the real safety gate without
+flooding the operator while the guarded procedure temporarily masks and
+restores the remaining queue.
 
 An already cordoned node is not treated as a fresh maintenance target. Another
 power cycle requires `--resume-maintenance`, which verifies the existing
