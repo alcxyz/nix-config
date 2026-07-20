@@ -47,18 +47,24 @@ stdenvNoCC.mkDerivation {
     done
 
     magick -background none -fill '#5c6470' \
-      -font "$spaceGrotesk" -weight 400 -pointsize 52 -kerning 16 \
-      -size 1200x72 -gravity center 'label:MEDIA CENTER' \
-      "$theme/subtitle-media-center.png"
-    magick -background none -fill '#5c6470' \
       -font "$spaceGrotesk" -weight 400 -pointsize 48 -kerning 16 \
       -size 1200x68 -gravity center 'label:POWERING OFF' \
       "$theme/subtitle-powering-off.png"
 
+    # Keep the original large white asset for the already-approved shutdown
+    # sequence. Boot uses a compact pre-rendered mark below the wordmark so the
+    # early renderer never has to scale a multi-megapixel transparent image.
     rsvg-convert --width 2228 --height 2228 "$snowflake" \
       --output "$theme/nix-snowflake-white.png"
-    magick -size 1040x6 xc:'#20242b' "$theme/progress-track.png"
-    magick -size 1040x6 xc:'#9db4d0' "$theme/progress-fill.png"
+    magick "$theme/nix-snowflake-white.png" \
+      -resize 512x512 \
+      -channel RGB -fill '#5c6470' -colorize 100% +channel \
+      -define png:color-type=6 \
+      "$theme/nix-snowflake-compact.png"
+    magick -size 1040x20 xc:'#343b47' \
+      -define png:color-type=2 "$theme/progress-track.png"
+    magick -size 1040x20 xc:'#b8cce5' \
+      -define png:color-type=2 "$theme/progress-fill.png"
 
     runHook postInstall
   '';

@@ -73,63 +73,81 @@ fun setup_layout()
     setup_letter(4, "letter-O.png");
     setup_letter(5, "letter-X.png");
 
-    watermark.original = Image("nix-snowflake-white.png");
-    watermark.size = Math.Int(Window.GetWidth() * 0.58);
-    watermark.image = watermark.original.Scale(watermark.size, watermark.size);
-    watermark.sprite = Sprite(watermark.image);
-    watermark.sprite.SetPosition(
-      Window.GetX() + Window.GetWidth() / 2 - watermark.size / 2,
-      Window.GetY() + Window.GetHeight() / 2 - watermark.size / 2,
-      10
-    );
-
     if (global.shutdown)
-      subtitle.original = Image("subtitle-powering-off.png");
+      {
+        global.watermark.original = Image("nix-snowflake-white.png");
+        global.watermark.size = Math.Int(Window.GetWidth() * 0.58);
+        global.watermark.image = global.watermark.original.Scale(global.watermark.size, global.watermark.size);
+        global.watermark.x = Window.GetX() + Window.GetWidth() / 2 - global.watermark.size / 2;
+        global.watermark.y = Window.GetY() + Window.GetHeight() / 2 - global.watermark.size / 2;
+        global.watermark.z = 10;
+      }
     else
-      subtitle.original = Image("subtitle-media-center.png");
-    subtitle.width = Math.Int(600 * global.layout_scale);
-    subtitle.height = Math.Int(36 * global.layout_scale);
-    subtitle.image = subtitle.original.Scale(subtitle.width, subtitle.height);
-    subtitle.sprite = Sprite(subtitle.image);
-    subtitle.sprite.SetPosition(
-      Window.GetX() + Window.GetWidth() / 2 - subtitle.width / 2,
-      Window.GetY() + Window.GetHeight() / 2 + 44 * global.layout_scale,
-      20
+      {
+        global.watermark.original = Image("nix-snowflake-compact.png");
+        global.watermark.size = Math.Int(64 * global.layout_scale);
+        global.watermark.image = global.watermark.original.Scale(global.watermark.size, global.watermark.size);
+        global.watermark.x = Window.GetX() + Window.GetWidth() / 2 - global.watermark.size / 2;
+        global.watermark.y = Window.GetY() + Window.GetHeight() / 2 + 32 * global.layout_scale;
+        global.watermark.z = 30;
+      }
+    global.watermark.sprite = Sprite(global.watermark.image);
+    global.watermark.sprite.SetPosition(
+      global.watermark.x,
+      global.watermark.y,
+      global.watermark.z
     );
-
-    progress_track.original = Image("progress-track.png");
-    progress_track.width = Math.Int(520 * global.layout_scale);
-    progress_track.height = Math.Int(3 * global.layout_scale);
-    if (progress_track.height < 1)
-      progress_track.height = 1;
-    progress_track.image = progress_track.original.Scale(
-      progress_track.width,
-      progress_track.height
-    );
-    progress_track.sprite = Sprite(progress_track.image);
-    progress_track.x = Window.GetX() + Window.GetWidth() / 2 - progress_track.width / 2;
-    progress_track.y = Window.GetY() + Window.GetHeight() / 2 + 112 * global.layout_scale;
-    progress_track.sprite.SetPosition(progress_track.x, progress_track.y, 20);
-
-    progress_fill.original = Image("progress-fill.png");
-    progress_fill.sprite = Sprite();
-    progress_fill.sprite.SetPosition(progress_track.x, progress_track.y, 21);
 
     if (global.shutdown)
       {
-        watermark.sprite.SetOpacity(0.05);
-        subtitle.sprite.SetOpacity(1);
-        progress_track.sprite.SetOpacity(0);
-        progress_fill.sprite.SetOpacity(0);
+        global.subtitle.original = Image("subtitle-powering-off.png");
+        global.subtitle.width = Math.Int(600 * global.layout_scale);
+        global.subtitle.height = Math.Int(36 * global.layout_scale);
+        global.subtitle.image = global.subtitle.original.Scale(global.subtitle.width, global.subtitle.height);
+        global.subtitle.sprite = Sprite(global.subtitle.image);
+        global.subtitle.sprite.SetPosition(
+          Window.GetX() + Window.GetWidth() / 2 - global.subtitle.width / 2,
+          Window.GetY() + Window.GetHeight() / 2 + 44 * global.layout_scale,
+          20
+        );
+      }
+
+    global.progress_track.original = Image("progress-track.png");
+    global.progress_track.width = Math.Int(520 * global.layout_scale);
+    global.progress_track.height = Math.Int(10 * global.layout_scale);
+    if (global.progress_track.height < 4)
+      global.progress_track.height = 4;
+    global.progress_track.image = global.progress_track.original.Scale(
+      global.progress_track.width,
+      global.progress_track.height
+    );
+    global.progress_track.sprite = Sprite(global.progress_track.image);
+    global.progress_track.x = Window.GetX() + Window.GetWidth() / 2 - global.progress_track.width / 2;
+    global.progress_track.y = Window.GetY() + Window.GetHeight() / 2 + 128 * global.layout_scale;
+    global.progress_track.sprite.SetPosition(global.progress_track.x, global.progress_track.y, 30);
+
+    global.progress_fill.original = Image("progress-fill.png");
+    global.progress_fill.image = global.progress_fill.original.Scale(
+      global.progress_track.width,
+      global.progress_track.height
+    );
+    global.progress_fill.sprite = Sprite(global.progress_fill.image);
+    global.progress_fill.sprite.SetPosition(global.progress_track.x, global.progress_track.y, 31);
+
+    if (global.shutdown)
+      {
+        global.watermark.sprite.SetOpacity(0.05);
+        global.subtitle.sprite.SetOpacity(1);
+        global.progress_track.sprite.SetOpacity(0);
+        global.progress_fill.sprite.SetOpacity(0);
         for (index = 0; index < 6; index++)
           global.letters[index].sprite.SetOpacity(1);
       }
     else
       {
-        watermark.sprite.SetOpacity(0);
-        subtitle.sprite.SetOpacity(0);
-        progress_track.sprite.SetOpacity(0);
-        progress_fill.sprite.SetOpacity(0);
+        global.watermark.sprite.SetOpacity(0);
+        global.progress_track.sprite.SetOpacity(0);
+        global.progress_fill.sprite.SetOpacity(0);
         for (index = 0; index < 6; index++)
           global.letters[index].sprite.SetOpacity(0);
         global.letters[2].sprite.SetX(global.word_center_x);
@@ -140,7 +158,6 @@ fun setup_layout()
         # expose an arbitrary late frame when a display appears.
         if (!global.animation_started)
           {
-            watermark.sprite.SetOpacity(0.16);
             global.letters[2].sprite.SetOpacity(1);
             global.letters[5].sprite.SetOpacity(1);
           }
@@ -171,9 +188,8 @@ Plymouth.SetBootProgressFunction(boot_progress_callback);
 
 fun show_complete_boot_lockup()
   {
-    watermark.sprite.SetOpacity(0.20);
-    subtitle.sprite.SetOpacity(1);
-    progress_track.sprite.SetOpacity(1);
+    global.watermark.sprite.SetOpacity(1);
+    global.progress_track.sprite.SetOpacity(1);
 
     for (index = 0; index < 6; index++)
       {
@@ -181,12 +197,12 @@ fun show_complete_boot_lockup()
         global.letters[index].sprite.SetOpacity(1);
       }
 
-    local.fill_image = progress_fill.original.Scale(
-      progress_track.width,
-      progress_track.height
+    local.fill_image = global.progress_fill.original.Scale(
+      global.progress_track.width,
+      global.progress_track.height
     );
-    progress_fill.sprite.SetImage(local.fill_image);
-    progress_fill.sprite.SetOpacity(1);
+    global.progress_fill.sprite.SetImage(local.fill_image);
+    global.progress_fill.sprite.SetOpacity(1);
   }
 
 # The XPS boot sequencer uses messages as renderer-independent stage signals.
@@ -235,10 +251,10 @@ fun refresh_callback()
     if (global.shutdown)
       {
         local.watermark_fade = clamp((local.time - 0.6) / 1.8);
-        watermark.sprite.SetOpacity(0.05 * (1 - local.watermark_fade * local.watermark_fade * local.watermark_fade));
+        global.watermark.sprite.SetOpacity(0.05 * (1 - local.watermark_fade * local.watermark_fade * local.watermark_fade));
 
         local.subtitle_fade = clamp((local.time - 1.2) / 0.8);
-        subtitle.sprite.SetOpacity(1 - local.subtitle_fade * local.subtitle_fade * local.subtitle_fade);
+        global.subtitle.sprite.SetOpacity(1 - local.subtitle_fade * local.subtitle_fade * local.subtitle_fade);
 
         local.fade = clamp((local.time - 0.7) / 0.5);
         global.letters[0].sprite.SetOpacity(1 - local.fade * local.fade * local.fade);
@@ -283,28 +299,22 @@ fun refresh_callback()
         global.letters[1].sprite.SetOpacity(ease_out((local.time - 2.42) / 0.7));
         global.letters[3].sprite.SetOpacity(ease_out((local.time - 2.54) / 0.7));
         global.letters[4].sprite.SetOpacity(ease_out((local.time - 2.66) / 0.7));
-        subtitle.sprite.SetOpacity(ease_out((local.time - 3.0) / 1.0));
-        progress_track.sprite.SetOpacity(ease_out((local.time - 3.5) / 0.8));
+        global.watermark.sprite.SetOpacity(ease_out((local.time - 3.0) / 0.8));
+        global.progress_track.sprite.SetOpacity(ease_out((local.time - 3.25) / 0.65));
 
-        # Prefer Plymouth's measured boot estimate when it is available. The
-        # Fable prototype supplies the visual fallback so a missing timing
-        # cache cannot leave the final lockup with an empty bar.
-        local.prototype_progress = ease_out((local.time - 3.7) / 4.0);
+        local.prototype_progress = ease_out((local.time - 3.45) / 3.1);
         local.progress_target = global.boot_progress;
         if (local.prototype_progress > local.progress_target)
           local.progress_target = local.prototype_progress;
         if (local.progress_target > global.visual_progress)
           global.visual_progress = local.progress_target;
 
-        local.watermark_progress = clamp((global.visual_progress - 0.2) / 0.62);
-        watermark.sprite.SetOpacity(0.14 + 0.06 * local.watermark_progress);
-
-        local.fill_width = Math.Int(progress_track.width * global.visual_progress);
+        local.fill_width = Math.Int(global.progress_track.width * global.visual_progress);
         if (local.fill_width > 0)
           {
-            local.fill_image = progress_fill.original.Scale(local.fill_width, progress_track.height);
-            progress_fill.sprite.SetImage(local.fill_image);
-            progress_fill.sprite.SetOpacity(progress_track.sprite.GetOpacity());
+            local.fill_image = global.progress_fill.original.Scale(local.fill_width, global.progress_track.height);
+            global.progress_fill.sprite.SetImage(local.fill_image);
+            global.progress_fill.sprite.SetOpacity(global.progress_track.sprite.GetOpacity());
           }
       }
   }

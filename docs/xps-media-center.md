@@ -24,34 +24,34 @@ generic message.
 ## Startup and shutdown
 
 The boot and graphical-session transitions are deliberately separate. Plymouth
-starts with one centered X, separates it into the two NIXBOX X positions,
-reveals N/I/B/O and `MEDIA CENTER`, fills the progress track, and raises a faint
-Nix watermark behind the completed lockup. Plymouth still starts on the early
-firmware surface to cover diagnostic boot. Once the existing display-pipeline
-allocator has settled the dock-backed outputs, a boot-only theme reload starts
-the bounded eight-second sequence from frame zero on the visible displays.
-Before that point, a static Nix/X mark prevents a completed wordmark from
-flashing before its own intro. Explicit start and completion stage signals
-guarantee the final subtitle, bar, watermark, and quit frame even when the
-high-resolution Plymouth renderer advances below its requested refresh rate.
-The quit frame is gated on that completion signal because Plymouth also invokes
-the theme's quit callback during reload.
+starts with one centered X, separates the two X positions, and reveals N/I/B/O.
+It then presents a compact Nix snowflake below NIXBOX and fills a simple bounded
+progress track beneath the mark. Once the existing display-pipeline allocator
+has settled the dock-backed outputs, a boot-only theme reload starts that
+sequence from frame zero. The boot mark is pre-rendered at a compact size so
+Plymouth does not repeatedly scale multi-megapixel transparent artwork across
+the simpledrm-to-i915 and multi-head handoff. The final NIXBOX, mark, and full
+bar lockup is gated on an explicit completion signal because Plymouth also
+invokes the theme's quit callback during reload.
 
-The Nix watermark stays visible behind the centered X and the complete boot
-assembly, strengthening from fourteen to twenty percent opacity for TV viewing.
-The completed frame is held explicitly for two seconds, then retained in the
-framebuffer while greetd starts. Greetd does not deallocate and clear that VT;
-Hyprland replaces it when the compositor takes ownership of the output.
+The bar is a bounded visual transition rather than a percentage estimate of
+system boot. Its intermediate cadence may vary with Plymouth's active renderer;
+the explicit completion stage always presents the full final lockup. This is an
+accepted cosmetic tradeoff and must not delay graphical login further.
+
+Plymouth's framebuffer is retained and greetd does not explicitly deallocate
+that VT, though a brief hardware mode-set blank may still occur while Hyprland
+claims the output. Once Hyprland has a usable output, the distinct Quickshell
+overlay presents only the approved `STARTING SESSION` transition and fades into
+the couch desktop.
 
 Systemd-boot keeps the newest six configurations on the EFI system partition.
 This bounds copied boot artifacts without deleting NixOS profile generations,
 so several rollback choices remain while new generations can still be written.
 
-Once Hyprland has a usable output, a distinct NIXBOX Quickshell overlay presents
-only the `STARTING SESSION` transition on every active display and fades into
-the couch session. It has no loading bar. The overlay never captures input and
-has a hard timeout so a display or animation failure cannot delay the browser,
-DMS, or controller controls.
+The graphical session overlay renders on every active display, never captures
+input, and has a hard timeout so a display or animation failure cannot delay
+the browser, DMS, or controller controls.
 
 The display-pipeline allocator still runs before greetd and preserves the
 three-external/internal-panel fallback behavior. Hyprland then owns the dynamic

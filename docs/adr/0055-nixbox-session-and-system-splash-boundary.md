@@ -23,8 +23,8 @@ display, and failure constraints.
 Implement the three distinct transitions from the design handoff:
 
 - Plymouth assembles the boot wordmark from one overlapped X, separates the two
-  X positions, reveals the remaining letters and `MEDIA CENTER`, fills the
-  progress track, and raises the Nix watermark behind the lockup.
+  X positions, reveals the remaining letters, fades in a compact Nix snowflake
+  beneath the wordmark, and fills the progress track below it.
 - A standalone Quickshell overlay begins only after Hyprland owns a usable
   output and presents `STARTING SESSION` without a progress bar.
 - Power-off and reboot reverse the wordmark motion while the compositor still
@@ -39,16 +39,19 @@ boot-only oneshot uses Plymouth's supported theme reload operation to give the
 visible pixel displays a deliberate frame-zero start. Before that signal, the
 theme holds a static Nix/X prelude rather than exposing an arbitrary late frame.
 The oneshot sends explicit start and completion stage messages around the
-bounded eight-second sequence, so graphical login cannot cut off the final
-lockup when a high-resolution renderer advances below the requested rate.
-Plymouth also invokes the theme's quit callback during reload, so the final
-lockup is gated on that completion signal and cannot flash ahead of its intro.
+bounded sequence. Plymouth reliably owns a centered-X to NIXBOX letter motion
+on this external KMS path. After the wordmark forms, show a compact pre-rendered
+Nix snowflake below it and a simple bounded progress track below the mark. Do
+not scale the multi-megapixel artwork during early boot: the large transparent
+sprite was unreliable across the simpledrm-to-i915 and multi-head handoff.
+Plymouth also invokes the theme's quit callback during reload, so the complete
+wordmark, mark, and bar are gated on the completion signal and cannot flash
+ahead of the intro.
 
-Prefer Plymouth's measured boot estimate for the progress fill. When no timing
-estimate is available, use the approved design prototype's bounded fill curve
-so the final lockup cannot remain empty; the quit frame is always complete. The
-watermark remains behind the entire boot composition and strengthens from
-fourteen to twenty percent opacity so it stays perceptible at TV distance.
+Treat the progress fill as a bounded visual transition, not as a percentage
+contract for system boot. Plymouth's refresh-driven script API permits its
+intermediate cadence to differ between renderers; the explicit completion
+signal provides the stable final state without extending the boot deadline.
 
 The Quickshell component must render on every active output, use one
 process-wide animation epoch, avoid keyboard and pointer focus, and terminate
