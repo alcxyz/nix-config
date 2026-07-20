@@ -1136,11 +1136,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1784062400,
-        "narHash": "sha256-FjVe0HdDQi7G5vcDfA7kysmNK4kZRsvPww221sFC80Q=",
+        "lastModified": 1784486109,
+        "narHash": "sha256-/RMUtpjpT7tfUsQ/LeoQyBUaPvIh+PtRMluD2g6nZJY=",
         "ref": "dev",
-        "rev": "60e932a33f1c01650e8a5d9133ecefe82a8ec5dc",
-        "revCount": 48,
+        "rev": "e0480a10f118f17fa298bb3e472588a9ef0a1835",
+        "revCount": 50,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       },
@@ -1248,11 +1248,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783144302,
-        "narHash": "sha256-NQnzmXwpEAd5tjMBh2+P/y9NknF+WHv5+6yoXoN4h/Y=",
+        "lastModified": 1783834461,
+        "narHash": "sha256-FCmrs1StAghJDKfqy56KM96KZtxpYzgeq6zM3QO8wjA=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "fe5aee0952e8e1525533d61defd9e36513db811b",
+        "rev": "a286e5b998e852297a403786f063fb2c9fe7f57a",
         "type": "github"
       },
       "original": {
@@ -1269,15 +1269,16 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1783245923,
-        "narHash": "sha256-esHR4pXAfJ7qmLRu0E3cMS3rGlj48xedE6kKADd9mWA=",
+        "lastModified": 1784257078,
+        "narHash": "sha256-lBkfaTH36MhWHk39Ie2uQqcU+yf76uImPdV91C8kWV8=",
         "owner": "rustfs",
         "repo": "rustfs",
-        "rev": "9cf211930d85cc8cfe03e811d3551834f59ed553",
+        "rev": "f67e8a6cdcb3e08dfa3c3c390412a9815837d0b2",
         "type": "github"
       },
       "original": {
         "owner": "rustfs",
+        "ref": "1.0.0-beta.10",
         "repo": "rustfs",
         "type": "github"
       }

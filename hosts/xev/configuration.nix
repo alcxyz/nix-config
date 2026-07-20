@@ -6,7 +6,8 @@
   pkgs,
   configDir,
   ...
-}: {
+}:
+{
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
@@ -25,8 +26,7 @@
 
   boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  boot.binfmt.emulatedSystems = ["aarch64-linux"];
-
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
   hardware.nvidia.enable = true;
   services.wolf-streaming = {
     enable = true;
@@ -70,6 +70,8 @@
   k3s = {
     enable = true;
     nodeIp = "192.168.1.13";
+    # Hardware watchdog reset path has not passed qualification on this host.
+    rebootWatchdogSec = "0";
     serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
     tlsSans = [
@@ -119,8 +121,8 @@
   ];
 
   networking.hosts = {
-    "192.168.1.13" = ["xev"];
-    "192.168.1.250" = ["k8s-api.local"];
+    "192.168.1.13" = [ "xev" ];
+    "192.168.1.250" = [ "k8s-api.local" ];
   };
 
   services.k8s-api-vip = {

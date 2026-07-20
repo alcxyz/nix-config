@@ -47,12 +47,46 @@ Its PDB remains authoritative, but does not prevent application workloads from
 being drained or require healthy replica processes to be deleted before a
 short host reboot. The storage-detach and host-session gates remain mandatory.
 
+After a drain, the helper verifies that active Longhorn volumes are attached
+away from the target and retain healthy replicas on at least two surviving
+nodes. CloudNativePG clusters must retain a Ready primary away from the target
+and enough Ready instances for one-node-down operation. Full Longhorn and
+CloudNativePG health is required again after the node is returned to service.
+
+Longhorn marks replicas on a briefly unavailable node as failed, then retains
+them for `replica-replenishment-wait-interval` so they can be reused through a
+delta or fast rebuild instead of replaced by a full copy. The default recovery
+timeout must exceed that interval plus bounded rebuild time. If the cluster
+sets `concurrent-replica-rebuild-per-node-limit` to `0`, automatic admission is
+disabled and the retained replicas require the cluster's guarded sequential
+recovery procedure. A full storage-node restart can therefore need the reuse
+interval plus the complete one-volume-at-a-time queue; the default health wait
+allows 90 minutes and reports the disabled admission state. Recovery output is
+aggregated by the number of unhealthy attached volumes and rate-limited to one
+progress report every five minutes; the complete list is printed only if the
+deadline expires. This keeps the helper waiting on the real safety gate without
+flooding the operator while the guarded procedure temporarily masks and
+restores the remaining queue.
+
+An already cordoned node is not treated as a fresh maintenance target. Another
+power cycle requires `--resume-maintenance`, which verifies the existing
+cordon, permits only maintenance Pods, repeats storage-detach and survivor
+checks, and fails closed on ambiguity. `--check-only` runs the corresponding
+fresh or resumed preflight without changing Kubernetes or host state.
+
 For reboot, the helper records the host boot ID before the action. SSH must
 become unavailable, return within the configured timeout, and expose a different
 boot ID before the node can be uncordoned.
 
-K3s nodes configure a bounded systemd reboot watchdog. Runtime watchdog policy
-is deliberately separate because it depends on host hardware validation.
+After the node reports Ready, its Kubernetes InternalIP must match the Flannel
+public-IP annotation before scheduling resumes. Drain and remote reboot-command
+failures leave the node cordoned for diagnosis instead of automatically
+returning an uncertain node to service.
+
+K3s nodes configure a bounded systemd reboot watchdog by default. The timeout
+is host-qualified and may be disabled when that host's firmware reset path is
+unvalidated or known to wedge. Runtime watchdog policy remains separate because
+it also depends on host hardware validation.
 
 Do not run a distribution-provided cluster kill-all script as a routine reboot
 step on a node with attached CSI storage. It is a recovery tool, not a storage

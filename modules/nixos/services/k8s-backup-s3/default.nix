@@ -241,6 +241,7 @@ in
           "rustfs_secret_key:${cfg.secretKeyFile}"
         ];
         ExecStart = "${rustfsPackage}/bin/rustfs server --address=${cfg.apiAddress} --console-enable --console-address=${cfg.consoleAddress} --access-key-file=%d/rustfs_access_key --secret-key-file=%d/rustfs_secret_key ${toString cfg.dataDir}";
+        Environment = "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency";
         Restart = "on-failure";
         RestartSec = "5s";
         NoNewPrivileges = true;
@@ -262,6 +263,7 @@ in
       requires = [ "k8s-backup-rustfs.service" ];
       path = [
         pkgs.coreutils
+        pkgs.getent
         pkgs.jq
         pkgs.minio-client
       ];
@@ -307,6 +309,51 @@ in
         import_alias source ${lib.escapeShellArg cfg.mirrorSourceEndpoint}
         import_alias replica ${lib.escapeShellArg localEndpoint}
 
+        inventory_dir="$MC_CONFIG_DIR/inventory"
+        mkdir -p "$inventory_dir"
+
+        write_inventory() {
+          local alias="$1"
+          local bucket="$2"
+          local output="$3"
+
+          mc ls --recursive --json "$alias/$bucket" \
+            | jq -cS 'select(.status == "success" and .type == "file") | {key, size}' \
+            | LC_ALL=C sort >"$output"
+        }
+
+        inventory_stats() {
+          jq -c -s '{
+            objects: length,
+            bytes: (map(.size) | add // 0)
+          }' "$1"
+        }
+
+        verify_listing_gaps() {
+          local bucket="$1"
+          local missing="$2"
+          local unresolved="$3"
+          local object key expected_size replica_stat actual_size
+          local verified_by_stat=0
+
+          : >"$unresolved"
+          while IFS= read -r object; do
+            key="$(jq -r '.key' <<<"$object")"
+            expected_size="$(jq -r '.size' <<<"$object")"
+
+            if replica_stat="$(mc stat --json "replica/$bucket/$key" 2>/dev/null)" \
+              && actual_size="$(jq -er 'select(.status == "success") | .size' <<<"$replica_stat")" \
+              && [ "$actual_size" = "$expected_size" ]; then
+              verified_by_stat=$((verified_by_stat + 1))
+            else
+              printf '%s\n' "$object" >>"$unresolved"
+            fi
+          done <"$missing"
+
+          mv "$unresolved" "$missing"
+          printf '%s\n' "$verified_by_stat"
+        }
+
         for attempt in $(seq 1 30); do
           if mc ls replica >/dev/null 2>&1; then
             break
@@ -326,18 +373,52 @@ in
 
         for bucket in "''${buckets[@]}"; do
           mc mb --ignore-existing "replica/$bucket"
-          mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket"
 
-          source_stats="$(mc du --json "source/$bucket")"
-          replica_stats="$(mc du --json "replica/$bucket")"
-          source_size="$(jq -r '.size' <<<"$source_stats")"
-          replica_size="$(jq -r '.size' <<<"$replica_stats")"
-          source_objects="$(jq -r '.objects' <<<"$source_stats")"
-          replica_objects="$(jq -r '.objects' <<<"$replica_stats")"
-          if [ "$source_size" != "$replica_size" ] || [ "$source_objects" != "$replica_objects" ]; then
-            echo "replica verification failed for bucket $bucket: source=$source_size bytes/$source_objects objects replica=$replica_size bytes/$replica_objects objects" >&2
-            exit 1
-          fi
+          bucket_inventory="$(mktemp -d "$inventory_dir/bucket.XXXXXX")"
+
+          for attempt in $(seq 1 5); do
+            source_checkpoint="$bucket_inventory/source-checkpoint.jsonl"
+            replica_after="$bucket_inventory/replica-after.jsonl"
+            missing="$bucket_inventory/missing.jsonl"
+
+            # Capture a finite source checkpoint before mirroring. Backup
+            # buckets can receive immutable objects continuously (for example,
+            # database WAL), so comparing live aggregate totals after the copy
+            # can never converge even when every object observed at the start
+            # was replicated correctly.
+            write_inventory source "$bucket" "$source_checkpoint"
+            mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket" >/dev/null
+            write_inventory replica "$bucket" "$replica_after"
+            LC_ALL=C comm -23 "$source_checkpoint" "$replica_after" >"$missing"
+
+            # A freshly copied object can be directly readable before it is
+            # visible through a cached recursive listing. Close only those
+            # listing gaps whose exact key and checkpointed size can be proven
+            # with an independent S3 stat; everything else remains missing.
+            verified_by_stat_objects="$(
+              verify_listing_gaps \
+                "$bucket" \
+                "$missing" \
+                "$bucket_inventory/unresolved.jsonl"
+            )"
+
+            missing_objects="$(wc -l <"$missing" | tr -d ' ')"
+            if [ "$missing_objects" -eq 0 ]; then
+              checkpoint_stats="$(inventory_stats "$source_checkpoint")"
+              checkpoint_bytes="$(jq -r '.bytes' <<<"$checkpoint_stats")"
+              checkpoint_objects="$(jq -r '.objects' <<<"$checkpoint_stats")"
+              echo "verified bucket=$bucket checkpoint_bytes=$checkpoint_bytes checkpoint_objects=$checkpoint_objects direct_stat_objects=$verified_by_stat_objects attempts=$attempt"
+              break
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "replica verification failed for bucket $bucket after $attempt attempts: checkpoint_missing_objects=$missing_objects" >&2
+              exit 1
+            fi
+
+            echo "bucket $bucket checkpoint still has $missing_objects missing object(s) after attempt $attempt; reconciling the delta" >&2
+            sleep 2
+          done
         done
       '';
     };
