@@ -53,6 +53,21 @@ nodes. CloudNativePG clusters must retain a Ready primary away from the target
 and enough Ready instances for one-node-down operation. Full Longhorn and
 CloudNativePG health is required again after the node is returned to service.
 
+Longhorn marks replicas on a briefly unavailable node as failed, then retains
+them for `replica-replenishment-wait-interval` so they can be reused through a
+delta or fast rebuild instead of replaced by a full copy. The default recovery
+timeout must exceed that interval plus bounded rebuild time. If the cluster
+sets `concurrent-replica-rebuild-per-node-limit` to `0`, automatic admission is
+disabled and the retained replicas require the cluster's guarded sequential
+recovery procedure. A full storage-node restart can therefore need the reuse
+interval plus the complete one-volume-at-a-time queue; the default health wait
+allows 90 minutes and reports the disabled admission state. Recovery output is
+aggregated by the number of unhealthy attached volumes and rate-limited to one
+progress report every five minutes; the complete list is printed only if the
+deadline expires. This keeps the helper waiting on the real safety gate without
+flooding the operator while the guarded procedure temporarily masks and
+restores the remaining queue.
+
 An already cordoned node is not treated as a fresh maintenance target. Another
 power cycle requires `--resume-maintenance`, which verifies the existing
 cordon, permits only maintenance Pods, repeats storage-detach and survivor
