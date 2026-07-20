@@ -23,7 +23,7 @@ in {
     inputs.nix-secrets.homeManagerModules.darwinOperator
   ];
 
-  home.packages = pkgsets.home.${hostRole.homePackageSet} ++ [pkgs.synergy1];
+  home.packages = pkgsets.home.${hostRole.homePackageSet};
 
   programs.wezterm.enable = true;
   programs.karabiner.managed.enable = true;

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-19
-**Applies to:** `users/alc/darwin/mac.nix`, `users/alc/linux/{xps,xyz}.nix`, `modules/home-manager/services/waynergy`, `packages/synergy1`
+**Applies to:** `users/alc/linux/{xps,xyz}.nix`, `modules/home-manager/services/waynergy`
 
 ## Context
 
@@ -13,10 +13,10 @@ disk image and its upstream Linux client is not a native Wayland input client.
 
 ## Decision
 
-Run the licensed Synergy 1 application on macOS as the server. Package its
-redistributable configuration separately from the user-supplied installer by
-using a fixed-output `requireFile` package; do not place license material in the
-public flake.
+Run the licensed Synergy 1 application on macOS as the server. Install the
+`synergy-core` formula with Homebrew rather than placing the proprietary disk
+image behind a fixed-output Home Manager package. Keep license material out of
+the public flake.
 
 Run Waynergy as a Home Manager user service on each Wayland client. Give each
 client a stable screen name, start it with the graphical session, and use the
@@ -47,10 +47,11 @@ Waynergy. A paid upgrade is not required for this topology.
 
 ## Consequences
 
-The Mac application must be installed from a user-provided, hash-verified disk
-image before its Nix package can build. Linux clients reconnect automatically
-when their graphical sessions or the server return. Initial server trust still
-requires deliberate verification on each client.
+The Mac application is managed outside Home Manager through Homebrew, avoiding
+a user-provided installer blocking unrelated Home Manager generations. Linux
+clients reconnect automatically when their graphical sessions or the server
+return. Initial server trust still requires deliberate verification on each
+client.
 
 ## Tracking
 

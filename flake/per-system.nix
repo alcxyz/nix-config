@@ -47,7 +47,6 @@
       "packages/nix-deploy/default.nix"
       "packages/nixbox-plymouth-theme/default.nix"
       "packages/nixbox-session-splash/default.nix"
-      "packages/synergy1/default.nix"
       "users/alc/common.nix"
       "users/alc/linux/madsil.nix"
       "users/alc/linux/common.nix"
@@ -97,9 +96,6 @@
         nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;
         nixbox-session-splash = pkgs.nixbox-session-splash;
         stashdb-pop = pkgs.stashdb-pop;
-      }
-      // lib.optionalAttrs (system == "aarch64-darwin") {
-        synergy1 = pkgs.synergy1;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
         # Cross-compiled U-Boot for Rock Pi 4 (RK3399).
