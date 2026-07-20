@@ -12,6 +12,8 @@ RUN set -eu; \
     test -x "${BROWSER_EXECUTABLE}"
 
 COPY --chmod=0755 startup.sh /opt/gow/startup-app.sh
+COPY waybar.jsonc /cfg/waybar/config.jsonc
+COPY waybar.css /cfg/waybar/style.css
 
 ENV NIXBOX_BROWSER_EXECUTABLE=${BROWSER_EXECUTABLE}
 

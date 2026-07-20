@@ -94,7 +94,7 @@ input.
 | `Super+Shift+D` | Cycle display layouts |
 | `Super+Shift+A` | Cycle audio outputs |
 | `Super+H` | Toggle the on-screen control reference |
-| `Super+V` / `Super+Z` | Open a new browser window / protected Brave |
+| `Super+V` | Open a new local browser window |
 | `Alt+Enter` | Open a terminal |
 | `Super+Space` | Open DMS search |
 | `Super+Enter` / `Super+S` / `Super+W` | Fullscreen / float / close |
@@ -202,11 +202,10 @@ the default output.
 The couch browser and Moonlight use XWayland so KDE Connect can provide phone
 keyboard, clicks, and scrolling. Phone pointer movement is not currently
 supported; an X11-to-Hyprland pointer bridge was removed because it interfered
-with physical mouse movement over XWayland windows. The protected Brave
-launcher opens an encrypted profile after a password prompt; normal browsing
-remains available without unlocking it. Its encrypted-profile supervisor runs
-as an independent user service, so DMS restarts do not terminate an active
-private browser session. Browsers use Hyprland's normal tiled layout; they do
+with physical mouse movement over XWayland windows. The protected local browser
+is intentionally omitted from launch menus and the on-screen shortcut guide.
+Its encrypted-profile supervisor runs as an independent user service, so DMS
+restarts do not terminate an active session. Browsers use Hyprland's normal tiled layout; they do
 not request browser-level fullscreen, avoiding its broken couch pointer and
 click behaviour. Their chrome and page contents use a couch-friendly 1.5x
 device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
@@ -234,6 +233,11 @@ The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
 client bitrate. Helium, the PIN-protected Brave profile, and the XPS couch
 launch actions have passed acceptance testing. Local XPS browsers remain
 available as an independent fallback.
+
+Both browser and Steam streams prefer their direct LAN endpoints. If XPS is
+used away from that network, Moonlight can fall back to the paired host's
+managed VPN endpoint. This fallback is deliberately limited to Moonlight;
+Synergy input sharing is LAN-only and disconnects rather than crossing the VPN.
 
 The remote browser session provides Norwegian, US, and Russian layouts in that
 order. Press `Alt+Shift` inside the session to cycle them. Moonlight transports

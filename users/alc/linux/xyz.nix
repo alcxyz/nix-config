@@ -91,9 +91,9 @@ in {
   services.hyprlock.enable = true;
   services.waynergy = {
     enable = true;
-    serverAddress = "mac";
     screenName = "xyz";
     sourceKeyboard = "mac";
+    requireLanAddress = true;
   };
   services.kdeconnect.enable = true;
   # Hyprland's portal does not provide RemoteDesktop. Run KDE Connect through

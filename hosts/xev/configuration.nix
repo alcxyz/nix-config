@@ -14,6 +14,7 @@
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
+    "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
@@ -37,6 +38,11 @@
       };
       brave.enable = true;
     };
+  };
+
+  services.netbird.managed = {
+    enable = true;
+    disableDns = true;
   };
 
   # ---- Nix Settings ----

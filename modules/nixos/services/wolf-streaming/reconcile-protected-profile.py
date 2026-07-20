@@ -26,7 +26,7 @@ def contains_values(current, desired):
     return current == desired
 
 
-def load_profile_definition(path):
+def load_profile_definition(path, display_name):
     definition = json.loads(path.read_text())
     required = {"id", "name", "pin"}
     missing = required - definition.keys()
@@ -58,6 +58,10 @@ def load_profile_definition(path):
             "protected profile definition has unsupported keys: "
             + ", ".join(sorted(unexpected))
         )
+    # The credential owns the stable id and PIN, but its internal label must
+    # never disclose what is behind the protected profile in Wolf UI.
+    definition["name"] = display_name
+    definition.pop("icon_png_path", None)
     return definition
 
 
@@ -85,18 +89,22 @@ def write_document(config_path, document):
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         raise SystemExit(
-            "usage: reconcile-protected-profile.py CONFIG PROFILE_JSON MANAGED_APPS_JSON"
+            "usage: reconcile-protected-profile.py CONFIG PROFILE_JSON "
+            "MANAGED_APPS_JSON DISPLAY_NAME"
         )
 
     config_path = Path(sys.argv[1])
     profile_path = Path(sys.argv[2])
     managed_path = Path(sys.argv[3])
+    display_name = sys.argv[4]
+    if not display_name:
+        raise ValueError("protected profile display name must not be empty")
     if not config_path.exists():
         return 0
 
-    definition = load_profile_definition(profile_path)
+    definition = load_profile_definition(profile_path, display_name)
     managed = json.loads(managed_path.read_text())
     managed_apps = managed["apps"]
     managed_titles = set(managed["managedTitles"])
@@ -105,11 +113,18 @@ def main():
         config_text += "\n"
     document = tomlkit.parse(config_text)
     profiles = document.setdefault("profiles", tomlkit.aot())
+    changed = False
+    # Wolf creates a stock unprotected `user` profile. Once a protected
+    # replacement is configured, keeping both advertises that there is a
+    # second browser identity and makes the chooser needlessly ambiguous.
+    for index in reversed(range(len(profiles))):
+        if profiles[index].get("id") == "user" and definition["id"] != "user":
+            del profiles[index]
+            changed = True
+
     profile = next(
         (item for item in profiles if item.get("id") == definition["id"]), None
     )
-    changed = False
-
     if profile is None:
         profile = tomlkit.table()
         for key, value in definition.items():

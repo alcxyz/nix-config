@@ -19,6 +19,22 @@ certificates, and access PINs must remain outside this public repository.
 
 ## Decision
 
+Launch browser streams with Moonlight's remote-desktop-optimized absolute
+pointer mode. Do not let the browser stream capture system-key combinations;
+the client compositor retains its workspace and couch-session shortcuts while
+ordinary keyboard input continues to the remote browser.
+
+Give each paired streaming host separate local and remote endpoints. Reconcile
+Moonlight's local and manual addresses to the private LAN endpoint and its
+remote address to the managed VPN endpoint immediately before launch. Moonlight
+tries the local address first, preserving the low-latency path at home, and can
+fall back to the VPN address when the client is away from the local network.
+Keep the concrete endpoint assignments in private configuration.
+On macOS, periodically reconcile the paired-host preference fields because
+Moonlight may replace its discovered remote address during host refresh. The
+agent matches hosts by their saved names, leaves pairing certificates and
+application state untouched, and does nothing until the host has been paired.
+
 Run [Wolf](https://games-on-whales.github.io/wolf/stable/) as a pinned
 container on a GPU-capable NixOS host, with `xev` as the initial deployment.
 Wolf provides Moonlight-compatible named applications and creates an isolated
@@ -71,6 +87,17 @@ it is attached to a PIN-protected Wolf profile through a root-only systemd
 credential supplied at runtime by the private configuration. The credential
 contains only the protected profile identity, display name, and PIN. It is
 never copied into the Nix store or this repository.
+
+Do not advertise the protected browser's identity in Wolf UI. Replace Wolf's
+stock unprotected profile with the protected profile, present it under the
+neutral `User` label, and discard any identifying profile icon before writing
+runtime configuration. The application list remains unavailable until the PIN
+is accepted. This is UI discretion rather than an additional security boundary.
+
+Browser containers keep a small Waybar for workspace, layout, audio, and clock
+status, but run it in Sway hide mode. It must not permanently consume vertical
+space during browsing or video playback; holding the compositor modifier
+temporarily reveals it.
 
 Roll out in two gates. First validate Wolf's upstream Firefox application at
 the intended 1440p60 client mode, including NVENC, audio, keyboard, pointer,
@@ -140,9 +167,15 @@ low-latency video, audio, and controller integration already used by Moonlight.
   implemented; automatic client-layout inheritance is unavailable in the
   Moonlight protocol, so layout selection is explicit with `Alt+Shift`.
 - Generic, atomic protected-profile reconciliation without store-copying its
-  credential: implemented.
+  credential: implemented. The visible profile identity is neutralized and the
+  redundant stock profile is removed.
+- Shared auto-hidden browser-session status bar: implemented.
 - Pinned Wolf UI profile selector and local API socket: implemented and
   accepted over an XPS HEVC/NVENC stream.
+- LAN-first streaming with managed-VPN remote fallback: implemented for both
+  the browser and Steam pairings; the active XPS browser stream was verified on
+  the direct LAN path. The equivalent macOS endpoint reconciler is implemented
+  and tested against a paired Wolf host.
 - Private Brave profile provisioning and XPS launch integration: implemented
   and accepted. Wolf UI requires the private PIN before exposing Brave; the
   browser runs on XEV's NVIDIA GPU with a persistent isolated home, while XPS

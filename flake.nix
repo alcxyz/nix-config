@@ -12,7 +12,7 @@
 
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git?ref=codex/media-routing";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

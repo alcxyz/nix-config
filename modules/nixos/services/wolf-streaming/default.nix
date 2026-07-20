@@ -22,6 +22,8 @@
       mkdir -p "$out"
       cp ${./browser-image/Dockerfile} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
+      cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
+      cp ${./browser-image/waybar.css} "$out/waybar.css"
       cp ${deb} "$out/browser.deb"
     '';
   browserImages = lib.filter (image: image.enable) [
@@ -329,16 +331,27 @@ in {
       };
     };
 
-    protectedProfile.definitionFile = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      example = "/run/credentials/docker-wolf.service/protected-profile";
-      description = ''
-        Root-only runtime JSON file defining the protected Wolf profile id,
-        display name, and PIN. Keep this file outside the Nix store. When set,
-        Brave is published only inside that profile and the file is loaded as a
-        systemd credential before Wolf starts.
-      '';
+    protectedProfile = {
+      definitionFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "/run/credentials/docker-wolf.service/protected-profile";
+        description = ''
+          Root-only runtime JSON file defining the protected Wolf profile id,
+          internal name, and PIN. Keep this file outside the Nix store. When
+          set, Brave is published only inside that profile and the file is
+          loaded as a systemd credential before Wolf starts.
+        '';
+      };
+
+      displayName = lib.mkOption {
+        type = lib.types.nonEmptyStr;
+        default = "User";
+        description = ''
+          Neutral public label shown for the protected profile in Wolf UI.
+          This deliberately overrides the private credential's internal name.
+        '';
+      };
     };
   };
 
@@ -455,7 +468,8 @@ in {
           ${lib.getExe reconcileWolfProtectedProfile} \
             ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} \
             "$CREDENTIALS_DIRECTORY/wolf-protected-profile" \
-            ${lib.escapeShellArg protectedBrowserAppsFile}
+            ${lib.escapeShellArg protectedBrowserAppsFile} \
+            ${lib.escapeShellArg cfg.protectedProfile.displayName}
         ''
       );
     };

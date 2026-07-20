@@ -20,9 +20,23 @@ the public flake.
 
 Run Waynergy as a Home Manager user service on each Wayland client. Give each
 client a stable screen name, start it with the graphical session, and use the
-Mac-oriented key map so physical Mac keycodes produce the expected Linux keys,
-including both Command keys as left and right Super.
+Mac-to-evdev raw map so physical Mac keycodes become the same standard Linux
+keycodes produced by attached keyboards and other input bridges. This keeps
+downstream remote-desktop clients from receiving Mac-specific scancodes while
+still making Command act as Super.
 Enable transport encryption with trust on first use.
+
+Use relative pointer motion on the Synergy server. A client compositor may
+retain powered-off outputs outside the visible desktop so it can restore them
+without losing layout state; mapping absolute motion across that full bounding
+box makes the visible pointer excessively sensitive. On couch clients,
+Waynergy also advertises the focused powered-on monitor at startup rather than
+the full compositor output bounding box.
+
+Keep the couch compositor's global controls available when a fullscreen remote
+desktop client requests shortcut inhibition. This lets Command from the Mac
+act as Super for workspace and application controls without preventing regular
+keys from reaching the remote session.
 
 Launch the client through a session-aware wrapper that reads the user service
 manager's current Wayland environment and waits for the advertised compositor
@@ -34,6 +48,12 @@ Keep client addressing configurable through the module rather than embedding
 network topology or credentials in the implementation. Any private defaults,
 license data, or operational details belong in the private configuration
 boundary.
+
+Synergy is a local input transport, not a remote-access service. Resolve its
+server to a private LAN address and fail closed unless the selected route uses
+a non-overlay interface. In particular, never allow an unavailable LAN path to
+fall back through a mesh VPN: the additional latency makes pointer movement
+unusable and remote input sharing is outside this setup's purpose.
 
 ## Alternatives Considered
 
@@ -58,9 +78,13 @@ The Mac application is managed outside Home Manager through Homebrew, avoiding
 a user-provided installer blocking unrelated Home Manager generations. Linux
 clients reconnect automatically when their graphical sessions or the server
 return. Initial server trust still requires deliberate verification on each
-client.
+client. Relative pointer mode is required on the server for clients whose
+compositors preserve inactive outputs outside the visible layout.
+If the Mac is unavailable on the physical LAN, Waynergy remains disconnected
+instead of selecting a VPN route.
 
 ## Tracking
 
 - Issue #152 tracks the Mac rebuild and end-to-end input validation on both
   Waynergy clients.
+- LAN-only route enforcement on XPS: implemented and verified.

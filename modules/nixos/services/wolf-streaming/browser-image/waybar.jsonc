@@ -1,0 +1,33 @@
+{
+    "name": "nixbox-browser",
+    "layer": "top",
+    "position": "top",
+    "mode": "hide",
+    "start_hidden": true,
+    "modifier-reset": "release",
+    "height": 36,
+    "spacing": 8,
+    "modules-left": ["sway/workspaces"],
+    "modules-center": ["sway/window"],
+    "modules-right": ["sway/language", "pulseaudio", "clock"],
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "format": "{name}"
+    },
+    "sway/window": {
+        "max-length": 80
+    },
+    "sway/language": {
+        "format": "{shortDescription}"
+    },
+    "pulseaudio": {
+        "format": "{volume}% {icon}",
+        "format-muted": "Muted",
+        "format-icons": {
+            "default": ["", "", ""]
+        }
+    },
+    "clock": {
+        "format": "{:%H:%M}"
+    }
+}
