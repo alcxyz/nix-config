@@ -1,0 +1,9 @@
+[Plymouth Theme]
+Name=NIXBOX
+Description=NIXBOX media-center boot and shutdown animation
+ModuleName=script
+
+[script]
+ImageDir=@themeDir@
+ScriptFile=@themeDir@/nixbox.script
+ConsoleLogBackgroundColor=0x0b0c0f

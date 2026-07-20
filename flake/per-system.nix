@@ -33,15 +33,20 @@
       "modules/nixos/common/distributed-build-client.nix"
       "modules/nixos/common/pkgsets.nix"
       "modules/nixos/common/server.nix"
+      "modules/home-manager/services/waynergy/default.nix"
+      "modules/home-manager/services/dms/default.nix"
       "modules/nixos/common/ssh-keys.nix"
       "modules/nixos/services/flatpak/default.nix"
       "modules/nixos/services/heroic-sideload/default.nix"
       "modules/nixos/services/k8s-api-vip/default.nix"
+      "modules/nixos/services/wolf-streaming/default.nix"
       "modules/nixos/virtualisation/k3s/default.nix"
       "modules/shared/host-metadata.nix"
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
+      "packages/nixbox-plymouth-theme/default.nix"
+      "packages/nixbox-session-splash/default.nix"
       "users/alc/common.nix"
       "users/alc/linux/madsil.nix"
       "users/alc/linux/common.nix"
@@ -88,6 +93,8 @@
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
+        nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;
+        nixbox-session-splash = pkgs.nixbox-session-splash;
         stashdb-pop = pkgs.stashdb-pop;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
