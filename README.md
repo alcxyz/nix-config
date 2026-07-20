@@ -23,6 +23,14 @@ See [ADR-0044](docs/adr/0044-host-inventory-role-model-for-new-machines.md),
 [ADR-0045](docs/adr/0045-xev-and-xps-kubernetes-node-onboarding.md), and
 [ADR-0046](docs/adr/0046-remotely-managed-family-gaming-laptop.md).
 
+### XPS media center
+
+XPS also provides a controller-first couch session for browsing, Moonlight,
+dynamic TV layouts, simultaneous TV audio, phone input, and a merged DMS shell.
+See the [XPS media-center guide](docs/xps-media-center.md) for controller and
+keyboard shortcuts, display modes, audio choices, and the on-screen help
+overlay.
+
 ## Repository layout
 
 ```

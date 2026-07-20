@@ -7,11 +7,13 @@
   configDir,
   hostRole,
   ...
-}: let
+}:
+let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
-in {
+in
+{
   imports = [
     "${configDir}/users/alc/linux/operator.nix"
 
@@ -20,6 +22,7 @@ in {
     "${configDir}/modules/home-manager/programs/niri/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
     "${configDir}/modules/home-manager/services/hyprlock/default.nix"
+    "${configDir}/modules/home-manager/services/waynergy/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
@@ -28,7 +31,10 @@ in {
     inputs.hyprscratch.homeModules.default
   ];
 
-  home.packages = pkgsets.home.${hostRole.homePackageSet};
+  # XPS exposes Brave only through the password-gated couch launcher. The
+  # browser package remains in that launcher's closure, but its unrestricted
+  # executable and desktop entries are not placed in the user profile.
+  home.packages = lib.remove pkgs.brave pkgsets.home.${hostRole.homePackageSet};
 
   xdg.configFile."ncspot/config.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/ncspot/config.toml";
@@ -42,6 +48,8 @@ in {
   programs.hyprland.managed = {
     enable = true;
     inputSensitivity = 0.0;
+    inputLayouts = "no,us";
+    inputOptions = "grp:alt_shift_toggle";
     laptopDisplayAutoSwitch.enable = true;
     # Hyprland 0.55 and DMS use the Lua configuration on XPS. DMS deliberately
     # archives legacy .conf files when both formats exist.
@@ -65,6 +73,10 @@ in {
 
   services.dms = {
     enable = true;
+    polkitDialog = {
+      width = 920;
+      height = 560;
+    };
     dock = {
       enable = true;
       autoHide = true;
@@ -73,9 +85,19 @@ in {
       enable = true;
       command = config.services.hyprlock.lockCommand;
     };
-    pluginSettings.dankAIUsage.enabled = true;
+    pluginSettings = {
+      dankAIUsage.enabled = true;
+      dankDisplayControl.enabled = true;
+    };
   };
   services.hyprlock.enable = true;
+  services.waynergy = {
+    enable = true;
+    screenName = "xps";
+    sourceKeyboard = "mac";
+    requireLanAddress = true;
+    useFocusedMonitorGeometry = true;
+  };
   dconf.enable = false;
   services.udiskie = {
     enable = true;
@@ -83,10 +105,10 @@ in {
   };
   systemd.user.services.udiskie = {
     Unit = {
-      After = lib.mkForce [];
-      PartOf = lib.mkForce [];
+      After = lib.mkForce [ ];
+      PartOf = lib.mkForce [ ];
     };
-    Install.WantedBy = lib.mkForce ["default.target"];
+    Install.WantedBy = lib.mkForce [ "default.target" ];
   };
 
   programs.ai.enable = true;
