@@ -116,7 +116,14 @@ decision.
 
 Keep attached secondary and tertiary displays independent in the all-output
 layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
-outputs; in a solo layout, return all workspace sets to the selected output.
+output roles. Expose only the workspace set belonging to each active logical
+display: a solo output has workspaces 1–3, two independent outputs have two
+sets, and all three independent outputs have all three sets. A mirrored second
+TV is a presentation target rather than another logical desktop and therefore
+does not add workspaces. When an output disappears, fold windows from its
+inactive workspace set into the corresponding primary workspace 1–3 so they
+remain reachable. Direct and relative workspace shortcuts must reject or skip
+inactive sets.
 Park inactive-but-connected outputs outside the usable desktop before powering
 them down so the cursor cannot escape onto a display whose adapter retains its
 connection while the panel is in standby.

@@ -96,9 +96,9 @@ input.
 | `Alt+Enter` | Open a terminal |
 | `Super+Space` | Open DMS search |
 | `Super+Enter` / `Super+S` / `Super+W` | Fullscreen / float / close |
-| `Super+1`…`Super+0` | Open workspace 1…10 |
-| `Super+J` / `Super+K` | Previous / next workspace |
-| `Super+Shift+1`…`Super+Shift+0` | Move the focused window to a workspace |
+| `Super+1`…`Super+9` | Open an active workspace |
+| `Super+J` / `Super+K` | Previous / next active workspace |
+| `Super+Shift+1`…`Super+Shift+9` | Move the focused window to an active workspace |
 | `F8` / `F9` / `F10` | Mute / volume down / volume up |
 | `Alt+Shift` | Toggle Norwegian and US keyboard layouts |
 
@@ -120,10 +120,13 @@ cycles through:
 
 The dual-TV layout assigns workspaces 1–3 to the primary TV and 4–6 to the
 secondary TV. The auxiliary display uses workspaces 7–9 and is placed directly
-beside the selected TV when the other TV is parked. Workspaces without an
-active dedicated display fall back to the primary output. Parked displays are
-moved outside the usable desktop before DPMS is disabled, preventing the
-cursor from disappearing onto them.
+beside the selected TV when the other TV is parked. Only workspace sets backed
+by active logical displays are exposed: solo and dual-TV mirror layouts use
+1–3; independent two-display layouts expose two sets; and the three-display
+layout exposes all nine. If a display disappears, windows from its inactive set
+are folded into the matching primary workspace 1–3. Parked displays are moved
+outside the usable desktop before DPMS is disabled, preventing the cursor from
+disappearing onto them.
 
 Cable presence is detectable, but panel power is not reliable through every
 adapter. Use an explicit layout when a connected television remains visible to
@@ -138,8 +141,8 @@ selected mirror state persists across reboots until toggled again. Enabling it
 switches both TVs to 1080p60, which keeps browser playback smooth while the
 compositor captures and presents the second copy; disabling it restores the
 normal 1440p60 extended layout. If either TV is unplugged, mirroring becomes
-dormant and the remaining display receives all workspace groups; it resumes
-when a second eligible display returns.
+dormant and the remaining display exposes workspaces 1–3; it resumes when a
+second eligible display returns.
 
 The secondary TV input must use its pixel-preserving custom picture-size mode
 at 1080p. A conventional 16:9 television mode may apply overscan and crop the

@@ -108,8 +108,8 @@
             desc = "Close";
           }
           {
-            key = "◆ 1–0";
-            desc = "Workspace";
+            key = "◆ 1–9";
+            desc = "Active workspace";
           }
           {
             key = "◆ J/K";
@@ -967,6 +967,88 @@
     '';
   };
 
+  couchWorkspace = pkgs.writeShellApplication {
+    name = "couch-workspace";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.hyprland
+      pkgs.jq
+    ];
+    text = ''
+      config_file=${lib.escapeShellArg dynamicMonitorConfigFile}
+
+      active_workspaces() {
+        if [ -r "$config_file" ]; then
+          sed -n 's/^workspace = \([0-9][0-9]*\),.*/\1/p' "$config_file" \
+            | sort -n -u
+        else
+          printf '1\n2\n3\n'
+        fi
+      }
+
+      workspace_is_active() {
+        requested="$1"
+        active_workspaces | grep -Fxq "$requested"
+      }
+
+      adjacent_workspace() {
+        direction="$1"
+        mapfile -t available < <(active_workspaces)
+        if ((''${#available[@]} == 0)); then
+          available=(1 2 3)
+        fi
+
+        current="$(hyprctl activeworkspace -j | jq -r '.id // 1')"
+        current_index=0
+        for index in "''${!available[@]}"; do
+          if [ "''${available[$index]}" = "$current" ]; then
+            current_index="$index"
+            break
+          fi
+        done
+
+        if [ "$direction" = next ]; then
+          next_index=$(((current_index + 1) % ''${#available[@]}))
+        else
+          next_index=$(((current_index + ''${#available[@]} - 1) % ''${#available[@]}))
+        fi
+        printf '%s\n' "''${available[$next_index]}"
+      }
+
+      action="''${1:-switch}"
+      target="''${2:-}"
+      case "$action" in
+        next | previous)
+          target="$(adjacent_workspace "$action")"
+          action=switch
+          ;;
+        move-next | move-previous)
+          target="$(adjacent_workspace "''${action#move-}")"
+          action=move
+          ;;
+        switch | move)
+          if ! workspace_is_active "$target"; then
+            hyprctl notify 1 2200 'rgb(f9e2af)' \
+              "Workspace $target is not active in this display layout" \
+              >/dev/null 2>&1 || true
+            exit 1
+          fi
+          ;;
+        *)
+          echo "usage: couch-workspace {switch NUMBER|move NUMBER|next|previous|move-next|move-previous}" >&2
+          exit 2
+          ;;
+      esac
+
+      case "$action" in
+        switch) exec hyprctl dispatch workspace "$target" ;;
+        move) exec hyprctl dispatch movetoworkspace "$target" ;;
+      esac
+    '';
+  };
+
   displayMirrorToggle = pkgs.writeShellApplication {
     name = "couch-display-mirror";
     runtimeInputs = [
@@ -1106,6 +1188,27 @@
         tertiary_output="$5"
         tertiary_mode="$6"
         native_mirror="$7"
+        secondary_logical=0
+        if [ -n "$secondary_output" ] && [ "$native_mirror_requested" != 1 ]; then
+          secondary_logical=1
+        fi
+        allowed_workspaces=${lib.escapeShellArg (builtins.toJSON cfg.autoLayoutPrimaryWorkspaces)}
+        if [ "$secondary_logical" = 1 ]; then
+          allowed_workspaces="$(
+            jq -cn \
+              --argjson primary "$allowed_workspaces" \
+              --argjson secondary ${lib.escapeShellArg (builtins.toJSON cfg.autoLayoutSecondaryWorkspaces)} \
+              '$primary + $secondary'
+          )"
+        fi
+        if [ -n "$tertiary_output" ]; then
+          allowed_workspaces="$(
+            jq -cn \
+              --argjson current "$allowed_workspaces" \
+              --argjson tertiary ${lib.escapeShellArg (builtins.toJSON cfg.autoLayoutTertiaryWorkspaces)} \
+              '$current + $tertiary'
+          )"
+        fi
         temporary_file="$config_file.tmp"
         secondary_position=${lib.escapeShellArg cfg.autoLayoutSecondaryPosition}
         tertiary_position=${lib.escapeShellArg cfg.autoLayoutTertiaryPosition}
@@ -1142,18 +1245,6 @@
               printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
                 "$workspace" "$source_output" "$default"
             done
-            if [ -z "$secondary_output" ]; then
-              for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
-                printf 'workspace = %s, monitor:%s, persistent:true\n' \
-                  "$workspace" "$source_output"
-              done
-            fi
-            if [ -z "$tertiary_output" ]; then
-              for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
-                printf 'workspace = %s, monitor:%s, persistent:true\n' \
-                  "$workspace" "$source_output"
-              done
-            fi
           fi
           if [ -n "$secondary_output" ]; then
             if [ "$native_mirror" = 1 ]; then
@@ -1162,7 +1253,7 @@
                 "$secondary_mode" \
                 ${lib.escapeShellArg (toString cfg.autoLayoutSecondaryScale)} \
                 "$source_output"
-            else
+            elif [ "$secondary_logical" = 1 ]; then
               printf 'monitor = %s, %s, %s, %s\n' \
                 "$secondary_output" \
                 "$secondary_mode" \
@@ -1176,6 +1267,12 @@
                 printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
                   "$workspace" "$secondary_output" "$default"
               done
+            else
+              printf 'monitor = %s, %s, %s, %s\n' \
+                "$secondary_output" \
+                "$secondary_mode" \
+                "$secondary_position" \
+                ${lib.escapeShellArg (toString cfg.autoLayoutSecondaryScale)}
             fi
           fi
           if [ -n "$tertiary_output" ]; then
@@ -1215,20 +1312,8 @@
             hyprctl dispatch moveworkspacetomonitor \
               "$workspace" "$source_output" >/dev/null 2>&1 || true
           done
-          if [ -z "$secondary_output" ]; then
-            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
-              hyprctl dispatch moveworkspacetomonitor \
-                "$workspace" "$source_output" >/dev/null 2>&1 || true
-            done
-          fi
-          if [ -z "$tertiary_output" ]; then
-            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
-              hyprctl dispatch moveworkspacetomonitor \
-                "$workspace" "$source_output" >/dev/null 2>&1 || true
-            done
-          fi
         fi
-        if [ -n "$secondary_output" ] && [ "$native_mirror" != 1 ]; then
+        if [ "$secondary_logical" = 1 ]; then
           hyprctl dispatch focusmonitor "$secondary_output" >/dev/null 2>&1 || true
           hyprctl dispatch workspace \
             ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutSecondaryWorkspaces))} \
@@ -1236,11 +1321,6 @@
           for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
             hyprctl dispatch moveworkspacetomonitor \
               "$workspace" "$secondary_output" >/dev/null 2>&1 || true
-          done
-        elif [ "$native_mirror" = 1 ] && [ -n "$source_output" ]; then
-          for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutSecondaryWorkspaces)}; do
-            hyprctl dispatch moveworkspacetomonitor \
-              "$workspace" "$source_output" >/dev/null 2>&1 || true
           done
         fi
         if [ -n "$tertiary_output" ]; then
@@ -1254,6 +1334,24 @@
           done
         fi
         if [ -n "$source_output" ]; then
+          while IFS=$'\t' read -r address destination; do
+            [ -n "$address" ] || continue
+            hyprctl dispatch movetoworkspacesilent \
+              "$destination,address:$address" >/dev/null 2>&1 || true
+          done < <(
+            hyprctl clients -j \
+              | jq -r --argjson allowed "$allowed_workspaces" '
+                  .[]
+                  | .workspace.id as $id
+                  | select(
+                      $id > 0
+                      and $id < 10
+                      and ($allowed | index($id) | not)
+                    )
+                  | [.address, (((.workspace.id - 1) % 3) + 1)]
+                  | @tsv
+                '
+          )
           hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
           DISPLAY=:0 xrandr --output "$source_output" --primary >/dev/null 2>&1 || true
@@ -1924,16 +2022,15 @@
 
     windowrule = match:class com.moonlight_stream.Moonlight, fullscreen true
     windowrule = match:class CouchBrowser, workspace 2
-    bind = SUPER, 1, workspace, 1
-    bind = SUPER, 2, workspace, 2
-    bind = SUPER, 3, workspace, 3
-    bind = SUPER, 4, workspace, 4
-    bind = SUPER, 5, workspace, 5
-    bind = SUPER, 6, workspace, 6
-    bind = SUPER, 7, workspace, 7
-    bind = SUPER, 8, workspace, 8
-    bind = SUPER, 9, workspace, 9
-    bind = SUPER, 0, workspace, 10
+    bind = SUPER, 1, exec, ${lib.getExe couchWorkspace} switch 1
+    bind = SUPER, 2, exec, ${lib.getExe couchWorkspace} switch 2
+    bind = SUPER, 3, exec, ${lib.getExe couchWorkspace} switch 3
+    bind = SUPER, 4, exec, ${lib.getExe couchWorkspace} switch 4
+    bind = SUPER, 5, exec, ${lib.getExe couchWorkspace} switch 5
+    bind = SUPER, 6, exec, ${lib.getExe couchWorkspace} switch 6
+    bind = SUPER, 7, exec, ${lib.getExe couchWorkspace} switch 7
+    bind = SUPER, 8, exec, ${lib.getExe couchWorkspace} switch 8
+    bind = SUPER, 9, exec, ${lib.getExe couchWorkspace} switch 9
     ${
       if cfg.enableControllerShortcuts
       then "bind = SUPER, M, exec, ${lib.getExe couchStreamControl} start"
@@ -1956,26 +2053,25 @@
     bind = SUPER, RETURN, fullscreen
     bind = SUPER, S, togglefloating
 
-    bind = SUPER, J, workspace, r-1
-    bind = SUPER, K, workspace, r+1
-    bind = SUPER, down, workspace, r-1
-    bind = SUPER, up, workspace, r+1
+    bind = SUPER, J, exec, ${lib.getExe couchWorkspace} previous
+    bind = SUPER, K, exec, ${lib.getExe couchWorkspace} next
+    bind = SUPER, down, exec, ${lib.getExe couchWorkspace} previous
+    bind = SUPER, up, exec, ${lib.getExe couchWorkspace} next
     bind = SUPER, TAB, workspace, previous
 
-    bind = SUPER SHIFT, J, movetoworkspace, r-1
-    bind = SUPER SHIFT, K, movetoworkspace, r+1
-    bind = SUPER SHIFT, down, movetoworkspace, r-1
-    bind = SUPER SHIFT, up, movetoworkspace, r+1
-    bind = SUPER SHIFT, 1, movetoworkspace, 1
-    bind = SUPER SHIFT, 2, movetoworkspace, 2
-    bind = SUPER SHIFT, 3, movetoworkspace, 3
-    bind = SUPER SHIFT, 4, movetoworkspace, 4
-    bind = SUPER SHIFT, 5, movetoworkspace, 5
-    bind = SUPER SHIFT, 6, movetoworkspace, 6
-    bind = SUPER SHIFT, 7, movetoworkspace, 7
-    bind = SUPER SHIFT, 8, movetoworkspace, 8
-    bind = SUPER SHIFT, 9, movetoworkspace, 9
-    bind = SUPER SHIFT, 0, movetoworkspace, 10
+    bind = SUPER SHIFT, J, exec, ${lib.getExe couchWorkspace} move-previous
+    bind = SUPER SHIFT, K, exec, ${lib.getExe couchWorkspace} move-next
+    bind = SUPER SHIFT, down, exec, ${lib.getExe couchWorkspace} move-previous
+    bind = SUPER SHIFT, up, exec, ${lib.getExe couchWorkspace} move-next
+    bind = SUPER SHIFT, 1, exec, ${lib.getExe couchWorkspace} move 1
+    bind = SUPER SHIFT, 2, exec, ${lib.getExe couchWorkspace} move 2
+    bind = SUPER SHIFT, 3, exec, ${lib.getExe couchWorkspace} move 3
+    bind = SUPER SHIFT, 4, exec, ${lib.getExe couchWorkspace} move 4
+    bind = SUPER SHIFT, 5, exec, ${lib.getExe couchWorkspace} move 5
+    bind = SUPER SHIFT, 6, exec, ${lib.getExe couchWorkspace} move 6
+    bind = SUPER SHIFT, 7, exec, ${lib.getExe couchWorkspace} move 7
+    bind = SUPER SHIFT, 8, exec, ${lib.getExe couchWorkspace} move 8
+    bind = SUPER SHIFT, 9, exec, ${lib.getExe couchWorkspace} move 9
 
     bindel = , XF86AudioRaiseVolume, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%+
     bindel = , XF86AudioLowerVolume, exec, ${lib.getExe' pkgs.wireplumber "wpctl"} set-volume @DEFAULT_AUDIO_SINK@ 3%-
@@ -2512,7 +2608,7 @@ in {
         9
         10
       ];
-      description = "Persistent workspaces assigned to the secondary output, or to the primary while no secondary is connected.";
+      description = "Persistent workspaces assigned while the secondary output is an independent logical display.";
     };
 
     autoLayoutTertiaryWorkspaces = lib.mkOption {
@@ -2522,7 +2618,7 @@ in {
         12
         13
       ];
-      description = "Persistent workspaces assigned to the tertiary output, or to the primary while no tertiary output is connected.";
+      description = "Persistent workspaces assigned while the tertiary output is an independent logical display.";
     };
 
     autoMirrorWorkspace = lib.mkOption {
