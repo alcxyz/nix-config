@@ -224,6 +224,10 @@ identity and PIN remain in the private configuration and out of the public Nix
 store; the reconciler preserves Wolf's pairings and any applications it does
 not own.
 
+Launch `Wolf UI` through Moonlight to choose a protected profile and then an
+application. The same screen can be restored from a running Wolf application
+with `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
+
 The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
 client bitrate. Local XPS browsers remain available as a fallback until Helium,
 protected Brave, and their couch launch actions complete acceptance testing.

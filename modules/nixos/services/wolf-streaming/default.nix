@@ -8,6 +8,7 @@
   nvidiaPackage = config.hardware.nvidia.package;
   browserCfg = cfg.browserImages;
   browserBaseImage = "ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14";
+  wolfUiImage = "ghcr.io/games-on-whales/wolf-ui@sha256:f483f79fcc5f39294067a5029f8de55e5867f74c709a3d55cd6163e4a5f0cf6b";
   heliumVersion = "0.14.7.1";
   heliumDeb = pkgs.fetchurl {
     url = "https://github.com/imputnet/helium-linux/releases/download/${heliumVersion}/helium-bin_${heliumVersion}-1_amd64.deb";
@@ -74,6 +75,33 @@
       ];
     };
   };
+  wolfUiHostConfig = builtins.toJSON {
+    HostConfig = {
+      IpcMode = "host";
+      Privileged = false;
+      CapAdd = [
+        "NET_RAW"
+        "MKNOD"
+        "NET_ADMIN"
+        "SYS_ADMIN"
+        "SYS_NICE"
+      ];
+      DeviceCgroupRules = [
+        "c 13:* rmw"
+        "c 244:* rmw"
+      ];
+      SecurityOpt = ["seccomp=unconfined"];
+      DeviceRequests = [
+        {
+          Driver = "cdi";
+          Count = 0;
+          DeviceIDs = ["nvidia.com/gpu=all"];
+          Capabilities = null;
+          Options = null;
+        }
+      ];
+    };
+  };
   mkMoonlightBrowserApp = {
     title,
     runnerName,
@@ -104,7 +132,32 @@
     };
   };
   managedMoonlightApps =
-    lib.optional browserCfg.helium.publish (mkMoonlightBrowserApp {
+    [
+      {
+        title = "Wolf UI";
+        icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png";
+        start_virtual_compositor = true;
+        runner = {
+          type = "docker";
+          name = "Wolf-UI";
+          image = wolfUiImage;
+          mounts = [
+            "/run/wolf-streaming/runtime/wolf.sock:/var/run/wolf/wolf.sock"
+            "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+          ];
+          env = [
+            "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*"
+            "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
+            "WOLF_UI_AUTOUPDATE=False"
+            "LOGLEVEL=INFO"
+          ];
+          devices = [];
+          ports = [];
+          base_create_json = wolfUiHostConfig;
+        };
+      }
+    ]
+    ++ lib.optional browserCfg.helium.publish (mkMoonlightBrowserApp {
       title = "Helium";
       runnerName = "WolfHelium";
       image = browserCfg.helium.image;
@@ -118,6 +171,7 @@
     });
   managedMoonlightAppsFile = pkgs.writeText "wolf-managed-moonlight-apps.json" (builtins.toJSON {
     managedTitles = [
+      "Wolf UI"
       "Helium"
       "Brave"
     ];
@@ -158,6 +212,9 @@
 
       docker image inspect ${lib.escapeShellArg browserBaseImage} >/dev/null 2>&1 \
         || docker pull ${lib.escapeShellArg browserBaseImage}
+
+      docker image inspect ${lib.escapeShellArg wolfUiImage} >/dev/null 2>&1 \
+        || docker pull ${lib.escapeShellArg wolfUiImage}
 
       ${lib.concatMapStringsSep "\n" (image: ''
           docker build \
@@ -336,6 +393,7 @@ in {
     systemd.tmpfiles.rules = [
       "d ${cfg.stateDirectory} 0700 root root - -"
       "d /run/wolf-streaming 0755 root root - -"
+      "d /run/wolf-streaming/runtime 0700 root root - -"
       "L+ /run/wolf-streaming/libnvidia-allocator.so.1 - - - - ${nvidiaPackage}/lib/libnvidia-allocator.so.1"
     ];
 
@@ -353,11 +411,13 @@ in {
           WOLF_LOG_LEVEL = "INFO";
           WOLF_RENDER_NODE = cfg.renderNode;
           WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
+          XDG_RUNTIME_DIR = "/run/wolf-streaming/runtime";
         };
         volumes = [
           "${cfg.stateDirectory}:/etc/wolf:rw"
           "${nvrtcRuntime}:/opt/wolf-nvrtc:ro"
           "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+          "/run/wolf-streaming/runtime:/run/wolf-streaming/runtime:rw"
           "${nvidiaPackage}/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/10_nvidia.json:ro"
           "/var/run/docker.sock:/var/run/docker.sock:rw"
           "/dev:/dev:rw"

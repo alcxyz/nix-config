@@ -63,11 +63,14 @@ split the browser profile.
 The module reconciles only explicitly managed applications in Wolf's Moonlight
 profile. It writes the generated TOML atomically and preserves every unowned
 application, paired client, certificate, profile, PIN, and home. Helium is
-published directly for general browsing. Brave is built but must remain absent
-from the direct Moonlight list; it is attached to a PIN-protected Wolf profile
-through a root-only systemd credential supplied at runtime by the private
-configuration. The credential contains only the protected profile identity,
-display name, and PIN. It is never copied into the Nix store or this repository.
+published directly for general browsing. A pinned Wolf UI entry is also
+published as the controller-friendly profile selector. Its API socket stays in
+a root-owned local runtime directory and is mounted only into that application
+container. Brave is built but must remain absent from the direct Moonlight list;
+it is attached to a PIN-protected Wolf profile through a root-only systemd
+credential supplied at runtime by the private configuration. The credential
+contains only the protected profile identity, display name, and PIN. It is
+never copied into the Nix store or this repository.
 
 Roll out in two gates. First validate Wolf's upstream Firefox application at
 the intended 1440p60 client mode, including NVENC, audio, keyboard, pointer,
@@ -138,4 +141,6 @@ low-latency video, audio, and controller integration already used by Moonlight.
   Moonlight protocol, so layout selection is explicit with `Alt+Shift`.
 - Generic, atomic protected-profile reconciliation without store-copying its
   credential: implemented.
+- Pinned Wolf UI profile selector and local API socket: implemented and
+  accepted over an XPS HEVC/NVENC stream.
 - Private Brave profile provisioning and XPS launch integration: pending.
