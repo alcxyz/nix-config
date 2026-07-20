@@ -229,6 +229,12 @@ Launch `Wolf UI` through Moonlight to choose a protected profile and then an
 application. The same screen can be restored from a running Wolf application
 with `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
+Moonlight opens as a normal tiled window on the workspace and display that are
+focused when it is launched. It requests a 2560×1440 stream independently of
+the local output: a 1440p TV presents it at native size, while the 1080p
+Philips output scales the window to that display. Moonlight and Hyprland do not
+request fullscreen; the single tiled window already fills the workspace.
+
 The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
 client bitrate. Helium, the PIN-protected Brave profile, and the XPS couch
 launch actions have passed acceptance testing. Local XPS browsers remain

@@ -20,8 +20,8 @@ need a compatible local input path.
 
 ## Decision
 
-Boot the XPS couch session into a fullscreen XWayland browser. Do not start or
-continually relaunch Moonlight during login.
+Boot the XPS couch session into an ordinary tiled XWayland browser. Do not
+start or continually relaunch Moonlight during login.
 
 Run a non-grabbing controller listener that survives controller reconnects and
 recognises deliberately held shortcuts:
@@ -44,6 +44,13 @@ Run Moonlight through XWayland in this couch session so KDE Connect input can
 reach the focused Moonlight window and be forwarded by the normal streaming
 input path. Keep the normal desktop session as a separately persisted boot
 mode.
+
+Launch Moonlight explicitly in windowed mode and let Hyprland tile it on the
+currently focused workspace. Do not add a compositor fullscreen rule or force
+a dedicated stream workspace: both are redundant for a single tiled window,
+make launch placement surprising on a multi-display couch setup, and interfere
+with pointer visibility. The selected output determines the local window size;
+the requested stream resolution remains independent.
 
 Keep the known-good couch and desktop profiles intact and offer a third
 `merged` profile for the combined experience. The merged profile reuses the
@@ -185,6 +192,13 @@ feedback loop also reacts to physical pointer movement over an XWayland window
 and makes the compositor cursor disappear. Phone pointer movement remains a
 separate Wayland-injection problem; preserve reliable physical pointer input
 and the KDE Connect input types that work without the bridge.
+
+The same limitation remains visible when Waynergy controls a windowed
+Moonlight browser stream: absolute motion reaches the remote application, but
+the pointer is rendered only on button events; relative Moonlight mode does not
+deliver motion to Wolf's session. Keep absolute mode for functional clicks and
+track compositor-native virtual-pointer support separately rather than
+regressing physical input or adding another feedback bridge.
 
 Expose the credential-bearing couch browser only through a password-gated
 launcher backed by an encrypted profile directory. Keep the unrestricted

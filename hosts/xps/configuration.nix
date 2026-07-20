@@ -344,7 +344,7 @@ in
       "--bitrate"
       "40000"
       "--display-mode"
-      "fullscreen"
+      "windowed"
       "--audio-config"
       "stereo"
       "--video-codec"

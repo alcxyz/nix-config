@@ -307,9 +307,6 @@ let
           ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
           while true; do
-            # Moonlight is a child of this launcher, so Hyprland's exec-once
-            # workspace rule does not apply when the stream process is relaunched.
-            hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
             ${moonlightInvocation} &
             moonlight_pid=$!
             seen_window=0
@@ -343,7 +340,6 @@ let
           ${lib.getExe displayModeSetup}
           ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
-          hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
           status=0
           ${moonlightInvocation} || status=$?
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
@@ -661,7 +657,6 @@ let
     text = ''
       ${lib.getExe moonlightEndpointSetup}
       ${lib.getExe displayModeSetup}
-      hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
       status=0
       ${browserMoonlightInvocation} || status=$?
       hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
@@ -686,9 +681,10 @@ let
           systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
           systemctl --user start couch-moonlight-browser-stream.service
           # Starting an already-active unit is intentionally a no-op. Still
-          # bring its dedicated workspace forward so the launch shortcut never
-          # appears to do nothing.
-          hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
+          # focus its window so the launch shortcut never appears to do
+          # nothing, without forcing a dedicated output or workspace.
+          hyprctl dispatch focuswindow \
+            'class:^(com.moonlight_stream.Moonlight)$' >/dev/null 2>&1 || true
           ;;
         browser)
           systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
@@ -2089,7 +2085,6 @@ let
       inactive_timeout = 3
     }
 
-    windowrule = match:class com.moonlight_stream.Moonlight, fullscreen true
     windowrule = match:class CouchBrowser, workspace 2
     bind = SUPER, 1, exec, ${lib.getExe couchWorkspace} switch 1
     bind = SUPER, 2, exec, ${lib.getExe couchWorkspace} switch 2
