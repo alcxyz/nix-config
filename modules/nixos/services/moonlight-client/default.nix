@@ -230,6 +230,14 @@ let
   streamEndpointPolicyEnabled = cfg.streamLocalAddress != null && cfg.streamRemoteAddress != null;
   browserStreamEndpointPolicyEnabled =
     cfg.browserStreamLocalAddress != null && cfg.browserStreamRemoteAddress != null;
+  browserStreamReadinessHosts =
+    if browserStreamEndpointPolicyEnabled then
+      [
+        cfg.browserStreamLocalAddress
+        cfg.browserStreamRemoteAddress
+      ]
+    else
+      lib.optional browserStreamEnabled cfg.browserStreamHost;
   streamReadinessHosts =
     if streamEndpointPolicyEnabled then
       [
@@ -395,6 +403,33 @@ let
     name = "couch-browser-new-window";
     text = ''
       exec ${lib.getExe couchBrowser} --new-window "$@"
+    '';
+  };
+
+  couchBrowserStartup = pkgs.writeShellApplication {
+    name = "couch-browser-startup";
+    runtimeInputs = [
+      pkgs.netcat-openbsd
+      pkgs.systemd
+    ];
+    text = ''
+      remote_hosts=(${lib.concatMapStringsSep " " lib.escapeShellArg browserStreamReadinessHosts})
+
+      for ((attempt = 0; attempt < ${toString cfg.browserStartupTimeout}; attempt++)); do
+        for host in "''${remote_hosts[@]}"; do
+          if nc -z -w 1 "$host" ${toString cfg.streamReadinessPort} \
+            >/dev/null 2>&1; then
+            systemctl --user reset-failed couch-moonlight-browser-stream.service \
+              >/dev/null 2>&1 || true
+            if systemctl --user start couch-moonlight-browser-stream.service; then
+              exit 0
+            fi
+          fi
+        done
+        sleep 1
+      done
+
+      exec ${lib.getExe couchBrowser}
     '';
   };
 
@@ -2137,7 +2172,9 @@ let
     ${lib.optionalString (
       cfg.sessionSplashCommand != null
     ) "exec-once = ${lib.getExe sessionSplashLaunch}"}
-    ${lib.optionalString cfg.autoStartBrowser "exec-once = ${lib.getExe couchBrowser}"}
+    ${lib.optionalString cfg.autoStartBrowser "exec-once = ${
+      lib.getExe (if cfg.preferRemoteBrowserAtStartup then couchBrowserStartup else couchBrowser)
+    }"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
     ${lib.optionalString cfg.enableAudioOutputCycle "exec-once = ${lib.getExe audioOutputControl} initialize"}
@@ -2350,6 +2387,22 @@ in
       type = lib.types.bool;
       default = false;
       description = "Launch the couch browser when the couch session starts.";
+    };
+
+    preferRemoteBrowserAtStartup = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Prefer the configured remote browser when the couch session starts,
+        falling back to the local couch browser when its Sunshine endpoint is
+        unavailable.
+      '';
+    };
+
+    browserStartupTimeout = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 10;
+      description = "Seconds to wait for the remote browser before starting the local fallback.";
     };
 
     sessionSplashCommand = lib.mkOption {
@@ -2888,6 +2941,7 @@ in
       cfg.browserPackage
       cfg.terminalPackage
       couchBrowser
+      couchBrowserStartup
       couchBrowserNewWindow
       couchTerminal
       couchApplications
@@ -3060,6 +3114,13 @@ in
       {
         assertion = !browserStreamEndpointPolicyEnabled || browserStreamEnabled;
         message = "services.moonlight-client browser endpoint policy requires a browser stream";
+      }
+      {
+        assertion = !cfg.preferRemoteBrowserAtStartup || (cfg.autoStartBrowser && browserStreamEnabled);
+        message = ''
+          services.moonlight-client.preferRemoteBrowserAtStartup requires
+          autoStartBrowser and a configured remote browser stream
+        '';
       }
       {
         assertion = cfg.browserStreamSelectorApplication == null || browserStreamEnabled;
