@@ -318,6 +318,8 @@ in {
     relaunchOnExit = false;
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
+    browserStreamHost = "Wolf";
+    browserStreamApplication = "Wolf UI";
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
     streamArguments = [

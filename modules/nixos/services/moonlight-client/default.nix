@@ -36,6 +36,10 @@
             desc = "Steam/Moonlight";
           }
           {
+            key = "Home X";
+            desc = "Remote browser";
+          }
+          {
             key = "L3 R3";
             desc = "Back to Helium";
           }
@@ -60,6 +64,10 @@
           {
             key = "◆ M";
             desc = "Steam/Moonlight";
+          }
+          {
+            key = "◆ R";
+            desc = "Remote browser";
           }
           {
             key = "◆ B";
@@ -136,6 +144,7 @@
     }
   );
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
+  browserStreamEnabled = cfg.browserStreamHost != null && cfg.browserStreamApplication != null;
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
     if dynamicExternalLayoutEnabled
@@ -158,28 +167,32 @@
     then cfg.autoLayoutTertiaryPosition
     else cfg.autoMirrorTertiaryPosition;
   mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
+  mkMoonlightInvocation = host: application:
+    lib.escapeShellArgs (
+      [
+        "${pkgs.coreutils}/bin/env"
+        "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
+        (lib.getExe cfg.package)
+        "stream"
+      ]
+      ++ cfg.streamArguments
+      ++ [
+        host
+        application
+      ]
+    );
   moonlightInvocation =
     if directStreamEnabled
-    then
-      lib.escapeShellArgs (
-        [
-          "${pkgs.coreutils}/bin/env"
-          "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
-          (lib.getExe cfg.package)
-          "stream"
-        ]
-        ++ cfg.streamArguments
-        ++ [
-          cfg.streamHost
-          cfg.streamApplication
-        ]
-      )
+    then mkMoonlightInvocation cfg.streamHost cfg.streamApplication
     else
       lib.escapeShellArgs [
         "${pkgs.coreutils}/bin/env"
         "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
         (lib.getExe cfg.package)
       ];
+  browserMoonlightInvocation = lib.optionalString browserStreamEnabled (
+    mkMoonlightInvocation cfg.browserStreamHost cfg.browserStreamApplication
+  );
 
   displayModeSetup = pkgs.writeShellApplication {
     name = "moonlight-display-mode";
@@ -616,6 +629,19 @@
     '';
   };
 
+  moonlightBrowserSession = pkgs.writeShellApplication {
+    name = "moonlight-browser-session";
+    runtimeInputs = [pkgs.hyprland];
+    text = ''
+      ${lib.getExe displayModeSetup}
+      hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
+      status=0
+      ${browserMoonlightInvocation} || status=$?
+      hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+      exit "$status"
+    '';
+  };
+
   couchStreamControl = pkgs.writeShellApplication {
     name = "couch-stream-control";
     runtimeInputs = [
@@ -626,10 +652,16 @@
     text = ''
       case "''${1:-}" in
         start)
+          systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
           systemctl --user start couch-moonlight-stream.service
+          ;;
+        remote-browser)
+          systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
+          systemctl --user start couch-moonlight-browser-stream.service
           ;;
         browser)
           systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
+          systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
           ${lib.getExe mergedUiControl} browser
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
 
@@ -639,7 +671,7 @@
           fi
           ;;
         *)
-          echo "usage: couch-stream-control {start|browser}" >&2
+          echo "usage: couch-stream-control {start|remote-browser|browser}" >&2
           exit 2
           ;;
       esac
@@ -672,6 +704,9 @@
     HOLD_SECONDS = ${toString cfg.controllerHoldSeconds}
     ACTIONS = {
         "start": {ecodes.BTN_MODE, ecodes.BTN_EAST},
+        ${lib.optionalString browserStreamEnabled ''
+      "remote_browser": {ecodes.BTN_MODE, ecodes.BTN_NORTH},
+    ''}
         "browser": {ecodes.BTN_THUMBL, ecodes.BTN_THUMBR},
         "help": {ecodes.BTN_SELECT, ecodes.BTN_SOUTH},
         ${lib.optionalString cfg.enableMirrorToggle ''
@@ -686,6 +721,9 @@
     }
     COMMANDS = {
         "start": [${builtins.toJSON (lib.getExe couchStreamControl)}, "start"],
+        ${lib.optionalString browserStreamEnabled ''
+      "remote_browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "remote-browser"],
+    ''}
         "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
         "help": [${builtins.toJSON (lib.getExe couchControlHelp)}],
         ${lib.optionalString cfg.enableMirrorToggle ''
@@ -2037,6 +2075,7 @@
       else "bind = SUPER, M, workspace, 1"
     }
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
+    ${lib.optionalString browserStreamEnabled "bind = SUPER, R, exec, ${lib.getExe couchStreamControl} remote-browser"}
     ${lib.optionalString cfg.enableMirrorToggle "bind = SUPER SHIFT, M, exec, ${lib.getExe displayMirrorToggle} toggle"}
     ${lib.optionalString cfg.enableAdaptiveDisplayLayout "bind = SUPER SHIFT, D, exec, ${lib.getExe displayLayoutControl} cycle"}
     ${lib.optionalString cfg.enableAudioOutputCycle "bind = SUPER SHIFT, A, exec, ${lib.getExe audioOutputControl} cycle"}
@@ -2195,6 +2234,18 @@ in {
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = "Moonlight application to launch on streamHost, or null to open the host chooser.";
+    };
+
+    browserStreamHost = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Paired Moonlight host providing the controller-launched remote browser.";
+    };
+
+    browserStreamApplication = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Moonlight application used as the remote browser and protected-profile selector.";
     };
 
     streamArguments = lib.mkOption {
@@ -2687,6 +2738,19 @@ in {
       };
     };
 
+    systemd.user.services.couch-moonlight-browser-stream = lib.mkIf browserStreamEnabled {
+      description = "Controller-launched remote browser stream";
+      serviceConfig = {
+        Type = "simple";
+        ExecStartPre = "-${lib.getExe mergedUiControl} game";
+        ExecStart = lib.getExe moonlightBrowserSession;
+        ExecStopPost = [
+          "-${lib.getExe mergedUiControl} browser"
+          "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
+        ];
+      };
+    };
+
     systemd.user.services.couch-protected-browser = lib.mkIf (cfg.protectedBrowserPackage != null) {
       description = "Independent protected couch browser supervisor";
       serviceConfig = {
@@ -2777,6 +2841,10 @@ in {
       {
         assertion = (cfg.streamHost == null) == (cfg.streamApplication == null);
         message = "services.moonlight-client.streamHost and streamApplication must be set together";
+      }
+      {
+        assertion = (cfg.browserStreamHost == null) == (cfg.browserStreamApplication == null);
+        message = "services.moonlight-client.browserStreamHost and browserStreamApplication must be set together";
       }
       {
         assertion = !cfg.enableControllerShortcuts || directStreamEnabled;

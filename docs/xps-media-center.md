@@ -73,6 +73,7 @@ Hold each combination until the action triggers.
 | Controller | Action |
 |---|---|
 | `Home+A` | Start the remote Steam session and Moonlight |
+| `Home+X` | Open the remote browser/profile selector on XEV |
 | `L3+R3` | Stop Moonlight and return to the browser |
 | `Minus+Plus` | Toggle display mirroring |
 | `Minus+X` | Cycle display layouts |
@@ -88,6 +89,7 @@ input.
 | Keyboard | Action |
 |---|---|
 | `Super+M` / `Super+B` | Start the stream / return to the browser |
+| `Super+R` | Open the remote browser/profile selector on XEV |
 | `Super+Shift+M` | Toggle display mirroring |
 | `Super+Shift+D` | Cycle display layouts |
 | `Super+Shift+A` | Cycle audio outputs |
