@@ -413,6 +413,14 @@ let
       pkgs.systemd
     ];
     text = ''
+      # Hyprland launches exec-once commands concurrently. Import the current
+      # compositor environment here before systemd starts the supervised
+      # Moonlight unit, so its hyprctl window health check cannot race the
+      # session-wide environment import.
+      systemctl --user import-environment \
+        WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP \
+        DBUS_SESSION_BUS_ADDRESS >/dev/null 2>&1 || true
+
       remote_hosts=(${lib.concatMapStringsSep " " lib.escapeShellArg browserStreamReadinessHosts})
 
       for ((attempt = 0; attempt < ${toString cfg.browserStartupTimeout}; attempt++)); do
