@@ -30,6 +30,10 @@
   hardware.nvidia.enable = true;
   services.wolf-streaming = {
     enable = true;
+    prunedApplicationTitles = [
+      "Remote Firefox"
+      "Test ball"
+    ];
     browserImages = {
       enable = true;
       helium = {

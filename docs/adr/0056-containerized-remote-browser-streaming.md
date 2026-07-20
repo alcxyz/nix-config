@@ -182,6 +182,9 @@ low-latency video, audio, and controller integration already used by Moonlight.
 - Shared auto-hidden browser-session status bar: implemented.
 - Pinned Wolf UI profile selector and local API socket: implemented and
   accepted over an XPS HEVC/NVENC stream.
+- Direct application catalog reduced to Wolf UI and Helium; the upstream
+  Firefox baseline and test-pattern entries are declaratively pruned after
+  acceptance without deleting their dormant application homes.
 - LAN-first streaming with managed-VPN remote fallback: implemented for both
   the browser and Steam pairings; the active XPS browser stream was verified on
   the direct LAN path. The equivalent macOS endpoint reconciler is implemented

@@ -176,7 +176,8 @@
       "Wolf UI"
       "Helium"
       "Brave"
-    ];
+    ]
+    ++ cfg.prunedApplicationTitles;
     apps = managedMoonlightApps;
   });
   protectedBrowserAppsFile = pkgs.writeText "wolf-managed-protected-browser-apps.json" (builtins.toJSON {
@@ -283,6 +284,15 @@ in {
       type = lib.types.bool;
       default = true;
       description = "Open Wolf's documented Moonlight protocol ports.";
+    };
+
+    prunedApplicationTitles = lib.mkOption {
+      type = lib.types.listOf lib.types.nonEmptyStr;
+      default = [ ];
+      description = ''
+        Application titles to remove from Wolf's direct Moonlight profile
+        during reconciliation. Persistent application homes are not deleted.
+      '';
     };
 
     browserImages = {
