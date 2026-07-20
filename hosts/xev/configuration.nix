@@ -44,6 +44,7 @@
   k3s = {
     enable = true;
     nodeIp = "192.168.1.13";
+    nodeInterface = "enp6s0";
     # Hardware watchdog reset path has not passed qualification on this host.
     rebootWatchdogSec = "0";
     serverAddr = "https://k8s-api.local:6443";

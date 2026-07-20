@@ -26,6 +26,7 @@ MIN_LONGHORN_REPLICAS=3
 MIN_SURVIVING_LONGHORN_REPLICAS=2
 REMOTE_BOOT_ID=""
 WORKLOADS_FILE=""
+NETWORK_AUDIT_SCRIPT="${K8S_NODE_NETWORK_AUDIT_SCRIPT:-}"
 
 usage() {
   cat <<'EOF'
@@ -937,6 +938,37 @@ verify_returned_node_network() {
   [[ -n "$internal_ip" ]] || die "${NODE} has no Kubernetes InternalIP"
   [[ "$flannel_ip" == "$internal_ip" ]] ||
     die "${NODE} Flannel public IP (${flannel_ip:-missing}) does not match InternalIP (${internal_ip})"
+
+  verify_remote_node_network_path "$internal_ip"
+}
+
+verify_remote_node_network_path() {
+  local expected_ip="${1:-}"
+  local remote_command
+
+  if [[ -z "$expected_ip" ]]; then
+    expected_ip=$(
+      kubectl get node "$NODE" \
+        -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+    )
+  fi
+
+  [[ -n "$expected_ip" ]] || die "${NODE} has no Kubernetes InternalIP"
+  [[ "$NODE" =~ ^[A-Za-z0-9._-]+$ ]] || die "unsafe Kubernetes node name: ${NODE}"
+  [[ "$expected_ip" =~ ^[0-9A-Fa-f:.]+$ ]] || die "unsafe Kubernetes node address: ${expected_ip}"
+  [[ -n "$NETWORK_AUDIT_SCRIPT" && -r "$NETWORK_AUDIT_SCRIPT" ]] ||
+    die "Kubernetes node network audit helper is unavailable"
+
+  remote_command="bash -s -- --node ${NODE} --expected-node-ip ${expected_ip} --disallowed-interface wt0"
+  log "checking ${NODE} Kubernetes peer routes and Flannel underlay"
+  if ! ssh -o BatchMode=yes "$SSH_TARGET" "
+    if [[ \$(id -u) -eq 0 ]]; then
+      exec ${remote_command}
+    fi
+    exec sudo -n ${remote_command}
+  " <"$NETWORK_AUDIT_SCRIPT"; then
+    die "${NODE} Kubernetes network path audit failed"
+  fi
 }
 
 verify_resumed_maintenance_state() {
@@ -1047,6 +1079,7 @@ prepare_node_for_disruption() {
   log "checking Kubernetes node ${NODE}"
   kubectl get node "$NODE" >/dev/null
   verify_remote_privilege
+  verify_remote_node_network_path
 
   if [[ "$RESUME_MAINTENANCE" == true ]]; then
     verify_resumed_maintenance_state
@@ -1169,6 +1202,7 @@ run_check_only() {
   log "checking Kubernetes node ${NODE} without changing cluster or host state"
   kubectl get node "$NODE" >/dev/null
   verify_remote_privilege
+  verify_remote_node_network_path
 
   if [[ "$RESUME_MAINTENANCE" == true ]]; then
     verify_resumed_maintenance_state
