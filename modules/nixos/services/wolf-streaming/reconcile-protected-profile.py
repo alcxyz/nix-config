@@ -100,7 +100,10 @@ def main():
     managed = json.loads(managed_path.read_text())
     managed_apps = managed["apps"]
     managed_titles = set(managed["managedTitles"])
-    document = tomlkit.parse(config_path.read_text())
+    config_text = config_path.read_text()
+    if config_text and not config_text.endswith("\n"):
+        config_text += "\n"
+    document = tomlkit.parse(config_text)
     profiles = document.setdefault("profiles", tomlkit.aot())
     profile = next(
         (item for item in profiles if item.get("id") == definition["id"]), None

@@ -19,6 +19,7 @@
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     inputs.nix-secrets.nixosModules.xevK8sBackupReplica
+    inputs.nix-secrets.nixosModules.xevPrivate
   ];
 
   boot.initrd.systemd.enable = true;
