@@ -241,6 +241,7 @@ in
           "rustfs_secret_key:${cfg.secretKeyFile}"
         ];
         ExecStart = "${rustfsPackage}/bin/rustfs server --address=${cfg.apiAddress} --console-enable --console-address=${cfg.consoleAddress} --access-key-file=%d/rustfs_access_key --secret-key-file=%d/rustfs_secret_key ${toString cfg.dataDir}";
+        Environment = "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency";
         Restart = "on-failure";
         RestartSec = "5s";
         NoNewPrivileges = true;
