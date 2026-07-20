@@ -82,7 +82,7 @@
     };
 
     rustfs = {
-      url = "github:rustfs/rustfs";
+      url = "github:rustfs/rustfs/1.0.0-beta.10";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
