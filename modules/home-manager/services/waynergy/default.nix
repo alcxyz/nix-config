@@ -5,6 +5,37 @@
   ...
 }: let
   cfg = config.services.waynergy;
+  sessionLauncher = pkgs.writeShellScript "waynergy-session-launcher" ''
+    set -eu
+
+    manager_variable() {
+      ${pkgs.systemd}/bin/systemctl --user show-environment \
+        | ${pkgs.gnused}/bin/sed -n "s/^$1=//p" \
+        | ${pkgs.coreutils}/bin/head -n 1
+    }
+
+    for _attempt in $(${pkgs.coreutils}/bin/seq 1 300); do
+      runtime_dir="''${XDG_RUNTIME_DIR:-$(manager_variable XDG_RUNTIME_DIR)}"
+      wayland_display="$(manager_variable WAYLAND_DISPLAY)"
+      hyprland_signature="$(manager_variable HYPRLAND_INSTANCE_SIGNATURE)"
+
+      if [ -n "$runtime_dir" ] \
+        && [ -n "$wayland_display" ] \
+        && [ -S "$runtime_dir/$wayland_display" ]; then
+        export XDG_RUNTIME_DIR="$runtime_dir"
+        export WAYLAND_DISPLAY="$wayland_display"
+        if [ -n "$hyprland_signature" ]; then
+          export HYPRLAND_INSTANCE_SIGNATURE="$hyprland_signature"
+        fi
+        exec ${cfg.package}/bin/waynergy
+      fi
+
+      ${pkgs.coreutils}/bin/sleep 0.1
+    done
+
+    echo "Wayland session environment did not become ready" >&2
+    exit 1
+  '';
 in {
   options.services.waynergy = {
     enable = lib.mkEnableOption "Waynergy Synergy client for Wayland";
@@ -70,11 +101,11 @@ in {
       };
 
       Service = {
-        ExecStart = "${cfg.package}/bin/waynergy";
+        ExecStart = sessionLauncher;
         Environment = [
           "PATH=${lib.makeBinPath [cfg.package pkgs.wl-clipboard pkgs.coreutils pkgs.procps]}"
         ];
-        Restart = "on-failure";
+        Restart = "always";
         RestartSec = 3;
       };
 

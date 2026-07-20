@@ -24,6 +24,12 @@ Mac-oriented key map so physical Mac keycodes produce the expected Linux keys,
 including both Command keys as left and right Super.
 Enable transport encryption with trust on first use.
 
+Launch the client through a session-aware wrapper that reads the user service
+manager's current Wayland environment and waits for the advertised compositor
+socket. A graphical-session target can become active just before UWSM imports
+that environment; treat an early clean client exit as retryable so boot timing
+cannot leave input sharing inactive for the rest of the session.
+
 Keep client addressing configurable through the module rather than embedding
 network topology or credentials in the implementation. Any private defaults,
 license data, or operational details belong in the private configuration
