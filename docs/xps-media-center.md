@@ -211,7 +211,7 @@ not request browser-level fullscreen, avoiding its broken couch pointer and
 click behaviour. Their chrome and page contents use a couch-friendly 1.5x
 device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 
-### Remote browser streaming (staged)
+### Remote browser streaming
 
 XEV also provides on-demand browser sessions through Wolf and Moonlight. Each
 launch creates a disposable application container and a virtual display; Wolf
@@ -231,8 +231,9 @@ application. The same screen can be restored from a running Wolf application
 with `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
 The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
-client bitrate. Local XPS browsers remain available as a fallback until Helium,
-protected Brave, and their couch launch actions complete acceptance testing.
+client bitrate. Helium, the PIN-protected Brave profile, and the XPS couch
+launch actions have passed acceptance testing. Local XPS browsers remain
+available as an independent fallback.
 
 The remote browser session provides Norwegian, US, and Russian layouts in that
 order. Press `Alt+Shift` inside the session to cycle them. Moonlight transports

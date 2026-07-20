@@ -1,6 +1,6 @@
 # ADR-0056: Containerized remote browser streaming
 
-**Status:** Accepted, implementation in progress
+**Status:** Accepted, implemented
 
 **Applies to:** `hosts/xev`, `hosts/xps`, Wolf, Moonlight, browser sessions
 
@@ -143,4 +143,7 @@ low-latency video, audio, and controller integration already used by Moonlight.
   credential: implemented.
 - Pinned Wolf UI profile selector and local API socket: implemented and
   accepted over an XPS HEVC/NVENC stream.
-- Private Brave profile provisioning and XPS launch integration: pending.
+- Private Brave profile provisioning and XPS launch integration: implemented
+  and accepted. Wolf UI requires the private PIN before exposing Brave; the
+  browser runs on XEV's NVIDIA GPU with a persistent isolated home, while XPS
+  hardware-decodes the HEVC stream.
