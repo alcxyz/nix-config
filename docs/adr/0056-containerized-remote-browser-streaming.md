@@ -1,6 +1,6 @@
 # ADR-0056: Containerized remote browser streaming
 
-**Status:** Accepted, staged
+**Status:** Accepted, implementation in progress
 
 **Applies to:** `hosts/xev`, `hosts/xps`, Wolf, Moonlight, browser sessions
 
@@ -41,11 +41,36 @@ homes. A PIN-protected Wolf profile will contain the private Brave application;
 the general profile will contain Helium. Their homes remain separate and
 persistent across on-demand container replacement.
 
+Build Helium and Brave as distinct local images on top of the same pinned GoW
+`base-app` image. Each image contains only its browser and the common Wolf
+compositor integration. Docker shares the base layers on disk, while separate
+image and home boundaries prevent browser settings, authentication, and upgrade
+lifecycle from leaking between the two applications. Browser release artifacts
+are fixed-output Nix inputs; the host does not install either browser globally.
+The browser containers relax Docker's default seccomp profile so Chromium can
+create its unprivileged user namespace and retain its own renderer sandbox;
+they do not use Chromium's `--no-sandbox` escape hatch.
+
+The module reconciles only explicitly managed applications in Wolf's Moonlight
+profile. It writes the generated TOML atomically and preserves every unowned
+application, paired client, certificate, profile, PIN, and home. Helium is
+published directly for general browsing. Brave is built but must remain absent
+from the direct Moonlight list; it is attached to a PIN-protected Wolf profile
+through private runtime configuration.
+
 Roll out in two gates. First validate Wolf's upstream Firefox application at
 the intended 1440p60 client mode, including NVENC, audio, keyboard, pointer,
-phone input, and controller exit behavior. Only after the transport passes,
-build pinned application images for Helium and Brave and add the controller
-and keyboard launch actions on XPS. Keep local XPS browsers as a fallback.
+phone input, and controller exit behavior. The accepted transport baseline is
+HEVC at 1440p60 and 60 Mbit/s: a multi-minute run remained connected without
+packet loss, encoder errors, container restarts, or OOM events. Wolf uses NVENC
+and the Moonlight client uses hardware decode. Firefox renders through the GPU,
+but its current container decodes web video in software; this remains an
+application-image optimization rather than a transport blocker.
+
+After that baseline passes, build the pinned Helium and Brave images, validate
+Helium through the same stream, then create the private Brave profile and add
+the controller and keyboard launch actions on XPS. Keep local XPS browsers as a
+fallback until both remote applications pass their acceptance tests.
 
 The SteamHeadless deployment and its existing XPS launch action remain
 unchanged. A browser-streaming failure must not start, stop, or modify the game
@@ -92,6 +117,9 @@ low-latency video, audio, and controller integration already used by Moonlight.
 
 ## Tracking
 
-- Implemented first as a reusable `services.wolf-streaming` NixOS module.
-- Browser application images and XPS launch integration remain gated on the
-  Firefox transport acceptance test.
+- Reusable `services.wolf-streaming` NixOS module and NVIDIA CDI bridge:
+  implemented.
+- Firefox HEVC transport baseline: accepted.
+- Shared GoW browser runtime and distinct pinned Helium/Brave images:
+  implemented, awaiting deployed application testing.
+- Protected Brave profile and XPS launch integration: pending.

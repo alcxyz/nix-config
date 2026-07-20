@@ -206,6 +206,20 @@ not request browser-level fullscreen, avoiding its broken couch pointer and
 click behaviour. Their chrome and page contents use a couch-friendly 1.5x
 device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 
+### Remote browser streaming (staged)
+
+XEV also provides on-demand browser sessions through Wolf and Moonlight. Each
+launch creates a disposable application container and a virtual display; Wolf
+removes the container when the stream ends while retaining that browser's
+isolated home. Helium is the general remote browser. Brave uses a separate
+image and home and will only be exposed through a PIN-protected Wolf profile.
+Neither browser is installed on the XEV host, and the two images share their
+common GoW runtime layers rather than duplicating a desktop stack.
+
+The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
+client bitrate. Local XPS browsers remain available as a fallback until Helium,
+protected Brave, and their couch launch actions complete acceptance testing.
+
 XPS retains separate `couch`, `merged`, and normal `desktop` profiles. The
 merged profile is the media-center default in use here; desktop mode remains a
 recovery and workstation option rather than changing the couch configuration.

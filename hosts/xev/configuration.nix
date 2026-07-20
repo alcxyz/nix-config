@@ -26,7 +26,17 @@
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
 
   hardware.nvidia.enable = true;
-  services.wolf-streaming.enable = true;
+  services.wolf-streaming = {
+    enable = true;
+    browserImages = {
+      enable = true;
+      helium = {
+        enable = true;
+        publish = true;
+      };
+      brave.enable = true;
+    };
+  };
 
   # ---- Nix Settings ----
   # Allow this host to build for remote machines via SSH.
