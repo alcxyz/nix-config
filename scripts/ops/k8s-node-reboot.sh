@@ -13,7 +13,10 @@ RESUME_MAINTENANCE=false
 CHECK_ONLY=false
 DRAIN_TIMEOUT="10m"
 READY_TIMEOUT="10m"
-SETTLE_TIMEOUT="15m"
+# Longhorn deliberately waits up to 30 minutes for a returning node so it can
+# reuse failed replicas instead of creating replacements. Leave enough time
+# for that interval plus a bounded delta/fast rebuild.
+SETTLE_TIMEOUT="45m"
 SSH_TIMEOUT_SECONDS=900
 POLL_SECONDS=5
 REQUIRE_LONGHORN_BACKUP_TARGET=false
@@ -50,7 +53,7 @@ Options:
                            without cordoning, draining, or powering the host.
   --drain-timeout <dur>    kubectl drain duration. Default: 10m.
   --ready-timeout <dur>    kubectl wait duration. Default: 10m.
-  --settle-timeout <dur>   Workload/Longhorn health wait duration. Default: 15m.
+  --settle-timeout <dur>   Workload/Longhorn health wait duration. Default: 45m.
   --ssh-timeout <seconds>  SSH return timeout. Default: 900.
   --require-longhorn-backup-target
                            Fail if the Longhorn backup target is unavailable.
@@ -546,8 +549,11 @@ wait_for_longhorn_health() {
   local deadline
   local settle_seconds
   local bad_volumes
+  local bad_count
+  local last_bad_count=-1
   local backup_available
   local backup_reason
+  local replica_reuse_wait
   local under_replicated
 
   if ! kubectl get namespace longhorn-system >/dev/null 2>&1; then
@@ -576,6 +582,14 @@ wait_for_longhorn_health() {
 
   log "waiting for attached Longhorn volumes to be healthy"
   settle_seconds=$(duration_to_seconds "$SETTLE_TIMEOUT")
+  replica_reuse_wait=$(
+    kubectl -n longhorn-system get settings.longhorn.io \
+      replica-replenishment-wait-interval \
+      -o jsonpath='{.value}' 2>/dev/null || true
+  )
+  if [[ "$replica_reuse_wait" =~ ^[0-9]+$ ]]; then
+    log "Longhorn failed-replica reuse window is ${replica_reuse_wait}s; health timeout is ${settle_seconds}s"
+  fi
   deadline=$((SECONDS + settle_seconds))
 
   while ((SECONDS < deadline)); do
@@ -591,11 +605,18 @@ wait_for_longhorn_health() {
       break
     fi
 
-    printf '%s\n' "$bad_volumes" >&2
+    bad_count=$(wc -l <<<"$bad_volumes")
+    if [[ "$bad_count" -ne "$last_bad_count" ]]; then
+      log "${bad_count} attached Longhorn volume(s) are still reconciling"
+      last_bad_count="$bad_count"
+    fi
     sleep "$POLL_SECONDS"
   done
 
-  [[ -z "$bad_volumes" ]] || die "Longhorn volumes are not healthy"
+  if [[ -n "$bad_volumes" ]]; then
+    printf '%s\n' "$bad_volumes" >&2
+    die "Longhorn volumes are not healthy"
+  fi
 
   if kubectl -n longhorn-system get backuptargets.longhorn.io default >/dev/null 2>&1; then
     log "checking Longhorn backup target"
