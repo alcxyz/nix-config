@@ -71,6 +71,7 @@ xkb_keymap {
     <LALT> = 66;
     <LCTL> = 67;
     <SPCE> = 57;
+    <RWIN> = 62;
     <LWIN> = 63;
     <UP> = 134;
     <LEFT> = 131;

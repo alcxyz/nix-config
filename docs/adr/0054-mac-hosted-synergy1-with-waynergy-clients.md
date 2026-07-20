@@ -20,7 +20,8 @@ the public flake.
 
 Run Waynergy as a Home Manager user service on each Wayland client. Give each
 client a stable screen name, start it with the graphical session, and use the
-Mac-oriented key map so physical Mac keycodes produce the expected Linux keys.
+Mac-oriented key map so physical Mac keycodes produce the expected Linux keys,
+including both Command keys as left and right Super.
 Enable transport encryption with trust on first use.
 
 Keep client addressing configurable through the module rather than embedding
