@@ -234,7 +234,16 @@ guide. Wolf UI can also be restored from a running Wolf application with
 `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
 Steam is available through `Home+A`, `Super+M`, and the `Steam Stream` menu
-entry.
+entry. The launcher first checks the direct LAN endpoint, starts the remote
+Steam container over its established SSH host configuration when needed, and
+shows DMS status notifications while waiting for Sunshine. A cold start is
+expected to take roughly 20–90 seconds; an explicit failure notification
+replaces the previous silent timeout behavior.
+
+Steam keyboard and pointer input pass through the container's Sunshine relay.
+Host-side Kanata deliberately excludes those virtual passthrough devices and
+restarts after transient device failures, so physical hotkeys remain managed
+without consuming streamed input.
 
 Remote browser homes persist across disposable application containers. Startup
 serializes access to each home and repairs stale Chromium singleton state. If a
