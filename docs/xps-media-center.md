@@ -233,6 +233,11 @@ profile. The private shortcut is deliberately omitted from the on-screen
 guide. Wolf UI can also be restored from a running Wolf application with
 `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
+The merged couch session starts public remote Helium by default. At login it
+checks the direct and fallback Wolf endpoints briefly; if neither is ready it
+opens local Helium instead, so XPS still boots into a usable browser when XEV
+is unavailable. Local Helium remains an explicit fallback through `Super+B`.
+
 Steam is available through `Home+A`, `Super+M`, and the `Steam Stream` menu
 entry. The launcher first checks the direct LAN endpoint, starts the remote
 Steam container over its established SSH host configuration when needed, and

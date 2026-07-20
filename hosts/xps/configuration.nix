@@ -280,6 +280,7 @@ in
     browserScaleFactor = 1.5;
     sessionSplashCommand = lib.getExe pkgs.nixbox-session-splash;
     autoStartBrowser = true;
+    preferRemoteBrowserAtStartup = true;
     autoStartStream = false;
     fallbackBrowserPackage = null;
     protectedBrowserPackage = pkgs.brave;
