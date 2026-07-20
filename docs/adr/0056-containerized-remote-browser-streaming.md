@@ -99,6 +99,16 @@ status, but run it in Sway hide mode. It must not permanently consume vertical
 space during browsing or video playback; holding the compositor modifier
 temporarily reveals it.
 
+Each disposable browser container takes an advisory lock on its persistent
+home for its full lifetime. After acquiring the lock, startup removes stale
+Chromium singleton links whose targets lived in the previous container's
+private temporary directory. A crashed or interrupted stream can therefore be
+launched again without discarding browser state, while a concurrent container
+cannot open and corrupt the same profile. Wolf remains responsible for
+discarding the stopped application container; recovery happens on the next
+explicit launch so intentionally closing a browser does not cause a restart
+loop.
+
 Roll out in two gates. First validate Wolf's upstream Firefox application at
 the intended 1440p60 client mode, including NVENC, audio, keyboard, pointer,
 phone input, and controller exit behavior. The accepted transport baseline is
@@ -180,3 +190,6 @@ low-latency video, audio, and controller integration already used by Moonlight.
   and accepted. Wolf UI requires the private PIN before exposing Brave; the
   browser runs on XEV's NVIDIA GPU with a persistent isolated home, while XPS
   hardware-decodes the HEVC stream.
+- Disposable browser crash recovery and per-profile concurrency guard:
+  implemented and verified by relaunching Brave from a home containing stale
+  Chromium singleton links.
