@@ -1,9 +1,24 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }: let
   cfg = config.services.wolf-streaming;
+  # GStreamer's CUDA conversion elements load NVRTC dynamically. The
+  # upstream Wolf image deliberately does not bundle it, while NixOS' NVIDIA
+  # CDI specification only injects driver libraries. Copy the runtime pieces
+  # from the CUDA redistributable source without pulling in the full toolkit.
+  nvrtcRuntime = pkgs.runCommand "wolf-nvrtc-runtime" {} ''
+    mkdir -p "$out/lib"
+    cp ${pkgs.cudaPackages.cuda_nvrtc.src}/lib/libnvrtc.so.* "$out/lib/"
+    cp ${pkgs.cudaPackages.cuda_nvrtc.src}/lib/libnvrtc-builtins.so.* "$out/lib/"
+
+    for library in libnvrtc libnvrtc-builtins; do
+      set -- "$out/lib/$library.so."*
+      ln -s "$(basename "$1")" "$out/lib/$library.so"
+    done
+  '';
 in {
   options.services.wolf-streaming = {
     enable = lib.mkEnableOption "Wolf Moonlight application streaming";
@@ -84,7 +99,7 @@ in {
         image = cfg.image;
         autoStart = true;
         environment = {
-          HOST_APPS_STATE_FOLDER = cfg.stateDirectory;
+          LD_LIBRARY_PATH = "/opt/wolf-nvrtc/lib";
           NVIDIA_DRIVER_CAPABILITIES = "all";
           NVIDIA_VISIBLE_DEVICES = "all";
           WOLF_DEFAULT_RUN_GID = toString cfg.defaultRunGid;
@@ -95,6 +110,7 @@ in {
         };
         volumes = [
           "${cfg.stateDirectory}:/etc/wolf:rw"
+          "${nvrtcRuntime}:/opt/wolf-nvrtc:ro"
           "/var/run/docker.sock:/var/run/docker.sock:rw"
           "/dev:/dev:rw"
           "/run/udev:/run/udev:rw"
