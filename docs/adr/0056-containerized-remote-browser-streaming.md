@@ -171,8 +171,19 @@ Run Steam, public Helium, and the protected selector as separate Moonlight user
 services on stable XPS workspaces. The services do not stop one another, so
 distinct remote applications can be kept open in parallel. Browser profile
 locks still reject two containers attempting to open the same persistent home.
-Background clients mute audio and release gamepad input, but are intentionally
-on-demand rather than idle-timed.
+Background clients mute audio and release gamepad input. Connected clients are
+not idle-timed; the bounded cleanup deadline begins only after disconnect.
+
+Route the compositor close shortcut through the focused process's user-service
+cgroup. Managed Moonlight windows stop their exact local service with a short
+per-cgroup SIGKILL fallback, but do not send the protocol quit that destroys the
+resumable remote application. Browser launchers therefore omit Moonlight's
+`--quit-after` option. Wolf starts a bounded idle deadline on stream
+pause and on an empty resumable lobby, cancels it on resume or join, and stops
+the corresponding application only after the deadline expires. Ordinary
+windows retain the compositor's normal close request. This prevents a stalled
+decoder event loop from trapping its supervisor, preserves fast browser resume,
+and eventually removes abandoned application containers.
 
 Public Helium and the protected selector target the same Wolf host. Give the
 selector its own persistent Moonlight XDG profile and client certificate so

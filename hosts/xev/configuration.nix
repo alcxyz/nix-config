@@ -29,6 +29,7 @@
   hardware.nvidia.enable = true;
   services.wolf-streaming = {
     enable = true;
+    sessionIdleTimeoutSeconds = 30 * 60;
     prunedApplicationTitles = [
       "Remote Firefox"
       "Test ball"

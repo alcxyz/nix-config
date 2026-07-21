@@ -4,8 +4,7 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.services.moonlight-client;
 
   modeStateDirectory = "/var/lib/moonlight-client";
@@ -15,13 +14,16 @@ let
   mirrorStateFile = "${modeStateDirectory}/mirror-enabled";
   displayLayoutStateFile = "${modeStateDirectory}/display-layout";
   mergedDmsConfigDirectory = "${runtimeStateDirectory}/dms-merged";
-  effectiveMergedDmsSettings = lib.recursiveUpdate (lib.optionalAttrs
-    (cfg.sessionSplashCommand != null)
-    {
-      customPowerActionReboot = "${lib.getExe sessionPowerAction} reboot";
-      customPowerActionPowerOff = "${lib.getExe sessionPowerAction} poweroff";
-    }
-  ) cfg.mergedDmsSettings;
+  effectiveMergedDmsSettings =
+    lib.recursiveUpdate (
+      lib.optionalAttrs
+      (cfg.sessionSplashCommand != null)
+      {
+        customPowerActionReboot = "${lib.getExe sessionPowerAction} reboot";
+        customPowerActionPowerOff = "${lib.getExe sessionPowerAction} poweroff";
+      }
+    )
+    cfg.mergedDmsSettings;
   mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (
     builtins.toJSON effectiveMergedDmsSettings
   );
@@ -144,29 +146,34 @@ let
   browserSelectorEnabled = browserStreamEnabled && cfg.browserStreamSelectorApplication != null;
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
-    if dynamicExternalLayoutEnabled then lib.last cfg.autoLayoutSecondaryModes else cfg.outputMode;
-  mirrorOutputMode = if cfg.mirrorOutputMode == null then cfg.outputMode else cfg.mirrorOutputMode;
-  autoMirrorOutputMode = if cfg.mirrorOutputMode == null then "" else cfg.mirrorOutputMode;
+    if dynamicExternalLayoutEnabled
+    then lib.last cfg.autoLayoutSecondaryModes
+    else cfg.outputMode;
+  mirrorOutputMode =
+    if cfg.mirrorOutputMode == null
+    then cfg.outputMode
+    else cfg.mirrorOutputMode;
+  autoMirrorOutputMode =
+    if cfg.mirrorOutputMode == null
+    then ""
+    else cfg.mirrorOutputMode;
   autoMirrorSecondaryPosition =
-    if cfg.autoMirrorSecondaryPosition == null then
-      cfg.autoLayoutSecondaryPosition
-    else
-      cfg.autoMirrorSecondaryPosition;
+    if cfg.autoMirrorSecondaryPosition == null
+    then cfg.autoLayoutSecondaryPosition
+    else cfg.autoMirrorSecondaryPosition;
   autoMirrorTertiaryPosition =
-    if cfg.autoMirrorTertiaryPosition == null then
-      cfg.autoLayoutTertiaryPosition
-    else
-      cfg.autoMirrorTertiaryPosition;
+    if cfg.autoMirrorTertiaryPosition == null
+    then cfg.autoLayoutTertiaryPosition
+    else cfg.autoMirrorTertiaryPosition;
   mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
-  mkMoonlightExecutable =
-    name: profileDirectory:
-    if profileDirectory == null then
-      lib.getExe cfg.package
+  mkMoonlightExecutable = name: profileDirectory:
+    if profileDirectory == null
+    then lib.getExe cfg.package
     else
       lib.getExe (
         pkgs.writeShellApplication {
           name = "moonlight-${name}";
-          runtimeInputs = [ pkgs.coreutils ];
+          runtimeInputs = [pkgs.coreutils];
           text = ''
             install -d -m 0700 \
               ${lib.escapeShellArg "${profileDirectory}/config"} \
@@ -181,8 +188,7 @@ let
       );
   defaultMoonlightExecutable = mkMoonlightExecutable "default" null;
   selectorMoonlightExecutable = mkMoonlightExecutable "browser-selector" cfg.browserStreamSelectorProfileDirectory;
-  mkMoonlightInvocation =
-    executable: extraArguments: host: application:
+  mkMoonlightInvocation = executable: extraArguments: host: application:
     lib.escapeShellArgs (
       [
         "${pkgs.coreutils}/bin/env"
@@ -198,8 +204,8 @@ let
       ]
     );
   moonlightInvocation =
-    if directStreamEnabled then
-      mkMoonlightInvocation defaultMoonlightExecutable [ ] cfg.streamHost cfg.streamApplication
+    if directStreamEnabled
+    then mkMoonlightInvocation defaultMoonlightExecutable [] cfg.streamHost cfg.streamApplication
     else
       lib.escapeShellArgs [
         "${pkgs.coreutils}/bin/env"
@@ -208,11 +214,11 @@ let
       ];
   browserMoonlightInvocation = lib.optionalString browserStreamEnabled (
     mkMoonlightInvocation defaultMoonlightExecutable cfg.browserStreamArguments cfg.browserStreamHost
-      cfg.browserStreamApplication
+    cfg.browserStreamApplication
   );
   browserSelectorMoonlightInvocation = lib.optionalString browserSelectorEnabled (
     mkMoonlightInvocation selectorMoonlightExecutable cfg.browserStreamArguments cfg.browserStreamHost
-      cfg.browserStreamSelectorApplication
+    cfg.browserStreamSelectorApplication
   );
   superviseMoonlightWindow = targetWorkspace: ''
     seen_window=0
@@ -284,53 +290,49 @@ let
   browserStreamEndpointPolicyEnabled =
     cfg.browserStreamLocalAddress != null && cfg.browserStreamRemoteAddress != null;
   browserStreamReadinessHosts =
-    if browserStreamEndpointPolicyEnabled then
+    if browserStreamEndpointPolicyEnabled
+    then
       lib.unique (
-        if cfg.browserStreamEndpointMode == "lan-only" then
-          [ cfg.browserStreamLocalAddress ]
-        else if cfg.browserStreamEndpointMode == "remote-only" then
-          [ cfg.browserStreamRemoteAddress ]
-        else
-          [
-            cfg.browserStreamLocalAddress
-            cfg.browserStreamRemoteAddress
-          ]
+        if cfg.browserStreamEndpointMode == "lan-only"
+        then [cfg.browserStreamLocalAddress]
+        else if cfg.browserStreamEndpointMode == "remote-only"
+        then [cfg.browserStreamRemoteAddress]
+        else [
+          cfg.browserStreamLocalAddress
+          cfg.browserStreamRemoteAddress
+        ]
       )
-    else
-      lib.optional browserStreamEnabled cfg.browserStreamHost;
+    else lib.optional browserStreamEnabled cfg.browserStreamHost;
   streamReadinessHosts =
-    if streamEndpointPolicyEnabled then
+    if streamEndpointPolicyEnabled
+    then
       lib.unique (
-        if cfg.streamEndpointMode == "lan-only" then
-          [ cfg.streamLocalAddress ]
-        else if cfg.streamEndpointMode == "remote-only" then
-          [ cfg.streamRemoteAddress ]
-        else
-          [
-            cfg.streamLocalAddress
-            cfg.streamRemoteAddress
-          ]
+        if cfg.streamEndpointMode == "lan-only"
+        then [cfg.streamLocalAddress]
+        else if cfg.streamEndpointMode == "remote-only"
+        then [cfg.streamRemoteAddress]
+        else [
+          cfg.streamLocalAddress
+          cfg.streamRemoteAddress
+        ]
       )
-    else
-      lib.optional (cfg.streamReadinessHost != null) cfg.streamReadinessHost;
+    else lib.optional (cfg.streamReadinessHost != null) cfg.streamReadinessHost;
   reconcileMoonlightEndpoints = pkgs.writeShellApplication {
     name = "reconcile-moonlight-endpoints";
-    runtimeInputs = [ pkgs.python3 ];
+    runtimeInputs = [pkgs.python3];
     text = ''
       exec python3 ${./reconcile-endpoints.py} "$@"
     '';
   };
-  mkMoonlightEndpointSetup =
-    name: profileDirectory: reconcileStream: reconcileBrowser:
+  mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser:
     pkgs.writeShellApplication {
       name = "moonlight-endpoint-setup-${name}";
       text = ''
           config_file=${
-            if profileDirectory == null then
-              ''"$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"''
-            else
-              lib.escapeShellArg "${profileDirectory}/config/Moonlight Game Streaming Project/Moonlight.conf"
-          }
+          if profileDirectory == null
+          then ''"$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"''
+          else lib.escapeShellArg "${profileDirectory}/config/Moonlight Game Streaming Project/Moonlight.conf"
+        }
         ${lib.optionalString (reconcileStream && streamEndpointPolicyEnabled) ''
           ${lib.getExe reconcileMoonlightEndpoints} \
             "$config_file" \
@@ -352,7 +354,7 @@ let
   moonlightEndpointSetup = mkMoonlightEndpointSetup "default" null true true;
   browserSelectorEndpointSetup =
     mkMoonlightEndpointSetup "browser-selector" cfg.browserStreamSelectorProfileDirectory false
-      true;
+    true;
   browserSelectorPair = pkgs.writeShellApplication {
     name = "couch-moonlight-pair-private";
     text = ''
@@ -363,13 +365,12 @@ let
       exec ${pkgs.coreutils}/bin/env \
         QT_QPA_PLATFORM=${lib.escapeShellArg cfg.moonlightPlatform} \
         ${selectorMoonlightExecutable} pair --pin "$1" ${
-          lib.escapeShellArg (
-            if cfg.browserStreamLocalAddress == null then
-              cfg.browserStreamHost
-            else
-              cfg.browserStreamLocalAddress
-          )
-        }
+        lib.escapeShellArg (
+          if cfg.browserStreamLocalAddress == null
+          then cfg.browserStreamHost
+          else cfg.browserStreamLocalAddress
+        )
+      }
     '';
   };
 
@@ -395,16 +396,17 @@ let
             keyboard_name="$(printf '%s' "$keyboard_name" | tr '[:upper:]' '[:lower:]')"
             case "$keyboard_name" in
               ${lib.concatStringsSep "\n              " (
-                lib.flatten (
-                  lib.mapAttrsToList (
-                    layout: matches:
-                    map (
-                      match:
-                      "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
-                    ) matches
-                  ) cfg.keyboardLayoutDeviceOverrides
-                )
-              )}
+        lib.flatten (
+          lib.mapAttrsToList (
+            layout: matches:
+              map (
+                match: "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
+              )
+              matches
+          )
+          cfg.keyboardLayoutDeviceOverrides
+        )
+      )}
             esac
           done < <(printf '%s' "$devices" | jq -r '.keyboards[].name')
 
@@ -511,35 +513,34 @@ let
       pkgs.jq
     ];
     text =
-      if cfg.relaunchOnExit then
-        ''
-          ${lib.getExe moonlightEndpointSetup}
-          ${lib.getExe displayModeSetup}
-          ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
+      if cfg.relaunchOnExit
+      then ''
+        ${lib.getExe moonlightEndpointSetup}
+        ${lib.getExe displayModeSetup}
+        ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
 
-          while true; do
-            ${moonlightInvocation} &
-            moonlight_pid=$!
-            ${superviseMoonlightWindow 1}
-            sleep 1
-          done
-        ''
-      else
-        ''
-          ${lib.getExe moonlightEndpointSetup}
-          ${lib.getExe displayModeSetup}
-          ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
-
+        while true; do
           ${moonlightInvocation} &
           moonlight_pid=$!
           ${superviseMoonlightWindow 1}
-          exit "$status"
-        '';
+          sleep 1
+        done
+      ''
+      else ''
+        ${lib.getExe moonlightEndpointSetup}
+        ${lib.getExe displayModeSetup}
+        ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
+
+        ${moonlightInvocation} &
+        moonlight_pid=$!
+        ${superviseMoonlightWindow 1}
+        exit "$status"
+      '';
   };
 
   couchBrowser = pkgs.writeShellApplication {
     name = "couch-browser";
-    runtimeInputs = [ pkgs.hyprland ];
+    runtimeInputs = [pkgs.hyprland];
     text = ''
       hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
       exec ${lib.getExe cfg.browserPackage} \
@@ -596,7 +597,7 @@ let
 
   couchTerminal = pkgs.writeShellApplication {
     name = "couch-terminal";
-    runtimeInputs = [ pkgs.hyprland ];
+    runtimeInputs = [pkgs.hyprland];
     text = ''
       hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
       exec ${lib.getExe cfg.terminalPackage}
@@ -606,7 +607,7 @@ let
   couchFallbackBrowser = lib.optionalAttrs (cfg.fallbackBrowserPackage != null) {
     package = pkgs.writeShellApplication {
       name = "couch-browser-fallback";
-      runtimeInputs = [ pkgs.hyprland ];
+      runtimeInputs = [pkgs.hyprland];
       text = ''
         hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
         exec ${lib.getExe cfg.fallbackBrowserPackage} \
@@ -621,7 +622,7 @@ let
 
   protectedBrowserPasswordPrompt = pkgs.writeShellApplication {
     name = "couch-protected-browser-password";
-    runtimeInputs = [ pkgs.zenity ];
+    runtimeInputs = [pkgs.zenity];
     text = ''
       export GDK_BACKEND=x11
       case "''${1:-unlock}" in
@@ -894,7 +895,7 @@ let
         fi
       ''}
 
-      ${lib.optionalString (streamReadinessHosts != [ ]) ''
+      ${lib.optionalString (streamReadinessHosts != []) ''
         ready_host=""
         for ((attempt = 0; attempt < ${toString cfg.streamStartupTimeout}; attempt++)); do
           ready_host="$(find_ready_host || true)"
@@ -917,8 +918,7 @@ let
     '';
   };
 
-  mkMoonlightBrowserSession =
-    name: endpointSetup: invocation: targetWorkspace: application:
+  mkMoonlightBrowserSession = name: endpointSetup: invocation: targetWorkspace: application:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
@@ -935,8 +935,12 @@ let
             COUCH_KEYBOARD_LAYOUT="$(${lib.getExe activeKeyboardLayout})"
             export COUCH_KEYBOARD_LAYOUT
             export COUCH_STREAM_APPLICATION=${
-              lib.escapeShellArg (if application == null then "" else application)
-            }
+            lib.escapeShellArg (
+              if application == null
+              then ""
+              else application
+            )
+          }
             ${cfg.browserStreamLayoutCommand}
           ) &
         ''}
@@ -946,14 +950,14 @@ let
     };
   moonlightBrowserSession =
     mkMoonlightBrowserSession "moonlight-browser-session" moonlightEndpointSetup
-      browserMoonlightInvocation
-      2
-      cfg.browserStreamApplication;
+    browserMoonlightInvocation
+    2
+    cfg.browserStreamApplication;
   moonlightBrowserSelectorSession =
     mkMoonlightBrowserSession "moonlight-browser-selector-session" browserSelectorEndpointSetup
-      browserSelectorMoonlightInvocation
-      3
-      cfg.browserStreamSelectorApplication;
+    browserSelectorMoonlightInvocation
+    3
+    cfg.browserStreamSelectorApplication;
 
   couchStreamControl = pkgs.writeShellApplication {
     name = "couch-stream-control";
@@ -978,27 +982,64 @@ let
           ;;
         browser)
           ${
-            if browserStreamEnabled then
-              ''
-                systemctl --user start couch-moonlight-browser-stream.service
-                hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-              ''
-            else
-              ''
-                ${lib.getExe mergedUiControl} browser
-                hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-                if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
-                  >/dev/null 2>&1; then
-                  ${lib.getExe couchBrowser} >/dev/null 2>&1 &
-                fi
-              ''
-          }
+        if browserStreamEnabled
+        then ''
+          systemctl --user start couch-moonlight-browser-stream.service
+          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+        ''
+        else ''
+          ${lib.getExe mergedUiControl} browser
+          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
+            >/dev/null 2>&1; then
+            ${lib.getExe couchBrowser} >/dev/null 2>&1 &
+          fi
+        ''
+      }
           ;;
         *)
           echo "usage: couch-stream-control {start|remote-browser|private-browser|browser}" >&2
           exit 2
           ;;
       esac
+    '';
+  };
+
+  closeActiveWindow = pkgs.writeShellApplication {
+    name = "couch-close-active-window";
+    runtimeInputs = [
+      pkgs.gawk
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.systemd
+    ];
+    text = ''
+      active_pid="$(hyprctl -j activewindow 2>/dev/null | jq -r '.pid // 0')"
+      managed_unit=""
+
+      if [[ "$active_pid" =~ ^[1-9][0-9]*$ ]] && [ -r "/proc/$active_pid/cgroup" ]; then
+        cgroup="$(awk -F: '$1 == "0" { print $3; exit }' "/proc/$active_pid/cgroup")"
+        case "$cgroup" in
+          */couch-moonlight-stream.service)
+            managed_unit=couch-moonlight-stream.service
+            ;;
+          */couch-moonlight-browser-stream.service)
+            managed_unit=couch-moonlight-browser-stream.service
+            ;;
+          */couch-moonlight-browser-selector.service)
+            managed_unit=couch-moonlight-browser-selector.service
+            ;;
+        esac
+      fi
+
+      if [ -n "$managed_unit" ]; then
+        # A stalled decoder can leave Moonlight's GUI event loop unable to
+        # honor Hyprland's close request. Stop the owning cgroup instead; the
+        # unit applies a bounded graceful timeout before killing leftovers.
+        exec systemctl --user --no-block stop "$managed_unit"
+      fi
+
+      exec hyprctl dispatch killactive
     '';
   };
 
@@ -1015,7 +1056,7 @@ let
     '';
   };
 
-  controllerPython = pkgs.python3.withPackages (pythonPackages: [ pythonPackages.evdev ]);
+  controllerPython = pkgs.python3.withPackages (pythonPackages: [pythonPackages.evdev]);
   controllerDaemonSource = pkgs.writeText "couch-controller.py" ''
     import select
     import subprocess
@@ -1029,36 +1070,36 @@ let
     ACTIONS = {
         "start": {ecodes.BTN_MODE, ecodes.BTN_EAST},
         ${lib.optionalString browserStreamEnabled ''
-          "remote_browser": {ecodes.BTN_MODE, ecodes.BTN_NORTH},
-        ''}
+      "remote_browser": {ecodes.BTN_MODE, ecodes.BTN_NORTH},
+    ''}
         "browser": {ecodes.BTN_THUMBL, ecodes.BTN_THUMBR},
         "help": {ecodes.BTN_SELECT, ecodes.BTN_SOUTH},
         ${lib.optionalString cfg.enableMirrorToggle ''
-          "mirror": {ecodes.BTN_SELECT, ecodes.BTN_START},
-        ''}
+      "mirror": {ecodes.BTN_SELECT, ecodes.BTN_START},
+    ''}
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
-          "layout": {ecodes.BTN_SELECT, ecodes.BTN_NORTH},
-        ''}
+      "layout": {ecodes.BTN_SELECT, ecodes.BTN_NORTH},
+    ''}
         ${lib.optionalString cfg.enableAudioOutputCycle ''
-          "audio": {ecodes.BTN_SELECT, ecodes.BTN_WEST},
-        ''}
+      "audio": {ecodes.BTN_SELECT, ecodes.BTN_WEST},
+    ''}
     }
     COMMANDS = {
         "start": [${builtins.toJSON (lib.getExe couchStreamControl)}, "start"],
         ${lib.optionalString browserStreamEnabled ''
-          "remote_browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "remote-browser"],
-        ''}
+      "remote_browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "remote-browser"],
+    ''}
         "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
         "help": [${builtins.toJSON (lib.getExe couchControlHelp)}],
         ${lib.optionalString cfg.enableMirrorToggle ''
-          "mirror": [${builtins.toJSON (lib.getExe displayMirrorToggle)}, "toggle"],
-        ''}
+      "mirror": [${builtins.toJSON (lib.getExe displayMirrorToggle)}, "toggle"],
+    ''}
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
-          "layout": [${builtins.toJSON (lib.getExe displayLayoutControl)}, "cycle"],
-        ''}
+      "layout": [${builtins.toJSON (lib.getExe displayLayoutControl)}, "cycle"],
+    ''}
         ${lib.optionalString cfg.enableAudioOutputCycle ''
-          "audio": [${builtins.toJSON (lib.getExe audioOutputControl)}, "cycle"],
-        ''}
+      "audio": [${builtins.toJSON (lib.getExe audioOutputControl)}, "cycle"],
+    ''}
     }
 
 
@@ -1478,13 +1519,14 @@ let
 
   autoLayoutExternalOutputs = pkgs.writeShellApplication {
     name = "couch-auto-layout-outputs";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.hyprland
-      pkgs.jq
-      pkgs.xrandr
-    ]
-    ++ lib.optional (cfg.autoMirrorExternalOutputs || cfg.enableMirrorToggle) pkgs.wl-mirror;
+    runtimeInputs =
+      [
+        pkgs.coreutils
+        pkgs.hyprland
+        pkgs.jq
+        pkgs.xrandr
+      ]
+      ++ lib.optional (cfg.autoMirrorExternalOutputs || cfg.enableMirrorToggle) pkgs.wl-mirror;
     text = ''
       config_file=${lib.escapeShellArg dynamicMonitorConfigFile}
       mirror_state_file=${lib.escapeShellArg mirrorStateFile}
@@ -1746,13 +1788,13 @@ let
 
         display_layout=all
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
-          display_layout="$(tr -d '[:space:]' < "$display_layout_state_file" 2>/dev/null || true)"
-          case "$display_layout" in
-            solo-tertiary) display_layout=solo-aux ;;
-            adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux) ;;
-            *) display_layout=adaptive ;;
-          esac
-        ''}
+        display_layout="$(tr -d '[:space:]' < "$display_layout_state_file" 2>/dev/null || true)"
+        case "$display_layout" in
+          solo-tertiary) display_layout=solo-aux ;;
+          adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux) ;;
+          *) display_layout=adaptive ;;
+        esac
+      ''}
 
         case "$display_layout" in
           adaptive)
@@ -1894,11 +1936,11 @@ let
 
         native_mirror_requested=0
         ${lib.optionalString cfg.enableMirrorToggle ''
-          native_mirror_requested="$(tr -d '[:space:]' < "$mirror_state_file" 2>/dev/null || true)"
-          if [ "$native_mirror_requested" != 1 ]; then
-            native_mirror_requested=0
-          fi
-        ''}
+        native_mirror_requested="$(tr -d '[:space:]' < "$mirror_state_file" 2>/dev/null || true)"
+        if [ "$native_mirror_requested" != 1 ]; then
+          native_mirror_requested=0
+        fi
+      ''}
         mirror_output_mode=${lib.escapeShellArg autoMirrorOutputMode}
         if [ "$native_mirror_requested" = 1 ] \
           && [ -n "$mirror_output_mode" ] \
@@ -1910,7 +1952,11 @@ let
           secondary_mode="$mirror_output_mode"
         fi
         native_mirror=0
-        native_mirror_allowed=${if cfg.forceSoftwareMirror then "0" else "1"}
+        native_mirror_allowed=${
+        if cfg.forceSoftwareMirror
+        then "0"
+        else "1"
+      }
         primary_dimensions="''${source_mode%@*}"
         secondary_dimensions="''${secondary_mode%@*}"
         if [ "$native_mirror_requested" = 1 ] \
@@ -1936,43 +1982,43 @@ let
         fi
 
         ${lib.optionalString (cfg.autoMirrorExternalOutputs || cfg.enableMirrorToggle) ''
-          software_mirror=0
-          ${lib.optionalString cfg.autoMirrorExternalOutputs ''
+        software_mirror=0
+        ${lib.optionalString cfg.autoMirrorExternalOutputs ''
+          software_mirror=1
+        ''}
+        ${lib.optionalString cfg.enableMirrorToggle ''
+          if [ "$native_mirror_requested" = 1 ] && [ "$native_mirror" != 1 ]; then
             software_mirror=1
-          ''}
-          ${lib.optionalString cfg.enableMirrorToggle ''
-            if [ "$native_mirror_requested" = 1 ] && [ "$native_mirror" != 1 ]; then
-              software_mirror=1
-            fi
-          ''}
-
-          if [ "$software_mirror" = 1 ] \
-            && [ -n "$source_output" ] \
-            && [ -n "$secondary_output" ]; then
-            if [ -z "$mirror_pid" ] || ! kill -0 "$mirror_pid" 2>/dev/null; then
-              hyprctl dispatch focusmonitor "$secondary_output" >/dev/null 2>&1 || true
-              hyprctl dispatch workspace \
-                ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
-                >/dev/null 2>&1 || true
-              wl-mirror \
-                --fullscreen-output "$secondary_output" \
-                --scaling fit \
-                --title "Couch mirror $source_output" \
-                "$source_output" &
-              mirror_pid=$!
-              sleep 0.5
-              hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
-              hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-            fi
-          elif [ -n "$mirror_pid" ]; then
-            stop_mirror
-            restore_secondary_workspace "$secondary_output"
-            if [ -n "$source_output" ]; then
-              hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
-              hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-            fi
           fi
         ''}
+
+        if [ "$software_mirror" = 1 ] \
+          && [ -n "$source_output" ] \
+          && [ -n "$secondary_output" ]; then
+          if [ -z "$mirror_pid" ] || ! kill -0 "$mirror_pid" 2>/dev/null; then
+            hyprctl dispatch focusmonitor "$secondary_output" >/dev/null 2>&1 || true
+            hyprctl dispatch workspace \
+              ${lib.escapeShellArg (toString cfg.autoMirrorWorkspace)} \
+              >/dev/null 2>&1 || true
+            wl-mirror \
+              --fullscreen-output "$secondary_output" \
+              --scaling fit \
+              --title "Couch mirror $source_output" \
+              "$source_output" &
+            mirror_pid=$!
+            sleep 0.5
+            hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
+            hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          fi
+        elif [ -n "$mirror_pid" ]; then
+          stop_mirror
+          restore_secondary_workspace "$secondary_output"
+          if [ -n "$source_output" ]; then
+            hyprctl dispatch focusmonitor "$source_output" >/dev/null 2>&1 || true
+            hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          fi
+        fi
+      ''}
 
         sleep 1
       done
@@ -2040,7 +2086,7 @@ let
 
   mergedDmsCondition = pkgs.writeShellApplication {
     name = "couch-merged-dms-condition";
-    runtimeInputs = [ pkgs.gnugrep ];
+    runtimeInputs = [pkgs.gnugrep];
     text = ''
       grep -qx merged ${lib.escapeShellArg modeStateFile}
     '';
@@ -2093,7 +2139,7 @@ let
 
   sessionSplashLaunch = pkgs.writeShellApplication {
     name = "couch-session-splash-launch";
-    runtimeInputs = [ waitForStableOutputs ];
+    runtimeInputs = [waitForStableOutputs];
     text = ''
       couch-wait-for-stable-outputs
       # The compositor can render before a dock-connected TV has completed its
@@ -2102,7 +2148,9 @@ let
       # clock during that interval.
       export NIXBOX_SPLASH_SETTLE_MS=3000
       exec ${
-        if cfg.sessionSplashCommand == null then "${pkgs.coreutils}/bin/true" else cfg.sessionSplashCommand
+        if cfg.sessionSplashCommand == null
+        then "${pkgs.coreutils}/bin/true"
+        else cfg.sessionSplashCommand
       }
     '';
   };
@@ -2216,7 +2264,7 @@ let
 
   sessionMode = pkgs.writeShellApplication {
     name = "xps-session-mode";
-    runtimeInputs = [ pkgs.coreutils ];
+    runtimeInputs = [pkgs.coreutils];
     text = ''
       mode_file=${lib.escapeShellArg modeStateFile}
       current="$(tr -d '[:space:]' < "$mode_file" 2>/dev/null || true)"
@@ -2243,7 +2291,7 @@ let
     '';
   };
 
-  couchApplications = pkgs.runCommand "couch-session-applications" { } ''
+  couchApplications = pkgs.runCommand "couch-session-applications" {} ''
     mkdir -p "$out/share/applications"
 
     cat > "$out/share/applications/couch-browser.desktop" <<EOF
@@ -2350,13 +2398,14 @@ let
   hyprlandConfig = pkgs.writeText "moonlight-hyprland.conf" ''
     monitor = , ${defaultOutputMode}, auto, ${toString cfg.outputScale}
     ${lib.concatMapStringsSep "\n" (
-      output: "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}"
-    ) mirrorSourceOutputs}
+        output: "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}"
+      )
+      mirrorSourceOutputs}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
-        output: source:
-        "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}, mirror, ${source}"
-      ) cfg.mirrorOutputs
+        output: source: "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}, mirror, ${source}"
+      )
+      cfg.mirrorOutputs
     )}
     ${lib.concatStringsSep "\n" (map (rule: "monitor = ${rule}") cfg.extraMonitorRules)}
     ${lib.concatStringsSep "\n" (map (rule: "workspace = ${rule}") cfg.extraWorkspaceRules)}
@@ -2376,7 +2425,11 @@ let
       cfg.sessionSplashCommand != null
     ) "exec-once = ${lib.getExe sessionSplashLaunch}"}
     ${lib.optionalString cfg.autoStartBrowser "exec-once = ${
-      lib.getExe (if cfg.preferRemoteBrowserAtStartup then couchBrowserStartup else couchBrowser)
+      lib.getExe (
+        if cfg.preferRemoteBrowserAtStartup
+        then couchBrowserStartup
+        else couchBrowser
+      )
     }"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
@@ -2388,9 +2441,9 @@ let
     ${lib.optionalString cfg.enableKdeConnect "exec-once = ${pkgs.coreutils}/bin/env QT_QPA_PLATFORM=xcb ${lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd"}"}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
-        output: source:
-        "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
-      ) cfg.softwareMirrorOutputs
+        output: source: "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
+      )
+      cfg.softwareMirrorOutputs
     )}
     ${lib.optionalString cfg.enableDms "exec-once = ${lib.getExe dmsSession}"}
     ${lib.optionalString cfg.enableMergedProfile "exec-once = ${lib.getExe mergedDmsServiceControl}"}
@@ -2450,10 +2503,9 @@ let
     bind = SUPER, 8, exec, ${lib.getExe couchWorkspace} switch 8
     bind = SUPER, 9, exec, ${lib.getExe couchWorkspace} switch 9
     ${
-      if cfg.enableControllerShortcuts then
-        "bind = SUPER, M, exec, ${lib.getExe couchStreamControl} start"
-      else
-        "bind = SUPER, M, workspace, 1"
+      if cfg.enableControllerShortcuts
+      then "bind = SUPER, M, exec, ${lib.getExe couchStreamControl} start"
+      else "bind = SUPER, M, workspace, 1"
     }
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
     ${lib.optionalString browserStreamEnabled "bind = SUPER, R, exec, ${lib.getExe couchStreamControl} remote-browser"}
@@ -2470,7 +2522,7 @@ let
     ${lib.optionalString (
       cfg.enableDms || cfg.enableMergedProfile
     ) "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
-    bind = SUPER, W, killactive
+    bind = SUPER, W, exec, ${lib.getExe closeActiveWindow}
     bind = SUPER, RETURN, fullscreen
     bind = SUPER, S, togglefloating
 
@@ -2517,7 +2569,7 @@ let
   sessionPackage = pkgs.writeTextFile {
     name = "moonlight-hyprland-session";
     destination = "/share/wayland-sessions/moonlight-hyprland.desktop";
-    passthru.providedSessions = [ "moonlight-hyprland" ];
+    passthru.providedSessions = ["moonlight-hyprland"];
     text = ''
       [Desktop Entry]
       Name=Couch (Hyprland)
@@ -2546,18 +2598,17 @@ let
           exec ${cfg.desktopSessionCommand}
           ;;
         ${lib.optionalString cfg.enableMergedProfile ''
-          merged)
-            exec ${sessionCommand}
-            ;;
-        ''}
+        merged)
+          exec ${sessionCommand}
+          ;;
+      ''}
         couch | *)
           exec ${sessionCommand}
           ;;
       esac
     '';
   };
-in
-{
+in {
   options.services.moonlight-client = {
     enable = lib.mkEnableOption "a dedicated Moonlight Hyprland session";
 
@@ -2720,7 +2771,7 @@ in
 
     browserStreamArguments = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ ];
+      default = [];
       description = "Additional Moonlight arguments used only for the remote browser stream.";
     };
 
@@ -2736,7 +2787,7 @@ in
 
     streamArguments = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ ];
+      default = [];
       description = "Additional arguments passed to the direct Moonlight stream command.";
     };
 
@@ -2834,7 +2885,7 @@ in
             name = "Couch Bar";
             enabled = true;
             position = 0;
-            screenPreferences = [ "all" ];
+            screenPreferences = ["all"];
             showOnLastDisplay = true;
             leftWidgets = [
               "launcherButton"
@@ -2886,7 +2937,7 @@ in
 
     keyboardLayoutDeviceOverrides = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf lib.types.str);
-      default = { };
+      default = {};
       description = ''
         Case-insensitive keyboard-name substrings that select a layout for a
         streamed browser when the matching device is connected. Attribute
@@ -3017,7 +3068,7 @@ in
 
     mirrorOutputs = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = { };
+      default = {};
       example = {
         "DP-2" = "DP-1";
       };
@@ -3032,21 +3083,21 @@ in
 
     extraMonitorRules = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ ];
-      example = [ "DP-2, 3840x2160@60, 2560x0, 2" ];
+      default = [];
+      example = ["DP-2, 3840x2160@60, 2560x0, 2"];
       description = "Additional Hyprland monitor rule bodies applied after the default and native mirror rules.";
     };
 
     extraWorkspaceRules = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ ];
-      example = [ "10, monitor:DP-2, default:true" ];
+      default = [];
+      example = ["10, monitor:DP-2, default:true"];
       description = "Additional Hyprland workspace rule bodies for fixed multi-output couch layouts.";
     };
 
     softwareMirrorOutputs = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = { };
+      default = {};
       example = {
         "DP-2" = "DP-1";
       };
@@ -3097,7 +3148,7 @@ in
 
     autoLayoutSecondaryModes = lib.mkOption {
       type = lib.types.nonEmptyListOf lib.types.str;
-      default = [ "1920x1080@60" ];
+      default = ["1920x1080@60"];
       description = "Preferred modes for automatically discovered auxiliary outputs, in priority order.";
     };
 
@@ -3197,35 +3248,38 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [
-      cfg.package
-      cfg.browserPackage
-      cfg.terminalPackage
-      couchBrowser
-      couchBrowserStartup
-      couchBrowserNewWindow
-      couchTerminal
-      couchApplications
-      couchStreamControl
-      moonlightStreamStart
-    ]
-    ++ lib.optional (
-      browserSelectorEnabled && cfg.browserStreamSelectorProfileDirectory != null
-    ) browserSelectorPair
-    ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
-    ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
-    ++ lib.optional cfg.enableMergedProfile mergedDmsSession
-    ++ lib.optional cfg.enableMergedProfile mergedUiControl
-    ++ lib.optional (cfg.softwareMirrorOutputs != { }) softwareMirror
-    ++ lib.optional cfg.enableMirrorToggle displayMirrorToggle
-    ++ lib.optional cfg.enableAdaptiveDisplayLayout displayLayoutControl
-    ++ lib.optional cfg.enableAudioOutputCycle audioOutputControl
-    ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
-    ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
-    ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
-    ++ lib.optional (cfg.protectedBrowserPackage != null) protectedBrowser
-    ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
-    services.displayManager.sessionPackages = [ sessionPackage ];
+    environment.systemPackages =
+      [
+        cfg.package
+        cfg.browserPackage
+        cfg.terminalPackage
+        couchBrowser
+        couchBrowserStartup
+        couchBrowserNewWindow
+        couchTerminal
+        couchApplications
+        couchStreamControl
+        closeActiveWindow
+        moonlightStreamStart
+      ]
+      ++ lib.optional (
+        browserSelectorEnabled && cfg.browserStreamSelectorProfileDirectory != null
+      )
+      browserSelectorPair
+      ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
+      ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
+      ++ lib.optional cfg.enableMergedProfile mergedDmsSession
+      ++ lib.optional cfg.enableMergedProfile mergedUiControl
+      ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
+      ++ lib.optional cfg.enableMirrorToggle displayMirrorToggle
+      ++ lib.optional cfg.enableAdaptiveDisplayLayout displayLayoutControl
+      ++ lib.optional cfg.enableAudioOutputCycle audioOutputControl
+      ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
+      ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
+      ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
+      ++ lib.optional (cfg.protectedBrowserPackage != null) protectedBrowser
+      ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
+    services.displayManager.sessionPackages = [sessionPackage];
 
     # Install udev rules for common controllers, including Steam hardware.
     hardware.steam-hardware.enable = true;
@@ -3240,6 +3294,9 @@ in
         ExecStart = lib.getExe moonlightStreamStart;
         ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
         TimeoutStartSec = cfg.streamStartupTimeout + 30;
+        TimeoutStopSec = 3;
+        KillMode = "control-group";
+        SendSIGKILL = true;
       };
     };
 
@@ -3250,6 +3307,9 @@ in
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
         ExecStart = lib.getExe moonlightBrowserSession;
         ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
+        TimeoutStopSec = 3;
+        KillMode = "control-group";
+        SendSIGKILL = true;
       };
     };
 
@@ -3260,6 +3320,9 @@ in
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
         ExecStart = lib.getExe moonlightBrowserSelectorSession;
         ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
+        TimeoutStopSec = 3;
+        KillMode = "control-group";
+        SendSIGKILL = true;
       };
     };
 
@@ -3285,7 +3348,9 @@ in
 
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
       command =
-        if cfg.desktopSessionCommand == null then sessionCommand else lib.getExe sessionDispatcher;
+        if cfg.desktopSessionCommand == null
+        then sessionCommand
+        else lib.getExe sessionDispatcher;
       user = cfg.autoLoginUser;
     };
 
@@ -3311,27 +3376,27 @@ in
 
     systemd.paths.couch-session-mode-switch =
       lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null)
-        {
-          description = "Watch for XPS session mode changes";
-          wantedBy = [ "multi-user.target" ];
-          pathConfig = {
-            PathChanged = modeStateFile;
-            Unit = "couch-session-mode-switch.service";
-          };
+      {
+        description = "Watch for XPS session mode changes";
+        wantedBy = ["multi-user.target"];
+        pathConfig = {
+          PathChanged = modeStateFile;
+          Unit = "couch-session-mode-switch.service";
         };
+      };
 
     systemd.services.couch-session-mode-switch =
       lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null)
-        {
-          description = "Restart greetd after an XPS session mode change";
-          serviceConfig.Type = "oneshot";
-          script = ''
-            # initial_session runs once per boot unless greetd's ephemeral marker is
-            # cleared. A deliberate mode change should auto-login immediately.
-            rm -f /run/greetd.run
-            ${pkgs.systemd}/bin/systemctl try-restart greetd.service
-          '';
-        };
+      {
+        description = "Restart greetd after an XPS session mode change";
+        serviceConfig.Type = "oneshot";
+        script = ''
+          # initial_session runs once per boot unless greetd's ephemeral marker is
+          # cleared. A deliberate mode change should auto-login immediately.
+          rm -f /run/greetd.run
+          ${pkgs.systemd}/bin/systemctl try-restart greetd.service
+        '';
+      };
 
     assertions = [
       {
@@ -3383,7 +3448,8 @@ in
       }
       {
         assertion =
-          cfg.browserStreamSelectorProfileDirectory == null
+          cfg.browserStreamSelectorProfileDirectory
+          == null
           || lib.hasPrefix "/" cfg.browserStreamSelectorProfileDirectory;
         message = "services.moonlight-client.browserStreamSelectorProfileDirectory must be absolute";
       }
@@ -3426,13 +3492,14 @@ in
       }
       {
         assertion =
-          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutSecondaryWorkspaces == [ ];
+          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutSecondaryWorkspaces == [];
         message = "services.moonlight-client automatic primary and secondary workspace sets must not overlap";
       }
       {
         assertion =
-          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutTertiaryWorkspaces == [ ]
-          && lib.intersectLists cfg.autoLayoutSecondaryWorkspaces cfg.autoLayoutTertiaryWorkspaces == [ ];
+          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutTertiaryWorkspaces
+          == []
+          && lib.intersectLists cfg.autoLayoutSecondaryWorkspaces cfg.autoLayoutTertiaryWorkspaces == [];
         message = "services.moonlight-client automatic tertiary workspace set must not overlap the primary or secondary sets";
       }
       {

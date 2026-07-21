@@ -1,0 +1,170 @@
+--- a/src/moonlight-server/control/control.cpp
++++ b/src/moonlight-server/control/control.cpp
+@@ -4,6 +4,9 @@
+ #include <events/events.hpp>
+ #include <immer/box.hpp>
+ #include <state/sessions.hpp>
++#include <atomic>
++#include <mutex>
++#include <unordered_map>
+ #include <sys/socket.h>
+ 
+ namespace control {
+@@ -142,8 +145,57 @@
+ 
+   immer::atom<enet_clients_map> connected_clients;
+ 
++  const auto idle_timeout = std::chrono::seconds(
++      std::stoull(utils::get_env("WOLF_SESSION_IDLE_TIMEOUT_SECONDS", "0")));
++  using IdleToken = std::shared_ptr<std::atomic_bool>;
++  auto idle_mutex = std::make_shared<std::mutex>();
++  auto idle_tokens = std::make_shared<std::unordered_map<std::size_t, IdleToken>>();
++
++  auto cancel_idle_timeout = [idle_mutex, idle_tokens](std::size_t session_id) {
++    std::scoped_lock lock(*idle_mutex);
++    if (auto timer = idle_tokens->find(session_id); timer != idle_tokens->end()) {
++      timer->second->store(true);
++      idle_tokens->erase(timer);
++    }
++  };
++
++  auto arm_idle_timeout = [idle_timeout, idle_mutex, idle_tokens, event_bus](std::size_t session_id) {
++    if (idle_timeout.count() == 0) {
++      return;
++    }
++
++    auto token = std::make_shared<std::atomic_bool>(false);
++    {
++      std::scoped_lock lock(*idle_mutex);
++      if (auto old_timer = idle_tokens->find(session_id); old_timer != idle_tokens->end()) {
++        old_timer->second->store(true);
++      }
++      (*idle_tokens)[session_id] = token;
++    }
++
++    std::thread([idle_timeout, idle_mutex, idle_tokens, event_bus, session_id, token]() {
++      std::this_thread::sleep_for(idle_timeout);
++      {
++        std::scoped_lock lock(*idle_mutex);
++        auto current = idle_tokens->find(session_id);
++        if (token->load() || current == idle_tokens->end() || current->second != token) {
++          return;
++        }
++        idle_tokens->erase(current);
++      }
++
++      logs::log(logs::info, "[IDLE] Session {} expired after {} seconds", session_id, idle_timeout.count());
++      event_bus->fire_event(immer::box<StopStreamEvent>(StopStreamEvent{.session_id = session_id}));
++    }).detach();
++  };
++
++  auto pause_idle_ev = event_bus->register_handler<immer::box<PauseStreamEvent>>(
++      [arm_idle_timeout](const immer::box<PauseStreamEvent> &ev) { arm_idle_timeout(ev->session_id); });
++  auto resume_idle_ev = event_bus->register_handler<immer::box<ResumeStreamEvent>>(
++      [cancel_idle_timeout](const immer::box<ResumeStreamEvent> &ev) { cancel_idle_timeout(ev->session_id); });
+   auto stop_ev = event_bus->register_handler<immer::box<StopStreamEvent>>(
+-      [&connected_clients](const immer::box<StopStreamEvent> &ev) {
++      [&connected_clients, cancel_idle_timeout](const immer::box<StopStreamEvent> &ev) {
++        cancel_idle_timeout(ev->session_id);
+         auto terminate_pkt = ControlTerminatePacket{};
+         std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
+         for (auto &[peer, session] : *connected_clients.load()) {
+--- a/src/moonlight-server/sessions/lobbies.cpp
++++ b/src/moonlight-server/sessions/lobbies.cpp
+@@ -1,3 +1,7 @@
++#include <atomic>
++#include <chrono>
++#include <mutex>
++#include <unordered_map>
+ #include <immer/vector_transient.hpp>
+ #include <sessions/common.hpp>
+ #include <sessions/handlers.hpp>
+@@ -70,6 +74,56 @@
+                        const std::optional<AudioServer> &audio_server) {
+   immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
+ 
++  const auto idle_timeout = std::chrono::seconds(
++      std::stoull(utils::get_env("WOLF_SESSION_IDLE_TIMEOUT_SECONDS", "0")));
++  using IdleToken = std::shared_ptr<std::atomic_bool>;
++  auto idle_mutex = std::make_shared<std::mutex>();
++  auto idle_tokens = std::make_shared<std::unordered_map<std::string, IdleToken>>();
++
++  auto cancel_idle_timeout = [idle_mutex, idle_tokens](const std::string &lobby_id) {
++    std::scoped_lock lock(*idle_mutex);
++    if (auto timer = idle_tokens->find(lobby_id); timer != idle_tokens->end()) {
++      timer->second->store(true);
++      idle_tokens->erase(timer);
++    }
++  };
++
++  auto arm_idle_timeout = [idle_timeout, idle_mutex, idle_tokens, app_state](const std::string &lobby_id) {
++    if (idle_timeout.count() == 0) {
++      return;
++    }
++
++    auto token = std::make_shared<std::atomic_bool>(false);
++    {
++      std::scoped_lock lock(*idle_mutex);
++      if (auto old_timer = idle_tokens->find(lobby_id); old_timer != idle_tokens->end()) {
++        old_timer->second->store(true);
++      }
++      (*idle_tokens)[lobby_id] = token;
++    }
++
++    std::thread([idle_timeout, idle_mutex, idle_tokens, app_state, lobby_id, token]() {
++      std::this_thread::sleep_for(idle_timeout);
++      {
++        std::scoped_lock lock(*idle_mutex);
++        auto current = idle_tokens->find(lobby_id);
++        if (token->load() || current == idle_tokens->end() || current->second != token) {
++          return;
++        }
++        idle_tokens->erase(current);
++      }
++
++      auto lobby = state::get_lobby_by_id(app_state->lobbies->load().get(), lobby_id);
++      if (!lobby || !lobby->connected_sessions->load()->empty()) {
++        return;
++      }
++
++      logs::log(logs::info, "[IDLE] Lobby {} expired after {} seconds", lobby_id, idle_timeout.count());
++      app_state->event_bus->fire_event(
++          immer::box<events::StopLobbyEvent>(events::StopLobbyEvent{.lobby_id = lobby_id}));
++    }).detach();
++  };
++
+   // On create lobby event
+   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::CreateLobbyEvent>>(
+       [=](const immer::box<events::CreateLobbyEvent> &lobby_settings) {
+@@ -87,6 +141,7 @@
+                           .runner = lobby_settings->runner});
+         app_state->lobbies->update(
+             [lobby](const immer::vector<events::Lobby> &lobbies) { return lobbies.push_back(*lobby); });
++        arm_idle_timeout(lobby->id);
+ 
+         { // Start Wayland compositor and Gstreamer producer pipeline
+           logs::log(logs::debug, "[LOBBY] Create wayland compositor");
+@@ -209,6 +264,7 @@
+         lobby->connected_sessions->update([session](const immer::vector<immer::box<std::string>> &connected_sessions) {
+           return connected_sessions.push_back({std::to_string(session->session_id)});
+         });
++        cancel_idle_timeout(lobby->id);
+ 
+         // switch mouse and keyboard in session to use the lobby wayland server
+         auto wl_state = lobby->wayland_display->load();
+@@ -259,11 +315,15 @@
+                     leave_lobby_event->moonlight_session_id);
+         } else {
+           leave_lobby(app_state->event_bus, lobby.value(), session.value());
++          if (lobby->connected_sessions->load()->empty()) {
++            arm_idle_timeout(lobby->id);
++          }
+         }
+       }));
+ 
+   // Stopping a lobby will trigger leave for all the connected sessions
+   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StopLobbyEvent>>(
+       [=](const immer::box<events::StopLobbyEvent> &stop_lobby_event) {
++        cancel_idle_timeout(stop_lobby_event->lobby_id);
+         auto lobbies = app_state->lobbies->load();
+         auto lobby = state::get_lobby_by_id(lobbies.get(), stop_lobby_event->lobby_id);

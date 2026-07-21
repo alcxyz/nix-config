@@ -8,8 +8,9 @@
   nvidiaPackage = config.hardware.nvidia.package;
   browserCfg = cfg.browserImages;
   wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
+  wolfPatchSet = "altgr-idle-v1";
   wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
-  wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-altgr";
+  wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}";
   wolfSource = pkgs.fetchFromGitHub {
     owner = "games-on-whales";
     repo = "wolf";
@@ -17,12 +18,15 @@
     hash = "sha256-5dcMiIgOPY9JtrVpmEUMoETha/cc+tShdaqe8j5ytp8=";
   };
   patchedWolfSource = pkgs.applyPatches {
-    name = "wolf-${builtins.substring 0 12 wolfRevision}-altgr-source";
+    name = "wolf-${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}-source";
     src = wolfSource;
-    patches = [./wolf-image/altgr.patch];
+    patches = [
+      ./wolf-image/altgr.patch
+      ./wolf-image/idle-session-timeout.patch
+    ];
   };
   wolfBuildContext =
-    pkgs.runCommand "wolf-${builtins.substring 0 12 wolfRevision}-altgr-image-context" {}
+    pkgs.runCommand "wolf-${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}-image-context" {}
     ''
       cp -r ${patchedWolfSource} "$out"
       chmod -R u+w "$out"
@@ -501,6 +505,16 @@ in {
       description = "Open Wolf's documented Moonlight protocol ports.";
     };
 
+    sessionIdleTimeoutSeconds = lib.mkOption {
+      type = lib.types.ints.unsigned;
+      default = 0;
+      description = ''
+        Seconds a disconnected stream or empty resumable lobby may remain
+        available before Wolf stops it. Reconnecting to the stream or joining
+        the lobby cancels the deadline. Zero disables idle expiry.
+      '';
+    };
+
     prunedApplicationTitles = lib.mkOption {
       type = lib.types.listOf lib.types.nonEmptyStr;
       default = [];
@@ -686,6 +700,7 @@ in {
           WOLF_DEFAULT_RUN_UID = toString cfg.defaultRunUid;
           WOLF_LOG_LEVEL = "INFO";
           WOLF_RENDER_NODE = cfg.renderNode;
+          WOLF_SESSION_IDLE_TIMEOUT_SECONDS = toString cfg.sessionIdleTimeoutSeconds;
           WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
           # gst-wayland-display owns the outer virtual seat. Its Smithay
           # keymap must recognize Right Alt as LevelThree before nested Sway

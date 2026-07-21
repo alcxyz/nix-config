@@ -98,7 +98,7 @@ input.
 | `Super+V` | Open a new local browser window |
 | `Alt+Enter` | Open a terminal |
 | `Super+Space` | Open DMS search |
-| `Super+Enter` / `Super+S` / `Super+W` | Fullscreen / float / close |
+| `Super+Enter` / `Super+S` / `Super+W` | Fullscreen / float / close safely |
 | `Super+1`…`Super+9` | Open an active workspace |
 | `Super+J` / `Super+K` | Previous / next active workspace |
 | `Super+Shift+1`…`Super+Shift+9` | Move the focused window to an active workspace |
@@ -215,9 +215,10 @@ device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 ### Remote browser streaming
 
 XEV also provides on-demand browser sessions through Wolf and Moonlight. Each
-launch creates a disposable application container and a virtual display; Wolf
-removes the container when the stream ends while retaining that browser's
-isolated home. Helium is the general remote browser. The protected selector
+launch creates a disposable application container and a virtual display. A
+client disconnect leaves the container resumable for 30 minutes; Wolf removes
+it after that idle deadline while retaining the browser's isolated home. Helium
+is the general remote browser. The protected selector
 offers isolated Helium, Brave, Chromium, Firefox, and Zen homes for private
 use and comparative testing. The browsers are not installed globally on XEV;
 their images share the common GoW runtime layers rather than duplicating a
@@ -257,10 +258,9 @@ Remote browser homes persist across disposable application containers. Startup
 serializes access to each home and repairs stale Chromium singleton and
 Firefox-family profile-lock state. If a
 Moonlight process stalls without a usable window, its user service terminates
-the process so the same launcher can recover on the next attempt. Browser
-streams also request remote-app shutdown when Moonlight exits, preventing a
-stale Helium, Brave, or Wolf UI session from prompting to replace itself at the
-next launch.
+the local process so the same launcher can reconnect on the next attempt.
+Browser launchers intentionally omit Moonlight's `--quit-after`: closing the
+local client pauses the remote application instead of destroying it.
 
 Steam, public Helium, and the protected Wolf selector use independent Moonlight
 processes on workspaces 1, 2, and 3 respectively. They can remain open and be
@@ -269,9 +269,19 @@ others. Background clients mute their audio and do not retain controller input,
 but continue decoding and using network bandwidth until explicitly closed.
 Three concurrent 1440p60 clients therefore still impose client-side decode and
 presentation work on XPS even though rendering happens remotely.
-There is no inactivity timeout. Each Moonlight client is supervised by its own
-process and exact Hyprland window address so XWayland's fallback class for a
-second client cannot make the services confuse one another.
+Each Moonlight client is supervised by its own process and exact Hyprland
+window address so XWayland's fallback class for a second client cannot make the
+services confuse one another.
+
+`Super+W` maps a focused Moonlight process back to its owning user-service
+cgroup and stops that service instead of relying on the application's window
+close handler. This matters when a stalled decoder stops servicing GUI events.
+Systemd kills only that client's unresponsive local processes within three
+seconds; it deliberately does not quit the resumable remote application.
+Wolf arms a 30-minute idle deadline when the stream disconnects or a protected
+browser lobby becomes empty. Reconnecting cancels the deadline; expiry stops
+and removes the abandoned remote application container. Other applications
+retain Hyprland's ordinary focused-window close behavior.
 
 The protected selector also uses a separate persistent Moonlight client
 profile because it shares the Wolf host with public Helium. Pair that profile
