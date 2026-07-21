@@ -106,8 +106,12 @@
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
         nixbox-report = pkgs.nixbox-report;
+      }
+      // lib.optionalAttrs pkgs.stdenv.isLinux {
         nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;
         nixbox-session-splash = pkgs.nixbox-session-splash;
+      }
+      // lib.optionalAttrs (pkgs ? stashdb-pop) {
         stashdb-pop = pkgs.stashdb-pop;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
