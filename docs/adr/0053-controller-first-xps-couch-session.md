@@ -20,15 +20,17 @@ need a compatible local input path.
 
 ## Decision
 
-Boot the XPS couch session into an ordinary tiled XWayland browser. Do not
-start or continually relaunch Moonlight during login.
+Boot the XPS couch session into the public remote browser when its independent
+Wolf host is reachable, with an ordinary tiled local XWayland browser as the
+bounded startup fallback. Do not make SteamHeadless availability a login
+dependency or continually relaunch a failed Moonlight client.
 
 Run a non-grabbing controller listener that survives controller reconnects and
 recognises deliberately held shortcuts:
 
 - hold `Home+A` to request the remote SteamHeadless service, wait for Sunshine,
   and start Steam Big Picture through Moonlight;
-- hold `L3+R3` to stop the local Moonlight session and return to the browser.
+- hold `L3+R3` to open or return to the public remote browser.
 
 The shortcuts require a hold interval to avoid accidental activation and do not
 take exclusive ownership of the controller, so Moonlight can continue to use it
@@ -45,12 +47,18 @@ reach the focused Moonlight window and be forwarded by the normal streaming
 input path. Keep the normal desktop session as a separately persisted boot
 mode.
 
-Launch Moonlight explicitly in windowed mode and let Hyprland tile it on the
-currently focused workspace. Do not add a compositor fullscreen rule or force
-a dedicated stream workspace: both are redundant for a single tiled window,
-make launch placement surprising on a multi-display couch setup, and interfere
-with pointer visibility. The selected output determines the local window size;
-the requested stream resolution remains independent.
+Launch Moonlight explicitly in windowed mode and let Hyprland tile it. Do not
+add a compositor fullscreen rule: browser-level or compositor fullscreen is
+redundant for a single tiled window and interferes with pointer visibility.
+Assign independent on-demand clients to stable couch workspaces: Steam on 1,
+public browsing on 2, and the protected selector on 3. This permits all three
+uses to remain available in parallel without sharing a Moonlight process.
+Identify each window by the PID of its launched client rather than application
+class, because a second XWayland Moonlight process may use the fallback class
+when its desktop portal application identifier is already registered. Mute
+background clients and withhold background controller input. The selected
+output determines the local window size; the requested stream resolution
+remains independent.
 
 Keep the known-good couch and desktop profiles intact and offer a third
 `merged` profile for the combined experience. The merged profile reuses the

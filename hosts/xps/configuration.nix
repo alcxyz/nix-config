@@ -276,6 +276,7 @@ in
     enableKdeConnect = true;
     enableControllerShortcuts = true;
     keyboardLayouts = "no,us";
+    keyboardLayoutDeviceOverrides.us = [ "glove80" ];
     keyboardOptions = "grp:alt_shift_toggle";
     browserScaleFactor = 1.5;
     sessionSplashCommand = lib.getExe pkgs.nixbox-session-splash;
@@ -334,6 +335,18 @@ in
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
     browserStreamSelectorApplication = "Wolf UI";
+    browserStreamLayoutCommand = ''
+      case "$COUCH_STREAM_APPLICATION" in
+        Helium) runner=WolfHelium ;;
+        "Wolf UI") runner=WolfBrave ;;
+        *) exit 0 ;;
+      esac
+      ${lib.getExe pkgs.openssh} \
+        -o BatchMode=yes \
+        -o ConnectTimeout=5 \
+        xev \
+        wolf-stream-layout "$runner" "$COUCH_KEYBOARD_LAYOUT"
+    '';
     browserStreamArguments = [
       "--absolute-mouse"
       "--capture-system-keys"
@@ -359,6 +372,8 @@ in
       "--no-hdr"
       "--frame-pacing"
       "--swap-gamepad-buttons"
+      "--mute-on-focus-loss"
+      "--no-background-gamepad"
     ];
   };
 

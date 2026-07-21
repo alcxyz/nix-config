@@ -74,7 +74,7 @@ Hold each combination until the action triggers.
 |---|---|
 | `Home+A` | Start the remote Steam session and Moonlight |
 | `Home+X` | Open the remote Helium browser on XEV |
-| `L3+R3` | Stop Moonlight and return to the browser |
+| `L3+R3` | Open or return to remote Helium on workspace 2 |
 | `Minus+Plus` | Toggle display mirroring |
 | `Minus+X` | Cycle display layouts |
 | `Minus+Y` | Cycle audio outputs |
@@ -88,7 +88,7 @@ input.
 
 | Keyboard | Action |
 |---|---|
-| `Super+M` / `Super+B` | Start the stream / return to the browser |
+| `Super+M` / `Super+B` | Open Steam on workspace 1 / Helium on workspace 2 |
 | `Super+R` | Open the remote Helium browser on XEV |
 | `Super+Shift+R` | Open the PIN-protected remote `User` selector |
 | `Super+Shift+M` | Toggle display mirroring |
@@ -103,7 +103,7 @@ input.
 | `Super+J` / `Super+K` | Previous / next active workspace |
 | `Super+Shift+1`…`Super+Shift+9` | Move the focused window to an active workspace |
 | `F8` / `F9` / `F10` | Mute / volume down / volume up |
-| `Alt+Shift` | Toggle Norwegian and US keyboard layouts |
+| `Alt+Shift` | Cycle Norwegian, US, and Russian keyboard layouts |
 
 ## Display layouts
 
@@ -236,7 +236,8 @@ guide. Wolf UI can also be restored from a running Wolf application with
 The merged couch session starts public remote Helium by default. At login it
 checks the direct and fallback Wolf endpoints briefly; if neither is ready it
 opens local Helium instead, so XPS still boots into a usable browser when XEV
-is unavailable. Local Helium remains an explicit fallback through `Super+B`.
+is unavailable. `Super+B` normally returns to remote Helium; the boot fallback
+does not turn XEV into a login dependency.
 
 Steam is available through `Home+A`, `Super+M`, and the `Steam Stream` menu
 entry. The launcher first checks the direct LAN endpoint, starts the remote
@@ -258,13 +259,22 @@ streams also request remote-app shutdown when Moonlight exits, preventing a
 stale Helium, Brave, or Wolf UI session from prompting to replace itself at the
 next launch.
 
-Moonlight opens as a normal tiled window on the workspace and display that are
-focused when it is launched. It requests a 2560×1440 stream independently of
-the local output: a 1440p TV presents it at native size, while the 1080p
-Philips output scales the window to that display. Moonlight and Hyprland do not
-request fullscreen; the single tiled window already fills the workspace.
+Steam, public Helium, and the protected Wolf selector use independent Moonlight
+processes on workspaces 1, 2, and 3 respectively. They can remain open and be
+switched with the ordinary workspace shortcuts; launching one does not stop the
+others. Background clients mute their audio and do not retain controller input,
+but continue decoding and using network bandwidth until explicitly closed.
+There is no inactivity timeout. Each Moonlight client is supervised by its own
+process and exact Hyprland window address so XWayland's fallback class for a
+second client cannot make the services confuse one another.
 
-The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 60 Mbit/s
+Moonlight opens as a normal tiled window. It requests a 2560×1440 stream
+independently of the local output: a 1440p TV presents it at native size, while
+the 1080p Philips output scales the window to that display. Moonlight and
+Hyprland do not request fullscreen; the single tiled window already fills the
+workspace.
+
+The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 40 Mbit/s
 client bitrate. Helium, the PIN-protected Brave profile, and the XPS couch
 launch actions have passed acceptance testing. Local XPS browsers remain
 available as an independent fallback.
@@ -274,11 +284,17 @@ used away from that network, Moonlight can fall back to the paired host's
 managed VPN endpoint. This fallback is deliberately limited to Moonlight;
 Synergy input sharing is LAN-only and disconnects rather than crossing the VPN.
 
-The remote browser session provides Norwegian, US, and Russian layouts in that
-order. Press `Alt+Shift` inside the session to cycle them. Moonlight transports
-key positions rather than the client's active layout name, so XPS, XYZ, and
-macOS cannot select it automatically. One Helium entry is retained so all
-layouts use the same persistent browser profile.
+The remote browser session provides Norwegian, US, and Russian layouts. On
+launch, XPS reads the active layout of Hyprland's main keyboard and selects the
+matching layout inside the new Wolf compositor over the direct LAN SSH path.
+A connected US Glove80 has an explicit device-name override because Hyprland
+can keep the laptop keyboard marked as main; otherwise Norwegian keyboards
+start Norwegian and the currently selected US layout starts US.
+Press `Alt+Shift` inside the session to cycle the exposed layouts. The launch
+hook supplies the state that Moonlight's scan-code protocol does not transport;
+one Helium entry is retained so every layout uses the same persistent profile.
+Right Alt remains the LevelThree modifier, so Norwegian combinations such as
+`AltGr+2` reach the browser as `@`.
 
 XPS retains separate `couch`, `merged`, and normal `desktop` profiles. The
 merged profile is the media-center default in use here; desktop mode remains a

@@ -69,12 +69,23 @@ they do not use Chromium's `--no-sandbox` escape hatch.
 
 Moonlight transports keyboard scan codes but does not tell Wolf which input
 layout is active on the client. Expose Norwegian, US, and Russian in each
-browser session, in that order, and use `Alt+Shift` to cycle layouts inside the
-remote compositor. Keep one Moonlight application per browser so every layout
-uses the same persistent browser home. Do not publish one application variant
-per layout: the pinned Wolf release derives application state from the title
-and does not honor an app-level state-folder override, which would silently
-split the browser profile.
+browser session and use `Alt+Shift` to cycle layouts inside the remote
+compositor. At launch, let the XPS client read its main Hyprland keyboard's
+active layout and invoke a LAN-only host helper that selects the corresponding
+nested Sway layout after the application container appears. Permit declarative
+device-name overrides for external keyboards whose physical layout differs
+from the laptop keyboard that Hyprland keeps marked as main. Keep one Moonlight
+application per browser so every layout uses the same persistent browser home.
+Do not publish one application variant per layout: the pinned Wolf release
+derives application state from the title and does not honor an app-level
+state-folder override, which would silently split the browser profile.
+
+Set the same XKB layout and LevelThree options on Wolf's outer virtual display
+seat and the nested browser compositor. The pinned Wolf build also retains the
+real left/right Alt key state instead of synthesizing Left Alt over a held Right
+Alt from GameStream's generic modifier bit. This preserves `AltGr` combinations
+from physical Moonlight keyboards while retaining the protocol fallback for
+clients that send only the modifier mask.
 
 The module reconciles only explicitly managed applications in Wolf's Moonlight
 profile. It writes the generated TOML atomically and preserves every unowned
@@ -112,7 +123,7 @@ loop.
 Roll out in two gates. First validate Wolf's upstream Firefox application at
 the intended 1440p60 client mode, including NVENC, audio, keyboard, pointer,
 phone input, and controller exit behavior. The accepted transport baseline is
-HEVC at 1440p60 and 60 Mbit/s: a multi-minute run remained connected without
+HEVC at 1440p60 and 40 Mbit/s: a multi-minute run remained connected without
 packet loss, encoder errors, container restarts, or OOM events. Wolf uses NVENC
 and the Moonlight client uses hardware decode. Firefox renders through the GPU,
 but its current container decodes web video in software; this remains an
@@ -122,6 +133,13 @@ After that baseline passes, build the pinned Helium and Brave images, validate
 Helium through the same stream, then create the private Brave profile and add
 the controller and keyboard launch actions on XPS. Keep local XPS browsers as a
 fallback until both remote applications pass their acceptance tests.
+
+Run Steam, public Helium, and the protected selector as separate Moonlight user
+services on stable XPS workspaces. The services do not stop one another, so
+distinct remote applications can be kept open in parallel. Browser profile
+locks still reject two containers attempting to open the same persistent home.
+Background clients mute audio and release gamepad input, but are intentionally
+on-demand rather than idle-timed.
 
 The SteamHeadless deployment and its existing XPS launch action remain
 unchanged. A browser-streaming failure must not start, stop, or modify the game
@@ -174,8 +192,10 @@ low-latency video, audio, and controller integration already used by Moonlight.
 - Shared GoW browser runtime and distinct pinned Helium/Brave images:
   implemented; Helium passed deployed application testing.
 - Norwegian, US, and Russian layouts in the shared browser session:
-  implemented; automatic client-layout inheritance is unavailable in the
-  Moonlight protocol, so layout selection is explicit with `Alt+Shift`.
+  implemented. Moonlight does not carry the layout name, so XPS supplies it
+  out-of-band from the active main keyboard and selects the matching nested
+  layout at launch; `Alt+Shift` remains the explicit cycle control. Right Alt
+  LevelThree input has been accepted with `AltGr+2` producing `@`.
 - Generic, atomic protected-profile reconciliation without store-copying its
   credential: implemented. The visible profile identity is neutralized and the
   redundant stock profile is removed.
@@ -204,3 +224,6 @@ low-latency video, audio, and controller integration already used by Moonlight.
 - Disposable browser crash recovery and per-profile concurrency guard:
   implemented and verified by relaunching Brave from a home containing stale
   Chromium singleton links.
+- Parallel Steam, public-browser, and protected-selector Moonlight clients:
+  implemented and accepted with three concurrent processes on workspaces 1–3;
+  stopping either Steam or the selector left public Helium running.

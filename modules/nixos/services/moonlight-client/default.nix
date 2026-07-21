@@ -190,10 +190,11 @@ let
     mkMoonlightInvocation cfg.browserStreamArguments cfg.browserStreamHost
       cfg.browserStreamSelectorApplication
   );
-  superviseMoonlightWindow = ''
+  superviseMoonlightWindow = targetWorkspace: ''
     seen_window=0
     startup_window_checks=0
     missing_window_checks=0
+    moonlight_address=""
 
     terminate_moonlight() {
       kill "$moonlight_pid" >/dev/null 2>&1 || true
@@ -202,9 +203,29 @@ let
     }
 
     while kill -0 "$moonlight_pid" >/dev/null 2>&1; do
-      if hyprctl -j clients 2>/dev/null \
-        | jq -e 'any(.[]; .class == "com.moonlight_stream.Moonlight" and .mapped)' \
-          >/dev/null 2>&1; then
+      moonlight_address="$(
+        hyprctl -j clients 2>/dev/null \
+          | jq -r --argjson pid "$moonlight_pid" '
+              first(
+                .[]
+                | select(
+                    .mapped
+                    and .pid == $pid
+                  )
+                | .address
+              ) // empty
+            '
+      )"
+      if [ -n "$moonlight_address" ]; then
+        if [ "$seen_window" -eq 0 ]; then
+          hyprctl dispatch movetoworkspacesilent \
+            ${toString targetWorkspace},"address:$moonlight_address" \
+            >/dev/null 2>&1 || true
+          hyprctl dispatch workspace ${toString targetWorkspace} \
+            >/dev/null 2>&1 || true
+          hyprctl dispatch focuswindow "address:$moonlight_address" \
+            >/dev/null 2>&1 || true
+        fi
         seen_window=1
         startup_window_checks=0
         missing_window_checks=0
@@ -271,6 +292,61 @@ let
           ${lib.escapeShellArg cfg.browserStreamLocalAddress} \
           ${lib.escapeShellArg cfg.browserStreamRemoteAddress}
       ''}
+    '';
+  };
+
+  activeKeyboardLayout = pkgs.writeShellApplication {
+    name = "couch-active-keyboard-layout";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+    ];
+    text = ''
+      configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+      fallback_layout="''${configured_layouts%%,*}"
+      active_keymap=""
+
+      # Give hot-plugged USB receivers a brief chance to appear at graphical
+      # login. Hyprland's "main" keyboard can remain the internal laptop
+      # device even while an external keyboard is the one being used.
+      for attempt in $(seq 1 20); do
+        devices="$(hyprctl -j devices 2>/dev/null || true)"
+        if [ -n "$devices" ]; then
+          while IFS= read -r keyboard_name; do
+            keyboard_name="$(printf '%s' "$keyboard_name" | tr '[:upper:]' '[:lower:]')"
+            case "$keyboard_name" in
+              ${lib.concatStringsSep "\n              " (
+                lib.flatten (
+                  lib.mapAttrsToList (
+                    layout: matches:
+                    map (
+                      match:
+                      "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
+                    ) matches
+                  ) cfg.keyboardLayoutDeviceOverrides
+                )
+              )}
+            esac
+          done < <(printf '%s' "$devices" | jq -r '.keyboards[].name')
+
+          active_keymap="$(
+            printf '%s' "$devices" \
+              | jq -r 'first(.keyboards[] | select(.main)).active_keymap // empty'
+          )"
+          if [ "$attempt" -ge 8 ] && [ -n "$active_keymap" ]; then
+            break
+          fi
+        fi
+        sleep 0.25
+      done
+
+      case "$active_keymap" in
+        *Norwegian*) printf '%s\n' no ;;
+        *Russian*) printf '%s\n' ru ;;
+        *"English (US)"*) printf '%s\n' us ;;
+        *) printf '%s\n' "$fallback_layout" ;;
+      esac
     '';
   };
 
@@ -366,7 +442,7 @@ let
           while true; do
             ${moonlightInvocation} &
             moonlight_pid=$!
-            ${superviseMoonlightWindow}
+            ${superviseMoonlightWindow 1}
             sleep 1
           done
         ''
@@ -378,8 +454,7 @@ let
 
           ${moonlightInvocation} &
           moonlight_pid=$!
-          ${superviseMoonlightWindow}
-          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+          ${superviseMoonlightWindow 1}
           exit "$status"
         '';
   };
@@ -765,7 +840,7 @@ let
   };
 
   mkMoonlightBrowserSession =
-    name: invocation:
+    name: invocation: targetWorkspace: application:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
@@ -777,13 +852,26 @@ let
         ${lib.getExe displayModeSetup}
         ${invocation} &
         moonlight_pid=$!
-        ${superviseMoonlightWindow}
-        hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+        ${lib.optionalString (cfg.browserStreamLayoutCommand != null) ''
+          (
+            COUCH_KEYBOARD_LAYOUT="$(${lib.getExe activeKeyboardLayout})"
+            export COUCH_KEYBOARD_LAYOUT
+            export COUCH_STREAM_APPLICATION=${
+              lib.escapeShellArg (if application == null then "" else application)
+            }
+            ${cfg.browserStreamLayoutCommand}
+          ) &
+        ''}
+        ${superviseMoonlightWindow targetWorkspace}
         exit "$status"
       '';
     };
-  moonlightBrowserSession = mkMoonlightBrowserSession "moonlight-browser-session" browserMoonlightInvocation;
-  moonlightBrowserSelectorSession = mkMoonlightBrowserSession "moonlight-browser-selector-session" browserSelectorMoonlightInvocation;
+  moonlightBrowserSession =
+    mkMoonlightBrowserSession "moonlight-browser-session" browserMoonlightInvocation 2
+      cfg.browserStreamApplication;
+  moonlightBrowserSelectorSession =
+    mkMoonlightBrowserSession "moonlight-browser-selector-session" browserSelectorMoonlightInvocation 3
+      cfg.browserStreamSelectorApplication;
 
   couchStreamControl = pkgs.writeShellApplication {
     name = "couch-stream-control";
@@ -795,38 +883,34 @@ let
     text = ''
       case "''${1:-}" in
         start)
-          systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
-          systemctl --user stop couch-moonlight-browser-selector.service >/dev/null 2>&1 || true
           systemctl --user start couch-moonlight-stream.service
+          hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
           ;;
         remote-browser)
-          systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
-          systemctl --user stop couch-moonlight-browser-selector.service >/dev/null 2>&1 || true
           systemctl --user start couch-moonlight-browser-stream.service
-          # Starting an already-active unit is intentionally a no-op. Still
-          # focus its window so the launch shortcut never appears to do
-          # nothing, without forcing a dedicated output or workspace.
-          hyprctl dispatch focuswindow \
-            'class:^(com.moonlight_stream.Moonlight)$' >/dev/null 2>&1 || true
+          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
           ;;
         private-browser)
-          systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
-          systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
           systemctl --user start couch-moonlight-browser-selector.service
-          hyprctl dispatch focuswindow \
-            'class:^(com.moonlight_stream.Moonlight)$' >/dev/null 2>&1 || true
+          hyprctl dispatch workspace 3 >/dev/null 2>&1 || true
           ;;
         browser)
-          systemctl --user stop couch-moonlight-stream.service >/dev/null 2>&1 || true
-          systemctl --user stop couch-moonlight-browser-stream.service >/dev/null 2>&1 || true
-          systemctl --user stop couch-moonlight-browser-selector.service >/dev/null 2>&1 || true
-          ${lib.getExe mergedUiControl} browser
-          hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-
-          if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
-            >/dev/null 2>&1; then
-            ${lib.getExe couchBrowser} >/dev/null 2>&1 &
-          fi
+          ${
+            if browserStreamEnabled then
+              ''
+                systemctl --user start couch-moonlight-browser-stream.service
+                hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+              ''
+            else
+              ''
+                ${lib.getExe mergedUiControl} browser
+                hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+                if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
+                  >/dev/null 2>&1; then
+                  ${lib.getExe couchBrowser} >/dev/null 2>&1 &
+                fi
+              ''
+          }
           ;;
         *)
           echo "usage: couch-stream-control {start|remote-browser|private-browser|browser}" >&2
@@ -1980,7 +2064,10 @@ let
 
   mergedUiControl = pkgs.writeShellApplication {
     name = "couch-merged-ui";
-    runtimeInputs = [ pkgs.coreutils ];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
     text = ''
       mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
       if [ "$mode" != merged ]; then
@@ -1993,6 +2080,17 @@ let
       fi
 
       case "''${1:-}" in
+        refresh)
+          for unit in \
+            couch-moonlight-stream.service \
+            couch-moonlight-browser-stream.service \
+            couch-moonlight-browser-selector.service; do
+            if systemctl --user --quiet is-active "$unit"; then
+              exec "$0" game
+            fi
+          done
+          exec "$0" browser
+          ;;
         game)
           "$dms" ipc call notifications enableDoNotDisturbIndefinitely >/dev/null 2>&1 || true
           "$dms" ipc call notifications dismissAllPopups >/dev/null 2>&1 || true
@@ -2012,7 +2110,7 @@ let
           "$dms" ipc call notifications disableDoNotDisturb >/dev/null 2>&1 || true
           ;;
         *)
-          echo "usage: couch-merged-ui {game|browser}" >&2
+          echo "usage: couch-merged-ui {refresh|game|browser}" >&2
           exit 2
           ;;
       esac
@@ -2491,6 +2589,16 @@ in
       description = "Additional Moonlight arguments used only for the remote browser stream.";
     };
 
+    browserStreamLayoutCommand = lib.mkOption {
+      type = lib.types.nullOr lib.types.lines;
+      default = null;
+      description = ''
+        Optional command that aligns a newly started remote browser with the
+        main local keyboard. COUCH_KEYBOARD_LAYOUT and
+        COUCH_STREAM_APPLICATION are exported for the command.
+      '';
+    };
+
     streamArguments = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -2639,6 +2747,16 @@ in
       type = lib.types.str;
       default = "us,no";
       description = "Comma-separated XKB layouts used by the dedicated couch session, in default-first order.";
+    };
+
+    keyboardLayoutDeviceOverrides = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+      default = { };
+      description = ''
+        Case-insensitive keyboard-name substrings that select a layout for a
+        streamed browser when the matching device is connected. Attribute
+        names are layout identifiers from keyboardLayouts.
+      '';
     };
 
     keyboardOptions = lib.mkOption {
@@ -2982,10 +3100,7 @@ in
         Type = "simple";
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
         ExecStart = lib.getExe moonlightStreamStart;
-        ExecStopPost = [
-          "-${lib.getExe mergedUiControl} browser"
-          "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
-        ];
+        ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
         TimeoutStartSec = cfg.streamStartupTimeout + 30;
       };
     };
@@ -2996,10 +3111,7 @@ in
         Type = "simple";
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
         ExecStart = lib.getExe moonlightBrowserSession;
-        ExecStopPost = [
-          "-${lib.getExe mergedUiControl} browser"
-          "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
-        ];
+        ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
       };
     };
 
@@ -3009,10 +3121,7 @@ in
         Type = "simple";
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
         ExecStart = lib.getExe moonlightBrowserSelectorSession;
-        ExecStopPost = [
-          "-${lib.getExe mergedUiControl} browser"
-          "-${pkgs.hyprland}/bin/hyprctl dispatch workspace 2"
-        ];
+        ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
       };
     };
 
@@ -3145,6 +3254,15 @@ in
       {
         assertion = cfg.browserScaleFactor > 0.0;
         message = "services.moonlight-client.browserScaleFactor must be positive";
+      }
+      {
+        assertion = lib.all (layout: lib.elem layout (lib.splitString "," cfg.keyboardLayouts)) (
+          lib.attrNames cfg.keyboardLayoutDeviceOverrides
+        );
+        message = ''
+          services.moonlight-client.keyboardLayoutDeviceOverrides keys must
+          name layouts configured in keyboardLayouts
+        '';
       }
       {
         assertion = lib.all (output: output != cfg.mirrorOutputs.${output}) (

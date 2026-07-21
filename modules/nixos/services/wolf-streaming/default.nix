@@ -8,6 +8,27 @@ let
   cfg = config.services.wolf-streaming;
   nvidiaPackage = config.hardware.nvidia.package;
   browserCfg = cfg.browserImages;
+  wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
+  wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
+  wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-altgr";
+  wolfSource = pkgs.fetchFromGitHub {
+    owner = "games-on-whales";
+    repo = "wolf";
+    rev = wolfRevision;
+    hash = "sha256-5dcMiIgOPY9JtrVpmEUMoETha/cc+tShdaqe8j5ytp8=";
+  };
+  patchedWolfSource = pkgs.applyPatches {
+    name = "wolf-${builtins.substring 0 12 wolfRevision}-altgr-source";
+    src = wolfSource;
+    patches = [ ./wolf-image/altgr.patch ];
+  };
+  wolfBuildContext =
+    pkgs.runCommand "wolf-${builtins.substring 0 12 wolfRevision}-altgr-image-context" { }
+      ''
+        cp -r ${patchedWolfSource} "$out"
+        chmod -R u+w "$out"
+        cp ${./wolf-image/Dockerfile} "$out/Dockerfile"
+      '';
   browserBaseImage = "ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14";
   wolfUiImage = "ghcr.io/games-on-whales/wolf-ui@sha256:f483f79fcc5f39294067a5029f8de55e5867f74c709a3d55cd6163e4a5f0cf6b";
   heliumVersion = "0.14.7.1";
@@ -143,7 +164,7 @@ let
           "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
           "NIXBOX_BROWSER_SCALE=1.5"
           "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
-          "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle"
+          "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
         ];
         devices = [ ];
         ports = [ ];
@@ -229,7 +250,10 @@ let
   };
   buildBrowserImages = pkgs.writeShellApplication {
     name = "build-wolf-browser-images";
-    runtimeInputs = [ pkgs.docker ];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.docker
+    ];
     text = ''
       set -euo pipefail
 
@@ -249,6 +273,71 @@ let
           --tag ${lib.escapeShellArg image.image} \
           ${lib.escapeShellArg image.context}
       '') browserImages}
+    '';
+  };
+  wolfStreamLayout = pkgs.writeShellApplication {
+    name = "wolf-stream-layout";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.docker
+    ];
+    text = ''
+      runner="''${1:-}"
+      layout="''${2:-}"
+      case "$layout" in
+        ${lib.concatImapStringsSep "\n        " (
+          index: layout: "${layout}) layout_index=${toString (index - 1)} ;;"
+        ) browserCfg.keyboardLayouts}
+        *)
+          echo "usage: wolf-stream-layout RUNNER {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}}" >&2
+          exit 2
+          ;;
+      esac
+
+      # Wolf UI may wait for a person to enter the protected profile PIN.
+      # Keep this detached launch helper alive long enough for that normal
+      # interaction without delaying Moonlight itself.
+      for ((attempt = 0; attempt < 1200; attempt++)); do
+        container="$(
+          docker ps \
+            --filter "name=^/''${runner}_" \
+            --format '{{.Names}}' \
+            | head -n1
+        )"
+        if [ -n "$container" ] \
+          && docker exec \
+            -u ${toString cfg.defaultRunUid} \
+            -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+            "$container" \
+            swaymsg input type:keyboard xkb_switch_layout "$layout_index" \
+              >/dev/null 2>&1; then
+          exit 0
+        fi
+        sleep 0.25
+      done
+
+      echo "streamed $runner session did not expose its keyboard in time" >&2
+      exit 1
+    '';
+  };
+  buildPatchedWolfImage = pkgs.writeShellApplication {
+    name = "build-patched-wolf-image";
+    runtimeInputs = [ pkgs.docker ];
+    text = ''
+      set -euo pipefail
+
+      if docker image inspect ${lib.escapeShellArg wolfPatchedImage} >/dev/null 2>&1; then
+        exit 0
+      fi
+
+      docker image inspect ${lib.escapeShellArg wolfBaseImage} >/dev/null 2>&1 \
+        || docker pull ${lib.escapeShellArg wolfBaseImage}
+
+      docker build \
+        --pull=false \
+        --build-arg RUNTIME_IMAGE=${lib.escapeShellArg wolfBaseImage} \
+        --tag ${lib.escapeShellArg wolfPatchedImage} \
+        ${lib.escapeShellArg wolfBuildContext}
     '';
   };
   # GStreamer's CUDA conversion elements load NVRTC dynamically. The
@@ -272,7 +361,7 @@ in
 
     image = lib.mkOption {
       type = lib.types.str;
-      default = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
+      default = wolfPatchedImage;
       description = "Pinned amd64 Wolf container image.";
     };
 
@@ -456,6 +545,11 @@ in
           WOLF_LOG_LEVEL = "INFO";
           WOLF_RENDER_NODE = cfg.renderNode;
           WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
+          # gst-wayland-display owns the outer virtual seat. Its Smithay
+          # keymap must recognize Right Alt as LevelThree before nested Sway
+          # can preserve AltGr for streamed applications.
+          XKB_DEFAULT_LAYOUT = lib.concatStringsSep "," browserCfg.keyboardLayouts;
+          XKB_DEFAULT_OPTIONS = "grp:alt_shift_toggle,lv3:ralt_switch";
           XDG_RUNTIME_DIR = "/run/wolf-streaming/runtime";
         };
         volumes = [
@@ -478,6 +572,8 @@ in
         ];
       };
     };
+
+    environment.systemPackages = lib.optional browserCfg.enable wolfStreamLayout;
 
     systemd.services.docker-wolf = {
       after = [
@@ -508,6 +604,19 @@ in
             ${lib.escapeShellArg cfg.protectedProfile.displayName}
         ''
       );
+    };
+
+    systemd.services.wolf-patched-image = lib.mkIf (cfg.image == wolfPatchedImage) {
+      description = "Build the pinned Wolf image with AltGr modifier tracking";
+      after = [ "docker.service" ];
+      before = [ "docker-wolf.service" ];
+      requires = [ "docker.service" ];
+      requiredBy = [ "docker-wolf.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = lib.getExe buildPatchedWolfImage;
+      };
     };
 
     systemd.services.wolf-browser-images = lib.mkIf browserCfg.enable {
