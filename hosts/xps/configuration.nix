@@ -336,8 +336,12 @@ in {
     relaunchOnExit = false;
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
+    # XPS is a fixed LAN client. Pin every Moonlight endpoint field to LAN so
+    # host discovery cannot silently move latency-sensitive streams onto VPN.
+    streamEndpointMode = "lan-only";
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
+    browserStreamEndpointMode = "lan-only";
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
     browserStreamLayoutCommand = ''

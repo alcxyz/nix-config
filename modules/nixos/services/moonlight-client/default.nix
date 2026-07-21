@@ -285,18 +285,32 @@ let
     cfg.browserStreamLocalAddress != null && cfg.browserStreamRemoteAddress != null;
   browserStreamReadinessHosts =
     if browserStreamEndpointPolicyEnabled then
-      [
-        cfg.browserStreamLocalAddress
-        cfg.browserStreamRemoteAddress
-      ]
+      lib.unique (
+        if cfg.browserStreamEndpointMode == "lan-only" then
+          [ cfg.browserStreamLocalAddress ]
+        else if cfg.browserStreamEndpointMode == "remote-only" then
+          [ cfg.browserStreamRemoteAddress ]
+        else
+          [
+            cfg.browserStreamLocalAddress
+            cfg.browserStreamRemoteAddress
+          ]
+      )
     else
       lib.optional browserStreamEnabled cfg.browserStreamHost;
   streamReadinessHosts =
     if streamEndpointPolicyEnabled then
-      [
-        cfg.streamLocalAddress
-        cfg.streamRemoteAddress
-      ]
+      lib.unique (
+        if cfg.streamEndpointMode == "lan-only" then
+          [ cfg.streamLocalAddress ]
+        else if cfg.streamEndpointMode == "remote-only" then
+          [ cfg.streamRemoteAddress ]
+        else
+          [
+            cfg.streamLocalAddress
+            cfg.streamRemoteAddress
+          ]
+      )
     else
       lib.optional (cfg.streamReadinessHost != null) cfg.streamReadinessHost;
   reconcileMoonlightEndpoints = pkgs.writeShellApplication {
@@ -321,6 +335,7 @@ let
           ${lib.getExe reconcileMoonlightEndpoints} \
             "$config_file" \
             ${lib.escapeShellArg cfg.streamHost} \
+            ${lib.escapeShellArg cfg.streamEndpointMode} \
             ${lib.escapeShellArg cfg.streamLocalAddress} \
             ${lib.escapeShellArg cfg.streamRemoteAddress}
         ''}
@@ -328,6 +343,7 @@ let
           ${lib.getExe reconcileMoonlightEndpoints} \
             "$config_file" \
             ${lib.escapeShellArg cfg.browserStreamHost} \
+            ${lib.escapeShellArg cfg.browserStreamEndpointMode} \
             ${lib.escapeShellArg cfg.browserStreamLocalAddress} \
             ${lib.escapeShellArg cfg.browserStreamRemoteAddress}
         ''}
@@ -1552,10 +1568,17 @@ let
           )"
         fi
         if [ -n "$tertiary_output" ]; then
+          tertiary_workspaces=${lib.escapeShellArg (builtins.toJSON cfg.autoLayoutTertiaryWorkspaces)}
+          if [ "$secondary_logical" != 1 ]; then
+            # Compact a two-display layout into the first two workspace blocks.
+            # The auxiliary output is physically tertiary, but logically it is
+            # the second active display when no second TV is selected.
+            tertiary_workspaces=${lib.escapeShellArg (builtins.toJSON cfg.autoLayoutSecondaryWorkspaces)}
+          fi
           allowed_workspaces="$(
             jq -cn \
               --argjson current "$allowed_workspaces" \
-              --argjson tertiary ${lib.escapeShellArg (builtins.toJSON cfg.autoLayoutTertiaryWorkspaces)} \
+              --argjson tertiary "$tertiary_workspaces" \
               '$current + $tertiary'
           )"
         fi
@@ -1631,14 +1654,15 @@ let
               "$tertiary_mode" \
               "$tertiary_position" \
               ${lib.escapeShellArg (toString cfg.autoLayoutTertiaryScale)}
-            for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
+            tertiary_default_workspace="$(jq -r '.[0]' <<<"$tertiary_workspaces")"
+            while read -r workspace; do
               default=""
-              if [ "$workspace" = ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutTertiaryWorkspaces))} ]; then
+              if [ "$workspace" = "$tertiary_default_workspace" ]; then
                 default=", default:true"
               fi
               printf 'workspace = %s, monitor:%s, persistent:true%s\n' \
                 "$workspace" "$tertiary_output" "$default"
-            done
+            done < <(jq -r '.[]' <<<"$tertiary_workspaces")
           fi
         } >"$temporary_file"
 
@@ -1675,13 +1699,14 @@ let
         fi
         if [ -n "$tertiary_output" ]; then
           hyprctl dispatch focusmonitor "$tertiary_output" >/dev/null 2>&1 || true
+          tertiary_default_workspace="$(jq -r '.[0]' <<<"$tertiary_workspaces")"
           hyprctl dispatch workspace \
-            ${lib.escapeShellArg (toString (builtins.head cfg.autoLayoutTertiaryWorkspaces))} \
+            "$tertiary_default_workspace" \
             >/dev/null 2>&1 || true
-          for workspace in ${lib.escapeShellArgs (map toString cfg.autoLayoutTertiaryWorkspaces)}; do
+          while read -r workspace; do
             hyprctl dispatch moveworkspacetomonitor \
               "$workspace" "$tertiary_output" >/dev/null 2>&1 || true
-          done
+          done < <(jq -r '.[]' <<<"$tertiary_workspaces")
         fi
         if [ -n "$source_output" ]; then
           while IFS=$'\t' read -r address destination; do
@@ -2622,6 +2647,20 @@ in
       description = "VPN fallback address for the direct stream host.";
     };
 
+    streamEndpointMode = lib.mkOption {
+      type = lib.types.enum [
+        "lan-only"
+        "lan-first"
+        "remote-only"
+      ];
+      default = "lan-first";
+      description = ''
+        Endpoint policy for the direct stream. LAN-only and remote-only pin
+        every saved Moonlight address field to the selected endpoint; LAN-first
+        retains an explicit remote fallback.
+      '';
+    };
+
     browserStreamHost = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -2663,6 +2702,20 @@ in
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = "VPN fallback address for the remote browser host.";
+    };
+
+    browserStreamEndpointMode = lib.mkOption {
+      type = lib.types.enum [
+        "lan-only"
+        "lan-first"
+        "remote-only"
+      ];
+      default = "lan-first";
+      description = ''
+        Endpoint policy for the browser stream. LAN-only and remote-only pin
+        every saved Moonlight address field to the selected endpoint; LAN-first
+        retains an explicit remote fallback.
+      '';
     };
 
     browserStreamArguments = lib.mkOption {

@@ -121,10 +121,11 @@ cycles through:
 | `solo-secondary` | Use only the second TV-class output |
 | `solo-aux` | Use the auxiliary display, with a TV fallback |
 
-The dual-TV layout assigns workspaces 1–3 to the primary TV and 4–6 to the
-secondary TV. The auxiliary display uses workspaces 7–9 and is placed directly
-beside the selected TV when the other TV is parked. Only workspace sets backed
-by active logical displays are exposed: solo and dual-TV mirror layouts use
+The first active display receives workspaces 1–3 and the second receives 4–6.
+This compact assignment also applies to `primary-aux` and `secondary-aux`, with
+the auxiliary display placed directly beside the selected TV. The auxiliary
+display uses workspaces 7–9 only in the three-display layout, where both TV
+workspace blocks are already active. Solo and dual-TV mirror layouts expose
 1–3; independent two-display layouts expose two sets; and the three-display
 layout exposes all nine. If a display disappears, windows from its inactive set
 are folded into the matching primary workspace 1–3. Parked displays are moved
@@ -235,10 +236,10 @@ guide. Wolf UI can also be restored from a running Wolf application with
 `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
 The merged couch session starts public remote Helium by default. At login it
-checks the direct and fallback Wolf endpoints briefly; if neither is ready it
-opens local Helium instead, so XPS still boots into a usable browser when XEV
-is unavailable. `Super+B` normally returns to remote Helium; the boot fallback
-does not turn XEV into a login dependency.
+checks the direct LAN Wolf endpoint briefly; if it is not ready it opens local
+Helium instead, so XPS still boots into a usable browser when XEV is unavailable.
+`Super+B` normally returns to remote Helium; the boot fallback does not turn XEV
+into a login dependency.
 
 Steam is available through `Home+A`, `Super+M`, and the `Steam Stream` menu
 entry. The launcher first checks the direct LAN endpoint, starts the remote
@@ -294,10 +295,12 @@ telemetry was healthy but visible site/UI glitches remained; the other private
 choices are useful compatibility fallbacks. Local XPS browsers remain
 available as an independent fallback.
 
-Both browser and Steam streams prefer their direct LAN endpoints. If XPS is
-used away from that network, Moonlight can fall back to the paired host's
-managed VPN endpoint. This fallback is deliberately limited to Moonlight;
-Synergy input sharing is LAN-only and disconnects rather than crossing the VPN.
+Both browser and Steam streams on XPS are LAN-only. Immediately before launch,
+the endpoint reconciler pins Moonlight's local, manual, and remote address
+fields to the configured LAN endpoint, and readiness checks probe only LAN.
+XPS therefore fails locally instead of silently streaming over VPN. Roaming
+clients use separately selected LAN-first or remote-only policies. Synergy input
+sharing is likewise LAN-only and disconnects rather than crossing the VPN.
 
 The remote browser session provides Norwegian, US, and Russian layouts. On
 launch, XPS reads the active layout of Hyprland's main keyboard and selects the

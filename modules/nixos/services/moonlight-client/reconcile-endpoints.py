@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Atomically set LAN-first and VPN-fallback addresses for one Moonlight host."""
+"""Atomically enforce an explicit endpoint policy for one Moonlight host."""
 
 import ipaddress
 import os
@@ -17,22 +17,26 @@ RFC1918 = (
 
 
 def main():
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         raise SystemExit(
-            "usage: reconcile-endpoints.py CONFIG HOSTNAME LAN_ADDRESS "
+            "usage: reconcile-endpoints.py CONFIG HOSTNAME MODE LAN_ADDRESS "
             "REMOTE_ADDRESS"
         )
 
     config_path = Path(sys.argv[1])
     hostname = sys.argv[2]
-    lan_address = ipaddress.ip_address(sys.argv[3])
-    remote_address = ipaddress.ip_address(sys.argv[4])
+    mode = sys.argv[3]
+    lan_address = ipaddress.ip_address(sys.argv[4])
+    remote_address = ipaddress.ip_address(sys.argv[5])
+
+    if mode not in ("lan-only", "lan-first", "remote-only"):
+        raise ValueError(f"unsupported Moonlight endpoint mode: {mode!r}")
 
     if not isinstance(lan_address, ipaddress.IPv4Address) or not any(
         lan_address in network for network in RFC1918
     ):
         raise ValueError("Moonlight LAN address must be RFC 1918 IPv4")
-    if lan_address == remote_address:
+    if mode == "lan-first" and lan_address == remote_address:
         raise ValueError("Moonlight LAN and remote addresses must differ")
     if not config_path.exists():
         return 0
@@ -55,10 +59,13 @@ def main():
     if host_index is None:
         raise RuntimeError(f"Moonlight has no paired host named {hostname!r}")
 
+    preferred_address = remote_address if mode == "remote-only" else lan_address
     desired = {
-        f"{host_index}\\localaddress": str(lan_address),
-        f"{host_index}\\manualaddress": str(lan_address),
-        f"{host_index}\\remoteaddress": str(remote_address),
+        f"{host_index}\\localaddress": str(preferred_address),
+        f"{host_index}\\manualaddress": str(preferred_address),
+        f"{host_index}\\remoteaddress": str(
+            remote_address if mode == "lan-first" else preferred_address
+        ),
     }
     found = set()
     changed = False

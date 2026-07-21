@@ -24,16 +24,21 @@ pointer mode. Do not let the browser stream capture system-key combinations;
 the client compositor retains its workspace and couch-session shortcuts while
 ordinary keyboard input continues to the remote browser.
 
-Give each paired streaming host separate local and remote endpoints. Reconcile
-Moonlight's local and manual addresses to the private LAN endpoint and its
-remote address to the managed VPN endpoint immediately before launch. Moonlight
-tries the local address first, preserving the low-latency path at home, and can
-fall back to the VPN address when the client is away from the local network.
-Keep the concrete endpoint assignments in private configuration.
-On macOS, periodically reconcile the paired-host preference fields because
-Moonlight may replace its discovered remote address during host refresh. The
-agent matches hosts by their saved names, leaves pairing certificates and
-application state untouched, and does nothing until the host has been paired.
+Give each paired streaming host separate local and remote endpoints, while
+making endpoint selection an explicit client policy. Fixed clients such as XPS
+use `lan-only`: immediately before launch, all three Moonlight address fields
+are pinned to the private LAN endpoint and readiness checks never probe VPN.
+This prevents host discovery or a cached remote preference from silently moving
+a local stream onto the managed VPN. Roaming clients may select `lan-first` or
+an explicit `remote-only` launcher instead. Keep concrete endpoint assignments
+in private configuration.
+
+The current macOS agent periodically reconciles LAN-first paired-host fields
+because Moonlight may replace its discovered addresses during host refresh. A
+future pair of explicit LAN and remote launch entries can replace that automatic
+choice without changing the endpoint policy. The agent matches hosts by their
+saved names, leaves pairing certificates and application state untouched, and
+does nothing until the host has been paired.
 
 Run [Wolf](https://games-on-whales.github.io/wolf/stable/) as a pinned
 container on a GPU-capable NixOS host, with `xev` as the initial deployment.
@@ -254,10 +259,10 @@ low-latency video, audio, and controller integration already used by Moonlight.
   containers created by the managed browser runners, while Moonlight sessions
   terminate themselves if their window never appears or disappears while the
   client process remains stuck.
-- LAN-first streaming with managed-VPN remote fallback: implemented for both
-  the browser and Steam pairings; the active XPS browser stream was verified on
-  the direct LAN path. The equivalent macOS endpoint reconciler is implemented
-  and tested against a paired Wolf host.
+- Explicit streaming endpoint policy: XPS pins both browser and Steam pairings
+  to LAN-only fields and readiness checks. The macOS endpoint reconciler
+  currently retains LAN-first managed-VPN fallback and has been tested against
+  a paired Wolf host.
 - Private Brave profile provisioning and XPS launch integration: implemented
   and accepted. Wolf UI requires the private PIN before exposing Brave; the
   browser runs on XEV's NVIDIA GPU with a persistent isolated home, while XPS
