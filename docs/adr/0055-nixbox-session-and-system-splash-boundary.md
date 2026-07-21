@@ -100,4 +100,5 @@ and the session animation does not pretend to represent boot progress.
 
 ## Tracking
 
-- Issue #157 tracks the staged boot and session implementation.
+- Closed issue #157 records the accepted boot, session, reboot, and shutdown
+  implementation. Further timing changes are optional visual polish.

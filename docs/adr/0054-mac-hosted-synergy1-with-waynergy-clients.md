@@ -88,8 +88,9 @@ instead of selecting a VPN route.
 
 ## Tracking
 
-- Issue #152 tracks the Mac rebuild and end-to-end input validation on both
-  Waynergy clients.
+- Issue #152 tracks the remaining XPS pointer refinement, XYZ end-to-end input
+  validation, and clipboard checks. The Mac server and basic XPS keyboard path
+  are accepted.
 - LAN-only route enforcement on XPS: implemented and verified.
 - Default-target startup across greetd/UWSM sessions: implemented after live
   validation showed `graphical-session.target` remained inactive on both XPS
