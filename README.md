@@ -31,6 +31,13 @@ See the [XPS media-center guide](docs/xps-media-center.md) for controller and
 keyboard shortcuts, display modes, audio choices, and the on-screen help
 overlay.
 
+### Visual reports
+
+Standalone, summary-first HTML reports complement the Markdown archive for
+interactive test review. See [the visual report guide](docs/reports/README.md)
+and open a report locally with `nixbox-report`; use its explicit `--lan` mode
+only when another machine needs temporary access.
+
 ## Repository layout
 
 ```

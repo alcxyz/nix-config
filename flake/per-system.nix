@@ -45,6 +45,7 @@
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
+      "packages/nixbox-report/default.nix"
       "packages/nixbox-plymouth-theme/default.nix"
       "packages/nixbox-session-splash/default.nix"
       "users/alc/common.nix"
@@ -84,6 +85,17 @@
         shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
       '';
 
+      report-assets =
+        mkRepoCheck "report-assets-check" [
+          pkgs.html-tidy
+          pkgs.python3
+          pkgs.ruff
+        ] ''
+          python3 -m py_compile packages/nixbox-report/nixbox-report.py
+          ruff check packages/nixbox-report/nixbox-report.py
+          tidy -qe docs/reports/*.html
+        '';
+
       forbid-submodule-config = mkRepoCheck "forbid-submodule-config" [] ''
         test ! -e .gitmodules
       '';
@@ -93,6 +105,7 @@
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
+        nixbox-report = pkgs.nixbox-report;
         nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;
         nixbox-session-splash = pkgs.nixbox-session-splash;
         stashdb-pop = pkgs.stashdb-pop;

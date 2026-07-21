@@ -220,6 +220,10 @@ low-latency video, audio, and controller integration already used by Moonlight.
 
 ## Tracking
 
+- Forgejo issue #182 records the completed implementation and accepted browser
+  matrix; follow-up rendering or input refinements should be tracked as
+  separate defects rather than reopening the delivery issue.
+
 - Reusable `services.wolf-streaming` NixOS module and NVIDIA CDI bridge:
   implemented.
 - Firefox HEVC transport baseline: accepted.

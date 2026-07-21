@@ -151,6 +151,7 @@ in rec {
       parallel
       agent-sync-check
       nix-deploy
+      nixbox-report
       k8s-node-reboot
     ];
 
