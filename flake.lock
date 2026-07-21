@@ -1210,6 +1210,26 @@
         "url": "https://git.outfoxxed.me/outfoxxed/quickshell"
       }
     },
+    "reportcraft": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1784665979,
+        "narHash": "sha256-/0PUq07PnHiBg6tMEZDoD8p1bn04yEhN+xNt9v5PM8k=",
+        "ref": "refs/heads/main",
+        "rev": "96981b650a0c88ea03e4cb4ccddd661d79568f07",
+        "revCount": 2,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git"
+      }
+    },
     "root": {
       "inputs": {
         "bn-bootstrap": "bn-bootstrap",
@@ -1233,6 +1253,7 @@
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",
         "quickshell": "quickshell",
+        "reportcraft": "reportcraft",
         "rustfs": "rustfs",
         "sops-nix": "sops-nix",
         "stashdb-pop": "stashdb-pop",

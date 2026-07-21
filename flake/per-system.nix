@@ -45,7 +45,6 @@
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
-      "packages/reportcraft/default.nix"
       "packages/nixbox-plymouth-theme/default.nix"
       "packages/nixbox-session-splash/default.nix"
       "users/alc/common.nix"
@@ -88,11 +87,7 @@
       report-assets =
         mkRepoCheck "report-assets-check" [
           pkgs.html-tidy
-          pkgs.python3
-          pkgs.ruff
         ] ''
-          python3 -m py_compile packages/reportcraft/reportcraft.py
-          ruff check packages/reportcraft/reportcraft.py
           tidy -qe docs/reports/*.html
         '';
 

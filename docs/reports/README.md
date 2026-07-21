@@ -11,12 +11,12 @@ agnostic: reports may live in this repository, the GitOps repository, or any
 other project that needs an accessible presentation layer over durable
 Markdown evidence.
 
-The standalone Reportcraft project owns the reusable template and local viewer.
-Consuming repositories own their completed reports and the durable evidence
-those reports summarize. Start a new campaign with `reportcraft new`, then
-replace the masthead, verdict, result rows, evidence, defects, method, limits,
-and actions. The generated report belongs beside its evidence and has no
-`nix-config` coupling.
+The standalone [Reportcraft](https://git.alc.xyz/alcxyz/reportcraft) project owns
+the reusable template and local viewer. Consuming repositories own their
+completed reports and the durable evidence those reports summarize. Start a new
+campaign with `reportcraft new`, then replace the masthead, verdict, result rows,
+evidence, defects, method, limits, and actions. The generated report belongs
+beside its evidence and has no `nix-config` coupling.
 
 ## Create a report
 

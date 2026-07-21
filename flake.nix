@@ -21,6 +21,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    reportcraft = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     paneru = {
       url = "github:alcxyz/paneru?ref=qa/alc-dev";
       inputs.nixpkgs.follows = "nixpkgs";
