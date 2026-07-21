@@ -1,12 +1,3 @@
-(defcfg
-  process-unmapped-keys yes
-  ;; Streaming servers create synthetic keyboards that must remain available
-  ;; to their own input stack instead of being exclusively grabbed by Kanata.
-  linux-dev-names-exclude (
-    "Keyboard passthrough"
-  )
-)
-
 ;; Define timeout values
 (defvar
   tap-timeout 150

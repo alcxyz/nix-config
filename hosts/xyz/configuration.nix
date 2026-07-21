@@ -254,6 +254,17 @@ in {
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
+  # Only the two intentional physical keyboards pass through Kanata on xyz.
+  # Composite receivers, mice, media controls, and streaming virtual devices
+  # remain owned by their native consumers.
+  services.kanata.keyboards.main.extraDefCfg = ''
+    process-unmapped-keys yes
+    linux-dev-names-include (
+      "Glove80 Keyboard"
+      "Logitech K850"
+    )
+  '';
+
   # ==================== Host-specific Settings ====================
 
   programs.hyprlock.enable = true;

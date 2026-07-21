@@ -233,7 +233,16 @@ in
     enable = true;
     package = pkgs.kanata;
     keyboards.main = {
-      configFile = "${configDir}/users/${username}/configs/kanata/kanata.kbd";
+      config = builtins.readFile "${configDir}/users/${username}/configs/kanata/kanata.kbd";
+      extraDefCfg = lib.mkDefault ''
+        process-unmapped-keys yes
+        ;; Streaming servers create synthetic keyboards that must remain
+        ;; available to their own input stack instead of being exclusively
+        ;; grabbed by Kanata.
+        linux-dev-names-exclude (
+          "Keyboard passthrough"
+        )
+      '';
     };
   };
   systemd.services.kanata-main.serviceConfig = {
