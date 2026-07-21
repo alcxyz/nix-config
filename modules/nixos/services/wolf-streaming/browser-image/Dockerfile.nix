@@ -5,11 +5,11 @@ FROM ${BASE_APP_IMAGE}
 ARG BROWSER_EXECUTABLE
 ARG BROWSER_FAMILY
 
-COPY browser.deb /tmp/browser.deb
+COPY browser-store.tar /tmp/browser-store.tar
 
 RUN set -eu; \
-    dpkg-deb --extract /tmp/browser.deb /; \
-    rm -f /tmp/browser.deb; \
+    tar --extract --file=/tmp/browser-store.tar --directory=/; \
+    rm -f /tmp/browser-store.tar; \
     test -x "${BROWSER_EXECUTABLE}"
 
 COPY --chmod=0755 startup.sh /opt/gow/startup-app.sh

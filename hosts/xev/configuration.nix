@@ -40,6 +40,9 @@
         publish = true;
       };
       brave.enable = true;
+      chromium.enable = true;
+      firefox.enable = true;
+      zen.enable = true;
     };
   };
 

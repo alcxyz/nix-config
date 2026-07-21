@@ -158,13 +158,36 @@ let
     else
       cfg.autoMirrorTertiaryPosition;
   mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
+  mkMoonlightExecutable =
+    name: profileDirectory:
+    if profileDirectory == null then
+      lib.getExe cfg.package
+    else
+      lib.getExe (
+        pkgs.writeShellApplication {
+          name = "moonlight-${name}";
+          runtimeInputs = [ pkgs.coreutils ];
+          text = ''
+            install -d -m 0700 \
+              ${lib.escapeShellArg "${profileDirectory}/config"} \
+              ${lib.escapeShellArg "${profileDirectory}/cache"} \
+              ${lib.escapeShellArg "${profileDirectory}/data"}
+            export XDG_CONFIG_HOME=${lib.escapeShellArg "${profileDirectory}/config"}
+            export XDG_CACHE_HOME=${lib.escapeShellArg "${profileDirectory}/cache"}
+            export XDG_DATA_HOME=${lib.escapeShellArg "${profileDirectory}/data"}
+            exec ${lib.getExe cfg.package} "$@"
+          '';
+        }
+      );
+  defaultMoonlightExecutable = mkMoonlightExecutable "default" null;
+  selectorMoonlightExecutable = mkMoonlightExecutable "browser-selector" cfg.browserStreamSelectorProfileDirectory;
   mkMoonlightInvocation =
-    extraArguments: host: application:
+    executable: extraArguments: host: application:
     lib.escapeShellArgs (
       [
         "${pkgs.coreutils}/bin/env"
         "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
-        (lib.getExe cfg.package)
+        executable
         "stream"
       ]
       ++ cfg.streamArguments
@@ -176,18 +199,19 @@ let
     );
   moonlightInvocation =
     if directStreamEnabled then
-      mkMoonlightInvocation [ ] cfg.streamHost cfg.streamApplication
+      mkMoonlightInvocation defaultMoonlightExecutable [ ] cfg.streamHost cfg.streamApplication
     else
       lib.escapeShellArgs [
         "${pkgs.coreutils}/bin/env"
         "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
-        (lib.getExe cfg.package)
+        defaultMoonlightExecutable
       ];
   browserMoonlightInvocation = lib.optionalString browserStreamEnabled (
-    mkMoonlightInvocation cfg.browserStreamArguments cfg.browserStreamHost cfg.browserStreamApplication
+    mkMoonlightInvocation defaultMoonlightExecutable cfg.browserStreamArguments cfg.browserStreamHost
+      cfg.browserStreamApplication
   );
   browserSelectorMoonlightInvocation = lib.optionalString browserSelectorEnabled (
-    mkMoonlightInvocation cfg.browserStreamArguments cfg.browserStreamHost
+    mkMoonlightInvocation selectorMoonlightExecutable cfg.browserStreamArguments cfg.browserStreamHost
       cfg.browserStreamSelectorApplication
   );
   superviseMoonlightWindow = targetWorkspace: ''
@@ -195,6 +219,7 @@ let
     startup_window_checks=0
     missing_window_checks=0
     moonlight_address=""
+    placed_moonlight_address=""
 
     terminate_moonlight() {
       kill "$moonlight_pid" >/dev/null 2>&1 || true
@@ -217,14 +242,21 @@ let
             '
       )"
       if [ -n "$moonlight_address" ]; then
-        if [ "$seen_window" -eq 0 ]; then
+        # Moonlight can replace its XWayland window while the renderer is
+        # initialized. Place each newly observed address, not just the first
+        # transient window, or concurrent client starts can leave the final
+        # window tiled on whichever workspace was focused last.
+        if [ "$moonlight_address" != "$placed_moonlight_address" ]; then
           hyprctl dispatch movetoworkspacesilent \
             ${toString targetWorkspace},"address:$moonlight_address" \
             >/dev/null 2>&1 || true
-          hyprctl dispatch workspace ${toString targetWorkspace} \
-            >/dev/null 2>&1 || true
-          hyprctl dispatch focuswindow "address:$moonlight_address" \
-            >/dev/null 2>&1 || true
+          if [ "$seen_window" -eq 0 ]; then
+            hyprctl dispatch workspace ${toString targetWorkspace} \
+              >/dev/null 2>&1 || true
+            hyprctl dispatch focuswindow "address:$moonlight_address" \
+              >/dev/null 2>&1 || true
+          fi
+          placed_moonlight_address="$moonlight_address"
         fi
         seen_window=1
         startup_window_checks=0
@@ -274,24 +306,54 @@ let
       exec python3 ${./reconcile-endpoints.py} "$@"
     '';
   };
-  moonlightEndpointSetup = pkgs.writeShellApplication {
-    name = "moonlight-endpoint-setup";
+  mkMoonlightEndpointSetup =
+    name: profileDirectory: reconcileStream: reconcileBrowser:
+    pkgs.writeShellApplication {
+      name = "moonlight-endpoint-setup-${name}";
+      text = ''
+          config_file=${
+            if profileDirectory == null then
+              ''"$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"''
+            else
+              lib.escapeShellArg "${profileDirectory}/config/Moonlight Game Streaming Project/Moonlight.conf"
+          }
+        ${lib.optionalString (reconcileStream && streamEndpointPolicyEnabled) ''
+          ${lib.getExe reconcileMoonlightEndpoints} \
+            "$config_file" \
+            ${lib.escapeShellArg cfg.streamHost} \
+            ${lib.escapeShellArg cfg.streamLocalAddress} \
+            ${lib.escapeShellArg cfg.streamRemoteAddress}
+        ''}
+        ${lib.optionalString (reconcileBrowser && browserStreamEndpointPolicyEnabled) ''
+          ${lib.getExe reconcileMoonlightEndpoints} \
+            "$config_file" \
+            ${lib.escapeShellArg cfg.browserStreamHost} \
+            ${lib.escapeShellArg cfg.browserStreamLocalAddress} \
+            ${lib.escapeShellArg cfg.browserStreamRemoteAddress}
+        ''}
+      '';
+    };
+  moonlightEndpointSetup = mkMoonlightEndpointSetup "default" null true true;
+  browserSelectorEndpointSetup =
+    mkMoonlightEndpointSetup "browser-selector" cfg.browserStreamSelectorProfileDirectory false
+      true;
+  browserSelectorPair = pkgs.writeShellApplication {
+    name = "couch-moonlight-pair-private";
     text = ''
-      config_file="$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"
-      ${lib.optionalString streamEndpointPolicyEnabled ''
-        ${lib.getExe reconcileMoonlightEndpoints} \
-          "$config_file" \
-          ${lib.escapeShellArg cfg.streamHost} \
-          ${lib.escapeShellArg cfg.streamLocalAddress} \
-          ${lib.escapeShellArg cfg.streamRemoteAddress}
-      ''}
-      ${lib.optionalString browserStreamEndpointPolicyEnabled ''
-        ${lib.getExe reconcileMoonlightEndpoints} \
-          "$config_file" \
-          ${lib.escapeShellArg cfg.browserStreamHost} \
-          ${lib.escapeShellArg cfg.browserStreamLocalAddress} \
-          ${lib.escapeShellArg cfg.browserStreamRemoteAddress}
-      ''}
+      if [ "$#" -ne 1 ] || ! [[ "$1" =~ ^[0-9]{4}$ ]]; then
+        echo "usage: couch-moonlight-pair-private FOUR_DIGIT_PIN" >&2
+        exit 2
+      fi
+      exec ${pkgs.coreutils}/bin/env \
+        QT_QPA_PLATFORM=${lib.escapeShellArg cfg.moonlightPlatform} \
+        ${selectorMoonlightExecutable} pair --pin "$1" ${
+          lib.escapeShellArg (
+            if cfg.browserStreamLocalAddress == null then
+              cfg.browserStreamHost
+            else
+              cfg.browserStreamLocalAddress
+          )
+        }
     '';
   };
 
@@ -840,7 +902,7 @@ let
   };
 
   mkMoonlightBrowserSession =
-    name: invocation: targetWorkspace: application:
+    name: endpointSetup: invocation: targetWorkspace: application:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
@@ -848,7 +910,7 @@ let
         pkgs.jq
       ];
       text = ''
-        ${lib.getExe moonlightEndpointSetup}
+        ${lib.getExe endpointSetup}
         ${lib.getExe displayModeSetup}
         ${invocation} &
         moonlight_pid=$!
@@ -867,10 +929,14 @@ let
       '';
     };
   moonlightBrowserSession =
-    mkMoonlightBrowserSession "moonlight-browser-session" browserMoonlightInvocation 2
+    mkMoonlightBrowserSession "moonlight-browser-session" moonlightEndpointSetup
+      browserMoonlightInvocation
+      2
       cfg.browserStreamApplication;
   moonlightBrowserSelectorSession =
-    mkMoonlightBrowserSession "moonlight-browser-selector-session" browserSelectorMoonlightInvocation 3
+    mkMoonlightBrowserSession "moonlight-browser-selector-session" browserSelectorEndpointSetup
+      browserSelectorMoonlightInvocation
+      3
       cfg.browserStreamSelectorApplication;
 
   couchStreamControl = pkgs.writeShellApplication {
@@ -2577,6 +2643,16 @@ in
       '';
     };
 
+    browserStreamSelectorProfileDirectory = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Optional absolute directory containing isolated XDG config, cache, and
+        data homes for the protected browser selector. Set this when the public
+        browser and selector must stream concurrently from the same host.
+      '';
+    };
+
     browserStreamLocalAddress = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -3080,6 +3156,9 @@ in
       couchStreamControl
       moonlightStreamStart
     ]
+    ++ lib.optional (
+      browserSelectorEnabled && cfg.browserStreamSelectorProfileDirectory != null
+    ) browserSelectorPair
     ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
     ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
     ++ lib.optional cfg.enableMergedProfile mergedDmsSession
@@ -3248,6 +3327,12 @@ in
       {
         assertion = cfg.browserStreamSelectorApplication == null || browserStreamEnabled;
         message = "services.moonlight-client browser selector requires a browser stream host and application";
+      }
+      {
+        assertion =
+          cfg.browserStreamSelectorProfileDirectory == null
+          || lib.hasPrefix "/" cfg.browserStreamSelectorProfileDirectory;
+        message = "services.moonlight-client.browserStreamSelectorProfileDirectory must be absolute";
       }
       {
         assertion = !cfg.enableControllerShortcuts || directStreamEnabled;

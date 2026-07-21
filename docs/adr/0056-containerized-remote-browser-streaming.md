@@ -53,16 +53,18 @@ The NixOS module:
 
 Treat the state directory as private runtime data. Do not commit its generated
 configuration, certificates, paired-client records, profile PINs, or browser
-homes. A PIN-protected Wolf profile will contain the private Brave application;
-the general profile will contain Helium. Their homes remain separate and
+homes. The general profile contains Helium. A PIN-protected Wolf profile
+contains isolated Helium, Brave, Chromium, Firefox, and Zen applications
+for private use and comparative testing. Their homes remain separate and
 persistent across on-demand container replacement.
 
-Build Helium and Brave as distinct local images on top of the same pinned GoW
-`base-app` image. Each image contains only its browser and the common Wolf
-compositor integration. Docker shares the base layers on disk, while separate
-image and home boundaries prevent browser settings, authentication, and upgrade
-lifecycle from leaking between the two applications. Browser release artifacts
-are fixed-output Nix inputs; the host does not install either browser globally.
+Build every browser as a distinct local image on top of the same pinned GoW
+`base-app` image. Helium and Brave use their pinned Debian release artifacts;
+Chromium, Firefox, and Zen import the closure of their pinned Nix package.
+Each image contains only its browser and the common Wolf compositor integration.
+Docker shares the base layers on disk, while separate image and home boundaries
+prevent browser settings, authentication, and upgrade lifecycle from leaking
+between applications. The host does not install the browsers globally.
 The browser containers relax Docker's default seccomp profile so Chromium can
 create its unprivileged user namespace and retain its own renderer sandbox;
 they do not use Chromium's `--no-sandbox` escape hatch.
@@ -93,11 +95,11 @@ application, paired client, certificate, profile, PIN, and home. Helium is
 published directly for general browsing. A pinned Wolf UI entry is also
 published as the controller-friendly profile selector. Its API socket stays in
 a root-owned local runtime directory and is mounted only into that application
-container. Brave is built but must remain absent from the direct Moonlight list;
-it is attached to a PIN-protected Wolf profile through a root-only systemd
-credential supplied at runtime by the private configuration. The credential
-contains only the protected profile identity, display name, and PIN. It is
-never copied into the Nix store or this repository.
+container. The protected browser set remains absent from the direct Moonlight
+list and is attached to a PIN-protected Wolf profile through a root-only
+systemd credential supplied at runtime by the private configuration. The
+credential contains only the protected profile identity, display name, and
+PIN. It is never copied into the Nix store or this repository.
 
 Do not advertise the protected browser's identity in Wolf UI. Replace Wolf's
 stock unprotected profile with the protected profile, present it under the
@@ -112,10 +114,11 @@ temporarily reveals it.
 
 Each disposable browser container takes an advisory lock on its persistent
 home for its full lifetime. After acquiring the lock, startup removes stale
-Chromium singleton links whose targets lived in the previous container's
-private temporary directory. A crashed or interrupted stream can therefore be
-launched again without discarding browser state, while a concurrent container
-cannot open and corrupt the same profile. Wolf remains responsible for
+Chromium singleton links and Firefox-family profile-lock symlinks whose targets
+lived in the previous container's private temporary directory. A crashed or
+interrupted stream can therefore be launched again without discarding browser
+state, while a concurrent container cannot open and corrupt the same profile.
+Wolf remains responsible for
 discarding the stopped application container; recovery happens on the next
 explicit launch so intentionally closing a browser does not cause a restart
 loop.
@@ -129,10 +132,35 @@ and the Moonlight client uses hardware decode. Firefox renders through the GPU,
 but its current container decodes web video in software; this remains an
 application-image optimization rather than a transport blocker.
 
-After that baseline passes, build the pinned Helium and Brave images, validate
-Helium through the same stream, then create the private Brave profile and add
-the controller and keyboard launch actions on XPS. Keep local XPS browsers as a
-fallback until both remote applications pass their acceptance tests.
+After that baseline passes, validate Helium and Brave through the same stream,
+then expose the broader protected browser matrix for comparative testing.
+Helium's XWayland/OpenGL path is the qualified Chromium-family baseline; Brave,
+plain Chromium, Firefox, and Zen remain independently selectable so their
+rendering, video decode, profile weight, and site compatibility can be measured
+without sharing state. Keep local XPS browsers as a fallback until the remote
+candidate in use passes its acceptance tests.
+
+A comparative acceptance run used the same 1440p YouTube video, explicitly set
+to 1440p, over the accepted 1440p60 HEVC transport. Each browser played for at
+least two minutes while the browser container, Wolf, NVENC, Moonlight, and XPS
+thermals were sampled. All five remained connected without a browser crash,
+Wolf encoder error, Moonlight decoder error, or abnormal client-side resource
+growth. Approximate observed ranges were:
+
+| Browser | Browser CPU cores | Browser memory | Wolf CPU | NVENC | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Helium | 1.7–3.1 | 0.94–1.00 GiB | 31–38% | 25–28% | Passed; preferred visual baseline |
+| Brave | 1.6–3.3 | 0.88–0.98 GiB | 31–36% | 26–27% | Passed transport; visible site/UI glitches remain |
+| Chromium | 2.0–3.6 | 1.04–1.10 GiB | 31–37% | 24–27% | Passed |
+| Firefox | 1.0–1.5 | 1.03–1.07 GiB | 29–32% | 26–28% | Passed |
+| Zen | 0.7–2.1 | 1.16–1.34 GiB | 26–31% | 25–27% | Passed; highest memory use |
+
+Across the matrix, XPS Moonlight stayed near 18% of one CPU core and 272 MiB
+RSS, with package temperature normally in the mid-to-high 50s Celsius. The
+similar Wolf and client costs show that browser choice primarily changes the
+remote application workload; it does not materially change stream encode or
+client decode cost. Helium remains the default because it also produced the
+best observed rendering behavior, not merely because it passed telemetry.
 
 Run Steam, public Helium, and the protected selector as separate Moonlight user
 services on stable XPS workspaces. The services do not stop one another, so
@@ -140,6 +168,12 @@ distinct remote applications can be kept open in parallel. Browser profile
 locks still reject two containers attempting to open the same persistent home.
 Background clients mute audio and release gamepad input, but are intentionally
 on-demand rather than idle-timed.
+
+Public Helium and the protected selector target the same Wolf host. Give the
+selector its own persistent Moonlight XDG profile and client certificate so
+Wolf treats it as an independent paired client instead of asking to terminate
+the public session. Keep generated credentials and pairing state outside the
+Nix store; NixOS declares the profile boundary and pairing helper only.
 
 The SteamHeadless deployment and its existing XPS launch action remain
 unchanged. A browser-streaming failure must not start, stop, or modify the game
@@ -189,8 +223,11 @@ low-latency video, audio, and controller integration already used by Moonlight.
 - Reusable `services.wolf-streaming` NixOS module and NVIDIA CDI bridge:
   implemented.
 - Firefox HEVC transport baseline: accepted.
-- Shared GoW browser runtime and distinct pinned Helium/Brave images:
-  implemented; Helium passed deployed application testing.
+- Shared GoW browser runtime and distinct pinned Helium, Brave, Chromium,
+  Firefox, and Zen images: implemented. All five passed the sustained 1440p
+  transport run. Helium remains the preferred visual baseline; Brave retained
+  visible site/UI glitches despite a healthy stream, and Zen used the most
+  memory.
 - Norwegian, US, and Russian layouts in the shared browser session:
   implemented. Moonlight does not carry the layout name, so XPS supplies it
   out-of-band from the active main keyboard and selects the matching nested
@@ -221,9 +258,14 @@ low-latency video, audio, and controller integration already used by Moonlight.
   and accepted. Wolf UI requires the private PIN before exposing Brave; the
   browser runs on XEV's NVIDIA GPU with a persistent isolated home, while XPS
   hardware-decodes the HEVC stream.
+- XPS client decode is assigned to Intel VA-API instead of its NVIDIA GPU.
+  Three concurrent streams continue decoding while hidden, so they retain a
+  measurable CPU, thermal, and network cost until explicitly closed.
 - Disposable browser crash recovery and per-profile concurrency guard:
   implemented and verified by relaunching Brave from a home containing stale
   Chromium singleton links.
 - Parallel Steam, public-browser, and protected-selector Moonlight clients:
-  implemented and accepted with three concurrent processes on workspaces 1–3;
-  stopping either Steam or the selector left public Helium running.
+  implemented with three independent services on workspaces 1–3. Steam and
+  Helium were revalidated after excluding Sunshine's virtual inputs from
+  Kanata. The selector has a distinct persistent Moonlight client profile so
+  Wolf can retain it alongside public Helium.

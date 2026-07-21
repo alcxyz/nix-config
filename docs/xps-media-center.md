@@ -216,10 +216,11 @@ device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 XEV also provides on-demand browser sessions through Wolf and Moonlight. Each
 launch creates a disposable application container and a virtual display; Wolf
 removes the container when the stream ends while retaining that browser's
-isolated home. Helium is the general remote browser. Brave uses a separate
-image and home and will only be exposed through a PIN-protected Wolf profile.
-Neither browser is installed on the XEV host, and the two images share their
-common GoW runtime layers rather than duplicating a desktop stack.
+isolated home. Helium is the general remote browser. The protected selector
+offers isolated Helium, Brave, Chromium, Firefox, and Zen homes for private
+use and comparative testing. The browsers are not installed globally on XEV;
+their images share the common GoW runtime layers rather than duplicating a
+desktop stack.
 
 The protected profile is provisioned from a root-only runtime credential. Its
 identity and PIN remain in the private configuration and out of the public Nix
@@ -228,8 +229,8 @@ not own.
 
 Launch public Helium directly with `Home+X`, `Super+R`, or the
 `Helium (Remote)` menu entry. The neutral `User (Remote)` menu entry and
-`Super+Shift+R` open Wolf UI, which exposes only the PIN-protected user
-profile. The private shortcut is deliberately omitted from the on-screen
+`Super+Shift+R` open Wolf UI, which exposes only the PIN-protected user profile
+and its five browser choices. The private shortcut is deliberately omitted from the on-screen
 guide. Wolf UI can also be restored from a running Wolf application with
 `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
@@ -252,7 +253,8 @@ restarts after transient device failures, so physical hotkeys remain managed
 without consuming streamed input.
 
 Remote browser homes persist across disposable application containers. Startup
-serializes access to each home and repairs stale Chromium singleton state. If a
+serializes access to each home and repairs stale Chromium singleton and
+Firefox-family profile-lock state. If a
 Moonlight process stalls without a usable window, its user service terminates
 the process so the same launcher can recover on the next attempt. Browser
 streams also request remote-app shutdown when Moonlight exits, preventing a
@@ -264,9 +266,18 @@ processes on workspaces 1, 2, and 3 respectively. They can remain open and be
 switched with the ordinary workspace shortcuts; launching one does not stop the
 others. Background clients mute their audio and do not retain controller input,
 but continue decoding and using network bandwidth until explicitly closed.
+Three concurrent 1440p60 clients therefore still impose client-side decode and
+presentation work on XPS even though rendering happens remotely.
 There is no inactivity timeout. Each Moonlight client is supervised by its own
 process and exact Hyprland window address so XWayland's fallback class for a
 second client cannot make the services confuse one another.
+
+The protected selector also uses a separate persistent Moonlight client
+profile because it shares the Wolf host with public Helium. Pair that profile
+once with `couch-moonlight-pair-private FOUR_DIGIT_PIN`; its certificate and
+host state remain in the user's private data directory rather than the Nix
+store. This allows Wolf to keep the public and protected sessions active at the
+same time.
 
 Moonlight opens as a normal tiled window. It requests a 2560×1440 stream
 independently of the local output: a 1440p TV presents it at native size, while
@@ -275,8 +286,12 @@ Hyprland do not request fullscreen; the single tiled window already fills the
 workspace.
 
 The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 40 Mbit/s
-client bitrate. Helium, the PIN-protected Brave profile, and the XPS couch
-launch actions have passed acceptance testing. Local XPS browsers remain
+client bitrate. Helium, Brave, Chromium, Firefox, and Zen each completed the
+same sustained 1440p playback test without a browser crash, Wolf encoder error,
+Moonlight decoder error, or abnormal XPS resource growth. Helium remains the
+default because it also gave the cleanest observed rendering. Brave's stream
+telemetry was healthy but visible site/UI glitches remained; the other private
+choices are useful compatibility fallbacks. Local XPS browsers remain
 available as an independent fallback.
 
 Both browser and Steam streams prefer their direct LAN endpoints. If XPS is

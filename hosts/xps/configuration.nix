@@ -120,6 +120,10 @@ in {
 
   hardware.enableRedistributableFirmware = true;
   hardware.nvidia.enable = true;
+  # Moonlight probes VA-API before Vulkan. Keep the Coffee Lake iGPU's media
+  # driver available so concurrent couch streams can use its fixed-function
+  # decoder instead of keeping the discrete NVIDIA GPU at media clocks.
+  hardware.graphics.extraPackages = [pkgs.intel-media-driver];
 
   # The Intel HDA controller exposes one PCM per physical display path. Keep
   # them simultaneous so DMS and the couch shortcuts can select an output
@@ -335,17 +339,26 @@ in {
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
     browserStreamSelectorApplication = "Wolf UI";
+    browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
     browserStreamLayoutCommand = ''
       case "$COUCH_STREAM_APPLICATION" in
-        Helium) runner=WolfHelium ;;
-        "Wolf UI") runner=WolfBrave ;;
+        Helium) runners=(WolfHelium) ;;
+        "Wolf UI")
+          runners=(
+            WolfHeliumPrivate
+            WolfBrave
+            WolfChromium
+            WolfFirefox
+            WolfZen
+          )
+          ;;
         *) exit 0 ;;
       esac
       ${lib.getExe pkgs.openssh} \
         -o BatchMode=yes \
         -o ConnectTimeout=5 \
         xev \
-        wolf-stream-layout "$runner" "$COUCH_KEYBOARD_LAYOUT"
+        wolf-stream-layout "$COUCH_KEYBOARD_LAYOUT" "''${runners[@]}"
     '';
     browserStreamArguments = [
       "--absolute-mouse"

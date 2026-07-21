@@ -47,6 +47,25 @@
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       cp ${deb} "$out/browser.deb"
     '';
+  mkNixBrowserContext = {
+    name,
+    package,
+  }: let
+    closure = pkgs.closureInfo {rootPaths = [package];};
+  in
+    pkgs.runCommand "wolf-${name}-image-context" {nativeBuildInputs = [pkgs.gnutar];} ''
+      mkdir -p "$out"
+      cp ${./browser-image/Dockerfile.nix} "$out/Dockerfile"
+      cp ${./browser-image/startup.sh} "$out/startup.sh"
+      cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
+      cp ${./browser-image/waybar.css} "$out/waybar.css"
+      tar \
+        --create \
+        --file="$out/browser-store.tar" \
+        --directory=/ \
+        --verbatim-files-from \
+        --files-from=${closure}/store-paths
+    '';
   browserImages = lib.filter (image: image.enable) [
     {
       enable = browserCfg.helium.enable;
@@ -54,6 +73,7 @@
       image = browserCfg.helium.image;
       version = heliumVersion;
       executable = "/usr/bin/helium";
+      family = "chromium";
       source = "https://github.com/imputnet/helium-linux";
       context = mkBrowserContext {
         name = "helium";
@@ -66,10 +86,50 @@
       image = browserCfg.brave.image;
       version = pkgs.brave.version;
       executable = "/usr/bin/brave-browser-stable";
+      family = "chromium";
       source = "https://github.com/brave/brave-browser";
       context = mkBrowserContext {
         name = "brave";
         deb = pkgs.brave.src;
+      };
+    }
+    {
+      enable = browserCfg.chromium.enable;
+      name = "chromium";
+      image = browserCfg.chromium.image;
+      version = pkgs.chromium.version;
+      executable = "${pkgs.chromium}/bin/chromium";
+      family = "chromium";
+      source = "https://chromium.googlesource.com/chromium/src";
+      context = mkNixBrowserContext {
+        name = "chromium";
+        package = pkgs.chromium;
+      };
+    }
+    {
+      enable = browserCfg.firefox.enable;
+      name = "firefox";
+      image = browserCfg.firefox.image;
+      version = pkgs.firefox.version;
+      executable = "${pkgs.firefox}/bin/firefox";
+      family = "firefox";
+      source = "https://hg.mozilla.org/mozilla-unified";
+      context = mkNixBrowserContext {
+        name = "firefox";
+        package = pkgs.firefox;
+      };
+    }
+    {
+      enable = browserCfg.zen.enable;
+      name = "zen";
+      image = browserCfg.zen.image;
+      version = pkgs.zen-browser.version;
+      executable = "${pkgs.zen-browser}/bin/zen";
+      family = "firefox";
+      source = "https://github.com/zen-browser/desktop";
+      context = mkNixBrowserContext {
+        name = "zen";
+        package = pkgs.zen-browser;
       };
     }
   ];
@@ -78,7 +138,11 @@
       "Wolf-UI"
     ]
     ++ lib.optional browserCfg.helium.enable "WolfHelium"
-    ++ lib.optional browserCfg.brave.enable "WolfBrave";
+    ++ lib.optional browserCfg.helium.enable "WolfHeliumPrivate"
+    ++ lib.optional browserCfg.brave.enable "WolfBrave"
+    ++ lib.optional browserCfg.chromium.enable "WolfChromium"
+    ++ lib.optional browserCfg.firefox.enable "WolfFirefox"
+    ++ lib.optional browserCfg.zen.enable "WolfZen";
   cleanupManagedContainers =
     lib.concatMapStringsSep "\n" (runnerName: ''
       ${pkgs.docker}/bin/docker ps -aq --filter ${lib.escapeShellArg "name=^/${runnerName}_"} \
@@ -222,13 +286,45 @@
   );
   protectedBrowserAppsFile = pkgs.writeText "wolf-managed-protected-browser-apps.json" (
     builtins.toJSON {
-      managedTitles = ["Brave"];
-      apps = lib.optional browserCfg.brave.enable (mkMoonlightBrowserApp {
-        title = "Brave";
-        runnerName = "WolfBrave";
-        image = browserCfg.brave.image;
-        icon = "https://brave.com/static-assets/images/brave-logo-sans-text.svg";
-      });
+      managedTitles = [
+        "Helium"
+        "Brave"
+        "Chromium"
+        "Firefox"
+        "Firefox ESR"
+        "Zen"
+      ];
+      apps =
+        lib.optional browserCfg.helium.enable (mkMoonlightBrowserApp {
+          title = "Helium";
+          runnerName = "WolfHeliumPrivate";
+          image = browserCfg.helium.image;
+          icon = "https://helium.computer/favicon.png";
+        })
+        ++ lib.optional browserCfg.brave.enable (mkMoonlightBrowserApp {
+          title = "Brave";
+          runnerName = "WolfBrave";
+          image = browserCfg.brave.image;
+          icon = "https://brave.com/static-assets/images/brave-logo-sans-text.svg";
+        })
+        ++ lib.optional browserCfg.chromium.enable (mkMoonlightBrowserApp {
+          title = "Chromium";
+          runnerName = "WolfChromium";
+          image = browserCfg.chromium.image;
+          icon = "https://www.chromium.org/_static/images/chromium-logo.svg";
+        })
+        ++ lib.optional browserCfg.firefox.enable (mkMoonlightBrowserApp {
+          title = "Firefox";
+          runnerName = "WolfFirefox";
+          image = browserCfg.firefox.image;
+          icon = "https://games-on-whales.github.io/wildlife/apps/firefox/assets/icon.png";
+        })
+        ++ lib.optional browserCfg.zen.enable (mkMoonlightBrowserApp {
+          title = "Zen";
+          runnerName = "WolfZen";
+          image = browserCfg.zen.image;
+          icon = "https://zen-browser.app/favicon.svg";
+        });
     }
   );
   reconcileWolfApps = pkgs.writeShellApplication {
@@ -269,6 +365,7 @@
             --pull=false \
             --build-arg BASE_APP_IMAGE=${lib.escapeShellArg browserBaseImage} \
             --build-arg BROWSER_EXECUTABLE=${lib.escapeShellArg image.executable} \
+            --build-arg BROWSER_FAMILY=${lib.escapeShellArg image.family} \
             --build-arg IMAGE_SOURCE=${lib.escapeShellArg image.source} \
             --build-arg IMAGE_VERSION=${lib.escapeShellArg image.version} \
             --tag ${lib.escapeShellArg image.image} \
@@ -284,42 +381,49 @@
       pkgs.docker
     ];
     text = ''
-      runner="''${1:-}"
-      layout="''${2:-}"
+      layout="''${1:-}"
+      shift || true
+      runners=("$@")
       case "$layout" in
         ${lib.concatImapStringsSep "\n        " (
           index: layout: "${layout}) layout_index=${toString (index - 1)} ;;"
         )
         browserCfg.keyboardLayouts}
         *)
-          echo "usage: wolf-stream-layout RUNNER {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}}" >&2
+          echo "usage: wolf-stream-layout {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}} RUNNER [RUNNER ...]" >&2
           exit 2
           ;;
       esac
+      if [ "''${#runners[@]}" -eq 0 ]; then
+        echo "wolf-stream-layout requires at least one runner" >&2
+        exit 2
+      fi
 
       # Wolf UI may wait for a person to enter the protected profile PIN.
       # Keep this detached launch helper alive long enough for that normal
       # interaction without delaying Moonlight itself.
       for ((attempt = 0; attempt < 1200; attempt++)); do
-        container="$(
-          docker ps \
-            --filter "name=^/''${runner}_" \
-            --format '{{.Names}}' \
-            | head -n1
-        )"
-        if [ -n "$container" ] \
-          && docker exec \
-            -u ${toString cfg.defaultRunUid} \
-            -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
-            "$container" \
-            swaymsg input type:keyboard xkb_switch_layout "$layout_index" \
-              >/dev/null 2>&1; then
-          exit 0
-        fi
+        for runner in "''${runners[@]}"; do
+          container="$(
+            docker ps \
+              --filter "name=^/''${runner}_" \
+              --format '{{.Names}}' \
+              | head -n1
+          )"
+          if [ -n "$container" ] \
+            && docker exec \
+              -u ${toString cfg.defaultRunUid} \
+              -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+              "$container" \
+              swaymsg input type:keyboard xkb_switch_layout "$layout_index" \
+                >/dev/null 2>&1; then
+            exit 0
+          fi
+        done
         sleep 0.25
       done
 
-      echo "streamed $runner session did not expose its keyboard in time" >&2
+      echo "none of the streamed runners exposed a keyboard in time: ''${runners[*]}" >&2
       exit 1
     '';
   };
@@ -452,6 +556,33 @@ in {
           description = "Local Docker image name used by the Brave Wolf application.";
         };
       };
+
+      chromium = {
+        enable = lib.mkEnableOption "the Chromium Wolf application image";
+        image = lib.mkOption {
+          type = lib.types.str;
+          default = "nixbox/wolf-chromium:${pkgs.chromium.version}";
+          description = "Local Docker image name used by the protected Chromium application.";
+        };
+      };
+
+      firefox = {
+        enable = lib.mkEnableOption "the Firefox Wolf application image";
+        image = lib.mkOption {
+          type = lib.types.str;
+          default = "nixbox/wolf-firefox:${pkgs.firefox.version}";
+          description = "Local Docker image name used by the protected Firefox application.";
+        };
+      };
+
+      zen = {
+        enable = lib.mkEnableOption "the Zen Wolf application image";
+        image = lib.mkOption {
+          type = lib.types.str;
+          default = "nixbox/wolf-zen:${pkgs.zen-browser.version}";
+          description = "Local Docker image name used by the protected Zen application.";
+        };
+      };
     };
 
     protectedProfile = {
@@ -462,8 +593,9 @@ in {
         description = ''
           Root-only runtime JSON file defining the protected Wolf profile id,
           internal name, and PIN. Keep this file outside the Nix store. When
-          set, Brave is published only inside that profile and the file is
-          loaded as a systemd credential before Wolf starts.
+          set, protected browser applications are published only inside that
+          profile and the file is loaded as a systemd credential before Wolf
+          starts.
         '';
       };
 
@@ -502,8 +634,15 @@ in {
         message = "services.wolf-streaming.browserImages.keyboardLayouts must not contain duplicates";
       }
       {
-        assertion = cfg.protectedProfile.definitionFile == null || browserCfg.brave.enable;
-        message = "services.wolf-streaming.protectedProfile requires the Brave browser image";
+        assertion =
+          cfg.protectedProfile.definitionFile
+          == null
+          || browserCfg.helium.enable
+          || browserCfg.brave.enable
+          || browserCfg.chromium.enable
+          || browserCfg.firefox.enable
+          || browserCfg.zen.enable;
+        message = "services.wolf-streaming.protectedProfile requires at least one browser image";
       }
       {
         assertion =
