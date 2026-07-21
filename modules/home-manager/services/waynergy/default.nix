@@ -171,8 +171,6 @@ in {
     systemd.user.services.waynergy = lib.mkIf cfg.autoStart {
       Unit = {
         Description = "Waynergy Synergy client";
-        After = ["graphical-session.target"];
-        PartOf = ["graphical-session.target"];
       };
 
       Service = {
@@ -191,7 +189,10 @@ in {
         RestartSec = 3;
       };
 
-      Install.WantedBy = ["graphical-session.target"];
+      # greetd/UWSM couch sessions do not necessarily activate Home Manager's
+      # graphical-session.target. The launcher already waits for a valid
+      # Wayland socket, so the persistent user target is the reliable owner.
+      Install.WantedBy = ["default.target"];
     };
   };
 }

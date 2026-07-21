@@ -1125,7 +1125,7 @@ let
         case "$layout" in
           solo-primary | primary-aux) target="Primary TV" ;;
           solo-secondary | secondary-aux) target="Secondary TV" ;;
-          solo-tertiary) target="Auxiliary display" ;;
+          solo-aux | solo-tertiary) target="Auxiliary display" ;;
           *) return ;;
         esac
         target_id="$(
@@ -1205,7 +1205,8 @@ let
         fi
       )"
       case "$current" in
-        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-tertiary) ;;
+        solo-tertiary) current=solo-aux ;;
+        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux) ;;
         *) current=adaptive ;;
       esac
 
@@ -1222,15 +1223,19 @@ let
             primary-aux) requested=secondary-aux ;;
             secondary-aux) requested=solo-primary ;;
             solo-primary) requested=solo-secondary ;;
-            solo-secondary) requested=solo-tertiary ;;
+            solo-secondary) requested=solo-aux ;;
             *) requested=adaptive ;;
           esac
           ;;
-        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-tertiary)
+        solo-tertiary)
+          # Compatibility for an older saved state or maintenance command.
+          requested=solo-aux
+          ;;
+        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux)
           requested="$1"
           ;;
         *)
-          echo "usage: couch-display-layout {status|cycle|adaptive|all|dual-tvs|primary-aux|secondary-aux|solo-primary|solo-secondary|solo-tertiary}" >&2
+          echo "usage: couch-display-layout {status|cycle|adaptive|all|dual-tvs|primary-aux|secondary-aux|solo-primary|solo-secondary|solo-aux}" >&2
           exit 2
           ;;
       esac
@@ -1652,7 +1657,8 @@ let
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
           display_layout="$(tr -d '[:space:]' < "$display_layout_state_file" 2>/dev/null || true)"
           case "$display_layout" in
-            adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-tertiary) ;;
+            solo-tertiary) display_layout=solo-aux ;;
+            adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux) ;;
             *) display_layout=adaptive ;;
           esac
         ''}
@@ -1720,7 +1726,7 @@ let
               ' <<<"$connected_external_monitors"
             )"
             ;;
-          solo-primary | solo-secondary | solo-tertiary)
+          solo-primary | solo-secondary | solo-aux)
             external_monitors="$(
               jq -c \
                 --arg layout "$display_layout" \

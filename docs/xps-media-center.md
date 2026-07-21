@@ -119,7 +119,7 @@ cycles through:
 | `secondary-aux` | Enable the secondary TV and auxiliary display |
 | `solo-primary` | Use only the largest TV-class output |
 | `solo-secondary` | Use only the second TV-class output |
-| `solo-tertiary` | Use the auxiliary display, with a TV fallback |
+| `solo-aux` | Use the auxiliary display, with a TV fallback |
 
 The dual-TV layout assigns workspaces 1–3 to the primary TV and 4–6 to the
 secondary TV. The auxiliary display uses workspaces 7–9 and is placed directly

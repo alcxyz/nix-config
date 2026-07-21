@@ -19,8 +19,9 @@ image behind a fixed-output Home Manager package. Keep license material out of
 the public flake.
 
 Run Waynergy as a Home Manager user service on each Wayland client. Give each
-client a stable screen name, start it with the graphical session, and use the
-Mac-to-evdev raw map so physical Mac keycodes become the same standard Linux
+client a stable screen name and start it from the persistent user default
+target. Use the Mac-to-evdev raw map so physical Mac keycodes become the same
+standard Linux
 keycodes produced by attached keyboards and other input bridges. This keeps
 downstream remote-desktop clients from receiving Mac-specific scancodes while
 still making Command act as Super.
@@ -40,9 +41,11 @@ keys from reaching the remote session.
 
 Launch the client through a session-aware wrapper that reads the user service
 manager's current Wayland environment and waits for the advertised compositor
-socket. A graphical-session target can become active just before UWSM imports
-that environment; treat an early clean client exit as retryable so boot timing
-cannot leave input sharing inactive for the rest of the session.
+socket. Do not depend on Home Manager's `graphical-session.target`: greetd/UWSM
+couch sessions may never activate it. The default-target service can start
+before UWSM imports the environment because the wrapper waits for the socket;
+keep early clean exits retryable so boot timing cannot leave input sharing
+inactive for the rest of the session.
 
 Keep client addressing configurable through the module rather than embedding
 network topology or credentials in the implementation. Any private defaults,
@@ -88,3 +91,6 @@ instead of selecting a VPN route.
 - Issue #152 tracks the Mac rebuild and end-to-end input validation on both
   Waynergy clients.
 - LAN-only route enforcement on XPS: implemented and verified.
+- Default-target startup across greetd/UWSM sessions: implemented after live
+  validation showed `graphical-session.target` remained inactive on both XPS
+  and XYZ.
