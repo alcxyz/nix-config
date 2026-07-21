@@ -1006,7 +1006,7 @@
 
         let theme = "system";
         try {
-          const saved = localStorage.getItem("nixbox-report-theme");
+          const saved = localStorage.getItem("reportcraft-theme");
           if (themes.includes(saved)) theme = saved;
         } catch (_error) {
           // file:// and hardened browser profiles may deny storage.
@@ -1017,7 +1017,7 @@
           theme = themes[(themes.indexOf(theme) + 1) % themes.length];
           applyTheme(theme);
           try {
-            localStorage.setItem("nixbox-report-theme", theme);
+            localStorage.setItem("reportcraft-theme", theme);
           } catch (_error) {
             // Theme still works for this page load.
           }

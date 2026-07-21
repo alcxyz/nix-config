@@ -45,7 +45,7 @@
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
       "packages/nix-deploy/default.nix"
-      "packages/nixbox-report/default.nix"
+      "packages/reportcraft/default.nix"
       "packages/nixbox-plymouth-theme/default.nix"
       "packages/nixbox-session-splash/default.nix"
       "users/alc/common.nix"
@@ -91,8 +91,8 @@
           pkgs.python3
           pkgs.ruff
         ] ''
-          python3 -m py_compile packages/nixbox-report/nixbox-report.py
-          ruff check packages/nixbox-report/nixbox-report.py
+          python3 -m py_compile packages/reportcraft/reportcraft.py
+          ruff check packages/reportcraft/reportcraft.py
           tidy -qe docs/reports/*.html
         '';
 
@@ -105,7 +105,7 @@
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
         nix-deploy = pkgs.nix-deploy;
-        nixbox-report = pkgs.nixbox-report;
+        reportcraft = pkgs.reportcraft;
       }
       // lib.optionalAttrs pkgs.stdenv.isLinux {
         nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;

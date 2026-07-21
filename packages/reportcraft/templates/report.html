@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A self-contained technical presentation report.">
+    <title>{{REPORT_TITLE}}</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0a12;
+        --surface: #15131f;
+        --surface-raised: #1c192a;
+        --surface-soft: #242035;
+        --text: #f6f2ff;
+        --muted: #b9b1c9;
+        --faint: #837b94;
+        --line: #3d3650;
+        --accent: #b99cff;
+        --accent-strong: #d8c8ff;
+        --pass: #65d6a6;
+        --warn: #ffcf70;
+        --fail: #ff8796;
+        --info: #7fc8ff;
+        --radius: 1rem;
+        --shadow: 0 1.5rem 4rem rgb(0 0 0 / 30%);
+        --max: 88rem;
+      }
+
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #f3f0f7;
+        --surface: #fff;
+        --surface-raised: #faf8fd;
+        --surface-soft: #eee8f5;
+        --text: #211a2e;
+        --muted: #62596f;
+        --faint: #7c7289;
+        --line: #d8cfe2;
+        --accent: #6544b5;
+        --accent-strong: #4c2c99;
+        --pass: #087f55;
+        --warn: #986500;
+        --fail: #b4233b;
+        --info: #12669b;
+        --shadow: 0 1.5rem 4rem rgb(40 20 60 / 12%);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 85% 5%, rgb(136 98 215 / 18%), transparent 30rem),
+          radial-gradient(circle at 5% 45%, rgb(74 143 182 / 11%), transparent 28rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        font-size: clamp(1rem, 0.35vw + 0.92rem, 1.2rem);
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--accent-strong);
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 20;
+        top: 1rem;
+        left: 1rem;
+        padding: 0.7rem 1rem;
+        border-radius: 0.6rem;
+        background: var(--text);
+        color: var(--bg);
+        transform: translateY(-180%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .page {
+        width: min(calc(100% - 2rem), var(--max));
+        margin: 0 auto;
+        padding: 1.5rem 0 5rem;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--text);
+        font-weight: 750;
+        letter-spacing: 0.03em;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 2.25rem;
+        height: 2.25rem;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        background: var(--surface-raised);
+        color: var(--accent-strong);
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 4%);
+      }
+
+      .theme-toggle {
+        min-width: 7rem;
+        padding: 0.65rem 0.85rem;
+        border: 1px solid var(--line);
+        border-radius: 0.7rem;
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .theme-toggle:hover,
+      .theme-toggle:focus-visible {
+        border-color: var(--accent);
+        outline: none;
+      }
+
+      .hero {
+        overflow: hidden;
+        position: relative;
+        padding: clamp(1.5rem, 4vw, 4rem);
+        border: 1px solid var(--line);
+        border-radius: calc(var(--radius) * 1.35);
+        background: linear-gradient(145deg, var(--surface-raised), var(--surface));
+        box-shadow: var(--shadow);
+      }
+
+      .hero::after {
+        position: absolute;
+        width: 18rem;
+        height: 18rem;
+        top: -9rem;
+        right: -6rem;
+        border-radius: 50%;
+        background: var(--accent);
+        content: "";
+        filter: blur(5rem);
+        opacity: 0.16;
+        pointer-events: none;
+      }
+
+      .eyebrow {
+        margin: 0 0 0.5rem;
+        color: var(--accent-strong);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 18ch;
+        margin-bottom: 0.8rem;
+        font-size: clamp(2.2rem, 6vw, 5.5rem);
+        line-height: 0.98;
+        letter-spacing: -0.055em;
+      }
+
+      h2 {
+        margin-bottom: 1rem;
+        font-size: clamp(1.55rem, 2vw, 2.25rem);
+        line-height: 1.15;
+        letter-spacing: -0.025em;
+      }
+
+      h3 {
+        margin-bottom: 0.45rem;
+        font-size: 1.1rem;
+      }
+
+      .lede {
+        max-width: 72ch;
+        margin-bottom: 1.5rem;
+        color: var(--muted);
+        font-size: clamp(1.05rem, 1vw + 0.85rem, 1.45rem);
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .meta li,
+      .pill {
+        padding: 0.35rem 0.65rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgb(255 255 255 / 3%);
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .verdict-grid,
+      .card-grid,
+      .metric-grid {
+        display: grid;
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+
+      .verdict-grid {
+        grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 0.6fr);
+        margin-top: 1.25rem;
+      }
+
+      .verdict,
+      .card,
+      .metric,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .verdict,
+      .card,
+      .panel {
+        padding: clamp(1.1rem, 2.2vw, 2rem);
+      }
+
+      .verdict {
+        border-left: 0.35rem solid var(--accent);
+      }
+
+      .verdict .label,
+      .metric .label {
+        display: block;
+        margin-bottom: 0.45rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 750;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .verdict strong {
+        display: block;
+        margin-bottom: 0.6rem;
+        font-size: clamp(1.35rem, 2.4vw, 2.4rem);
+        line-height: 1.12;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        width: fit-content;
+        padding: 0.35rem 0.65rem;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .status::before {
+        content: "●";
+      }
+
+      .pass {
+        color: var(--pass);
+      }
+
+      .default {
+        color: var(--accent-strong);
+      }
+
+      .warning {
+        color: var(--warn);
+      }
+
+      .failure {
+        color: var(--fail);
+      }
+
+      .informational {
+        color: var(--info);
+      }
+
+      section {
+        margin-top: clamp(2.5rem, 6vw, 5rem);
+        scroll-margin-top: 1rem;
+      }
+
+      .section-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 2rem;
+        padding-bottom: 0.8rem;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section-heading p {
+        max-width: 52ch;
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .card-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .card p,
+      .panel p,
+      .verdict p {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .metric-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .metric {
+        padding: 1rem;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: clamp(1.35rem, 2.2vw, 2rem);
+        line-height: 1.1;
+      }
+
+      .metric small {
+        color: var(--faint);
+      }
+
+      .table-wrap {
+        overflow: hidden;
+        margin-top: 1rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 1rem;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--surface-soft);
+        color: var(--muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tbody tr[data-recommended="true"] {
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+      }
+
+      .finding-list,
+      .action-list {
+        display: grid;
+        gap: 0.85rem;
+        margin: 1rem 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .finding-list li,
+      .action-list li {
+        position: relative;
+        padding: 1rem 1rem 1rem 3rem;
+        border: 1px solid var(--line);
+        border-radius: 0.8rem;
+        background: var(--surface);
+      }
+
+      .finding-list li::before,
+      .action-list li::before {
+        position: absolute;
+        top: 0.95rem;
+        left: 1rem;
+        color: var(--accent-strong);
+        content: "→";
+        font-weight: 900;
+      }
+
+      .two-column {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+
+      code {
+        padding: 0.15rem 0.35rem;
+        border-radius: 0.35rem;
+        background: var(--surface-soft);
+        color: var(--accent-strong);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+      }
+
+      footer {
+        margin-top: 4rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--line);
+        color: var(--faint);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 64rem) {
+        .verdict-grid,
+        .two-column {
+          grid-template-columns: 1fr;
+        }
+
+        .card-grid,
+        .metric-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .section-heading {
+          align-items: start;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        table,
+        tbody,
+        tr,
+        td {
+          display: block;
+          width: 100%;
+        }
+
+        thead {
+          position: absolute;
+          overflow: hidden;
+          width: 1px;
+          height: 1px;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
+        }
+
+        tbody tr {
+          padding: 0.45rem 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        tbody tr:last-child {
+          border-bottom: 0;
+        }
+
+        td {
+          display: grid;
+          grid-template-columns: minmax(8rem, 32%) 1fr;
+          gap: 0.75rem;
+          padding: 0.55rem 1rem;
+          border: 0;
+        }
+
+        td::before {
+          color: var(--faint);
+          content: attr(data-label);
+          font-size: 0.75rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+      }
+
+      @media (max-width: 38rem) {
+        .page {
+          width: min(calc(100% - 1rem), var(--max));
+          padding-top: 0.6rem;
+        }
+
+        .hero {
+          padding: 1.25rem;
+        }
+
+        .card-grid,
+        .metric-grid {
+          grid-template-columns: 1fr;
+        }
+
+        td {
+          grid-template-columns: 1fr;
+          gap: 0.15rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition: none !important;
+        }
+      }
+
+      @media print {
+        :root {
+          color-scheme: light;
+          --bg: #fff;
+          --surface: #fff;
+          --surface-raised: #fff;
+          --surface-soft: #f2f2f2;
+          --text: #111;
+          --muted: #333;
+          --faint: #555;
+          --line: #bbb;
+          --accent: #44306f;
+          --accent-strong: #332252;
+          --pass: #075b3e;
+          --warn: #714b00;
+          --fail: #8c172d;
+          --info: #164d6e;
+          --shadow: none;
+        }
+
+        body {
+          background: #fff;
+          font-size: 10pt;
+        }
+
+        .page {
+          width: 100%;
+          padding: 0;
+        }
+
+        .theme-toggle,
+        .skip-link {
+          display: none;
+        }
+
+        .hero,
+        .card,
+        .panel,
+        .metric,
+        .table-wrap {
+          break-inside: avoid;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to report</a>
+    <div class="page">
+      <header class="topbar">
+        <a class="brand" href="#content">
+          <span class="brand-mark" aria-hidden="true">R</span>
+          Reportcraft
+        </a>
+        <button class="theme-toggle" type="button" aria-label="Change color theme">
+          Theme: auto
+        </button>
+      </header>
+
+      <main id="content">
+        <article class="hero" aria-labelledby="report-title">
+          <p class="eyebrow">Field report · report-id · yyyy-mm-dd</p>
+          <h1 id="report-title">{{REPORT_TITLE}}</h1>
+          <p class="lede">
+            State the situation and why the reader should care in one or two
+            sentences. Keep the decision visible before the implementation detail.
+          </p>
+          <ul class="meta" aria-label="Report context">
+            <li>Scope: replace me</li>
+            <li>Environment: replace me</li>
+            <li>Evidence window: replace me</li>
+          </ul>
+        </article>
+
+        <div class="verdict-grid" aria-label="Executive summary">
+          <article class="verdict">
+            <span class="label">Verdict</span>
+            <strong>Write the conclusion as a complete sentence.</strong>
+            <p>
+              Explain the consequence, qualification, or trade-off. A reader should
+              understand the recommendation without opening the evidence table.
+            </p>
+          </article>
+          <article class="verdict">
+            <span class="label">Recommended action</span>
+            <span class="status default">Default</span>
+            <p style="margin-top: 0.8rem">
+              Name the chosen option or immediate next move and why it wins.
+            </p>
+          </article>
+        </div>
+
+        <section aria-labelledby="summary-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">At a glance</p>
+              <h2 id="summary-title">What matters</h2>
+            </div>
+            <p>Use three concise cards for the strongest claims or constraints.</p>
+          </div>
+          <div class="card-grid">
+            <article class="card">
+              <span class="status pass">Pass</span>
+              <h3>Primary acceptance condition</h3>
+              <p>Summarize the measured result and point to its evidence.</p>
+            </article>
+            <article class="card">
+              <span class="status warning">Qualified</span>
+              <h3>Important limitation</h3>
+              <p>State what worked imperfectly without hiding the successful parts.</p>
+            </article>
+            <article class="card">
+              <span class="status informational">Context</span>
+              <h3>Operating boundary</h3>
+              <p>Explain where the conclusion applies and where it does not.</p>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="comparison-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Comparison</p>
+              <h2 id="comparison-title">Options and outcomes</h2>
+            </div>
+            <p>Keep unlike concepts in separate columns and label recommendations.</p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Option</th>
+                  <th scope="col">Outcome</th>
+                  <th scope="col">Evidence</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr data-recommended="true">
+                  <td data-label="Option"><strong>Preferred candidate</strong></td>
+                  <td data-label="Outcome"><span class="status pass">Pass</span></td>
+                  <td data-label="Evidence">Measured result, observation, or reference.</td>
+                  <td data-label="Decision"><span class="status default">Default</span></td>
+                </tr>
+                <tr>
+                  <td data-label="Option"><strong>Alternative</strong></td>
+                  <td data-label="Outcome"><span class="status warning">Qualified</span></td>
+                  <td data-label="Evidence">What differentiated it from the default.</td>
+                  <td data-label="Decision">Retain for a narrower use case.</td>
+                </tr>
+                <tr>
+                  <td data-label="Option"><strong>Rejected candidate</strong></td>
+                  <td data-label="Outcome"><span class="status failure">Fail</span></td>
+                  <td data-label="Evidence">The acceptance condition it missed.</td>
+                  <td data-label="Decision">Do not use for this scope.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section aria-labelledby="evidence-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Evidence</p>
+              <h2 id="evidence-title">Measured signals</h2>
+            </div>
+            <p>Show only metrics that materially support the conclusion.</p>
+          </div>
+          <div class="metric-grid">
+            <article class="metric">
+              <span class="label">Metric one</span>
+              <strong>42 ms</strong>
+              <small>Target: under 50 ms</small>
+            </article>
+            <article class="metric">
+              <span class="label">Metric two</span>
+              <strong>99.9%</strong>
+              <small>Observation window</small>
+            </article>
+            <article class="metric">
+              <span class="label">Samples</span>
+              <strong>12</strong>
+              <small>Comparable runs</small>
+            </article>
+            <article class="metric">
+              <span class="label">Defects</span>
+              <strong>1</strong>
+              <small>Non-blocking</small>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="findings-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Interpretation</p>
+              <h2 id="findings-title">Findings</h2>
+            </div>
+            <p>Translate observations into implications; avoid repeating the table.</p>
+          </div>
+          <ul class="finding-list">
+            <li><strong>Finding one.</strong> Explain why it changes the decision.</li>
+            <li><strong>Finding two.</strong> Preserve uncertainty where evidence is limited.</li>
+            <li><strong>Finding three.</strong> Separate a visual defect from a functional failure.</li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="method-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Reproducibility</p>
+              <h2 id="method-title">Method and limits</h2>
+            </div>
+            <p>Give future readers enough context to repeat or challenge the result.</p>
+          </div>
+          <div class="two-column">
+            <article class="panel">
+              <h3>Method</h3>
+              <p>
+                Describe the workload, environment, observation window, controls,
+                and acceptance conditions. Link to durable evidence where useful.
+              </p>
+            </article>
+            <article class="panel">
+              <h3>Limits</h3>
+              <p>
+                State what was not tested, what was inferred, and what could make
+                the conclusion invalid in another environment.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="actions-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Follow-through</p>
+              <h2 id="actions-title">Next actions</h2>
+            </div>
+            <p>End with ownership and decisions, not an unprioritized backlog dump.</p>
+          </div>
+          <ol class="action-list">
+            <li><strong>Adopt the default.</strong> Name the owner and completion signal.</li>
+            <li><strong>Track the limitation.</strong> Link the issue or durable record.</li>
+            <li><strong>Revisit on new evidence.</strong> State the trigger, not a vague date.</li>
+          </ol>
+        </section>
+      </main>
+
+      <footer>
+        <p>
+          Presentation layer only. Durable evidence: <code>replace/with/source.md</code>
+          · generated from the Reportcraft template.
+        </p>
+      </footer>
+    </div>
+
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const button = document.querySelector(".theme-toggle");
+        const themes = ["auto", "dark", "light"];
+        const stored = localStorage.getItem("reportcraft-theme") || "auto";
+        let index = Math.max(0, themes.indexOf(stored));
+
+        const apply = () => {
+          const theme = themes[index];
+          if (theme === "auto") root.removeAttribute("data-theme");
+          else root.dataset.theme = theme;
+          button.textContent = `Theme: ${theme}`;
+          localStorage.setItem("reportcraft-theme", theme);
+        };
+
+        button.addEventListener("click", () => {
+          index = (index + 1) % themes.length;
+          apply();
+        });
+        apply();
+      })();
+    </script>
+  </body>
+</html>

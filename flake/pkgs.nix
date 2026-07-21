@@ -66,7 +66,7 @@ in
               });
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
-              nixbox-report = _prev.callPackage ../packages/nixbox-report {};
+              reportcraft = _prev.callPackage ../packages/reportcraft {};
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
                 quickshell = inputs.quickshell.packages.${system}.default;

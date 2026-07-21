@@ -151,7 +151,7 @@ in rec {
       parallel
       agent-sync-check
       nix-deploy
-      nixbox-report
+      reportcraft
       k8s-node-reboot
     ];
 
