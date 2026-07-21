@@ -3,8 +3,7 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.services.wolf-streaming;
   nvidiaPackage = config.hardware.nvidia.package;
   browserCfg = cfg.browserImages;
@@ -20,15 +19,15 @@ let
   patchedWolfSource = pkgs.applyPatches {
     name = "wolf-${builtins.substring 0 12 wolfRevision}-altgr-source";
     src = wolfSource;
-    patches = [ ./wolf-image/altgr.patch ];
+    patches = [./wolf-image/altgr.patch];
   };
   wolfBuildContext =
-    pkgs.runCommand "wolf-${builtins.substring 0 12 wolfRevision}-altgr-image-context" { }
-      ''
-        cp -r ${patchedWolfSource} "$out"
-        chmod -R u+w "$out"
-        cp ${./wolf-image/Dockerfile} "$out/Dockerfile"
-      '';
+    pkgs.runCommand "wolf-${builtins.substring 0 12 wolfRevision}-altgr-image-context" {}
+    ''
+      cp -r ${patchedWolfSource} "$out"
+      chmod -R u+w "$out"
+      cp ${./wolf-image/Dockerfile} "$out/Dockerfile"
+    '';
   browserBaseImage = "ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14";
   wolfUiImage = "ghcr.io/games-on-whales/wolf-ui@sha256:f483f79fcc5f39294067a5029f8de55e5867f74c709a3d55cd6163e4a5f0cf6b";
   heliumVersion = "0.14.7.1";
@@ -36,12 +35,11 @@ let
     url = "https://github.com/imputnet/helium-linux/releases/download/${heliumVersion}/helium-bin_${heliumVersion}-1_amd64.deb";
     hash = "sha256-FSSqAA2q64ubpGTBcd6l2VGK4DmSY0FVRNRhu4ZOfIc=";
   };
-  mkBrowserContext =
-    {
-      name,
-      deb,
-    }:
-    pkgs.runCommand "wolf-${name}-image-context" { } ''
+  mkBrowserContext = {
+    name,
+    deb,
+  }:
+    pkgs.runCommand "wolf-${name}-image-context" {} ''
       mkdir -p "$out"
       cp ${./browser-image/Dockerfile} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
@@ -75,19 +73,22 @@ let
       };
     }
   ];
-  managedRunnerNames = [
-    "Wolf-UI"
-  ]
-  ++ lib.optional browserCfg.helium.enable "WolfHelium"
-  ++ lib.optional browserCfg.brave.enable "WolfBrave";
-  cleanupManagedContainers = lib.concatMapStringsSep "\n" (runnerName: ''
-    ${pkgs.docker}/bin/docker ps -aq --filter ${lib.escapeShellArg "name=^/${runnerName}_"} \
-      | while read -r container; do
-        if [ -n "$container" ]; then
-          ${pkgs.docker}/bin/docker rm -f "$container"
-        fi
-      done
-  '') managedRunnerNames;
+  managedRunnerNames =
+    [
+      "Wolf-UI"
+    ]
+    ++ lib.optional browserCfg.helium.enable "WolfHelium"
+    ++ lib.optional browserCfg.brave.enable "WolfBrave";
+  cleanupManagedContainers =
+    lib.concatMapStringsSep "\n" (runnerName: ''
+      ${pkgs.docker}/bin/docker ps -aq --filter ${lib.escapeShellArg "name=^/${runnerName}_"} \
+        | while read -r container; do
+          if [ -n "$container" ]; then
+            ${pkgs.docker}/bin/docker rm -f "$container"
+          fi
+        done
+    '')
+    managedRunnerNames;
   browserHostConfig = builtins.toJSON {
     HostConfig = {
       IpcMode = "host";
@@ -101,12 +102,12 @@ let
         "c 13:* rmw"
         "c 244:* rmw"
       ];
-      SecurityOpt = [ "seccomp=unconfined" ];
+      SecurityOpt = ["seccomp=unconfined"];
       DeviceRequests = [
         {
           Driver = "cdi";
           Count = 0;
-          DeviceIDs = [ "nvidia.com/gpu=all" ];
+          DeviceIDs = ["nvidia.com/gpu=all"];
           Capabilities = null;
           Options = null;
         }
@@ -128,100 +129,100 @@ let
         "c 13:* rmw"
         "c 244:* rmw"
       ];
-      SecurityOpt = [ "seccomp=unconfined" ];
+      SecurityOpt = ["seccomp=unconfined"];
       DeviceRequests = [
         {
           Driver = "cdi";
           Count = 0;
-          DeviceIDs = [ "nvidia.com/gpu=all" ];
+          DeviceIDs = ["nvidia.com/gpu=all"];
           Capabilities = null;
           Options = null;
         }
       ];
     };
   };
-  mkMoonlightBrowserApp =
-    {
-      title,
-      runnerName,
-      image,
-      icon,
-    }:
-    {
-      inherit title;
-      icon_png_path = icon;
-      start_virtual_compositor = true;
-      start_audio_server = true;
-      runner = {
-        type = "docker";
-        name = runnerName;
-        inherit image;
-        mounts = [
-          "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
-        ];
-        env = [
-          "RUN_SWAY=1"
-          "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
-          "NIXBOX_BROWSER_SCALE=1.5"
-          "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
-          "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
-        ];
-        devices = [ ];
-        ports = [ ];
-        base_create_json = browserHostConfig;
-      };
+  mkMoonlightBrowserApp = {
+    title,
+    runnerName,
+    image,
+    icon,
+  }: {
+    inherit title;
+    icon_png_path = icon;
+    start_virtual_compositor = true;
+    start_audio_server = true;
+    runner = {
+      type = "docker";
+      name = runnerName;
+      inherit image;
+      mounts = [
+        "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+      ];
+      env = [
+        "RUN_SWAY=1"
+        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
+        "NIXBOX_BROWSER_SCALE=1.5"
+        "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
+        "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
+      ];
+      devices = [];
+      ports = [];
+      base_create_json = browserHostConfig;
     };
-  managedMoonlightApps = [
-    {
-      title = "Wolf UI";
-      icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png";
-      start_virtual_compositor = true;
-      runner = {
-        type = "docker";
-        name = "Wolf-UI";
-        image = wolfUiImage;
-        mounts = [
-          "/run/wolf-streaming/runtime/wolf.sock:/var/run/wolf/wolf.sock"
-          "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
-        ];
-        env = [
-          "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*"
-          "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
-          "WOLF_UI_AUTOUPDATE=False"
-          "LOGLEVEL=INFO"
-        ];
-        devices = [ ];
-        ports = [ ];
-        base_create_json = wolfUiHostConfig;
-      };
-    }
-  ]
-  ++ lib.optional browserCfg.helium.publish (mkMoonlightBrowserApp {
-    title = "Helium";
-    runnerName = "WolfHelium";
-    image = browserCfg.helium.image;
-    icon = "https://helium.computer/favicon.png";
-  })
-  ++ lib.optional browserCfg.brave.publish (mkMoonlightBrowserApp {
-    title = "Brave";
-    runnerName = "WolfBrave";
-    image = browserCfg.brave.image;
-    icon = "https://brave.com/static-assets/images/brave-logo-sans-text.svg";
-  });
+  };
+  managedMoonlightApps =
+    [
+      {
+        title = "Wolf UI";
+        icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png";
+        start_virtual_compositor = true;
+        runner = {
+          type = "docker";
+          name = "Wolf-UI";
+          image = wolfUiImage;
+          mounts = [
+            "/run/wolf-streaming/runtime/wolf.sock:/var/run/wolf/wolf.sock"
+            "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+          ];
+          env = [
+            "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*"
+            "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
+            "WOLF_UI_AUTOUPDATE=False"
+            "LOGLEVEL=INFO"
+          ];
+          devices = [];
+          ports = [];
+          base_create_json = wolfUiHostConfig;
+        };
+      }
+    ]
+    ++ lib.optional browserCfg.helium.publish (mkMoonlightBrowserApp {
+      title = "Helium";
+      runnerName = "WolfHelium";
+      image = browserCfg.helium.image;
+      icon = "https://helium.computer/favicon.png";
+    })
+    ++ lib.optional browserCfg.brave.publish (mkMoonlightBrowserApp {
+      title = "Brave";
+      runnerName = "WolfBrave";
+      image = browserCfg.brave.image;
+      icon = "https://brave.com/static-assets/images/brave-logo-sans-text.svg";
+    });
   managedMoonlightAppsFile = pkgs.writeText "wolf-managed-moonlight-apps.json" (
     builtins.toJSON {
-      managedTitles = [
-        "Wolf UI"
-        "Helium"
-        "Brave"
-      ]
-      ++ cfg.prunedApplicationTitles;
+      managedTitles =
+        [
+          "Wolf UI"
+          "Helium"
+          "Brave"
+        ]
+        ++ cfg.prunedApplicationTitles;
       apps = managedMoonlightApps;
     }
   );
   protectedBrowserAppsFile = pkgs.writeText "wolf-managed-protected-browser-apps.json" (
     builtins.toJSON {
-      managedTitles = [ "Brave" ];
+      managedTitles = ["Brave"];
       apps = lib.optional browserCfg.brave.enable (mkMoonlightBrowserApp {
         title = "Brave";
         runnerName = "WolfBrave";
@@ -233,7 +234,7 @@ let
   reconcileWolfApps = pkgs.writeShellApplication {
     name = "reconcile-wolf-apps";
     runtimeInputs = [
-      (pkgs.python3.withPackages (pythonPackages: [ pythonPackages.tomlkit ]))
+      (pkgs.python3.withPackages (pythonPackages: [pythonPackages.tomlkit]))
     ];
     text = ''
       exec python3 ${./reconcile-apps.py} "$@"
@@ -242,7 +243,7 @@ let
   reconcileWolfProtectedProfile = pkgs.writeShellApplication {
     name = "reconcile-wolf-protected-profile";
     runtimeInputs = [
-      (pkgs.python3.withPackages (pythonPackages: [ pythonPackages.tomlkit ]))
+      (pkgs.python3.withPackages (pythonPackages: [pythonPackages.tomlkit]))
     ];
     text = ''
       exec python3 ${./reconcile-protected-profile.py} "$@"
@@ -264,15 +265,16 @@ let
         || docker pull ${lib.escapeShellArg wolfUiImage}
 
       ${lib.concatMapStringsSep "\n" (image: ''
-        docker build \
-          --pull=false \
-          --build-arg BASE_APP_IMAGE=${lib.escapeShellArg browserBaseImage} \
-          --build-arg BROWSER_EXECUTABLE=${lib.escapeShellArg image.executable} \
-          --build-arg IMAGE_SOURCE=${lib.escapeShellArg image.source} \
-          --build-arg IMAGE_VERSION=${lib.escapeShellArg image.version} \
-          --tag ${lib.escapeShellArg image.image} \
-          ${lib.escapeShellArg image.context}
-      '') browserImages}
+          docker build \
+            --pull=false \
+            --build-arg BASE_APP_IMAGE=${lib.escapeShellArg browserBaseImage} \
+            --build-arg BROWSER_EXECUTABLE=${lib.escapeShellArg image.executable} \
+            --build-arg IMAGE_SOURCE=${lib.escapeShellArg image.source} \
+            --build-arg IMAGE_VERSION=${lib.escapeShellArg image.version} \
+            --tag ${lib.escapeShellArg image.image} \
+            ${lib.escapeShellArg image.context}
+        '')
+        browserImages}
     '';
   };
   wolfStreamLayout = pkgs.writeShellApplication {
@@ -287,7 +289,8 @@ let
       case "$layout" in
         ${lib.concatImapStringsSep "\n        " (
           index: layout: "${layout}) layout_index=${toString (index - 1)} ;;"
-        ) browserCfg.keyboardLayouts}
+        )
+        browserCfg.keyboardLayouts}
         *)
           echo "usage: wolf-stream-layout RUNNER {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}}" >&2
           exit 2
@@ -322,7 +325,7 @@ let
   };
   buildPatchedWolfImage = pkgs.writeShellApplication {
     name = "build-patched-wolf-image";
-    runtimeInputs = [ pkgs.docker ];
+    runtimeInputs = [pkgs.docker];
     text = ''
       set -euo pipefail
 
@@ -344,7 +347,7 @@ let
   # upstream Wolf image deliberately does not bundle it, while NixOS' NVIDIA
   # CDI specification only injects driver libraries. Copy the runtime pieces
   # from the CUDA redistributable source without pulling in the full toolkit.
-  nvrtcRuntime = pkgs.runCommand "wolf-nvrtc-runtime" { } ''
+  nvrtcRuntime = pkgs.runCommand "wolf-nvrtc-runtime" {} ''
     mkdir -p "$out/lib"
     cp ${pkgs.cudaPackages.cuda_nvrtc.src}/lib/libnvrtc.so.* "$out/lib/"
     cp ${pkgs.cudaPackages.cuda_nvrtc.src}/lib/libnvrtc-builtins.so.* "$out/lib/"
@@ -354,8 +357,7 @@ let
       ln -s "$(basename "$1")" "$out/lib/$library.so"
     done
   '';
-in
-{
+in {
   options.services.wolf-streaming = {
     enable = lib.mkEnableOption "Wolf Moonlight application streaming";
 
@@ -397,7 +399,7 @@ in
 
     prunedApplicationTitles = lib.mkOption {
       type = lib.types.listOf lib.types.nonEmptyStr;
-      default = [ ];
+      default = [];
       description = ''
         Application titles to remove from Wolf's direct Moonlight profile
         during reconciliation. Persistent application homes are not deleted.
@@ -491,7 +493,7 @@ in
         message = "services.wolf-streaming.renderNode must name a DRM render node";
       }
       {
-        assertion = !browserCfg.enable || browserImages != [ ];
+        assertion = !browserCfg.enable || browserImages != [];
         message = "services.wolf-streaming.browserImages requires at least one browser image";
       }
       {
@@ -505,7 +507,8 @@ in
       }
       {
         assertion =
-          cfg.protectedProfile.definitionFile == null
+          cfg.protectedProfile.definitionFile
+          == null
           || lib.hasPrefix "/" cfg.protectedProfile.definitionFile;
         message = "services.wolf-streaming.protectedProfile.definitionFile must be an absolute runtime path";
       }
@@ -576,12 +579,13 @@ in
     environment.systemPackages = lib.optional browserCfg.enable wolfStreamLayout;
 
     systemd.services.docker-wolf = {
-      after = [
-        "docker.service"
-        "nvidia-container-toolkit-cdi-generator.service"
-      ]
-      ++ lib.optional (cfg.protectedProfile.definitionFile != null) "sops-install-secrets.service";
-      requires = [ "docker.service" ];
+      after =
+        [
+          "docker.service"
+          "nvidia-container-toolkit-cdi-generator.service"
+        ]
+        ++ lib.optional (cfg.protectedProfile.definitionFile != null) "sops-install-secrets.service";
+      requires = ["docker.service"];
       serviceConfig.LoadCredential = lib.mkIf (cfg.protectedProfile.definitionFile != null) [
         "wolf-protected-profile:${cfg.protectedProfile.definitionFile}"
       ];
@@ -608,10 +612,10 @@ in
 
     systemd.services.wolf-patched-image = lib.mkIf (cfg.image == wolfPatchedImage) {
       description = "Build the pinned Wolf image with AltGr modifier tracking";
-      after = [ "docker.service" ];
-      before = [ "docker-wolf.service" ];
-      requires = [ "docker.service" ];
-      requiredBy = [ "docker-wolf.service" ];
+      after = ["docker.service"];
+      before = ["docker-wolf.service"];
+      requires = ["docker.service"];
+      requiredBy = ["docker-wolf.service"];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -621,10 +625,10 @@ in
 
     systemd.services.wolf-browser-images = lib.mkIf browserCfg.enable {
       description = "Build local Wolf browser application images";
-      after = [ "docker.service" ];
-      before = [ "docker-wolf.service" ];
-      requires = [ "docker.service" ];
-      requiredBy = [ "docker-wolf.service" ];
+      after = ["docker.service"];
+      before = ["docker-wolf.service"];
+      requires = ["docker.service"];
+      requiredBy = ["docker-wolf.service"];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;

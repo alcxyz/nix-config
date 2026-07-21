@@ -8,8 +8,7 @@
   configDir,
   lib,
   ...
-}:
-let
+}: let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -24,8 +23,7 @@ let
       ]
     } -o "Hostname=$COUCH_STREAM_START_TARGET" -o HostKeyAlias=xyz xyz ${lib.escapeShellArg "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"}
   '';
-in
-{
+in {
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
@@ -50,7 +48,7 @@ in
   boot.plymouth = {
     enable = true;
     theme = "nixbox";
-    themePackages = [ pkgs.nixbox-plymouth-theme ];
+    themePackages = [pkgs.nixbox-plymouth-theme];
     # Start on the early DRM surface. The theme rebuilds its layout when the
     # real KMS outputs hotplug; a later boot service deliberately restarts the
     # timeline after the external-display pipeline has settled.
@@ -69,12 +67,12 @@ in
       "plymouth-start.service"
       "xps-display-pipeline-setup.service"
     ];
-    wants = [ "xps-display-pipeline-setup.service" ];
+    wants = ["xps-display-pipeline-setup.service"];
     before = [
       "plymouth-quit.service"
       "greetd.service"
     ];
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = ["multi-user.target"];
     path = [
       pkgs.coreutils
       pkgs.plymouth
@@ -100,9 +98,9 @@ in
 
   # DMS power actions already run the approved compositor-owned reverse
   # animation. Do not replay a second power transition after Hyprland exits.
-  systemd.services.plymouth-poweroff.wantedBy = lib.mkForce [ ];
-  systemd.services.plymouth-reboot.wantedBy = lib.mkForce [ ];
-  systemd.services.plymouth-halt.wantedBy = lib.mkForce [ ];
+  systemd.services.plymouth-poweroff.wantedBy = lib.mkForce [];
+  systemd.services.plymouth-reboot.wantedBy = lib.mkForce [];
+  systemd.services.plymouth-halt.wantedBy = lib.mkForce [];
 
   # Activation can legitimately request wrapper regeneration several times
   # during early boot. Every run is idempotent; do not report a false failure
@@ -114,9 +112,11 @@ in
   console.useXkbConfig = lib.mkForce false;
   console.keyMap = "no";
 
-  environment.systemPackages = pkgsets.system.${hostRole.systemPackageSet} ++ [
-    pkgs.bolt
-  ];
+  environment.systemPackages =
+    pkgsets.system.${hostRole.systemPackageSet}
+    ++ [
+      pkgs.bolt
+    ];
 
   hardware.enableRedistributableFirmware = true;
   hardware.nvidia.enable = true;
@@ -141,7 +141,7 @@ in
         };
       }
       {
-        matches = [ { "node.name" = "~alsa_output.*[.]playback[.]0[.]0"; } ];
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]0[.]0";}];
         actions."update-props" = {
           "node.description" = "XPS speakers";
           "node.nick" = "XPS speakers";
@@ -149,7 +149,7 @@ in
         };
       }
       {
-        matches = [ { "node.name" = "~alsa_output.*[.]playback[.]3[.]0"; } ];
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]3[.]0";}];
         actions."update-props" = {
           "node.description" = "Primary TV";
           "node.nick" = "Primary TV";
@@ -157,7 +157,7 @@ in
         };
       }
       {
-        matches = [ { "node.name" = "~alsa_output.*[.]playback[.]7[.]0"; } ];
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]7[.]0";}];
         actions."update-props" = {
           "node.description" = "Secondary TV";
           "node.nick" = "Secondary TV";
@@ -165,7 +165,7 @@ in
         };
       }
       {
-        matches = [ { "node.name" = "~alsa_output.*[.]playback[.]8[.]0"; } ];
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.]8[.]0";}];
         actions."update-props" = {
           "node.description" = "Auxiliary display";
           "node.nick" = "Auxiliary display";
@@ -175,7 +175,7 @@ in
     ];
     "monitor.bluez.rules" = [
       {
-        matches = [ { "device.form-factor" = "speaker"; } ];
+        matches = [{"device.form-factor" = "speaker";}];
         actions."update-props"."device.profile" = "a2dp-sink";
       }
     ];
@@ -206,7 +206,7 @@ in
             # user-facing volume scale.
             "state.default-volume" = "0.064";
           };
-          "stream.props" = { };
+          "stream.props" = {};
           "stream.rules" = [
             {
               matches = [
@@ -250,7 +250,7 @@ in
           > /var/lib/AccountsService/users/${username}
       fi
     '';
-    deps = [ ];
+    deps = [];
   };
 
   services.displayManager.gdm.enable = false;
@@ -276,7 +276,7 @@ in
     enableKdeConnect = true;
     enableControllerShortcuts = true;
     keyboardLayouts = "no,us";
-    keyboardLayoutDeviceOverrides.us = [ "glove80" ];
+    keyboardLayoutDeviceOverrides.us = ["glove80"];
     keyboardOptions = "grp:alt_shift_toggle";
     browserScaleFactor = 1.5;
     sessionSplashCommand = lib.getExe pkgs.nixbox-session-splash;
@@ -383,9 +383,9 @@ in
   # three are physically connected; otherwise leave the panel detectable.
   systemd.services.xps-display-pipeline-setup = {
     description = "Allocate XPS display pipelines for couch outputs";
-    before = [ "greetd.service" ];
-    wantedBy = [ "multi-user.target" ];
-    path = [ pkgs.coreutils ];
+    before = ["greetd.service"];
+    wantedBy = ["multi-user.target"];
+    path = [pkgs.coreutils];
     serviceConfig.Type = "oneshot";
     script = ''
       internal_connector=""
@@ -455,7 +455,7 @@ in
   # session is stopped; treat that normal lifecycle as successful.
   systemd.user.services.dms = {
     overrideStrategy = "asDropin";
-    path = [ inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default ];
+    path = [inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default];
     serviceConfig.SuccessExitStatus = 143;
   };
 
@@ -463,9 +463,9 @@ in
   # target so they do not interfere with the fixed-output couch session.
   systemd.user.services.xps-desktop-session-setup = {
     description = "Start XPS desktop session companions";
-    partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" ];
-    wantedBy = [ "graphical-session.target" ];
+    partOf = ["graphical-session.target"];
+    after = ["graphical-session.target"];
+    wantedBy = ["graphical-session.target"];
     serviceConfig.Type = "oneshot";
     path = [
       pkgs.coreutils
@@ -508,8 +508,8 @@ in
 
   xdg.portal = {
     enable = true;
-    extraPortals = with pkgs; [ xdg-desktop-portal-gtk ];
-    config.common.default = [ "gtk" ];
+    extraPortals = with pkgs; [xdg-desktop-portal-gtk];
+    config.common.default = ["gtk"];
     config.hyprland.default = [
       "hyprland"
       "gtk"
@@ -530,10 +530,10 @@ in
 
   systemd.services.xps-network-route-metrics = {
     description = "Prefer wired routing and keep Wi-Fi as fallback";
-    after = [ "NetworkManager.service" ];
-    wants = [ "NetworkManager.service" ];
-    wantedBy = [ "multi-user.target" ];
-    path = [ pkgs.networkmanager ];
+    after = ["NetworkManager.service"];
+    wants = ["NetworkManager.service"];
+    wantedBy = ["multi-user.target"];
+    path = [pkgs.networkmanager];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -561,8 +561,8 @@ in
   };
 
   networking.hosts = {
-    "192.168.1.14" = [ "xps" ];
-    "192.168.1.250" = [ "k8s-api.local" ];
+    "192.168.1.14" = ["xps"];
+    "192.168.1.250" = ["k8s-api.local"];
   };
 
   nix.settings.max-jobs = 8;

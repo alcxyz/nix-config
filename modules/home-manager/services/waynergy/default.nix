@@ -3,8 +3,7 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.services.waynergy;
   macRawKeymap = builtins.readFile ./raw-keymap-mac-evdev.ini;
   sessionLauncher = pkgs.writeShellScript "waynergy-session-launcher" ''
@@ -31,53 +30,53 @@ let
         fi
 
         ${lib.optionalString cfg.requireLanAddress ''
-          server_ip="$(${pkgs.getent}/bin/getent ahostsv4 ${lib.escapeShellArg cfg.serverAddress} \
-            | ${pkgs.gawk}/bin/awk 'NR == 1 { print $1; exit }')"
-          case "$server_ip" in
-            10.*|192.168.*) ;;
-            172.*)
-              second_octet="$(printf '%s\n' "$server_ip" | ${pkgs.gawk}/bin/awk -F. '{ print $2 }')"
-              if [ "$second_octet" -lt 16 ] || [ "$second_octet" -gt 31 ]; then
-                echo "Refusing non-LAN Synergy endpoint" >&2
-                exit 1
-              fi
-              ;;
-            *)
-              echo "Refusing non-LAN Synergy endpoint" >&2
-              exit 1
-              ;;
-          esac
+      server_ip="$(${pkgs.getent}/bin/getent ahostsv4 ${lib.escapeShellArg cfg.serverAddress} \
+        | ${pkgs.gawk}/bin/awk 'NR == 1 { print $1; exit }')"
+      case "$server_ip" in
+        10.*|192.168.*) ;;
+        172.*)
+          second_octet="$(printf '%s\n' "$server_ip" | ${pkgs.gawk}/bin/awk -F. '{ print $2 }')"
+          if [ "$second_octet" -lt 16 ] || [ "$second_octet" -gt 31 ]; then
+            echo "Refusing non-LAN Synergy endpoint" >&2
+            exit 1
+          fi
+          ;;
+        *)
+          echo "Refusing non-LAN Synergy endpoint" >&2
+          exit 1
+          ;;
+      esac
 
-          route_device="$(${pkgs.iproute2}/bin/ip -4 route get "$server_ip" \
-            | ${pkgs.gawk}/bin/awk 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }')"
-          case "$route_device" in
-            ""|wg*|wt*|tun*|tap*|tailscale*)
-              echo "Refusing Synergy route outside a physical LAN interface" >&2
-              exit 1
-              ;;
-          esac
-        ''}
+      route_device="$(${pkgs.iproute2}/bin/ip -4 route get "$server_ip" \
+        | ${pkgs.gawk}/bin/awk 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }')"
+      case "$route_device" in
+        ""|wg*|wt*|tun*|tap*|tailscale*)
+          echo "Refusing Synergy route outside a physical LAN interface" >&2
+          exit 1
+          ;;
+      esac
+    ''}
 
         ${lib.optionalString cfg.useFocusedMonitorGeometry ''
-          geometry="$(${pkgs.hyprland}/bin/hyprctl -j monitors 2>/dev/null \
-            | ${pkgs.jq}/bin/jq -r '
-                ([.[] | select(.focused == true and .dpmsStatus == true)][0]
-                  // [.[] | select(.dpmsStatus == true)][0]
-                  // .[0]) as $monitor
-                | if $monitor == null then empty
-                  else [($monitor.width / $monitor.scale | round),
-                        ($monitor.height / $monitor.scale | round)]
-                    | @tsv
-                  end
-              ' || true)"
-          if [ -n "$geometry" ]; then
-            screen_width="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 1)"
-            screen_height="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 2)"
-            exec ${cfg.package}/bin/waynergy \
-              --width "$screen_width" \
-              --height "$screen_height"
-          fi
-        ''}
+      geometry="$(${pkgs.hyprland}/bin/hyprctl -j monitors 2>/dev/null \
+        | ${pkgs.jq}/bin/jq -r '
+            ([.[] | select(.focused == true and .dpmsStatus == true)][0]
+              // [.[] | select(.dpmsStatus == true)][0]
+              // .[0]) as $monitor
+            | if $monitor == null then empty
+              else [($monitor.width / $monitor.scale | round),
+                    ($monitor.height / $monitor.scale | round)]
+                | @tsv
+              end
+          ' || true)"
+      if [ -n "$geometry" ]; then
+        screen_width="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 1)"
+        screen_height="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 2)"
+        exec ${cfg.package}/bin/waynergy \
+          --width "$screen_width" \
+          --height "$screen_height"
+      fi
+    ''}
 
         exec ${cfg.package}/bin/waynergy
       fi
@@ -88,12 +87,11 @@ let
     echo "Wayland session environment did not become ready" >&2
     exit 1
   '';
-in
-{
+in {
   options.services.waynergy = {
     enable = lib.mkEnableOption "Waynergy Synergy client for Wayland";
 
-    package = lib.mkPackageOption pkgs "waynergy" { };
+    package = lib.mkPackageOption pkgs "waynergy" {};
 
     serverAddress = lib.mkOption {
       type = lib.types.str;
@@ -143,7 +141,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.package ];
+    home.packages = [cfg.package];
 
     xdg.configFile = {
       "waynergy/config.ini".text = ''
@@ -154,9 +152,9 @@ in
           syn_raw_key_codes = true
 
           ${lib.optionalString (cfg.sourceKeyboard == "mac") ''
-            [raw-keymap]
-            ${macRawKeymap}
-          ''}
+          [raw-keymap]
+          ${macRawKeymap}
+        ''}
 
           [idle-inhibit]
         enable = false
@@ -173,8 +171,8 @@ in
     systemd.user.services.waynergy = lib.mkIf cfg.autoStart {
       Unit = {
         Description = "Waynergy Synergy client";
-        After = [ "graphical-session.target" ];
-        PartOf = [ "graphical-session.target" ];
+        After = ["graphical-session.target"];
+        PartOf = ["graphical-session.target"];
       };
 
       Service = {
@@ -193,7 +191,7 @@ in
         RestartSec = 3;
       };
 
-      Install.WantedBy = [ "graphical-session.target" ];
+      Install.WantedBy = ["graphical-session.target"];
     };
   };
 }

@@ -7,13 +7,11 @@
   configDir,
   hostRole,
   ...
-}:
-let
+}: let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
-in
-{
+in {
   imports = [
     "${configDir}/users/alc/linux/operator.nix"
 
@@ -105,10 +103,10 @@ in
   };
   systemd.user.services.udiskie = {
     Unit = {
-      After = lib.mkForce [ ];
-      PartOf = lib.mkForce [ ];
+      After = lib.mkForce [];
+      PartOf = lib.mkForce [];
     };
-    Install.WantedBy = lib.mkForce [ "default.target" ];
+    Install.WantedBy = lib.mkForce ["default.target"];
   };
 
   programs.ai.enable = true;
