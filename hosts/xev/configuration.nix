@@ -30,6 +30,7 @@
   services.wolf-streaming = {
     enable = true;
     sessionIdleTimeoutSeconds = 30 * 60;
+    pipelineWatchdog.enable = true;
     vramWatchdog.enable = true;
     prunedApplicationTitles = [
       "Remote Firefox"

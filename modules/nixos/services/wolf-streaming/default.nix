@@ -615,6 +615,91 @@
       systemctl restart docker-wolf.service
     '';
   };
+  wolfPipelineWatchdog = pkgs.writeShellApplication {
+    name = "wolf-pipeline-watchdog";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.docker
+      pkgs.gnugrep
+      pkgs.systemd
+    ];
+    text = ''
+      state_dir=/var/lib/wolf-pipeline-watchdog
+      cursor_file="$state_dir/log-cursor"
+      pending_file="$state_dir/recovery-pending"
+
+      if ! systemctl --quiet is-active docker-wolf.service; then
+        exit 0
+      fi
+
+      now="$(date --iso-8601=seconds)"
+      if [ -r "$cursor_file" ]; then
+        read -r since < "$cursor_file"
+      else
+        since="$(docker inspect --format '{{.State.StartedAt}}' wolf)"
+      fi
+      printf '%s\n' "$now" > "$cursor_file"
+
+      log_sample="$(mktemp)"
+      trap 'rm -f "$log_sample"' EXIT
+      docker logs --since "$since" wolf > "$log_sample" 2>&1 || true
+
+      # Both signatures leave Wolf running while its video path can no longer
+      # produce frames.  They are deliberately narrower than generic
+      # GStreamer warnings, which are common during normal disconnects.
+      if grep -aEq \
+        'Failed to map input buffer|Unhandled exception: stoull' \
+        "$log_sample"; then
+        touch "$pending_file"
+      fi
+
+      if [ ! -e "$pending_file" ]; then
+        exit 0
+      fi
+
+      # Never destroy a healthy concurrent stream.  Once Moonlight has timed
+      # out the poisoned stream, the API reports no active sessions and it is
+      # safe to rebuild Wolf's coordinator and encoder state.  Persistent app
+      # homes remain on disk; docker-wolf's pre-start removes only unusable
+      # runner containers.
+      if ! active_sessions="$(
+        docker exec -i wolf python3 - <<'PY'
+import json
+import socket
+
+connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+connection.settimeout(2)
+connection.connect("/run/wolf-streaming/runtime/wolf.sock")
+connection.sendall(
+    b"GET /api/v1/sessions HTTP/1.1\r\n"
+    b"Host: localhost\r\n"
+    b"Connection: close\r\n\r\n"
+)
+response = bytearray()
+while chunk := connection.recv(65536):
+    response.extend(chunk)
+body = bytes(response).split(b"\r\n\r\n", 1)[1]
+print(len(json.loads(body).get("sessions", [])))
+PY
+      )"; then
+        echo "Wolf pipeline recovery deferred: session API unavailable" >&2
+        exit 1
+      fi
+
+      if ! [[ "$active_sessions" =~ ^[0-9]+$ ]]; then
+        echo "Wolf pipeline recovery deferred: invalid session count" >&2
+        exit 1
+      fi
+      if [ "$active_sessions" -ne 0 ]; then
+        echo "Wolf pipeline recovery pending behind $active_sessions active session(s)" >&2
+        exit 0
+      fi
+
+      echo "Restarting Wolf after an unrecoverable video-pipeline failure" >&2
+      systemctl restart docker-wolf.service
+      rm -f "$pending_file"
+    '';
+  };
 in {
   options.services.wolf-streaming = {
     enable = lib.mkEnableOption "Wolf Moonlight application streaming";
@@ -684,6 +769,16 @@ in {
         type = lib.types.nonEmptyStr;
         default = "30s";
         description = "Systemd time span between Wolf GPU-memory checks.";
+      };
+    };
+
+    pipelineWatchdog = {
+      enable = lib.mkEnableOption "automatic recovery from fatal Wolf video-pipeline failures";
+
+      interval = lib.mkOption {
+        type = lib.types.nonEmptyStr;
+        default = "15s";
+        description = "Systemd time span between Wolf video-pipeline health checks.";
       };
     };
 
@@ -952,6 +1047,26 @@ in {
         OnBootSec = cfg.vramWatchdog.interval;
         OnUnitActiveSec = cfg.vramWatchdog.interval;
         Unit = "wolf-vram-watchdog.service";
+      };
+    };
+
+    systemd.services.wolf-pipeline-watchdog = lib.mkIf cfg.pipelineWatchdog.enable {
+      description = "Recover Wolf from fatal video-pipeline failures";
+      after = ["docker-wolf.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        StateDirectory = "wolf-pipeline-watchdog";
+        ExecStart = lib.getExe wolfPipelineWatchdog;
+      };
+    };
+
+    systemd.timers.wolf-pipeline-watchdog = lib.mkIf cfg.pipelineWatchdog.enable {
+      description = "Periodically check Wolf video-pipeline health";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = cfg.pipelineWatchdog.interval;
+        OnUnitActiveSec = cfg.pipelineWatchdog.interval;
+        Unit = "wolf-pipeline-watchdog.service";
       };
     };
 

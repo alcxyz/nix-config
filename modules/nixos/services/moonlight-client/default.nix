@@ -2871,6 +2871,19 @@
         exit 0
       fi
 
+      # DMS is presentation, not part of the stream lifecycle.  A wedged IPC
+      # request must never hold a Moonlight unit in stop-post until systemd
+      # marks the otherwise cleanly stopped stream as failed.
+      dms_call() {
+        timeout \
+          --foreground \
+          --signal=TERM \
+          --kill-after=0.25 \
+          0.5 \
+          "$dms" ipc call "$@" \
+          >/dev/null 2>&1
+      }
+
       case "''${1:-}" in
         refresh)
           for unit in \
@@ -2884,22 +2897,22 @@
           exec "$0" browser
           ;;
         game)
-          "$dms" ipc call notifications enableDoNotDisturbIndefinitely >/dev/null 2>&1 || true
-          "$dms" ipc call notifications dismissAllPopups >/dev/null 2>&1 || true
-          "$dms" ipc call bar hide index 0 >/dev/null 2>&1 || true
-          "$dms" ipc call dock hide >/dev/null 2>&1 || true
+          dms_call notifications enableDoNotDisturbIndefinitely || true
+          dms_call notifications dismissAllPopups || true
+          dms_call bar hide index 0 || true
+          dms_call dock hide || true
           ;;
         browser)
-          for ((attempt = 0; attempt < 20; attempt++)); do
-            if "$dms" ipc call bar reveal index 0 >/dev/null 2>&1; then
+          for ((attempt = 0; attempt < 2; attempt++)); do
+            if dms_call bar reveal index 0; then
               break
             fi
             sleep 0.1
           done
-          "$dms" ipc call bar autoHide index 0 >/dev/null 2>&1 || true
-          "$dms" ipc call dock reveal >/dev/null 2>&1 || true
-          "$dms" ipc call dock autoHide >/dev/null 2>&1 || true
-          "$dms" ipc call notifications disableDoNotDisturb >/dev/null 2>&1 || true
+          dms_call bar autoHide index 0 || true
+          dms_call dock reveal || true
+          dms_call dock autoHide || true
+          dms_call notifications disableDoNotDisturb || true
           ;;
         *)
           echo "usage: couch-merged-ui {refresh|game|browser}" >&2

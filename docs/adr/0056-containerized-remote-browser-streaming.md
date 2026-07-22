@@ -296,3 +296,12 @@ low-latency video, audio, and controller integration already used by Moonlight.
   Moonlight window stops only its local user service, reconnecting resumes the
   existing Wolf application, and an uninterrupted 30-minute disconnect was
   observed expiring and removing the abandoned browser container.
+- Guarded encoder recovery: implemented. XEV watches for the narrow fatal
+  CUDA-buffer and Wolf streaming-thread signatures that leave the coordinator
+  reachable but unable to emit video. Recovery remains pending while the Wolf
+  API reports any active session, then restarts the coordinator once no
+  healthy concurrent stream can be disrupted. Persistent browser homes are
+  retained. Sustained VRAM growth remains covered by its separate watchdog.
+- Stream teardown is independent of DMS responsiveness. Every optional shell
+  IPC call has a sub-second deadline, preventing a presentation-layer timeout
+  from leaving an otherwise stopped Moonlight unit in a failed state.

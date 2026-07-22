@@ -278,10 +278,19 @@ cgroup and stops that service instead of relying on the application's window
 close handler. This matters when a stalled decoder stops servicing GUI events.
 Systemd kills only that client's unresponsive local processes within three
 seconds; it deliberately does not quit the resumable remote application.
+The optional DMS bar and dock updates are individually time-bounded, so a
+stalled shell IPC request cannot wedge the Moonlight service during cleanup.
 Wolf arms a 30-minute idle deadline when the stream disconnects or a protected
 browser lobby becomes empty. Reconnecting cancels the deadline; expiry stops
 and removes the abandoned remote application container. Other applications
 retain Hyprland's ordinary focused-window close behavior.
+
+XEV also guards against the rarer case where Wolf remains reachable after its
+CUDA/GStreamer video path has failed. The watchdog recognizes only the known
+fatal buffer-map or streaming-thread signatures, waits until Wolf reports no
+active sessions, and then reconstructs the coordinator and disposable runner
+containers. It never interrupts a healthy concurrent Steam or browser stream,
+and the browser homes remain persistent across recovery.
 
 The protected selector also uses a separate persistent Moonlight client
 profile because it shares the Wolf host with public Helium. Pair that profile
