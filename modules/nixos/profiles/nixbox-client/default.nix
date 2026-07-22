@@ -65,7 +65,16 @@ in {
     enablePresentation = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Enable the Nixbox boot and graphical-session transitions.";
+      description = "Enable the Nixbox graphical-session and power transitions.";
+    };
+
+    enableBootSplash = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Enable the Plymouth Nixbox boot splash. This can be disabled on compact
+        devices while retaining compositor-owned session and power animations.
+      '';
     };
 
     moonlightPlatform = lib.mkOption {
@@ -115,7 +124,7 @@ in {
 
     security.polkit.enable = true;
 
-    boot.plymouth = lib.mkIf cfg.enablePresentation {
+    boot.plymouth = lib.mkIf (cfg.enablePresentation && cfg.enableBootSplash) {
       enable = true;
       theme = "nixbox";
       themePackages = [pkgs.nixbox-plymouth-theme];
@@ -125,9 +134,12 @@ in {
     # DMS runs the compositor-owned reverse transition before requesting the
     # system action. Avoid replaying a second Plymouth transition after the
     # graphical session has already released the display.
-    systemd.services.plymouth-poweroff.wantedBy = lib.mkIf cfg.enablePresentation (lib.mkForce []);
-    systemd.services.plymouth-reboot.wantedBy = lib.mkIf cfg.enablePresentation (lib.mkForce []);
-    systemd.services.plymouth-halt.wantedBy = lib.mkIf cfg.enablePresentation (lib.mkForce []);
+    systemd.services.plymouth-poweroff.wantedBy =
+      lib.mkIf (cfg.enablePresentation && cfg.enableBootSplash) (lib.mkForce []);
+    systemd.services.plymouth-reboot.wantedBy =
+      lib.mkIf (cfg.enablePresentation && cfg.enableBootSplash) (lib.mkForce []);
+    systemd.services.plymouth-halt.wantedBy =
+      lib.mkIf (cfg.enablePresentation && cfg.enableBootSplash) (lib.mkForce []);
 
     services.moonlight-client = {
       enable = true;

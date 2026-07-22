@@ -87,6 +87,7 @@ in {
   services.nixbox-client = {
     enable = true;
     user = username;
+    enableBootSplash = false;
     outputMode = "2560x1440@60";
   };
 
