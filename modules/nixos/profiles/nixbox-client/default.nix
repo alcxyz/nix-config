@@ -124,6 +124,11 @@ in {
 
     security.polkit.enable = true;
 
+    # The document portal and protected-profile mounts invoke fusermount3 at
+    # runtime. Compact hosts do not otherwise pull in the privileged FUSE
+    # wrappers that a full desktop happens to provide transitively.
+    programs.fuse.enable = true;
+
     boot.plymouth = lib.mkIf (cfg.enablePresentation && cfg.enableBootSplash) {
       enable = true;
       theme = "nixbox";

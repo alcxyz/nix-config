@@ -12,8 +12,9 @@ forking its launch, input, audio, or recovery logic.
   XWayland/Hyprland bridge;
 - LAN-only Waynergy input from a Synergy server, using uinput so input follows
   the same path as physical keyboards and pointers;
-- the Nixbox Plymouth boot theme and compositor-owned session, reboot, and
-  shutdown transitions;
+- compositor-owned login, logout, reboot, and shutdown transitions, with an
+  optional Nixbox Plymouth boot theme for hosts where early boot graphics are
+  worth the added boot-path complexity;
 - selectable local display audio and a local sound-system output;
 - a local terminal as a maintenance escape hatch; and
 - a preferred output mode with a 1080p fallback.
@@ -45,5 +46,7 @@ network. If the graphical shell fails, the local terminal binding and SSH
 remain available for recovery.
 
 Boot generations remain the rollback boundary for display-mode or Plymouth
-experiments. A client-specific early-display override must not be generalized
-into this profile.
+experiments. Set `enableBootSplash = false` on compact hosts that should retain
+the normal console boot while keeping the compositor-owned transitions. A
+client-specific early-display override must not be generalized into this
+profile.
