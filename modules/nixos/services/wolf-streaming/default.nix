@@ -431,11 +431,12 @@
         shift 2
       fi
       case "$presentation_scale" in
-        1 | 1.0)
+        1 | 1.0 | 1.00 | 1.000 | 1.0000 | 1.00000 | 1.000000)
           presentation_scale=1.0
           cursor_size=24
           ;;
-        1.5)
+        1.5 | 1.50 | 1.500 | 1.5000 | 1.50000 | 1.500000)
+          presentation_scale=1.5
           cursor_size=36
           ;;
         *)
