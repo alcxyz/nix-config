@@ -12,6 +12,8 @@
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  sshKeys = import "${configDir}/modules/nixos/common/ssh-keys.nix";
+  humanLoginKeys = sshKeys.groups.humanLogin sshKeys.keys;
   networkName = hostInventory.darwinNetworkName or "mac";
   netbirdHostname = "mac";
   netbirdClient = pkgs.writeShellScriptBin "netbird" ''
@@ -143,7 +145,9 @@ in {
 
     echo "configuring xyz nfs mounts..." >&2
 
-    install -d -m 0755 /Volumes/stash
+    if [ ! -d /Volumes/stash ]; then
+      install -d -m 0755 /Volumes/stash
+    fi
 
     fstab_file=/etc/fstab
     tmp_file="$(mktemp /tmp/nix-darwin-fstab.XXXXXX)"
@@ -207,7 +211,10 @@ in {
   # ============================================================================
   system.primaryUser = username;
 
-  users.users.${username}.shell = shellPackages.${config.alc.shell.default};
+  users.users.${username} = {
+    shell = shellPackages.${config.alc.shell.default};
+    openssh.authorizedKeys.keys = humanLoginKeys;
+  };
 
   # ============================================================================
   # System Packages

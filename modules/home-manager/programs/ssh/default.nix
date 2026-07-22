@@ -4,6 +4,7 @@
   lib,
   pkgs,
   inventory ? {},
+  hostName ? null,
   username ? config.home.username,
   ...
 }: let
@@ -21,6 +22,19 @@
       exit 0
     fi
   '';
+  netbirdSshProxy = pkgs.writeShellScript "netbird-ssh-proxy" ''
+    set -eu
+
+    peer_ip="$(${pkgs.netbird}/bin/netbird status --json | ${pkgs.jq}/bin/jq -er --arg host "$1" '
+      first(
+        .peers.details[]
+        | select((.fqdn | split(".")[0]) == $host)
+        | .netbirdIp
+      )
+    ')"
+
+    exec ${pkgs.netcat}/bin/nc "$peer_ip" "$2"
+  '';
 
   managedHosts = inventory.hosts or {};
   mkManagedHostBlock = name: hostAttrs: let
@@ -32,6 +46,9 @@
       HostName = hostAttrs.sshHostname or name;
       User = hostAttrs.sshUser or username;
       ForwardAgent = hostAttrs.forwardAgent or false;
+    }
+    // optionalAttrs ((hostAttrs.sshViaNetbird or false) && name != hostName) {
+      ProxyCommand = "${netbirdSshProxy} %h %p";
     };
   };
   managedHostSettings = lib.attrsets.mergeAttrsList (lib.mapAttrsToList mkManagedHostBlock managedHosts);
