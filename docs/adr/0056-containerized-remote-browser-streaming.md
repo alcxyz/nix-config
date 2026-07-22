@@ -292,3 +292,7 @@ low-latency video, audio, and controller integration already used by Moonlight.
   Helium were revalidated after excluding Sunshine's virtual inputs from
   Kanata. The selector has a distinct persistent Moonlight client profile so
   Wolf can retain it alongside public Helium.
+- Resumable browser lifecycle: implemented and accepted. Closing the focused
+  Moonlight window stops only its local user service, reconnecting resumes the
+  existing Wolf application, and an uninterrupted 30-minute disconnect was
+  observed expiring and removing the abandoned browser container.
