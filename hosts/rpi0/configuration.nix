@@ -53,6 +53,10 @@ in {
   programs.nix-ld.libraries = lib.mkForce [];
   services.pcscd.enable = lib.mkForce false;
   virtualisation.docker.enable = lib.mkForce false;
+  environment.variables = {
+    EDITOR = lib.mkForce "nano";
+    VISUAL = lib.mkForce "nano";
+  };
 
   services.bluetooth-audio-receiver = {
     enable = true;

@@ -24,6 +24,11 @@ developer tools, multiple-display workspace policy, or the XPS dock-specific
 Plymouth replay service. Browser state and rendering live on the remote stream
 host.
 
+Compact appliances should also use a dedicated Home Manager profile rather
+than inherit an operator or workstation profile. Keep only the shell tooling
+needed for local recovery; DMS, Waynergy, and their runtime dependencies should
+be owned by their respective modules.
+
 ## Configuration boundary
 
 The public profile owns generic behavior and exposes options for the session
