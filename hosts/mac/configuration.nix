@@ -20,6 +20,30 @@
     export NB_HOSTNAME="''${NB_HOSTNAME:-${netbirdHostname}}"
     exec ${pkgs.netbird}/bin/netbird "$@"
   '';
+  macSshOn = pkgs.writeShellScriptBin "mac-ssh-on" ''
+    set -euo pipefail
+
+    service="system/com.openssh.sshd"
+    plist="/System/Library/LaunchDaemons/ssh.plist"
+
+    if [ "$(id -u)" -ne 0 ]; then
+      exec sudo -- "$0" "$@"
+    fi
+
+    echo "enabling macOS Remote Login..." >&2
+    /bin/launchctl enable "$service"
+
+    if ! /bin/launchctl print "$service" >/dev/null 2>&1; then
+      /bin/launchctl bootstrap system "$plist"
+    fi
+
+    if /usr/bin/nc -G 3 -z 127.0.0.1 22 >/dev/null 2>&1; then
+      echo "Remote Login is listening on port 22."
+    else
+      echo "Remote Login did not start; a management policy may be blocking it." >&2
+      exit 1
+    fi
+  '';
   xyzLanAddress = "192.168.1.10";
   shellPackages = {
     bash = pkgs.bashInteractive;
@@ -220,7 +244,10 @@ in {
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = pkgsets.system.mac ++ [netbirdClient];
+    systemPackages = pkgsets.system.mac ++ [
+      macSshOn
+      netbirdClient
+    ];
     shells = with pkgs; [
       bash
       nushell
