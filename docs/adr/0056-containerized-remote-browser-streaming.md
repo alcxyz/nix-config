@@ -33,12 +33,15 @@ a local stream onto the managed VPN. Roaming clients may select `lan-first` or
 an explicit `remote-only` launcher instead. Keep concrete endpoint assignments
 in private configuration.
 
-The current macOS agent periodically reconciles LAN-first paired-host fields
-because Moonlight may replace its discovered addresses during host refresh. A
-future pair of explicit LAN and remote launch entries can replace that automatic
-choice without changing the endpoint policy. The agent matches hosts by their
-saved names, leaves pairing certificates and application state untouched, and
-does nothing until the host has been paired.
+On macOS, publish separate `HOST (LAN)` and `HOST (VPN)` application bundles
+for each explicitly selected application. Endpoint definitions remain generic
+and private; the public Mac configuration opts only Wolf UI into launchers, so
+other paired hosts do not acquire misleading entries. Each launcher pins all
+three saved address fields to its selected endpoint immediately before starting
+the configured Moonlight application, and supplies that exact endpoint to
+Moonlight's `stream` command. There is no periodic reconciler and no automatic
+route crossover. The launchers match hosts by saved name and leave pairing
+certificates and application state untouched.
 
 Run [Wolf](https://games-on-whales.github.io/wolf/stable/) as a pinned
 container on a GPU-capable NixOS host, with `xev` as the initial deployment.
@@ -271,9 +274,9 @@ low-latency video, audio, and controller integration already used by Moonlight.
   terminate themselves if their window never appears or disappears while the
   client process remains stuck.
 - Explicit streaming endpoint policy: XPS pins both browser and Steam pairings
-  to LAN-only fields and readiness checks. The macOS endpoint reconciler
-  currently retains LAN-first managed-VPN fallback and has been tested against
-  a paired Wolf host.
+  to LAN-only fields and readiness checks. macOS exposes distinct LAN and VPN
+  application bundles; each pins all saved fields to one endpoint and starts
+  the configured Wolf application without automatic fallback.
 - Private Brave profile provisioning and XPS launch integration: implemented
   and accepted. Wolf UI requires the private PIN before exposing Brave; the
   browser runs on XEV's NVIDIA GPU with a persistent isolated home, while XPS

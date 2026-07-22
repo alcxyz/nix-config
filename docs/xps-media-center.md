@@ -308,9 +308,10 @@ available as an independent fallback.
 Both browser and Steam streams on XPS are LAN-only. Immediately before launch,
 the endpoint reconciler pins Moonlight's local, manual, and remote address
 fields to the configured LAN endpoint, and readiness checks probe only LAN.
-XPS therefore fails locally instead of silently streaming over VPN. Roaming
-clients use separately selected LAN-first or remote-only policies. Synergy input
-sharing is likewise LAN-only and disconnects rather than crossing the VPN.
+XPS therefore fails locally instead of silently streaming over VPN. The Mac
+instead exposes separate `Wolf (LAN)` and `Wolf (VPN)` application bundles;
+neither route falls back to the other. Synergy input sharing is likewise
+LAN-only and disconnects rather than crossing the VPN.
 
 The remote browser session provides Norwegian, US, and Russian layouts. On
 launch, XPS reads the active layout of Hyprland's main keyboard and selects the

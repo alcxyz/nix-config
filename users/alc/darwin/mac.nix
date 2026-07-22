@@ -30,6 +30,12 @@ in {
   programs.karabiner.managed.enable = true;
   programs.paneru.managed.enable = false;
   programs.atuin.daemon.enable = false;
+  programs.moonlightEndpoints.launchers = [
+    {
+      hostname = "Wolf";
+      application = "Wolf UI";
+    }
+  ];
 
   home.sessionPath = [
     "${config.home.homeDirectory}/.nix-profile/bin"
