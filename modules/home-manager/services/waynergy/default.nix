@@ -9,6 +9,19 @@
   sessionLauncher = pkgs.writeShellScript "waynergy-session-launcher" ''
     set -eu
 
+    waynergy_pid=""
+
+    stop_waynergy() {
+      if [ -n "$waynergy_pid" ] && kill -0 "$waynergy_pid" 2>/dev/null; then
+        kill "$waynergy_pid" 2>/dev/null || true
+        wait "$waynergy_pid" 2>/dev/null || true
+      fi
+      waynergy_pid=""
+    }
+
+    trap stop_waynergy EXIT
+    trap 'exit 0' HUP INT TERM
+
     manager_variable() {
       ${pkgs.systemd}/bin/systemctl --user show-environment \
         | ${pkgs.gnused}/bin/sed -n "s/^$1=//p" \
@@ -58,24 +71,37 @@
     ''}
 
         ${lib.optionalString cfg.useFocusedMonitorGeometry ''
-      geometry="$(${pkgs.hyprland}/bin/hyprctl -j monitors 2>/dev/null \
-        | ${pkgs.jq}/bin/jq -r '
-            ([.[] | select(.focused == true and .dpmsStatus == true)][0]
-              // [.[] | select(.dpmsStatus == true)][0]
-              // .[0]) as $monitor
-            | if $monitor == null then empty
-              else [($monitor.width / $monitor.scale | round),
-                    ($monitor.height / $monitor.scale | round)]
-                | @tsv
-              end
-          ' || true)"
-      if [ -n "$geometry" ]; then
-        screen_width="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 1)"
-        screen_height="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 2)"
-        exec ${cfg.package}/bin/waynergy \
-          --width "$screen_width" \
-          --height "$screen_height"
-      fi
+      current_geometry=""
+      while true; do
+        geometry="$(${pkgs.hyprland}/bin/hyprctl -j monitors 2>/dev/null \
+          | ${pkgs.jq}/bin/jq -r '
+              ([.[] | select(.focused == true and .dpmsStatus == true)][0]
+                // [.[] | select(.dpmsStatus == true)][0]
+                // .[0]) as $monitor
+              | if $monitor == null then empty
+                else [($monitor.width / $monitor.scale | round),
+                      ($monitor.height / $monitor.scale | round)]
+                  | @tsv
+                end
+            ' || true)"
+
+        if [ -n "$geometry" ] && { [ -z "$waynergy_pid" ] || [ "$geometry" != "$current_geometry" ]; }; then
+          stop_waynergy
+          screen_width="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 1)"
+          screen_height="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 2)"
+          ${cfg.package}/bin/waynergy \
+            --width "$screen_width" \
+            --height "$screen_height" &
+          waynergy_pid=$!
+          current_geometry="$geometry"
+        elif [ -n "$waynergy_pid" ] && ! kill -0 "$waynergy_pid" 2>/dev/null; then
+          wait "$waynergy_pid" 2>/dev/null || true
+          waynergy_pid=""
+          current_geometry=""
+        fi
+
+        ${pkgs.coreutils}/bin/sleep 0.5
+      done
     ''}
 
         exec ${cfg.package}/bin/waynergy
@@ -113,6 +139,20 @@ in {
       description = "Physical keycode layout used by the server computer.";
     };
 
+    backend = lib.mkOption {
+      type = lib.types.enum [
+        "wlr"
+        "kde"
+        "uinput"
+      ];
+      default = "wlr";
+      description = ''
+        Input injection backend. The uinput backend makes Synergy input follow
+        the same libinput path as physical devices, which is required by some
+        XWayland applications.
+      '';
+    };
+
     autoStart = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -147,16 +187,16 @@ in {
       "waynergy/config.ini".text = ''
         host = ${cfg.serverAddress}
         name = ${cfg.screenName}
-          backend = wlr
-          restart_on_fatal = true
-          syn_raw_key_codes = true
+        backend = ${cfg.backend}
+        restart_on_fatal = true
+        syn_raw_key_codes = true
 
-          ${lib.optionalString (cfg.sourceKeyboard == "mac") ''
+        ${lib.optionalString (cfg.sourceKeyboard == "mac") ''
           [raw-keymap]
           ${macRawKeymap}
         ''}
 
-          [idle-inhibit]
+        [idle-inhibit]
         enable = false
 
         [tls]

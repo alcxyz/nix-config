@@ -9,6 +9,7 @@
   ...
 }: let
   cfg = config.services.dms;
+  compact = cfg.profile == "compact";
   idleLockCfg = cfg.idleLock;
   dockCfg = cfg.dock;
   optionalSetting = name: value:
@@ -35,13 +36,73 @@
       loginctlLockIntegration = false;
       lockBeforeSuspend = false;
     };
-  generatedSettings =
+  compactSettings = lib.optionalAttrs compact {
+    acMonitorTimeout = 0;
+    acLockTimeout = 0;
+    acSuspendTimeout = 0;
+    acPostLockMonitorTimeout = 0;
+    batteryMonitorTimeout = 0;
+    batteryLockTimeout = 0;
+    batterySuspendTimeout = 0;
+    batteryPostLockMonitorTimeout = 0;
+    loginctlLockIntegration = false;
+    lockBeforeSuspend = false;
+    lockAtStartup = false;
+    fadeToLockEnabled = false;
+    fadeToDpmsEnabled = false;
+    soundsEnabled = false;
+    fontScale = 1.5;
+    showDock = true;
+    dockAutoHide = true;
+    dockSmartAutoHide = true;
+    notificationOverlayEnabled = false;
+    barConfigs = [
+      {
+        id = "nixbox";
+        name = "Nixbox";
+        enabled = true;
+        position = 0;
+        screenPreferences = ["all"];
+        showOnLastDisplay = true;
+        leftWidgets = [
+          "launcherButton"
+          "workspaceSwitcher"
+          "focusedWindow"
+        ];
+        centerWidgets = [
+          "music"
+          "clock"
+        ];
+        rightWidgets = [
+          "systemTray"
+          "notificationButton"
+          "controlCenterButton"
+        ];
+        spacing = 4;
+        innerPadding = 4;
+        bottomGap = 0;
+        transparency = 1.0;
+        widgetTransparency = 1.0;
+        autoHide = true;
+        autoHideStrict = true;
+        autoHideDelay = 250;
+        showOnWindowsOpen = false;
+        openOnOverview = false;
+        visible = true;
+        popupGapsAuto = true;
+        popupGapsManual = 4;
+        useOverlayLayer = false;
+      }
+    ];
+  };
+  generatedSettings = lib.recursiveUpdate compactSettings (
     lib.recursiveUpdate
     (lib.optionalAttrs idleLockCfg.enable idleLockSettings)
     (lib.optionalAttrs dockCfg.enable {
       showDock = true;
       dockAutoHide = dockCfg.autoHide;
-    });
+    })
+  );
   managedSettings = lib.recursiveUpdate generatedSettings cfg.settings;
   managedSettingsFile = pkgs.writeText "dms-managed-settings.json" (
     builtins.toJSON managedSettings
@@ -214,6 +275,15 @@ in {
   options.services.dms = {
     enable = lib.mkEnableOption "Enable DankMaterialShell suite";
 
+    profile = lib.mkOption {
+      type = lib.types.enum [
+        "full"
+        "compact"
+      ];
+      default = "full";
+      description = "DMS feature profile; compact keeps only the core shell surfaces.";
+    };
+
     settings = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
       default = {};
@@ -351,15 +421,18 @@ in {
   ];
 
   config = lib.mkIf cfg.enable {
-    home.packages = [
-      dankcalendarPkg
-      dankaiusagePkg
-      elevationPkg
-      pkgs.translate-shell
-    ];
+    home.packages =
+      [elevationPkg]
+      ++ lib.optionals (!compact) [
+        dankcalendarPkg
+        dankaiusagePkg
+        pkgs.translate-shell
+      ];
 
-    xdg.configFile."dankcalendar/config.json".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/dankcalendar/config.json";
+    xdg.configFile = lib.optionalAttrs (!compact) {
+      "dankcalendar/config.json".source =
+        config.lib.file.mkOutOfStoreSymlink "${configDir}/users/${username}/configs/dankcalendar/config.json";
+    };
 
     programs.dsearch = {
       enable = true;
@@ -377,100 +450,100 @@ in {
         restartIfChanged = true;
       };
 
-      enableSystemMonitoring = true;
-      enableVPN = true;
-      enableDynamicTheming = true;
-      enableAudioWavelength = true;
-      enableCalendarEvents = true;
+      enableSystemMonitoring = !compact;
+      enableVPN = !compact;
+      enableDynamicTheming = !compact;
+      enableAudioWavelength = !compact;
+      enableCalendarEvents = !compact;
 
       plugins = {
         WorldClock = {
-          enable = true;
+          enable = !compact;
           src = plugins.worldclock;
         };
         DankCalculator = {
-          enable = true;
+          enable = !compact;
           src = plugins.calculator;
         };
         DankQuickSearch = {
-          enable = true;
+          enable = !compact;
           src = plugins.quicksearch;
         };
         DankVault = {
-          enable = true;
+          enable = !compact;
           src = plugins.vault;
         };
         DankTranslate = {
-          enable = true;
+          enable = !compact;
           src = plugins.translate;
         };
         DankSpotify = {
-          enable = true;
+          enable = !compact;
           src = plugins.spotify;
         };
         DankCalendar = {
-          enable = true;
+          enable = !compact;
           src = plugins.dankcalendar;
         };
         DankDiskUsage = {
-          enable = true;
+          enable = !compact;
           src = plugins.diskusage;
         };
         DankAIUsage = {
-          enable = true;
+          enable = !compact;
           src = plugins.aiusage;
         };
         DankDisplayControl = {
-          enable = true;
+          enable = !compact;
           src = plugins.displaycontrol;
         };
         # First-party plugins (AvengeMedia/dms-plugins monorepo)
         DankActions = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankActions";
         };
         DankBatteryAlerts = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankBatteryAlerts";
         };
         DankClight = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankClight";
         };
         DankDesktopWeather = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankDesktopWeather";
         };
         DankGifSearch = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankGifSearch";
         };
         DankHooks = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankHooks";
         };
         DankHyprlandWindows = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankHyprlandWindows";
         };
         DankKDEConnect = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankKDEConnect";
         };
         DankLauncherKeys = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankLauncherKeys";
         };
         DankNotepadModule = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankNotepadModule";
         };
         DankPomodoroTimer = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankPomodoroTimer";
         };
         DankStickerSearch = {
-          enable = true;
+          enable = !compact;
           src = plugins.firstparty + "/DankStickerSearch";
         };
       };

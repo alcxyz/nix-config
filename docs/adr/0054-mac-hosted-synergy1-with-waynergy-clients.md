@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-19
-**Applies to:** `users/alc/linux/{xps,xyz}.nix`, `modules/home-manager/services/waynergy`
+**Applies to:** Nixbox and workstation clients, `modules/home-manager/services/waynergy`
 
 ## Context
 

@@ -233,6 +233,11 @@
       kill -KILL "$moonlight_pid" >/dev/null 2>&1 || true
     }
 
+    # systemd stops the supervising shell first. Explicitly reap Moonlight so
+    # a restart cannot leave the old client holding SDL input/audio resources
+    # while a replacement client is launched.
+    trap 'terminate_moonlight; exit 0' HUP INT TERM
+
     while kill -0 "$moonlight_pid" >/dev/null 2>&1; do
       moonlight_address="$(
         hyprctl -j clients 2>/dev/null \
@@ -285,6 +290,7 @@
 
     status=0
     wait "$moonlight_pid" || status=$?
+    trap - HUP INT TERM
   '';
   streamEndpointPolicyEnabled = cfg.streamLocalAddress != null && cfg.streamRemoteAddress != null;
   browserStreamEndpointPolicyEnabled =
@@ -324,15 +330,21 @@
       exec python3 ${./reconcile-endpoints.py} "$@"
     '';
   };
-  mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser:
+  mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser: let
+    reconciliationEnabled =
+      (reconcileStream && streamEndpointPolicyEnabled)
+      || (reconcileBrowser && browserStreamEndpointPolicyEnabled);
+  in
     pkgs.writeShellApplication {
       name = "moonlight-endpoint-setup-${name}";
       text = ''
+        ${lib.optionalString reconciliationEnabled ''
           config_file=${
-          if profileDirectory == null
-          then ''"$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"''
-          else lib.escapeShellArg "${profileDirectory}/config/Moonlight Game Streaming Project/Moonlight.conf"
-        }
+            if profileDirectory == null
+            then ''"$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"''
+            else lib.escapeShellArg "${profileDirectory}/config/Moonlight Game Streaming Project/Moonlight.conf"
+          }
+        ''}
         ${lib.optionalString (reconcileStream && streamEndpointPolicyEnabled) ''
           ${lib.getExe reconcileMoonlightEndpoints} \
             "$config_file" \
@@ -591,7 +603,14 @@
         sleep 1
       done
 
-      exec ${lib.getExe couchBrowser}
+      ${
+        if cfg.enableLocalBrowser
+        then "exec ${lib.getExe couchBrowser}"
+        else ''
+          echo "Remote browser did not become ready and the local fallback is disabled" >&2
+          exit 1
+        ''
+      }
     '';
   };
 
@@ -871,7 +890,9 @@
         return 1
       }
 
-      ready_host="$(find_ready_host || true)"
+      ${lib.optionalString (cfg.streamHostStartCommand != null || streamReadinessHosts != []) ''
+        ready_host="$(find_ready_host || true)"
+      ''}
 
       ${lib.optionalString (cfg.streamHostStartCommand != null) ''
         if [ -z "$ready_host" ]; then
@@ -913,7 +934,11 @@
         fi
       ''}
 
-      show_status info "Steam is ready" "Connecting Moonlight now."
+      ${
+        if directStreamEnabled
+        then ''show_status info "Steam is ready" "Connecting Moonlight now."''
+        else ''show_status info "Moonlight" "Opening the host chooser."''
+      }
       exec ${lib.getExe moonlightSession}
     '';
   };
@@ -934,6 +959,7 @@
           (
             COUCH_KEYBOARD_LAYOUT="$(${lib.getExe activeKeyboardLayout})"
             export COUCH_KEYBOARD_LAYOUT
+            export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
             export COUCH_STREAM_APPLICATION=${
             lib.escapeShellArg (
               if application == null
@@ -987,13 +1013,18 @@
           systemctl --user start couch-moonlight-browser-stream.service
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
         ''
-        else ''
+        else if cfg.enableLocalBrowser
+        then ''
           ${lib.getExe mergedUiControl} browser
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
           if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
             >/dev/null 2>&1; then
             ${lib.getExe couchBrowser} >/dev/null 2>&1 &
           fi
+        ''
+        else ''
+          echo "No local or remote browser is configured" >&2
+          exit 1
         ''
       }
           ;;
@@ -1072,8 +1103,12 @@
         ${lib.optionalString browserStreamEnabled ''
       "remote_browser": {ecodes.BTN_MODE, ecodes.BTN_NORTH},
     ''}
-        "browser": {ecodes.BTN_THUMBL, ecodes.BTN_THUMBR},
-        "help": {ecodes.BTN_SELECT, ecodes.BTN_SOUTH},
+        ${lib.optionalString (browserStreamEnabled || cfg.enableLocalBrowser) ''
+      "browser": {ecodes.BTN_THUMBL, ecodes.BTN_THUMBR},
+    ''}
+        ${lib.optionalString (cfg.enableDms || cfg.enableMergedProfile) ''
+      "help": {ecodes.BTN_SELECT, ecodes.BTN_SOUTH},
+    ''}
         ${lib.optionalString cfg.enableMirrorToggle ''
       "mirror": {ecodes.BTN_SELECT, ecodes.BTN_START},
     ''}
@@ -1089,8 +1124,12 @@
         ${lib.optionalString browserStreamEnabled ''
       "remote_browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "remote-browser"],
     ''}
-        "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
-        "help": [${builtins.toJSON (lib.getExe couchControlHelp)}],
+        ${lib.optionalString (browserStreamEnabled || cfg.enableLocalBrowser) ''
+      "browser": [${builtins.toJSON (lib.getExe couchStreamControl)}, "browser"],
+    ''}
+        ${lib.optionalString (cfg.enableDms || cfg.enableMergedProfile) ''
+      "help": [${builtins.toJSON (lib.getExe couchControlHelp)}],
+    ''}
         ${lib.optionalString cfg.enableMirrorToggle ''
       "mirror": [${builtins.toJSON (lib.getExe displayMirrorToggle)}, "toggle"],
     ''}
@@ -1163,6 +1202,490 @@
     name = "couch-controller";
     text = ''
       exec ${controllerPython}/bin/python ${controllerDaemonSource}
+    '';
+  };
+
+  kdeConnectPointerShimSource = pkgs.writeText "kdeconnect-hypr-pointer-shim.c" ''
+    #define _GNU_SOURCE
+
+    #include <dlfcn.h>
+    #include <errno.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <sys/socket.h>
+    #include <sys/un.h>
+    #include <unistd.h>
+    #include <xcb/xcb.h>
+
+    typedef xcb_void_cookie_t (*warp_pointer_fn)(
+        xcb_connection_t *, xcb_window_t, xcb_window_t,
+        int16_t, int16_t, uint16_t, uint16_t, int16_t, int16_t);
+
+    static void send_motion(const char *kind, int x, int y)
+    {
+        const char *runtime_dir = getenv("XDG_RUNTIME_DIR");
+        struct sockaddr_un address = { .sun_family = AF_UNIX };
+        char message[96];
+        int fd;
+        int message_length;
+
+        if (!runtime_dir || !*runtime_dir)
+            return;
+        if (snprintf(address.sun_path, sizeof(address.sun_path),
+                     "%s/kdeconnect-hypr-pointer.sock", runtime_dir)
+            >= (int)sizeof(address.sun_path))
+            return;
+
+        message_length = snprintf(message, sizeof(message), "%s %d %d", kind, x, y);
+        if (message_length <= 0 || message_length >= (int)sizeof(message))
+            return;
+
+        fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+        if (fd < 0)
+            return;
+        (void)sendto(fd, message, (size_t)message_length, MSG_DONTWAIT,
+                     (const struct sockaddr *)&address, sizeof(address));
+        close(fd);
+    }
+
+    xcb_void_cookie_t xcb_warp_pointer(
+        xcb_connection_t *connection,
+        xcb_window_t source_window,
+        xcb_window_t destination_window,
+        int16_t source_x,
+        int16_t source_y,
+        uint16_t source_width,
+        uint16_t source_height,
+        int16_t destination_x,
+        int16_t destination_y)
+    {
+        static warp_pointer_fn real_warp_pointer;
+        xcb_query_pointer_cookie_t query_cookie;
+        xcb_query_pointer_reply_t *query_reply = NULL;
+        xcb_void_cookie_t result = { 0 };
+
+        if (!real_warp_pointer)
+            real_warp_pointer = (warp_pointer_fn)dlsym(RTLD_NEXT, "xcb_warp_pointer");
+
+        if (destination_window != XCB_NONE) {
+            query_cookie = xcb_query_pointer(connection, destination_window);
+            query_reply = xcb_query_pointer_reply(connection, query_cookie, NULL);
+        }
+        if (query_reply) {
+            send_motion("M",
+                        (int)destination_x - (int)query_reply->root_x,
+                        (int)destination_y - (int)query_reply->root_y);
+            free(query_reply);
+        } else {
+            send_motion("A", destination_x, destination_y);
+        }
+
+        if (real_warp_pointer) {
+            result = real_warp_pointer(
+                connection,
+                source_window,
+                destination_window,
+                source_x,
+                source_y,
+                source_width,
+                source_height,
+                destination_x,
+                destination_y);
+        }
+        return result;
+    }
+  '';
+
+  kdeConnectPointerShim = pkgs.runCommandCC "kdeconnect-hypr-pointer-shim" {
+    nativeBuildInputs = [pkgs.pkg-config];
+    buildInputs = [pkgs.libxcb];
+  } ''
+    install -d "$out/lib"
+    "$CC" \
+      -shared \
+      -fPIC \
+      -Wall \
+      -Wextra \
+      -Werror \
+      $(${pkgs.pkg-config}/bin/pkg-config --cflags xcb) \
+      -o "$out/lib/libkdeconnect-hypr-pointer-shim.so" \
+      ${kdeConnectPointerShimSource} \
+      $(${pkgs.pkg-config}/bin/pkg-config --libs xcb) \
+      -ldl
+  '';
+
+  pointerSyncSource = pkgs.writeText "couch-xwayland-pointer-bridge.py" ''
+    import ctypes
+    import fcntl
+    import glob
+    import json
+    import os
+    import re
+    import socket
+    import struct
+    import subprocess
+    import time
+
+
+    x11 = ctypes.CDLL(${builtins.toJSON "${pkgs.libx11}/lib/libX11.so.6"})
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+    x11.XDefaultRootWindow.restype = ctypes.c_ulong
+    x11.XQueryPointer.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_uint),
+    ]
+    x11.XQueryPointer.restype = ctypes.c_int
+
+
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    signature = os.environ["HYPRLAND_INSTANCE_SIGNATURE"]
+    hypr_socket = os.path.join(runtime_dir, "hypr", signature, ".socket.sock")
+    kdeconnect_socket_path = os.path.join(
+        runtime_dir, "kdeconnect-hypr-pointer.sock"
+    )
+    xrandr_output = re.compile(
+        r"^(\S+) connected(?: primary)? (\d+)x(\d+)\+(-?\d+)\+(-?\d+)"
+    )
+    input_event = struct.Struct("llHHI")
+    ev_syn = 0
+    ev_abs = 3
+    syn_report = 0
+    abs_x = 0
+    abs_y = 1
+
+
+    def evio_get_abs(axis):
+        # _IOR('E', 0x40 + axis, struct input_absinfo)
+        return (2 << 30) | (24 << 16) | (ord("E") << 8) | (0x40 + axis)
+
+
+    def hypr_request(command):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(0.25)
+                client.connect(hypr_socket)
+                client.sendall(command.encode())
+                response = bytearray()
+                while True:
+                    chunk = client.recv(65536)
+                    if not chunk:
+                        break
+                    response.extend(chunk)
+                return response.decode()
+        except (OSError, UnicodeDecodeError):
+            return ""
+
+
+    def monitor_mapping():
+        try:
+            xrandr = subprocess.run(
+                [${builtins.toJSON (lib.getExe pkgs.xrandr)}, "--query"],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=2,
+            ).stdout
+            hypr = json.loads(hypr_request("j/monitors all") or "[]")
+        except (json.JSONDecodeError, OSError, subprocess.SubprocessError):
+            return []
+
+        x_outputs = {}
+        for line in xrandr.splitlines():
+            match = xrandr_output.match(line)
+            if match:
+                name, width, height, x, y = match.groups()
+                x_outputs[name] = tuple(map(int, (x, y, width, height)))
+
+        mapping = []
+        for monitor in hypr:
+            source = x_outputs.get(monitor.get("name"))
+            scale = float(monitor.get("scale") or 1)
+            if source is None or scale <= 0:
+                continue
+            mapping.append(
+                (
+                    source,
+                    (
+                        int(monitor.get("x", 0)),
+                        int(monitor.get("y", 0)),
+                        round(int(monitor.get("width", 0)) / scale),
+                        round(int(monitor.get("height", 0)) / scale),
+                    ),
+                )
+            )
+        return mapping
+
+
+    def translate(x, y, mapping):
+        for (source_x, source_y, source_width, source_height), (
+            target_x,
+            target_y,
+            target_width,
+            target_height,
+        ) in mapping:
+            if (
+                source_width > 0
+                and source_height > 0
+                and source_x <= x < source_x + source_width
+                and source_y <= y < source_y + source_height
+            ):
+                local_x = (x - source_x) / source_width
+                local_y = (y - source_y) / source_height
+                return (
+                    round(target_x + local_x * target_width),
+                    round(target_y + local_y * target_height),
+                )
+        return None
+
+
+    def focused_monitor():
+        try:
+            monitors = json.loads(hypr_request("j/monitors all") or "[]")
+        except json.JSONDecodeError:
+            return None
+
+        powered = [monitor for monitor in monitors if monitor.get("dpmsStatus", True)]
+        monitor = next(
+            (item for item in powered if item.get("focused")),
+            powered[0] if powered else None,
+        )
+        if monitor is None:
+            return None
+
+        scale = float(monitor.get("scale") or 1)
+        if scale <= 0:
+            return None
+        return (
+            int(monitor.get("x", 0)),
+            int(monitor.get("y", 0)),
+            round(int(monitor.get("width", 0)) / scale),
+            round(int(monitor.get("height", 0)) / scale),
+        )
+
+
+    def open_waynergy_mouse():
+        for name_path in glob.glob("/sys/class/input/event*/device/name"):
+            descriptor = None
+            try:
+                with open(name_path, encoding="utf-8") as name_file:
+                    if name_file.read().strip() != "waynergy mouse":
+                        continue
+                event_name = name_path.split("/")[-3]
+                descriptor = os.open(
+                    f"/dev/input/{event_name}", os.O_RDONLY | os.O_NONBLOCK
+                )
+                axes = []
+                for axis in (abs_x, abs_y):
+                    data = bytearray(24)
+                    fcntl.ioctl(descriptor, evio_get_abs(axis), data)
+                    _value, minimum, maximum, _fuzz, _flat, _resolution = (
+                        struct.unpack("iiiiii", data)
+                    )
+                    axes.append((minimum, maximum))
+                return descriptor, axes
+            except (FileNotFoundError, OSError, UnicodeDecodeError):
+                try:
+                    if descriptor is not None:
+                        os.close(descriptor)
+                except OSError:
+                    pass
+        return None, None
+
+
+    display = None
+    while not display:
+        display = x11.XOpenDisplay(b":0")
+        if not display:
+            time.sleep(0.5)
+
+    root = x11.XDefaultRootWindow(display)
+    try:
+        os.unlink(kdeconnect_socket_path)
+    except FileNotFoundError:
+        pass
+    kdeconnect_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    kdeconnect_socket.bind(kdeconnect_socket_path)
+    os.chmod(kdeconnect_socket_path, 0o600)
+    kdeconnect_socket.setblocking(False)
+    mapping = []
+    mapping_updated_at = 0.0
+    last_x11_position = None
+    waynergy_fd = None
+    waynergy_axes = None
+    waynergy_buffer = bytearray()
+    waynergy_position = {abs_x: None, abs_y: None}
+    waynergy_scan_at = 0.0
+    waynergy_monitor = None
+    waynergy_monitor_updated_at = 0.0
+
+    while True:
+        now = time.monotonic()
+        if now - mapping_updated_at >= 2:
+            mapping = monitor_mapping()
+            mapping_updated_at = now
+
+        if waynergy_fd is None and now >= waynergy_scan_at:
+            waynergy_fd, waynergy_axes = open_waynergy_mouse()
+            waynergy_scan_at = now + 1
+
+        if now - waynergy_monitor_updated_at >= 0.5:
+            waynergy_monitor = focused_monitor()
+            waynergy_monitor_updated_at = now
+
+        if waynergy_fd is not None:
+            try:
+                while True:
+                    chunk = os.read(waynergy_fd, input_event.size * 64)
+                    if not chunk:
+                        raise OSError("Waynergy input device disappeared")
+                    waynergy_buffer.extend(chunk)
+            except BlockingIOError:
+                pass
+            except OSError:
+                os.close(waynergy_fd)
+                waynergy_fd = None
+                waynergy_axes = None
+                waynergy_buffer.clear()
+                waynergy_scan_at = now + 0.25
+
+            while len(waynergy_buffer) >= input_event.size:
+                event = bytes(waynergy_buffer[: input_event.size])
+                del waynergy_buffer[: input_event.size]
+                _seconds, _microseconds, event_type, code, value = (
+                    input_event.unpack(event)
+                )
+                if event_type == ev_abs and code in waynergy_position:
+                    waynergy_position[code] = value
+                elif event_type == ev_syn and code == syn_report:
+                    x_value = waynergy_position[abs_x]
+                    y_value = waynergy_position[abs_y]
+                    if (
+                        x_value is not None
+                        and y_value is not None
+                        and waynergy_axes is not None
+                        and waynergy_monitor is not None
+                    ):
+                        monitor_x, monitor_y, monitor_width, monitor_height = (
+                            waynergy_monitor
+                        )
+                        (x_min, x_max), (y_min, y_max) = waynergy_axes
+                        if x_max > x_min and y_max > y_min:
+                            target_x = monitor_x + round(
+                                (x_value - x_min)
+                                * max(monitor_width - 1, 0)
+                                / (x_max - x_min)
+                            )
+                            target_y = monitor_y + round(
+                                (y_value - y_min)
+                                * max(monitor_height - 1, 0)
+                                / (y_max - y_min)
+                            )
+                            hypr_request(
+                                f"dispatch movecursor {target_x} {target_y}"
+                            )
+
+        while True:
+            try:
+                message = kdeconnect_socket.recv(96).decode().split()
+            except BlockingIOError:
+                break
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            try:
+                kind, first, second = message
+                first = float(first)
+                second = float(second)
+            except (ValueError, TypeError):
+                continue
+
+            if kind == "M":
+                try:
+                    current = json.loads(hypr_request("j/cursorpos") or "{}")
+                    target = (
+                        round(float(current["x"]) + first),
+                        round(float(current["y"]) + second),
+                    )
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                    continue
+            elif kind == "A":
+                target = translate(first, second, mapping)
+                if target is None:
+                    continue
+            else:
+                continue
+            hypr_request(f"dispatch movecursor {target[0]} {target[1]}")
+
+        root_return = ctypes.c_ulong()
+        child_return = ctypes.c_ulong()
+        root_x = ctypes.c_int()
+        root_y = ctypes.c_int()
+        window_x = ctypes.c_int()
+        window_y = ctypes.c_int()
+        mask = ctypes.c_uint()
+
+        if x11.XQueryPointer(
+            display,
+            root,
+            ctypes.byref(root_return),
+            ctypes.byref(child_return),
+            ctypes.byref(root_x),
+            ctypes.byref(root_y),
+            ctypes.byref(window_x),
+            ctypes.byref(window_y),
+            ctypes.byref(mask),
+        ):
+            x11_position = (root_x.value, root_y.value)
+            if x11_position != last_x11_position:
+                target = translate(*x11_position, mapping)
+                if target is not None:
+                    try:
+                        current = json.loads(hypr_request("j/cursorpos") or "{}")
+                        current_position = (round(current["x"]), round(current["y"]))
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        current_position = target
+
+                    # Native libinput and Wayland virtual-pointer events have
+                    # already moved Hyprland by the time XWayland observes
+                    # them. Only bridge X11-only movement such as KDE Connect
+                    # XTest, avoiding feedback against physical/Synergy input.
+                    if max(
+                        abs(current_position[0] - target[0]),
+                        abs(current_position[1] - target[1]),
+                    ) > 1:
+                        hypr_request(f"dispatch movecursor {target[0]} {target[1]}")
+                last_x11_position = x11_position
+
+        time.sleep(1 / 60)
+  '';
+
+  pointerSync = pkgs.writeShellApplication {
+    name = "couch-xwayland-pointer-bridge";
+    text = ''
+      exec ${pkgs.python3}/bin/python ${pointerSyncSource}
+    '';
+  };
+
+  kdeConnectDbusServiceOverride = pkgs.writeTextFile {
+    name = "kdeconnect-dbus-systemd-service";
+    destination = "/share/dbus-1/services/org.kde.kdeconnect.service";
+    text = ''
+      [D-BUS Service]
+      Name=org.kde.kdeconnect
+      Exec=${pkgs.systemd}/bin/systemctl --user start kdeconnect.service
+      SystemdService=kdeconnect.service
     '';
   };
 
@@ -1244,11 +1767,14 @@
           return
         fi
 
-        layout="$(tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true)"
+        layout="''${1:-}"
+        if [ -z "$layout" ]; then
+          layout="$(tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true)"
+        fi
         case "$layout" in
-          solo-primary | primary-aux) target="Primary TV" ;;
-          solo-secondary | secondary-aux) target="Secondary TV" ;;
-          solo-aux | solo-tertiary) target="Auxiliary display" ;;
+          living | living-aux | solo-primary | primary-aux) target="Primary TV" ;;
+          bedroom | bedroom-aux | solo-secondary | secondary-aux) target="Secondary TV" ;;
+          aux | solo-aux | solo-tertiary) target="Auxiliary display" ;;
           *) return ;;
         esac
         target_id="$(
@@ -1282,6 +1808,15 @@
           follow_layout
           exit 0
           ;;
+        prepare-layout)
+          follow_layout "''${2:-}"
+          # WirePlumber follows the new default target. Give it time to relink
+          # live streams while the old HDMI sink still exists; otherwise SDL
+          # loses its playback node when the display is parked and Moonlight
+          # cannot recover that audio stream without reconnecting.
+          sleep 1
+          exit 0
+          ;;
         status)
           jq -r --argjson current "''${current_id:--1}" \
             '.[] | select(.id == $current) | .description' <<<"$sinks"
@@ -1298,7 +1833,7 @@
           )"
           ;;
         *)
-          echo "usage: couch-audio-output {initialize|follow-layout|cycle|status}" >&2
+          echo "usage: couch-audio-output {initialize|follow-layout|prepare-layout LAYOUT|cycle|status}" >&2
           exit 2
           ;;
       esac
@@ -1314,11 +1849,102 @@
     '';
   };
 
-  displayLayoutControl = pkgs.writeShellApplication {
-    name = "couch-display-layout";
+  audioHealthRecovery = pkgs.writeShellApplication {
+    name = "couch-audio-health-recovery";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.systemd
+      pkgs.wireplumber
+    ];
+    text = ''
+      if ! systemctl --user --quiet is-active pipewire.service; then
+        exit 0
+      fi
+
+      probe_audio() {
+        timeout --kill-after=1 4 wpctl status >/dev/null 2>&1
+      }
+
+      if probe_audio; then
+        exit 0
+      fi
+      sleep 2
+      if probe_audio; then
+        exit 0
+      fi
+
+      # A failed Bluetooth/HDMI route can wedge WirePlumber while PipeWire and
+      # its client streams are still healthy. Restarting only the session
+      # manager preserves those streams and lets it rebuild their links.
+      systemctl --user restart wireplumber.service
+      for _ in 1 2 3 4; do
+        sleep 1
+        if probe_audio; then
+          exit 0
+        fi
+      done
+
+      # SDL clients such as Moonlight do not recreate their playback stream
+      # after the PipeWire server disappears. Never destroy a live stream in
+      # the name of recovery; leave the client session intact and report the
+      # unhealthy graph for an explicit reconnect instead.
+      for moonlight_unit in \
+        couch-moonlight-stream.service \
+        couch-moonlight-browser-stream.service \
+        couch-moonlight-browser-selector.service; do
+        if systemctl --user --quiet is-active "$moonlight_unit"; then
+          echo "audio graph remains unhealthy; preserving active $moonlight_unit" >&2
+          exit 1
+        fi
+      done
+
+      dms_was_active=false
+      if systemctl --user --quiet is-active couch-merged-dms.service; then
+        dms_was_active=true
+        systemctl --user stop couch-merged-dms.service
+      fi
+
+      systemctl --user restart \
+        pipewire.service \
+        pipewire-pulse.service \
+        wireplumber.service
+
+      if "$dms_was_active"; then
+        systemctl --user start couch-merged-dms.service
+      fi
+    '';
+  };
+
+  audioLayoutSync = pkgs.writeShellApplication {
+    name = "couch-audio-follow-layout";
+    runtimeInputs = [
+      pkgs.coreutils
+      waitForStableOutputs
+      audioOutputControl
+    ];
+    text = ''
+      couch-wait-for-stable-outputs
+      sleep 2
+
+      if timeout --kill-after=1 8 couch-audio-output follow-layout; then
+        exit 0
+      fi
+
+      ${lib.optionalString cfg.enableAudioHealthRecovery ''
+        ${lib.getExe audioHealthRecovery}
+        sleep 2
+        timeout --kill-after=1 8 couch-audio-output follow-layout
+      ''}
+    '';
+  };
+
+  displayLayoutControl = pkgs.writeShellApplication {
+    name = "couch-display-layout";
+      runtimeInputs = [
+      audioOutputControl
+      pkgs.coreutils
       pkgs.hyprland
+      pkgs.systemd
     ];
     text = ''
       state_file=${lib.escapeShellArg displayLayoutStateFile}
@@ -1328,8 +1954,13 @@
         fi
       )"
       case "$current" in
-        solo-tertiary) current=solo-aux ;;
-        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux) ;;
+        dual-tvs) current=living-bedroom ;;
+        primary-aux) current=living-aux ;;
+        secondary-aux) current=bedroom-aux ;;
+        solo-primary) current=living ;;
+        solo-secondary) current=bedroom ;;
+        solo-aux | solo-tertiary) current=aux ;;
+        adaptive | all | living-bedroom | living-aux | bedroom-aux | living | bedroom | aux) ;;
         *) current=adaptive ;;
       esac
 
@@ -1341,33 +1972,44 @@
         cycle)
           case "$current" in
             adaptive) requested=all ;;
-            all) requested=dual-tvs ;;
-            dual-tvs) requested=primary-aux ;;
-            primary-aux) requested=secondary-aux ;;
-            secondary-aux) requested=solo-primary ;;
-            solo-primary) requested=solo-secondary ;;
-            solo-secondary) requested=solo-aux ;;
+            all) requested=living-bedroom ;;
+            living-bedroom) requested=living-aux ;;
+            living-aux) requested=bedroom-aux ;;
+            bedroom-aux) requested=living ;;
+            living) requested=bedroom ;;
+            bedroom) requested=aux ;;
             *) requested=adaptive ;;
           esac
           ;;
-        solo-tertiary)
-          # Compatibility for an older saved state or maintenance command.
-          requested=solo-aux
-          ;;
-        adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux)
+        dual-tvs) requested=living-bedroom ;;
+        primary-aux) requested=living-aux ;;
+        secondary-aux) requested=bedroom-aux ;;
+        solo-primary) requested=living ;;
+        solo-secondary) requested=bedroom ;;
+        solo-aux | solo-tertiary) requested=aux ;;
+        adaptive | all | living-bedroom | living-aux | bedroom-aux | living | bedroom | aux)
           requested="$1"
           ;;
         *)
-          echo "usage: couch-display-layout {status|cycle|adaptive|all|dual-tvs|primary-aux|secondary-aux|solo-primary|solo-secondary|solo-aux}" >&2
+          echo "usage: couch-display-layout {status|cycle|adaptive|all|living-bedroom|living-aux|bedroom-aux|living|bedroom|aux}" >&2
           exit 2
           ;;
       esac
+
+      ${lib.optionalString cfg.enableAudioOutputCycle ''
+        # Migrate live streams before the layout watcher parks the old output.
+        # Selecting audio after the HDMI sink disappears is too late for SDL
+        # clients such as Moonlight, which keep queuing packets to a dead node.
+        timeout --kill-after=1 5 couch-audio-output prepare-layout "$requested" \
+          >/dev/null 2>&1 || true
+      ''}
 
       temporary_file="$state_file.tmp"
       printf '%s\n' "$requested" > "$temporary_file"
       mv "$temporary_file" "$state_file"
       ${lib.optionalString cfg.enableAudioOutputCycle ''
-        ${lib.getExe audioOutputControl} follow-layout >/dev/null 2>&1 || true
+        systemctl --user --no-block restart couch-audio-follow-layout.service \
+          >/dev/null 2>&1 || true
       ''}
       hyprctl notify 1 3000 'rgb(89b4fa)' "Display layout: $requested" \
         >/dev/null 2>&1 || true
@@ -1790,8 +2432,13 @@
         ${lib.optionalString cfg.enableAdaptiveDisplayLayout ''
         display_layout="$(tr -d '[:space:]' < "$display_layout_state_file" 2>/dev/null || true)"
         case "$display_layout" in
-          solo-tertiary) display_layout=solo-aux ;;
-          adaptive | all | dual-tvs | primary-aux | secondary-aux | solo-primary | solo-secondary | solo-aux) ;;
+          dual-tvs) display_layout=living-bedroom ;;
+          primary-aux) display_layout=living-aux ;;
+          secondary-aux) display_layout=bedroom-aux ;;
+          solo-primary) display_layout=living ;;
+          solo-secondary) display_layout=bedroom ;;
+          solo-aux | solo-tertiary) display_layout=aux ;;
+          adaptive | all | living-bedroom | living-aux | bedroom-aux | living | bedroom | aux) ;;
           *) display_layout=adaptive ;;
         esac
       ''}
@@ -1822,7 +2469,7 @@
           all)
             external_monitors="$connected_external_monitors"
             ;;
-          dual-tvs)
+          living-bedroom)
             external_monitors="$(
               jq -c \
                 --argjson minimum_width ${lib.escapeShellArg (toString cfg.autoLayoutPrimaryMinPhysicalWidth)} '
@@ -1837,7 +2484,7 @@
               ' <<<"$connected_external_monitors"
             )"
             ;;
-          primary-aux | secondary-aux)
+          living-aux | bedroom-aux)
             external_monitors="$(
               jq -c \
                 --arg layout "$display_layout" \
@@ -1847,7 +2494,7 @@
                   (sort_by(.physicalWidth * .physicalHeight) | reverse) as $ranked
                   | ([$ranked[] | select(.physicalWidth >= $minimum_width)]) as $tvs
                   | ([$ranked[] | select(.physicalWidth < $minimum_width)]) as $auxiliary
-                  | (if $layout == "primary-aux" then
+                  | (if $layout == "living-aux" then
                        ($tvs[0] // $ranked[0])
                      else
                        ($tvs[1] // $tvs[0] // $ranked[0])
@@ -1859,7 +2506,7 @@
               ' <<<"$connected_external_monitors"
             )"
             ;;
-          solo-primary | solo-secondary | solo-aux)
+          living | bedroom | aux)
             external_monitors="$(
               jq -c \
                 --arg layout "$display_layout" \
@@ -1869,9 +2516,9 @@
                   (sort_by(.physicalWidth * .physicalHeight) | reverse) as $ranked
                   | ([$ranked[] | select(.physicalWidth >= $minimum_width)]) as $tvs
                   | ([$ranked[] | select(.physicalWidth < $minimum_width)]) as $auxiliary
-                  | if $layout == "solo-primary" then
+                  | if $layout == "living" then
                       [($tvs[0] // $ranked[0])]
-                    elif $layout == "solo-secondary" then
+                    elif $layout == "bedroom" then
                       [($tvs[1] // $tvs[0] // $ranked[0])]
                     else
                       [($auxiliary[0] // $tvs[0] // $ranked[0])]
@@ -2294,18 +2941,20 @@
   couchApplications = pkgs.runCommand "couch-session-applications" {} ''
     mkdir -p "$out/share/applications"
 
-    cat > "$out/share/applications/couch-browser.desktop" <<EOF
-    [Desktop Entry]
-    Name=Helium (Couch)
-    Comment=Open the couch web browser
-    Exec=${lib.getExe couchBrowser}
-    Icon=helium
-    Terminal=false
-    Type=Application
-    Categories=Network;WebBrowser;
-    EOF
+    ${lib.optionalString cfg.enableLocalBrowser ''
+      cat > "$out/share/applications/couch-browser.desktop" <<EOF
+      [Desktop Entry]
+      Name=Helium (Couch)
+      Comment=Open the couch web browser
+      Exec=${lib.getExe couchBrowser}
+      Icon=helium
+      Terminal=false
+      Type=Application
+      Categories=Network;WebBrowser;
+      EOF
+    ''}
 
-    ${lib.optionalString (cfg.fallbackBrowserPackage != null) ''
+    ${lib.optionalString (cfg.enableLocalBrowser && cfg.fallbackBrowserPackage != null) ''
       cat > "$out/share/applications/couch-browser-fallback.desktop" <<EOF
       [Desktop Entry]
       Name=Brave (Couch fallback)
@@ -2436,9 +3085,9 @@
     ${lib.optionalString cfg.enableAudioOutputCycle "exec-once = ${lib.getExe audioOutputControl} initialize"}
     # Hyprland's portal does not implement RemoteDesktop. Keep KDE Connect and
     # couch browsers on XWayland so its phone keyboard, clicks, and scrolling
-    # can be injected through XTest. Do not mirror the X11 pointer into
-    # Hyprland: doing so fights physical pointer motion over XWayland surfaces.
-    ${lib.optionalString cfg.enableKdeConnect "exec-once = ${pkgs.coreutils}/bin/env QT_QPA_PLATFORM=xcb ${lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd"}"}
+    # can be injected through XTest. Translate XTest-only pointer movement into
+    # Hyprland coordinates; the bridge ignores native physical/Wayland motion.
+    ${lib.optionalString cfg.enableKdeConnect "exec-once = ${lib.getExe pointerSync}"}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
         output: source: "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
@@ -2514,11 +3163,11 @@
     ${lib.optionalString cfg.enableAdaptiveDisplayLayout "bind = SUPER SHIFT, D, exec, ${lib.getExe displayLayoutControl} cycle"}
     ${lib.optionalString cfg.enableAudioOutputCycle "bind = SUPER SHIFT, A, exec, ${lib.getExe audioOutputControl} cycle"}
     bind = SUPER, H, exec, ${lib.getExe couchControlHelp}
-    bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}
+    ${lib.optionalString cfg.enableLocalBrowser "bind = SUPER, V, exec, ${lib.getExe couchBrowserNewWindow}"}
     ${lib.optionalString (
       cfg.protectedBrowserPackage != null
     ) "bind = SUPER, Z, exec, ${lib.getExe protectedBrowser}"}
-    bind = ALT, RETURN, exec, ${lib.getExe couchTerminal}
+    ${lib.optionalString cfg.enableLocalUtilities "bind = ALT, RETURN, exec, ${lib.getExe couchTerminal}"}
     ${lib.optionalString (
       cfg.enableDms || cfg.enableMergedProfile
     ) "bind = SUPER, SPACE, exec, $HOME/.nix-profile/bin/dms ipc call spotlight toggle"}
@@ -2958,10 +3607,31 @@ in {
       description = "Browser package used by the couch browser launcher.";
     };
 
+    enableLocalBrowser = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Install and expose the local browser fallback in the dedicated session.";
+    };
+
+    enableLocalUtilities = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Install and expose local couch-session utilities such as the terminal launcher.";
+    };
+
     browserScaleFactor = lib.mkOption {
       type = lib.types.float;
       default = 1.0;
       description = "Chromium device scale factor used by couch browser launchers.";
+    };
+
+    browserPresentationScale = lib.mkOption {
+      type = lib.types.float;
+      default = 1.0;
+      description = ''
+        UI and cursor presentation class requested from a remote browser
+        capsule. This does not change streamed video resolution.
+      '';
     };
 
     terminalPackage = lib.mkOption {
@@ -3134,6 +3804,15 @@ in {
       description = "Enable keyboard and controller shortcuts that cycle the available PipeWire audio sinks.";
     };
 
+    enableAudioHealthRecovery = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Recover a persistently unresponsive couch audio graph without
+        destroying active Moonlight playback streams.
+      '';
+    };
+
     audioOutputStartupVolumePercent = lib.mkOption {
       type = lib.types.ints.between 0 100;
       default = 40;
@@ -3251,16 +3930,20 @@ in {
     environment.systemPackages =
       [
         cfg.package
-        cfg.browserPackage
-        cfg.terminalPackage
-        couchBrowser
-        couchBrowserStartup
-        couchBrowserNewWindow
-        couchTerminal
         couchApplications
         couchStreamControl
         closeActiveWindow
         moonlightStreamStart
+      ]
+      ++ lib.optionals cfg.enableLocalUtilities [
+        cfg.terminalPackage
+        couchTerminal
+      ]
+      ++ lib.optionals cfg.enableLocalBrowser [
+        cfg.browserPackage
+        couchBrowser
+        couchBrowserStartup
+        couchBrowserNewWindow
       ]
       ++ lib.optional (
         browserSelectorEnabled && cfg.browserStreamSelectorProfileDirectory != null
@@ -3268,15 +3951,27 @@ in {
       browserSelectorPair
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
+      ++ lib.optionals cfg.enableKdeConnect [
+        pointerSync
+        (lib.hiPrio kdeConnectDbusServiceOverride)
+      ]
       ++ lib.optional cfg.enableMergedProfile mergedDmsSession
       ++ lib.optional cfg.enableMergedProfile mergedUiControl
       ++ lib.optional (cfg.softwareMirrorOutputs != {}) softwareMirror
       ++ lib.optional cfg.enableMirrorToggle displayMirrorToggle
       ++ lib.optional cfg.enableAdaptiveDisplayLayout displayLayoutControl
       ++ lib.optional cfg.enableAudioOutputCycle audioOutputControl
+      ++ lib.optional cfg.enableAudioOutputCycle audioLayoutSync
+      ++ lib.optional (cfg.sessionSplashCommand != null) sessionPowerAction
       ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
-      ++ lib.optional (cfg.fallbackBrowserPackage != null) cfg.fallbackBrowserPackage
-      ++ lib.optional (cfg.fallbackBrowserPackage != null) couchFallbackBrowser.package
+      ++ lib.optional (
+        cfg.enableLocalBrowser && cfg.fallbackBrowserPackage != null
+      )
+      cfg.fallbackBrowserPackage
+      ++ lib.optional (
+        cfg.enableLocalBrowser && cfg.fallbackBrowserPackage != null
+      )
+      couchFallbackBrowser.package
       ++ lib.optional (cfg.protectedBrowserPackage != null) protectedBrowser
       ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
     services.displayManager.sessionPackages = [sessionPackage];
@@ -3286,8 +3981,30 @@ in {
 
     programs.kdeconnect.enable = cfg.enableKdeConnect;
 
+    # Route both eager startup and D-Bus activation through one supervised
+    # XWayland daemon. The preload shim preserves KDE Connect's XTest keyboard,
+    # click and scroll path while forwarding pointer motion rejected by
+    # XWayland to the session-local Hyprland bridge.
+    systemd.user.services.kdeconnect = lib.mkIf cfg.enableKdeConnect {
+      description = "KDE Connect with Hyprland pointer integration";
+      wantedBy = ["default.target"];
+      environment = {
+        DISPLAY = ":0";
+        QT_QPA_PLATFORM = "xcb";
+        LD_PRELOAD = "${kdeConnectPointerShim}/lib/libkdeconnect-hypr-pointer-shim.so";
+      };
+      serviceConfig = {
+        Type = "dbus";
+        BusName = "org.kde.kdeconnect";
+        ExecStart = lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd";
+        Restart = "on-failure";
+        RestartSec = 2;
+      };
+    };
+
     systemd.user.services.couch-moonlight-stream = lib.mkIf cfg.enableControllerShortcuts {
       description = "Controller-launched Moonlight stream";
+      restartIfChanged = false;
       serviceConfig = {
         Type = "simple";
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
@@ -3302,6 +4019,7 @@ in {
 
     systemd.user.services.couch-moonlight-browser-stream = lib.mkIf browserStreamEnabled {
       description = "Controller-launched remote browser stream";
+      restartIfChanged = false;
       serviceConfig = {
         Type = "simple";
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
@@ -3315,6 +4033,7 @@ in {
 
     systemd.user.services.couch-moonlight-browser-selector = lib.mkIf browserSelectorEnabled {
       description = "PIN-protected remote browser selector";
+      restartIfChanged = false;
       serviceConfig = {
         Type = "simple";
         ExecStartPre = "-${lib.getExe mergedUiControl} game";
@@ -3345,6 +4064,40 @@ in {
         SuccessExitStatus = 143;
       };
     };
+
+    systemd.user.services.couch-audio-health-recovery =
+      lib.mkIf cfg.enableAudioHealthRecovery
+      {
+        description = "Recover couch audio without disrupting active streams";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = lib.getExe audioHealthRecovery;
+          TimeoutStartSec = 30;
+        };
+      };
+
+    systemd.user.services.couch-audio-follow-layout =
+      lib.mkIf cfg.enableAudioOutputCycle
+      {
+        description = "Select couch audio after the display layout settles";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = lib.getExe audioLayoutSync;
+          TimeoutStartSec = 45;
+        };
+      };
+
+    systemd.user.timers.couch-audio-health-recovery =
+      lib.mkIf cfg.enableAudioHealthRecovery
+      {
+        description = "Periodically verify couch audio responsiveness";
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnBootSec = "1m";
+          OnUnitActiveSec = "30s";
+          Unit = "couch-audio-health-recovery.service";
+        };
+      };
 
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
       command =
@@ -3443,6 +4196,16 @@ in {
         '';
       }
       {
+        assertion =
+          !cfg.autoStartBrowser
+          || cfg.enableLocalBrowser
+          || (cfg.preferRemoteBrowserAtStartup && browserStreamEnabled);
+        message = ''
+          services.moonlight-client.autoStartBrowser requires a local browser
+          or a preferred remote browser stream
+        '';
+      }
+      {
         assertion = cfg.browserStreamSelectorApplication == null || browserStreamEnabled;
         message = "services.moonlight-client browser selector requires a browser stream host and application";
       }
@@ -3454,16 +4217,19 @@ in {
         message = "services.moonlight-client.browserStreamSelectorProfileDirectory must be absolute";
       }
       {
-        assertion = !cfg.enableControllerShortcuts || directStreamEnabled;
-        message = "services.moonlight-client.enableControllerShortcuts requires a direct stream host and application";
-      }
-      {
         assertion = cfg.controllerHoldSeconds > 0.0;
         message = "services.moonlight-client.controllerHoldSeconds must be positive";
       }
       {
         assertion = cfg.browserScaleFactor > 0.0;
         message = "services.moonlight-client.browserScaleFactor must be positive";
+      }
+      {
+        assertion = lib.elem cfg.browserPresentationScale [
+          1.0
+          1.5
+        ];
+        message = "services.moonlight-client.browserPresentationScale must be 1.0 or 1.5";
       }
       {
         assertion = lib.all (layout: lib.elem layout (lib.splitString "," cfg.keyboardLayouts)) (

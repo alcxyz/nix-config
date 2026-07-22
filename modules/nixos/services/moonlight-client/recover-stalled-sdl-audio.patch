@@ -1,0 +1,21 @@
+diff --git a/app/streaming/audio/renderers/sdlaud.cpp b/app/streaming/audio/renderers/sdlaud.cpp
+index 5843892..8fdca01 100644
+--- a/app/streaming/audio/renderers/sdlaud.cpp
++++ b/app/streaming/audio/renderers/sdlaud.cpp
+@@ -127,6 +127,16 @@ bool SdlAudioRenderer::submitAudio(int bytesWritten)
+         SDL_Delay(1);
+     }
+ 
++    // A dead PulseAudio/PipeWire connection may leave SDL reporting PLAYING
++    // even though its queue has stopped draining. Treat that as device loss so
++    // Moonlight's existing renderer reinitialization path opens the new
++    // default device without reconnecting the stream session.
++    if (SDL_GetQueuedAudioSize(m_AudioDevice) / m_FrameSize > 10) {
++        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
++                    "Audio queue stopped draining; recreating audio device");
++        return false;
++    }
++
+     if (SDL_QueueAudio(m_AudioDevice, m_AudioBuffer, bytesWritten) < 0) {
+         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                      "Failed to queue audio sample: %s",

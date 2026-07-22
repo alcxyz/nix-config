@@ -7,14 +7,29 @@
   lib,
   configDir,
   ...
-}: {
+}: let
+  steamHeadlessStartCommand = ''
+    ${
+      lib.escapeShellArgs [
+        "${pkgs.openssh}/bin/ssh"
+        "-o"
+        "BatchMode=yes"
+        "-o"
+        "ConnectTimeout=5"
+      ]
+    } -o "Hostname=$COUCH_STREAM_START_TARGET" -o HostKeyAlias=xyz xyz ${lib.escapeShellArg "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"}
+  '';
+in {
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
+    "${configDir}/modules/nixos/profiles/nixbox-client/default.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
     "${configDir}/modules/nixos/services/unifi-native/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
+    "${configDir}/modules/nixos/services/bluetooth-audio-receiver/default.nix"
+    inputs.nix-secrets.nixosModules.rpi0Private
   ];
 
   boot.loader.grub.enable = false;
@@ -23,24 +38,119 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   nix.settings.require-sigs = false;
-  # Prefer remote builders, but keep a local fallback for small activation-time
-  # derivations when the configured builder is unavailable.
-  nix.settings.max-jobs = 1;
-  alc.distributedBuildClient.enable = true;
+  # The embedded client only substitutes or receives builds from xyz. Failing
+  # closed here prevents an unavailable builder from turning into a long,
+  # thermally constrained local compile on the SD-card-backed host.
+  nix.settings.max-jobs = 0;
+  alc.distributedBuildClient = {
+    enable = true;
+    builders = ["xyz"];
+  };
 
   # Keep the embedded fallback host small enough for its SD-card root.
   fonts.packages = lib.mkForce [];
   programs.nix-ld.enable = lib.mkForce false;
   programs.nix-ld.libraries = lib.mkForce [];
   services.pcscd.enable = lib.mkForce false;
-  security.rtkit.enable = lib.mkForce false;
-  services.pipewire.enable = lib.mkForce false;
-  services.pipewire.alsa.enable = lib.mkForce false;
-  services.pipewire.alsa.support32Bit = lib.mkForce false;
-  services.pipewire.pulse.enable = lib.mkForce false;
-  services.pipewire.wireplumber.enable = lib.mkForce false;
-  hardware.bluetooth.enable = lib.mkForce false;
   virtualisation.docker.enable = lib.mkForce false;
+
+  services.bluetooth-audio-receiver = {
+    enable = true;
+    user = username;
+    adapterName = "Nixbox";
+    outputSinkName = "alsa_output.platform-sound.stereo-fallback";
+  };
+
+  services.pipewire.wireplumber.extraConfig."52-rpi0-nixbox-outputs" = {
+    "monitor.alsa.rules" = [
+      {
+        matches = [{"node.name" = "alsa_output.platform-hdmi-sound.stereo-fallback";}];
+        actions."update-props" = {
+          "node.description" = "Bedroom TV";
+          "node.nick" = "Bedroom TV";
+          "priority.session" = 1100;
+        };
+      }
+      {
+        matches = [{"node.name" = "alsa_output.platform-sound.stereo-fallback";}];
+        actions."update-props" = {
+          "node.description" = "Bose sound system";
+          "node.nick" = "Bose sound system";
+          "priority.session" = 1000;
+        };
+      }
+    ];
+  };
+
+  hardware.firmware = [pkgs.broadcom-bt-firmware];
+
+  services.nixbox-client = {
+    enable = true;
+    user = username;
+    outputMode = "2560x1440@60";
+  };
+
+  services.moonlight-client = {
+    streamHost = "SteamHeadless";
+    streamApplication = "Steam Big Picture";
+    streamEndpointMode = "lan-only";
+    streamHostStartCommand = steamHeadlessStartCommand;
+    streamReadinessHost = "xyz";
+    streamArguments = [
+      "--1440"
+      "--fps"
+      "60"
+      "--bitrate"
+      "40000"
+      "--display-mode"
+      "windowed"
+      "--audio-config"
+      "stereo"
+      "--video-codec"
+      "HEVC"
+      "--video-decoder"
+      "hardware"
+      "--no-hdr"
+      "--frame-pacing"
+      "--swap-gamepad-buttons"
+      "--mute-on-focus-loss"
+      "--no-background-gamepad"
+    ];
+
+    browserStreamHost = "Wolf";
+    browserStreamApplication = "Helium";
+    browserStreamEndpointMode = "lan-only";
+    browserStreamSelectorApplication = "Wolf UI";
+    browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
+    browserStreamArguments = [
+      "--absolute-mouse"
+      "--capture-system-keys"
+      "never"
+    ];
+    browserStreamLayoutCommand = ''
+      case "$COUCH_STREAM_APPLICATION" in
+        Helium) runners=(WolfHelium) ;;
+        "Wolf UI")
+          runners=(
+            WolfHeliumPrivate
+            WolfBrave
+            WolfChromium
+            WolfFirefox
+            WolfZen
+          )
+          ;;
+        *) exit 0 ;;
+      esac
+      ${lib.getExe pkgs.openssh} \
+        -o BatchMode=yes \
+        -o ConnectTimeout=5 \
+        xev \
+        wolf-stream-layout \
+          --presentation-scale "$COUCH_PRESENTATION_SCALE" \
+          "$COUCH_KEYBOARD_LAYOUT" \
+          "''${runners[@]}"
+    '';
+  };
 
   services.journald.extraConfig = ''
     Storage=persistent

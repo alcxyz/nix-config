@@ -31,6 +31,13 @@ See the [XPS media-center guide](docs/xps-media-center.md) for controller and
 keyboard shortcuts, display modes, audio choices, and the on-screen help
 overlay.
 
+### Compact Nixbox clients
+
+The reusable compact client profile turns smaller NixOS hosts into
+controller-first Moonlight endpoints without carrying the XPS workbench
+configuration. See the [compact Nixbox client guide](docs/nixbox-client.md) for
+the shared session, input, display, audio, and presentation boundaries.
+
 ### Visual reports
 
 Standalone, summary-first HTML reports complement the Markdown archive for

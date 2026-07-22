@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-19
-**Applies to:** `hosts/xps`, `modules/nixos/services/moonlight-client`, Quickshell
+**Applies to:** Nixbox clients, `modules/nixos/services/moonlight-client`, Quickshell
 
 ## Context
 
@@ -73,6 +73,12 @@ Keep the normal boot verbosity rather than using a quiet kernel command line so
 diagnostics remain logged and Plymouth's details view can expose them. Retain
 the proven initrd module inventory; do not narrow the host's hardware module set
 for branding.
+
+Reuse the theme and compositor transitions on compact Nixbox clients. A client
+with a direct display path uses Plymouth's normal lifecycle; it must not inherit
+the XPS-only dock discovery, theme replay, or multi-output allocation services.
+The generic profile keeps its display fallback and boot generation as the
+recovery boundaries.
 
 ## Consequences
 

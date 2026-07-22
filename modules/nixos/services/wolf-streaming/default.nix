@@ -6,9 +6,10 @@
 }: let
   cfg = config.services.wolf-streaming;
   nvidiaPackage = config.hardware.nvidia.package;
+  nvidiaSmi = "${nvidiaPackage.bin}/bin/nvidia-smi";
   browserCfg = cfg.browserImages;
   wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
-  wolfPatchSet = "altgr-idle-v1";
+  wolfPatchSet = "altgr-idle-presentation-v1";
   wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
   wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}";
   wolfSource = pkgs.fetchFromGitHub {
@@ -22,6 +23,7 @@
     src = wolfSource;
     patches = [
       ./wolf-image/altgr.patch
+      ./wolf-image/client-presentation-scale.patch
       ./wolf-image/idle-session-timeout.patch
     ];
   };
@@ -229,7 +231,7 @@
       env = [
         "RUN_SWAY=1"
         "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
-        "NIXBOX_BROWSER_SCALE=1.5"
+        "NIXBOX_BROWSER_SCALE=1.0"
         "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
         "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
       ];
@@ -378,6 +380,40 @@
         browserImages}
     '';
   };
+  wolfSetClientPresentationScale = pkgs.writeText "wolf-set-client-presentation-scale.py" ''
+    import json
+    import socket
+    import sys
+
+    client_id, scale = sys.argv[1:]
+    payload = json.dumps(
+        {
+            "client_id": client_id,
+            "settings": {"presentation_scale": float(scale)},
+        },
+        separators=(",", ":"),
+    ).encode()
+    request = (
+        b"POST /api/v1/clients/settings HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Content-Type: application/json\r\n"
+        + f"Content-Length: {len(payload)}\r\n".encode()
+        + b"Connection: close\r\n\r\n"
+        + payload
+    )
+
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.connect("/run/wolf-streaming/runtime/wolf.sock")
+        connection.sendall(request)
+        response = bytearray()
+        while chunk := connection.recv(65536):
+            response.extend(chunk)
+
+    status_line = bytes(response).split(b"\r\n", 1)[0]
+    if b" 200 " not in status_line:
+        raise RuntimeError(status_line.decode(errors="replace"))
+  '';
+
   wolfStreamLayout = pkgs.writeShellApplication {
     name = "wolf-stream-layout";
     runtimeInputs = [
@@ -385,6 +421,29 @@
       pkgs.docker
     ];
     text = ''
+      presentation_scale=1.0
+      if [ "''${1:-}" = --presentation-scale ]; then
+        [ -n "''${2:-}" ] || {
+          echo "wolf-stream-layout: --presentation-scale requires a value" >&2
+          exit 2
+        }
+        presentation_scale="$2"
+        shift 2
+      fi
+      case "$presentation_scale" in
+        1 | 1.0)
+          presentation_scale=1.0
+          cursor_size=24
+          ;;
+        1.5)
+          cursor_size=36
+          ;;
+        *)
+          echo "wolf-stream-layout: unsupported presentation scale: $presentation_scale" >&2
+          exit 2
+          ;;
+      esac
+
       layout="''${1:-}"
       shift || true
       runners=("$@")
@@ -394,7 +453,7 @@
         )
         browserCfg.keyboardLayouts}
         *)
-          echo "usage: wolf-stream-layout {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}} RUNNER [RUNNER ...]" >&2
+          echo "usage: wolf-stream-layout [--presentation-scale {1.0|1.5}] {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}} RUNNER [RUNNER ...]" >&2
           exit 2
           ;;
       esac
@@ -417,10 +476,37 @@
           if [ -n "$container" ] \
             && docker exec \
               -u ${toString cfg.defaultRunUid} \
+              "$container" \
+              sh -c '
+                if [ -e /tmp/nixbox-browser-presentation/ready ]; then
+                  printf "%s\n" "$1" > /tmp/nixbox-browser-presentation/requested-scale
+                fi
+              ' sh "$presentation_scale" \
+                >/dev/null 2>&1 \
+            && docker exec \
+              -u ${toString cfg.defaultRunUid} \
               -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
               "$container" \
               swaymsg input type:keyboard xkb_switch_layout "$layout_index" \
                 >/dev/null 2>&1; then
+            # WOLF_SESSION_ID is the paired-client ID. Persist this client's
+            # presentation class so a future fresh runner starts at the right
+            # scale; the startup handshake above also handles this first run.
+            client_id="$(
+              docker exec "$container" printenv WOLF_SESSION_ID 2>/dev/null \
+                || true
+            )"
+            if [ -n "$client_id" ]; then
+              docker exec -i wolf python3 - "$client_id" "$presentation_scale" \
+                < ${wolfSetClientPresentationScale} \
+                >/dev/null 2>&1 || true
+            fi
+            docker exec \
+              -u ${toString cfg.defaultRunUid} \
+              -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+              "$container" \
+              swaymsg seat seat0 xcursor_theme Adwaita "$cursor_size" \
+                >/dev/null 2>&1 || true
             exit 0
           fi
         done
@@ -465,6 +551,69 @@
       ln -s "$(basename "$1")" "$out/lib/$library.so"
     done
   '';
+  wolfVramWatchdog = pkgs.writeShellApplication {
+    name = "wolf-vram-watchdog";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.systemd
+    ];
+    text = ''
+      state_file=/run/wolf-streaming/vram-high-count
+
+      if ! systemctl --quiet is-active docker-wolf.service; then
+        rm -f "$state_file"
+        exit 0
+      fi
+
+      total_mib="$(
+        ${nvidiaSmi} \
+          --query-gpu=memory.total \
+          --format=csv,noheader,nounits \
+          | awk -F, 'NR == 1 { gsub(/[[:space:]]/, "", $1); print $1 }'
+      )"
+      wolf_mib="$(
+        ${nvidiaSmi} \
+          --query-compute-apps=process_name,used_memory \
+          --format=csv,noheader,nounits \
+          | awk -F, '
+              $1 ~ /\/wolf$/ {
+                gsub(/[[:space:]]/, "", $2)
+                total += $2
+              }
+              END { print total + 0 }
+            '
+      )"
+
+      if ! [[ "$total_mib" =~ ^[1-9][0-9]*$ && "$wolf_mib" =~ ^[0-9]+$ ]]; then
+        echo "Wolf VRAM watchdog could not parse the NVIDIA memory sample" >&2
+        exit 1
+      fi
+
+      threshold_mib=$((total_mib * ${toString cfg.vramWatchdog.maxUsedPercent} / 100))
+      if [ "$wolf_mib" -lt "$threshold_mib" ]; then
+        rm -f "$state_file"
+        exit 0
+      fi
+
+      count=0
+      if [ -r "$state_file" ]; then
+        read -r count < "$state_file" || count=0
+      fi
+      [[ "$count" =~ ^[0-9]+$ ]] || count=0
+      count=$((count + 1))
+      printf '%s\n' "$count" > "$state_file"
+
+      if [ "$count" -lt ${toString cfg.vramWatchdog.consecutiveSamples} ]; then
+        echo "Wolf VRAM remains high: $wolf_mib MiB of $total_mib MiB (sample $count/${toString cfg.vramWatchdog.consecutiveSamples})" >&2
+        exit 0
+      fi
+
+      rm -f "$state_file"
+      echo "Restarting Wolf after sustained VRAM growth: $wolf_mib MiB of $total_mib MiB" >&2
+      systemctl restart docker-wolf.service
+    '';
+  };
 in {
   options.services.wolf-streaming = {
     enable = lib.mkEnableOption "Wolf Moonlight application streaming";
@@ -513,6 +662,28 @@ in {
         available before Wolf stops it. Reconnecting to the stream or joining
         the lobby cancels the deadline. Zero disables idle expiry.
       '';
+    };
+
+    vramWatchdog = {
+      enable = lib.mkEnableOption "automatic recovery from sustained Wolf GPU-memory growth";
+
+      maxUsedPercent = lib.mkOption {
+        type = lib.types.ints.between 1 99;
+        default = 80;
+        description = "Percentage of total GPU memory Wolf may retain before recovery is considered.";
+      };
+
+      consecutiveSamples = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 2;
+        description = "Consecutive high-memory samples required before Wolf is restarted.";
+      };
+
+      interval = lib.mkOption {
+        type = lib.types.nonEmptyStr;
+        default = "30s";
+        description = "Systemd time span between Wolf GPU-memory checks.";
+      };
     };
 
     prunedApplicationTitles = lib.mkOption {
@@ -762,6 +933,25 @@ in {
             ${lib.escapeShellArg cfg.protectedProfile.displayName}
         ''
       );
+    };
+
+    systemd.services.wolf-vram-watchdog = lib.mkIf cfg.vramWatchdog.enable {
+      description = "Recover Wolf from sustained GPU-memory growth";
+      after = ["docker-wolf.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe wolfVramWatchdog;
+      };
+    };
+
+    systemd.timers.wolf-vram-watchdog = lib.mkIf cfg.vramWatchdog.enable {
+      description = "Periodically check Wolf GPU-memory usage";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = cfg.vramWatchdog.interval;
+        OnUnitActiveSec = cfg.vramWatchdog.interval;
+        Unit = "wolf-vram-watchdog.service";
+      };
     };
 
     systemd.services.wolf-patched-image = lib.mkIf (cfg.image == wolfPatchedImage) {

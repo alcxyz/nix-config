@@ -1,0 +1,161 @@
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  cfg = config.services.nixbox-client;
+in {
+  imports = [../../services/moonlight-client/default.nix];
+
+  options.services.nixbox-client = {
+    enable = lib.mkEnableOption "a compact controller-first Nixbox streaming client";
+
+    user = lib.mkOption {
+      type = lib.types.str;
+      description = "Existing user that owns the graphical media session.";
+    };
+
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.moonlight-v4l2-request;
+      defaultText = lib.literalExpression "pkgs.moonlight-v4l2-request";
+      description = "Moonlight package used by the compact client.";
+    };
+
+    outputMode = lib.mkOption {
+      type = lib.types.str;
+      default = "1920x1080@60";
+      description = "Preferred display mode for the compact client.";
+    };
+
+    outputScale = lib.mkOption {
+      type = lib.types.float;
+      default = 1.0;
+      description = "Hyprland output scale for the compact client.";
+    };
+
+    presentationScale = lib.mkOption {
+      type = lib.types.float;
+      default = 1.5;
+      description = ''
+        UI and cursor scale requested from local and streamed browser
+        presentations without reducing media resolution.
+      '';
+    };
+
+    enableDms = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Run the compact DMS shell in the Nixbox session.";
+    };
+
+    enableKdeConnect = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Enable KDE Connect input and the Hyprland pointer bridge.";
+    };
+
+    enableLocalUtilities = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Keep a local terminal available as a maintenance escape hatch.";
+    };
+
+    enablePresentation = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Enable the Nixbox boot and graphical-session transitions.";
+    };
+
+    moonlightPlatform = lib.mkOption {
+      type = lib.types.enum [
+        "wayland"
+        "xcb"
+      ];
+      # KDE Connect and Waynergy pointer injection need the same XWayland
+      # bridge proven by the full Nixbox client. Video decoding remains in the
+      # platform-specific Moonlight package rather than the Qt presentation
+      # backend.
+      default = "xcb";
+      description = "Qt display backend used by Moonlight.";
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = builtins.hasAttr cfg.user config.users.users;
+        message = "services.nixbox-client.user must name a declared NixOS user";
+      }
+    ];
+
+    users.users.${cfg.user}.extraGroups = [
+      "input"
+      "render"
+      "video"
+    ];
+
+    hardware.graphics.enable = true;
+    hardware.enableRedistributableFirmware = true;
+
+    programs.hyprland = {
+      enable = true;
+      withUWSM = false;
+      xwayland.enable = cfg.moonlightPlatform == "xcb";
+    };
+
+    services.greetd = {
+      enable = true;
+      settings.default_session = {
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --sessions /run/current-system/sw/share/wayland-sessions";
+        user = "greeter";
+      };
+    };
+
+    security.polkit.enable = true;
+
+    boot.plymouth = lib.mkIf cfg.enablePresentation {
+      enable = true;
+      theme = "nixbox";
+      themePackages = [pkgs.nixbox-plymouth-theme];
+      extraConfig = "UseSimpledrmNoLuks=1";
+    };
+
+    # DMS runs the compositor-owned reverse transition before requesting the
+    # system action. Avoid replaying a second Plymouth transition after the
+    # graphical session has already released the display.
+    systemd.services.plymouth-poweroff.wantedBy = lib.mkIf cfg.enablePresentation (lib.mkForce []);
+    systemd.services.plymouth-reboot.wantedBy = lib.mkIf cfg.enablePresentation (lib.mkForce []);
+    systemd.services.plymouth-halt.wantedBy = lib.mkIf cfg.enablePresentation (lib.mkForce []);
+
+    services.moonlight-client = {
+      enable = true;
+      package = cfg.package;
+      autoLoginUser = cfg.user;
+      autoStartBrowser = false;
+      autoStartStream = false;
+      enableLocalBrowser = false;
+      enableLocalUtilities = cfg.enableLocalUtilities;
+      enableDms = cfg.enableDms;
+      enableMergedProfile = false;
+      enableKdeConnect = cfg.enableKdeConnect;
+      enableControllerShortcuts = true;
+      fallbackBrowserPackage = null;
+      protectedBrowserPackage = null;
+      browserScaleFactor = cfg.presentationScale;
+      browserPresentationScale = cfg.presentationScale;
+      sessionSplashCommand = lib.mkIf cfg.enablePresentation (lib.getExe pkgs.nixbox-session-splash);
+      relaunchOnExit = false;
+      moonlightPlatform = cfg.moonlightPlatform;
+      outputMode = cfg.outputMode;
+      fallbackOutputMode = "1920x1080@60";
+      outputScale = cfg.outputScale;
+      # Compact clients can have both a TV and a local sound system. Preserve
+      # the user's selected default across Moonlight launches and expose the
+      # existing keyboard/controller audio-output cycle.
+      preferHdmiAudio = false;
+      enableAudioOutputCycle = true;
+    };
+  };
+}

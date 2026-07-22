@@ -1,0 +1,58 @@
+diff --git a/src/moonlight-server/api/api.hpp b/src/moonlight-server/api/api.hpp
+index 52251f8..779c4e1 100644
+--- a/src/moonlight-server/api/api.hpp
++++ b/src/moonlight-server/api/api.hpp
+@@ -59,6 +59,7 @@ struct PartialClientSettings {
+   std::optional<float> v_scroll_acceleration;
+   std::optional<float> h_scroll_acceleration;
+   std::optional<wolf::config::ControllerType> motion_controller_override;
++  std::optional<float> presentation_scale;
+ };
+ 
+ struct UpdateClientSettingsRequest {
+diff --git a/src/moonlight-server/api/endpoints.cpp b/src/moonlight-server/api/endpoints.cpp
+index dbe85a7..48b0f12 100644
+--- a/src/moonlight-server/api/endpoints.cpp
++++ b/src/moonlight-server/api/endpoints.cpp
+@@ -434,7 +434,9 @@ void UnixSocketServer::endpoint_LobbyCreate(const wolf::api::HTTPRequest &req, s
+                 .h_scroll_acceleration =
+                     client_settings.h_scroll_acceleration.value_or(default_client_settings.h_scroll_acceleration),
+                 .motion_controller_override = client_settings.motion_controller_override.value_or(
+-                    default_client_settings.motion_controller_override)},
++                    default_client_settings.motion_controller_override),
++                .presentation_scale =
++                    client_settings.presentation_scale.value_or(default_client_settings.presentation_scale)},
+         .runner_state_folder = event.value().runner_state_folder,
+         .runner = state::get_runner(event.value().runner, this->state_->app_state->event_bus)};
+     // Fire the event
+@@ -580,5 +582,6 @@ void UnixSocketServer::endpoint_UpdateClientSettings(const HTTPRequest &req, std
+           .motion_controller_override =
+               new_settings.motion_controller_override.value_or(current_settings.motion_controller_override),
++          .presentation_scale = new_settings.presentation_scale.value_or(current_settings.presentation_scale),
+       }};
+ 
+   update_client_settings(this->state_->app_state->config, std::stoull(payload.client_id.value()), merged_client);
+diff --git a/src/moonlight-server/sessions/common.cpp b/src/moonlight-server/sessions/common.cpp
+index 37a1520..b9de748 100644
+--- a/src/moonlight-server/sessions/common.cpp
++++ b/src/moonlight-server/sessions/common.cpp
+@@ -20,6 +20,7 @@ void start_runner(std::shared_ptr<events::Runner> runner,
+   immer::map_transient<std::string, std::string> full_env;
+   full_env.set("XDG_RUNTIME_DIR", args->xdg_runtime_dir);
+   full_env.set("WOLF_SESSION_ID", args->session_id);
++  full_env.set("NIXBOX_PRESENTATION_SCALE", fmt::format("{}", args->client_settings->presentation_scale));
+ 
+   auto pulse_sink_name = fmt::format("{}{}", VIRTUAL_SINK_PREFIX, args->session_id);
+   auto audio_server_name = args->audio_server ? audio::get_server_name(args->audio_server->server) : "";
+diff --git a/src/moonlight-server/state/serialised_config.hpp b/src/moonlight-server/state/serialised_config.hpp
+index 637b2ef..a112383 100644
+--- a/src/moonlight-server/state/serialised_config.hpp
++++ b/src/moonlight-server/state/serialised_config.hpp
+@@ -37,5 +37,7 @@ struct ClientSettings {
+    * actually having motion to forward. */
+   ControllerType motion_controller_override = ControllerType::AUTO;
++  /* Per-client UI/cursor presentation scale passed to application runners. */
++  float presentation_scale = 1.0;
+ };
+ 
+ struct PairedClient {

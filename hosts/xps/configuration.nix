@@ -145,6 +145,29 @@ in {
         };
       }
       {
+        matches = [{"node.name" = "~alsa_output.*[.]playback[.](0|3|7|8)[.]0";}];
+        actions."update-props" = {
+          # The pro-audio profile exposes every HDMI PCM concurrently, but its
+          # generic 64-channel default is invalid for these stereo endpoints
+          # and can wedge the graph while display routes are recreated.
+          "audio.channels" = 2;
+          "audio.position" = [
+            "FL"
+            "FR"
+          ];
+        };
+      }
+      {
+        matches = [{"node.name" = "~alsa_input.*[.]capture[.]0[.]0";}];
+        actions."update-props" = {
+          "audio.channels" = 2;
+          "audio.position" = [
+            "FL"
+            "FR"
+          ];
+        };
+      }
+      {
         matches = [{"node.name" = "~alsa_output.*[.]playback[.]0[.]0";}];
         actions."update-props" = {
           "node.description" = "XPS speakers";
@@ -268,6 +291,14 @@ in {
 
   services.moonlight-client = {
     enable = true;
+    package = pkgs.moonlight-qt.overrideAttrs (old: {
+      patches = (old.patches or []) ++ [
+        (builtins.path {
+          path = ../../modules/nixos/services/moonlight-client/recover-stalled-sdl-audio.patch;
+          name = "moonlight-recover-stalled-sdl-audio.patch";
+        })
+      ];
+    });
     autoLoginUser = username;
     desktopSessionCommand = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
     defaultSessionMode = "couch";
@@ -283,6 +314,7 @@ in {
     keyboardLayoutDeviceOverrides.us = ["glove80"];
     keyboardOptions = "grp:alt_shift_toggle";
     browserScaleFactor = 1.5;
+    browserPresentationScale = 1.5;
     sessionSplashCommand = lib.getExe pkgs.nixbox-session-splash;
     autoStartBrowser = true;
     preferRemoteBrowserAtStartup = true;
@@ -328,6 +360,7 @@ in {
     ];
     enableAdaptiveDisplayLayout = true;
     enableAudioOutputCycle = true;
+    enableAudioHealthRecovery = true;
     autoMirrorExternalOutputs = false;
     enableMirrorToggle = true;
     forceSoftwareMirror = true;
@@ -362,7 +395,10 @@ in {
         -o BatchMode=yes \
         -o ConnectTimeout=5 \
         xev \
-        wolf-stream-layout "$COUCH_KEYBOARD_LAYOUT" "''${runners[@]}"
+        wolf-stream-layout \
+          --presentation-scale "$COUCH_PRESENTATION_SCALE" \
+          "$COUCH_KEYBOARD_LAYOUT" \
+          "''${runners[@]}"
     '';
     browserStreamArguments = [
       "--absolute-mouse"

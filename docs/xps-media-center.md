@@ -114,15 +114,15 @@ cycles through:
 |---|---|
 | `adaptive` | Preserve one active output, with the largest connected display as fallback |
 | `all` | Enable every connected external display |
-| `dual-tvs` | Enable the two TV-class outputs and park the auxiliary display |
-| `primary-aux` | Enable the primary TV and auxiliary display |
-| `secondary-aux` | Enable the secondary TV and auxiliary display |
-| `solo-primary` | Use only the largest TV-class output |
-| `solo-secondary` | Use only the second TV-class output |
-| `solo-aux` | Use the auxiliary display, with a TV fallback |
+| `living-bedroom` | Enable the living-room and bedroom TVs and park the auxiliary display |
+| `living-aux` | Enable the living-room TV and auxiliary display |
+| `bedroom-aux` | Enable the bedroom TV and auxiliary display |
+| `living` | Use only the living-room TV |
+| `bedroom` | Use only the bedroom TV |
+| `aux` | Use the auxiliary display, with a TV fallback |
 
 The first active display receives workspaces 1–3 and the second receives 4–6.
-This compact assignment also applies to `primary-aux` and `secondary-aux`, with
+This compact assignment also applies to `living-aux` and `bedroom-aux`, with
 the auxiliary display placed directly beside the selected TV. The auxiliary
 display uses workspaces 7–9 only in the three-display layout, where both TV
 workspace blocks are already active. Solo and dual-TV mirror layouts expose

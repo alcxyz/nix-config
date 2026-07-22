@@ -241,6 +241,7 @@ in
         ;; grabbed by Kanata.
         linux-dev-names-exclude (
           "Keyboard passthrough"
+          "waynergy keyboard"
         )
       '';
     };

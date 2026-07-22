@@ -34,6 +34,7 @@
       "modules/nixos/common/distributed-build-client.nix"
       "modules/nixos/common/pkgsets.nix"
       "modules/nixos/common/server.nix"
+      "modules/nixos/profiles/nixbox-client/default.nix"
       "modules/home-manager/services/waynergy/default.nix"
       "modules/home-manager/services/dms/default.nix"
       "modules/nixos/common/ssh-keys.nix"
@@ -45,6 +46,7 @@
       "modules/shared/host-metadata.nix"
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
+      "packages/ffmpeg-v4l2-request/default.nix"
       "packages/nix-deploy/default.nix"
       "packages/nixbox-plymouth-theme/default.nix"
       "packages/nixbox-session-splash/default.nix"
@@ -87,9 +89,11 @@
       '';
 
       report-assets =
-        mkRepoCheck "report-assets-check" [
+        mkRepoCheck "report-assets-check"
+        [
           pkgs.html-tidy
-        ] ''
+        ]
+        ''
           tidy -qe docs/reports/*.html
         '';
 
@@ -105,6 +109,8 @@
         reportcraft = pkgs.reportcraft;
       }
       // lib.optionalAttrs pkgs.stdenv.isLinux {
+        ffmpeg-v4l2-request = pkgs.ffmpeg-v4l2-request;
+        moonlight-v4l2-request = pkgs.moonlight-v4l2-request;
         nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;
         nixbox-session-splash = pkgs.nixbox-session-splash;
       }

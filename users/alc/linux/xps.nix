@@ -93,6 +93,7 @@ in {
     enable = true;
     screenName = "xps";
     sourceKeyboard = "mac";
+    backend = "uinput";
     requireLanAddress = true;
     useFocusedMonitorGeometry = true;
   };

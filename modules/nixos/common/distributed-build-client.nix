@@ -4,6 +4,7 @@
   lib,
   ...
 }: let
+  cfg = config.alc.distributedBuildClient;
   buildKeyPath = "/root/.ssh/id_distributed_build";
   primaryBuilders = [
     {
@@ -18,20 +19,39 @@
     }
   ];
   buildMachines =
-    map (builder: {
+    map
+    (builder: {
       inherit (builder) hostName speedFactor maxJobs;
       sshUser = "root";
       sshKey = buildKeyPath;
-      systems = ["x86_64-linux" "aarch64-linux"];
-      supportedFeatures = ["big-parallel" "kvm"];
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      supportedFeatures = [
+        "big-parallel"
+        "kvm"
+      ];
       protocol = "ssh";
     })
-    (lib.filter (builder: builder.hostName != hostName) primaryBuilders);
+    (
+      lib.filter (
+        builder: builder.hostName != hostName && builtins.elem builder.hostName cfg.builders
+      )
+      primaryBuilders
+    );
 in {
-  options.alc.distributedBuildClient.enable =
-    lib.mkEnableOption "distributed builds through xev with xyz fallback";
+  options.alc.distributedBuildClient = {
+    enable = lib.mkEnableOption "distributed builds through the configured build hosts";
 
-  config = lib.mkIf config.alc.distributedBuildClient.enable {
+    builders = lib.mkOption {
+      type = lib.types.listOf (lib.types.enum (map (builder: builder.hostName) primaryBuilders));
+      default = map (builder: builder.hostName) primaryBuilders;
+      description = "Build hosts this client may use.";
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
     systemd.tmpfiles.rules = [
       "d /root/.ssh 0700 root root - -"
     ];
