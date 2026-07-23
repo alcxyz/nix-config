@@ -32,10 +32,8 @@ retain powered-off outputs outside the visible desktop so it can restore them
 without losing layout state; mapping absolute motion across that full bounding
 box makes the visible pointer excessively sensitive. On couch clients,
 Waynergy advertises the focused powered-on monitor rather than the full
-compositor output bounding box. Use Waynergy's `uinput` backend so motion,
-buttons, and keys traverse one libinput-compatible path. The couch pointer
-bridge maps Waynergy's absolute coordinates onto the focused powered-on output
-and keeps the XWayland cursor synchronized for Moonlight.
+compositor output bounding box. Bind the WLR virtual pointer to that exact
+output and restart the child when focused-monitor geometry changes.
 
 Treat the declarative `waynergy.service` as the sole client identity owner.
 Never leave an experimental transient Waynergy unit running beside it with the
@@ -95,12 +93,6 @@ compositors preserve inactive outputs outside the visible layout.
 If the Mac is unavailable on the physical LAN, Waynergy remains disconnected
 instead of selecting a VPN route.
 
-An output-bound WLR virtual pointer was evaluated on XPS. It simplified
-compositor output binding, but regressed click and drag behavior through the
-Moonlight/XWayland path compared with the previously qualified uinput
-generation. The WLR backend remains available as a module option, but is not
-the Nixbox default.
-
 ## Tracking
 
 - Issue #152 tracks the remaining XPS pointer refinement, XYZ end-to-end input
@@ -110,10 +102,7 @@ the Nixbox default.
 - Default-target startup across greetd/UWSM sessions: implemented after live
   validation showed `graphical-session.target` remained inactive on both XPS
   and XYZ.
-- Single-client ownership on XPS: implemented. A duplicate transient client was
-  identified from repeated server-side rejection and removed; the declarative
-  service then remained connected while concurrent Moonlight sessions kept
-  their original processes.
-- Nixbox uinput pointer path: restored and qualified against the last known-good
-  XPS Home Manager and NixOS generations. The full focused-output/XWayland
-  bridge is shared by XPS and compact Nixbox clients.
+- Focused-output WLR binding and single-client ownership on XPS: implemented.
+  A duplicate transient client was identified from repeated server-side
+  rejection and removed; the declarative service then remained connected while
+  concurrent Moonlight sessions kept their original processes.

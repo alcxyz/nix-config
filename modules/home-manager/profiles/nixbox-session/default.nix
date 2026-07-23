@@ -10,7 +10,7 @@
   services.waynergy = {
     enable = lib.mkDefault true;
     sourceKeyboard = lib.mkDefault "mac";
-    backend = lib.mkDefault "uinput";
+    backend = lib.mkDefault "wlr";
     requireLanAddress = lib.mkDefault true;
     useFocusedMonitorGeometry = lib.mkDefault true;
   };

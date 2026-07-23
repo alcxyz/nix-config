@@ -1549,35 +1549,12 @@
     '';
 
   pointerSyncSource = pkgs.writeText "couch-xwayland-pointer-bridge.py" ''
-    import ctypes
-    import fcntl
-    import glob
     import json
     import os
     import re
     import socket
-    import struct
     import subprocess
     import time
-
-
-    x11 = ctypes.CDLL(${builtins.toJSON "${pkgs.libx11}/lib/libX11.so.6"})
-    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
-    x11.XOpenDisplay.restype = ctypes.c_void_p
-    x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
-    x11.XDefaultRootWindow.restype = ctypes.c_ulong
-    x11.XQueryPointer.argtypes = [
-        ctypes.c_void_p,
-        ctypes.c_ulong,
-        ctypes.POINTER(ctypes.c_ulong),
-        ctypes.POINTER(ctypes.c_ulong),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_uint),
-    ]
-    x11.XQueryPointer.restype = ctypes.c_int
 
 
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
@@ -1589,19 +1566,6 @@
     xrandr_output = re.compile(
         r"^(\S+) connected(?: primary)? (\d+)x(\d+)\+(-?\d+)\+(-?\d+)"
     )
-    input_event = struct.Struct("llHHI")
-    ev_syn = 0
-    ev_abs = 3
-    syn_report = 0
-    abs_x = 0
-    abs_y = 1
-
-
-    def evio_get_abs(axis):
-        # _IOR('E', 0x40 + axis, struct input_absinfo)
-        return (2 << 30) | (24 << 16) | (ord("E") << 8) | (0x40 + axis)
-
-
     def hypr_request(command):
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -1683,67 +1647,6 @@
         return None
 
 
-    def focused_monitor():
-        try:
-            monitors = json.loads(hypr_request("j/monitors all") or "[]")
-        except json.JSONDecodeError:
-            return None
-
-        powered = [monitor for monitor in monitors if monitor.get("dpmsStatus", True)]
-        monitor = next(
-            (item for item in powered if item.get("focused")),
-            powered[0] if powered else None,
-        )
-        if monitor is None:
-            return None
-
-        scale = float(monitor.get("scale") or 1)
-        if scale <= 0:
-            return None
-        return (
-            int(monitor.get("x", 0)),
-            int(monitor.get("y", 0)),
-            round(int(monitor.get("width", 0)) / scale),
-            round(int(monitor.get("height", 0)) / scale),
-        )
-
-
-    def open_waynergy_mouse():
-        for name_path in glob.glob("/sys/class/input/event*/device/name"):
-            descriptor = None
-            try:
-                with open(name_path, encoding="utf-8") as name_file:
-                    if name_file.read().strip() != "waynergy mouse":
-                        continue
-                event_name = name_path.split("/")[-3]
-                descriptor = os.open(
-                    f"/dev/input/{event_name}", os.O_RDONLY | os.O_NONBLOCK
-                )
-                axes = []
-                for axis in (abs_x, abs_y):
-                    data = bytearray(24)
-                    fcntl.ioctl(descriptor, evio_get_abs(axis), data)
-                    _value, minimum, maximum, _fuzz, _flat, _resolution = (
-                        struct.unpack("iiiiii", data)
-                    )
-                    axes.append((minimum, maximum))
-                return descriptor, axes
-            except (FileNotFoundError, OSError, UnicodeDecodeError):
-                try:
-                    if descriptor is not None:
-                        os.close(descriptor)
-                except OSError:
-                    pass
-        return None, None
-
-
-    display = None
-    while not display:
-        display = x11.XOpenDisplay(b":0")
-        if not display:
-            time.sleep(0.5)
-
-    root = x11.XDefaultRootWindow(display)
     try:
         os.unlink(kdeconnect_socket_path)
     except FileNotFoundError:
@@ -1754,80 +1657,12 @@
     kdeconnect_socket.setblocking(False)
     mapping = []
     mapping_updated_at = 0.0
-    last_x11_position = None
-    waynergy_fd = None
-    waynergy_axes = None
-    waynergy_buffer = bytearray()
-    waynergy_position = {abs_x: None, abs_y: None}
-    waynergy_scan_at = 0.0
-    waynergy_monitor = None
-    waynergy_monitor_updated_at = 0.0
 
     while True:
         now = time.monotonic()
         if now - mapping_updated_at >= 2:
             mapping = monitor_mapping()
             mapping_updated_at = now
-
-        if waynergy_fd is None and now >= waynergy_scan_at:
-            waynergy_fd, waynergy_axes = open_waynergy_mouse()
-            waynergy_scan_at = now + 1
-
-        if now - waynergy_monitor_updated_at >= 0.5:
-            waynergy_monitor = focused_monitor()
-            waynergy_monitor_updated_at = now
-
-        if waynergy_fd is not None:
-            try:
-                while True:
-                    chunk = os.read(waynergy_fd, input_event.size * 64)
-                    if not chunk:
-                        raise OSError("Waynergy input device disappeared")
-                    waynergy_buffer.extend(chunk)
-            except BlockingIOError:
-                pass
-            except OSError:
-                os.close(waynergy_fd)
-                waynergy_fd = None
-                waynergy_axes = None
-                waynergy_buffer.clear()
-                waynergy_scan_at = now + 0.25
-
-            while len(waynergy_buffer) >= input_event.size:
-                event = bytes(waynergy_buffer[: input_event.size])
-                del waynergy_buffer[: input_event.size]
-                _seconds, _microseconds, event_type, code, value = (
-                    input_event.unpack(event)
-                )
-                if event_type == ev_abs and code in waynergy_position:
-                    waynergy_position[code] = value
-                elif event_type == ev_syn and code == syn_report:
-                    x_value = waynergy_position[abs_x]
-                    y_value = waynergy_position[abs_y]
-                    if (
-                        x_value is not None
-                        and y_value is not None
-                        and waynergy_axes is not None
-                        and waynergy_monitor is not None
-                    ):
-                        monitor_x, monitor_y, monitor_width, monitor_height = (
-                            waynergy_monitor
-                        )
-                        (x_min, x_max), (y_min, y_max) = waynergy_axes
-                        if x_max > x_min and y_max > y_min:
-                            target_x = monitor_x + round(
-                                (x_value - x_min)
-                                * max(monitor_width - 1, 0)
-                                / (x_max - x_min)
-                            )
-                            target_y = monitor_y + round(
-                                (y_value - y_min)
-                                * max(monitor_height - 1, 0)
-                                / (y_max - y_min)
-                            )
-                            hypr_request(
-                                f"dispatch movecursor {target_x} {target_y}"
-                            )
 
         while True:
             try:
@@ -1860,46 +1695,6 @@
             else:
                 continue
             hypr_request(f"dispatch movecursor {target[0]} {target[1]}")
-
-        root_return = ctypes.c_ulong()
-        child_return = ctypes.c_ulong()
-        root_x = ctypes.c_int()
-        root_y = ctypes.c_int()
-        window_x = ctypes.c_int()
-        window_y = ctypes.c_int()
-        mask = ctypes.c_uint()
-
-        if x11.XQueryPointer(
-            display,
-            root,
-            ctypes.byref(root_return),
-            ctypes.byref(child_return),
-            ctypes.byref(root_x),
-            ctypes.byref(root_y),
-            ctypes.byref(window_x),
-            ctypes.byref(window_y),
-            ctypes.byref(mask),
-        ):
-            x11_position = (root_x.value, root_y.value)
-            if x11_position != last_x11_position:
-                target = translate(*x11_position, mapping)
-                if target is not None:
-                    try:
-                        current = json.loads(hypr_request("j/cursorpos") or "{}")
-                        current_position = (round(current["x"]), round(current["y"]))
-                    except (json.JSONDecodeError, KeyError, TypeError):
-                        current_position = target
-
-                    # Native libinput and Wayland virtual-pointer events have
-                    # already moved Hyprland by the time XWayland observes
-                    # them. Only bridge X11-only movement such as KDE Connect
-                    # XTest, avoiding feedback against physical/Synergy input.
-                    if max(
-                        abs(current_position[0] - target[0]),
-                        abs(current_position[1] - target[1]),
-                    ) > 1:
-                        hypr_request(f"dispatch movecursor {target[0]} {target[1]}")
-                last_x11_position = x11_position
 
         time.sleep(1 / 60)
   '';
