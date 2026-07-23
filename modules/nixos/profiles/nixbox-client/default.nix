@@ -162,6 +162,9 @@ in {
       protectedBrowserPackage = null;
       browserScaleFactor = cfg.presentationScale;
       browserPresentationScale = cfg.presentationScale;
+      cursorThemePackage = pkgs.adwaita-icon-theme;
+      cursorTheme = "Adwaita";
+      cursorSize = 48;
       sessionSplashCommand = lib.mkIf cfg.enablePresentation (lib.getExe pkgs.nixbox-session-splash);
       relaunchOnExit = false;
       moonlightPlatform = cfg.moonlightPlatform;

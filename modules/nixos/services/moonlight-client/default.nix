@@ -1297,23 +1297,24 @@
     }
   '';
 
-  kdeConnectPointerShim = pkgs.runCommandCC "kdeconnect-hypr-pointer-shim" {
-    nativeBuildInputs = [pkgs.pkg-config];
-    buildInputs = [pkgs.libxcb];
-  } ''
-    install -d "$out/lib"
-    "$CC" \
-      -shared \
-      -fPIC \
-      -Wall \
-      -Wextra \
-      -Werror \
-      $(${pkgs.pkg-config}/bin/pkg-config --cflags xcb) \
-      -o "$out/lib/libkdeconnect-hypr-pointer-shim.so" \
-      ${kdeConnectPointerShimSource} \
-      $(${pkgs.pkg-config}/bin/pkg-config --libs xcb) \
-      -ldl
-  '';
+  kdeConnectPointerShim =
+    pkgs.runCommandCC "kdeconnect-hypr-pointer-shim" {
+      nativeBuildInputs = [pkgs.pkg-config];
+      buildInputs = [pkgs.libxcb];
+    } ''
+      install -d "$out/lib"
+      "$CC" \
+        -shared \
+        -fPIC \
+        -Wall \
+        -Wextra \
+        -Werror \
+        $(${pkgs.pkg-config}/bin/pkg-config --cflags xcb) \
+        -o "$out/lib/libkdeconnect-hypr-pointer-shim.so" \
+        ${kdeConnectPointerShimSource} \
+        $(${pkgs.pkg-config}/bin/pkg-config --libs xcb) \
+        -ldl
+    '';
 
   pointerSyncSource = pkgs.writeText "couch-xwayland-pointer-bridge.py" ''
     import ctypes
@@ -1940,7 +1941,7 @@
 
   displayLayoutControl = pkgs.writeShellApplication {
     name = "couch-display-layout";
-      runtimeInputs = [
+    runtimeInputs = [
       audioOutputControl
       pkgs.coreutils
       pkgs.hyprland
@@ -3080,6 +3081,10 @@
     env = QT_QPA_PLATFORM,wayland
     env = QT_QPA_PLATFORMTHEME,gtk3
     env = QT_QPA_PLATFORMTHEME_QT6,gtk3
+    ${lib.optionalString (cfg.cursorThemePackage != null) ''
+      env = XCURSOR_THEME,${cfg.cursorTheme}
+      env = XCURSOR_SIZE,${toString cfg.cursorSize}
+    ''}
 
     exec-once = ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
     ${lib.optionalString dynamicExternalLayoutEnabled "exec-once = ${lib.getExe autoLayoutExternalOutputs}"}
@@ -3613,6 +3618,24 @@ in {
       description = "XKB options used by the dedicated couch session.";
     };
 
+    cursorThemePackage = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = null;
+      description = "Optional XCursor theme package installed for the dedicated couch session.";
+    };
+
+    cursorTheme = lib.mkOption {
+      type = lib.types.str;
+      default = "default";
+      description = "XCursor theme name used by the dedicated couch session.";
+    };
+
+    cursorSize = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 24;
+      description = "Cursor size in pixels used by the dedicated couch session.";
+    };
+
     browserPackage = lib.mkOption {
       type = lib.types.package;
       default = pkgs.helium;
@@ -3964,6 +3987,7 @@ in {
       browserSelectorPair
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
+      ++ lib.optional (cfg.cursorThemePackage != null) cfg.cursorThemePackage
       ++ lib.optionals cfg.enableKdeConnect [
         pointerSync
         (lib.hiPrio kdeConnectDbusServiceOverride)

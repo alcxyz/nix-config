@@ -92,7 +92,7 @@ in {
     enable = true;
     user = username;
     enableBootSplash = false;
-    outputMode = "2560x1440@60";
+    outputMode = "1920x1080@60";
   };
 
   services.moonlight-client = {
@@ -102,7 +102,7 @@ in {
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
     streamArguments = [
-      "--1440"
+      "--1080"
       "--fps"
       "60"
       "--bitrate"
