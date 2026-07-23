@@ -149,10 +149,11 @@
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
   browserStreamEnabled = cfg.browserStreamHost != null && cfg.browserStreamApplication != null;
   browserSelectorEnabled = browserStreamEnabled && cfg.browserStreamSelectorApplication != null;
+  directDrmStreamEnabled = cfg.enableDirectDrmStream && directStreamEnabled;
   directDrmBrowserEnabled = cfg.enableDirectDrmBrowserStreams && browserStreamEnabled;
   sessionModeSwitchEnabled =
     cfg.autoLoginUser != null
-    && (cfg.desktopSessionCommand != null || directDrmBrowserEnabled);
+    && (cfg.desktopSessionCommand != null || directDrmStreamEnabled || directDrmBrowserEnabled);
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
     if dynamicExternalLayoutEnabled
@@ -224,6 +225,14 @@
         "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
         defaultMoonlightExecutable
       ];
+  directDrmMoonlightInvocation = lib.optionalString directDrmStreamEnabled (
+    mkMoonlightInvocation defaultMoonlightExecutable [
+      "QT_QPA_PLATFORM=eglfs"
+    ]
+    cfg.directDrmStreamArguments
+    cfg.streamHost
+    cfg.streamApplication
+  );
   browserMoonlightInvocation = lib.optionalString browserStreamEnabled (
     mkMoonlightInvocation defaultMoonlightExecutable [
       "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
@@ -446,7 +455,9 @@
       # device even while an external keyboard is the one being used.
       for attempt in $(seq 1 20); do
         devices="$(hyprctl -j devices 2>/dev/null || true)"
-        if [ -n "$devices" ]; then
+        if printf '%s' "$devices" \
+          | jq -e 'type == "object" and (.keyboards | type == "array")' \
+            >/dev/null 2>&1; then
           while IFS= read -r keyboard_name; do
             keyboard_name="$(printf '%s' "$keyboard_name" | tr '[:upper:]' '[:lower:]')"
             case "$keyboard_name" in
@@ -1027,7 +1038,67 @@
     browserSelectorMoonlightInvocation
     3
     cfg.browserStreamSelectorApplication;
-  mkDirectDrmBrowserSession = name: endpointSetup: invocation: application:
+  directDrmStreamHostPrepare = pkgs.writeShellApplication {
+    name = "moonlight-direct-drm-stream-host-prepare";
+    runtimeInputs = [pkgs.netcat-openbsd];
+    text = ''
+      stream_hosts=(${lib.concatMapStringsSep " " lib.escapeShellArg streamReadinessHosts})
+
+      find_ready_host() {
+        local host
+        for host in "''${stream_hosts[@]}"; do
+          if nc -z -w 1 "$host" ${toString cfg.streamReadinessPort} \
+            >/dev/null 2>&1; then
+            printf '%s\n' "$host"
+            return 0
+          fi
+        done
+        return 1
+      }
+
+      ${lib.optionalString (cfg.streamHostStartCommand != null || streamReadinessHosts != []) ''
+        ready_host="$(find_ready_host || true)"
+      ''}
+
+      ${lib.optionalString (cfg.streamHostStartCommand != null) ''
+        if [ -z "$ready_host" ]; then
+          start_target=""
+          for host in "''${stream_hosts[@]}"; do
+            if nc -z -w 1 "$host" ${toString cfg.streamHostControlPort} \
+              >/dev/null 2>&1; then
+              start_target="$host"
+              break
+            fi
+          done
+          if [ -z "$start_target" ] && [ "''${#stream_hosts[@]}" -gt 0 ]; then
+            start_target="''${stream_hosts[0]}"
+          fi
+          export COUCH_STREAM_START_TARGET="$start_target"
+          ${cfg.streamHostStartCommand}
+        fi
+      ''}
+
+      ${lib.optionalString (streamReadinessHosts != []) ''
+        ready_host=""
+        for ((attempt = 0; attempt < ${toString cfg.streamStartupTimeout}; attempt++)); do
+          ready_host="$(find_ready_host || true)"
+          if [ -n "$ready_host" ]; then
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "stream host did not become ready" >&2
+        exit 1
+      ''}
+    '';
+  };
+  mkDirectDrmSession = {
+    name,
+    endpointSetup,
+    invocation,
+    application ? null,
+    prepareCommand ? null,
+  }:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
@@ -1057,14 +1128,18 @@
         trap 'return_to_session 0' HUP INT TERM
         trap 'return_to_session $?' EXIT
 
-        # These shells belong to Hyprland and cannot render while EGLFS owns
-        # the display. Keep the persistent user services alive, but stop their
-        # compositor-bound processes until the normal couch session returns.
+        # These processes depend on Hyprland/XWayland and cannot operate while
+        # EGLFS owns the display. Hyprland's exec-once hooks restore them when
+        # the normal couch session returns.
         systemctl --user stop \
           couch-dms.service \
           couch-merged-dms.service \
+          kdeconnect.service \
+          waynergy.service \
+          xdg-desktop-portal-gtk.service \
           >/dev/null 2>&1 || true
 
+        ${lib.optionalString (prepareCommand != null) "${prepareCommand}\n"}
         ${lib.getExe endpointSetup}
         ${invocation} &
         moonlight_pid=$!
@@ -1099,14 +1174,26 @@
       '';
     };
   directDrmBrowserSession =
-    mkDirectDrmBrowserSession "moonlight-direct-drm-browser-session" moonlightEndpointSetup
-    directDrmBrowserMoonlightInvocation
-    cfg.browserStreamApplication;
+    mkDirectDrmSession {
+      name = "moonlight-direct-drm-browser-session";
+      endpointSetup = moonlightEndpointSetup;
+      invocation = directDrmBrowserMoonlightInvocation;
+      application = cfg.browserStreamApplication;
+    };
   directDrmBrowserSelectorSession =
-    mkDirectDrmBrowserSession "moonlight-direct-drm-browser-selector-session"
-    browserSelectorEndpointSetup
-    directDrmBrowserSelectorMoonlightInvocation
-    cfg.browserStreamSelectorApplication;
+    mkDirectDrmSession {
+      name = "moonlight-direct-drm-browser-selector-session";
+      endpointSetup = browserSelectorEndpointSetup;
+      invocation = directDrmBrowserSelectorMoonlightInvocation;
+      application = cfg.browserStreamSelectorApplication;
+    };
+  directDrmStreamSession =
+    mkDirectDrmSession {
+      name = "moonlight-direct-drm-stream-session";
+      endpointSetup = moonlightEndpointSetup;
+      invocation = directDrmMoonlightInvocation;
+      prepareCommand = lib.getExe directDrmStreamHostPrepare;
+    };
 
   couchStreamControl = pkgs.writeShellApplication {
     name = "couch-stream-control";
@@ -3058,7 +3145,9 @@
       current_mode="''${current%%:*}"
       supported_modes="couch${lib.optionalString (cfg.desktopSessionCommand != null) "|desktop"}${
         lib.optionalString cfg.enableMergedProfile "|merged"
-      }${lib.optionalString directDrmBrowserEnabled "|direct-browser"}${
+      }${lib.optionalString directDrmStreamEnabled "|direct-stream"}${
+        lib.optionalString directDrmBrowserEnabled "|direct-browser"
+      }${
         lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) "|direct-private"
       }"
 
@@ -3078,8 +3167,12 @@
           printf '%s\n' "$1" > "$mode_file"
           printf 'Switching Nixbox to %s mode\n' "$1"
           ;;
-        ${lib.optionalString directDrmBrowserEnabled ''
-        direct-browser${lib.optionalString browserSelectorEnabled " | direct-private"})
+        ${lib.optionalString (directDrmStreamEnabled || directDrmBrowserEnabled) ''
+        ${lib.optionalString directDrmStreamEnabled "direct-stream"}${
+          lib.optionalString (directDrmStreamEnabled && directDrmBrowserEnabled) " | "
+        }${lib.optionalString directDrmBrowserEnabled "direct-browser"}${
+          lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) " | direct-private"
+        })
           case "$current_mode" in
             couch${lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"}${
           lib.optionalString cfg.enableMergedProfile " | merged"
@@ -3188,6 +3281,19 @@
       ''}
     ''}
 
+    ${lib.optionalString directDrmStreamEnabled ''
+      cat > "$out/share/applications/couch-direct-drm-stream.desktop" <<EOF
+      [Desktop Entry]
+      Name=Steam Stream (Direct display)
+      Comment=Stream Steam with Moonlight owning the display
+      Exec=${lib.getExe sessionMode} direct-stream
+      Icon=steam
+      Terminal=false
+      Type=Application
+      Categories=Game;
+      EOF
+    ''}
+
     ${lib.optionalString cfg.enableControllerShortcuts ''
       cat > "$out/share/applications/couch-steam-stream.desktop" <<EOF
       [Desktop Entry]
@@ -3268,6 +3374,9 @@
     ''}
 
     exec-once = ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
+    ${lib.optionalString cfg.enableKdeConnect "exec-once = ${pkgs.systemd}/bin/systemctl --user restart kdeconnect.service"}
+    exec-once = ${pkgs.systemd}/bin/systemctl --user start waynergy.service
+    exec-once = ${pkgs.systemd}/bin/systemctl --user start xdg-desktop-portal-gtk.service
     ${lib.optionalString dynamicExternalLayoutEnabled "exec-once = ${lib.getExe autoLayoutExternalOutputs}"}
     ${lib.optionalString (
       cfg.sessionSplashCommand != null
@@ -3464,6 +3573,17 @@
           exec ${sessionCommand}
           ;;
       ''}
+        ${lib.optionalString directDrmStreamEnabled ''
+        direct-stream)
+          boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
+          if [ "$mode_token" = "$boot_id" ]; then
+            exec ${lib.getExe directDrmStreamSession}
+          fi
+          printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
+            > ${lib.escapeShellArg modeStateFile}
+          exec ${sessionCommand}
+          ;;
+      ''}
         ${lib.optionalString directDrmBrowserEnabled ''
         direct-browser)
           boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
@@ -3635,6 +3755,22 @@ in {
         EGLFS instead of rendering through Hyprland. Exiting the stream
         automatically returns to the previous graphical session mode.
       '';
+    };
+
+    enableDirectDrmStream = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Offer a one-shot primary Moonlight stream where Moonlight owns DRM
+        through EGLFS instead of rendering through Hyprland. Exiting the
+        stream automatically returns to the previous graphical session mode.
+      '';
+    };
+
+    directDrmStreamArguments = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Additional Moonlight arguments used only by the direct-DRM primary stream.";
     };
 
     browserStreamLocalAddress = lib.mkOption {
@@ -4251,7 +4387,6 @@ in {
     # XWayland to the session-local Hyprland bridge.
     systemd.user.services.kdeconnect = lib.mkIf cfg.enableKdeConnect {
       description = "KDE Connect with Hyprland pointer integration";
-      wantedBy = ["default.target"];
       environment = {
         DISPLAY = ":0";
         QT_QPA_PLATFORM = "xcb";
@@ -4390,10 +4525,10 @@ in {
         sessionModeSwitchEnabled
       ) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
       ++ lib.optional (
-        directDrmBrowserEnabled && cfg.autoLoginUser != null
+        (directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null
       ) "f ${directDrmReturnModeFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
       ++ lib.optional (
-        directDrmBrowserEnabled && cfg.autoLoginUser != null
+        (directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null
       ) "f ${directDrmKeyboardLayoutFile} 0644 ${cfg.autoLoginUser} root - ${
         builtins.head (lib.splitString "," cfg.keyboardLayouts)
       }"
@@ -4442,6 +4577,14 @@ in {
       {
         assertion = cfg.desktopSessionCommand == null || cfg.autoLoginUser != null;
         message = "services.moonlight-client.desktopSessionCommand requires autoLoginUser";
+      }
+      {
+        assertion = !cfg.enableDirectDrmStream || cfg.autoLoginUser != null;
+        message = "services.moonlight-client.enableDirectDrmStream requires autoLoginUser";
+      }
+      {
+        assertion = !cfg.enableDirectDrmStream || directStreamEnabled;
+        message = "services.moonlight-client.enableDirectDrmStream requires a configured primary stream";
       }
       {
         assertion = !cfg.enableDirectDrmBrowserStreams || cfg.autoLoginUser != null;

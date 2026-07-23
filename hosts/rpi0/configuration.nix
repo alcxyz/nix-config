@@ -36,6 +36,10 @@ in {
   boot.loader.generic-extlinux-compatible.enable = true;
   boot.loader.generic-extlinux-compatible.configurationLimit = 2;
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  # Direct DRM sessions bypass Hyprland's monitor rule. Pin the single TV
+  # connector to its proven EDID mode so EGLFS cannot select the preferred
+  # 4K30 timing for a 1080p stream.
+  boot.kernelParams = ["video=HDMI-A-1:1920x1080@60e"];
 
   nix.settings.require-sigs = false;
   # The embedded client only substitutes or receives builds from xyz. Failing
@@ -98,6 +102,10 @@ in {
   services.moonlight-client = {
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
+    enableDirectDrmStream = true;
+    # SteamHeadless renders at 1440p while the direct DRM client scales it onto
+    # the RPi's fixed 1080p60 TV output.
+    directDrmStreamArguments = ["--1440"];
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
     streamArguments = [
@@ -125,6 +133,16 @@ in {
     browserStreamApplication = "Helium";
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
+    # Browser runners are resumable across clients and are standardized on a
+    # 1440p desktop. Keep that stream coordinate space even on the 1080p TV;
+    # Moonlight scales presentation locally while absolute pointer input still
+    # reaches every remote pixel. Steam retains the 1080p base arguments.
+    browserStreamArguments = [
+      "--1440"
+      "--absolute-mouse"
+      "--capture-system-keys"
+      "never"
+    ];
     browserStreamLayoutCommand = ''
       case "$COUCH_STREAM_APPLICATION" in
         Helium) runners=(WolfHelium) ;;

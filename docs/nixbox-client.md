@@ -41,6 +41,27 @@ the proven XTest-to-Hyprland pointer bridge. Hardware video decoding remains a
 property of the selected Moonlight package and is independent of that Qt
 presentation backend.
 
+## Direct-display streams
+
+Small clients can opt into one-shot direct-display modes for Steam and remote
+browsers. In these modes Moonlight uses EGLFS/DRM and owns the display instead
+of being composited by Hyprland. This materially lowers the client rendering
+overhead while preserving server-side concurrency: another client can remain
+connected to the same stream host, and independent stream hosts remain
+unaffected.
+
+The stream coordinate space does not have to match the physical output. A
+compact client may request a 2560×1440 stream while its kernel framebuffer
+remains fixed at 1920×1080 at 60 Hz. Moonlight scales presentation locally;
+absolute pointer input still covers the complete remote desktop because its
+coordinates follow the requested stream resolution.
+
+Direct-display mode deliberately suspends compositor-bound DMS, KDE Connect,
+and Waynergy processes. Physical keyboard, mouse, and controller input continue
+to reach Moonlight directly. Exiting the stream restores the previous session
+mode and Hyprland starts the suspended user services again. Use the normal
+Hyprland/XWayland stream path when phone or Synergy input is required.
+
 ## Recovery behavior
 
 The compositor falls back to 1080p when the preferred mode cannot be entered.
@@ -55,3 +76,7 @@ experiments. Set `enableBootSplash = false` on compact hosts that should retain
 the normal console boot while keeping the compositor-owned transitions. A
 client-specific early-display override must not be generalized into this
 profile.
+
+A normal direct-display exit returns immediately. If Moonlight becomes
+unresponsive, the session wrapper still restores the saved mode; greetd's
+bounded service-stop fallback remains the final recovery boundary.
