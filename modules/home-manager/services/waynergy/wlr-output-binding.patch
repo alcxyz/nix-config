@@ -1,0 +1,49 @@
+diff --git a/src/wayland.c b/src/wayland.c
+--- a/src/wayland.c
++++ b/src/wayland.c
+@@ -433,7 +433,8 @@ static void handle_global(void *data, struct wl_registry *registry, uint32_t nam
+ 		ctx->seat = wl_registry_bind(registry, name, &wl_seat_interface, version);
+ 		wl_seat_add_listener(ctx->seat, &seat_listener, ctx);
+ 	} else if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
+-		ctx->pointer_manager = wl_registry_bind(registry, name, &zwlr_virtual_pointer_manager_v1_interface, 1);
++		ctx->pointer_manager = wl_registry_bind(registry, name, &zwlr_virtual_pointer_manager_v1_interface,
++			version >= 2 ? 2 : 1);
+ 	} else if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
+ 		ctx->keyboard_manager = wl_registry_bind(registry, name, &zwp_virtual_keyboard_manager_v1_interface, 1);
+ 	} else if (strcmp(interface, org_kde_kwin_fake_input_interface.name) == 0) {
+diff --git a/src/wl_input_wlr.c b/src/wl_input_wlr.c
+--- a/src/wl_input_wlr.c
++++ b/src/wl_input_wlr.c
+@@ -88,11 +88,31 @@ static void mouse_wheel(struct wlInput *input, signed short dx, signed short dy)
+ bool wlInputInitWlr(struct wlContext *ctx)
+ {
+ 	int wheel_mult_default;
++	const char *output_name;
++	struct wl_output *mapped_output = NULL;
+ 	struct state_wlr *wlr;
+ 	if (!(ctx->pointer_manager && ctx->keyboard_manager)) {
+ 		return false;
+ 	}
+ 	wlr = xmalloc(sizeof(*wlr));
+-	wlr->pointer = zwlr_virtual_pointer_manager_v1_create_virtual_pointer(ctx->pointer_manager, ctx->seat);
++	output_name = getenv("WAYNERGY_OUTPUT");
++	if (output_name && *output_name) {
++		for (struct wlOutput *output = ctx->outputs; output; output = output->next) {
++			if (output->name && !strcmp(output->name, output_name)) {
++				mapped_output = output->wl_output;
++				break;
++			}
++		}
++	}
++	if (mapped_output &&
++	    zwlr_virtual_pointer_manager_v1_get_version(ctx->pointer_manager) >= 2) {
++		logInfo("Mapping virtual pointer to output %s", output_name);
++		wlr->pointer =
++			zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
++				ctx->pointer_manager, ctx->seat, mapped_output);
++	} else {
++		wlr->pointer = zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
++			ctx->pointer_manager, ctx->seat);
++	}
+ 
+ 	wlr->keyboard = zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(ctx->keyboard_manager, ctx->seat);

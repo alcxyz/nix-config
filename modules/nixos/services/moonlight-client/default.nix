@@ -149,10 +149,15 @@
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
   browserStreamEnabled = cfg.browserStreamHost != null && cfg.browserStreamApplication != null;
   browserSelectorEnabled = browserStreamEnabled && cfg.browserStreamSelectorApplication != null;
+  browserSelectorHost =
+    if cfg.browserStreamSelectorHost == null
+    then cfg.browserStreamHost
+    else cfg.browserStreamSelectorHost;
   directDrmStreamEnabled = cfg.enableDirectDrmStream && directStreamEnabled;
   directDrmBrowserEnabled = cfg.enableDirectDrmBrowserStreams && browserStreamEnabled;
   sessionModeSwitchEnabled =
-    cfg.autoLoginUser != null
+    cfg.autoLoginUser
+    != null
     && (cfg.desktopSessionCommand != null || directDrmStreamEnabled || directDrmBrowserEnabled);
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
@@ -248,7 +253,7 @@
       "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
     ]
     cfg.browserStreamArguments
-    cfg.browserStreamHost
+    browserSelectorHost
     cfg.browserStreamSelectorApplication
   );
   directDrmBrowserMoonlightInvocation = lib.optionalString directDrmBrowserEnabled (
@@ -262,14 +267,15 @@
     cfg.browserStreamApplication
   );
   directDrmBrowserSelectorMoonlightInvocation =
-    lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) (
+    lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled)
+    (
       mkMoonlightInvocation selectorMoonlightExecutable [
         "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
         "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
         "QT_QPA_PLATFORM=eglfs"
       ]
       cfg.browserStreamArguments
-      cfg.browserStreamHost
+      browserSelectorHost
       cfg.browserStreamSelectorApplication
     );
   superviseMoonlightWindow = targetWorkspace: ''
@@ -382,7 +388,7 @@
       exec python3 ${./reconcile-endpoints.py} "$@"
     '';
   };
-  mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser: let
+  mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser: selector: let
     reconciliationEnabled =
       (reconcileStream && streamEndpointPolicyEnabled)
       || (reconcileBrowser && browserStreamEndpointPolicyEnabled);
@@ -408,16 +414,29 @@
         ${lib.optionalString (reconcileBrowser && browserStreamEndpointPolicyEnabled) ''
           ${lib.getExe reconcileMoonlightEndpoints} \
             "$config_file" \
-            ${lib.escapeShellArg cfg.browserStreamHost} \
+            ${lib.escapeShellArg (
+            if selector
+            then browserSelectorHost
+            else cfg.browserStreamHost
+          )} \
             ${lib.escapeShellArg cfg.browserStreamEndpointMode} \
             ${lib.escapeShellArg cfg.browserStreamLocalAddress} \
-            ${lib.escapeShellArg cfg.browserStreamRemoteAddress}
+            ${lib.escapeShellArg cfg.browserStreamRemoteAddress} ${lib.optionalString selector ''
+            ${
+              lib.escapeShellArg (
+                if cfg.browserStreamSelectorPort == null
+                then ""
+                else toString cfg.browserStreamSelectorPort
+              )
+            } \
+            ${lib.escapeShellArg cfg.browserStreamHost}
+          ''}
         ''}
       '';
     };
-  moonlightEndpointSetup = mkMoonlightEndpointSetup "default" null true true;
+  moonlightEndpointSetup = mkMoonlightEndpointSetup "default" null true true false;
   browserSelectorEndpointSetup =
-    mkMoonlightEndpointSetup "browser-selector" cfg.browserStreamSelectorProfileDirectory false
+    mkMoonlightEndpointSetup "browser-selector" cfg.browserStreamSelectorProfileDirectory false true
     true;
   browserSelectorPair = pkgs.writeShellApplication {
     name = "couch-moonlight-pair-private";
@@ -431,8 +450,12 @@
         ${selectorMoonlightExecutable} pair --pin "$1" ${
         lib.escapeShellArg (
           if cfg.browserStreamLocalAddress == null
-          then cfg.browserStreamHost
-          else cfg.browserStreamLocalAddress
+          then browserSelectorHost
+          else
+            cfg.browserStreamLocalAddress
+            + lib.optionalString (
+              cfg.browserStreamSelectorPort != null
+            ) ":${toString cfg.browserStreamSelectorPort}"
         )
       }
     '';
@@ -1113,9 +1136,9 @@
             || true
         )"
         case "$return_mode" in
-          couch${lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"}${
-          lib.optionalString cfg.enableMergedProfile " | merged"
-        }) ;;
+          couch${
+          lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
+        }${lib.optionalString cfg.enableMergedProfile " | merged"}) ;;
           *) return_mode=${lib.escapeShellArg cfg.defaultSessionMode} ;;
         esac
 
@@ -1173,27 +1196,24 @@
         return_to_session "$?"
       '';
     };
-  directDrmBrowserSession =
-    mkDirectDrmSession {
-      name = "moonlight-direct-drm-browser-session";
-      endpointSetup = moonlightEndpointSetup;
-      invocation = directDrmBrowserMoonlightInvocation;
-      application = cfg.browserStreamApplication;
-    };
-  directDrmBrowserSelectorSession =
-    mkDirectDrmSession {
-      name = "moonlight-direct-drm-browser-selector-session";
-      endpointSetup = browserSelectorEndpointSetup;
-      invocation = directDrmBrowserSelectorMoonlightInvocation;
-      application = cfg.browserStreamSelectorApplication;
-    };
-  directDrmStreamSession =
-    mkDirectDrmSession {
-      name = "moonlight-direct-drm-stream-session";
-      endpointSetup = moonlightEndpointSetup;
-      invocation = directDrmMoonlightInvocation;
-      prepareCommand = lib.getExe directDrmStreamHostPrepare;
-    };
+  directDrmBrowserSession = mkDirectDrmSession {
+    name = "moonlight-direct-drm-browser-session";
+    endpointSetup = moonlightEndpointSetup;
+    invocation = directDrmBrowserMoonlightInvocation;
+    application = cfg.browserStreamApplication;
+  };
+  directDrmBrowserSelectorSession = mkDirectDrmSession {
+    name = "moonlight-direct-drm-browser-selector-session";
+    endpointSetup = browserSelectorEndpointSetup;
+    invocation = directDrmBrowserSelectorMoonlightInvocation;
+    application = cfg.browserStreamSelectorApplication;
+  };
+  directDrmStreamSession = mkDirectDrmSession {
+    name = "moonlight-direct-drm-stream-session";
+    endpointSetup = moonlightEndpointSetup;
+    invocation = directDrmMoonlightInvocation;
+    prepareCommand = lib.getExe directDrmStreamHostPrepare;
+  };
 
   couchStreamControl = pkgs.writeShellApplication {
     name = "couch-stream-control";
@@ -1508,10 +1528,12 @@
   '';
 
   kdeConnectPointerShim =
-    pkgs.runCommandCC "kdeconnect-hypr-pointer-shim" {
+    pkgs.runCommandCC "kdeconnect-hypr-pointer-shim"
+    {
       nativeBuildInputs = [pkgs.pkg-config];
       buildInputs = [pkgs.libxcb];
-    } ''
+    }
+    ''
       install -d "$out/lib"
       "$CC" \
         -shared \
@@ -1527,35 +1549,12 @@
     '';
 
   pointerSyncSource = pkgs.writeText "couch-xwayland-pointer-bridge.py" ''
-    import ctypes
-    import fcntl
-    import glob
     import json
     import os
     import re
     import socket
-    import struct
     import subprocess
     import time
-
-
-    x11 = ctypes.CDLL(${builtins.toJSON "${pkgs.libx11}/lib/libX11.so.6"})
-    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
-    x11.XOpenDisplay.restype = ctypes.c_void_p
-    x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
-    x11.XDefaultRootWindow.restype = ctypes.c_ulong
-    x11.XQueryPointer.argtypes = [
-        ctypes.c_void_p,
-        ctypes.c_ulong,
-        ctypes.POINTER(ctypes.c_ulong),
-        ctypes.POINTER(ctypes.c_ulong),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_uint),
-    ]
-    x11.XQueryPointer.restype = ctypes.c_int
 
 
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
@@ -1567,19 +1566,6 @@
     xrandr_output = re.compile(
         r"^(\S+) connected(?: primary)? (\d+)x(\d+)\+(-?\d+)\+(-?\d+)"
     )
-    input_event = struct.Struct("llHHI")
-    ev_syn = 0
-    ev_abs = 3
-    syn_report = 0
-    abs_x = 0
-    abs_y = 1
-
-
-    def evio_get_abs(axis):
-        # _IOR('E', 0x40 + axis, struct input_absinfo)
-        return (2 << 30) | (24 << 16) | (ord("E") << 8) | (0x40 + axis)
-
-
     def hypr_request(command):
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -1661,67 +1647,6 @@
         return None
 
 
-    def focused_monitor():
-        try:
-            monitors = json.loads(hypr_request("j/monitors all") or "[]")
-        except json.JSONDecodeError:
-            return None
-
-        powered = [monitor for monitor in monitors if monitor.get("dpmsStatus", True)]
-        monitor = next(
-            (item for item in powered if item.get("focused")),
-            powered[0] if powered else None,
-        )
-        if monitor is None:
-            return None
-
-        scale = float(monitor.get("scale") or 1)
-        if scale <= 0:
-            return None
-        return (
-            int(monitor.get("x", 0)),
-            int(monitor.get("y", 0)),
-            round(int(monitor.get("width", 0)) / scale),
-            round(int(monitor.get("height", 0)) / scale),
-        )
-
-
-    def open_waynergy_mouse():
-        for name_path in glob.glob("/sys/class/input/event*/device/name"):
-            descriptor = None
-            try:
-                with open(name_path, encoding="utf-8") as name_file:
-                    if name_file.read().strip() != "waynergy mouse":
-                        continue
-                event_name = name_path.split("/")[-3]
-                descriptor = os.open(
-                    f"/dev/input/{event_name}", os.O_RDONLY | os.O_NONBLOCK
-                )
-                axes = []
-                for axis in (abs_x, abs_y):
-                    data = bytearray(24)
-                    fcntl.ioctl(descriptor, evio_get_abs(axis), data)
-                    _value, minimum, maximum, _fuzz, _flat, _resolution = (
-                        struct.unpack("iiiiii", data)
-                    )
-                    axes.append((minimum, maximum))
-                return descriptor, axes
-            except (FileNotFoundError, OSError, UnicodeDecodeError):
-                try:
-                    if descriptor is not None:
-                        os.close(descriptor)
-                except OSError:
-                    pass
-        return None, None
-
-
-    display = None
-    while not display:
-        display = x11.XOpenDisplay(b":0")
-        if not display:
-            time.sleep(0.5)
-
-    root = x11.XDefaultRootWindow(display)
     try:
         os.unlink(kdeconnect_socket_path)
     except FileNotFoundError:
@@ -1732,80 +1657,12 @@
     kdeconnect_socket.setblocking(False)
     mapping = []
     mapping_updated_at = 0.0
-    last_x11_position = None
-    waynergy_fd = None
-    waynergy_axes = None
-    waynergy_buffer = bytearray()
-    waynergy_position = {abs_x: None, abs_y: None}
-    waynergy_scan_at = 0.0
-    waynergy_monitor = None
-    waynergy_monitor_updated_at = 0.0
 
     while True:
         now = time.monotonic()
         if now - mapping_updated_at >= 2:
             mapping = monitor_mapping()
             mapping_updated_at = now
-
-        if waynergy_fd is None and now >= waynergy_scan_at:
-            waynergy_fd, waynergy_axes = open_waynergy_mouse()
-            waynergy_scan_at = now + 1
-
-        if now - waynergy_monitor_updated_at >= 0.5:
-            waynergy_monitor = focused_monitor()
-            waynergy_monitor_updated_at = now
-
-        if waynergy_fd is not None:
-            try:
-                while True:
-                    chunk = os.read(waynergy_fd, input_event.size * 64)
-                    if not chunk:
-                        raise OSError("Waynergy input device disappeared")
-                    waynergy_buffer.extend(chunk)
-            except BlockingIOError:
-                pass
-            except OSError:
-                os.close(waynergy_fd)
-                waynergy_fd = None
-                waynergy_axes = None
-                waynergy_buffer.clear()
-                waynergy_scan_at = now + 0.25
-
-            while len(waynergy_buffer) >= input_event.size:
-                event = bytes(waynergy_buffer[: input_event.size])
-                del waynergy_buffer[: input_event.size]
-                _seconds, _microseconds, event_type, code, value = (
-                    input_event.unpack(event)
-                )
-                if event_type == ev_abs and code in waynergy_position:
-                    waynergy_position[code] = value
-                elif event_type == ev_syn and code == syn_report:
-                    x_value = waynergy_position[abs_x]
-                    y_value = waynergy_position[abs_y]
-                    if (
-                        x_value is not None
-                        and y_value is not None
-                        and waynergy_axes is not None
-                        and waynergy_monitor is not None
-                    ):
-                        monitor_x, monitor_y, monitor_width, monitor_height = (
-                            waynergy_monitor
-                        )
-                        (x_min, x_max), (y_min, y_max) = waynergy_axes
-                        if x_max > x_min and y_max > y_min:
-                            target_x = monitor_x + round(
-                                (x_value - x_min)
-                                * max(monitor_width - 1, 0)
-                                / (x_max - x_min)
-                            )
-                            target_y = monitor_y + round(
-                                (y_value - y_min)
-                                * max(monitor_height - 1, 0)
-                                / (y_max - y_min)
-                            )
-                            hypr_request(
-                                f"dispatch movecursor {target_x} {target_y}"
-                            )
 
         while True:
             try:
@@ -1838,46 +1695,6 @@
             else:
                 continue
             hypr_request(f"dispatch movecursor {target[0]} {target[1]}")
-
-        root_return = ctypes.c_ulong()
-        child_return = ctypes.c_ulong()
-        root_x = ctypes.c_int()
-        root_y = ctypes.c_int()
-        window_x = ctypes.c_int()
-        window_y = ctypes.c_int()
-        mask = ctypes.c_uint()
-
-        if x11.XQueryPointer(
-            display,
-            root,
-            ctypes.byref(root_return),
-            ctypes.byref(child_return),
-            ctypes.byref(root_x),
-            ctypes.byref(root_y),
-            ctypes.byref(window_x),
-            ctypes.byref(window_y),
-            ctypes.byref(mask),
-        ):
-            x11_position = (root_x.value, root_y.value)
-            if x11_position != last_x11_position:
-                target = translate(*x11_position, mapping)
-                if target is not None:
-                    try:
-                        current = json.loads(hypr_request("j/cursorpos") or "{}")
-                        current_position = (round(current["x"]), round(current["y"]))
-                    except (json.JSONDecodeError, KeyError, TypeError):
-                        current_position = target
-
-                    # Native libinput and Wayland virtual-pointer events have
-                    # already moved Hyprland by the time XWayland observes
-                    # them. Only bridge X11-only movement such as KDE Connect
-                    # XTest, avoiding feedback against physical/Synergy input.
-                    if max(
-                        abs(current_position[0] - target[0]),
-                        abs(current_position[1] - target[1]),
-                    ) > 1:
-                        hypr_request(f"dispatch movecursor {target[0]} {target[1]}")
-                last_x11_position = x11_position
 
         time.sleep(1 / 60)
   '';
@@ -3143,11 +2960,9 @@
       mode_file=${lib.escapeShellArg modeStateFile}
       current="$(tr -d '[:space:]' < "$mode_file" 2>/dev/null || true)"
       current_mode="''${current%%:*}"
-      supported_modes="couch${lib.optionalString (cfg.desktopSessionCommand != null) "|desktop"}${
-        lib.optionalString cfg.enableMergedProfile "|merged"
-      }${lib.optionalString directDrmStreamEnabled "|direct-stream"}${
-        lib.optionalString directDrmBrowserEnabled "|direct-browser"
-      }${
+      supported_modes="couch${
+        lib.optionalString (cfg.desktopSessionCommand != null) "|desktop"
+      }${lib.optionalString cfg.enableMergedProfile "|merged"}${lib.optionalString directDrmStreamEnabled "|direct-stream"}${lib.optionalString directDrmBrowserEnabled "|direct-browser"}${
         lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) "|direct-private"
       }"
 
@@ -3157,9 +2972,9 @@
       fi
 
       case "$1" in
-        couch${lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"}${
-        lib.optionalString cfg.enableMergedProfile " | merged"
-      })
+        couch${
+        lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
+      }${lib.optionalString cfg.enableMergedProfile " | merged"})
           if [ "$1" = "$current_mode" ]; then
             printf 'Nixbox is already configured for %s mode\n' "$1"
             exit 0
@@ -3174,9 +2989,9 @@
           lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) " | direct-private"
         })
           case "$current_mode" in
-            couch${lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"}${
-          lib.optionalString cfg.enableMergedProfile " | merged"
-        })
+            couch${
+          lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
+        }${lib.optionalString cfg.enableMergedProfile " | merged"})
               return_mode="$current_mode"
               ;;
             *)
@@ -3595,16 +3410,16 @@
           exec ${sessionCommand}
           ;;
         ${lib.optionalString browserSelectorEnabled ''
-        direct-private)
-          boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
-          if [ "$mode_token" = "$boot_id" ]; then
-            exec ${lib.getExe directDrmBrowserSelectorSession}
-          fi
-          printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
-            > ${lib.escapeShellArg modeStateFile}
-          exec ${sessionCommand}
-          ;;
-      ''}
+          direct-private)
+            boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
+            if [ "$mode_token" = "$boot_id" ]; then
+              exec ${lib.getExe directDrmBrowserSelectorSession}
+            fi
+            printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
+              > ${lib.escapeShellArg modeStateFile}
+            exec ${sessionCommand}
+            ;;
+        ''}
       ''}
         couch | *)
           exec ${sessionCommand}
@@ -3734,6 +3549,24 @@ in {
       description = ''
         Optional Moonlight application used as a separate protected-profile
         selector on the same remote browser host.
+      '';
+    };
+
+    browserStreamSelectorHost = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Optional independent paired Moonlight host for the protected browser
+        selector. Null keeps the selector on browserStreamHost.
+      '';
+    };
+
+    browserStreamSelectorPort = lib.mkOption {
+      type = lib.types.nullOr lib.types.port;
+      default = null;
+      description = ''
+        Optional nonstandard HTTP port for an isolated protected browser
+        coordinator.
       '';
     };
 
@@ -4475,39 +4308,33 @@ in {
       };
     };
 
-    systemd.user.services.couch-audio-health-recovery =
-      lib.mkIf cfg.enableAudioHealthRecovery
-      {
-        description = "Recover couch audio without disrupting active streams";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = lib.getExe audioHealthRecovery;
-          TimeoutStartSec = 30;
-        };
+    systemd.user.services.couch-audio-health-recovery = lib.mkIf cfg.enableAudioHealthRecovery {
+      description = "Recover couch audio without disrupting active streams";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe audioHealthRecovery;
+        TimeoutStartSec = 30;
       };
+    };
 
-    systemd.user.services.couch-audio-follow-layout =
-      lib.mkIf cfg.enableAudioOutputCycle
-      {
-        description = "Select couch audio after the display layout settles";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = lib.getExe audioLayoutSync;
-          TimeoutStartSec = 45;
-        };
+    systemd.user.services.couch-audio-follow-layout = lib.mkIf cfg.enableAudioOutputCycle {
+      description = "Select couch audio after the display layout settles";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe audioLayoutSync;
+        TimeoutStartSec = 45;
       };
+    };
 
-    systemd.user.timers.couch-audio-health-recovery =
-      lib.mkIf cfg.enableAudioHealthRecovery
-      {
-        description = "Periodically verify couch audio responsiveness";
-        wantedBy = ["timers.target"];
-        timerConfig = {
-          OnBootSec = "1m";
-          OnUnitActiveSec = "30s";
-          Unit = "couch-audio-health-recovery.service";
-        };
+    systemd.user.timers.couch-audio-health-recovery = lib.mkIf cfg.enableAudioHealthRecovery {
+      description = "Periodically verify couch audio responsiveness";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "1m";
+        OnUnitActiveSec = "30s";
+        Unit = "couch-audio-health-recovery.service";
       };
+    };
 
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
       command =
@@ -4521,17 +4348,12 @@ in {
       lib.optional (
         cfg.autoLoginUser != null && (sessionModeSwitchEnabled || cfg.enableAdaptiveDisplayLayout)
       ) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
-      ++ lib.optional (
-        sessionModeSwitchEnabled
-      ) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional sessionModeSwitchEnabled "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
       ++ lib.optional (
         (directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null
       ) "f ${directDrmReturnModeFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
-      ++ lib.optional (
-        (directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null
-      ) "f ${directDrmKeyboardLayoutFile} 0644 ${cfg.autoLoginUser} root - ${
-        builtins.head (lib.splitString "," cfg.keyboardLayouts)
-      }"
+      ++ lib.optional ((directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null)
+      "f ${directDrmKeyboardLayoutFile} 0644 ${cfg.autoLoginUser} root - ${builtins.head (lib.splitString "," cfg.keyboardLayouts)}"
       ++ lib.optional (
         cfg.autoLoginUser != null && cfg.enableAdaptiveDisplayLayout
       ) "f ${displayLayoutStateFile} 0644 ${cfg.autoLoginUser} root - adaptive"
@@ -4545,29 +4367,25 @@ in {
         cfg.autoLoginUser != null && cfg.enableMirrorToggle
       ) "f ${mirrorStateFile} 0644 ${cfg.autoLoginUser} root - 0";
 
-    systemd.paths.couch-session-mode-switch =
-      lib.mkIf sessionModeSwitchEnabled
-      {
-        description = "Watch for Nixbox session mode changes";
-        wantedBy = ["multi-user.target"];
-        pathConfig = {
-          PathChanged = modeStateFile;
-          Unit = "couch-session-mode-switch.service";
-        };
+    systemd.paths.couch-session-mode-switch = lib.mkIf sessionModeSwitchEnabled {
+      description = "Watch for Nixbox session mode changes";
+      wantedBy = ["multi-user.target"];
+      pathConfig = {
+        PathChanged = modeStateFile;
+        Unit = "couch-session-mode-switch.service";
       };
+    };
 
-    systemd.services.couch-session-mode-switch =
-      lib.mkIf sessionModeSwitchEnabled
-      {
-        description = "Restart greetd after a Nixbox session mode change";
-        serviceConfig.Type = "oneshot";
-        script = ''
-          # initial_session runs once per boot unless greetd's ephemeral marker is
-          # cleared. A deliberate mode change should auto-login immediately.
-          rm -f /run/greetd.run
-          ${pkgs.systemd}/bin/systemctl try-restart greetd.service
-        '';
-      };
+    systemd.services.couch-session-mode-switch = lib.mkIf sessionModeSwitchEnabled {
+      description = "Restart greetd after a Nixbox session mode change";
+      serviceConfig.Type = "oneshot";
+      script = ''
+        # initial_session runs once per boot unless greetd's ephemeral marker is
+        # cleared. A deliberate mode change should auto-login immediately.
+        rm -f /run/greetd.run
+        ${pkgs.systemd}/bin/systemctl try-restart greetd.service
+      '';
+    };
 
     assertions = [
       {
@@ -4642,6 +4460,14 @@ in {
       {
         assertion = cfg.browserStreamSelectorApplication == null || browserStreamEnabled;
         message = "services.moonlight-client browser selector requires a browser stream host and application";
+      }
+      {
+        assertion = cfg.browserStreamSelectorHost == null || cfg.browserStreamSelectorApplication != null;
+        message = "services.moonlight-client.browserStreamSelectorHost requires a browser selector";
+      }
+      {
+        assertion = cfg.browserStreamSelectorPort == null || cfg.browserStreamSelectorApplication != null;
+        message = "services.moonlight-client.browserStreamSelectorPort requires a browser selector";
       }
       {
         assertion =

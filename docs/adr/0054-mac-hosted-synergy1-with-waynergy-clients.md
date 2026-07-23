@@ -31,8 +31,15 @@ Use relative pointer motion on the Synergy server. A client compositor may
 retain powered-off outputs outside the visible desktop so it can restore them
 without losing layout state; mapping absolute motion across that full bounding
 box makes the visible pointer excessively sensitive. On couch clients,
-Waynergy also advertises the focused powered-on monitor at startup rather than
-the full compositor output bounding box.
+Waynergy advertises the focused powered-on monitor rather than the full
+compositor output bounding box. Bind the WLR virtual pointer to that exact
+output and restart the child when focused-monitor geometry changes.
+
+Treat the declarative `waynergy.service` as the sole client identity owner.
+Never leave an experimental transient Waynergy unit running beside it with the
+same screen name: the Synergy server admits one connection, causing the two
+clients to evict one another in a timeout/reconnect loop. Test units must be
+stopped before the declarative service is started or reloaded.
 
 Keep the couch compositor's global controls available when a fullscreen remote
 desktop client requests shortcut inhibition. This lets Command from the Mac
@@ -95,3 +102,7 @@ instead of selecting a VPN route.
 - Default-target startup across greetd/UWSM sessions: implemented after live
   validation showed `graphical-session.target` remained inactive on both XPS
   and XYZ.
+- Focused-output WLR binding and single-client ownership on XPS: implemented.
+  A duplicate transient client was identified from repeated server-side
+  rejection and removed; the declarative service then remained connected while
+  concurrent Moonlight sessions kept their original processes.

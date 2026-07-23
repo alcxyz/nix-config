@@ -6,6 +6,13 @@
 }: let
   cfg = config.services.waynergy;
   macRawKeymap = builtins.readFile ./raw-keymap-mac-evdev.ini;
+  waynergyPackage =
+    if cfg.backend == "wlr"
+    then
+      cfg.package.overrideAttrs (old: {
+        patches = (old.patches or []) ++ [./wlr-output-binding.patch];
+      })
+    else cfg.package;
   sessionLauncher = pkgs.writeShellScript "waynergy-session-launcher" ''
     set -eu
 
@@ -80,7 +87,8 @@
                 // .[0]) as $monitor
               | if $monitor == null then empty
                 else [($monitor.width / $monitor.scale | round),
-                      ($monitor.height / $monitor.scale | round)]
+                      ($monitor.height / $monitor.scale | round),
+                      $monitor.name]
                   | @tsv
                 end
             ' || true)"
@@ -89,7 +97,8 @@
           stop_waynergy
           screen_width="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 1)"
           screen_height="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 2)"
-          ${cfg.package}/bin/waynergy \
+          screen_output="$(printf '%s\n' "$geometry" | ${pkgs.coreutils}/bin/cut -f 3)"
+          WAYNERGY_OUTPUT="$screen_output" ${waynergyPackage}/bin/waynergy \
             --width "$screen_width" \
             --height "$screen_height" &
           waynergy_pid=$!
@@ -104,7 +113,7 @@
       done
     ''}
 
-        exec ${cfg.package}/bin/waynergy
+        exec ${waynergyPackage}/bin/waynergy
       fi
 
       ${pkgs.coreutils}/bin/sleep 0.1
@@ -181,7 +190,7 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [cfg.package];
+    home.packages = [waynergyPackage];
 
     xdg.configFile = {
       "waynergy/config.ini".text = ''
@@ -218,7 +227,7 @@ in {
         Environment = [
           "PATH=${
             lib.makeBinPath [
-              cfg.package
+              waynergyPackage
               pkgs.wl-clipboard
               pkgs.coreutils
               pkgs.procps
