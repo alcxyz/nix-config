@@ -27,11 +27,12 @@ def contains_values(current, desired):
 
 
 def main():
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: reconcile-apps.py CONFIG MANAGED_APPS_JSON")
+    if len(sys.argv) not in (3, 4):
+        raise SystemExit("usage: reconcile-apps.py CONFIG MANAGED_APPS_JSON [HOSTNAME]")
 
     config_path = Path(sys.argv[1])
     managed_path = Path(sys.argv[2])
+    hostname = sys.argv[3] if len(sys.argv) == 4 else None
     if not config_path.exists():
         return 0
 
@@ -39,6 +40,10 @@ def main():
     if config_text and not config_text.endswith("\n"):
         config_text += "\n"
     document = tomlkit.parse(config_text)
+    changed = False
+    if hostname is not None and document.get("hostname") != hostname:
+        document["hostname"] = hostname
+        changed = True
     managed = json.loads(managed_path.read_text())
     managed_apps = managed["apps"]
     managed_titles = set(managed["managedTitles"])
@@ -54,13 +59,17 @@ def main():
         raise RuntimeError("Wolf config has no moonlight-profile-id profile")
 
     apps = profile.setdefault("apps", tomlkit.aot())
-    changed = False
     desired_titles = {app["title"] for app in managed_apps}
+    retained_titles = set()
     for index in reversed(range(len(apps))):
         title = apps[index].get("title")
-        if title in managed_titles and title not in desired_titles:
+        if title not in managed_titles:
+            continue
+        if title not in desired_titles or title in retained_titles:
             del apps[index]
             changed = True
+        else:
+            retained_titles.add(title)
 
     for desired in managed_apps:
         index = next(

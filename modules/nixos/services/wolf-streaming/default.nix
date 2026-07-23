@@ -8,6 +8,12 @@
   nvidiaPackage = config.hardware.nvidia.package;
   nvidiaSmi = "${nvidiaPackage.bin}/bin/nvidia-smi";
   browserCfg = cfg.browserImages;
+  isolatedProtectedBackend =
+    cfg.protectedProfile.definitionFile != null && cfg.protectedProfile.isolateBackend;
+  publicRuntimeDirectory = "/run/wolf-streaming/runtime";
+  protectedRuntimeDirectory = "/run/wolf-streaming/protected/runtime";
+  protectedStateDirectory = cfg.protectedProfile.stateDirectory;
+  protectedPort = standard: standard + cfg.protectedProfile.portOffset;
   wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
   wolfPatchSet = "altgr-idle-presentation-v1";
   wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
@@ -139,17 +145,17 @@
       };
     }
   ];
-  managedRunnerNames =
+  publicRunnerNames = lib.optional browserCfg.helium.enable "WolfHelium";
+  protectedRunnerNames =
     [
       "Wolf-UI"
     ]
-    ++ lib.optional browserCfg.helium.enable "WolfHelium"
     ++ lib.optional browserCfg.helium.enable "WolfHeliumPrivate"
     ++ lib.optional browserCfg.brave.enable "WolfBrave"
     ++ lib.optional browserCfg.chromium.enable "WolfChromium"
     ++ lib.optional browserCfg.firefox.enable "WolfFirefox"
     ++ lib.optional browserCfg.zen.enable "WolfZen";
-  cleanupManagedContainers =
+  cleanupRunnerContainers = runnerNames:
     lib.concatMapStringsSep "\n" (runnerName: ''
       ${pkgs.docker}/bin/docker ps -aq --filter ${lib.escapeShellArg "name=^/${runnerName}_"} \
         | while read -r container; do
@@ -158,7 +164,7 @@
           fi
         done
     '')
-    managedRunnerNames;
+    runnerNames;
   browserHostConfig = builtins.toJSON {
     HostConfig = {
       IpcMode = "host";
@@ -240,32 +246,31 @@
       base_create_json = browserHostConfig;
     };
   };
+  mkWolfUiApp = runtimeDirectory: {
+    title = "Wolf UI";
+    icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png";
+    start_virtual_compositor = true;
+    runner = {
+      type = "docker";
+      name = "Wolf-UI";
+      image = wolfUiImage;
+      mounts = [
+        "${runtimeDirectory}/wolf.sock:/var/run/wolf/wolf.sock"
+        "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+      ];
+      env = [
+        "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*"
+        "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
+        "WOLF_UI_AUTOUPDATE=False"
+        "LOGLEVEL=INFO"
+      ];
+      devices = [];
+      ports = [];
+      base_create_json = wolfUiHostConfig;
+    };
+  };
   managedMoonlightApps =
-    [
-      {
-        title = "Wolf UI";
-        icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png";
-        start_virtual_compositor = true;
-        runner = {
-          type = "docker";
-          name = "Wolf-UI";
-          image = wolfUiImage;
-          mounts = [
-            "/run/wolf-streaming/runtime/wolf.sock:/var/run/wolf/wolf.sock"
-            "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
-          ];
-          env = [
-            "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*"
-            "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
-            "WOLF_UI_AUTOUPDATE=False"
-            "LOGLEVEL=INFO"
-          ];
-          devices = [];
-          ports = [];
-          base_create_json = wolfUiHostConfig;
-        };
-      }
-    ]
+    lib.optional (!isolatedProtectedBackend) (mkWolfUiApp publicRuntimeDirectory)
     ++ lib.optional browserCfg.helium.publish (mkMoonlightBrowserApp {
       title = "Helium";
       runnerName = "WolfHelium";
@@ -278,6 +283,9 @@
       image = browserCfg.brave.image;
       icon = "https://brave.com/static-assets/images/brave-logo-sans-text.svg";
     });
+  protectedMoonlightApps = lib.optional isolatedProtectedBackend (
+    mkWolfUiApp protectedRuntimeDirectory
+  );
   managedMoonlightAppsFile = pkgs.writeText "wolf-managed-moonlight-apps.json" (
     builtins.toJSON {
       managedTitles =
@@ -285,9 +293,27 @@
           "Wolf UI"
           "Helium"
           "Brave"
+          "Chromium"
+          "Firefox"
+          "Firefox ESR"
+          "Zen"
         ]
         ++ cfg.prunedApplicationTitles;
       apps = managedMoonlightApps;
+    }
+  );
+  protectedMoonlightAppsFile = pkgs.writeText "wolf-protected-moonlight-apps.json" (
+    builtins.toJSON {
+      managedTitles = [
+        "Wolf UI"
+        "Helium"
+        "Brave"
+        "Chromium"
+        "Firefox"
+        "Firefox ESR"
+        "Zen"
+      ];
+      apps = protectedMoonlightApps;
     }
   );
   protectedBrowserAppsFile = pkgs.writeText "wolf-managed-protected-browser-apps.json" (
@@ -349,6 +375,15 @@
     ];
     text = ''
       exec python3 ${./reconcile-protected-profile.py} "$@"
+    '';
+  };
+  removeWolfProtectedProfile = pkgs.writeShellApplication {
+    name = "remove-wolf-protected-profile";
+    runtimeInputs = [
+      (pkgs.python3.withPackages (pythonPackages: [pythonPackages.tomlkit]))
+    ];
+    text = ''
+      exec python3 ${./remove-protected-profile.py} "$@"
     '';
   };
   buildBrowserImages = pkgs.writeShellApplication {
@@ -422,14 +457,37 @@
     ];
     text = ''
       presentation_scale=1.0
-      if [ "''${1:-}" = --presentation-scale ]; then
-        [ -n "''${2:-}" ] || {
-          echo "wolf-stream-layout: --presentation-scale requires a value" >&2
-          exit 2
-        }
-        presentation_scale="$2"
-        shift 2
-      fi
+      coordinator=wolf
+      runtime_directory=${lib.escapeShellArg publicRuntimeDirectory}
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --presentation-scale)
+            [ -n "''${2:-}" ] || {
+              echo "wolf-stream-layout: --presentation-scale requires a value" >&2
+              exit 2
+            }
+            presentation_scale="$2"
+            shift 2
+            ;;
+          --coordinator)
+            [ -n "''${2:-}" ] || {
+              echo "wolf-stream-layout: --coordinator requires a container name" >&2
+              exit 2
+            }
+            coordinator="$2"
+            shift 2
+            ;;
+          --runtime-directory)
+            [ -n "''${2:-}" ] || {
+              echo "wolf-stream-layout: --runtime-directory requires a path" >&2
+              exit 2
+            }
+            runtime_directory="$2"
+            shift 2
+            ;;
+          *) break ;;
+        esac
+      done
       case "$presentation_scale" in
         1 | 1.0 | 1.00 | 1.000 | 1.0000 | 1.00000 | 1.000000)
           presentation_scale=1.0
@@ -454,7 +512,7 @@
         )
         browserCfg.keyboardLayouts}
         *)
-          echo "usage: wolf-stream-layout [--presentation-scale {1.0|1.5}] {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}} RUNNER [RUNNER ...]" >&2
+          echo "usage: wolf-stream-layout [--presentation-scale {1.0|1.5}] [--coordinator NAME] [--runtime-directory PATH] {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}} RUNNER [RUNNER ...]" >&2
           exit 2
           ;;
       esac
@@ -486,7 +544,7 @@
                 >/dev/null 2>&1 \
             && docker exec \
               -u ${toString cfg.defaultRunUid} \
-              -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+              -e "SWAYSOCK=$runtime_directory/sway.socket" \
               "$container" \
               swaymsg input type:keyboard xkb_switch_layout "$layout_index" \
                 >/dev/null 2>&1; then
@@ -498,13 +556,13 @@
                 || true
             )"
             if [ -n "$client_id" ]; then
-              docker exec -i wolf python3 - "$client_id" "$presentation_scale" \
+              docker exec -i "$coordinator" python3 - "$client_id" "$presentation_scale" \
                 < ${wolfSetClientPresentationScale} \
                 >/dev/null 2>&1 || true
             fi
             docker exec \
               -u ${toString cfg.defaultRunUid} \
-              -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+              -e "SWAYSOCK=$runtime_directory/sway.socket" \
               "$container" \
               swaymsg seat seat0 xcursor_theme Adwaita "$cursor_size" \
                 >/dev/null 2>&1 || true
@@ -515,14 +573,14 @@
             if [ "$presentation_scale" = 1.5 ]; then
               docker exec \
                 -u ${toString cfg.defaultRunUid} \
-                -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+                -e "SWAYSOCK=$runtime_directory/sway.socket" \
                 "$container" \
                 swaymsg seat seat0 hide_cursor 1 \
                   >/dev/null 2>&1 || true
             else
               docker exec \
                 -u ${toString cfg.defaultRunUid} \
-                -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+                -e "SWAYSOCK=$runtime_directory/sway.socket" \
                 "$container" \
                 swaymsg seat seat0 hide_cursor 0 \
                   >/dev/null 2>&1 || true
@@ -571,170 +629,236 @@
       ln -s "$(basename "$1")" "$out/lib/$library.so"
     done
   '';
-  wolfVramWatchdog = pkgs.writeShellApplication {
-    name = "wolf-vram-watchdog";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.gawk
-      pkgs.systemd
-    ];
-    text = ''
-      state_file=/run/wolf-streaming/vram-high-count
+  mkWolfVramWatchdog = {
+    name,
+    containerName,
+    serviceName,
+    stateFile,
+  }:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [
+        pkgs.coreutils
+        pkgs.docker
+        pkgs.gawk
+        pkgs.systemd
+      ];
+      text = ''
+          state_file=${lib.escapeShellArg stateFile}
 
-      if ! systemctl --quiet is-active docker-wolf.service; then
-        rm -f "$state_file"
-        exit 0
-      fi
-
-      total_mib="$(
-        ${nvidiaSmi} \
-          --query-gpu=memory.total \
-          --format=csv,noheader,nounits \
-          | awk -F, 'NR == 1 { gsub(/[[:space:]]/, "", $1); print $1 }'
-      )"
-      wolf_mib="$(
-        ${nvidiaSmi} \
-          --query-compute-apps=process_name,used_memory \
-          --format=csv,noheader,nounits \
-          | awk -F, '
-              $1 ~ /\/wolf$/ {
-                gsub(/[[:space:]]/, "", $2)
-                total += $2
-              }
-              END { print total + 0 }
-            '
-      )"
-
-      if ! [[ "$total_mib" =~ ^[1-9][0-9]*$ && "$wolf_mib" =~ ^[0-9]+$ ]]; then
-        echo "Wolf VRAM watchdog could not parse the NVIDIA memory sample" >&2
-        exit 1
-      fi
-
-      threshold_mib=$((total_mib * ${toString cfg.vramWatchdog.maxUsedPercent} / 100))
-      if [ "$wolf_mib" -lt "$threshold_mib" ]; then
-        rm -f "$state_file"
-        exit 0
-      fi
-
-      count=0
-      if [ -r "$state_file" ]; then
-        read -r count < "$state_file" || count=0
-      fi
-      [[ "$count" =~ ^[0-9]+$ ]] || count=0
-      count=$((count + 1))
-      printf '%s\n' "$count" > "$state_file"
-
-      if [ "$count" -lt ${toString cfg.vramWatchdog.consecutiveSamples} ]; then
-        echo "Wolf VRAM remains high: $wolf_mib MiB of $total_mib MiB (sample $count/${toString cfg.vramWatchdog.consecutiveSamples})" >&2
-        exit 0
-      fi
-
-      rm -f "$state_file"
-      echo "Restarting Wolf after sustained VRAM growth: $wolf_mib MiB of $total_mib MiB" >&2
-      systemctl restart docker-wolf.service
-    '';
-  };
-  wolfPipelineWatchdog = pkgs.writeShellApplication {
-    name = "wolf-pipeline-watchdog";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.docker
-      pkgs.gnugrep
-      pkgs.iproute2
-      pkgs.systemd
-    ];
-    text = ''
-      state_dir=/var/lib/wolf-pipeline-watchdog
-      cursor_file="$state_dir/log-cursor"
-      pending_file="$state_dir/recovery-pending"
-
-      if ! systemctl --quiet is-active docker-wolf.service; then
-        exit 0
-      fi
-
-      now="$(date --iso-8601=seconds)"
-      if [ -r "$cursor_file" ]; then
-        read -r since < "$cursor_file"
-      else
-        since="$(docker inspect --format '{{.State.StartedAt}}' wolf)"
-      fi
-      printf '%s\n' "$now" > "$cursor_file"
-
-      log_sample="$(mktemp)"
-      trap 'rm -f "$log_sample"' EXIT
-      docker logs --since "$since" wolf > "$log_sample" 2>&1 || true
-
-      # Both signatures leave Wolf running while its video path can no longer
-      # produce frames.  They are deliberately narrower than generic
-      # GStreamer warnings, which are common during normal disconnects.
-      if grep -aEq \
-        'Failed to map input buffer|Unhandled exception: stoull' \
-        "$log_sample"; then
-        touch "$pending_file"
-      fi
-
-      if [ ! -e "$pending_file" ]; then
-        exit 0
-      fi
-
-      # Never destroy a healthy concurrent stream.  Once Moonlight has timed
-      # out the poisoned stream, the API reports no active sessions and it is
-      # safe to rebuild Wolf's coordinator and encoder state.  Persistent app
-      # homes remain on disk; docker-wolf's pre-start removes only unusable
-      # runner containers.
-      if ! active_sessions="$(
-        docker exec -i wolf python3 - <<'PY'
-import json
-import socket
-
-connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-connection.settimeout(2)
-connection.connect("/run/wolf-streaming/runtime/wolf.sock")
-connection.sendall(
-    b"GET /api/v1/sessions HTTP/1.1\r\n"
-    b"Host: localhost\r\n"
-    b"Connection: close\r\n\r\n"
-)
-response = bytearray()
-while chunk := connection.recv(65536):
-    response.extend(chunk)
-body = bytes(response).split(b"\r\n\r\n", 1)[1]
-print(len(json.loads(body).get("sessions", [])))
-PY
-      )"; then
-        echo "Wolf pipeline recovery deferred: session API unavailable" >&2
-        exit 1
-      fi
-
-      if ! [[ "$active_sessions" =~ ^[0-9]+$ ]]; then
-        echo "Wolf pipeline recovery deferred: invalid session count" >&2
-        exit 1
-      fi
-      if [ "$active_sessions" -ne 0 ]; then
-        stale_control_connections="$(
-          ss -Hnt state close-wait 'sport = :47989' \
-            | wc -l \
-            | tr -d '[:space:]'
-        )"
-        [[ "$stale_control_connections" =~ ^[0-9]+$ ]] || stale_control_connections=0
-
-        # A poisoned coordinator can retain session records while leaking
-        # already-closed HTTP control connections. In that state, waiting for
-        # the API session count to reach zero can deadlock recovery forever.
-        # A deliberately high threshold distinguishes that failure from the
-        # handful of transient control requests seen during normal launches.
-        if [ "$stale_control_connections" -lt ${toString cfg.pipelineWatchdog.staleControlConnectionThreshold} ]; then
-          echo "Wolf pipeline recovery pending behind $active_sessions active session(s)" >&2
+        if ! systemctl --quiet is-active ${lib.escapeShellArg serviceName}; then
+          rm -f "$state_file"
+          exit 0
+        fi
+        if ! docker inspect ${lib.escapeShellArg containerName} >/dev/null 2>&1; then
+          # The OCI unit becomes active just before `docker run` creates the
+          # named container. Treat that short startup window as healthy.
+          rm -f "$state_file"
           exit 0
         fi
 
-        echo "Wolf pipeline recovery overriding $active_sessions stale session record(s) after detecting $stale_control_connections abandoned control connections" >&2
-      fi
+        total_mib="$(
+            ${nvidiaSmi} \
+              --query-gpu=memory.total \
+              --format=csv,noheader,nounits \
+              | awk -F, 'NR == 1 { gsub(/[[:space:]]/, "", $1); print $1 }'
+          )"
+          wolf_pid="$(
+            docker top ${lib.escapeShellArg containerName} -eo pid,comm \
+              | awk '$2 == "wolf" { print $1; exit }'
+          )"
+          wolf_mib="$(
+            ${nvidiaSmi} \
+              --query-compute-apps=pid,used_memory \
+              --format=csv,noheader,nounits \
+              | awk -F, -v wolf_pid="$wolf_pid" '
+                  {
+                    gsub(/[[:space:]]/, "", $1)
+                  }
+                  $1 == wolf_pid {
+                    gsub(/[[:space:]]/, "", $2)
+                    total += $2
+                  }
+                  END { print total + 0 }
+                '
+          )"
 
-      echo "Restarting Wolf after an unrecoverable video-pipeline failure" >&2
-      systemctl restart docker-wolf.service
-      rm -f "$pending_file"
+          if ! [[ "$total_mib" =~ ^[1-9][0-9]*$ && "$wolf_mib" =~ ^[0-9]+$ ]]; then
+            echo "Wolf VRAM watchdog could not parse the NVIDIA memory sample" >&2
+            exit 1
+          fi
+
+          threshold_mib=$((total_mib * ${toString cfg.vramWatchdog.maxUsedPercent} / 100))
+          if [ "$wolf_mib" -lt "$threshold_mib" ]; then
+            rm -f "$state_file"
+            exit 0
+          fi
+
+          count=0
+          if [ -r "$state_file" ]; then
+            read -r count < "$state_file" || count=0
+          fi
+          [[ "$count" =~ ^[0-9]+$ ]] || count=0
+          count=$((count + 1))
+          printf '%s\n' "$count" > "$state_file"
+
+          if [ "$count" -lt ${toString cfg.vramWatchdog.consecutiveSamples} ]; then
+            echo "Wolf VRAM remains high: $wolf_mib MiB of $total_mib MiB (sample $count/${toString cfg.vramWatchdog.consecutiveSamples})" >&2
+            exit 0
+          fi
+
+          rm -f "$state_file"
+          echo "Restarting Wolf after sustained VRAM growth: $wolf_mib MiB of $total_mib MiB" >&2
+          systemctl restart ${lib.escapeShellArg serviceName}
+      '';
+    };
+  mkWolfPipelineWatchdog = {
+    name,
+    containerName,
+    serviceName,
+    socketPath,
+    stateDirectory,
+    controlPort,
+  }: let
+    activeSessionCount = pkgs.writeText "wolf-active-session-count.py" ''
+      import json
+      import socket
+      import sys
+
+      connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+      connection.settimeout(2)
+      connection.connect(sys.argv[1])
+      connection.sendall(
+          b"GET /api/v1/sessions HTTP/1.1\r\n"
+          b"Host: localhost\r\n"
+          b"Connection: close\r\n\r\n"
+      )
+      response = bytearray()
+      while chunk := connection.recv(65536):
+          response.extend(chunk)
+      body = bytes(response).split(b"\r\n\r\n", 1)[1]
+      print(len(json.loads(body).get("sessions", [])))
     '';
+  in
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [
+        pkgs.coreutils
+        pkgs.docker
+        pkgs.gnugrep
+        pkgs.iproute2
+        pkgs.systemd
+      ];
+      text = ''
+                state_dir=${lib.escapeShellArg stateDirectory}
+                cursor_file="$state_dir/log-cursor"
+                pending_file="$state_dir/recovery-pending"
+
+        if ! systemctl --quiet is-active ${lib.escapeShellArg serviceName}; then
+          exit 0
+        fi
+        if ! docker inspect ${lib.escapeShellArg containerName} >/dev/null 2>&1; then
+          # The OCI unit becomes active just before `docker run` creates the
+          # named container. The next timer tick will inspect the live service.
+          exit 0
+        fi
+
+        now="$(date --iso-8601=seconds)"
+                if [ -r "$cursor_file" ]; then
+                  read -r since < "$cursor_file"
+                else
+                  since="$(docker inspect --format '{{.State.StartedAt}}' ${lib.escapeShellArg containerName})"
+                fi
+                printf '%s\n' "$now" > "$cursor_file"
+
+                log_sample="$(mktemp)"
+                trap 'rm -f "$log_sample"' EXIT
+                docker logs --since "$since" ${lib.escapeShellArg containerName} > "$log_sample" 2>&1 || true
+
+                # Both signatures leave Wolf running while its video path can no longer
+                # produce frames.  They are deliberately narrower than generic
+                # GStreamer warnings, which are common during normal disconnects.
+                if grep -aEq \
+                  'Failed to map input buffer|Unhandled exception: stoull' \
+                  "$log_sample"; then
+                  touch "$pending_file"
+                fi
+
+                if [ ! -e "$pending_file" ]; then
+                  exit 0
+                fi
+
+                # Never destroy a healthy concurrent stream.  Once Moonlight has timed
+                # out the poisoned stream, the API reports no active sessions and it is
+                # safe to rebuild Wolf's coordinator and encoder state.  Persistent app
+                # homes remain on disk; docker-wolf's pre-start removes only unusable
+                # runner containers.
+                if ! active_sessions="$(
+                  docker exec -i ${lib.escapeShellArg containerName} \
+                    python3 - ${lib.escapeShellArg socketPath} \
+                    < ${activeSessionCount}
+                )"; then
+                  echo "Wolf pipeline recovery deferred: session API unavailable" >&2
+                  exit 1
+                fi
+
+                if ! [[ "$active_sessions" =~ ^[0-9]+$ ]]; then
+                  echo "Wolf pipeline recovery deferred: invalid session count" >&2
+                  exit 1
+                fi
+                if [ "$active_sessions" -ne 0 ]; then
+                  stale_control_connections="$(
+                    ss -Hnt state close-wait ${lib.escapeShellArg "sport = :${toString controlPort}"} \
+                      | wc -l \
+                      | tr -d '[:space:]'
+                  )"
+                  [[ "$stale_control_connections" =~ ^[0-9]+$ ]] || stale_control_connections=0
+
+                  # A poisoned coordinator can retain session records while leaking
+                  # already-closed HTTP control connections. In that state, waiting for
+                  # the API session count to reach zero can deadlock recovery forever.
+                  # A deliberately high threshold distinguishes that failure from the
+                  # handful of transient control requests seen during normal launches.
+                  if [ "$stale_control_connections" -lt ${toString cfg.pipelineWatchdog.staleControlConnectionThreshold} ]; then
+                    echo "Wolf pipeline recovery pending behind $active_sessions active session(s)" >&2
+                    exit 0
+                  fi
+
+                  echo "Wolf pipeline recovery overriding $active_sessions stale session record(s) after detecting $stale_control_connections abandoned control connections" >&2
+                fi
+
+                echo "Restarting Wolf after an unrecoverable video-pipeline failure" >&2
+                systemctl restart ${lib.escapeShellArg serviceName}
+                rm -f "$pending_file"
+      '';
+    };
+  wolfVramWatchdog = mkWolfVramWatchdog {
+    name = "wolf-vram-watchdog";
+    containerName = "wolf";
+    serviceName = "docker-wolf.service";
+    stateFile = "/run/wolf-streaming/vram-high-count";
+  };
+  protectedWolfVramWatchdog = mkWolfVramWatchdog {
+    name = "wolf-protected-vram-watchdog";
+    containerName = "wolf-protected";
+    serviceName = "docker-wolf-protected.service";
+    stateFile = "/run/wolf-streaming/protected-vram-high-count";
+  };
+  wolfPipelineWatchdog = mkWolfPipelineWatchdog {
+    name = "wolf-pipeline-watchdog";
+    containerName = "wolf";
+    serviceName = "docker-wolf.service";
+    socketPath = "${publicRuntimeDirectory}/wolf.sock";
+    stateDirectory = "/var/lib/wolf-pipeline-watchdog";
+    controlPort = 47989;
+  };
+  protectedWolfPipelineWatchdog = mkWolfPipelineWatchdog {
+    name = "wolf-protected-pipeline-watchdog";
+    containerName = "wolf-protected";
+    serviceName = "docker-wolf-protected.service";
+    socketPath = "${protectedRuntimeDirectory}/wolf.sock";
+    stateDirectory = "/var/lib/wolf-protected-pipeline-watchdog";
+    controlPort = protectedPort 47989;
   };
 in {
   options.services.wolf-streaming = {
@@ -914,6 +1038,31 @@ in {
     };
 
     protectedProfile = {
+      isolateBackend = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Run the protected selector and browser capsules on an independent
+          Wolf coordinator. A failure or restart on this backend cannot
+          interrupt the public browser stream.
+        '';
+      };
+
+      stateDirectory = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/wolf-protected";
+        description = "Persistent state for the isolated protected Wolf coordinator.";
+      };
+
+      portOffset = lib.mkOption {
+        type = lib.types.ints.between 1 10000;
+        default = 1000;
+        description = ''
+          Offset added to Wolf's standard Moonlight ports for the isolated
+          protected coordinator.
+        '';
+      };
+
       definitionFile = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -979,6 +1128,14 @@ in {
           || lib.hasPrefix "/" cfg.protectedProfile.definitionFile;
         message = "services.wolf-streaming.protectedProfile.definitionFile must be an absolute runtime path";
       }
+      {
+        assertion = lib.hasPrefix "/" protectedStateDirectory;
+        message = "services.wolf-streaming.protectedProfile.stateDirectory must be absolute";
+      }
+      {
+        assertion = !isolatedProtectedBackend || protectedPort 48200 <= 65535;
+        message = "services.wolf-streaming.protectedProfile.portOffset produces an invalid port";
+      }
     ];
 
     boot.kernelModules = [
@@ -994,54 +1151,107 @@ in {
       KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
     '';
 
-    systemd.tmpfiles.rules = [
-      "d ${cfg.stateDirectory} 0700 root root - -"
-      "d /run/wolf-streaming 0755 root root - -"
-      "d /run/wolf-streaming/runtime 0700 root root - -"
-      "L+ /run/wolf-streaming/libnvidia-allocator.so.1 - - - - ${nvidiaPackage}/lib/libnvidia-allocator.so.1"
-    ];
+    systemd.tmpfiles.rules =
+      [
+        "d ${cfg.stateDirectory} 0700 root root - -"
+        "d /run/wolf-streaming 0755 root root - -"
+        "d ${publicRuntimeDirectory} 0700 root root - -"
+        "L+ /run/wolf-streaming/libnvidia-allocator.so.1 - - - - ${nvidiaPackage}/lib/libnvidia-allocator.so.1"
+      ]
+      ++ lib.optionals isolatedProtectedBackend [
+        "d ${protectedStateDirectory} 0700 root root - -"
+        "d /run/wolf-streaming/protected 0700 root root - -"
+        "d ${protectedRuntimeDirectory} 0700 root root - -"
+      ];
 
     virtualisation.oci-containers = {
       backend = "docker";
-      containers.wolf = {
-        image = cfg.image;
-        autoStart = true;
-        environment = {
-          LD_LIBRARY_PATH = "/opt/wolf-nvrtc/lib";
-          NVIDIA_DRIVER_CAPABILITIES = "all";
-          NVIDIA_VISIBLE_DEVICES = "all";
-          WOLF_DEFAULT_RUN_GID = toString cfg.defaultRunGid;
-          WOLF_DEFAULT_RUN_UID = toString cfg.defaultRunUid;
-          WOLF_LOG_LEVEL = "INFO";
-          WOLF_RENDER_NODE = cfg.renderNode;
-          WOLF_SESSION_IDLE_TIMEOUT_SECONDS = toString cfg.sessionIdleTimeoutSeconds;
-          WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
-          # gst-wayland-display owns the outer virtual seat. Its Smithay
-          # keymap must recognize Right Alt as LevelThree before nested Sway
-          # can preserve AltGr for streamed applications.
-          XKB_DEFAULT_LAYOUT = lib.concatStringsSep "," browserCfg.keyboardLayouts;
-          XKB_DEFAULT_OPTIONS = "grp:alt_shift_toggle,lv3:ralt_switch";
-          XDG_RUNTIME_DIR = "/run/wolf-streaming/runtime";
+      containers =
+        {
+          wolf = {
+            image = cfg.image;
+            autoStart = true;
+            environment = {
+              LD_LIBRARY_PATH = "/opt/wolf-nvrtc/lib";
+              NVIDIA_DRIVER_CAPABILITIES = "all";
+              NVIDIA_VISIBLE_DEVICES = "all";
+              WOLF_DEFAULT_RUN_GID = toString cfg.defaultRunGid;
+              WOLF_DEFAULT_RUN_UID = toString cfg.defaultRunUid;
+              WOLF_LOG_LEVEL = "INFO";
+              WOLF_RENDER_NODE = cfg.renderNode;
+              WOLF_SESSION_IDLE_TIMEOUT_SECONDS = toString cfg.sessionIdleTimeoutSeconds;
+              WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
+              # gst-wayland-display owns the outer virtual seat. Its Smithay
+              # keymap must recognize Right Alt as LevelThree before nested Sway
+              # can preserve AltGr for streamed applications.
+              XKB_DEFAULT_LAYOUT = lib.concatStringsSep "," browserCfg.keyboardLayouts;
+              XKB_DEFAULT_OPTIONS = "grp:alt_shift_toggle,lv3:ralt_switch";
+              XDG_RUNTIME_DIR = "/run/wolf-streaming/runtime";
+            };
+            volumes = [
+              "${cfg.stateDirectory}:/etc/wolf:rw"
+              "${nvrtcRuntime}:/opt/wolf-nvrtc:ro"
+              "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+              "/run/wolf-streaming/runtime:/run/wolf-streaming/runtime:rw"
+              "${nvidiaPackage}/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/10_nvidia.json:ro"
+              "/var/run/docker.sock:/var/run/docker.sock:rw"
+              "/dev:/dev:rw"
+              "/run/udev:/run/udev:rw"
+            ];
+            extraOptions = [
+              "--network=host"
+              "--device=/dev/dri"
+              "--device=/dev/uinput"
+              "--device=/dev/uhid"
+              "--device=nvidia.com/gpu=all"
+              "--device-cgroup-rule=c 13:* rmw"
+            ];
+          };
+        }
+        // lib.optionalAttrs isolatedProtectedBackend {
+          wolf-protected = {
+            image = cfg.image;
+            autoStart = true;
+            environment = {
+              LD_LIBRARY_PATH = "/opt/wolf-nvrtc/lib";
+              NVIDIA_DRIVER_CAPABILITIES = "all";
+              NVIDIA_VISIBLE_DEVICES = "all";
+              WOLF_AUDIO_PING_PORT = toString (protectedPort 48200);
+              WOLF_CONTROL_PORT = toString (protectedPort 47999);
+              WOLF_DEFAULT_RUN_GID = toString cfg.defaultRunGid;
+              WOLF_DEFAULT_RUN_UID = toString cfg.defaultRunUid;
+              WOLF_HTTP_PORT = toString (protectedPort 47989);
+              WOLF_HTTPS_PORT = toString (protectedPort 47984);
+              WOLF_LOG_LEVEL = "INFO";
+              WOLF_RENDER_NODE = cfg.renderNode;
+              WOLF_RTSP_SETUP_PORT = toString (protectedPort 48010);
+              WOLF_SESSION_IDLE_TIMEOUT_SECONDS = toString cfg.sessionIdleTimeoutSeconds;
+              WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
+              WOLF_VIDEO_PING_PORT = toString (protectedPort 48100);
+              XKB_DEFAULT_LAYOUT = lib.concatStringsSep "," browserCfg.keyboardLayouts;
+              XKB_DEFAULT_OPTIONS = "grp:alt_shift_toggle,lv3:ralt_switch";
+              XDG_RUNTIME_DIR = protectedRuntimeDirectory;
+            };
+            volumes = [
+              "${protectedStateDirectory}:/etc/wolf:rw"
+              "${nvrtcRuntime}:/opt/wolf-nvrtc:ro"
+              "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+              "${protectedRuntimeDirectory}:${protectedRuntimeDirectory}:rw"
+              "${nvidiaPackage}/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/10_nvidia.json:ro"
+              "/var/run/docker.sock:/var/run/docker.sock:rw"
+              "/dev:/dev:rw"
+              "/run/udev:/run/udev:rw"
+            ];
+            extraOptions = [
+              "--network=host"
+              "--device=/dev/dri"
+              "--device=/dev/uinput"
+              "--device=/dev/uhid"
+              "--device=nvidia.com/gpu=all"
+              "--device-cgroup-rule=c 13:* rmw"
+            ];
+          };
         };
-        volumes = [
-          "${cfg.stateDirectory}:/etc/wolf:rw"
-          "${nvrtcRuntime}:/opt/wolf-nvrtc:ro"
-          "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
-          "/run/wolf-streaming/runtime:/run/wolf-streaming/runtime:rw"
-          "${nvidiaPackage}/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/10_nvidia.json:ro"
-          "/var/run/docker.sock:/var/run/docker.sock:rw"
-          "/dev:/dev:rw"
-          "/run/udev:/run/udev:rw"
-        ];
-        extraOptions = [
-          "--network=host"
-          "--device=/dev/dri"
-          "--device=/dev/uinput"
-          "--device=/dev/uhid"
-          "--device=nvidia.com/gpu=all"
-          "--device-cgroup-rule=c 13:* rmw"
-        ];
-      };
     };
 
     environment.systemPackages = lib.optional browserCfg.enable wolfStreamLayout;
@@ -1052,8 +1262,13 @@ in {
           "docker.service"
           "nvidia-container-toolkit-cdi-generator.service"
         ]
+        ++ lib.optional isolatedProtectedBackend "wolf-protected-state-migration.service"
         ++ lib.optional (cfg.protectedProfile.definitionFile != null) "sops-install-secrets.service";
-      requires = ["docker.service"];
+      requires =
+        [
+          "docker.service"
+        ]
+        ++ lib.optional isolatedProtectedBackend "wolf-protected-state-migration.service";
       serviceConfig.LoadCredential = lib.mkIf (cfg.protectedProfile.definitionFile != null) [
         "wolf-protected-profile:${cfg.protectedProfile.definitionFile}"
       ];
@@ -1062,13 +1277,24 @@ in {
           # Wolf cannot resume application containers that outlive a
           # coordinator restart. Remove only containers created by the managed
           # runners before loading the reconciled application catalog.
-          ${cleanupManagedContainers}
+          ${cleanupRunnerContainers (
+            publicRunnerNames ++ lib.optionals (!isolatedProtectedBackend) protectedRunnerNames
+          )}
 
           ${lib.getExe reconcileWolfApps} \
             ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} \
             ${lib.escapeShellArg managedMoonlightAppsFile}
+
+          ${lib.optionalString isolatedProtectedBackend ''
+            # The independent coordinator now owns this profile. Remove its
+            # stale catalog entry from the public coordinator only after the
+            # one-time state fork has completed.
+            ${lib.getExe removeWolfProtectedProfile} \
+              ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} \
+              "$CREDENTIALS_DIRECTORY/wolf-protected-profile"
+          ''}
         ''
-        + lib.optionalString (cfg.protectedProfile.definitionFile != null) ''
+        + lib.optionalString (cfg.protectedProfile.definitionFile != null && !isolatedProtectedBackend) ''
           ${lib.getExe reconcileWolfProtectedProfile} \
             ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} \
             "$CREDENTIALS_DIRECTORY/wolf-protected-profile" \
@@ -1076,6 +1302,59 @@ in {
             ${lib.escapeShellArg cfg.protectedProfile.displayName}
         ''
       );
+    };
+
+    systemd.services.wolf-protected-state-migration = lib.mkIf isolatedProtectedBackend {
+      description = "Fork persistent Wolf state for the protected coordinator";
+      before = [
+        "docker-wolf.service"
+        "docker-wolf-protected.service"
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        # Preserve pairing, protected browser homes, and profile identity on
+        # the first split. The state trees diverge permanently after this copy.
+        if [ ! -e ${lib.escapeShellArg "${protectedStateDirectory}/cfg/config.toml"} ] \
+          && [ -e ${lib.escapeShellArg "${cfg.stateDirectory}/cfg/config.toml"} ]; then
+          cp -a ${lib.escapeShellArg "${cfg.stateDirectory}/."} \
+            ${lib.escapeShellArg "${protectedStateDirectory}/"}
+          find ${lib.escapeShellArg protectedStateDirectory} \
+            -name .nixbox-browser-session.lock -delete
+        fi
+      '';
+    };
+
+    systemd.services.docker-wolf-protected = lib.mkIf isolatedProtectedBackend {
+      after = [
+        "docker.service"
+        "nvidia-container-toolkit-cdi-generator.service"
+        "sops-install-secrets.service"
+        "wolf-protected-state-migration.service"
+      ];
+      requires = [
+        "docker.service"
+        "wolf-protected-state-migration.service"
+      ];
+      serviceConfig.LoadCredential = [
+        "wolf-protected-profile:${cfg.protectedProfile.definitionFile}"
+      ];
+      preStart = ''
+        ${cleanupRunnerContainers protectedRunnerNames}
+
+        ${lib.getExe reconcileWolfApps} \
+          ${lib.escapeShellArg "${protectedStateDirectory}/cfg/config.toml"} \
+          ${lib.escapeShellArg protectedMoonlightAppsFile} \
+          ${lib.escapeShellArg "Wolf User"}
+
+        ${lib.getExe reconcileWolfProtectedProfile} \
+          ${lib.escapeShellArg "${protectedStateDirectory}/cfg/config.toml"} \
+          "$CREDENTIALS_DIRECTORY/wolf-protected-profile" \
+          ${lib.escapeShellArg protectedBrowserAppsFile} \
+          ${lib.escapeShellArg cfg.protectedProfile.displayName}
+      '';
     };
 
     systemd.services.wolf-vram-watchdog = lib.mkIf cfg.vramWatchdog.enable {
@@ -1097,6 +1376,29 @@ in {
       };
     };
 
+    systemd.services.wolf-protected-vram-watchdog =
+      lib.mkIf (cfg.vramWatchdog.enable && isolatedProtectedBackend)
+      {
+        description = "Recover protected Wolf from sustained GPU-memory growth";
+        after = ["docker-wolf-protected.service"];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = lib.getExe protectedWolfVramWatchdog;
+        };
+      };
+
+    systemd.timers.wolf-protected-vram-watchdog =
+      lib.mkIf (cfg.vramWatchdog.enable && isolatedProtectedBackend)
+      {
+        description = "Periodically check protected Wolf GPU-memory usage";
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnBootSec = cfg.vramWatchdog.interval;
+          OnUnitActiveSec = cfg.vramWatchdog.interval;
+          Unit = "wolf-protected-vram-watchdog.service";
+        };
+      };
+
     systemd.services.wolf-pipeline-watchdog = lib.mkIf cfg.pipelineWatchdog.enable {
       description = "Recover Wolf from fatal video-pipeline failures";
       after = ["docker-wolf.service"];
@@ -1117,12 +1419,44 @@ in {
       };
     };
 
+    systemd.services.wolf-protected-pipeline-watchdog =
+      lib.mkIf (cfg.pipelineWatchdog.enable && isolatedProtectedBackend)
+      {
+        description = "Recover protected Wolf from fatal video-pipeline failures";
+        after = ["docker-wolf-protected.service"];
+        serviceConfig = {
+          Type = "oneshot";
+          StateDirectory = "wolf-protected-pipeline-watchdog";
+          ExecStart = lib.getExe protectedWolfPipelineWatchdog;
+        };
+      };
+
+    systemd.timers.wolf-protected-pipeline-watchdog =
+      lib.mkIf (cfg.pipelineWatchdog.enable && isolatedProtectedBackend)
+      {
+        description = "Periodically check protected Wolf video-pipeline health";
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnBootSec = cfg.pipelineWatchdog.interval;
+          OnUnitActiveSec = cfg.pipelineWatchdog.interval;
+          Unit = "wolf-protected-pipeline-watchdog.service";
+        };
+      };
+
     systemd.services.wolf-patched-image = lib.mkIf (cfg.image == wolfPatchedImage) {
       description = "Build the pinned Wolf image with AltGr modifier tracking";
       after = ["docker.service"];
-      before = ["docker-wolf.service"];
+      before =
+        [
+          "docker-wolf.service"
+        ]
+        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       requires = ["docker.service"];
-      requiredBy = ["docker-wolf.service"];
+      requiredBy =
+        [
+          "docker-wolf.service"
+        ]
+        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -1133,9 +1467,17 @@ in {
     systemd.services.wolf-browser-images = lib.mkIf browserCfg.enable {
       description = "Build local Wolf browser application images";
       after = ["docker.service"];
-      before = ["docker-wolf.service"];
+      before =
+        [
+          "docker-wolf.service"
+        ]
+        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       requires = ["docker.service"];
-      requiredBy = ["docker-wolf.service"];
+      requiredBy =
+        [
+          "docker-wolf.service"
+        ]
+        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -1144,16 +1486,28 @@ in {
     };
 
     networking.firewall = lib.mkIf cfg.openFirewall {
-      allowedTCPPorts = [
-        47984
-        47989
-        48010
-      ];
-      allowedUDPPorts = [
-        47999
-        48100
-        48200
-      ];
+      allowedTCPPorts =
+        [
+          47984
+          47989
+          48010
+        ]
+        ++ lib.optionals isolatedProtectedBackend [
+          (protectedPort 47984)
+          (protectedPort 47989)
+          (protectedPort 48010)
+        ];
+      allowedUDPPorts =
+        [
+          47999
+          48100
+          48200
+        ]
+        ++ lib.optionals isolatedProtectedBackend [
+          (protectedPort 47999)
+          (protectedPort 48100)
+          (protectedPort 48200)
+        ];
     };
   };
 }

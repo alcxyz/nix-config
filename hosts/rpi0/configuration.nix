@@ -131,6 +131,8 @@ in {
 
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
+    browserStreamSelectorHost = "Wolf User";
+    browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
     # Browser runners are resumable across clients and are standardized on a
@@ -145,8 +147,15 @@ in {
     ];
     browserStreamLayoutCommand = ''
       case "$COUCH_STREAM_APPLICATION" in
-        Helium) runners=(WolfHelium) ;;
+        Helium)
+          coordinator_args=()
+          runners=(WolfHelium)
+          ;;
         "Wolf UI")
+          coordinator_args=(
+            --coordinator wolf-protected
+            --runtime-directory /run/wolf-streaming/protected/runtime
+          )
           runners=(
             WolfHeliumPrivate
             WolfBrave
@@ -162,6 +171,7 @@ in {
         -o ConnectTimeout=5 \
         xev \
         wolf-stream-layout \
+          "''${coordinator_args[@]}" \
           --presentation-scale "$COUCH_PRESENTATION_SCALE" \
           "$COUCH_KEYBOARD_LAYOUT" \
           "''${runners[@]}"

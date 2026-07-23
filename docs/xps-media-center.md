@@ -214,15 +214,15 @@ device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 
 ### Remote browser streaming
 
-XEV also provides on-demand browser sessions through Wolf and Moonlight. Each
-launch creates a disposable application container and a virtual display. A
-client disconnect leaves the container resumable for 30 minutes; Wolf removes
-it after that idle deadline while retaining the browser's isolated home. Helium
-is the general remote browser. The protected selector
-offers isolated Helium, Brave, Chromium, Firefox, and Zen homes for private
-use and comparative testing. The browsers are not installed globally on XEV;
-their images share the common GoW runtime layers rather than duplicating a
-desktop stack.
+XEV also provides on-demand browser sessions through two independent Wolf
+coordinators and Moonlight. The public coordinator exposes only Helium. The
+protected coordinator exposes Wolf UI, whose protected profile offers isolated
+Helium, Brave, Chromium, Firefox, and Zen homes for private use and comparative
+testing. Each launch creates a disposable application container and virtual
+display. A client disconnect leaves the container resumable for 30 minutes;
+its owning coordinator removes it after that idle deadline while retaining the
+browser's isolated home. The browsers are not installed globally on XEV; their
+images share common GoW runtime layers rather than duplicating a desktop stack.
 
 The protected profile is provisioned from a root-only runtime credential. Its
 identity and PIN remain in the private configuration and out of the public Nix
@@ -263,10 +263,13 @@ Browser launchers intentionally omit Moonlight's `--quit-after`: closing the
 local client pauses the remote application instead of destroying it.
 
 Steam, public Helium, and the protected Wolf selector use independent Moonlight
-processes on workspaces 1, 2, and 3 respectively. They can remain open and be
-switched with the ordinary workspace shortcuts; launching one does not stop the
-others. Background clients mute their audio and do not retain controller input,
-but continue decoding and using network bandwidth until explicitly closed.
+processes on workspaces 1, 2, and 3 respectively. Public Helium and the
+protected selector also use separate Wolf coordinators, state trees, runtime
+sockets, ports, cleanup scopes, and watchdogs on XEV. They can remain open and
+be switched with the ordinary workspace shortcuts; launching, restarting, or
+recovering one browser coordinator does not stop the other. Background clients
+mute their audio and do not retain controller input, but continue decoding and
+using network bandwidth until explicitly closed.
 Three concurrent 1440p60 clients therefore still impose client-side decode and
 presentation work on XPS even though rendering happens remotely.
 Each Moonlight client is supervised by its own process and exact Hyprland
@@ -285,21 +288,22 @@ browser lobby becomes empty. Reconnecting cancels the deadline; expiry stops
 and removes the abandoned remote application container. Other applications
 retain Hyprland's ordinary focused-window close behavior.
 
-XEV also guards against the rarer case where Wolf remains reachable after its
-CUDA/GStreamer video path has failed. The watchdog recognizes only the known
-fatal buffer-map or streaming-thread signatures, waits until Wolf reports no
-active sessions, and then reconstructs the coordinator and disposable runner
-containers. If the coordinator both retains session records and accumulates a
-pathological number of abandoned HTTP control connections, the watchdog treats
-those records as stale and recovers instead of waiting forever. The browser
-homes remain persistent across recovery.
+XEV also guards against the rarer case where either Wolf coordinator remains
+reachable after its CUDA/GStreamer video path has failed. Each watchdog
+recognizes only the known fatal buffer-map or streaming-thread signatures,
+waits until its own coordinator reports no active sessions, and reconstructs
+only that coordinator and its disposable runner containers. If a coordinator
+retains session records and accumulates a pathological number of abandoned HTTP
+control connections, its watchdog treats those records as stale and recovers
+instead of waiting forever. Browser homes remain persistent across recovery.
 
-The protected selector also uses a separate persistent Moonlight client
-profile because it shares the Wolf host with public Helium. Pair that profile
-once with `couch-moonlight-pair-private FOUR_DIGIT_PIN`; its certificate and
-host state remain in the user's private data directory rather than the Nix
-store. This allows Wolf to keep the public and protected sessions active at the
-same time.
+The protected selector uses a separate persistent Moonlight client profile and
+targets the protected coordinator's distinct hostname and protocol port. Pair
+that profile once with `couch-moonlight-pair-private FOUR_DIGIT_PIN`; its
+certificate and host state remain in the user's private data directory rather
+than the Nix store. The migration from the earlier shared coordinator preserves
+that established pairing while moving subsequent protected sessions onto the
+independent endpoint.
 
 Moonlight opens as a normal tiled window. It requests a 2560×1440 stream
 independently of the local output: a 1440p TV presents it at native size, while

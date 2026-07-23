@@ -292,12 +292,14 @@ in {
   services.moonlight-client = {
     enable = true;
     package = pkgs.moonlight-qt.overrideAttrs (old: {
-      patches = (old.patches or []) ++ [
-        (builtins.path {
-          path = ../../modules/nixos/services/moonlight-client/recover-stalled-sdl-audio.patch;
-          name = "moonlight-recover-stalled-sdl-audio.patch";
-        })
-      ];
+      patches =
+        (old.patches or [])
+        ++ [
+          (builtins.path {
+            path = ../../modules/nixos/services/moonlight-client/recover-stalled-sdl-audio.patch;
+            name = "moonlight-recover-stalled-sdl-audio.patch";
+          })
+        ];
     });
     autoLoginUser = username;
     desktopSessionCommand = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
@@ -364,12 +366,21 @@ in {
     # host discovery cannot silently move latency-sensitive streams onto VPN.
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
+    browserStreamSelectorHost = "Wolf User";
+    browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
     browserStreamLayoutCommand = ''
       case "$COUCH_STREAM_APPLICATION" in
-        Helium) runners=(WolfHelium) ;;
+        Helium)
+          coordinator_args=()
+          runners=(WolfHelium)
+          ;;
         "Wolf UI")
+          coordinator_args=(
+            --coordinator wolf-protected
+            --runtime-directory /run/wolf-streaming/protected/runtime
+          )
           runners=(
             WolfHeliumPrivate
             WolfBrave
@@ -385,6 +396,7 @@ in {
         -o ConnectTimeout=5 \
         xev \
         wolf-stream-layout \
+          "''${coordinator_args[@]}" \
           --presentation-scale "$COUCH_PRESENTATION_SCALE" \
           "$COUCH_KEYBOARD_LAYOUT" \
           "''${runners[@]}"

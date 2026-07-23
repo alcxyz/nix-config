@@ -71,6 +71,12 @@ services restart independently and refuse to route Synergy over an overlay
 network. If the graphical shell fails, the local terminal binding and SSH
 remain available for recovery.
 
+Normal and protected browser launchers may target separate coordinator
+hostnames and ports while sharing the same physical streaming server. Compact
+clients keep a distinct Moonlight XDG profile for the protected selector, so a
+restart or recovery of its coordinator does not interrupt the public browser
+session.
+
 Boot generations remain the rollback boundary for display-mode or Plymouth
 experiments. Set `enableBootSplash = false` on compact hosts that should retain
 the normal console boot while keeping the compositor-owned transitions. A

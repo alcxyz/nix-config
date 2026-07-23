@@ -51,20 +51,21 @@ dummy display plug.
 
 The NixOS module:
 
-- enables NVIDIA container CDI and starts Wolf only after its CDI inventory is
-  available;
+- enables NVIDIA container CDI and starts each Wolf coordinator only after its
+  CDI inventory is available;
 - mounts the Docker socket, DRM and virtual-input devices required by Wolf;
-- stores certificates, pairings, profiles, and application homes in a
-  configurable persistent state directory;
+- stores certificates, pairings, profiles, and application homes in separate
+  configurable persistent state directories for public and protected use;
 - exposes only Wolf's documented Moonlight protocol ports; and
 - pins the Wolf image by platform digest instead of following a mutable tag.
 
-Treat the state directory as private runtime data. Do not commit its generated
+Treat the state directories as private runtime data. Do not commit their generated
 configuration, certificates, paired-client records, profile PINs, or browser
-homes. The general profile contains Helium. A PIN-protected Wolf profile
-contains isolated Helium, Brave, Chromium, Firefox, and Zen applications
-for private use and comparative testing. Their homes remain separate and
-persistent across on-demand container replacement.
+homes. The public coordinator contains only Helium. An independent protected
+coordinator exposes Wolf UI, whose PIN-protected profile contains isolated
+Helium, Brave, Chromium, Firefox, and Zen applications for private use and
+comparative testing. Their homes remain separate and persistent across
+on-demand container replacement.
 
 Build every browser as a distinct local image on top of the same pinned GoW
 `base-app` image. Helium and Brave use their pinned Debian release artifacts;
@@ -97,17 +98,26 @@ Alt from GameStream's generic modifier bit. This preserves `AltGr` combinations
 from physical Moonlight keyboards while retaining the protocol fallback for
 clients that send only the modifier mask.
 
-The module reconciles only explicitly managed applications in Wolf's Moonlight
-profile. It writes the generated TOML atomically and preserves every unowned
-application, paired client, certificate, profile, PIN, and home. Helium is
-published directly for general browsing. A pinned Wolf UI entry is also
-published as the controller-friendly profile selector. Its API socket stays in
-a root-owned local runtime directory and is mounted only into that application
-container. The protected browser set remains absent from the direct Moonlight
-list and is attached to a PIN-protected Wolf profile through a root-only
-systemd credential supplied at runtime by the private configuration. The
-credential contains only the protected profile identity, display name, and
-PIN. It is never copied into the Nix store or this repository.
+The module reconciles only explicitly managed applications in each
+coordinator's Moonlight profile. It writes generated TOML atomically and
+preserves every unowned application, paired client, certificate, PIN, and home.
+Helium is published directly by the public coordinator. A pinned Wolf UI entry
+is published only by the protected coordinator as its controller-friendly
+profile selector. Its API socket stays in a distinct root-owned runtime
+directory and is mounted only into that application container. The protected
+browser set remains absent from both direct Moonlight lists and is attached to
+a PIN-protected Wolf profile through a root-only systemd credential supplied at
+runtime by the private configuration. The credential contains only the
+protected profile identity, display name, and PIN. It is never copied into the
+Nix store or this repository.
+
+Fork the established Wolf state once when enabling coordinator isolation so
+pairings and browser homes survive migration. Reconcile the protected copy
+under an independent hostname and offset protocol ports, then retire the
+protected profile from the public catalog. From that point onward the
+coordinators have separate state, runtime sockets, runner cleanup sets, ports,
+VRAM watchdogs, and pipeline watchdogs. Restarting or recovering one coordinator
+must not stop runners or sessions owned by the other.
 
 Do not advertise the protected browser's identity in Wolf UI. Replace Wolf's
 stock unprotected profile with the protected profile, present it under the
@@ -188,11 +198,13 @@ windows retain the compositor's normal close request. This prevents a stalled
 decoder event loop from trapping its supervisor, preserves fast browser resume,
 and eventually removes abandoned application containers.
 
-Public Helium and the protected selector target the same Wolf host. Give the
-selector its own persistent Moonlight XDG profile and client certificate so
-Wolf treats it as an independent paired client instead of asking to terminate
-the public session. Keep generated credentials and pairing state outside the
-Nix store; NixOS declares the profile boundary and pairing helper only.
+Public Helium and the protected selector target independent Wolf coordinators
+on the same GPU host. Give the selector its own persistent Moonlight XDG
+profile, hostname, client certificate, and configured port. This lets both
+coordinators retain an active session without sharing client state or a
+control-plane failure domain. Keep generated credentials and pairing state
+outside the Nix store; NixOS declares the profile and endpoint boundaries plus
+the pairing helper only.
 
 The SteamHeadless deployment and its existing XPS launch action remain
 unchanged. A browser-streaming failure must not start, stop, or modify the game
@@ -265,20 +277,22 @@ low-latency video, audio, and controller integration already used by Moonlight.
   directly; a neutral menu entry and separate keyboard shortcut open Wolf UI
   for the PIN-protected profile without putting that path in the on-screen
   guide.
-- Direct application catalog reduced to Wolf UI and Helium; the upstream
-  Firefox baseline and test-pattern entries are declaratively pruned after
-  acceptance without deleting their dormant application homes.
+- Public direct application catalog reduced to Helium; the protected direct
+  catalog contains only Wolf UI. Browser choices remain behind the protected
+  profile, and the upstream Firefox baseline and test-pattern entries are
+  declaratively pruned without deleting dormant application homes.
 - Browser homes are locked while in use and stale Chromium singleton files are
   removed before launch. Wolf coordinator restarts remove only orphaned
   containers created by the managed browser runners, while Moonlight sessions
   terminate themselves if their window never appears or disappears while the
   client process remains stuck. The pipeline watchdog also recognizes a wedged
   coordinator whose stale session records would otherwise block recovery.
-- Public and protected browser applications have separate runner containers
-  and persistent homes but still share one Wolf coordinator. That coordinator
-  remains a common failure domain; a future strict-isolation design should use
-  separate coordinator endpoints rather than claiming application-container
-  separation also provides control-plane isolation.
+- Public and protected browser applications use independent Wolf coordinators,
+  persistent state trees, runtime sockets, protocol ports, runner cleanup sets,
+  and watchdogs. The one-time state fork retained established pairings and
+  browser homes; the protected profile was then removed from public state. A
+  protected-coordinator restart was verified without changing the public
+  coordinator's container identity, start time, or availability.
 - Explicit streaming endpoint policy: XPS pins both browser and Steam pairings
   to LAN-only fields and readiness checks. macOS exposes distinct LAN and VPN
   application bundles; each pins all saved fields to one endpoint and starts
@@ -302,12 +316,14 @@ low-latency video, audio, and controller integration already used by Moonlight.
   Moonlight window stops only its local user service, reconnecting resumes the
   existing Wolf application, and an uninterrupted 30-minute disconnect was
   observed expiring and removing the abandoned browser container.
-- Guarded encoder recovery: implemented. XEV watches for the narrow fatal
-  CUDA-buffer and Wolf streaming-thread signatures that leave the coordinator
-  reachable but unable to emit video. Recovery remains pending while the Wolf
-  API reports any active session, then restarts the coordinator once no
-  healthy concurrent stream can be disrupted. Persistent browser homes are
-  retained. Sustained VRAM growth remains covered by its separate watchdog.
+- Guarded encoder recovery: implemented independently for both coordinators.
+  XEV watches for the narrow fatal CUDA-buffer and Wolf streaming-thread
+  signatures that leave a coordinator reachable but unable to emit video.
+  Recovery remains pending while that coordinator reports an active session,
+  then restarts only that service once no healthy stream on it can be
+  disrupted. Persistent browser homes are retained. Sustained VRAM growth is
+  covered by a separate per-coordinator watchdog, and startup races before
+  Docker creates the named container are treated as normal.
 - Stream teardown is independent of DMS responsiveness. Every optional shell
   IPC call has a sub-second deadline, preventing a presentation-layer timeout
   from leaving an otherwise stopped Moonlight unit in a failed state.

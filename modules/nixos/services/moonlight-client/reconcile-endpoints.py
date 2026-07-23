@@ -17,10 +17,10 @@ RFC1918 = (
 
 
 def main():
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 8):
         raise SystemExit(
             "usage: reconcile-endpoints.py CONFIG HOSTNAME MODE LAN_ADDRESS "
-            "REMOTE_ADDRESS"
+            "REMOTE_ADDRESS [HTTP_PORT PREVIOUS_HOSTNAME]"
         )
 
     config_path = Path(sys.argv[1])
@@ -28,6 +28,10 @@ def main():
     mode = sys.argv[3]
     lan_address = ipaddress.ip_address(sys.argv[4])
     remote_address = ipaddress.ip_address(sys.argv[5])
+    http_port = int(sys.argv[6]) if len(sys.argv) == 8 and sys.argv[6] else None
+    previous_hostname = sys.argv[7] if len(sys.argv) == 8 else ""
+    if http_port is not None and not 1 <= http_port <= 65535:
+        raise ValueError("Moonlight HTTP port must be between 1 and 65535")
 
     if mode not in ("lan-only", "lan-first", "remote-only"):
         raise ValueError(f"unsupported Moonlight endpoint mode: {mode!r}")
@@ -44,6 +48,7 @@ def main():
     lines = config_path.read_text().splitlines(keepends=True)
     in_hosts = False
     host_index = None
+    previous_host_index = None
     for line in lines:
         stripped = line.rstrip("\r\n")
         if stripped.startswith("[") and stripped.endswith("]"):
@@ -52,21 +57,42 @@ def main():
         if not in_hosts:
             continue
         match = re.fullmatch(r"(\d+)\\hostname=(.*)", stripped)
-        if match and match.group(2) == hostname:
-            host_index = match.group(1)
-            break
+        if match:
+            if match.group(2) == hostname:
+                host_index = match.group(1)
+                break
+            if previous_hostname and match.group(2) == previous_hostname:
+                previous_host_index = match.group(1)
 
     if host_index is None:
-        raise RuntimeError(f"Moonlight has no paired host named {hostname!r}")
+        host_index = previous_host_index
+    if host_index is None:
+        raise RuntimeError(
+            f"Moonlight has no paired host named {hostname!r}"
+            + (
+                f" or migration source {previous_hostname!r}"
+                if previous_hostname
+                else ""
+            )
+        )
 
     preferred_address = remote_address if mode == "remote-only" else lan_address
     desired = {
+        f"{host_index}\\hostname": hostname,
         f"{host_index}\\localaddress": str(preferred_address),
         f"{host_index}\\manualaddress": str(preferred_address),
         f"{host_index}\\remoteaddress": str(
             remote_address if mode == "lan-first" else preferred_address
         ),
     }
+    if http_port is not None:
+        desired.update(
+            {
+                f"{host_index}\\localport": str(http_port),
+                f"{host_index}\\manualport": str(http_port),
+                f"{host_index}\\remoteport": str(http_port),
+            }
+        )
     found = set()
     changed = False
     output = []

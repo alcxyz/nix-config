@@ -140,11 +140,16 @@ def main():
 
     apps = profile.setdefault("apps", tomlkit.aot())
     desired_titles = {app["title"] for app in managed_apps}
+    retained_titles = set()
     for index in reversed(range(len(apps))):
         title = apps[index].get("title")
-        if title in managed_titles and title not in desired_titles:
+        if title not in managed_titles:
+            continue
+        if title not in desired_titles or title in retained_titles:
             del apps[index]
             changed = True
+        else:
+            retained_titles.add(title)
 
     for desired in managed_apps:
         index = next(
