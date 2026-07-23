@@ -20,7 +20,7 @@ in {
     "${configDir}/modules/home-manager/programs/niri/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
     "${configDir}/modules/home-manager/services/hyprlock/default.nix"
-    "${configDir}/modules/home-manager/services/waynergy/default.nix"
+    "${configDir}/modules/home-manager/profiles/nixbox-session/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
@@ -90,12 +90,7 @@ in {
   };
   services.hyprlock.enable = true;
   services.waynergy = {
-    enable = true;
     screenName = "xps";
-    sourceKeyboard = "mac";
-    backend = "uinput";
-    requireLanAddress = true;
-    useFocusedMonitorGeometry = true;
   };
   dconf.enable = false;
   services.udiskie = {

@@ -3160,6 +3160,10 @@
 
     cursor {
       inactive_timeout = 3
+      # Network input backends can expose absolute axes even when they are
+      # semantically mice. Never let that classification hide Waynergy or KDE
+      # Connect motion; retain the normal inactivity timeout above.
+      hide_on_touch = false
     }
 
     windowrule = match:class CouchBrowser, workspace 2

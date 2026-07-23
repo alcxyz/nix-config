@@ -28,7 +28,7 @@ in {
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
-    "${configDir}/modules/nixos/services/moonlight-client/default.nix"
+    "${configDir}/modules/nixos/profiles/nixbox-session/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
     inputs.nix-secrets.nixosModules.xpsPrivate
   ];
@@ -308,13 +308,9 @@ in {
     disableInternalDisplay = false;
     enableDms = false;
     enableMergedProfile = true;
-    enableKdeConnect = true;
-    enableControllerShortcuts = true;
     keyboardLayouts = "no,us";
     keyboardLayoutDeviceOverrides.us = ["glove80"];
     keyboardOptions = "grp:alt_shift_toggle";
-    browserScaleFactor = 1.5;
-    browserPresentationScale = 1.5;
     sessionSplashCommand = lib.getExe pkgs.nixbox-session-splash;
     autoStartBrowser = true;
     preferRemoteBrowserAtStartup = true;
@@ -326,7 +322,6 @@ in {
     protectedBrowserCommandName = "brave";
     protectedBrowserEncryptedDirectory = "brave-couch-private";
     protectedBrowserLegacyProfileDirectory = "/run/moonlight-client/dms-merged/BraveSoftware/Brave-Browser";
-    moonlightPlatform = "xcb";
     outputMode = "2560x1440@60";
     mirrorOutputMode = "1920x1080@60";
     fallbackOutputMode = "1920x1080@60";
@@ -359,22 +354,16 @@ in {
       9
     ];
     enableAdaptiveDisplayLayout = true;
-    enableAudioOutputCycle = true;
-    enableAudioHealthRecovery = true;
     autoMirrorExternalOutputs = false;
     enableMirrorToggle = true;
     forceSoftwareMirror = true;
     autoMirrorWorkspace = 10;
-    preferHdmiAudio = false;
-    relaunchOnExit = false;
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
     # XPS is a fixed LAN client. Pin every Moonlight endpoint field to LAN so
     # host discovery cannot silently move latency-sensitive streams onto VPN.
-    streamEndpointMode = "lan-only";
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
-    browserStreamEndpointMode = "lan-only";
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
     browserStreamLayoutCommand = ''
@@ -400,11 +389,6 @@ in {
           "$COUCH_KEYBOARD_LAYOUT" \
           "''${runners[@]}"
     '';
-    browserStreamArguments = [
-      "--absolute-mouse"
-      "--capture-system-keys"
-      "never"
-    ];
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
     streamArguments = [

@@ -98,7 +98,6 @@ in {
   services.moonlight-client = {
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
-    streamEndpointMode = "lan-only";
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
     streamArguments = [
@@ -124,14 +123,8 @@ in {
 
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
-    browserStreamEndpointMode = "lan-only";
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
-    browserStreamArguments = [
-      "--absolute-mouse"
-      "--capture-system-keys"
-      "never"
-    ];
     browserStreamLayoutCommand = ''
       case "$COUCH_STREAM_APPLICATION" in
         Helium) runners=(WolfHelium) ;;

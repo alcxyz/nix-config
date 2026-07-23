@@ -6,7 +6,7 @@
 }: let
   cfg = config.services.nixbox-client;
 in {
-  imports = [../../services/moonlight-client/default.nix];
+  imports = [../nixbox-session/default.nix];
 
   options.services.nixbox-client = {
     enable = lib.mkEnableOption "a compact controller-first Nixbox streaming client";
@@ -163,7 +163,6 @@ in {
       enableDms = cfg.enableDms;
       enableMergedProfile = false;
       enableKdeConnect = cfg.enableKdeConnect;
-      enableControllerShortcuts = true;
       fallbackBrowserPackage = null;
       protectedBrowserPackage = null;
       browserScaleFactor = cfg.presentationScale;
@@ -179,11 +178,6 @@ in {
       outputMode = cfg.outputMode;
       fallbackOutputMode = "1920x1080@60";
       outputScale = cfg.outputScale;
-      # Compact clients can have both a TV and a local sound system. Preserve
-      # the user's selected default across Moonlight launches and expose the
-      # existing keyboard/controller audio-output cycle.
-      preferHdmiAudio = false;
-      enableAudioOutputCycle = true;
     };
   };
 }

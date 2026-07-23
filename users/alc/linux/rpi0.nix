@@ -10,7 +10,7 @@
     # enabling or installing the operator Kubernetes toolchain.
     "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
-    "${configDir}/modules/home-manager/services/waynergy/default.nix"
+    "${configDir}/modules/home-manager/profiles/nixbox-session/default.nix"
   ];
 
   # This is an appliance profile, not the shared Linux operator profile.
@@ -52,11 +52,6 @@
   };
 
   services.waynergy = {
-    enable = true;
     screenName = "rpi0";
-    sourceKeyboard = "mac";
-    backend = "uinput";
-    requireLanAddress = true;
-    useFocusedMonitorGeometry = true;
   };
 }
