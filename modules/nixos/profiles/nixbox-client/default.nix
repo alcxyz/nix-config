@@ -164,7 +164,9 @@ in {
       browserPresentationScale = cfg.presentationScale;
       cursorThemePackage = pkgs.adwaita-icon-theme;
       cursorTheme = "Adwaita";
-      cursorSize = 48;
+      # Adwaita's conventional desktop cursor is 24 px. Match the compact
+      # client's 1.5x presentation scale without changing the output scale.
+      cursorSize = 36;
       sessionSplashCommand = lib.mkIf cfg.enablePresentation (lib.getExe pkgs.nixbox-session-splash);
       relaunchOnExit = false;
       moonlightPlatform = cfg.moonlightPlatform;

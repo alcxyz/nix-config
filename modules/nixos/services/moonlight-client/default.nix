@@ -3112,7 +3112,10 @@
       )
       cfg.softwareMirrorOutputs
     )}
-    ${lib.optionalString cfg.enableDms "exec-once = ${lib.getExe dmsSession}"}
+    # Import the live compositor environment immediately above, then hand DMS
+    # to systemd so a transient startup failure or later crash cannot leave the
+    # shell absent for the remainder of the session.
+    ${lib.optionalString cfg.enableDms "exec-once = ${pkgs.systemd}/bin/systemctl --user start couch-dms.service"}
     ${lib.optionalString cfg.enableMergedProfile "exec-once = ${lib.getExe mergedDmsServiceControl}"}
 
     input {
@@ -4087,6 +4090,17 @@ in {
       serviceConfig = {
         Type = "exec";
         ExecStart = lib.getExe protectedBrowserSession;
+      };
+    };
+
+    systemd.user.services.couch-dms = lib.mkIf cfg.enableDms {
+      description = "Supervised DMS shell for the dedicated couch session";
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = lib.getExe dmsSession;
+        Restart = "always";
+        RestartSec = 2;
+        SuccessExitStatus = 143;
       };
     };
 
