@@ -6,9 +6,14 @@
   ...
 }: let
   cfg = config.services.moonlight-client;
+  moonlightPackage = cfg.package.overrideAttrs (old: {
+    patches = (old.patches or []) ++ [./patches/poll-absolute-mouse.patch];
+  });
 
   modeStateDirectory = "/var/lib/moonlight-client";
   modeStateFile = "${modeStateDirectory}/session-mode";
+  directDrmReturnModeFile = "${modeStateDirectory}/direct-drm-return-mode";
+  directDrmKeyboardLayoutFile = "${modeStateDirectory}/direct-drm-keyboard-layout";
   runtimeStateDirectory = "/run/moonlight-client";
   dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
   mirrorStateFile = "${modeStateDirectory}/mirror-enabled";
@@ -144,6 +149,10 @@
   directStreamEnabled = cfg.streamHost != null && cfg.streamApplication != null;
   browserStreamEnabled = cfg.browserStreamHost != null && cfg.browserStreamApplication != null;
   browserSelectorEnabled = browserStreamEnabled && cfg.browserStreamSelectorApplication != null;
+  directDrmBrowserEnabled = cfg.enableDirectDrmBrowserStreams && browserStreamEnabled;
+  sessionModeSwitchEnabled =
+    cfg.autoLoginUser != null
+    && (cfg.desktopSessionCommand != null || directDrmBrowserEnabled);
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
     if dynamicExternalLayoutEnabled
@@ -168,7 +177,7 @@
   mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
   mkMoonlightExecutable = name: profileDirectory:
     if profileDirectory == null
-    then lib.getExe cfg.package
+    then lib.getExe moonlightPackage
     else
       lib.getExe (
         pkgs.writeShellApplication {
@@ -182,17 +191,20 @@
             export XDG_CONFIG_HOME=${lib.escapeShellArg "${profileDirectory}/config"}
             export XDG_CACHE_HOME=${lib.escapeShellArg "${profileDirectory}/cache"}
             export XDG_DATA_HOME=${lib.escapeShellArg "${profileDirectory}/data"}
-            exec ${lib.getExe cfg.package} "$@"
+            exec ${lib.getExe moonlightPackage} "$@"
           '';
         }
       );
   defaultMoonlightExecutable = mkMoonlightExecutable "default" null;
   selectorMoonlightExecutable = mkMoonlightExecutable "browser-selector" cfg.browserStreamSelectorProfileDirectory;
-  mkMoonlightInvocation = executable: extraArguments: host: application:
+  mkMoonlightInvocation = executable: extraEnvironment: extraArguments: host: application:
     lib.escapeShellArgs (
       [
         "${pkgs.coreutils}/bin/env"
         "QT_QPA_PLATFORM=${cfg.moonlightPlatform}"
+      ]
+      ++ extraEnvironment
+      ++ [
         executable
         "stream"
       ]
@@ -205,7 +217,7 @@
     );
   moonlightInvocation =
     if directStreamEnabled
-    then mkMoonlightInvocation defaultMoonlightExecutable [] cfg.streamHost cfg.streamApplication
+    then mkMoonlightInvocation defaultMoonlightExecutable [] [] cfg.streamHost cfg.streamApplication
     else
       lib.escapeShellArgs [
         "${pkgs.coreutils}/bin/env"
@@ -213,13 +225,44 @@
         defaultMoonlightExecutable
       ];
   browserMoonlightInvocation = lib.optionalString browserStreamEnabled (
-    mkMoonlightInvocation defaultMoonlightExecutable cfg.browserStreamArguments cfg.browserStreamHost
+    mkMoonlightInvocation defaultMoonlightExecutable [
+      "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+      "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+    ]
+    cfg.browserStreamArguments
+    cfg.browserStreamHost
     cfg.browserStreamApplication
   );
   browserSelectorMoonlightInvocation = lib.optionalString browserSelectorEnabled (
-    mkMoonlightInvocation selectorMoonlightExecutable cfg.browserStreamArguments cfg.browserStreamHost
+    mkMoonlightInvocation selectorMoonlightExecutable [
+      "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+      "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+    ]
+    cfg.browserStreamArguments
+    cfg.browserStreamHost
     cfg.browserStreamSelectorApplication
   );
+  directDrmBrowserMoonlightInvocation = lib.optionalString directDrmBrowserEnabled (
+    mkMoonlightInvocation defaultMoonlightExecutable [
+      "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+      "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+      "QT_QPA_PLATFORM=eglfs"
+    ]
+    cfg.browserStreamArguments
+    cfg.browserStreamHost
+    cfg.browserStreamApplication
+  );
+  directDrmBrowserSelectorMoonlightInvocation =
+    lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) (
+      mkMoonlightInvocation selectorMoonlightExecutable [
+        "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+        "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+        "QT_QPA_PLATFORM=eglfs"
+      ]
+      cfg.browserStreamArguments
+      cfg.browserStreamHost
+      cfg.browserStreamSelectorApplication
+    );
   superviseMoonlightWindow = targetWorkspace: ''
     seen_window=0
     startup_window_checks=0
@@ -519,7 +562,7 @@
   moonlightSession = pkgs.writeShellApplication {
     name = "moonlight-session";
     runtimeInputs = [
-      cfg.package
+      moonlightPackage
       pkgs.coreutils
       pkgs.hyprland
       pkgs.jq
@@ -983,6 +1026,86 @@
     mkMoonlightBrowserSession "moonlight-browser-selector-session" browserSelectorEndpointSetup
     browserSelectorMoonlightInvocation
     3
+    cfg.browserStreamSelectorApplication;
+  mkDirectDrmBrowserSession = name: endpointSetup: invocation: application:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [
+        pkgs.coreutils
+        pkgs.systemd
+      ];
+      text = ''
+        return_mode="$(
+          tr -d '[:space:]' \
+            < ${lib.escapeShellArg directDrmReturnModeFile} \
+            2>/dev/null \
+            || true
+        )"
+        case "$return_mode" in
+          couch${lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"}${
+          lib.optionalString cfg.enableMergedProfile " | merged"
+        }) ;;
+          *) return_mode=${lib.escapeShellArg cfg.defaultSessionMode} ;;
+        esac
+
+        return_to_session() {
+          status="''${1:-0}"
+          trap - EXIT HUP INT TERM
+          printf '%s\n' "$return_mode" > ${lib.escapeShellArg modeStateFile}
+          exit "$status"
+        }
+        trap 'return_to_session 0' HUP INT TERM
+        trap 'return_to_session $?' EXIT
+
+        # These shells belong to Hyprland and cannot render while EGLFS owns
+        # the display. Keep the persistent user services alive, but stop their
+        # compositor-bound processes until the normal couch session returns.
+        systemctl --user stop \
+          couch-dms.service \
+          couch-merged-dms.service \
+          >/dev/null 2>&1 || true
+
+        ${lib.getExe endpointSetup}
+        ${invocation} &
+        moonlight_pid=$!
+
+        ${lib.optionalString (cfg.browserStreamLayoutCommand != null) ''
+          (
+            COUCH_KEYBOARD_LAYOUT="$(
+              tr -d '[:space:]' \
+                < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
+                2>/dev/null \
+                || true
+            )"
+            if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
+              configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+              COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
+            fi
+            export COUCH_KEYBOARD_LAYOUT
+            export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
+            export COUCH_STREAM_APPLICATION=${
+            lib.escapeShellArg (
+              if application == null
+              then ""
+              else application
+            )
+          }
+            ${cfg.browserStreamLayoutCommand}
+          ) &
+        ''}
+
+        wait "$moonlight_pid"
+        return_to_session "$?"
+      '';
+    };
+  directDrmBrowserSession =
+    mkDirectDrmBrowserSession "moonlight-direct-drm-browser-session" moonlightEndpointSetup
+    directDrmBrowserMoonlightInvocation
+    cfg.browserStreamApplication;
+  directDrmBrowserSelectorSession =
+    mkDirectDrmBrowserSession "moonlight-direct-drm-browser-selector-session"
+    browserSelectorEndpointSetup
+    directDrmBrowserSelectorMoonlightInvocation
     cfg.browserStreamSelectorApplication;
 
   couchStreamControl = pkgs.writeShellApplication {
@@ -2925,27 +3048,59 @@
 
   sessionMode = pkgs.writeShellApplication {
     name = "xps-session-mode";
-    runtimeInputs = [pkgs.coreutils];
+    runtimeInputs = [
+      pkgs.coreutils
+      activeKeyboardLayout
+    ];
     text = ''
       mode_file=${lib.escapeShellArg modeStateFile}
       current="$(tr -d '[:space:]' < "$mode_file" 2>/dev/null || true)"
+      current_mode="''${current%%:*}"
+      supported_modes="couch${lib.optionalString (cfg.desktopSessionCommand != null) "|desktop"}${
+        lib.optionalString cfg.enableMergedProfile "|merged"
+      }${lib.optionalString directDrmBrowserEnabled "|direct-browser"}${
+        lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) "|direct-private"
+      }"
 
       if [ "$#" -eq 0 ]; then
-        printf '%s\n' "''${current:-${cfg.defaultSessionMode}}"
+        printf '%s\n' "''${current_mode:-${cfg.defaultSessionMode}}"
         exit 0
       fi
 
       case "$1" in
-        couch | desktop${lib.optionalString cfg.enableMergedProfile " | merged"})
-          if [ "$1" = "$current" ]; then
-            printf 'XPS is already configured for %s mode\n' "$1"
+        couch${lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"}${
+        lib.optionalString cfg.enableMergedProfile " | merged"
+      })
+          if [ "$1" = "$current_mode" ]; then
+            printf 'Nixbox is already configured for %s mode\n' "$1"
             exit 0
           fi
           printf '%s\n' "$1" > "$mode_file"
-          printf 'Switching XPS to %s mode\n' "$1"
+          printf 'Switching Nixbox to %s mode\n' "$1"
           ;;
+        ${lib.optionalString directDrmBrowserEnabled ''
+        direct-browser${lib.optionalString browserSelectorEnabled " | direct-private"})
+          case "$current_mode" in
+            couch${lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"}${
+          lib.optionalString cfg.enableMergedProfile " | merged"
+        })
+              return_mode="$current_mode"
+              ;;
+            *)
+              return_mode=${lib.escapeShellArg cfg.defaultSessionMode}
+              ;;
+          esac
+          ${lib.getExe activeKeyboardLayout} \
+            > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
+          printf '%s\n' "$return_mode" \
+            > ${lib.escapeShellArg directDrmReturnModeFile}
+          boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
+          printf '%s:%s\n' "$1" "$boot_id" > "$mode_file"
+          printf 'Switching Nixbox to %s mode\n' "$1"
+          ;;
+      ''}
         *)
-          echo "usage: xps-session-mode [couch|desktop${lib.optionalString cfg.enableMergedProfile "|merged"}]" >&2
+          echo "usage: xps-session-mode [$supported_modes]" >&2
           exit 2
           ;;
       esac
@@ -3005,6 +3160,32 @@
       Type=Application
       Categories=Network;WebBrowser;
       EOF
+    ''}
+
+    ${lib.optionalString directDrmBrowserEnabled ''
+      cat > "$out/share/applications/couch-direct-drm-browser.desktop" <<EOF
+      [Desktop Entry]
+      Name=Helium (Direct display)
+      Comment=Stream Helium with Moonlight owning the display
+      Exec=${lib.getExe sessionMode} direct-browser
+      Icon=helium
+      Terminal=false
+      Type=Application
+      Categories=Network;WebBrowser;
+      EOF
+
+      ${lib.optionalString browserSelectorEnabled ''
+        cat > "$out/share/applications/couch-direct-drm-private.desktop" <<EOF
+        [Desktop Entry]
+        Name=User (Direct display)
+        Comment=Open the protected remote user profile with Moonlight owning the display
+        Exec=${lib.getExe sessionMode} direct-private
+        Icon=system-users
+        Terminal=false
+        Type=Application
+        Categories=Network;WebBrowser;
+        EOF
+      ''}
     ''}
 
     ${lib.optionalString cfg.enableControllerShortcuts ''
@@ -3264,17 +3445,46 @@
     ];
     text = ''
       mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
-      if [ "$mode" != merged ]; then
+      mode_name="''${mode%%:*}"
+      mode_token=""
+      if [ "$mode" != "$mode_name" ]; then
+        mode_token="''${mode#*:}"
+      fi
+      if [ "$mode_name" != merged ]; then
         systemctl --user stop couch-merged-dms.service >/dev/null 2>&1 || true
       fi
-      case "$mode" in
+      case "$mode_name" in
+        ${lib.optionalString (cfg.desktopSessionCommand != null) ''
         desktop)
           exec ${cfg.desktopSessionCommand}
           ;;
+      ''}
         ${lib.optionalString cfg.enableMergedProfile ''
         merged)
           exec ${sessionCommand}
           ;;
+      ''}
+        ${lib.optionalString directDrmBrowserEnabled ''
+        direct-browser)
+          boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
+          if [ "$mode_token" = "$boot_id" ]; then
+            exec ${lib.getExe directDrmBrowserSession}
+          fi
+          printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
+            > ${lib.escapeShellArg modeStateFile}
+          exec ${sessionCommand}
+          ;;
+        ${lib.optionalString browserSelectorEnabled ''
+        direct-private)
+          boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
+          if [ "$mode_token" = "$boot_id" ]; then
+            exec ${lib.getExe directDrmBrowserSelectorSession}
+          fi
+          printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
+            > ${lib.escapeShellArg modeStateFile}
+          exec ${sessionCommand}
+          ;;
+      ''}
       ''}
         couch | *)
           exec ${sessionCommand}
@@ -3414,6 +3624,16 @@ in {
         Optional absolute directory containing isolated XDG config, cache, and
         data homes for the protected browser selector. Set this when the public
         browser and selector must stream concurrently from the same host.
+      '';
+    };
+
+    enableDirectDrmBrowserStreams = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Offer one-shot browser sessions where Moonlight owns DRM through
+        EGLFS instead of rendering through Hyprland. Exiting the stream
+        automatically returns to the previous graphical session mode.
       '';
     };
 
@@ -3972,7 +4192,7 @@ in {
   config = lib.mkIf cfg.enable {
     environment.systemPackages =
       [
-        cfg.package
+        moonlightPackage
         couchApplications
         couchStreamControl
         closeActiveWindow
@@ -4017,7 +4237,7 @@ in {
       )
       couchFallbackBrowser.package
       ++ lib.optional (cfg.protectedBrowserPackage != null) protectedBrowser
-      ++ lib.optional (cfg.desktopSessionCommand != null) sessionMode;
+      ++ lib.optional sessionModeSwitchEnabled sessionMode;
     services.displayManager.sessionPackages = [sessionPackage];
 
     # Install udev rules for common controllers, including Steam hardware.
@@ -4156,19 +4376,27 @@ in {
 
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
       command =
-        if cfg.desktopSessionCommand == null
-        then sessionCommand
-        else lib.getExe sessionDispatcher;
+        if sessionModeSwitchEnabled
+        then lib.getExe sessionDispatcher
+        else sessionCommand;
       user = cfg.autoLoginUser;
     };
 
     systemd.tmpfiles.rules =
       lib.optional (
-        cfg.autoLoginUser != null && (cfg.desktopSessionCommand != null || cfg.enableAdaptiveDisplayLayout)
+        cfg.autoLoginUser != null && (sessionModeSwitchEnabled || cfg.enableAdaptiveDisplayLayout)
       ) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
       ++ lib.optional (
-        cfg.autoLoginUser != null && cfg.desktopSessionCommand != null
+        sessionModeSwitchEnabled
       ) "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional (
+        directDrmBrowserEnabled && cfg.autoLoginUser != null
+      ) "f ${directDrmReturnModeFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional (
+        directDrmBrowserEnabled && cfg.autoLoginUser != null
+      ) "f ${directDrmKeyboardLayoutFile} 0644 ${cfg.autoLoginUser} root - ${
+        builtins.head (lib.splitString "," cfg.keyboardLayouts)
+      }"
       ++ lib.optional (
         cfg.autoLoginUser != null && cfg.enableAdaptiveDisplayLayout
       ) "f ${displayLayoutStateFile} 0644 ${cfg.autoLoginUser} root - adaptive"
@@ -4183,9 +4411,9 @@ in {
       ) "f ${mirrorStateFile} 0644 ${cfg.autoLoginUser} root - 0";
 
     systemd.paths.couch-session-mode-switch =
-      lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null)
+      lib.mkIf sessionModeSwitchEnabled
       {
-        description = "Watch for XPS session mode changes";
+        description = "Watch for Nixbox session mode changes";
         wantedBy = ["multi-user.target"];
         pathConfig = {
           PathChanged = modeStateFile;
@@ -4194,9 +4422,9 @@ in {
       };
 
     systemd.services.couch-session-mode-switch =
-      lib.mkIf (cfg.autoLoginUser != null && cfg.desktopSessionCommand != null)
+      lib.mkIf sessionModeSwitchEnabled
       {
-        description = "Restart greetd after an XPS session mode change";
+        description = "Restart greetd after a Nixbox session mode change";
         serviceConfig.Type = "oneshot";
         script = ''
           # initial_session runs once per boot unless greetd's ephemeral marker is
@@ -4214,6 +4442,14 @@ in {
       {
         assertion = cfg.desktopSessionCommand == null || cfg.autoLoginUser != null;
         message = "services.moonlight-client.desktopSessionCommand requires autoLoginUser";
+      }
+      {
+        assertion = !cfg.enableDirectDrmBrowserStreams || cfg.autoLoginUser != null;
+        message = "services.moonlight-client.enableDirectDrmBrowserStreams requires autoLoginUser";
+      }
+      {
+        assertion = !cfg.enableDirectDrmBrowserStreams || browserStreamEnabled;
+        message = "services.moonlight-client.enableDirectDrmBrowserStreams requires a configured browser stream";
       }
       {
         assertion = cfg.defaultSessionMode != "merged" || cfg.enableMergedProfile;

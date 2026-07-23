@@ -508,6 +508,25 @@
               "$container" \
               swaymsg seat seat0 xcursor_theme Adwaita "$cursor_size" \
                 >/dev/null 2>&1 || true
+            # TV-oriented Nixbox clients render a responsive cursor locally in
+            # Moonlight. Hide Wolf's remote cursor after activity so absolute
+            # virtual pointers cannot leave a stale click-position cursor in
+            # the stream. Desktop clients retain the normal remote cursor.
+            if [ "$presentation_scale" = 1.5 ]; then
+              docker exec \
+                -u ${toString cfg.defaultRunUid} \
+                -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+                "$container" \
+                swaymsg seat seat0 hide_cursor 1 \
+                  >/dev/null 2>&1 || true
+            else
+              docker exec \
+                -u ${toString cfg.defaultRunUid} \
+                -e SWAYSOCK=/run/wolf-streaming/runtime/sway.socket \
+                "$container" \
+                swaymsg seat seat0 hide_cursor 0 \
+                  >/dev/null 2>&1 || true
+            fi
             exit 0
           fi
         done

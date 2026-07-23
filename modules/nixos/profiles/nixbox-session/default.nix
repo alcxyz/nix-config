@@ -12,6 +12,7 @@
     enableControllerShortcuts = lib.mkDefault true;
     enableAudioOutputCycle = lib.mkDefault true;
     enableAudioHealthRecovery = lib.mkDefault true;
+    enableDirectDrmBrowserStreams = lib.mkDefault true;
     preferHdmiAudio = lib.mkDefault false;
     relaunchOnExit = lib.mkDefault false;
 

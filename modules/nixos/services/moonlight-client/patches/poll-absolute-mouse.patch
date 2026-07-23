@@ -1,0 +1,109 @@
+diff --git a/app/streaming/input/input.h b/app/streaming/input/input.h
+index 26039e7..911ab8b 100644
+--- a/app/streaming/input/input.h
++++ b/app/streaming/input/input.h
+@@ -65,6 +65,8 @@ public:
+ 
+     void handleMouseMotionEvent(SDL_MouseMotionEvent* event);
+ 
++    void pollAbsoluteMousePosition();
++
+     void handleMouseWheelEvent(SDL_MouseWheelEvent* event);
+ 
+     void handleControllerAxisEvent(SDL_ControllerAxisEvent* event);
+@@ -188,6 +190,9 @@ private:
+     StreamingPreferences::CaptureSysKeysMode m_CaptureSystemKeysMode;
+     int m_MouseCursorCapturedVisibilityState;
+ 
++    bool m_HavePolledMousePosition;
++    int m_LastPolledMouseX, m_LastPolledMouseY;
++
+     struct {
+         KeyCombo keyCombo;
+         SDL_Keycode keyCode;
+diff --git a/app/streaming/input/input.cpp b/app/streaming/input/input.cpp
+index b994388..7a8d6fc 100644
+--- a/app/streaming/input/input.cpp
++++ b/app/streaming/input/input.cpp
+@@ -21,6 +21,9 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, in
+       m_FakeCaptureActive(false),
+       m_CaptureSystemKeysMode(prefs.captureSysKeysMode),
+-      m_MouseCursorCapturedVisibilityState(SDL_DISABLE),
++      m_MouseCursorCapturedVisibilityState(
++          qEnvironmentVariableIsSet("MOONLIGHT_SHOW_LOCAL_CURSOR") ? SDL_ENABLE : SDL_DISABLE),
++      m_HavePolledMousePosition(false),
++      m_LastPolledMouseX(0), m_LastPolledMouseY(0),
+       m_LongPressTimer(0),
+       m_StreamWidth(streamWidth),
+       m_StreamHeight(streamHeight),
+diff --git a/app/streaming/input/mouse.cpp b/app/streaming/input/mouse.cpp
+index 976ec09..117d710 100644
+--- a/app/streaming/input/mouse.cpp
++++ b/app/streaming/input/mouse.cpp
+@@ -154,6 +154,42 @@ void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
+     }
+ }
+ 
++void SdlInputHandler::pollAbsoluteMousePosition()
++{
++    if (!m_AbsoluteMouseMode || !isCaptureActive() || m_Window == nullptr) {
++        m_HavePolledMousePosition = false;
++        return;
++    }
++
++    int globalX, globalY;
++    SDL_GetGlobalMouseState(&globalX, &globalY);
++
++    if (m_HavePolledMousePosition &&
++            globalX == m_LastPolledMouseX && globalY == m_LastPolledMouseY) {
++        return;
++    }
++
++    int windowX, windowY;
++    SDL_GetWindowPosition(m_Window, &windowX, &windowY);
++
++    SDL_MouseMotionEvent event = {};
++    event.type = SDL_MOUSEMOTION;
++    event.timestamp = SDL_GetTicks();
++    event.windowID = SDL_GetWindowID(m_Window);
++    event.which = 0;
++    event.x = globalX - windowX;
++    event.y = globalY - windowY;
++    if (m_HavePolledMousePosition) {
++        event.xrel = globalX - m_LastPolledMouseX;
++        event.yrel = globalY - m_LastPolledMouseY;
++    }
++
++    m_HavePolledMousePosition = true;
++    m_LastPolledMouseX = globalX;
++    m_LastPolledMouseY = globalY;
++    handleMouseMotionEvent(&event);
++}
++
+ void SdlInputHandler::handleMouseWheelEvent(SDL_MouseWheelEvent* event)
+ {
+     if (!isCaptureActive()) {
+diff --git a/app/streaming/session.cpp b/app/streaming/session.cpp
+index 81c9bec..73a0abc 100644
+--- a/app/streaming/session.cpp
++++ b/app/streaming/session.cpp
+@@ -1964,6 +1964,11 @@ void Session::exec()
+     // Hijack this thread to be the SDL main thread. We have to do this
+     // because we want to suspend all Qt processing until the stream is over.
+     SDL_Event event;
++    const bool pollAbsoluteMouse =
++        qEnvironmentVariableIsSet("MOONLIGHT_POLL_ABSOLUTE_MOUSE");
+     for (;;) {
++        if (pollAbsoluteMouse) {
++            m_InputHandler->pollAbsoluteMousePosition();
++        }
+ #if SDL_VERSION_ATLEAST(2, 0, 18) && !defined(STEAM_LINK)
+         // SDL 2.0.18 has a proper wait event implementation that uses platform
+@@ -1975,7 +1980,7 @@ void Session::exec()
+         // issues that could cause indefinite timeouts, delayed joystick detection,
+         // and other problems.
+-        if (!SDL_WaitEventTimeout(&event, 1000)) {
++        if (!SDL_WaitEventTimeout(&event, pollAbsoluteMouse ? 8 : 1000)) {
+             presence.runCallbacks();
+             continue;
+         }
