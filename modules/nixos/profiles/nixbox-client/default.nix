@@ -122,7 +122,13 @@ in {
       };
     };
 
-    security.polkit.enable = true;
+    security.polkit = {
+      enable = true;
+      # DMS supplies the graphical authentication agent. The privileged
+      # wrapper is still required for its contextual elevation helper to hand
+      # approved commands to Polkit.
+      enablePkexecWrapper = true;
+    };
 
     # The document portal and protected-profile mounts invoke fusermount3 at
     # runtime. Compact hosts do not otherwise pull in the privileged FUSE
