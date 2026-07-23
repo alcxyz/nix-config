@@ -272,7 +272,13 @@ low-latency video, audio, and controller integration already used by Moonlight.
   removed before launch. Wolf coordinator restarts remove only orphaned
   containers created by the managed browser runners, while Moonlight sessions
   terminate themselves if their window never appears or disappears while the
-  client process remains stuck.
+  client process remains stuck. The pipeline watchdog also recognizes a wedged
+  coordinator whose stale session records would otherwise block recovery.
+- Public and protected browser applications have separate runner containers
+  and persistent homes but still share one Wolf coordinator. That coordinator
+  remains a common failure domain; a future strict-isolation design should use
+  separate coordinator endpoints rather than claiming application-container
+  separation also provides control-plane isolation.
 - Explicit streaming endpoint policy: XPS pins both browser and Steam pairings
   to LAN-only fields and readiness checks. macOS exposes distinct LAN and VPN
   application bundles; each pins all saved fields to one endpoint and starts

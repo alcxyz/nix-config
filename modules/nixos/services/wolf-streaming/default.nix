@@ -640,6 +640,7 @@
       pkgs.coreutils
       pkgs.docker
       pkgs.gnugrep
+      pkgs.iproute2
       pkgs.systemd
     ];
     text = ''
@@ -710,8 +711,24 @@ PY
         exit 1
       fi
       if [ "$active_sessions" -ne 0 ]; then
-        echo "Wolf pipeline recovery pending behind $active_sessions active session(s)" >&2
-        exit 0
+        stale_control_connections="$(
+          ss -Hnt state close-wait 'sport = :47989' \
+            | wc -l \
+            | tr -d '[:space:]'
+        )"
+        [[ "$stale_control_connections" =~ ^[0-9]+$ ]] || stale_control_connections=0
+
+        # A poisoned coordinator can retain session records while leaking
+        # already-closed HTTP control connections. In that state, waiting for
+        # the API session count to reach zero can deadlock recovery forever.
+        # A deliberately high threshold distinguishes that failure from the
+        # handful of transient control requests seen during normal launches.
+        if [ "$stale_control_connections" -lt ${toString cfg.pipelineWatchdog.staleControlConnectionThreshold} ]; then
+          echo "Wolf pipeline recovery pending behind $active_sessions active session(s)" >&2
+          exit 0
+        fi
+
+        echo "Wolf pipeline recovery overriding $active_sessions stale session record(s) after detecting $stale_control_connections abandoned control connections" >&2
       fi
 
       echo "Restarting Wolf after an unrecoverable video-pipeline failure" >&2
@@ -798,6 +815,17 @@ in {
         type = lib.types.nonEmptyStr;
         default = "15s";
         description = "Systemd time span between Wolf video-pipeline health checks.";
+      };
+
+      staleControlConnectionThreshold = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 32;
+        description = ''
+          Number of abandoned HTTP control connections that proves Wolf's
+          coordinator is wedged even when its API still reports sessions.
+          Reaching this threshold allows pipeline recovery to override stale
+          session records instead of waiting indefinitely.
+        '';
       };
     };
 

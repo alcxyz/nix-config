@@ -289,8 +289,10 @@ XEV also guards against the rarer case where Wolf remains reachable after its
 CUDA/GStreamer video path has failed. The watchdog recognizes only the known
 fatal buffer-map or streaming-thread signatures, waits until Wolf reports no
 active sessions, and then reconstructs the coordinator and disposable runner
-containers. It never interrupts a healthy concurrent Steam or browser stream,
-and the browser homes remain persistent across recovery.
+containers. If the coordinator both retains session records and accumulates a
+pathological number of abandoned HTTP control connections, the watchdog treats
+those records as stale and recovers instead of waiting forever. The browser
+homes remain persistent across recovery.
 
 The protected selector also uses a separate persistent Moonlight client
 profile because it shares the Wolf host with public Helium. Pair that profile
