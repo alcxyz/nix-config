@@ -3264,7 +3264,9 @@
     }
 
     cursor {
-      inactive_timeout = 3
+      # Couch pointers are often controlled from a phone or another computer.
+      # Keep the cursor visible long enough to reacquire it between gestures.
+      inactive_timeout = 6
       # Network input backends can expose absolute axes even when they are
       # semantically mice. Never let that classification hide Waynergy or KDE
       # Connect motion; retain the normal inactivity timeout above.

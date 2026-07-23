@@ -10,8 +10,8 @@ forking its launch, input, audio, or recovery logic.
 - a compact, auto-hiding DMS shell with idle locking and suspension disabled;
 - KDE Connect keyboard, pointer, click, and scrolling support through the
   XWayland/Hyprland bridge;
-- LAN-only Waynergy input from a Synergy server, using uinput so input follows
-  the same path as physical keyboards and pointers;
+- LAN-only Waynergy input from a Synergy server, using an output-bound WLR
+  pointer so movement follows the active couch display;
 - compositor-owned login, logout, reboot, and shutdown transitions, with an
   optional Nixbox Plymouth boot theme for hosts where early boot graphics are
   worth the added boot-path complexity;
@@ -36,10 +36,12 @@ user, output mode and scale, Moonlight package, and optional presentation and
 input features. Host-specific display quirks, private endpoints, credentials,
 and pairing state remain outside this repository or in runtime state.
 
-The client defaults Moonlight to XWayland because KDE Connect and Waynergy need
-the proven XTest-to-Hyprland pointer bridge. Hardware video decoding remains a
-property of the selected Moonlight package and is independent of that Qt
-presentation backend.
+The client defaults Moonlight to XWayland because the current remote-input path
+uses its focused keyboard, button, and scroll delivery while pointer motion is
+kept compositor-native. KDE Connect pointer warps are forwarded through a
+scoped runtime socket rather than mirrored from the X11 root cursor. Hardware
+video decoding remains a property of the selected Moonlight package and is
+independent of that Qt presentation backend.
 
 ## Direct-display streams
 

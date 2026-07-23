@@ -193,20 +193,21 @@ dock renames a connector after a link flap. Write parked-output positions before
 active-output positions so a live transition never temporarily overlaps two
 extended outputs.
 
-KDE Connect's X11 backend can inject buttons, scrolling, and keys into focused
-XWayland clients, but its pointer warp does not move Hyprland's compositor
-cursor. Do not mirror XWayland root-pointer coordinates into Hyprland: that
-feedback loop also reacts to physical pointer movement over an XWayland window
-and makes the compositor cursor disappear. Phone pointer movement remains a
-separate Wayland-injection problem; preserve reliable physical pointer input
-and the KDE Connect input types that work without the bridge.
+KDE Connect's X11 backend injects buttons, scrolling, and keys into focused
+XWayland clients. Intercept only its pointer-warp request and forward relative
+or absolute coordinates over a private runtime socket to a compositor-native
+Hyprland bridge. Do not poll or mirror the XWayland root pointer: that feedback
+loop also reacts to physical pointer movement over an XWayland window and makes
+the compositor cursor disappear. Keep touch-classified network motion visible
+and retain the couch cursor for six seconds after activity so phone input is
+easy to reacquire between gestures.
 
-The same limitation remains visible when Waynergy controls a windowed
-Moonlight browser stream: absolute motion reaches the remote application, but
-the pointer is rendered only on button events; relative Moonlight mode does not
-deliver motion to Wolf's session. Keep absolute mode for functional clicks and
-track compositor-native virtual-pointer support separately rather than
-regressing physical input or adding another feedback bridge.
+Waynergy uses an output-bound WLR virtual pointer for accurate movement across
+dynamic couch layouts. That path is the accepted tracking baseline, but button
+delivery through windowed Moonlight remains under evaluation because WLR
+clicks and drags do not yet match KDE Connect's reliability. Keep motion and
+button refinement separate from the qualified phone-input path and avoid
+reintroducing a global X11 feedback bridge.
 
 Expose the credential-bearing couch browser only through a password-gated
 launcher backed by an encrypted profile directory. Keep the unrestricted
@@ -287,5 +288,6 @@ attached to the container's X server.
 
 - Issue #140 tracks the initial controller-first rollout and live validation.
 - Issue #141 tracks optional controller-native browser navigation, a proper
-  Wayland-compatible phone pointer path, and a deliberate remote shutdown
-  action.
+  controller shutdown action, and optional clipboard transfer. The
+  Wayland-compatible KDE Connect phone pointer path is implemented and
+  qualified.

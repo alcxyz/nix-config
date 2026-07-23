@@ -106,3 +106,7 @@ instead of selecting a VPN route.
   A duplicate transient client was identified from repeated server-side
   rejection and removed; the declarative service then remained connected while
   concurrent Moonlight sessions kept their original processes.
+- WLR pointer tracking on XPS: accepted as the current movement baseline.
+  Reliable button and drag delivery through Moonlight remains open in issue
+  #152; any hybrid must preserve one client identity and avoid X11 root-pointer
+  feedback.
