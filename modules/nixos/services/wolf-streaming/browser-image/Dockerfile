@@ -20,6 +20,7 @@ RUN set -eu; \
 
 COPY --chmod=0755 startup.sh /opt/gow/startup-app.sh
 COPY --chmod=0755 desktop-session.sh /opt/gow/desktop-session.sh
+COPY --chmod=0755 kde-pointer-bridge.py /opt/gow/kde-pointer-bridge.py
 COPY waybar.jsonc /cfg/waybar/config.jsonc
 COPY waybar.css /cfg/waybar/style.css
 

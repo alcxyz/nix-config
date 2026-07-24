@@ -73,11 +73,25 @@ def cooperative_runner(individual_app, runner_name, kdeconnect_executable):
     environment = [
         item
         for item in runner.get("env", [])
-        if not item.startswith("NIXBOX_KDECONNECT_EXECUTABLE=")
+        if not item.startswith(
+            (
+                "NIXBOX_KDECONNECT_EXECUTABLE=",
+                "NIXBOX_CURSOR_SIZE=",
+                "NIXBOX_CURSOR_THEME=",
+                "WLR_NO_HARDWARE_CURSORS=",
+                "XCURSOR_SIZE=",
+                "XCURSOR_THEME=",
+            )
+        )
     ]
     if kdeconnect_executable:
-        environment.append(
-            f"NIXBOX_KDECONNECT_EXECUTABLE={kdeconnect_executable}"
+        environment.extend(
+            [
+                f"NIXBOX_KDECONNECT_EXECUTABLE={kdeconnect_executable}",
+                "NIXBOX_CURSOR_SIZE=48",
+                "NIXBOX_CURSOR_THEME=Adwaita",
+                "WLR_NO_HARDWARE_CURSORS=1",
+            ]
         )
     runner["env"] = environment
 

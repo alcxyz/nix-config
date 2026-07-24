@@ -2,6 +2,9 @@
 set -euo pipefail
 
 if [[ -n "${NIXBOX_KDECONNECT_EXECUTABLE:-}" ]]; then
+  export XCURSOR_SIZE="${NIXBOX_CURSOR_SIZE:-48}"
+  export XCURSOR_THEME="${NIXBOX_CURSOR_THEME:-Adwaita}"
+
   install -d -m 0700 "${HOME}/.config/kdeconnect"
   config_file="${HOME}/.config/kdeconnect/config"
   if [[ -e "${config_file}" ]]; then
@@ -20,6 +23,14 @@ if [[ -n "${NIXBOX_KDECONNECT_EXECUTABLE:-}" ]]; then
     while true; do
       LC_ALL=C.UTF-8 QT_QPA_PLATFORM=xcb \
         "${NIXBOX_KDECONNECT_EXECUTABLE}" --replace
+      sleep 2
+    done
+  ) &
+
+  (
+    set +e
+    while true; do
+      /opt/gow/kde-pointer-bridge.py
       sleep 2
     done
   ) &

@@ -56,6 +56,7 @@
       cp ${./browser-image/Dockerfile} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
+      cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       cp ${deb} "$out/browser.deb"
@@ -71,6 +72,7 @@
       cp ${./browser-image/Dockerfile.nix} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
+      cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       tar \
