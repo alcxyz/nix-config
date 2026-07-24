@@ -95,4 +95,5 @@ case "${NIXBOX_BROWSER_FAMILY:-chromium}" in
     ;;
 esac
 
-launcher "${NIXBOX_BROWSER_EXECUTABLE}" "${browser_flags[@]}"
+launcher /opt/gow/desktop-session.sh \
+  "${NIXBOX_BROWSER_EXECUTABLE}" "${browser_flags[@]}"

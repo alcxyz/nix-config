@@ -55,6 +55,7 @@
       mkdir -p "$out"
       cp ${./browser-image/Dockerfile} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
+      cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       cp ${deb} "$out/browser.deb"
@@ -69,6 +70,7 @@
       mkdir -p "$out"
       cp ${./browser-image/Dockerfile.nix} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
+      cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       tar \
@@ -87,6 +89,7 @@
       executable = "/usr/bin/helium";
       family = "chromium";
       source = "https://github.com/imputnet/helium-linux";
+      desktopPackages = lib.optional browserCfg.helium.kdeConnect.enable "kdeconnect=24.12.3-0ubuntu2.1";
       context = mkBrowserContext {
         name = "helium";
         deb = heliumDeb;
@@ -100,6 +103,7 @@
       executable = "/usr/bin/brave-browser-stable";
       family = "chromium";
       source = "https://github.com/brave/brave-browser";
+      desktopPackages = [];
       context = mkBrowserContext {
         name = "brave";
         deb = pkgs.brave.src;
@@ -113,6 +117,7 @@
       executable = "${pkgs.chromium}/bin/chromium";
       family = "chromium";
       source = "https://chromium.googlesource.com/chromium/src";
+      desktopPackages = [];
       context = mkNixBrowserContext {
         name = "chromium";
         package = pkgs.chromium;
@@ -126,6 +131,7 @@
       executable = "${pkgs.firefox}/bin/firefox";
       family = "firefox";
       source = "https://hg.mozilla.org/mozilla-unified";
+      desktopPackages = [];
       context = mkNixBrowserContext {
         name = "firefox";
         package = pkgs.firefox;
@@ -139,13 +145,17 @@
       executable = "${pkgs.zen-browser}/bin/zen";
       family = "firefox";
       source = "https://github.com/zen-browser/desktop";
+      desktopPackages = [];
       context = mkNixBrowserContext {
         name = "zen";
         package = pkgs.zen-browser;
       };
     }
   ];
-  publicRunnerNames = lib.optional browserCfg.helium.enable "WolfHelium";
+  publicRunnerNames = lib.optionals browserCfg.helium.enable [
+    "WolfHelium"
+    "WolfHeliumCoop"
+  ];
   protectedRunnerNames =
     [
       "Wolf-UI"
@@ -246,6 +256,25 @@
       base_create_json = browserHostConfig;
     };
   };
+  heliumIndividualApp = mkMoonlightBrowserApp {
+    title =
+      if browserCfg.helium.cooperativeDefault
+      then "Helium (Individual)"
+      else "Helium";
+    runnerName = "WolfHelium";
+    image = browserCfg.helium.image;
+    icon = "https://helium.computer/favicon.png";
+  };
+  heliumCooperativeEntryApp = {
+    title = "Helium";
+    icon_png_path = "https://helium.computer/favicon.png";
+    start_virtual_compositor = true;
+    start_audio_server = true;
+    runner = {
+      type = "process";
+      run_cmd = "sleep infinity";
+    };
+  };
   mkWolfUiApp = runtimeDirectory: {
     title = "Wolf UI";
     icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png";
@@ -271,12 +300,14 @@
   };
   managedMoonlightApps =
     lib.optional (!isolatedProtectedBackend) (mkWolfUiApp publicRuntimeDirectory)
-    ++ lib.optional browserCfg.helium.publish (mkMoonlightBrowserApp {
-      title = "Helium";
-      runnerName = "WolfHelium";
-      image = browserCfg.helium.image;
-      icon = "https://helium.computer/favicon.png";
-    })
+    ++ lib.optionals browserCfg.helium.publish (
+      if browserCfg.helium.cooperativeDefault
+      then [
+        heliumCooperativeEntryApp
+        heliumIndividualApp
+      ]
+      else [heliumIndividualApp]
+    )
     ++ lib.optional browserCfg.brave.publish (mkMoonlightBrowserApp {
       title = "Brave";
       runnerName = "WolfBrave";
@@ -307,6 +338,7 @@
       managedTitles = [
         "Wolf UI"
         "Helium"
+        "Helium (Individual)"
         "Brave"
         "Chromium"
         "Firefox"
@@ -386,6 +418,27 @@
       exec python3 ${./remove-protected-profile.py} "$@"
     '';
   };
+  wolfCoopManager = pkgs.writeShellApplication {
+    name = "wolf-coop-manager";
+    runtimeInputs = [pkgs.python3];
+    text = ''
+      exec python3 ${./wolf-coop-manager.py} \
+        --socket ${lib.escapeShellArg "${publicRuntimeDirectory}/wolf.sock"} \
+        --entry-title Helium \
+        --individual-title ${lib.escapeShellArg "Helium (Individual)"} \
+        --lobby-name Helium \
+        --runner-name WolfHeliumCoop \
+        --runner-state-folder ${lib.escapeShellArg "profile-data/moonlight-profile-id/WolfHeliumCoop"} \
+        --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw(memory:CUDAMemory)"} \
+        --kdeconnect-executable ${
+        lib.escapeShellArg (
+          if browserCfg.helium.kdeConnect.enable
+          then "/usr/bin/kdeconnectd"
+          else ""
+        )
+      }
+    '';
+  };
   buildBrowserImages = pkgs.writeShellApplication {
     name = "build-wolf-browser-images";
     runtimeInputs = [
@@ -407,6 +460,7 @@
             --build-arg BASE_APP_IMAGE=${lib.escapeShellArg browserBaseImage} \
             --build-arg BROWSER_EXECUTABLE=${lib.escapeShellArg image.executable} \
             --build-arg BROWSER_FAMILY=${lib.escapeShellArg image.family} \
+            --build-arg DESKTOP_PACKAGES=${lib.escapeShellArg (lib.concatStringsSep " " image.desktopPackages)} \
             --build-arg IMAGE_SOURCE=${lib.escapeShellArg image.source} \
             --build-arg IMAGE_VERSION=${lib.escapeShellArg image.version} \
             --tag ${lib.escapeShellArg image.image} \
@@ -988,6 +1042,18 @@ in {
           default = false;
           description = "Publish Helium directly in the Moonlight application list.";
         };
+        cooperativeDefault = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Route the Helium catalog entry into one persistent multi-user
+            lobby and publish Helium (Individual) as the opt-in isolated
+            session.
+          '';
+        };
+        kdeConnect.enable = lib.mkEnableOption ''
+          KDE Connect inside the shared Helium desktop session
+        '';
         image = lib.mkOption {
           type = lib.types.str;
           default = "nixbox/wolf-helium:${heliumVersion}";
@@ -1104,6 +1170,15 @@ in {
       {
         assertion = !browserCfg.enable || browserImages != [];
         message = "services.wolf-streaming.browserImages requires at least one browser image";
+      }
+      {
+        assertion =
+          !browserCfg.helium.cooperativeDefault || (browserCfg.helium.enable && browserCfg.helium.publish);
+        message = "cooperative Helium requires the enabled, published Helium image";
+      }
+      {
+        assertion = !browserCfg.helium.kdeConnect.enable || browserCfg.helium.cooperativeDefault;
+        message = "in-session KDE Connect requires cooperative Helium";
       }
       {
         assertion =
@@ -1257,6 +1332,7 @@ in {
     environment.systemPackages = lib.optional browserCfg.enable wolfStreamLayout;
 
     systemd.services.docker-wolf = {
+      restartIfChanged = false;
       after =
         [
           "docker.service"
@@ -1304,6 +1380,20 @@ in {
       );
     };
 
+    systemd.services.wolf-coop-manager =
+      lib.mkIf (browserCfg.helium.publish && browserCfg.helium.cooperativeDefault)
+      {
+        description = "Route Helium Moonlight sessions into the shared lobby";
+        wantedBy = ["multi-user.target"];
+        after = ["docker-wolf.service"];
+        requires = ["docker-wolf.service"];
+        serviceConfig = {
+          ExecStart = lib.getExe wolfCoopManager;
+          Restart = "always";
+          RestartSec = "2s";
+        };
+      };
+
     systemd.services.wolf-protected-state-migration = lib.mkIf isolatedProtectedBackend {
       description = "Fork persistent Wolf state for the protected coordinator";
       before = [
@@ -1328,6 +1418,7 @@ in {
     };
 
     systemd.services.docker-wolf-protected = lib.mkIf isolatedProtectedBackend {
+      restartIfChanged = false;
       after = [
         "docker.service"
         "nvidia-container-toolkit-cdi-generator.service"
@@ -1466,6 +1557,7 @@ in {
 
     systemd.services.wolf-browser-images = lib.mkIf browserCfg.enable {
       description = "Build local Wolf browser application images";
+      restartIfChanged = false;
       after = ["docker.service"];
       before =
         [
@@ -1492,6 +1584,7 @@ in {
           47989
           48010
         ]
+        ++ lib.optional browserCfg.helium.kdeConnect.enable 1716
         ++ lib.optionals isolatedProtectedBackend [
           (protectedPort 47984)
           (protectedPort 47989)
@@ -1503,6 +1596,7 @@ in {
           48100
           48200
         ]
+        ++ lib.optional browserCfg.helium.kdeConnect.enable 1716
         ++ lib.optionals isolatedProtectedBackend [
           (protectedPort 47999)
           (protectedPort 48100)

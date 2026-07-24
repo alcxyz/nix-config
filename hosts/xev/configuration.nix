@@ -42,6 +42,8 @@
       helium = {
         enable = true;
         publish = true;
+        cooperativeDefault = true;
+        kdeConnect.enable = true;
       };
       brave.enable = true;
       chromium.enable = true;

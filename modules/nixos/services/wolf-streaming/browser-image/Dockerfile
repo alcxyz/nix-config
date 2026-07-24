@@ -4,15 +4,22 @@ FROM ${BASE_APP_IMAGE}
 
 ARG BROWSER_EXECUTABLE
 ARG BROWSER_FAMILY
+ARG DESKTOP_PACKAGES
 
 COPY browser.deb /tmp/browser.deb
 
 RUN set -eu; \
     dpkg-deb --extract /tmp/browser.deb /; \
     rm -f /tmp/browser.deb; \
+    if [ -n "${DESKTOP_PACKAGES}" ]; then \
+      apt-get update; \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ${DESKTOP_PACKAGES}; \
+      rm -rf /var/lib/apt/lists/*; \
+    fi; \
     test -x "${BROWSER_EXECUTABLE}"
 
 COPY --chmod=0755 startup.sh /opt/gow/startup-app.sh
+COPY --chmod=0755 desktop-session.sh /opt/gow/desktop-session.sh
 COPY waybar.jsonc /cfg/waybar/config.jsonc
 COPY waybar.css /cfg/waybar/style.css
 
