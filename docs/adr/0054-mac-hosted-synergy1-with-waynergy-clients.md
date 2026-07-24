@@ -35,6 +35,12 @@ Waynergy advertises the focused powered-on monitor rather than the full
 compositor output bounding box. Bind the WLR virtual pointer to that exact
 output and restart the child when focused-monitor geometry changes.
 
+When a couch host runs Moonlight through XWayland, it may route only Waynergy
+pointer events through a bounded XTest mirror. This keeps the qualified WLR
+motion path and the single Synergy client identity while giving Moonlight
+Waynergy-originated motion and button events on its proven X11 path. Fall back
+to native WLR delivery if the X display is unavailable.
+
 Treat the declarative `waynergy.service` as the sole client identity owner.
 Never leave an experimental transient Waynergy unit running beside it with the
 same screen name: the Synergy server admits one connection, causing the two
@@ -107,6 +113,6 @@ instead of selecting a VPN route.
   rejection and removed; the declarative service then remained connected while
   concurrent Moonlight sessions kept their original processes.
 - WLR pointer tracking on XPS: accepted as the current movement baseline.
-  Reliable button and drag delivery through Moonlight remains open in issue
-  #152; any hybrid must preserve one client identity and avoid X11 root-pointer
-  feedback.
+  XPS now selects the bounded XTest event mirror; pointer visibility, clicks,
+  and held drags through concurrent Moonlight browser sessions are qualified
+  for current use. Issue #152 remains open for the xyz and clipboard checks.

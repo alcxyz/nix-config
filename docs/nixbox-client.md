@@ -39,9 +39,11 @@ and pairing state remain outside this repository or in runtime state.
 The client defaults Moonlight to XWayland because the current remote-input path
 uses its focused keyboard, button, and scroll delivery while pointer motion is
 kept compositor-native. KDE Connect pointer warps are forwarded through a
-scoped runtime socket rather than mirrored from the X11 root cursor. Hardware
-video decoding remains a property of the selected Moonlight package and is
-independent of that Qt presentation backend.
+scoped runtime socket rather than mirrored from the X11 root cursor. Hosts can
+retain WLR Waynergy tracking while narrowly mirroring Waynergy-originated
+motion and button transitions through XTest when Moonlight requires it.
+Hardware video decoding remains a property of the selected Moonlight package
+and is independent of that Qt presentation backend.
 
 ## Direct-display streams
 

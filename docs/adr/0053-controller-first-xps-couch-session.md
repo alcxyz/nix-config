@@ -195,19 +195,20 @@ extended outputs.
 
 KDE Connect's X11 backend injects buttons, scrolling, and keys into focused
 XWayland clients. Intercept only its pointer-warp request and forward relative
-or absolute coordinates over a private runtime socket to a compositor-native
-Hyprland bridge. Do not poll or mirror the XWayland root pointer: that feedback
-loop also reacts to physical pointer movement over an XWayland window and makes
-the compositor cursor disappear. Keep touch-classified network motion visible
-and retain the couch cursor for six seconds after activity so phone input is
-easy to reacquire between gestures.
+or absolute coordinates over a private runtime socket to the scoped Hyprland
+bridge. Do not add another virtual pointer and do not poll the XWayland root
+pointer: either path can interfere with the qualified Waynergy cursor over
+Moonlight, while root polling also reacts to physical pointer movement.
+Rate-limit phone wheel steps without changing physical scroll input, keep
+touch-classified network motion visible, and retain the XPS couch cursor for
+twelve seconds after activity.
 
 Waynergy uses an output-bound WLR virtual pointer for accurate movement across
-dynamic couch layouts. That path is the accepted tracking baseline, but button
-delivery through windowed Moonlight remains under evaluation because WLR
-clicks and drags do not yet match KDE Connect's reliability. Keep motion and
-button refinement separate from the qualified phone-input path and avoid
-reintroducing a global X11 feedback bridge.
+dynamic couch layouts. That path is the accepted tracking baseline. On XPS,
+mirror only Waynergy-originated motion and button transitions through XTest so
+windowed Moonlight sees pointer activity while compositor tracking remains
+WLR-native. Keep one Waynergy client identity, fall back to native WLR delivery
+when X11 is unavailable, and avoid reintroducing a global X11 feedback bridge.
 
 Expose the credential-bearing couch browser only through a password-gated
 launcher backed by an encrypted profile directory. Keep the unrestricted

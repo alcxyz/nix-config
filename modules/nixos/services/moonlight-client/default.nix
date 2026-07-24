@@ -1443,14 +1443,18 @@
     #include <stdio.h>
     #include <stdlib.h>
     #include <string.h>
+    #include <time.h>
     #include <sys/socket.h>
     #include <sys/un.h>
     #include <unistd.h>
+    #include <X11/Xlib.h>
+    #include <X11/extensions/XTest.h>
     #include <xcb/xcb.h>
 
     typedef xcb_void_cookie_t (*warp_pointer_fn)(
         xcb_connection_t *, xcb_window_t, xcb_window_t,
         int16_t, int16_t, uint16_t, uint16_t, int16_t, int16_t);
+    typedef Bool (*fake_button_fn)(Display *, unsigned int, Bool, unsigned long);
 
     static void send_motion(const char *kind, int x, int y)
     {
@@ -1477,6 +1481,64 @@
         (void)sendto(fd, message, (size_t)message_length, MSG_DONTWAIT,
                      (const struct sockaddr *)&address, sizeof(address));
         close(fd);
+    }
+
+    static long scroll_interval_ms(void)
+    {
+        static long interval = -1;
+        char *end = NULL;
+        const char *configured;
+        long parsed;
+
+        if (interval >= 0)
+            return interval;
+        configured = getenv("KDECONNECT_SCROLL_INTERVAL_MS");
+        if (!configured || !*configured) {
+            interval = 0;
+            return interval;
+        }
+        parsed = strtol(configured, &end, 10);
+        interval = end != configured && *end == '\0' && parsed > 0 ? parsed : 0;
+        return interval;
+    }
+
+    Bool XTestFakeButtonEvent(
+        Display *display,
+        unsigned int button,
+        Bool is_press,
+        unsigned long delay)
+    {
+        static fake_button_fn real_fake_button;
+        static long long last_scroll_ns;
+        static Bool suppress_release[6];
+        struct timespec now;
+        long interval;
+        long long now_ns;
+
+        if (!real_fake_button)
+            real_fake_button =
+                (fake_button_fn)dlsym(RTLD_NEXT, "XTestFakeButtonEvent");
+        if (!real_fake_button)
+            return False;
+
+        interval = scroll_interval_ms();
+        if ((button == 4 || button == 5) && interval > 0) {
+            if (!is_press && suppress_release[button]) {
+                suppress_release[button] = False;
+                return True;
+            }
+            if (is_press && clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
+                now_ns = (long long)now.tv_sec * 1000000000LL + now.tv_nsec;
+                if (last_scroll_ns != 0
+                    && now_ns - last_scroll_ns < interval * 1000000LL) {
+                    suppress_release[button] = True;
+                    return True;
+                }
+                last_scroll_ns = now_ns;
+            }
+        }
+
+        return real_fake_button(display, button, is_press, delay);
     }
 
     xcb_void_cookie_t xcb_warp_pointer(
@@ -1531,7 +1593,12 @@
     pkgs.runCommandCC "kdeconnect-hypr-pointer-shim"
     {
       nativeBuildInputs = [pkgs.pkg-config];
-      buildInputs = [pkgs.libxcb];
+      buildInputs = [
+        pkgs.libx11
+        pkgs.libxcb
+        pkgs.libxi
+        pkgs.libxtst
+      ];
     }
     ''
       install -d "$out/lib"
@@ -1541,10 +1608,10 @@
         -Wall \
         -Wextra \
         -Werror \
-        $(${pkgs.pkg-config}/bin/pkg-config --cflags xcb) \
+        $(${pkgs.pkg-config}/bin/pkg-config --cflags x11 xcb xi xtst) \
         -o "$out/lib/libkdeconnect-hypr-pointer-shim.so" \
         ${kdeConnectPointerShimSource} \
-        $(${pkgs.pkg-config}/bin/pkg-config --libs xcb) \
+        $(${pkgs.pkg-config}/bin/pkg-config --libs x11 xcb xi xtst) \
         -ldl
     '';
 
@@ -3266,7 +3333,7 @@
     cursor {
       # Couch pointers are often controlled from a phone or another computer.
       # Keep the cursor visible long enough to reacquire it between gestures.
-      inactive_timeout = 6
+      inactive_timeout = ${toString cfg.remotePointerInactiveTimeout}
       # Network input backends can expose absolute axes even when they are
       # semantically mice. Never let that classification hide Waynergy or KDE
       # Connect motion; retain the normal inactivity timeout above.
@@ -3794,6 +3861,15 @@ in {
       description = "Enable KDE Connect and start its daemon in the dedicated session.";
     };
 
+    kdeConnectScrollIntervalMs = lib.mkOption {
+      type = lib.types.ints.between 0 1000;
+      default = 0;
+      description = ''
+        Minimum interval between KDE Connect XTest wheel steps in
+        milliseconds. Zero preserves upstream packet-for-packet scrolling.
+      '';
+    };
+
     keyboardLayouts = lib.mkOption {
       type = lib.types.str;
       default = "us,no";
@@ -3832,6 +3908,15 @@ in {
       type = lib.types.ints.positive;
       default = 24;
       description = "Cursor size in pixels used by the dedicated couch session.";
+    };
+
+    remotePointerInactiveTimeout = lib.mkOption {
+      type = lib.types.ints.between 0 20;
+      default = 6;
+      description = ''
+        Seconds to retain the couch cursor after remote pointer activity.
+        Zero disables inactivity hiding.
+      '';
     };
 
     browserPackage = lib.mkOption {
@@ -4224,6 +4309,7 @@ in {
       description = "KDE Connect with Hyprland pointer integration";
       environment = {
         DISPLAY = ":0";
+        KDECONNECT_SCROLL_INTERVAL_MS = toString cfg.kdeConnectScrollIntervalMs;
         QT_QPA_PLATFORM = "xcb";
         LD_PRELOAD = "${kdeConnectPointerShim}/lib/libkdeconnect-hypr-pointer-shim.so";
       };

@@ -91,6 +91,9 @@ in {
   services.hyprlock.enable = true;
   services.waynergy = {
     screenName = "xps";
+    # Mirror only Waynergy-originated pointer events into XWayland so Moonlight
+    # sees motion and buttons while WLR remains the compositor tracking source.
+    wlrXwaylandBridge = true;
   };
   dconf.enable = false;
   services.udiskie = {

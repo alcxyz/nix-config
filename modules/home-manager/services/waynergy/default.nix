@@ -10,7 +10,17 @@
     if cfg.backend == "wlr"
     then
       cfg.package.overrideAttrs (old: {
-        patches = (old.patches or []) ++ [./wlr-output-binding.patch];
+        patches =
+          (old.patches or [])
+          ++ [./wlr-output-binding.patch]
+          ++ lib.optional cfg.wlrXwaylandBridge ./wlr-xtest-moonlight.patch;
+        buildInputs =
+          (old.buildInputs or [])
+          ++ lib.optionals cfg.wlrXwaylandBridge [
+            pkgs.libx11
+            pkgs.libxi
+            pkgs.libxtst
+          ];
       })
     else cfg.package;
   sessionLauncher = pkgs.writeShellScript "waynergy-session-launcher" ''
@@ -39,6 +49,9 @@
       runtime_dir="''${XDG_RUNTIME_DIR:-$(manager_variable XDG_RUNTIME_DIR)}"
       wayland_display="$(manager_variable WAYLAND_DISPLAY)"
       hyprland_signature="$(manager_variable HYPRLAND_INSTANCE_SIGNATURE)"
+      ${lib.optionalString cfg.wlrXwaylandBridge ''
+      x11_display="''${DISPLAY:-$(manager_variable DISPLAY)}"
+    ''}
 
       if [ -n "$runtime_dir" ] \
         && [ -n "$wayland_display" ] \
@@ -48,6 +61,11 @@
         if [ -n "$hyprland_signature" ]; then
           export HYPRLAND_INSTANCE_SIGNATURE="$hyprland_signature"
         fi
+        ${lib.optionalString cfg.wlrXwaylandBridge ''
+      if [ -n "$x11_display" ]; then
+        export DISPLAY="$x11_display"
+      fi
+    ''}
 
         ${lib.optionalString cfg.requireLanAddress ''
       server_ip="$(${pkgs.getent}/bin/getent ahostsv4 ${lib.escapeShellArg cfg.serverAddress} \
@@ -159,6 +177,16 @@ in {
         Input injection backend. The uinput backend makes Synergy input follow
         the same libinput path as physical devices, which is required by some
         XWayland applications.
+      '';
+    };
+
+    wlrXwaylandBridge = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Mirror Waynergy motion and buttons through XTest for the focused
+        XWayland client while retaining output-bound WLR motion as the
+        compositor tracking source.
       '';
     };
 
