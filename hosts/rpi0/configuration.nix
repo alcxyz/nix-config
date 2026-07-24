@@ -100,6 +100,9 @@ in {
   };
 
   services.moonlight-client = {
+    # The appliance boots directly into public Helium with Moonlight owning
+    # DRM. The composited couch remains an explicit maintenance/recovery mode.
+    defaultSessionMode = "direct-browser";
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
     enableDirectDrmStream = true;

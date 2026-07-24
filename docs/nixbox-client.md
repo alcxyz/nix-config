@@ -99,7 +99,10 @@ direct-display launchers are one-shot sessions: they save the current
 compositor mode and keyboard layout, restart the greetd session with Moonlight
 owning DRM, and return to the saved mode when Moonlight exits. A direct-display
 request is scoped to the current boot, so a reboot with a stale request returns
-to the normal compositor instead of reopening Moonlight on DRM.
+to the configured default instead of reopening the stale request. Hosts that
+set `defaultSessionMode = "direct-browser"` deliberately initialize public
+Helium on DRM at activation and every boot; `couch` remains their explicit
+maintenance and recovery mode until the next activation or boot.
 
 The application menu is the normal switching interface. These commands are the
 maintenance and recovery interface:

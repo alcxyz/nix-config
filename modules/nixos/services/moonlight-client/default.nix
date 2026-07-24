@@ -155,6 +155,25 @@
     else cfg.browserStreamSelectorHost;
   directDrmStreamEnabled = cfg.enableDirectDrmStream && directStreamEnabled;
   directDrmBrowserEnabled = cfg.enableDirectDrmBrowserStreams && browserStreamEnabled;
+  persistentDirectDrmBrowserDefault = cfg.defaultSessionMode == "direct-browser";
+  compositorSessionCondition = pkgs.writeShellScript "nixbox-compositor-session-condition" ''
+    mode="$(
+      tr -d '[:space:]' \
+        < ${lib.escapeShellArg modeStateFile} \
+        2>/dev/null \
+        || true
+    )"
+    case "''${mode%%:*}" in
+      couch${
+      lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
+    }${lib.optionalString cfg.enableMergedProfile " | merged"})
+        exit 0
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+  '';
   sessionModeSwitchEnabled =
     cfg.autoLoginUser
     != null
@@ -1117,6 +1136,7 @@
   };
   mkDirectDrmSession = {
     name,
+    mode,
     endpointSetup,
     invocation,
     application ? null,
@@ -1129,6 +1149,7 @@
         pkgs.systemd
       ];
       text = ''
+        active_mode=${lib.escapeShellArg mode}
         return_mode="$(
           tr -d '[:space:]' \
             < ${lib.escapeShellArg directDrmReturnModeFile} \
@@ -1138,14 +1159,32 @@
         case "$return_mode" in
           couch${
           lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
-        }${lib.optionalString cfg.enableMergedProfile " | merged"}) ;;
+        }${lib.optionalString cfg.enableMergedProfile " | merged"}${
+          lib.optionalString (cfg.defaultSessionMode == mode) " | ${mode}"
+        }) ;;
           *) return_mode=${lib.escapeShellArg cfg.defaultSessionMode} ;;
         esac
 
         return_to_session() {
           status="''${1:-0}"
           trap - EXIT HUP INT TERM
-          printf '%s\n' "$return_mode" > ${lib.escapeShellArg modeStateFile}
+          current_mode="$(
+            tr -d '[:space:]' \
+              < ${lib.escapeShellArg modeStateFile} \
+              2>/dev/null \
+              || true
+          )"
+          current_mode="''${current_mode%%:*}"
+          # An operator may force a direct session back to couch over SSH.
+          # Preserve that explicit request instead of racing it with the
+          # exiting DRM wrapper's normal return mode.
+          if [ "$current_mode" = "$active_mode" ]; then
+            printf '%s\n' "$return_mode" > ${lib.escapeShellArg modeStateFile}
+            # Keep greetd's initial session alive long enough for the path unit
+            # to restart it. Otherwise greetd can race ahead to its greeter,
+            # which then needs the bounded stop timeout before recovery.
+            sleep 2
+          fi
           exit "$status"
         }
         trap 'return_to_session 0' HUP INT TERM
@@ -1155,6 +1194,16 @@
         # EGLFS owns the display. Hyprland's exec-once hooks restore them when
         # the normal couch session returns.
         systemctl --user stop \
+          couch-dms.service \
+          couch-merged-dms.service \
+          kdeconnect.service \
+          waynergy.service \
+          xdg-desktop-portal-gtk.service \
+          >/dev/null 2>&1 || true
+        # The compositor may disappear before its clients process the stop
+        # request, causing an otherwise expected broken Wayland connection to
+        # leave a failed-unit marker behind for the whole DRM session.
+        systemctl --user reset-failed \
           couch-dms.service \
           couch-merged-dms.service \
           kdeconnect.service \
@@ -1198,18 +1247,21 @@
     };
   directDrmBrowserSession = mkDirectDrmSession {
     name = "moonlight-direct-drm-browser-session";
+    mode = "direct-browser";
     endpointSetup = moonlightEndpointSetup;
     invocation = directDrmBrowserMoonlightInvocation;
     application = cfg.browserStreamApplication;
   };
   directDrmBrowserSelectorSession = mkDirectDrmSession {
     name = "moonlight-direct-drm-browser-selector-session";
+    mode = "direct-private";
     endpointSetup = browserSelectorEndpointSetup;
     invocation = directDrmBrowserSelectorMoonlightInvocation;
     application = cfg.browserStreamSelectorApplication;
   };
   directDrmStreamSession = mkDirectDrmSession {
     name = "moonlight-direct-drm-stream-session";
+    mode = "direct-stream";
     endpointSetup = moonlightEndpointSetup;
     invocation = directDrmMoonlightInvocation;
     prepareCommand = lib.getExe directDrmStreamHostPrepare;
@@ -3021,6 +3073,7 @@
     name = "xps-session-mode";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.procps
       activeKeyboardLayout
     ];
     text = ''
@@ -3047,6 +3100,16 @@
             exit 0
           fi
           printf '%s\n' "$1" > "$mode_file"
+          ${lib.optionalString persistentDirectDrmBrowserDefault ''
+        case "$current_mode" in
+          direct-*)
+            # Moonlight's EGLFS process ignores the graceful signal from
+            # greetd. End only this user's local client after persisting
+            # the explicit recovery mode so the wrapper cannot overwrite it.
+            pkill -KILL -x moonlight >/dev/null 2>&1 || true
+            ;;
+        esac
+      ''}
           printf 'Switching Nixbox to %s mode\n' "$1"
           ;;
         ${lib.optionalString (directDrmStreamEnabled || directDrmBrowserEnabled) ''
@@ -3471,7 +3534,7 @@
         ${lib.optionalString directDrmBrowserEnabled ''
         direct-browser)
           boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
-          if [ "$mode_token" = "$boot_id" ]; then
+          if [ "$mode_token" = "$boot_id" ]${lib.optionalString persistentDirectDrmBrowserDefault " || [ -z \"$mode_token\" ]"}; then
             exec ${lib.getExe directDrmBrowserSession}
           fi
           printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
@@ -4031,10 +4094,15 @@ in {
       type = lib.types.enum [
         "couch"
         "desktop"
+        "direct-browser"
         "merged"
       ];
       default = "couch";
-      description = "Session mode used until the user selects and persists another mode.";
+      description = ''
+        Session mode initialized on activation and boot. Direct browser mode
+        persistently starts the public browser with Moonlight owning DRM;
+        other direct modes remain one-shot requests.
+      '';
     };
 
     disableInternalDisplay = lib.mkOption {
@@ -4373,6 +4441,11 @@ in {
       };
     };
 
+    systemd.user.services.xdg-desktop-portal-gtk = lib.mkIf persistentDirectDrmBrowserDefault {
+      overrideStrategy = "asDropin";
+      serviceConfig.ExecCondition = compositorSessionCondition;
+    };
+
     systemd.user.services.couch-dms = lib.mkIf cfg.enableDms {
       description = "Supervised DMS shell for the dedicated couch session";
       serviceConfig = {
@@ -4432,14 +4505,27 @@ in {
       user = cfg.autoLoginUser;
     };
 
+    # A persistent direct-display appliance must recover its initial session
+    # after an operator or service restart as well as after a mode-file change.
+    systemd.services.greetd.preStart = lib.mkIf persistentDirectDrmBrowserDefault ''
+      rm -f /run/greetd.run
+    '';
+
     systemd.tmpfiles.rules =
       lib.optional (
         cfg.autoLoginUser != null && (sessionModeSwitchEnabled || cfg.enableAdaptiveDisplayLayout)
       ) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
-      ++ lib.optional sessionModeSwitchEnabled "f ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
-      ++ lib.optional (
-        (directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null
-      ) "f ${directDrmReturnModeFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional sessionModeSwitchEnabled "${
+        if persistentDirectDrmBrowserDefault
+        then "f+"
+        else "f"
+      } ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
+      ++ lib.optional ((directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null)
+      "${
+        if persistentDirectDrmBrowserDefault
+        then "f+"
+        else "f"
+      } ${directDrmReturnModeFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
       ++ lib.optional ((directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null)
       "f ${directDrmKeyboardLayoutFile} 0644 ${cfg.autoLoginUser} root - ${builtins.head (lib.splitString "," cfg.keyboardLayouts)}"
       ++ lib.optional (
@@ -4503,6 +4589,10 @@ in {
       {
         assertion = cfg.defaultSessionMode != "merged" || cfg.enableMergedProfile;
         message = "services.moonlight-client.defaultSessionMode = merged requires enableMergedProfile";
+      }
+      {
+        assertion = cfg.defaultSessionMode != "direct-browser" || directDrmBrowserEnabled;
+        message = "services.moonlight-client.defaultSessionMode = direct-browser requires a configured direct browser stream";
       }
       {
         assertion = (cfg.streamHost == null) == (cfg.streamApplication == null);
