@@ -90,3 +90,49 @@ profile.
 A normal direct-display exit returns immediately. If Moonlight becomes
 unresponsive, the session wrapper still restores the saved mode; greetd's
 bounded service-stop fallback remains the final recovery boundary.
+
+## Switching and recovery workflow
+
+Use the normal Helium, protected-user, and Steam launchers when DMS, KDE
+Connect, or Synergy input is needed during the stream. The corresponding
+direct-display launchers are one-shot sessions: they save the current
+compositor mode and keyboard layout, restart the greetd session with Moonlight
+owning DRM, and return to the saved mode when Moonlight exits. A direct-display
+request is scoped to the current boot, so a reboot with a stale request returns
+to the normal compositor instead of reopening Moonlight on DRM.
+
+The application menu is the normal switching interface. These commands are the
+maintenance and recovery interface:
+
+```sh
+# Report the persisted mode.
+xps-session-mode
+
+# Start a one-shot direct-display session.
+xps-session-mode direct-stream
+xps-session-mode direct-browser
+xps-session-mode direct-private
+
+# Force an active direct-display session back to the compositor.
+xps-session-mode couch
+```
+
+`xps-session-mode` is the compatibility name of the shared session command; it
+is also installed by compact clients. A forced return restarts greetd and may
+take up to its bounded stop timeout while it reaps an unresponsive Moonlight
+process. If the mode already reports `couch` but the graphical session remains
+wedged, restart `greetd.service` from SSH. Do not stop PipeWire or host network
+services as part of display recovery.
+
+After recovery, these checks distinguish a restored client session from a
+server-side stream failure:
+
+```sh
+systemctl is-active greetd.service
+systemctl --user is-active couch-dms.service kdeconnect.service waynergy.service
+couch-audio-output status
+```
+
+Direct-display mode intentionally has no compositor-bound phone or Synergy
+path. Use a physical keyboard, mouse, or controller to operate or exit it, or
+use the SSH recovery command above.
