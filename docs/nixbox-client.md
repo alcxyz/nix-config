@@ -68,11 +68,14 @@ remains fixed at 1920×1080 at 60 Hz. Moonlight scales presentation locally;
 absolute pointer input still covers the complete remote desktop because its
 coordinates follow the requested stream resolution.
 
-Direct-display mode deliberately suspends compositor-bound DMS, KDE Connect,
-and Waynergy processes. Physical keyboard, mouse, and controller input continue
-to reach Moonlight directly. Exiting the stream restores the previous session
-mode and Hyprland starts the suspended user services again. Use the normal
-Hyprland/XWayland stream path when phone or Synergy input is required.
+Direct-display mode deliberately suspends host-local, compositor-bound DMS, KDE
+Connect, and Waynergy processes. KDE Connect running inside a remote browser
+capsule remains available through that stream. Physical keyboard, mouse, and
+controller input continue to reach Moonlight directly, but that does not imply
+that a host-side shortcut listener is active. Exiting a one-shot stream restores
+its return mode and Hyprland starts the suspended user services when that return
+mode is composited. Use the normal Hyprland/XWayland stream path when host-local
+phone or Synergy input is required.
 
 ## Recovery behavior
 
@@ -112,28 +115,81 @@ set `defaultSessionMode = "direct-browser"` deliberately initialize public
 Helium on DRM at activation and every boot; `couch` remains their explicit
 maintenance and recovery mode until the next activation or boot.
 
-The application menu is the normal switching interface. These commands are the
-maintenance and recovery interface:
+The application menu is the normal switching interface from a composited couch
+session. A compact client that already runs public Helium directly on DRM has no
+local application menu. On such a client, the session command is currently both
+the mode-selection and recovery interface and should normally be invoked over
+SSH:
 
 ```sh
 # Report the persisted mode.
-xps-session-mode
+ssh rpi0 xps-session-mode
 
-# Start a one-shot direct-display session.
-xps-session-mode direct-stream
-xps-session-mode direct-browser
-xps-session-mode direct-private
+# Select the local direct-display client.
+ssh rpi0 xps-session-mode direct-browser # public Helium
+ssh rpi0 xps-session-mode direct-stream  # Steam
+ssh rpi0 xps-session-mode direct-private # protected browser selector
 
 # Force an active direct-display session back to the compositor.
-xps-session-mode couch
+ssh rpi0 xps-session-mode couch
 ```
 
 `xps-session-mode` is the compatibility name of the shared session command; it
-is also installed by compact clients. A forced return restarts greetd and may
-take up to its bounded stop timeout while it reaps an unresponsive Moonlight
-process. If the mode already reports `couch` but the graphical session remains
-wedged, restart `greetd.service` from SSH. Do not stop PipeWire or host network
-services as part of display recovery.
+is also installed by compact clients. The `direct-private` mode opens the
+protected Wolf selector; the browser choice occurs inside that stream. A mode
+change replaces only the local greetd/Moonlight presentation. It does not
+deliberately stop the remote browser capsule, whose server-side idle policy
+remains authoritative.
+
+A forced return restarts greetd and may take up to its bounded stop timeout
+while it reaps an unresponsive Moonlight process. If the mode already reports
+`couch` but the graphical session remains wedged, restart `greetd.service` from
+SSH. Do not stop PipeWire or host network services as part of display recovery.
+
+### Physical input in direct display
+
+Moonlight itself provides two exit combinations:
+
+- `Ctrl+Alt+Shift+Q` on a physical keyboard
+- `Start+Select+L1+R1` on a controller
+
+These combinations exit the current Moonlight client; they do not select
+another direct-display application. On a compact client whose default is
+`direct-browser`, exiting a one-shot Steam or protected-browser session returns
+to public Helium. Exiting the default Helium client relaunches it.
+
+The controller listener that implements couch shortcuts such as `Home+A` and
+`Home+X` currently starts with Hyprland and is therefore absent while Moonlight
+owns DRM. Until an always-running, non-grabbing listener is implemented, there
+is no controller-only path from direct Helium into Steam or the protected
+selector. The intended direct-display mappings are:
+
+- `Home+X` or `Super+R`: public Helium
+- `Home+A` or `Super+M`: Steam
+- `Start+Up+RB` or `Super+Shift+R`: protected browser selector
+
+The persistent listener and final controller-reconnect validation remain tracked
+by [issue #183](https://git.alc.xyz/alcxyz/nix-config/issues/183). These mappings
+describe planned behavior, not the current deployed direct-display interface.
+
+### Audio in direct display
+
+Direct display has no host-local DMS audio picker. Connector-aware clients can
+follow a selected HDMI output, but discovery, connection, selection, status,
+and fallback for Bluetooth headphones or speakers do not yet have an equivalent
+controller-first interface. Return to the composited session for the complete
+graphical audio workflow, or use the host command line over SSH for recovery.
+The direct-display audio and Bluetooth UX is tracked separately by
+[issue #184](https://git.alc.xyz/alcxyz/nix-config/issues/184).
+
+### Resolution evidence
+
+The remote stream coordinate space, Moonlight render target, framebuffer
+configuration, connector mode, and mode reported by a TV are separate facts.
+Do not infer the physical HDMI signal solely from a `--1080` or `--1440`
+Moonlight argument, and do not treat a configured output mode as fresh physical
+evidence without inspecting the live connector and display. Issue #183 records
+the current compact-client observation for later investigation.
 
 After recovery, these checks distinguish a restored client session from a
 server-side stream failure:
@@ -144,6 +200,8 @@ systemctl --user is-active couch-dms.service kdeconnect.service waynergy.service
 couch-audio-output status
 ```
 
-Direct-display mode intentionally has no compositor-bound phone or Synergy
-path. Use a physical keyboard, mouse, or controller to operate or exit it, or
-use the SSH recovery command above.
+Direct-display mode intentionally has no host-local compositor-bound phone or
+Synergy path. Use physical input to operate or exit it and SSH to select or
+recover the local mode. KDE Connect inside a remote browser capsule remains a
+remote-browser input path and cannot change the compact client's local session
+mode.
