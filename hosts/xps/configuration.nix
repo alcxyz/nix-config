@@ -319,18 +319,17 @@ in {
     autoStartBrowser = true;
     preferRemoteBrowserAtStartup = true;
     autoStartStream = false;
-    # Keep the composited merged session as the default, but offer the same
-    # one-at-a-time direct Helium, protected-browser, and Steam modes as the
-    # compact client. XPS snapshots the currently powered TV before leaving
-    # Hyprland so EGLFS selects Intel KMS rather than the NVIDIA DRM card and
-    # turns off the other connected outputs for the duration of the stream.
+    # Keep the composited session as the default, but offer one-at-a-time
+    # direct Helium, protected-browser, and Steam modes on the qualified
+    # primary TV. EGLFS selects Intel KMS and turns off the other connected
+    # outputs for the duration of the stream.
     enableDirectDrmStream = true;
-    directDrmAutoSelectOutput = true;
-    directDrmAudioOutputByConnector = {
-      "DP-3" = "alsa_output.pci-0000_00_1f.3.playback.8.0";
-      "DP-5" = "alsa_output.pci-0000_00_1f.3.playback.7.0";
-      "DP-7" = "alsa_output.pci-0000_00_1f.3.playback.3.0";
+    directDrmFixedOutput = {
+      device = "/dev/dri/card1";
+      connector = "DP-3";
+      mode = "2560x1440@60";
     };
+    directDrmAudioOutputByConnector."DP-3" = "alsa_output.pci-0000_00_1f.3.playback.8.0";
     fallbackBrowserPackage = null;
     protectedBrowserPackage = pkgs.brave;
     protectedBrowserName = "Brave (Private)";

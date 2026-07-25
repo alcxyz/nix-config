@@ -352,17 +352,14 @@ than changing the couch configuration.
 
 XPS also exposes one-at-a-time direct-display sessions for public Helium, the
 protected browser selector, and Steam. These reuse the shared Nixbox
-session/recovery lifecycle, but XPS snapshots the currently focused powered
-output before leaving Hyprland. The generated Qt KMS configuration selects the
-Intel DRM device, keeps that output at its current pixel dimensions, and turns
-off the other connected outputs until Moonlight exits. The remote source can
-remain at 1440p regardless of whether the selected TV is currently using
-1440p60 or 1080p60.
+session/recovery lifecycle with a fixed Qt KMS configuration for the primary TV
+on the Intel DRM device at 1440p60. The other connected outputs remain off until
+Moonlight exits.
 
 The primary TV is the qualified XPS direct-display target. The composited
 profile remains the supported path for the secondary TV, auxiliary display,
 multi-output layouts, and mirroring. Direct-to-direct application changes reuse
-the saved primary-TV KMS selection instead of attempting to query the stopped
+the same fixed primary-TV KMS selection and do not depend on the stopped
 Hyprland session.
 
 Direct mode is an alternative presentation path, not another concurrent local
@@ -379,7 +376,7 @@ controller input also continue to reach Moonlight directly. The normal
 `merged` path remains the choice for host-local phone or Synergy input.
 
 ```sh
-# Start a one-shot session on the currently selected TV.
+# Start a one-shot session on the primary TV.
 xps-session-mode direct-browser
 xps-session-mode direct-private
 xps-session-mode direct-stream
