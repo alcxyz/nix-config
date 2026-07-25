@@ -145,6 +145,11 @@ A forced return restarts greetd and may take up to its bounded stop timeout
 while it reaps an unresponsive Moonlight process. If the mode already reports
 `couch` but the graphical session remains wedged, restart `greetd.service` from
 SSH. Do not stop PipeWire or host network services as part of display recovery.
+When a client reconnects to an existing cooperative browser lobby, the
+coordinator briefly waits for the new consumer pipeline to become ready before
+joining it. This prevents a reconnect from missing the initial video or audio
+producer handoff; recovery remains local to the client and preserves the
+browser capsule.
 
 ### Physical input in direct display
 
@@ -188,8 +193,14 @@ The remote stream coordinate space, Moonlight render target, framebuffer
 configuration, connector mode, and mode reported by a TV are separate facts.
 Do not infer the physical HDMI signal solely from a `--1080` or `--1440`
 Moonlight argument, and do not treat a configured output mode as fresh physical
-evidence without inspecting the live connector and display. Issue #183 records
-the current compact-client observation for later investigation.
+evidence without inspecting the live connector and display.
+
+Compact clients with a qualified fixed-output baseline declare the DRM device,
+connector, and exact mode. The module generates a static Qt EGLFS KMS
+configuration and forces that connector mode when Moonlight starts. The current
+compact baseline is a physical `1920x1080@60` signal; a remote source may remain
+at 1440p and scale locally. Revisit physical 1440p output only when the display
+hardware changes.
 
 After recovery, these checks distinguish a restored client session from a
 server-side stream failure:
