@@ -106,6 +106,12 @@ in {
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
     enableDirectDrmStream = true;
+    directDrmFixedOutput = {
+      device = "/dev/dri/card0";
+      connector = "HDMI-A-1";
+      mode = "1920x1080@60";
+    };
+    directDrmAudioOutputByConnector."HDMI-A-1" = "Bedroom TV";
     # SteamHeadless renders at 1440p while the direct DRM client scales it onto
     # the RPi's fixed 1080p60 TV output.
     directDrmStreamArguments = ["--1440"];

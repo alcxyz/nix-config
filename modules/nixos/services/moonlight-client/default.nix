@@ -16,6 +16,44 @@ let
   directDrmReturnModeFile = "${modeStateDirectory}/direct-drm-return-mode";
   directDrmKeyboardLayoutFile = "${modeStateDirectory}/direct-drm-keyboard-layout";
   directDrmKmsConfigFile = "${modeStateDirectory}/direct-drm-kms.json";
+  qtConnectorName =
+    connector:
+    lib.replaceStrings
+      [
+        "HDMI-A-"
+        "HDMI-B-"
+        "-"
+      ]
+      [
+        "HDMI"
+        "HDMI"
+        ""
+      ]
+      connector;
+  directDrmFixedKmsConfigFile =
+    if cfg.directDrmFixedOutput == null then
+      null
+    else
+      pkgs.writeText "moonlight-direct-drm-fixed-kms.json" (
+        builtins.toJSON {
+          device = cfg.directDrmFixedOutput.device;
+          outputs = [
+            {
+              name = qtConnectorName cfg.directDrmFixedOutput.connector;
+              mode = cfg.directDrmFixedOutput.mode;
+              primary = true;
+              virtualIndex = 0;
+            }
+          ];
+        }
+      );
+  directDrmKmsConfigEnabled =
+    cfg.directDrmAutoSelectOutput || cfg.directDrmFixedOutput != null;
+  directDrmActiveKmsConfigFile =
+    if cfg.directDrmAutoSelectOutput then
+      directDrmKmsConfigFile
+    else
+      directDrmFixedKmsConfigFile;
   runtimeStateDirectory = "/run/moonlight-client";
   dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
   mirrorStateFile = "${modeStateDirectory}/mirror-enabled";
@@ -196,10 +234,12 @@ let
   directDrmEnvironment = [
     "QT_QPA_PLATFORM=eglfs"
   ]
-  ++ lib.optionals cfg.directDrmAutoSelectOutput [
+  ++ lib.optionals directDrmKmsConfigEnabled [
     "QT_QPA_EGLFS_INTEGRATION=eglfs_kms"
-    "QT_QPA_EGLFS_KMS_CONFIG=${directDrmKmsConfigFile}"
-  ];
+    "QT_QPA_EGLFS_KMS_CONFIG=${directDrmActiveKmsConfigFile}"
+  ]
+  ++ lib.optional (cfg.directDrmFixedOutput != null)
+    "QT_QPA_EGLFS_ALWAYS_SET_MODE=1";
   mkMoonlightExecutable =
     name: profileDirectory:
     if profileDirectory == null then
@@ -612,6 +652,10 @@ let
         connector="$(basename "''${status_path%/status}")"
         connector="''${connector#"$card_name"-}"
         qt_connector="''${connector//-/}"
+        case "$qt_connector" in
+          HDMIA*) qt_connector="HDMI''${qt_connector#HDMIA}" ;;
+          HDMIB*) qt_connector="HDMI''${qt_connector#HDMIB}" ;;
+        esac
         if [ "$connector" = "$output" ]; then
           outputs="$(
             jq \
@@ -676,7 +720,7 @@ let
           lib.mapAttrsToList (
             connector: description:
             "${
-              lib.escapeShellArg (lib.replaceStrings [ "-" ] [ "" ] connector)
+              lib.escapeShellArg (qtConnectorName connector)
             }) target=${lib.escapeShellArg description} ;;"
           ) cfg.directDrmAudioOutputByConnector
         )}
@@ -3954,6 +3998,38 @@ in
       '';
     };
 
+    directDrmFixedOutput = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            device = lib.mkOption {
+              type = lib.types.str;
+              example = "/dev/dri/card0";
+              description = "DRM device used by the fixed direct-display output.";
+            };
+
+            connector = lib.mkOption {
+              type = lib.types.str;
+              example = "HDMI-A-1";
+              description = "Kernel DRM connector used by the fixed direct-display output.";
+            };
+
+            mode = lib.mkOption {
+              type = lib.types.str;
+              example = "1920x1080@60";
+              description = "Exact Qt EGLFS KMS mode used by the fixed direct-display output.";
+            };
+          };
+        }
+      );
+      default = null;
+      description = ''
+        Generate a static Qt EGLFS KMS configuration for a fixed single-output
+        direct-DRM client. This prevents EGLFS from replacing the configured
+        appliance mode with the display's preferred mode.
+      '';
+    };
+
     directDrmAudioOutputByConnector = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -4843,8 +4919,16 @@ in
         message = "services.moonlight-client.directDrmAutoSelectOutput requires a configured direct-DRM stream";
       }
       {
-        assertion = cfg.directDrmAudioOutputByConnector == { } || cfg.directDrmAutoSelectOutput;
-        message = "services.moonlight-client.directDrmAudioOutputByConnector requires directDrmAutoSelectOutput";
+        assertion = cfg.directDrmFixedOutput == null || (directDrmStreamEnabled || directDrmBrowserEnabled);
+        message = "services.moonlight-client.directDrmFixedOutput requires a configured direct-DRM stream";
+      }
+      {
+        assertion = !cfg.directDrmAutoSelectOutput || cfg.directDrmFixedOutput == null;
+        message = "services.moonlight-client directDrmAutoSelectOutput and directDrmFixedOutput are mutually exclusive";
+      }
+      {
+        assertion = cfg.directDrmAudioOutputByConnector == { } || directDrmKmsConfigEnabled;
+        message = "services.moonlight-client.directDrmAudioOutputByConnector requires a direct DRM KMS configuration";
       }
       {
         assertion = !cfg.enableDirectDrmBrowserStreams || cfg.autoLoginUser != null;
