@@ -8,8 +8,7 @@
   configDir,
   lib,
   ...
-}:
-let
+}: let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -24,8 +23,7 @@ let
       ]
     } -o "Hostname=$COUCH_STREAM_START_TARGET" -o HostKeyAlias=xyz xyz ${lib.escapeShellArg "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"}
   '';
-in
-{
+in {
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
@@ -114,7 +112,9 @@ in
   console.useXkbConfig = lib.mkForce false;
   console.keyMap = "no";
 
-  environment.systemPackages = pkgsets.system.${hostRole.systemPackageSet} ++ [
+  environment.systemPackages =
+    pkgsets.system.${hostRole.systemPackageSet}
+    ++ [
       pkgs.bolt
     ];
 
@@ -292,7 +292,9 @@ in
   services.moonlight-client = {
     enable = true;
     package = pkgs.moonlight-qt.overrideAttrs (old: {
-      patches = (old.patches or [ ]) ++ [
+      patches =
+        (old.patches or [])
+        ++ [
           (builtins.path {
             path = ../../modules/nixos/services/moonlight-client/recover-stalled-sdl-audio.patch;
             name = "moonlight-recover-stalled-sdl-audio.patch";

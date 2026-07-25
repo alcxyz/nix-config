@@ -250,19 +250,21 @@
       type = "docker";
       name = runnerName;
       inherit image;
-      mounts = [
-        "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
-      ]
-      ++ lib.optional kdeConnect "/nix/store:/nix/store:ro";
-      env = [
-        "RUN_SWAY=1"
-        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
-        "NIXBOX_BROWSER_SCALE=1.0"
-        "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
-        "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
-      ]
-      ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_EXECUTABLE=${kdeConnectExecutable}"
-      ++ lib.optional restoreSession "NIXBOX_RESTORE_LAST_SESSION=1";
+      mounts =
+        [
+          "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
+        ]
+        ++ lib.optional kdeConnect "/nix/store:/nix/store:ro";
+      env =
+        [
+          "RUN_SWAY=1"
+          "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
+          "NIXBOX_BROWSER_SCALE=1.0"
+          "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
+          "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
+        ]
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_EXECUTABLE=${kdeConnectExecutable}"
+        ++ lib.optional restoreSession "NIXBOX_RESTORE_LAST_SESSION=1";
       devices = [];
       ports = [];
       base_create_json = browserHostConfig;
