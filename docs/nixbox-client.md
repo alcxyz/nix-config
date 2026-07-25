@@ -47,12 +47,20 @@ and is independent of that Qt presentation backend.
 
 ## Direct-display streams
 
-Small clients can opt into one-shot direct-display modes for Steam and remote
+Nixbox hosts can opt into one-shot direct-display modes for Steam and remote
 browsers. In these modes Moonlight uses EGLFS/DRM and owns the display instead
 of being composited by Hyprland. This materially lowers the client rendering
 overhead while preserving server-side concurrency: another client can remain
 connected to the same stream host, and independent stream hosts remain
 unaffected.
+
+A fixed single-output appliance can retain EGLFS device discovery and constrain
+its physical mode through the kernel baseline. A multi-GPU or multi-output
+couch host can enable direct-output auto-selection instead. The session command
+then snapshots the focused powered Hyprland output, resolves its owning DRM
+card, and writes a Qt KMS configuration that keeps only that connector active
+at its current pixel dimensions. This selection occurs before the compositor
+releases DRM.
 
 The stream coordinate space does not have to match the physical output. A
 compact client may request a 2560×1440 stream while its kernel framebuffer

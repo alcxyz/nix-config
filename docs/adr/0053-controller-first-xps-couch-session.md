@@ -47,6 +47,35 @@ reach the focused Moonlight window and be forwarded by the normal streaming
 input path. Keep the normal desktop session as a separately persisted boot
 mode.
 
+Retain the composited `merged` session as the XPS default, but also offer
+one-shot direct-display sessions for public Helium, the protected browser
+selector, and Steam. Direct-display Moonlight owns DRM through Qt EGLFS, so
+only one such client can run at a time and host-local compositor-bound DMS, KDE
+Connect, and Waynergy input is deliberately unavailable until the stream exits.
+KDE Connect inside the remote Helium capsule remains available through the
+stream. Physical keyboard, pointer, and controller input continue to reach
+Moonlight directly. A normal exit returns to the previous couch, merged, or
+desktop session; the persisted session-mode command and greetd restart remain
+the forced recovery boundary.
+
+Resolve XPS direct-display ownership before stopping Hyprland. Snapshot the
+focused powered output, map its connector to the DRM card that owns it, and
+generate a trusted Qt KMS configuration with that device and the output's
+current pixel dimensions. Mark the selected connector primary and turn off the
+other connected outputs on that card for the duration of the direct session.
+This is required because the discrete NVIDIA device enumerates before the Intel
+display device even though every physical XPS display connector belongs to
+Intel. It also preserves the deliberately selected 1080p or 1440p TV mode
+instead of allowing EGLFS to choose a different preferred mode.
+
+Treat the remote stream resolution independently from the physical mode.
+Helium, protected browsers, and Steam may continue rendering at 1440p while
+Moonlight presents them on the selected XPS output. Entering direct display
+restarts the local graphical session, so concurrent local XWayland Moonlight
+clients close. Their remote Wolf capsules retain their configured grace and
+persistent profiles; returning to merged mode automatically restores public
+Helium, while a protected client is reopened deliberately.
+
 Launch Moonlight explicitly in windowed mode and let Hyprland tile it. Do not
 add a compositor fullscreen rule: browser-level or compositor fullscreen is
 redundant for a single tiled window and interferes with pointer visibility.
@@ -258,6 +287,21 @@ held combinations without grabbing the device is sufficient here.
 Automatic remote shutdown would make brief disconnects and browser switches
 expensive. Remote shutdown can be added later as a separate deliberate action.
 
+### Let EGLFS discover the XPS DRM device and outputs
+
+Automatic discovery can select the earlier-enumerated NVIDIA DRM device even
+though it owns no XPS display connector, or create screens for several cabled
+Intel outputs. An explicit KMS snapshot preserves the user-selected TV and
+keeps direct-display recovery deterministic.
+
+### Keep Hyprland running behind direct-display Moonlight
+
+Both processes require DRM ownership and the current session lifecycle already
+uses greetd as a bounded recovery boundary. Moving direct Moonlight onto a
+separate active session while retaining compositor clients would add
+seat-switching and DRM-master coordination without preserving visible
+concurrency. Remote session state is retained server-side instead.
+
 ## Consequences
 
 XPS remains useful for browsing when the remote host or container is offline.
@@ -271,6 +315,13 @@ restarting the graphical session.
 Moonlight uses XWayland in couch mode to support phone input. Hardware decoding
 remains enabled, but the XWayland presentation path should be retained only
 while it meets latency and rendering expectations.
+
+Direct-display mode provides the same low-overhead Helium, protected-browser,
+and Steam choices as the compact client while retaining XPS's multi-output
+composited mode as the normal experience. Only the selected physical output is
+active during a direct session. Phone and Synergy input require returning to
+the compositor; direct mode is operated with physical input or recovered over
+SSH.
 
 The protected couch browser profile is encrypted while closed, but becomes
 available to the logged-in couch session while the launcher is running. It is
@@ -287,7 +338,8 @@ attached to the container's X server.
 
 ## Tracking
 
-- Issue #140 tracks the initial controller-first rollout and live validation.
+- Issue #140 tracks the controller-first rollout, XPS direct-display
+  qualification, and remaining live display validation.
 - Issue #141 tracks optional controller-native browser navigation, a proper
   controller shutdown action, and optional clipboard transfer. The
   Wayland-compatible KDE Connect phone pointer path is implemented and

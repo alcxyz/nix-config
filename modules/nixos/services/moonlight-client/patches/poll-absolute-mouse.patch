@@ -40,7 +40,7 @@ diff --git a/app/streaming/input/mouse.cpp b/app/streaming/input/mouse.cpp
 index 976ec09..117d710 100644
 --- a/app/streaming/input/mouse.cpp
 +++ b/app/streaming/input/mouse.cpp
-@@ -154,6 +154,42 @@ void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
+@@ -154,6 +154,65 @@ void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
      }
  }
  
@@ -54,13 +54,36 @@ index 976ec09..117d710 100644
 +    int globalX, globalY;
 +    SDL_GetGlobalMouseState(&globalX, &globalY);
 +
++    int windowX, windowY;
++    SDL_GetWindowPosition(m_Window, &windowX, &windowY);
++
++    static const double sensitivity = []() {
++        bool ok = false;
++        const double value =
++            qEnvironmentVariable("MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY").toDouble(&ok);
++        return ok && value > 0.0 ? value : 1.0;
++    }();
++    if (m_HavePolledMousePosition && sensitivity != 1.0) {
++        int windowWidth, windowHeight;
++        SDL_GetWindowSize(m_Window, &windowWidth, &windowHeight);
++        const int acceleratedX = qBound(
++            windowX,
++            m_LastPolledMouseX + qRound((globalX - m_LastPolledMouseX) * sensitivity),
++            windowX + windowWidth - 1);
++        const int acceleratedY = qBound(
++            windowY,
++            m_LastPolledMouseY + qRound((globalY - m_LastPolledMouseY) * sensitivity),
++            windowY + windowHeight - 1);
++        if (SDL_WarpMouseGlobal(acceleratedX, acceleratedY) == 0) {
++            globalX = acceleratedX;
++            globalY = acceleratedY;
++        }
++    }
++
 +    if (m_HavePolledMousePosition &&
 +            globalX == m_LastPolledMouseX && globalY == m_LastPolledMouseY) {
 +        return;
 +    }
-+
-+    int windowX, windowY;
-+    SDL_GetWindowPosition(m_Window, &windowX, &windowY);
 +
 +    SDL_MouseMotionEvent event = {};
 +    event.type = SDL_MOUSEMOTION;
@@ -87,23 +110,30 @@ diff --git a/app/streaming/session.cpp b/app/streaming/session.cpp
 index 81c9bec..73a0abc 100644
 --- a/app/streaming/session.cpp
 +++ b/app/streaming/session.cpp
-@@ -1964,6 +1964,11 @@ void Session::exec()
+@@ -1964,6 +1964,17 @@ void Session::exec()
      // Hijack this thread to be the SDL main thread. We have to do this
      // because we want to suspend all Qt processing until the stream is over.
      SDL_Event event;
 +    const bool pollAbsoluteMouse =
 +        qEnvironmentVariableIsSet("MOONLIGHT_POLL_ABSOLUTE_MOUSE");
++    const int pollAbsoluteMouseIntervalMs = []() {
++        bool ok = false;
++        const int value =
++            qEnvironmentVariable("MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS").toInt(&ok);
++        return ok && value > 0 ? value : 8;
++    }();
      for (;;) {
 +        if (pollAbsoluteMouse) {
 +            m_InputHandler->pollAbsoluteMousePosition();
 +        }
  #if SDL_VERSION_ATLEAST(2, 0, 18) && !defined(STEAM_LINK)
          // SDL 2.0.18 has a proper wait event implementation that uses platform
-@@ -1975,7 +1980,7 @@ void Session::exec()
+@@ -1975,7 +1986,8 @@ void Session::exec()
          // issues that could cause indefinite timeouts, delayed joystick detection,
          // and other problems.
 -        if (!SDL_WaitEventTimeout(&event, 1000)) {
-+        if (!SDL_WaitEventTimeout(&event, pollAbsoluteMouse ? 8 : 1000)) {
++        if (!SDL_WaitEventTimeout(
++                &event, pollAbsoluteMouse ? pollAbsoluteMouseIntervalMs : 1000)) {
              presence.runCallbacks();
              continue;
          }

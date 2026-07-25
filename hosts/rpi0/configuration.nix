@@ -134,6 +134,8 @@ in {
 
     browserStreamHost = "Wolf";
     browserStreamApplication = "Helium";
+    browserAbsoluteMouseSensitivity = 2.0;
+    browserAbsoluteMousePollIntervalMs = 1;
     browserStreamSelectorHost = "Wolf User";
     browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";
@@ -152,7 +154,7 @@ in {
       case "$COUCH_STREAM_APPLICATION" in
         Helium)
           coordinator_args=()
-          runners=(WolfHelium)
+          runners=(WolfHeliumCoop)
           ;;
         "Wolf UI")
           coordinator_args=(
@@ -178,6 +180,13 @@ in {
           --presentation-scale "$COUCH_PRESENTATION_SCALE" \
           "$COUCH_KEYBOARD_LAYOUT" \
           "''${runners[@]}"
+    '';
+    browserStreamPrepareCommand = ''
+      ${lib.getExe pkgs.openssh} \
+        -o BatchMode=yes \
+        -o ConnectTimeout=5 \
+        xev \
+        wolf-clear-peer-sessions
     '';
   };
 

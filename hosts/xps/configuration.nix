@@ -8,7 +8,8 @@
   configDir,
   lib,
   ...
-}: let
+}:
+let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -23,7 +24,8 @@
       ]
     } -o "Hostname=$COUCH_STREAM_START_TARGET" -o HostKeyAlias=xyz xyz ${lib.escapeShellArg "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"}
   '';
-in {
+in
+{
   imports = [
     ./hardware-configuration.nix
     "${configDir}/modules/nixos/common/default.nix"
@@ -112,9 +114,7 @@ in {
   console.useXkbConfig = lib.mkForce false;
   console.keyMap = "no";
 
-  environment.systemPackages =
-    pkgsets.system.${hostRole.systemPackageSet}
-    ++ [
+  environment.systemPackages = pkgsets.system.${hostRole.systemPackageSet} ++ [
       pkgs.bolt
     ];
 
@@ -178,9 +178,9 @@ in {
       {
         matches = [{"node.name" = "~alsa_output.*[.]playback[.]3[.]0";}];
         actions."update-props" = {
-          "node.description" = "Primary TV";
-          "node.nick" = "Primary TV";
-          "priority.session" = 1100;
+          "node.description" = "Auxiliary display";
+          "node.nick" = "Auxiliary display";
+          "priority.session" = 1000;
         };
       }
       {
@@ -194,9 +194,9 @@ in {
       {
         matches = [{"node.name" = "~alsa_output.*[.]playback[.]8[.]0";}];
         actions."update-props" = {
-          "node.description" = "Auxiliary display";
-          "node.nick" = "Auxiliary display";
-          "priority.session" = 1000;
+          "node.description" = "Primary TV";
+          "node.nick" = "Primary TV";
+          "priority.session" = 1100;
         };
       }
     ];
@@ -239,7 +239,7 @@ in {
               matches = [
                 {
                   "media.class" = "Audio/Sink";
-                  "node.name" = "~alsa_output.*[.]playback[.](3|7)[.]0";
+                  "node.name" = "~alsa_output.*[.]playback[.](7|8)[.]0";
                 }
               ];
               actions."create-stream" = {
@@ -292,9 +292,7 @@ in {
   services.moonlight-client = {
     enable = true;
     package = pkgs.moonlight-qt.overrideAttrs (old: {
-      patches =
-        (old.patches or [])
-        ++ [
+      patches = (old.patches or [ ]) ++ [
           (builtins.path {
             path = ../../modules/nixos/services/moonlight-client/recover-stalled-sdl-audio.patch;
             name = "moonlight-recover-stalled-sdl-audio.patch";
@@ -319,6 +317,18 @@ in {
     autoStartBrowser = true;
     preferRemoteBrowserAtStartup = true;
     autoStartStream = false;
+    # Keep the composited merged session as the default, but offer the same
+    # one-at-a-time direct Helium, protected-browser, and Steam modes as the
+    # compact client. XPS snapshots the currently powered TV before leaving
+    # Hyprland so EGLFS selects Intel KMS rather than the NVIDIA DRM card and
+    # turns off the other connected outputs for the duration of the stream.
+    enableDirectDrmStream = true;
+    directDrmAutoSelectOutput = true;
+    directDrmAudioOutputByConnector = {
+      "DP-3" = "alsa_output.pci-0000_00_1f.3.playback.8.0";
+      "DP-5" = "alsa_output.pci-0000_00_1f.3.playback.7.0";
+      "DP-7" = "alsa_output.pci-0000_00_1f.3.playback.3.0";
+    };
     fallbackBrowserPackage = null;
     protectedBrowserPackage = pkgs.brave;
     protectedBrowserName = "Brave (Private)";
@@ -376,7 +386,7 @@ in {
       case "$COUCH_STREAM_APPLICATION" in
         Helium)
           coordinator_args=()
-          runners=(WolfHelium)
+          runners=(WolfHeliumCoop)
           ;;
         "Wolf UI")
           coordinator_args=(
@@ -402,6 +412,13 @@ in {
           --presentation-scale "$COUCH_PRESENTATION_SCALE" \
           "$COUCH_KEYBOARD_LAYOUT" \
           "''${runners[@]}"
+    '';
+    browserStreamPrepareCommand = ''
+      ${lib.getExe pkgs.openssh} \
+        -o BatchMode=yes \
+        -o ConnectTimeout=5 \
+        xev \
+        wolf-clear-peer-sessions
     '';
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";

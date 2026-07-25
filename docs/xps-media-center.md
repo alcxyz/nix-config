@@ -324,9 +324,11 @@ Both browser and Steam streams on XPS are LAN-only. Immediately before launch,
 the endpoint reconciler pins Moonlight's local, manual, and remote address
 fields to the configured LAN endpoint, and readiness checks probe only LAN.
 XPS therefore fails locally instead of silently streaming over VPN. The Mac
-instead exposes separate `Wolf (LAN)` and `Wolf (VPN)` application bundles;
-neither route falls back to the other. Synergy input sharing is likewise
-LAN-only and disconnects rather than crossing the VPN.
+instead exposes separate `Wolf (LAN)` and `Wolf (VPN)` application bundles for
+the protected selector. Each launcher pins both the selected address and the
+coordinator's HTTP base port, so neither route falls back to the other or to
+the public coordinator. Synergy input sharing is likewise LAN-only and
+disconnects rather than crossing the VPN.
 
 The remote browser session provides Norwegian, US, and Russian layouts. On
 launch, XPS reads the active layout of Hyprland's main keyboard and selects the
@@ -343,6 +345,43 @@ Right Alt remains the LevelThree modifier, so Norwegian combinations such as
 XPS retains separate `couch`, `merged`, and normal `desktop` profiles. The
 merged profile is the media-center default in use here; desktop mode remains a
 recovery and workstation option rather than changing the couch configuration.
+
+## Direct-display sessions
+
+XPS also exposes one-at-a-time direct-display sessions for public Helium, the
+protected browser selector, and Steam. These reuse the shared Nixbox
+session/recovery lifecycle, but XPS snapshots the currently focused powered
+output before leaving Hyprland. The generated Qt KMS configuration selects the
+Intel DRM device, keeps that output at its current pixel dimensions, and turns
+off the other connected outputs until Moonlight exits. The remote source can
+remain at 1440p regardless of whether the selected TV is currently using
+1440p60 or 1080p60.
+
+Direct mode is an alternative presentation path, not another concurrent local
+window. Entering it restarts the graphical session and therefore closes the
+local composited Moonlight clients. Remote browser capsules and persistent
+profiles remain server-side. A normal direct exit returns to the prior profile;
+merged mode then relaunches public Helium automatically, while the protected
+client is reopened explicitly.
+
+Host-local DMS, KDE Connect, and Waynergy are compositor-bound and intentionally
+stop during direct display. KDE Connect running inside the remote Helium
+capsule remains available through the stream. Physical keyboard, pointer, and
+controller input also continue to reach Moonlight directly. The normal
+`merged` path remains the choice for host-local phone or Synergy input.
+
+```sh
+# Start a one-shot session on the currently selected TV.
+xps-session-mode direct-browser
+xps-session-mode direct-private
+xps-session-mode direct-stream
+
+# Force recovery to the normal XPS media-center profile.
+xps-session-mode merged
+```
+
+The session switch is boot-scoped. A stale one-shot direct request cannot
+reopen after a reboot; XPS returns to its configured `merged` default.
 
 ## Command-line status
 
