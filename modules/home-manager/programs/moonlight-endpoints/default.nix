@@ -42,6 +42,7 @@
           exit 2
           ;;
       esac
+      port="$(printf '%s\n' "$host" | jq -r .port)"
 
       host_count="$(
         /usr/bin/defaults read ${lib.escapeShellArg preferenceDomain} "hosts.size" \
@@ -70,8 +71,15 @@
         /usr/bin/defaults write ${lib.escapeShellArg preferenceDomain} \
           "hosts.$index.$field" -string "$address"
       done
+      for field in localport manualport remoteport; do
+        /usr/bin/defaults write ${lib.escapeShellArg preferenceDomain} \
+          "hosts.$index.$field" -int "$port"
+      done
 
-      printf '%s\n' "$address"
+      case "$address" in
+        *:*) printf '[%s]:%s\n' "$address" "$port" ;;
+        *) printf '%s:%s\n' "$address" "$port" ;;
+      esac
     '';
   };
 
@@ -142,6 +150,11 @@ in {
             remoteAddress = lib.mkOption {
               type = lib.types.str;
               description = "Address selected by the explicit VPN launcher.";
+            };
+            port = lib.mkOption {
+              type = lib.types.ints.between 1 65535;
+              default = 47989;
+              description = "Moonlight HTTP base port pinned for every route field.";
             };
           };
         }
