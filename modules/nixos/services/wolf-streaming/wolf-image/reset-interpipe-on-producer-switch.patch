@@ -1,0 +1,119 @@
+diff --git a/src/moonlight-server/events/events.hpp b/src/moonlight-server/events/events.hpp
+index 456654d..7ad52bb 100644
+--- a/src/moonlight-server/events/events.hpp
++++ b/src/moonlight-server/events/events.hpp
+@@ -193,5 +193,6 @@ struct LeaveLobbyEvent {
+   const std::string lobby_id;
+   const std::size_t moonlight_session_id;
++  bool switch_stream_producers = true;
+ };
+ 
+ struct StopLobbyEvent {
+diff --git a/src/moonlight-server/sessions/lobbies.cpp b/src/moonlight-server/sessions/lobbies.cpp
+index 6f305c8..d3c6e7d 100644
+--- a/src/moonlight-server/sessions/lobbies.cpp
++++ b/src/moonlight-server/sessions/lobbies.cpp
+@@ -15,7 +15,8 @@ namespace wolf::core::sessions {
+  */
+ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
+                  const events::Lobby &lobby,
+-                 const events::StreamSession &session) {
++                 const events::StreamSession &session,
++                 bool switch_stream_producers = true) {
+   logs::log(logs::info, "[LOBBY] Session {} leaving lobby {}", session.session_id, lobby.id);
+   // Remove the current session from the lobby list
+   lobby.connected_sessions->update([session](const immer::vector<immer::box<std::string>> &connected_sessions) {
+@@ -56,10 +56,12 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
+   }
+   // TODO: hotplug pen_tablet and touch_screen
+ 
+-  // Switch audio/video gstreamer stream producers
+-  ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
+-      events::SwitchStreamProducerEvents{.session_id = session.session_id,
+-                                         .interpipe_src_id = std::to_string(session.session_id)}});
++  if (switch_stream_producers) {
++    // Switch audio/video gstreamer stream producers
++    ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
++        events::SwitchStreamProducerEvents{.session_id = session.session_id,
++                                           .interpipe_src_id = std::to_string(session.session_id)}});
++  }
+ 
+   if (lobby.stop_when_everyone_leaves && lobby.connected_sessions->load()->size() == 0) {
+     // Nobody left in the lobby, and it's set to stop when everyone leaves
+@@ -307,7 +309,10 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
+                     leave_lobby_event->lobby_id,
+                     leave_lobby_event->moonlight_session_id);
+         } else {
+-          leave_lobby(app_state->event_bus, lobby.value(), session.value());
++          leave_lobby(app_state->event_bus,
++                      lobby.value(),
++                      session.value(),
++                      leave_lobby_event->switch_stream_producers);
+           if (lobby->connected_sessions->load()->empty()) {
+             arm_idle_timeout(lobby->id);
+           }
+@@ -385,6 +390,8 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
+       logs::log(logs::info, "[LOBBY] Moonlight stream {} over, leaving lobby {}", moonlight_session_id, lobby->id);
+       // Fire the LeaveLobbyEvent so that it can also be picked up by WolfUI via SSE
+       app_state->event_bus->fire_event(immer::box<events::LeaveLobbyEvent>{
+-          events::LeaveLobbyEvent{.lobby_id = lobby->id, .moonlight_session_id = moonlight_session_id}});
++          events::LeaveLobbyEvent{.lobby_id = lobby->id,
++                                  .moonlight_session_id = moonlight_session_id,
++                                  .switch_stream_producers = false}});
+     }
+   };
+
+diff --git a/src/moonlight-server/streaming/streaming.cpp b/src/moonlight-server/streaming/streaming.cpp
+index 20e3ca1..91c9d93 100644
+--- a/src/moonlight-server/streaming/streaming.cpp
++++ b/src/moonlight-server/streaming/streaming.cpp
+@@ -416,6 +416,17 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
+       configure_appsink(app_sink_el, udp_sink.get());
+       gst_object_unref(app_sink_el);
+     }
++
++    /*
++     * Configure interpipesrc before the pipeline enters PLAYING. NVIDIA
++     * zero-copy pipelines cannot reliably renegotiate if these properties
++     * are changed only after switching to a lobby producer.
++     */
++    auto video_pipe_name = fmt::format("interpipesrc_{}_video", video_session->session_id);
++    if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), video_pipe_name.c_str())) {
++      g_object_set(src, "allow-renegotiation", TRUE, "format", GST_FORMAT_TIME, nullptr);
++      gst_object_unref(src);
++    }
+ 
+     auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
+     gst_bus_set_sync_handler(bus, bus_sync_handler, ctx_data_ptr.get(), nullptr);
+@@ -470,7 +481,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
+             auto pipe_name = fmt::format("interpipesrc_{}_video", sess_id);
+             if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), pipe_name.c_str())) {
+-              /* Perform the switch */
++              /* Renegotiation was enabled before the pipeline started. */
+               auto video_interpipe = fmt::format("{}_video", switch_ev->interpipe_src_id);
+               g_object_set(src, "listen-to", video_interpipe.c_str(), nullptr);
+               gst_object_unref(src);
+             } else {
+@@ -536,6 +547,12 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
+       custom_sink::configure_appsink(app_sink_el, udp_sink.get());
+       gst_object_unref(app_sink_el);
+     }
++
++    auto audio_pipe_name = fmt::format("interpipesrc_{}_audio", session_id);
++    if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), audio_pipe_name.c_str())) {
++      g_object_set(src, "allow-renegotiation", TRUE, "format", GST_FORMAT_TIME, nullptr);
++      gst_object_unref(src);
++    }
+ 
+     auto pause_handler = event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+         [session_id, pipeline](const immer::box<events::PauseStreamEvent> &ev) {
+@@ -568,8 +585,8 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
+ 
+             auto pipe_name = fmt::format("interpipesrc_{}_audio", session_id);
+             if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), pipe_name.c_str())) {
+-              /* Perform the switch */
++              /* Renegotiation was enabled before the pipeline started. */
+               auto audio_interpipe = fmt::format("{}_audio", switch_ev->interpipe_src_id);
+               g_object_set(src, "listen-to", audio_interpipe.c_str(), nullptr);
+               gst_object_unref(src);
+             } else {

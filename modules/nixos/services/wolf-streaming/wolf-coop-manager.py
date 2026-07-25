@@ -206,6 +206,12 @@ def reconcile_once(api, args):
                 "connected_sessions": [],
             }
             logging.info("created the shared %s lobby", args.lobby_name)
+            # Wolf reports lobby setup complete after launching the runner
+            # thread, before the new interpipe producer necessarily has caps
+            # or a first frame. Let that producer settle before moving the
+            # first Moonlight consumer onto it. Existing-lobby joins skip this
+            # delay and remain immediate.
+            time.sleep(args.initial_join_delay)
 
         api.post(
             "/api/v1/lobbies/join",
@@ -229,6 +235,7 @@ def parse_args():
     parser.add_argument("--kdeconnect-executable", default="")
     parser.add_argument("--video-producer-buffer-caps", required=True)
     parser.add_argument("--poll-seconds", type=float, default=0.5)
+    parser.add_argument("--initial-join-delay", type=float, default=5.0)
     return parser.parse_args()
 
 

@@ -8,6 +8,8 @@
   nvidiaPackage = config.hardware.nvidia.package;
   nvidiaSmi = "${nvidiaPackage.bin}/bin/nvidia-smi";
   browserCfg = cfg.browserImages;
+  kdeConnectPackage = pkgs.kdePackages.kdeconnect-kde;
+  kdeConnectExecutable = "${kdeConnectPackage}/bin/kdeconnectd";
   isolatedProtectedBackend =
     cfg.protectedProfile.definitionFile != null && cfg.protectedProfile.isolateBackend;
   publicRuntimeDirectory = "/run/wolf-streaming/runtime";
@@ -15,7 +17,7 @@
   protectedStateDirectory = cfg.protectedProfile.stateDirectory;
   protectedPort = standard: standard + cfg.protectedProfile.portOffset;
   wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
-  wolfPatchSet = "altgr-idle-presentation-v1";
+  wolfPatchSet = "altgr-idle-presentation-interpipe-v4";
   wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
   wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}";
   wolfSource = pkgs.fetchFromGitHub {
@@ -31,6 +33,7 @@
       ./wolf-image/altgr.patch
       ./wolf-image/client-presentation-scale.patch
       ./wolf-image/idle-session-timeout.patch
+      ./wolf-image/reset-interpipe-on-producer-switch.patch
     ];
   };
   wolfBuildContext =
@@ -178,6 +181,8 @@
     '')
     runnerNames;
   browserHostConfig = builtins.toJSON {
+    StopSignal = "SIGTERM";
+    StopTimeout = 20;
     HostConfig = {
       IpcMode = "host";
       Privileged = false;
@@ -234,6 +239,8 @@
     runnerName,
     image,
     icon,
+    kdeConnect ? false,
+    restoreSession ? false,
   }: {
     inherit title;
     icon_png_path = icon;
@@ -245,14 +252,17 @@
       inherit image;
       mounts = [
         "/run/wolf-streaming/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro"
-      ];
+      ]
+      ++ lib.optional kdeConnect "/nix/store:/nix/store:ro";
       env = [
         "RUN_SWAY=1"
         "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
         "NIXBOX_BROWSER_SCALE=1.0"
         "XKB_DEFAULT_LAYOUT=${lib.concatStringsSep "," browserCfg.keyboardLayouts}"
         "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
-      ];
+      ]
+      ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_EXECUTABLE=${kdeConnectExecutable}"
+      ++ lib.optional restoreSession "NIXBOX_RESTORE_LAST_SESSION=1";
       devices = [];
       ports = [];
       base_create_json = browserHostConfig;
@@ -266,6 +276,8 @@
     runnerName = "WolfHelium";
     image = browserCfg.helium.image;
     icon = "https://helium.computer/favicon.png";
+    kdeConnect = browserCfg.helium.kdeConnect.enable;
+    restoreSession = true;
   };
   heliumCooperativeEntryApp = {
     title = "Helium";
@@ -366,6 +378,7 @@
           runnerName = "WolfHeliumPrivate";
           image = browserCfg.helium.image;
           icon = "https://helium.computer/favicon.png";
+          kdeConnect = browserCfg.helium.kdeConnect.enable;
         })
         ++ lib.optional browserCfg.brave.enable (mkMoonlightBrowserApp {
           title = "Brave";
@@ -435,7 +448,7 @@
         --kdeconnect-executable ${
         lib.escapeShellArg (
           if browserCfg.helium.kdeConnect.enable
-          then "/usr/bin/kdeconnectd"
+          then kdeConnectExecutable
           else ""
         )
       }
@@ -476,34 +489,72 @@
     import socket
     import sys
 
-    client_id, scale = sys.argv[1:]
-    payload = json.dumps(
+    session_or_lobby_id, scale = sys.argv[1:]
+
+    def request(method, path, payload=None):
+        body = b""
+        headers = [
+            f"{method} {path} HTTP/1.1",
+            "Host: localhost",
+            "Connection: close",
+        ]
+        if payload is not None:
+            body = json.dumps(payload, separators=(",", ":")).encode()
+            headers.extend(
+                [
+                    "Content-Type: application/json",
+                    f"Content-Length: {len(body)}",
+                ]
+            )
+        wire = ("\r\n".join(headers) + "\r\n\r\n").encode() + body
+
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.connect("/run/wolf-streaming/runtime/wolf.sock")
+            connection.sendall(wire)
+            response = bytearray()
+            while chunk := connection.recv(65536):
+                response.extend(chunk)
+
+        status_line, remainder = bytes(response).split(b"\r\n", 1)
+        _headers, response_body = remainder.split(b"\r\n\r\n", 1)
+        if b" 200 " not in status_line:
+            raise RuntimeError(status_line.decode(errors="replace"))
+        return json.loads(response_body) if response_body else {}
+
+    client_id = session_or_lobby_id
+    if not client_id.isdecimal():
+        lobbies = request("GET", "/api/v1/lobbies").get("lobbies", [])
+        lobby = next(
+            (item for item in lobbies if item.get("id") == session_or_lobby_id),
+            None,
+        )
+        connected_sessions = (
+            lobby.get("connected_sessions", []) if lobby is not None else []
+        )
+        if not connected_sessions:
+            raise SystemExit(0)
+        client_id = connected_sessions[-1]
+
+    request(
+        "POST",
+        "/api/v1/clients/settings",
         {
             "client_id": client_id,
             "settings": {"presentation_scale": float(scale)},
         },
-        separators=(",", ":"),
-    ).encode()
-    request = (
-        b"POST /api/v1/clients/settings HTTP/1.1\r\n"
-        b"Host: localhost\r\n"
-        b"Content-Type: application/json\r\n"
-        + f"Content-Length: {len(payload)}\r\n".encode()
-        + b"Connection: close\r\n\r\n"
-        + payload
     )
-
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-        connection.connect("/run/wolf-streaming/runtime/wolf.sock")
-        connection.sendall(request)
-        response = bytearray()
-        while chunk := connection.recv(65536):
-            response.extend(chunk)
-
-    status_line = bytes(response).split(b"\r\n", 1)[0]
-    if b" 200 " not in status_line:
-        raise RuntimeError(status_line.decode(errors="replace"))
   '';
+  wolfClearPeerSessions = pkgs.writeShellApplication {
+    name = "wolf-clear-peer-sessions";
+    runtimeInputs = [pkgs.docker];
+    text = ''
+      exec docker exec \
+        -e "SSH_CONNECTION=$SSH_CONNECTION" \
+        -i wolf \
+        python3 - \
+        < ${./wolf-clear-peer-sessions.py}
+    '';
+  };
 
   wolfStreamLayout = pkgs.writeShellApplication {
     name = "wolf-stream-layout";
@@ -1331,7 +1382,10 @@ in {
         };
     };
 
-    environment.systemPackages = lib.optional browserCfg.enable wolfStreamLayout;
+    environment.systemPackages = lib.optionals browserCfg.enable [
+      wolfClearPeerSessions
+      wolfStreamLayout
+    ];
 
     systemd.services.docker-wolf = {
       restartIfChanged = false;
@@ -1545,7 +1599,10 @@ in {
         ]
         ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       requires = ["docker.service"];
-      requiredBy =
+      # Pull the image build into coordinator startup without coupling their
+      # lifetimes. A changed oneshot may be restarted during activation, but
+      # that must not stop already-running public or protected coordinators.
+      wantedBy =
         [
           "docker-wolf.service"
         ]
@@ -1567,7 +1624,9 @@ in {
         ]
         ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       requires = ["docker.service"];
-      requiredBy =
+      # Browser image refreshes are startup prerequisites, not runtime
+      # dependencies of either coordinator.
+      wantedBy =
         [
           "docker-wolf.service"
         ]

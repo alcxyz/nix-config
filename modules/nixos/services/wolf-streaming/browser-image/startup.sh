@@ -80,6 +80,9 @@ case "${NIXBOX_BROWSER_FAMILY:-chromium}" in
       "--ozone-platform=x11"
       "--use-angle=gl"
     )
+    if [[ "${NIXBOX_RESTORE_LAST_SESSION:-0}" == 1 ]]; then
+      browser_flags+=("--restore-last-session")
+    fi
     ;;
   firefox)
     # Firefox-family browsers use XWayland here so all five test candidates
@@ -95,5 +98,79 @@ case "${NIXBOX_BROWSER_FAMILY:-chromium}" in
     ;;
 esac
 
+launcher_pid=
+shutdown_requested=0
+
+# shellcheck disable=SC2329 # Invoked indirectly by the signal trap below.
+graceful_shutdown() {
+  shutdown_requested=1
+  trap - INT TERM
+
+  # Docker signals this wrapper rather than the browser nested under Sway.
+  # Ask the main browser process to terminate first so Chromium can commit its
+  # session to the persistent home.
+  browser_executable="$(readlink -f "${NIXBOX_BROWSER_EXECUTABLE}")"
+  mapfile -t browser_pids < <(
+    ps -u "$(id -u)" -o pid=,args= |
+      awk -v executable="${browser_executable}" \
+        '$2 == executable && $0 !~ / --type=/ { print $1 }'
+  )
+  if ((${#browser_pids[@]})); then
+    kill -TERM "${browser_pids[@]}" 2>/dev/null || true
+    for _attempt in {1..150}; do
+      browser_running=0
+      for browser_pid in "${browser_pids[@]}"; do
+        if kill -0 "${browser_pid}" 2>/dev/null; then
+          browser_running=1
+          break
+        fi
+      done
+      ((browser_running == 0)) && break
+      sleep 0.1
+    done
+  fi
+
+  if [[ -n "${NIXBOX_KDECONNECT_EXECUTABLE:-}" ]]; then
+    kdeconnect_executable="$(readlink -f "${NIXBOX_KDECONNECT_EXECUTABLE}")"
+    mapfile -t kdeconnect_pids < <(
+      ps -u "$(id -u)" -o pid=,args= |
+        awk -v executable="${kdeconnect_executable}" \
+          '$2 == executable { print $1 }'
+    )
+    if ((${#kdeconnect_pids[@]})); then
+      kill -TERM "${kdeconnect_pids[@]}" 2>/dev/null || true
+      for _attempt in {1..30}; do
+        kdeconnect_running=0
+        for kdeconnect_pid in "${kdeconnect_pids[@]}"; do
+          if kill -0 "${kdeconnect_pid}" 2>/dev/null; then
+            kdeconnect_running=1
+            break
+          fi
+        done
+        ((kdeconnect_running == 0)) && break
+        sleep 0.1
+      done
+    fi
+  fi
+
+  sync
+  if [[ -n "${launcher_pid}" ]] && kill -0 "${launcher_pid}" 2>/dev/null; then
+    kill -TERM "${launcher_pid}" 2>/dev/null || true
+  fi
+}
+
+trap graceful_shutdown INT TERM
+
 launcher /opt/gow/desktop-session.sh \
-  "${NIXBOX_BROWSER_EXECUTABLE}" "${browser_flags[@]}"
+  "${NIXBOX_BROWSER_EXECUTABLE}" "${browser_flags[@]}" &
+launcher_pid=$!
+
+set +e
+wait "${launcher_pid}"
+launcher_status=$?
+set -e
+
+if ((shutdown_requested)); then
+  exit 0
+fi
+exit "${launcher_status}"

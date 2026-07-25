@@ -5,7 +5,12 @@ import ctypes
 import os
 import socket
 import struct
+import threading
 import time
+
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
 
 
 class SwayIpc:
@@ -101,24 +106,108 @@ class XPointer:
         return root_x.value, root_y.value
 
 
+class KdeConnectGate:
+    _service = "org.kde.kdeconnect"
+    _daemon_path = "/modules/kdeconnect"
+    _daemon_interface = "org.kde.kdeconnect.daemon"
+    _device_interface = "org.kde.kdeconnect.device"
+
+    def __init__(self):
+        DBusGMainLoop(set_as_default=True)
+        self.bus = dbus.SessionBus()
+        self.daemon = dbus.Interface(
+            self.bus.get_object(self._service, self._daemon_path),
+            self._daemon_interface,
+        )
+        self.reachable = threading.Event()
+        self.bus.add_signal_receiver(
+            self._refresh,
+            dbus_interface=self._daemon_interface,
+        )
+        self.bus.add_signal_receiver(
+            self._refresh,
+            dbus_interface=self._device_interface,
+        )
+        self.bus.add_signal_receiver(
+            self._service_changed,
+            signal_name="NameOwnerChanged",
+            dbus_interface="org.freedesktop.DBus",
+            arg0=self._service,
+        )
+        self.loop = GLib.MainLoop()
+        self.thread = threading.Thread(target=self.loop.run, daemon=True)
+        self.thread.start()
+        self._refresh()
+
+    def _refresh(self, *_args, **_kwargs):
+        try:
+            has_reachable_device = bool(self.daemon.devices(True, True))
+        except dbus.DBusException:
+            has_reachable_device = False
+        if has_reachable_device:
+            self.reachable.set()
+        else:
+            self.reachable.clear()
+
+    def _service_changed(self, _name, _old_owner, new_owner):
+        if new_owner:
+            self._refresh()
+        else:
+            self.reachable.clear()
+
+
 def main():
     pointer = XPointer(os.environ["DISPLAY"])
+    kdeconnect = KdeConnectGate()
     sway = SwayIpc(os.environ["SWAYSOCK"])
     hide_timeout = int(os.environ.get("NIXBOX_CURSOR_HIDE_TIMEOUT_MS", "8000"))
+    hide_timeout_seconds = hide_timeout / 1000
+    poll_seconds = float(os.environ.get("NIXBOX_CURSOR_POLL_MS", "1")) / 1000
     cursor_size = int(os.environ.get("NIXBOX_CURSOR_SIZE", "48"))
     cursor_theme = os.environ.get("NIXBOX_CURSOR_THEME", "Adwaita")
 
     sway.command(f"seat seat0 hide_cursor {hide_timeout}")
-    sway.command("seat seat0 hide_cursor when-typing enable")
+    sway.command("seat seat0 hide_cursor when-typing disable")
     sway.command(f"seat seat0 xcursor_theme {cursor_theme} {cursor_size}")
 
-    last_position = None
     while True:
-        position = pointer.position()
-        if position is not None and position != last_position:
-            sway.command(f"seat seat0 cursor set {position[0]} {position[1]}")
-            last_position = position
-        time.sleep(0.005)
+        kdeconnect.reachable.wait()
+        last_position = pointer.position()
+        if last_position is None:
+            sway.command("seat seat0 hide_cursor 0")
+        else:
+            sway.command(
+                "seat seat0 hide_cursor 0; "
+                f"seat seat0 cursor set {last_position[0]} {last_position[1]}"
+            )
+        last_motion = time.monotonic()
+        hidden = False
+
+        while kdeconnect.reachable.is_set():
+            position = pointer.position()
+            if position is not None and position != last_position:
+                now = time.monotonic()
+                if hidden:
+                    sway.command(
+                        "seat seat0 hide_cursor 0; "
+                        f"seat seat0 cursor set {position[0]} {position[1]}"
+                    )
+                    hidden = False
+                else:
+                    sway.command(
+                        f"seat seat0 cursor set {position[0]} {position[1]}"
+                    )
+                last_position = position
+                last_motion = now
+            elif (
+                not hidden
+                and time.monotonic() - last_motion >= hide_timeout_seconds
+            ):
+                sway.command("seat seat0 hide_cursor 1")
+                hidden = True
+            time.sleep(poll_seconds)
+
+        sway.command(f"seat seat0 hide_cursor {hide_timeout}")
 
 
 if __name__ == "__main__":
