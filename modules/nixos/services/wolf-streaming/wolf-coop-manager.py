@@ -210,8 +210,15 @@ def reconcile_once(api, args):
             # thread, before the new interpipe producer necessarily has caps
             # or a first frame. Let that producer settle before moving the
             # first Moonlight consumer onto it. Existing-lobby joins skip this
-            # delay and remain immediate.
+            # delay because their producer is already running.
             time.sleep(args.initial_join_delay)
+        else:
+            # The Moonlight session appears in Wolf's API before all of its
+            # streaming handlers are necessarily registered. Joining an
+            # existing lobby immediately can therefore fire the producer
+            # switch before the video or audio consumer is listening, leaving
+            # that client black or silent until it reconnects.
+            time.sleep(args.existing_join_delay)
 
         api.post(
             "/api/v1/lobbies/join",
@@ -236,6 +243,7 @@ def parse_args():
     parser.add_argument("--video-producer-buffer-caps", required=True)
     parser.add_argument("--poll-seconds", type=float, default=0.5)
     parser.add_argument("--initial-join-delay", type=float, default=5.0)
+    parser.add_argument("--existing-join-delay", type=float, default=1.0)
     return parser.parse_args()
 
 
