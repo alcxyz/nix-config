@@ -357,6 +357,12 @@ off the other connected outputs until Moonlight exits. The remote source can
 remain at 1440p regardless of whether the selected TV is currently using
 1440p60 or 1080p60.
 
+The primary TV is the qualified XPS direct-display target. The composited
+profile remains the supported path for the secondary TV, auxiliary display,
+multi-output layouts, and mirroring. Direct-to-direct application changes reuse
+the saved primary-TV KMS selection instead of attempting to query the stopped
+Hyprland session.
+
 Direct mode is an alternative presentation path, not another concurrent local
 window. Entering it restarts the graphical session and therefore closes the
 local composited Moonlight clients. Remote browser capsules and persistent
@@ -382,6 +388,32 @@ xps-session-mode merged
 
 The session switch is boot-scoped. A stale one-shot direct request cannot
 reopen after a reboot; XPS returns to its configured `merged` default.
+
+### Resource comparison
+
+A matched 30-second sample compared one public Helium client on the primary TV
+at 1440p60. Both samples used the same persistent remote session after a settle
+period; the local protected-selector client was stopped. Overall CPU is the
+fraction of total logical-CPU capacity, process CPU uses the conventional
+one-core scale, and DRM engine percentages are Moonlight's per-process kernel
+`fdinfo` counters rather than global GPU utilization.
+
+| Local metric | Merged Hyprland + DMS | Direct DRM |
+|---|---:|---:|
+| Overall system CPU | 9.73% | 3.45% |
+| Moonlight CPU | 19.83% | 20.50% |
+| Hyprland CPU | 6.40% | absent |
+| DMS and Quickshell CPU | 0.96% | absent |
+| Moonlight DRM render engine | 13.29% | 10.19% |
+| Moonlight DRM video engine | 16.02% | 11.35% |
+| Moonlight RSS | 271.0 MiB | 262.8 MiB |
+| Hyprland plus DMS/Quickshell RSS | 630.3 MiB | absent |
+| User-slice memory | 2392.7 MiB | 1369.5 MiB |
+
+The direct path reduced total system CPU by about 64% and user-slice memory by
+about 1.0 GiB in this sample. Moonlight's own CPU stayed effectively unchanged;
+the material savings came from removing the compositor, shell, and other
+compositor-bound session services.
 
 ## Command-line status
 
