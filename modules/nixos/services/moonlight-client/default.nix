@@ -3351,16 +3351,43 @@ let
           lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
         }${lib.optionalString cfg.enableMergedProfile " | merged"})
               return_mode="$current_mode"
+              ${lib.getExe activeKeyboardLayout} \
+                > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
+              ${lib.optionalString cfg.directDrmAutoSelectOutput ''
+                ${lib.getExe directDrmOutputSnapshot}
+              ''}
+              ;;
+            direct-*)
+              return_mode="$(
+                tr -d '[:space:]' \
+                  < ${lib.escapeShellArg directDrmReturnModeFile} \
+                  2>/dev/null \
+                  || true
+              )"
+              case "$return_mode" in
+                couch${
+          lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
+        }${lib.optionalString cfg.enableMergedProfile " | merged"}${
+          lib.optionalString persistentDirectDrmBrowserDefault " | direct-browser"
+        }) ;;
+                *) return_mode=${lib.escapeShellArg cfg.defaultSessionMode} ;;
+              esac
+              ${lib.optionalString cfg.directDrmAutoSelectOutput ''
+                if [ ! -s ${lib.escapeShellArg directDrmKmsConfigFile} ]; then
+                  echo "No saved direct DRM output is available" >&2
+                  exit 1
+                fi
+              ''}
               ;;
             *)
               return_mode=${lib.escapeShellArg cfg.defaultSessionMode}
+              ${lib.getExe activeKeyboardLayout} \
+                > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
+              ${lib.optionalString cfg.directDrmAutoSelectOutput ''
+                ${lib.getExe directDrmOutputSnapshot}
+              ''}
               ;;
           esac
-          ${lib.getExe activeKeyboardLayout} \
-            > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
-            ${lib.optionalString cfg.directDrmAutoSelectOutput ''
-              ${lib.getExe directDrmOutputSnapshot}
-            ''}
           printf '%s\n' "$return_mode" \
             > ${lib.escapeShellArg directDrmReturnModeFile}
             # Stop compositor clients while their Wayland/XWayland connections
