@@ -53,5 +53,8 @@
 
   services.waynergy = {
     screenName = "rpi0";
+    # Consume the shared XPS-qualified bridge so Waynergy buttons and drags
+    # reach XWayland Moonlight without changing the WLR compositor path.
+    wlrXwaylandBridge = true;
   };
 }
