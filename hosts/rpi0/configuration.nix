@@ -106,6 +106,7 @@ in {
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
     enableDirectDrmStream = true;
+    enableDirectModeInputShortcuts = true;
     directDrmFixedOutput = {
       device = "/dev/dri/card0";
       connector = "HDMI-A-1";

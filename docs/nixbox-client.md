@@ -163,19 +163,20 @@ another direct-display application. On a compact client whose default is
 `direct-browser`, exiting a one-shot Steam or protected-browser session returns
 to public Helium. Exiting the default Helium client relaunches it.
 
-The controller listener that implements couch shortcuts such as `Home+A` and
-`Home+X` currently starts with Hyprland and is therefore absent while Moonlight
-owns DRM. Until an always-running, non-grabbing listener is implemented, there
-is no controller-only path from direct Helium into Steam or the protected
-selector. The intended direct-display mappings are:
+RPi0 runs a persistent, non-grabbing input listener outside the greetd display
+session. It sleeps outside direct-display modes, survives local Moonlight and
+greetd replacement, and rediscovers a Bluetooth keyboard after disconnects.
+The active keyboard mappings are:
 
-- `Home+X` or `Super+R`: public Helium
-- `Home+A` or `Super+M`: Steam
-- `Start+Up+RB` or `Super+Shift+R`: protected browser selector
+- `Super+R`: public Helium
+- `Super+M`: Steam
+- `Super+Shift+R`: protected browser selector
 
-The persistent listener and final controller-reconnect validation remain tracked
-by [issue #183](https://git.alc.xyz/alcxyz/nix-config/issues/183). These mappings
-describe planned behavior, not the current deployed direct-display interface.
+The same listener implements `Home+X`, `Home+A`, and `Start+Up+RB` for those
+three modes without grabbing the controller from Moonlight. Physical controller
+and reconnect acceptance remains deferred under
+[issue #183](https://git.alc.xyz/alcxyz/nix-config/issues/183); treat those
+controller mappings as unqualified until that test is completed.
 
 ### Audio in direct display
 

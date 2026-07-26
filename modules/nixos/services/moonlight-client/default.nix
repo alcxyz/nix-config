@@ -215,6 +215,10 @@ let
   sessionModeSwitchEnabled =
     cfg.autoLoginUser != null
     && (cfg.desktopSessionCommand != null || directDrmStreamEnabled || directDrmBrowserEnabled);
+  directModeInputShortcutsEnabled =
+    cfg.enableDirectModeInputShortcuts
+    && sessionModeSwitchEnabled
+    && (directDrmStreamEnabled || directDrmBrowserEnabled);
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
     if dynamicExternalLayoutEnabled then lib.last cfg.autoLayoutSecondaryModes else cfg.outputMode;
@@ -1718,6 +1722,211 @@ let
     name = "couch-controller";
     text = ''
       exec ${controllerPython}/bin/python ${controllerDaemonSource}
+    '';
+  };
+
+  directModeInputDaemonSource = pkgs.writeText "nixbox-direct-input.py" ''
+    import select
+    import subprocess
+    import time
+
+    from evdev import InputDevice, ecodes, list_devices
+
+
+    MODE_FILE = ${builtins.toJSON modeStateFile}
+    CONTROLLER_NAME = ${builtins.toJSON cfg.controllerDeviceName}
+    CONTROLLER_HOLD_SECONDS = ${toString cfg.controllerHoldSeconds}
+    DEVICE_REFRESH_SECONDS = 1.0
+    INACTIVE_MODE_SLEEP_SECONDS = 0.5
+    IGNORED_KEYBOARD_NAMES = ("kde connect", "moonlight", "uinput", "virtual", "waynergy")
+    COMMANDS = {
+        ${lib.optionalString directDrmBrowserEnabled ''
+      "direct-browser": [${builtins.toJSON (lib.getExe sessionMode)}, "direct-browser"],
+    ''}
+        ${lib.optionalString directDrmStreamEnabled ''
+      "direct-stream": [${builtins.toJSON (lib.getExe sessionMode)}, "direct-stream"],
+    ''}
+        ${lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) ''
+      "direct-private": [${builtins.toJSON (lib.getExe sessionMode)}, "direct-private"],
+    ''}
+    }
+
+
+    def current_mode():
+        try:
+            with open(MODE_FILE, encoding="utf-8") as mode_file:
+                return mode_file.read().strip().split(":", 1)[0]
+        except OSError:
+            return ""
+
+
+    def close_devices(devices):
+        for state in devices.values():
+            state["device"].close()
+        devices.clear()
+
+
+    def classify_device(device):
+        capabilities = device.capabilities()
+        keys = set(capabilities.get(ecodes.EV_KEY, []))
+
+        if device.name == CONTROLLER_NAME and ecodes.BTN_MODE in keys:
+            return "controller"
+
+        name = device.name.lower()
+        if any(fragment in name for fragment in IGNORED_KEYBOARD_NAMES):
+            return None
+        has_meta = ecodes.KEY_LEFTMETA in keys or ecodes.KEY_RIGHTMETA in keys
+        if has_meta and ecodes.KEY_R in keys and ecodes.KEY_M in keys:
+            return "keyboard"
+        return None
+
+
+    def refresh_devices(devices):
+        available_paths = set(list_devices())
+        for path in list(devices):
+            if path not in available_paths:
+                devices.pop(path)["device"].close()
+
+        for path in sorted(available_paths - set(devices)):
+            try:
+                device = InputDevice(path)
+                role = classify_device(device)
+                if role is None:
+                    device.close()
+                    continue
+                devices[path] = {
+                    "device": device,
+                    "role": role,
+                    "pressed": set(),
+                    "hat_up": False,
+                    "candidate": None,
+                    "candidate_since": None,
+                    "latched": False,
+                }
+                print(f"Listening to {role} input from {device.name}", flush=True)
+            except (OSError, PermissionError):
+                continue
+
+
+    def keyboard_action(state):
+        pressed = state["pressed"]
+        meta = ecodes.KEY_LEFTMETA in pressed or ecodes.KEY_RIGHTMETA in pressed
+        shift = ecodes.KEY_LEFTSHIFT in pressed or ecodes.KEY_RIGHTSHIFT in pressed
+        if not meta:
+            return None
+        ${lib.optionalString (
+      directDrmBrowserEnabled && browserSelectorEnabled
+    ) "if shift and ecodes.KEY_R in pressed:\n        return \"direct-private\"\n"}
+        ${lib.optionalString directDrmBrowserEnabled "if not shift and ecodes.KEY_R in pressed:\n        return \"direct-browser\"\n"}
+        ${lib.optionalString directDrmStreamEnabled "if not shift and ecodes.KEY_M in pressed:\n        return \"direct-stream\"\n"}
+        return None
+
+
+    def controller_action(state):
+        pressed = state["pressed"]
+        ${
+      lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled)
+      "if (\n        state[\"hat_up\"]\n        and ecodes.BTN_START in pressed\n        and ecodes.BTN_TR in pressed\n    ):\n        return \"direct-private\"\n"
+    }
+        ${lib.optionalString directDrmBrowserEnabled "if ecodes.BTN_MODE in pressed and ecodes.BTN_NORTH in pressed:\n        return \"direct-browser\"\n"}
+        ${lib.optionalString directDrmStreamEnabled "if ecodes.BTN_MODE in pressed and ecodes.BTN_EAST in pressed:\n        return \"direct-stream\"\n"}
+        return None
+
+
+    def requested_action(state):
+        if state["role"] == "keyboard":
+            return keyboard_action(state)
+        return controller_action(state)
+
+
+    def run_action(action):
+        print(f"Requesting {action}", flush=True)
+        subprocess.Popen(
+            COMMANDS[action],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+
+    devices = {}
+    next_refresh = 0.0
+
+    while True:
+        if not current_mode().startswith("direct-"):
+            close_devices(devices)
+            next_refresh = 0.0
+            time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
+            continue
+
+        now = time.monotonic()
+        if now >= next_refresh:
+            refresh_devices(devices)
+            next_refresh = now + DEVICE_REFRESH_SECONDS
+
+        if not devices:
+            time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
+            continue
+
+        try:
+            readable, _, _ = select.select(
+                [state["device"].fd for state in devices.values()],
+                [],
+                [],
+                0.1,
+            )
+        except (OSError, ValueError):
+            close_devices(devices)
+            next_refresh = 0.0
+            continue
+
+        readable_fds = set(readable)
+        for path, state in list(devices.items()):
+            if state["device"].fd not in readable_fds:
+                continue
+            try:
+                for event in state["device"].read():
+                    if event.type == ecodes.EV_KEY:
+                        if event.value:
+                            state["pressed"].add(event.code)
+                        else:
+                            state["pressed"].discard(event.code)
+                    elif (
+                        state["role"] == "controller"
+                        and event.type == ecodes.EV_ABS
+                        and event.code == ecodes.ABS_HAT0Y
+                    ):
+                        state["hat_up"] = event.value < 0
+            except (OSError, ValueError):
+                devices.pop(path)["device"].close()
+                continue
+
+        now = time.monotonic()
+        for state in devices.values():
+            action = requested_action(state)
+            if action is None:
+                state["candidate"] = None
+                state["candidate_since"] = None
+                state["latched"] = False
+                continue
+            if state["latched"]:
+                continue
+            if state["candidate"] != action:
+                state["candidate"] = action
+                state["candidate_since"] = now
+                continue
+            hold_seconds = 0.0 if state["role"] == "keyboard" else CONTROLLER_HOLD_SECONDS
+            if now - state["candidate_since"] >= hold_seconds:
+                run_action(action)
+                state["latched"] = True
+  '';
+
+  directModeInputDaemon = pkgs.writeShellApplication {
+    name = "nixbox-direct-input";
+    text = ''
+      exec ${controllerPython}/bin/python ${directModeInputDaemonSource}
     '';
   };
 
@@ -4194,6 +4403,16 @@ in
       description = "Listen for held controller shortcuts that start streaming or return to the browser.";
     };
 
+    enableDirectModeInputShortcuts = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Run a persistent non-grabbing keyboard and controller listener for
+        direct-display session switching. The listener sleeps outside direct
+        modes and survives compositor and greetd session replacement.
+      '';
+    };
+
     controllerDeviceName = lib.mkOption {
       type = lib.types.str;
       default = "Pro Controller";
@@ -4705,6 +4924,7 @@ in
     ) browserSelectorPair
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
+      ++ lib.optional directModeInputShortcutsEnabled directModeInputDaemon
       ++ lib.optional (cfg.cursorThemePackage != null) cfg.cursorThemePackage
       ++ lib.optionals cfg.enableKdeConnect [
         pointerSync
@@ -4752,6 +4972,17 @@ in
         ExecStart = lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd";
         Restart = "on-failure";
         RestartSec = 2;
+      };
+    };
+
+    systemd.user.services.nixbox-direct-input = lib.mkIf directModeInputShortcutsEnabled {
+      description = "Non-grabbing direct-display input shortcuts";
+      wantedBy = ["default.target"];
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = lib.getExe directModeInputDaemon;
+        Restart = "always";
+        RestartSec = 1;
       };
     };
 
@@ -5035,6 +5266,11 @@ in
       {
         assertion = cfg.controllerHoldSeconds > 0.0;
         message = "services.moonlight-client.controllerHoldSeconds must be positive";
+      }
+      {
+        assertion =
+          !cfg.enableDirectModeInputShortcuts || (directDrmBrowserEnabled || directDrmStreamEnabled);
+        message = "services.moonlight-client.enableDirectModeInputShortcuts requires a configured direct-display stream";
       }
       {
         assertion = cfg.browserScaleFactor > 0.0;
