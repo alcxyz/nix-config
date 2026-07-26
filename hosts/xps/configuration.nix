@@ -328,6 +328,11 @@ in {
       device = "/dev/dri/card1";
       connector = "DP-3";
       mode = "2560x1440@60";
+      disabledConnectors = [
+        "eDP-1"
+        "DP-6"
+        "DP-7"
+      ];
     };
     directDrmAudioOutputByConnector."DP-3" = "alsa_output.pci-0000_00_1f.3.playback.8.0";
     fallbackBrowserPackage = null;

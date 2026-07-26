@@ -37,14 +37,21 @@ let
       pkgs.writeText "moonlight-direct-drm-fixed-kms.json" (
         builtins.toJSON {
           device = cfg.directDrmFixedOutput.device;
-          outputs = [
-            {
-              name = qtConnectorName cfg.directDrmFixedOutput.connector;
-              mode = cfg.directDrmFixedOutput.mode;
-              primary = true;
-              virtualIndex = 0;
-            }
-          ];
+          outputs =
+            [
+              {
+                name = qtConnectorName cfg.directDrmFixedOutput.connector;
+                mode = cfg.directDrmFixedOutput.mode;
+                primary = true;
+                virtualIndex = 0;
+              }
+            ]
+            ++ map
+            (connector: {
+              name = qtConnectorName connector;
+              mode = "off";
+            })
+            cfg.directDrmFixedOutput.disabledConnectors;
         }
       );
   directDrmKmsConfigEnabled =
@@ -4255,14 +4262,27 @@ in
               example = "1920x1080@60";
               description = "Exact Qt EGLFS KMS mode used by the fixed direct-display output.";
             };
+
+            disabledConnectors = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              example = [
+                "eDP-1"
+                "DP-2"
+              ];
+              description = ''
+                Other connectors on the DRM device that Qt EGLFS must disable
+                while the fixed direct-display output owns scanout.
+              '';
+            };
           };
         }
       );
       default = null;
       description = ''
-        Generate a static Qt EGLFS KMS configuration for a fixed single-output
-        direct-DRM client. This prevents EGLFS from replacing the configured
-        appliance mode with the display's preferred mode.
+        Generate a static Qt EGLFS KMS configuration for a fixed direct-DRM
+        output. This prevents EGLFS from replacing the configured mode with the
+        display's preferred mode or presenting on another connected output.
       '';
     };
 
