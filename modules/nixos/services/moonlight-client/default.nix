@@ -2509,6 +2509,22 @@ let
           follow_layout
           exit 0
           ;;
+        select-name)
+          if [ "$#" -ne 2 ]; then
+            echo "usage: couch-audio-output select-name NODE_NAME" >&2
+            exit 2
+          fi
+          next_id="$(
+            jq -r --arg name "$2" \
+              '[.[] | select(.name == $name)][0].id // ""' <<<"$sinks"
+          )"
+          if [ -z "$next_id" ]; then
+            echo "requested audio output is no longer available" >&2
+            exit 1
+          fi
+          set_default "$next_id"
+          exit 0
+          ;;
         reconcile)
           reconcile_default
           exit 0
@@ -2538,7 +2554,7 @@ let
           )"
           ;;
         *)
-          echo "usage: couch-audio-output {initialize|follow-layout|reconcile|prepare-layout LAYOUT|cycle|status}" >&2
+          echo "usage: couch-audio-output {initialize|follow-layout|select-name NODE_NAME|reconcile|prepare-layout LAYOUT|cycle|status}" >&2
           exit 2
           ;;
       esac

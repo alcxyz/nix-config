@@ -71,6 +71,7 @@ in {
 
   services.dms = {
     enable = true;
+    audioOutputCommand = "/run/current-system/sw/bin/couch-audio-output";
     polkitDialog = {
       width = 920;
       height = 560;

@@ -269,6 +269,11 @@
         substituteInPlace "$out/share/quickshell/dms/Modals/PolkitAuthSurfaceModal.qml" \
           --subst-var-by polkitModalWidth ${toString cfg.polkitDialog.width} \
           --subst-var-by polkitModalHeight ${toString cfg.polkitDialog.height}
+        ${lib.optionalString (cfg.audioOutputCommand != null) ''
+          patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-external-audio-output.patch}
+          substituteInPlace "$out/share/quickshell/dms/Services/AudioService.qml" \
+            --subst-var-by audioOutputCommand ${lib.escapeShellArg cfg.audioOutputCommand}
+        ''}
       '';
   });
 in {
@@ -282,6 +287,16 @@ in {
       ];
       default = "full";
       description = "DMS feature profile; compact keeps only the core shell surfaces.";
+    };
+
+    audioOutputCommand = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Optional output-selection command. DMS invokes it with
+        `select-name NODE_NAME` instead of changing the PipeWire default
+        through its in-process node object.
+      '';
     };
 
     settings = lib.mkOption {
