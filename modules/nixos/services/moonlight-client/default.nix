@@ -2316,15 +2316,32 @@ let
   audioOutputControl = pkgs.writeShellApplication {
     name = "couch-audio-output";
     runtimeInputs = [
+      pkgs.coreutils
       pkgs.gnused
       pkgs.hyprland
       pkgs.jq
       pkgs.pipewire
+      pkgs.pulseaudio
+      pkgs.systemd
       pkgs.wireplumber
     ];
     text = ''
+      request_recovery() {
+        systemctl --user --no-block start couch-audio-health-recovery.service \
+          >/dev/null 2>&1 || true
+      }
+
+      load_graph() {
+        if ! graph="$(timeout --kill-after=1 4 pw-dump)"; then
+          echo "audio graph is unresponsive; requested recovery" >&2
+          request_recovery
+          return 1
+        fi
+      }
+      load_graph
+
       get_sinks() {
-        pw-dump | jq -c '
+        jq -c '
           [
             .[]
             | select(
@@ -2340,7 +2357,7 @@ let
               }
           ]
           | sort_by([-.priority, .description])
-        '
+        ' <<<"$graph"
       }
 
       sinks="$(get_sinks)"
@@ -2350,10 +2367,101 @@ let
       fi
 
       current_id="$(
-        wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null \
+        timeout --kill-after=1 4 wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null \
           | sed -n 's/^id \([0-9][0-9]*\),.*/\1/p' \
-          | head -n1
+          | head -n1 \
+          || true
       )"
+      configured_name="$(
+        jq -r '
+          [
+            .[]
+            | select(
+                .type == "PipeWire:Interface:Metadata"
+                and (.props["metadata.name"] // "") == "default"
+              )
+            | .metadata[]?
+            | select(.key == "default.configured.audio.sink")
+            | .value.name // ""
+          ][0] // ""
+        ' <<<"$graph"
+      )"
+
+      set_default() {
+        target_id="$1"
+        target_name="$(
+          jq -r --argjson id "$target_id" \
+            '.[] | select(.id == $id) | .name' <<<"$sinks"
+        )"
+        if [ -z "$target_name" ]; then
+          echo "selected audio output is no longer available" >&2
+          return 1
+        fi
+        if ! timeout --kill-after=1 4 wpctl set-default "$target_id"; then
+          echo "failed to select audio output; requested recovery" >&2
+          request_recovery
+          return 1
+        fi
+
+        # PipeWire-Pulse clients can keep their existing stream attached to a
+        # disappearing Bluetooth or HDMI route even after WirePlumber changes
+        # the default. Move each live stream in place so Moonlight keeps its
+        # connection and server-side session while the output changes.
+        if ! sink_inputs="$(timeout --kill-after=1 4 pactl list short sink-inputs)"; then
+          echo "audio streams are unresponsive; requested recovery" >&2
+          request_recovery
+          return 1
+        fi
+        while read -r input_id _; do
+          if [ -n "$input_id" ]; then
+            timeout --kill-after=1 4 \
+              pactl move-sink-input "$input_id" "$target_name" \
+              >/dev/null 2>&1 || true
+          fi
+        done <<<"$sink_inputs"
+      }
+
+      layout_target() {
+        case "$1" in
+          all | dual-tvs | living-bedroom) printf '%s\n' "Both TVs" ;;
+          living | living-aux | primary-aux | solo-primary) printf '%s\n' "Primary TV" ;;
+          bedroom | bedroom-aux | secondary-aux | solo-secondary) printf '%s\n' "Secondary TV" ;;
+          aux | solo-aux | solo-tertiary) printf '%s\n' "Auxiliary display" ;;
+          *) printf '%s\n' "" ;;
+        esac
+      }
+
+      select_layout_fallback() {
+        layout="''${1:-}"
+        if [ -z "$layout" ]; then
+          layout="$(tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true)"
+        fi
+        target="$(layout_target "$layout")"
+        target_id="$(
+          jq -r --arg target "$target" \
+            '[.[] | select(.description == $target)][0].id // ""' <<<"$sinks"
+        )"
+        if [ -z "$target_id" ]; then
+          # Adaptive or unavailable-role fallback: select the highest-priority
+          # non-Bluetooth sink rather than retaining a vanished endpoint.
+          target_id="$(
+            jq -r '
+              [
+                .[]
+                | select(
+                    .api != "bluez5"
+                    and (.name | startswith("bluez_") | not)
+                  )
+              ][0].id // ""
+            ' <<<"$sinks"
+          )"
+        fi
+        if [ -z "$target_id" ]; then
+          echo "no local audio fallback is available" >&2
+          return 1
+        fi
+        set_default "$target_id"
+      }
 
       follow_layout() {
         current_api="$(
@@ -2364,23 +2472,18 @@ let
           return
         fi
 
-        layout="''${1:-}"
-        if [ -z "$layout" ]; then
-          layout="$(tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true)"
+        select_layout_fallback "''${1:-}"
+      }
+
+      reconcile_default() {
+        if [ -z "$configured_name" ]; then
+          return
         fi
-        case "$layout" in
-          living | living-aux | solo-primary | primary-aux) target="Primary TV" ;;
-          bedroom | bedroom-aux | solo-secondary | secondary-aux) target="Secondary TV" ;;
-          aux | solo-aux | solo-tertiary) target="Auxiliary display" ;;
-          *) return ;;
-        esac
-        target_id="$(
-          jq -r --arg target "$target" \
-            '[.[] | select(.description == $target)][0].id // ""' <<<"$sinks"
-        )"
-        if [ -n "$target_id" ]; then
-          wpctl set-default "$target_id"
+        if jq -e --arg name "$configured_name" \
+          'any(.[]; .name == $name)' <<<"$sinks" >/dev/null; then
+          return
         fi
+        select_layout_fallback
       }
 
       case "''${1:-cycle}" in
@@ -2390,6 +2493,7 @@ let
               break
             fi
             sleep 0.25
+            load_graph
             sinks="$(get_sinks)"
           done
           while IFS= read -r sink_id; do
@@ -2403,6 +2507,10 @@ let
           ;;
         follow-layout)
           follow_layout
+          exit 0
+          ;;
+        reconcile)
+          reconcile_default
           exit 0
           ;;
         prepare-layout)
@@ -2430,7 +2538,7 @@ let
           )"
           ;;
         *)
-          echo "usage: couch-audio-output {initialize|follow-layout|prepare-layout LAYOUT|cycle|status}" >&2
+          echo "usage: couch-audio-output {initialize|follow-layout|reconcile|prepare-layout LAYOUT|cycle|status}" >&2
           exit 2
           ;;
       esac
@@ -2439,7 +2547,7 @@ let
         jq -r --argjson id "$next_id" '.[] | select(.id == $id) | .description' \
           <<<"$sinks"
       )"
-      wpctl set-default "$next_id"
+      set_default "$next_id"
       hyprctl notify 1 3000 'rgb(a6e3a1)' "Audio output: $description" \
         >/dev/null 2>&1 || true
       printf '%s\n' "$description"
@@ -2449,11 +2557,19 @@ let
   audioHealthRecovery = pkgs.writeShellApplication {
     name = "couch-audio-health-recovery";
     runtimeInputs = [
+      audioOutputControl
       pkgs.coreutils
       pkgs.systemd
       pkgs.wireplumber
     ];
     text = ''
+      case "$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)" in
+        direct-*)
+          # Direct DRM owns its own local-client lifecycle and audio route.
+          exit 0
+          ;;
+      esac
+
       if ! systemctl --user --quiet is-active pipewire.service; then
         exit 0
       fi
@@ -2462,11 +2578,15 @@ let
         timeout --kill-after=1 4 wpctl status >/dev/null 2>&1
       }
 
-      if probe_audio; then
+      reconcile_audio() {
+        timeout --kill-after=1 5 couch-audio-output reconcile >/dev/null 2>&1
+      }
+
+      if probe_audio && reconcile_audio; then
         exit 0
       fi
       sleep 2
-      if probe_audio; then
+      if probe_audio && reconcile_audio; then
         exit 0
       fi
 
@@ -2474,30 +2594,51 @@ let
       # its client streams are still healthy. Restarting only the session
       # manager preserves those streams and lets it rebuild their links.
       systemctl --user restart wireplumber.service
-      for _ in 1 2 3 4; do
+      for _ in 1 2; do
         sleep 1
-        if probe_audio; then
+        if probe_audio && reconcile_audio; then
           exit 0
         fi
       done
 
       # SDL clients such as Moonlight do not recreate their playback stream
-      # after the PipeWire server disappears. Never destroy a live stream in
-      # the name of recovery; leave the client session intact and report the
-      # unhealthy graph for an explicit reconnect instead.
+      # after the PipeWire server disappears. Record the active local clients,
+      # disconnect them inside their server-side grace window, rebuild audio,
+      # select the persisted layout's sink, and immediately reconnect them.
+      active_moonlight_units=()
       for moonlight_unit in \
         couch-moonlight-stream.service \
         couch-moonlight-browser-stream.service \
         couch-moonlight-browser-selector.service; do
         if systemctl --user --quiet is-active "$moonlight_unit"; then
-          echo "audio graph remains unhealthy; preserving active $moonlight_unit" >&2
-          exit 1
+          active_moonlight_units+=("$moonlight_unit")
         fi
       done
 
       dms_was_active=false
       if systemctl --user --quiet is-active couch-merged-dms.service; then
         dms_was_active=true
+      fi
+
+      sessions_stopped=false
+      restore_sessions() {
+        if ! "$sessions_stopped"; then
+          return
+        fi
+        if "$dms_was_active"; then
+          systemctl --user start couch-merged-dms.service || true
+        fi
+        for moonlight_unit in "''${active_moonlight_units[@]}"; do
+          systemctl --user start "$moonlight_unit" || true
+        done
+      }
+      trap restore_sessions EXIT
+
+      sessions_stopped=true
+      if [ "''${#active_moonlight_units[@]}" -gt 0 ]; then
+        systemctl --user stop "''${active_moonlight_units[@]}"
+      fi
+      if "$dms_was_active"; then
         systemctl --user stop couch-merged-dms.service
       fi
 
@@ -2506,9 +2647,26 @@ let
         pipewire-pulse.service \
         wireplumber.service
 
-      if "$dms_was_active"; then
-        systemctl --user start couch-merged-dms.service
+      graph_healthy=false
+      for _ in 1 2 3 4 5 6 7 8; do
+        sleep 1
+        if probe_audio; then
+          graph_healthy=true
+          break
+        fi
+      done
+      if ! "$graph_healthy"; then
+        echo "audio graph remains unhealthy after a bounded rebuild" >&2
+        exit 1
       fi
+      if ! reconcile_audio; then
+        echo "audio graph recovered but its persisted display route did not" >&2
+        exit 1
+      fi
+
+      restore_sessions
+      sessions_stopped=false
+      trap - EXIT
     '';
   };
 
@@ -4803,8 +4961,8 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Recover a persistently unresponsive couch audio graph without
-        destroying active Moonlight playback streams.
+        Reconcile vanished couch audio routes and recover an unresponsive
+        graph by reconnecting active local Moonlight clients.
       '';
     };
 
@@ -5086,11 +5244,11 @@ in
     };
 
     systemd.user.services.couch-audio-health-recovery = lib.mkIf cfg.enableAudioHealthRecovery {
-      description = "Recover couch audio without disrupting active streams";
+      description = "Reconcile couch audio and recover stalled routes";
       serviceConfig = {
         Type = "oneshot";
         ExecStart = lib.getExe audioHealthRecovery;
-        TimeoutStartSec = 30;
+        TimeoutStartSec = 60;
       };
     };
 
@@ -5104,11 +5262,12 @@ in
     };
 
     systemd.user.timers.couch-audio-health-recovery = lib.mkIf cfg.enableAudioHealthRecovery {
-      description = "Periodically verify couch audio responsiveness";
+      description = "Reconcile couch audio routes and verify responsiveness";
       wantedBy = ["timers.target"];
       timerConfig = {
-        OnBootSec = "1m";
-        OnUnitActiveSec = "30s";
+        OnBootSec = "10s";
+        OnUnitActiveSec = "5s";
+        AccuracySec = "1s";
         Unit = "couch-audio-health-recovery.service";
       };
     };
