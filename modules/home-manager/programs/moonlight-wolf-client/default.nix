@@ -144,6 +144,8 @@ in
       type = lib.types.listOf lib.types.str;
       default = [
         "--1440"
+        "--display-mode"
+        "windowed"
         "--absolute-mouse"
         "--capture-system-keys"
         "never"
