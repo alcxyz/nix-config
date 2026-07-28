@@ -27,6 +27,7 @@ in {
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
 
     "${configDir}/modules/home-manager/programs/ai/default.nix"
+    "${configDir}/modules/home-manager/programs/moonlight-wolf-client/default.nix"
     "${configDir}/modules/home-manager/programs/stashdb-pop/default.nix"
 
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
@@ -65,6 +66,7 @@ in {
   programs.foot.enable = true;
   programs.hyprland.managed.enable = true;
   programs.niri.managed.enable = true;
+  programs.moonlightWolfClient.enable = true;
 
   programs.hyprscratch = {
     enable = true;
