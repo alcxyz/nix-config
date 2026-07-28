@@ -34,6 +34,11 @@ in {
     {
       hostname = "Wolf";
       application = "Wolf UI";
+      arguments = [
+        "--absolute-mouse"
+        "--display-mode"
+        "windowed"
+      ];
     }
   ];
 
