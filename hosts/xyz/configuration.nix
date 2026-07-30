@@ -731,6 +731,20 @@ in {
     requires = ["nvidia-container-toolkit-cdi-generator.service"];
   };
 
+  # Agents do not have the server admin kubeconfig. The kube-proxy identity has
+  # the read-only node inventory needed by the LAN path audit.
+  systemd.services.k3s-network-path-audit = {
+    environment.KUBECONFIG = "/var/lib/rancher/k3s/agent/kubeproxy.kubeconfig";
+    serviceConfig = {
+      Restart = "on-failure";
+      RestartSec = "10s";
+    };
+    unitConfig = {
+      StartLimitIntervalSec = 120;
+      StartLimitBurst = 12;
+    };
+  };
+
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
   # t3code server — reachable via Netbird and the k8s oauth2-proxy route.
