@@ -26,13 +26,6 @@
   appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
   k8sBackupDataset = "tank/k8s-backups";
   k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
-  nvidiaContainerRuntime = lib.getExe' (
-    lib.getOutput "tools" config.hardware.nvidia-container-toolkit.package
-  ) "nvidia-container-runtime";
-  nvidiaContainerRuntimeHook = lib.getExe' (
-    lib.getOutput "tools" config.hardware.nvidia-container-toolkit.package
-  ) "nvidia-container-runtime-hook";
-  nvidiaCtk = lib.getExe' config.hardware.nvidia-container-toolkit.package "nvidia-ctk";
   homeBackupDataset = "xpool/home";
   homeBackupRoot = "${appStateBackupPool}/xyz/home";
   gamesDataset = "${appStateBackupPool}/games";
@@ -259,6 +252,7 @@ in {
     "${configDir}/modules/nixos/virtualisation/kvm/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/gpu-passthrough.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
+    "${configDir}/modules/nixos/virtualisation/k3s/nvidia-runtime.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
@@ -691,6 +685,7 @@ in {
     tokenFile = config.sops.secrets.k3s_server_token.path;
     extraFlags = [
       "--node-label=nixbox.alc.xyz/ephemeral-gpu=true"
+      "--node-label=nixbox.alc.xyz/protected-browser-worker=true"
       "--node-taint=nixbox.alc.xyz/ephemeral-gpu=true:NoSchedule"
     ];
   };
@@ -710,10 +705,6 @@ in {
   };
   alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
 
-  # Kubernetes allocates NVIDIA devices by UUID. Generate CDI names that match
-  # the device plugin while retaining the aggregate `all` name used by Wolf.
-  hardware.nvidia-container-toolkit.device-name-strategy = "uuid";
-
   # XYZ is an expendable interactive worker, never a control-plane or storage
   # dependency. Bound planned shutdowns so an attached browser volume is
   # released cleanly without making workstation restarts unreasonably slow.
@@ -721,46 +712,6 @@ in {
     enable = true;
     shutdownGracePeriod = "30s";
     shutdownGracePeriodCriticalPods = "10s";
-  };
-
-  # K3s cannot discover Nix store executables through its conventional runtime
-  # search paths. Register the NVIDIA runtime and all of its helper paths
-  # explicitly for GPU workloads.
-  environment.etc."nvidia-container-runtime/config.toml".text = ''
-    disable-require = true
-    supported-driver-capabilities = "compat32,compute,display,graphics,ngx,utility,video"
-
-    [nvidia-container-cli]
-    environment = []
-    ldconfig = "@${lib.getExe' pkgs.glibc "ldconfig"}"
-    load-kmods = true
-    no-cgroups = false
-    path = "${lib.getExe' pkgs.libnvidia-container "nvidia-container-cli"}"
-
-    [nvidia-container-runtime]
-    mode = "cdi"
-    runtimes = ["docker-runc", "runc", "crun"]
-
-    [nvidia-container-runtime-hook]
-    path = "${nvidiaContainerRuntimeHook}"
-    skip-mode-detection = false
-
-    [nvidia-ctk]
-    path = "${nvidiaCtk}"
-  '';
-
-  services.k3s.containerdConfigTemplate = ''
-    {{ template "base" . }}
-
-    [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'nvidia']
-      runtime_type = "io.containerd.runc.v2"
-      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'nvidia'.options]
-        BinaryName = "${nvidiaContainerRuntime}"
-  '';
-
-  systemd.services.k3s = {
-    after = ["nvidia-container-toolkit-cdi-generator.service"];
-    requires = ["nvidia-container-toolkit-cdi-generator.service"];
   };
 
   # Agents do not have the server admin kubeconfig. The kube-proxy identity has
