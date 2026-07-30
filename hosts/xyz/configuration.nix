@@ -691,6 +691,21 @@ in {
     ];
   };
 
+  # Longhorn still needs writable engine binaries and logs on an attachment
+  # node. Keep those transient files in bounded memory while the durable volume
+  # replicas remain on the stable storage nodes.
+  fileSystems."/var/lib/longhorn" = {
+    device = "none";
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=1G"
+      "nosuid"
+      "nodev"
+    ];
+  };
+  alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
+
   # XYZ is an expendable interactive worker, never a control-plane or storage
   # dependency. Bound planned shutdowns so an attached browser volume is
   # released cleanly without making workstation restarts unreasonably slow.
