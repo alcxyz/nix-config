@@ -29,6 +29,10 @@
   nvidiaContainerRuntime = lib.getExe' (
     lib.getOutput "tools" config.hardware.nvidia-container-toolkit.package
   ) "nvidia-container-runtime";
+  nvidiaContainerRuntimeHook = lib.getExe' (
+    lib.getOutput "tools" config.hardware.nvidia-container-toolkit.package
+  ) "nvidia-container-runtime-hook";
+  nvidiaCtk = lib.getExe' config.hardware.nvidia-container-toolkit.package "nvidia-ctk";
   homeBackupDataset = "xpool/home";
   homeBackupRoot = "${appStateBackupPool}/xyz/home";
   gamesDataset = "${appStateBackupPool}/games";
@@ -716,7 +720,31 @@ in {
   };
 
   # K3s cannot discover Nix store executables through its conventional runtime
-  # search paths. Register the NVIDIA runtime explicitly for GPU workloads.
+  # search paths. Register the NVIDIA runtime and all of its helper paths
+  # explicitly for GPU workloads.
+  environment.etc."nvidia-container-runtime/config.toml".text = ''
+    disable-require = true
+    supported-driver-capabilities = "compat32,compute,display,graphics,ngx,utility,video"
+
+    [nvidia-container-cli]
+    environment = []
+    ldconfig = "@${lib.getExe' pkgs.glibc "ldconfig"}"
+    load-kmods = true
+    no-cgroups = false
+    path = "${lib.getExe' pkgs.libnvidia-container "nvidia-container-cli"}"
+
+    [nvidia-container-runtime]
+    mode = "cdi"
+    runtimes = ["docker-runc", "runc", "crun"]
+
+    [nvidia-container-runtime-hook]
+    path = "${nvidiaContainerRuntimeHook}"
+    skip-mode-detection = false
+
+    [nvidia-ctk]
+    path = "${nvidiaCtk}"
+  '';
+
   services.k3s.containerdConfigTemplate = ''
     {{ template "base" . }}
 
