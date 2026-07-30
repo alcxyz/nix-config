@@ -26,6 +26,9 @@
   appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
   k8sBackupDataset = "tank/k8s-backups";
   k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
+  nvidiaContainerRuntime = lib.getExe' (
+    lib.getOutput "tools" config.hardware.nvidia-container-toolkit.package
+  ) "nvidia-container-runtime";
   homeBackupDataset = "xpool/home";
   homeBackupRoot = "${appStateBackupPool}/xyz/home";
   gamesDataset = "${appStateBackupPool}/games";
@@ -252,6 +255,7 @@ in {
     "${configDir}/modules/nixos/virtualisation/kvm/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/gpu-passthrough.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
+    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -676,9 +680,40 @@ in {
   };
 
   k3s = {
-    enable = false;
+    enable = true;
+    nodeIp = "192.168.1.10";
+    nodeInterface = "enp8s0";
     serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
+    extraFlags = [
+      "--node-label=nixbox.alc.xyz/ephemeral-gpu=true"
+      "--node-taint=nixbox.alc.xyz/ephemeral-gpu=true:NoSchedule"
+    ];
+  };
+
+  # XYZ is an expendable interactive worker, never a control-plane or storage
+  # dependency. Bound planned shutdowns so an attached browser volume is
+  # released cleanly without making workstation restarts unreasonably slow.
+  services.k3s.gracefulNodeShutdown = {
+    enable = true;
+    shutdownGracePeriod = "30s";
+    shutdownGracePeriodCriticalPods = "10s";
+  };
+
+  # K3s cannot discover Nix store executables through its conventional runtime
+  # search paths. Register the NVIDIA runtime explicitly for GPU workloads.
+  services.k3s.containerdConfigTemplate = ''
+    {{ template "base" . }}
+
+    [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'nvidia']
+      runtime_type = "io.containerd.runc.v2"
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'nvidia'.options]
+        BinaryName = "${nvidiaContainerRuntime}"
+  '';
+
+  systemd.services.k3s = {
+    after = ["nvidia-container-toolkit-cdi-generator.service"];
+    requires = ["nvidia-container-toolkit-cdi-generator.service"];
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
