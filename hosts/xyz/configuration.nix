@@ -237,6 +237,7 @@ in {
     "${configDir}/modules/nixos/common/desktop.nix"
     inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
+    inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/hardware/amd.nix"
     "${configDir}/modules/nixos/services/torrent/default.nix"
