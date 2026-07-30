@@ -710,6 +710,10 @@ in {
   };
   alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
 
+  # Kubernetes allocates NVIDIA devices by UUID. Generate CDI names that match
+  # the device plugin while retaining the aggregate `all` name used by Wolf.
+  hardware.nvidia-container-toolkit.device-name-strategy = "uuid";
+
   # XYZ is an expendable interactive worker, never a control-plane or storage
   # dependency. Bound planned shutdowns so an attached browser volume is
   # released cleanly without making workstation restarts unreasonably slow.
