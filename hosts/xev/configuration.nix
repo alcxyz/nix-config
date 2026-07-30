@@ -16,6 +16,7 @@
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
+    "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/nvidia-runtime.nix"

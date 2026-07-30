@@ -246,6 +246,7 @@ in {
     "${configDir}/modules/nixos/services/calibre-web/default.nix"
     "${configDir}/modules/nixos/services/flatpak/default.nix"
     "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
+    "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"

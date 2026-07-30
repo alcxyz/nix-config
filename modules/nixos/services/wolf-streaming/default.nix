@@ -17,7 +17,7 @@
   protectedStateDirectory = cfg.protectedProfile.stateDirectory;
   protectedPort = standard: standard + cfg.protectedProfile.portOffset;
   wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
-  wolfPatchSet = "altgr-idle-presentation-interpipe-v4";
+  wolfPatchSet = "altgr-idle-presentation-interpipe-media-v5";
   wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
   wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}";
   wolfSource = pkgs.fetchFromGitHub {
@@ -34,6 +34,7 @@
       ./wolf-image/client-presentation-scale.patch
       ./wolf-image/idle-session-timeout.patch
       ./wolf-image/reset-interpipe-on-producer-switch.patch
+      ./wolf-image/media-keys.patch
     ];
   };
   wolfBuildContext =
@@ -728,16 +729,7 @@
   # upstream Wolf image deliberately does not bundle it, while NixOS' NVIDIA
   # CDI specification only injects driver libraries. Copy the runtime pieces
   # from the CUDA redistributable source without pulling in the full toolkit.
-  nvrtcRuntime = pkgs.runCommand "wolf-nvrtc-runtime" {} ''
-    mkdir -p "$out/lib"
-    cp ${pkgs.cudaPackages.cuda_nvrtc.src}/lib/libnvrtc.so.* "$out/lib/"
-    cp ${pkgs.cudaPackages.cuda_nvrtc.src}/lib/libnvrtc-builtins.so.* "$out/lib/"
-
-    for library in libnvrtc libnvrtc-builtins; do
-      set -- "$out/lib/$library.so."*
-      ln -s "$(basename "$1")" "$out/lib/$library.so"
-    done
-  '';
+  nvrtcRuntime = pkgs.callPackage ./nvrtc-runtime.nix {};
   mkWolfVramWatchdog = {
     name,
     containerName,
