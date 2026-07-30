@@ -11,6 +11,12 @@ with lib;
 let
   cfg = config.services.calibre-web.managed;
   calibreConfigDir = "/var/lib/calibre/config";
+  calibreWebPort = 8083;
+  calibreWebFirewallRules =
+    lib.concatMapStringsSep "\n" (ip: ''
+      iptables -A nixos-fw -p tcp --dport ${toString calibreWebPort} -s ${ip} -j nixos-fw-accept
+    '')
+    cfg.proxySources;
   calibreWebStateSetup = pkgs.writeShellScript "calibre-web-state-setup" ''
     set -euo pipefail
 
@@ -36,10 +42,18 @@ in
       default = "/var/lib/calibre/config/libraries/Main";
       description = "Calibre library directory exposed to Calibre-Web.";
     };
+
+    proxySources = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "Source addresses allowed to reach Calibre-Web.";
+    };
   };
 
   config = mkIf cfg.enable {
-    networking.firewall.allowedTCPPorts = [ 8083 ];
+    networking.firewall.extraCommands = lib.mkAfter ''
+      ${calibreWebFirewallRules}
+    '';
 
     systemd.tmpfiles.rules = [
       "d ${cfg.configDir} 0755 ${username} users - -"
@@ -60,7 +74,7 @@ in
       group = "users";
       listen = {
         ip = "0.0.0.0";
-        port = 8083;
+        port = calibreWebPort;
       };
       options = {
         calibreLibrary = cfg.libraryDir;
