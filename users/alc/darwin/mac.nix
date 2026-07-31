@@ -32,7 +32,7 @@ in {
   programs.atuin.daemon.enable = false;
   programs.moonlightEndpoints.launchers = [
     {
-      hostname = "Wolf";
+      hostname = "Wolf User";
       application = "Wolf UI";
       arguments = [
         "--absolute-mouse"
