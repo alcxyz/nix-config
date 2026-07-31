@@ -4,6 +4,10 @@
 
 **Applies to:** `hosts/xev`, `hosts/xps`, Wolf, Moonlight, browser sessions
 
+**Lifecycle amendment:** ADR-0057 moves both coordinators under Kubernetes
+while retaining the independent public and protected identities established
+here.
+
 ## Context
 
 The XPS couch session needs both a general browser and a private browser profile
