@@ -2,11 +2,12 @@ diff --git a/dms/Services/AudioService.qml b/dms/Services/AudioService.qml
 index 6868a47..112d888 100644
 --- a/dms/Services/AudioService.qml
 +++ b/dms/Services/AudioService.qml
-@@ -127,7 +127,7 @@ Singleton {
+@@ -127,7 +127,8 @@ Singleton {
      function setSink(node: PwNode): bool {
          if (!node)
              return false;
 -        Pipewire.preferredDefaultAudioSink = node;
 +        Quickshell.execDetached(["@audioOutputCommand@", "select-name", node.name]);
++        Pipewire.preferredDefaultAudioSink = node;
          return true;
      }

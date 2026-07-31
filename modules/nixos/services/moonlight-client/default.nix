@@ -4,11 +4,15 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.services.moonlight-client;
   moonlightPackage = cfg.package.overrideAttrs (old: {
-    patches = (old.patches or []) ++ [./patches/poll-absolute-mouse.patch];
+    patches =
+      (old.patches or [])
+      ++ [
+        ./patches/poll-absolute-mouse.patch
+        ./patches/forward-media-keys.patch
+      ];
   });
 
   modeStateDirectory = "/var/lib/moonlight-client";
@@ -16,23 +20,22 @@ let
   directDrmReturnModeFile = "${modeStateDirectory}/direct-drm-return-mode";
   directDrmKeyboardLayoutFile = "${modeStateDirectory}/direct-drm-keyboard-layout";
   directDrmKmsConfigFile = "${modeStateDirectory}/direct-drm-kms.json";
-  qtConnectorName =
-    connector:
+  qtConnectorName = connector:
     lib.replaceStrings
-      [
-        "HDMI-A-"
-        "HDMI-B-"
-        "-"
-      ]
-      [
-        "HDMI"
-        "HDMI"
-        ""
-      ]
-      connector;
+    [
+      "HDMI-A-"
+      "HDMI-B-"
+      "-"
+    ]
+    [
+      "HDMI"
+      "HDMI"
+      ""
+    ]
+    connector;
   directDrmFixedKmsConfigFile =
-    if cfg.directDrmFixedOutput == null then
-      null
+    if cfg.directDrmFixedOutput == null
+    then null
     else
       pkgs.writeText "moonlight-direct-drm-fixed-kms.json" (
         builtins.toJSON {
@@ -57,22 +60,24 @@ let
   directDrmKmsConfigEnabled =
     cfg.directDrmAutoSelectOutput || cfg.directDrmFixedOutput != null;
   directDrmActiveKmsConfigFile =
-    if cfg.directDrmAutoSelectOutput then
-      directDrmKmsConfigFile
-    else
-      directDrmFixedKmsConfigFile;
+    if cfg.directDrmAutoSelectOutput
+    then directDrmKmsConfigFile
+    else directDrmFixedKmsConfigFile;
   runtimeStateDirectory = "/run/moonlight-client";
   dynamicMonitorConfigFile = "${runtimeStateDirectory}/monitors.conf";
   mirrorStateFile = "${modeStateDirectory}/mirror-enabled";
   displayLayoutStateFile = "${modeStateDirectory}/display-layout";
   mergedDmsConfigDirectory = "${runtimeStateDirectory}/dms-merged";
-  effectiveMergedDmsSettings = lib.recursiveUpdate (lib.optionalAttrs
+  effectiveMergedDmsSettings =
+    lib.recursiveUpdate (
+      lib.optionalAttrs
       (cfg.sessionSplashCommand != null)
       {
         customPowerActionReboot = "${lib.getExe sessionPowerAction} reboot";
         customPowerActionPowerOff = "${lib.getExe sessionPowerAction} poweroff";
       }
-  ) cfg.mergedDmsSettings;
+    )
+    cfg.mergedDmsSettings;
   mergedDmsSettingsFile = pkgs.writeText "dms-merged-settings.json" (
     builtins.toJSON effectiveMergedDmsSettings
   );
@@ -194,10 +199,9 @@ let
   browserStreamEnabled = cfg.browserStreamHost != null && cfg.browserStreamApplication != null;
   browserSelectorEnabled = browserStreamEnabled && cfg.browserStreamSelectorApplication != null;
   browserSelectorHost =
-    if cfg.browserStreamSelectorHost == null then
-      cfg.browserStreamHost
-    else
-      cfg.browserStreamSelectorHost;
+    if cfg.browserStreamSelectorHost == null
+    then cfg.browserStreamHost
+    else cfg.browserStreamSelectorHost;
   directDrmStreamEnabled = cfg.enableDirectDrmStream && directStreamEnabled;
   directDrmBrowserEnabled = cfg.enableDirectDrmBrowserStreams && browserStreamEnabled;
   persistentDirectDrmBrowserDefault = cfg.defaultSessionMode == "direct-browser";
@@ -220,7 +224,8 @@ let
     esac
   '';
   sessionModeSwitchEnabled =
-    cfg.autoLoginUser != null
+    cfg.autoLoginUser
+    != null
     && (cfg.desktopSessionCommand != null || directDrmStreamEnabled || directDrmBrowserEnabled);
   directModeInputShortcutsEnabled =
     cfg.enableDirectModeInputShortcuts
@@ -228,33 +233,39 @@ let
     && (directDrmStreamEnabled || directDrmBrowserEnabled);
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
-    if dynamicExternalLayoutEnabled then lib.last cfg.autoLayoutSecondaryModes else cfg.outputMode;
-  mirrorOutputMode = if cfg.mirrorOutputMode == null then cfg.outputMode else cfg.mirrorOutputMode;
-  autoMirrorOutputMode = if cfg.mirrorOutputMode == null then "" else cfg.mirrorOutputMode;
+    if dynamicExternalLayoutEnabled
+    then lib.last cfg.autoLayoutSecondaryModes
+    else cfg.outputMode;
+  mirrorOutputMode =
+    if cfg.mirrorOutputMode == null
+    then cfg.outputMode
+    else cfg.mirrorOutputMode;
+  autoMirrorOutputMode =
+    if cfg.mirrorOutputMode == null
+    then ""
+    else cfg.mirrorOutputMode;
   autoMirrorSecondaryPosition =
-    if cfg.autoMirrorSecondaryPosition == null then
-      cfg.autoLayoutSecondaryPosition
-    else
-      cfg.autoMirrorSecondaryPosition;
+    if cfg.autoMirrorSecondaryPosition == null
+    then cfg.autoLayoutSecondaryPosition
+    else cfg.autoMirrorSecondaryPosition;
   autoMirrorTertiaryPosition =
-    if cfg.autoMirrorTertiaryPosition == null then
-      cfg.autoLayoutTertiaryPosition
-    else
-      cfg.autoMirrorTertiaryPosition;
+    if cfg.autoMirrorTertiaryPosition == null
+    then cfg.autoLayoutTertiaryPosition
+    else cfg.autoMirrorTertiaryPosition;
   mirrorSourceOutputs = lib.unique (lib.attrValues cfg.mirrorOutputs);
-  directDrmEnvironment = [
-    "QT_QPA_PLATFORM=eglfs"
-  ]
-  ++ lib.optionals directDrmKmsConfigEnabled [
-    "QT_QPA_EGLFS_INTEGRATION=eglfs_kms"
-    "QT_QPA_EGLFS_KMS_CONFIG=${directDrmActiveKmsConfigFile}"
-  ]
-  ++ lib.optional (cfg.directDrmFixedOutput != null)
+  directDrmEnvironment =
+    [
+      "QT_QPA_PLATFORM=eglfs"
+    ]
+    ++ lib.optionals directDrmKmsConfigEnabled [
+      "QT_QPA_EGLFS_INTEGRATION=eglfs_kms"
+      "QT_QPA_EGLFS_KMS_CONFIG=${directDrmActiveKmsConfigFile}"
+    ]
+    ++ lib.optional (cfg.directDrmFixedOutput != null)
     "QT_QPA_EGLFS_ALWAYS_SET_MODE=1";
-  mkMoonlightExecutable =
-    name: profileDirectory:
-    if profileDirectory == null then
-      lib.getExe moonlightPackage
+  mkMoonlightExecutable = name: profileDirectory:
+    if profileDirectory == null
+    then lib.getExe moonlightPackage
     else
       lib.getExe (
         pkgs.writeShellApplication {
@@ -274,8 +285,7 @@ let
       );
   defaultMoonlightExecutable = mkMoonlightExecutable "default" null;
   selectorMoonlightExecutable = mkMoonlightExecutable "browser-selector" cfg.browserStreamSelectorProfileDirectory;
-  mkMoonlightInvocation =
-    executable: extraEnvironment: extraArguments: host: application:
+  mkMoonlightInvocation = executable: extraEnvironment: extraArguments: host: application:
     lib.escapeShellArgs (
       [
         "${pkgs.coreutils}/bin/env"
@@ -294,8 +304,8 @@ let
       ]
     );
   moonlightInvocation =
-    if directStreamEnabled then
-      mkMoonlightInvocation defaultMoonlightExecutable [ ] [ ] cfg.streamHost cfg.streamApplication
+    if directStreamEnabled
+    then mkMoonlightInvocation defaultMoonlightExecutable [] [] cfg.streamHost cfg.streamApplication
     else
       lib.escapeShellArgs [
         "${pkgs.coreutils}/bin/env"
@@ -313,7 +323,10 @@ let
       "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
       "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
       "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
-    ] cfg.browserStreamArguments cfg.browserStreamHost cfg.browserStreamApplication
+    ]
+    cfg.browserStreamArguments
+    cfg.browserStreamHost
+    cfg.browserStreamApplication
   );
   browserSelectorMoonlightInvocation = lib.optionalString browserSelectorEnabled (
     mkMoonlightInvocation selectorMoonlightExecutable [
@@ -321,31 +334,40 @@ let
       "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
       "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
       "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
-    ] cfg.browserStreamArguments browserSelectorHost cfg.browserStreamSelectorApplication
+    ]
+    cfg.browserStreamArguments
+    browserSelectorHost
+    cfg.browserStreamSelectorApplication
   );
   directDrmBrowserMoonlightInvocation = lib.optionalString directDrmBrowserEnabled (
     mkMoonlightInvocation defaultMoonlightExecutable (
       [
-      "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+        "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
         "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
         "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
-      "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
-    ]
+        "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+      ]
       ++ directDrmEnvironment
-    ) cfg.browserStreamArguments cfg.browserStreamHost cfg.browserStreamApplication
+    )
+    cfg.browserStreamArguments
+    cfg.browserStreamHost
+    cfg.browserStreamApplication
   );
   directDrmBrowserSelectorMoonlightInvocation =
     lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled)
     (
-        mkMoonlightInvocation selectorMoonlightExecutable (
-          [
-        "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
-            "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
-            "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
-        "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
-      ]
-          ++ directDrmEnvironment
-        ) cfg.browserStreamArguments browserSelectorHost cfg.browserStreamSelectorApplication
+      mkMoonlightInvocation selectorMoonlightExecutable (
+        [
+          "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+          "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
+          "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
+          "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+        ]
+        ++ directDrmEnvironment
+      )
+      cfg.browserStreamArguments
+      browserSelectorHost
+      cfg.browserStreamSelectorApplication
     );
   superviseMoonlightWindow = targetWorkspace: ''
     seen_window=0
@@ -423,35 +445,33 @@ let
   browserStreamEndpointPolicyEnabled =
     cfg.browserStreamLocalAddress != null && cfg.browserStreamRemoteAddress != null;
   browserStreamReadinessHosts =
-    if browserStreamEndpointPolicyEnabled then
+    if browserStreamEndpointPolicyEnabled
+    then
       lib.unique (
-        if cfg.browserStreamEndpointMode == "lan-only" then
-          [ cfg.browserStreamLocalAddress ]
-        else if cfg.browserStreamEndpointMode == "remote-only" then
-          [ cfg.browserStreamRemoteAddress ]
-        else
-          [
+        if cfg.browserStreamEndpointMode == "lan-only"
+        then [cfg.browserStreamLocalAddress]
+        else if cfg.browserStreamEndpointMode == "remote-only"
+        then [cfg.browserStreamRemoteAddress]
+        else [
           cfg.browserStreamLocalAddress
           cfg.browserStreamRemoteAddress
         ]
       )
-    else
-      lib.optional browserStreamEnabled cfg.browserStreamHost;
+    else lib.optional browserStreamEnabled cfg.browserStreamHost;
   streamReadinessHosts =
-    if streamEndpointPolicyEnabled then
+    if streamEndpointPolicyEnabled
+    then
       lib.unique (
-        if cfg.streamEndpointMode == "lan-only" then
-          [ cfg.streamLocalAddress ]
-        else if cfg.streamEndpointMode == "remote-only" then
-          [ cfg.streamRemoteAddress ]
-        else
-          [
+        if cfg.streamEndpointMode == "lan-only"
+        then [cfg.streamLocalAddress]
+        else if cfg.streamEndpointMode == "remote-only"
+        then [cfg.streamRemoteAddress]
+        else [
           cfg.streamLocalAddress
           cfg.streamRemoteAddress
         ]
       )
-    else
-      lib.optional (cfg.streamReadinessHost != null) cfg.streamReadinessHost;
+    else lib.optional (cfg.streamReadinessHost != null) cfg.streamReadinessHost;
   reconcileMoonlightEndpoints = pkgs.writeShellApplication {
     name = "reconcile-moonlight-endpoints";
     runtimeInputs = [pkgs.python3];
@@ -459,9 +479,7 @@ let
       exec python3 ${./reconcile-endpoints.py} "$@"
     '';
   };
-  mkMoonlightEndpointSetup =
-    name: profileDirectory: reconcileStream: reconcileBrowser: selector:
-    let
+  mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser: selector: let
     reconciliationEnabled =
       (reconcileStream && streamEndpointPolicyEnabled)
       || (reconcileBrowser && browserStreamEndpointPolicyEnabled);
@@ -471,10 +489,9 @@ let
       text = ''
         ${lib.optionalString reconciliationEnabled ''
           config_file=${
-            if profileDirectory == null then
-              ''"$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"''
-            else
-              lib.escapeShellArg "${profileDirectory}/config/Moonlight Game Streaming Project/Moonlight.conf"
+            if profileDirectory == null
+            then ''"$HOME/.config/Moonlight Game Streaming Project/Moonlight.conf"''
+            else lib.escapeShellArg "${profileDirectory}/config/Moonlight Game Streaming Project/Moonlight.conf"
           }
         ''}
         ${lib.optionalString (reconcileStream && streamEndpointPolicyEnabled) ''
@@ -488,13 +505,19 @@ let
         ${lib.optionalString (reconcileBrowser && browserStreamEndpointPolicyEnabled) ''
           ${lib.getExe reconcileMoonlightEndpoints} \
             "$config_file" \
-            ${lib.escapeShellArg (if selector then browserSelectorHost else cfg.browserStreamHost)} \
+            ${lib.escapeShellArg (
+            if selector
+            then browserSelectorHost
+            else cfg.browserStreamHost
+          )} \
             ${lib.escapeShellArg cfg.browserStreamEndpointMode} \
             ${lib.escapeShellArg cfg.browserStreamLocalAddress} \
             ${lib.escapeShellArg cfg.browserStreamRemoteAddress} ${lib.optionalString selector ''
             ${
               lib.escapeShellArg (
-                  if cfg.browserStreamSelectorPort == null then "" else toString cfg.browserStreamSelectorPort
+                if cfg.browserStreamSelectorPort == null
+                then ""
+                else toString cfg.browserStreamSelectorPort
               )
             } \
             ${lib.escapeShellArg cfg.browserStreamHost}
@@ -517,8 +540,8 @@ let
         QT_QPA_PLATFORM=${lib.escapeShellArg cfg.moonlightPlatform} \
         ${selectorMoonlightExecutable} pair --pin "$1" ${
         lib.escapeShellArg (
-            if cfg.browserStreamLocalAddress == null then
-              browserSelectorHost
+          if cfg.browserStreamLocalAddress == null
+          then browserSelectorHost
           else
             cfg.browserStreamLocalAddress
             + lib.optionalString (
@@ -557,10 +580,11 @@ let
           lib.mapAttrsToList (
             layout: matches:
               map (
-                      match:
-                      "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
-                    ) matches
-                  ) cfg.keyboardLayoutDeviceOverrides
+                match: "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
+              )
+              matches
+          )
+          cfg.keyboardLayoutDeviceOverrides
         )
       )}
             esac
@@ -728,13 +752,13 @@ let
       )"
       case "$output" in
         ${lib.concatStringsSep "\n        " (
-          lib.mapAttrsToList (
-            connector: description:
-            "${
-              lib.escapeShellArg (qtConnectorName connector)
-            }) target=${lib.escapeShellArg description} ;;"
-          ) cfg.directDrmAudioOutputByConnector
-        )}
+        lib.mapAttrsToList (
+          connector: description: "${
+            lib.escapeShellArg (qtConnectorName connector)
+          }) target=${lib.escapeShellArg description} ;;"
+        )
+        cfg.directDrmAudioOutputByConnector
+      )}
         *) exit 0 ;;
       esac
 
@@ -853,8 +877,8 @@ let
       pkgs.jq
     ];
     text =
-      if cfg.relaunchOnExit then
-        ''
+      if cfg.relaunchOnExit
+      then ''
         ${lib.getExe moonlightEndpointSetup}
         ${lib.getExe displayModeSetup}
         ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
@@ -866,8 +890,7 @@ let
           sleep 1
         done
       ''
-      else
-        ''
+      else ''
         ${lib.getExe moonlightEndpointSetup}
         ${lib.getExe displayModeSetup}
         ${lib.optionalString cfg.preferHdmiAudio "${lib.getExe hdmiAudioSetup} || true"}
@@ -933,10 +956,9 @@ let
       done
 
       ${
-        if cfg.enableLocalBrowser then
-          "exec ${lib.getExe couchBrowser}"
-        else
-          ''
+        if cfg.enableLocalBrowser
+        then "exec ${lib.getExe couchBrowser}"
+        else ''
           echo "Remote browser did not become ready and the local fallback is disabled" >&2
           exit 1
         ''
@@ -1265,17 +1287,15 @@ let
       ''}
 
       ${
-        if directStreamEnabled then
-          ''show_status info "Steam is ready" "Connecting Moonlight now."''
-        else
-          ''show_status info "Moonlight" "Opening the host chooser."''
+        if directStreamEnabled
+        then ''show_status info "Steam is ready" "Connecting Moonlight now."''
+        else ''show_status info "Moonlight" "Opening the host chooser."''
       }
       exec ${lib.getExe moonlightSession}
     '';
   };
 
-  mkMoonlightBrowserSession =
-    name: endpointSetup: invocation: targetWorkspace: application:
+  mkMoonlightBrowserSession = name: endpointSetup: invocation: targetWorkspace: application:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
@@ -1284,8 +1304,9 @@ let
       ];
       text = ''
         ${lib.optionalString (
-          application == cfg.browserStreamApplication && cfg.browserStreamPrepareCommand != null
-        ) cfg.browserStreamPrepareCommand}
+            application == cfg.browserStreamApplication && cfg.browserStreamPrepareCommand != null
+          )
+          cfg.browserStreamPrepareCommand}
         ${lib.getExe endpointSetup}
         ${lib.getExe displayModeSetup}
         ${invocation} &
@@ -1296,7 +1317,11 @@ let
             export COUCH_KEYBOARD_LAYOUT
             export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
             export COUCH_STREAM_APPLICATION=${
-              lib.escapeShellArg (if application == null then "" else application)
+            lib.escapeShellArg (
+              if application == null
+              then ""
+              else application
+            )
           }
             ${cfg.browserStreamLayoutCommand}
           ) &
@@ -1369,8 +1394,7 @@ let
       ''}
     '';
   };
-  mkDirectDrmSession =
-    {
+  mkDirectDrmSession = {
     name,
     mode,
     endpointSetup,
@@ -1458,7 +1482,7 @@ let
         ${lib.optionalString (prepareCommand != null) "${prepareCommand}\n"}
         ${lib.getExe endpointSetup}
         ${lib.optionalString (
-          cfg.directDrmAudioOutputByConnector != { }
+          cfg.directDrmAudioOutputByConnector != {}
         ) "${lib.getExe directDrmAudioOutputSetup}"}
         ${invocation} &
         moonlight_pid=$!
@@ -1478,7 +1502,11 @@ let
             export COUCH_KEYBOARD_LAYOUT
             export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
             export COUCH_STREAM_APPLICATION=${
-              lib.escapeShellArg (if application == null then "" else application)
+            lib.escapeShellArg (
+              if application == null
+              then ""
+              else application
+            )
           }
             ${cfg.browserStreamLayoutCommand}
           ) &
@@ -1534,13 +1562,13 @@ let
           ;;
         browser)
           ${
-            if browserStreamEnabled then
-              ''
+        if browserStreamEnabled
+        then ''
           systemctl --user start couch-moonlight-browser-stream.service
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
         ''
-            else if cfg.enableLocalBrowser then
-              ''
+        else if cfg.enableLocalBrowser
+        then ''
           ${lib.getExe mergedUiControl} browser
           hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
           if ! pgrep -u "$USER" -f -- ${lib.escapeShellArg cfg.browserProfileDirectory} \
@@ -1548,8 +1576,7 @@ let
             ${lib.getExe couchBrowser} >/dev/null 2>&1 &
           fi
         ''
-            else
-              ''
+        else ''
           echo "No local or remote browser is configured" >&2
           exit 1
         ''
@@ -2419,6 +2446,13 @@ let
               >/dev/null 2>&1 || true
           fi
         done <<<"$sink_inputs"
+
+        # SDL can retain the timing state of the previous HDMI sink after a
+        # successful PipeWire-Pulse move into a Bluetooth latency domain. Ask
+        # patched Moonlight clients to recreate only their audio renderer; the
+        # video connection and remote application session remain untouched.
+        audio_reopen_marker="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/moonlight-audio-reopen"
+        printf '%s\n' "$(date +%s%N)" > "$audio_reopen_marker"
       }
 
       layout_target() {
@@ -2464,15 +2498,30 @@ let
       }
 
       follow_layout() {
-        current_api="$(
-          jq -r --argjson current "''${current_id:--1}" \
-            '.[] | select(.id == $current) | .api' <<<"$sinks"
+        requested_layout="''${1:-}"
+        persisted_layout="$(
+          tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true
         )"
-        if [ "$current_api" = bluez5 ]; then
+        if [ -z "$requested_layout" ]; then
+          requested_layout="$persisted_layout"
+        fi
+
+        current_description="$(
+          jq -r --argjson current "''${current_id:--1}" \
+            '.[] | select(.id == $current) | .description' <<<"$sinks"
+        )"
+        previous_layout_target="$(layout_target "$persisted_layout")"
+
+        # Follow the display only while audio still matches the previous
+        # layout's default. Any other live sink is an explicit user override
+        # and remains selected across display-state changes.
+        if [ -n "$current_description" ] \
+          && [ -n "$previous_layout_target" ] \
+          && [ "$current_description" != "$previous_layout_target" ]; then
           return
         fi
 
-        select_layout_fallback "''${1:-}"
+        select_layout_fallback "$requested_layout"
       }
 
       reconcile_default() {
@@ -2932,7 +2981,8 @@ let
 
   autoLayoutExternalOutputs = pkgs.writeShellApplication {
     name = "couch-auto-layout-outputs";
-    runtimeInputs = [
+    runtimeInputs =
+      [
         pkgs.coreutils
         pkgs.hyprland
         pkgs.jq
@@ -3369,7 +3419,11 @@ let
           secondary_mode="$mirror_output_mode"
         fi
         native_mirror=0
-        native_mirror_allowed=${if cfg.forceSoftwareMirror then "0" else "1"}
+        native_mirror_allowed=${
+        if cfg.forceSoftwareMirror
+        then "0"
+        else "1"
+      }
         primary_dimensions="''${source_mode%@*}"
         secondary_dimensions="''${secondary_mode%@*}"
         if [ "$native_mirror_requested" = 1 ] \
@@ -3561,7 +3615,9 @@ let
       # clock during that interval.
       export NIXBOX_SPLASH_SETTLE_MS=3000
       exec ${
-        if cfg.sessionSplashCommand == null then "${pkgs.coreutils}/bin/true" else cfg.sessionSplashCommand
+        if cfg.sessionSplashCommand == null
+        then "${pkgs.coreutils}/bin/true"
+        else cfg.sessionSplashCommand
       }
     '';
   };
@@ -3744,8 +3800,8 @@ let
               ${lib.getExe activeKeyboardLayout} \
                 > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
               ${lib.optionalString cfg.directDrmAutoSelectOutput ''
-                ${lib.getExe directDrmOutputSnapshot}
-              ''}
+          ${lib.getExe directDrmOutputSnapshot}
+        ''}
               ;;
             direct-*)
               return_mode="$(
@@ -3763,19 +3819,19 @@ let
                 *) return_mode=${lib.escapeShellArg cfg.defaultSessionMode} ;;
               esac
               ${lib.optionalString cfg.directDrmAutoSelectOutput ''
-                if [ ! -s ${lib.escapeShellArg directDrmKmsConfigFile} ]; then
-                  echo "No saved direct DRM output is available" >&2
-                  exit 1
-                fi
-              ''}
+          if [ ! -s ${lib.escapeShellArg directDrmKmsConfigFile} ]; then
+            echo "No saved direct DRM output is available" >&2
+            exit 1
+          fi
+        ''}
               ;;
             *)
               return_mode=${lib.escapeShellArg cfg.defaultSessionMode}
               ${lib.getExe activeKeyboardLayout} \
                 > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
               ${lib.optionalString cfg.directDrmAutoSelectOutput ''
-                ${lib.getExe directDrmOutputSnapshot}
-              ''}
+          ${lib.getExe directDrmOutputSnapshot}
+        ''}
               ;;
           esac
           printf '%s\n' "$return_mode" \
@@ -3967,12 +4023,13 @@ let
     monitor = , ${defaultOutputMode}, auto, ${toString cfg.outputScale}
     ${lib.concatMapStringsSep "\n" (
         output: "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}"
-    ) mirrorSourceOutputs}
+      )
+      mirrorSourceOutputs}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
-        output: source:
-        "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}, mirror, ${source}"
-      ) cfg.mirrorOutputs
+        output: source: "monitor = ${output}, ${mirrorOutputMode}, 0x0, ${toString cfg.outputScale}, mirror, ${source}"
+      )
+      cfg.mirrorOutputs
     )}
     ${lib.concatStringsSep "\n" (map (rule: "monitor = ${rule}") cfg.extraMonitorRules)}
     ${lib.concatStringsSep "\n" (map (rule: "workspace = ${rule}") cfg.extraWorkspaceRules)}
@@ -3999,7 +4056,11 @@ let
       cfg.sessionSplashCommand != null
     ) "exec-once = ${lib.getExe sessionSplashLaunch}"}
     ${lib.optionalString cfg.autoStartBrowser "exec-once = ${
-      lib.getExe (if cfg.preferRemoteBrowserAtStartup then couchBrowserStartup else couchBrowser)
+      lib.getExe (
+        if cfg.preferRemoteBrowserAtStartup
+        then couchBrowserStartup
+        else couchBrowser
+      )
     }"}
     ${lib.optionalString cfg.autoStartStream "exec-once = [workspace 1 silent] ${lib.getExe moonlightSession}"}
     ${lib.optionalString cfg.enableControllerShortcuts "exec-once = ${lib.getExe controllerDaemon}"}
@@ -4011,9 +4072,9 @@ let
     ${lib.optionalString cfg.enableKdeConnect "exec-once = ${lib.getExe pointerSync}"}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
-        output: source:
-        "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
-      ) cfg.softwareMirrorOutputs
+        output: source: "exec-once = ${lib.getExe softwareMirror} ${lib.escapeShellArg output} ${lib.escapeShellArg source}"
+      )
+      cfg.softwareMirrorOutputs
     )}
     # Import the live compositor environment immediately above, then hand DMS
     # to systemd so a transient startup failure or later crash cannot leave the
@@ -4082,10 +4143,9 @@ let
     bind = SUPER, 8, exec, ${lib.getExe couchWorkspace} switch 8
     bind = SUPER, 9, exec, ${lib.getExe couchWorkspace} switch 9
     ${
-      if cfg.enableControllerShortcuts then
-        "bind = SUPER, M, exec, ${lib.getExe couchStreamControl} start"
-      else
-        "bind = SUPER, M, workspace, 1"
+      if cfg.enableControllerShortcuts
+      then "bind = SUPER, M, exec, ${lib.getExe couchStreamControl} start"
+      else "bind = SUPER, M, workspace, 1"
     }
     bind = SUPER, B, exec, ${lib.getExe couchStreamControl} browser
     ${lib.optionalString browserStreamEnabled "bind = SUPER, R, exec, ${lib.getExe couchStreamControl} remote-browser"}
@@ -4228,8 +4288,7 @@ let
       esac
     '';
   };
-in
-{
+in {
   options.services.moonlight-client = {
     enable = lib.mkEnableOption "a dedicated Moonlight Hyprland session";
 
@@ -4439,7 +4498,7 @@ in
 
             disabledConnectors = lib.mkOption {
               type = lib.types.listOf lib.types.str;
-              default = [ ];
+              default = [];
               example = [
                 "eDP-1"
                 "DP-2"
@@ -4462,7 +4521,7 @@ in
 
     directDrmAudioOutputByConnector = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = { };
+      default = {};
       example = {
         "DP-1" = "Living room TV";
         "HDMI-A-1" = "Desk display";
@@ -5096,7 +5155,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [
+    environment.systemPackages =
+      [
         moonlightPackage
         couchApplications
         couchStreamControl
@@ -5115,7 +5175,8 @@ in
       ]
       ++ lib.optional (
         browserSelectorEnabled && cfg.browserStreamSelectorProfileDirectory != null
-    ) browserSelectorPair
+      )
+      browserSelectorPair
       ++ lib.optional cfg.enableControllerShortcuts controllerDaemon
       ++ lib.optional cfg.enableControllerShortcuts couchControlHelp
       ++ lib.optional directModeInputShortcutsEnabled directModeInputDaemon
@@ -5135,10 +5196,12 @@ in
       ++ lib.optional dynamicExternalLayoutEnabled autoLayoutExternalOutputs
       ++ lib.optional (
         cfg.enableLocalBrowser && cfg.fallbackBrowserPackage != null
-    ) cfg.fallbackBrowserPackage
+      )
+      cfg.fallbackBrowserPackage
       ++ lib.optional (
         cfg.enableLocalBrowser && cfg.fallbackBrowserPackage != null
-    ) couchFallbackBrowser.package
+      )
+      couchFallbackBrowser.package
       ++ lib.optional (cfg.protectedBrowserPackage != null) protectedBrowser
       ++ lib.optional sessionModeSwitchEnabled sessionMode;
     services.displayManager.sessionPackages = [sessionPackage];
@@ -5289,7 +5352,10 @@ in
     };
 
     services.greetd.settings.initial_session = lib.mkIf (cfg.autoLoginUser != null) {
-      command = if sessionModeSwitchEnabled then lib.getExe sessionDispatcher else sessionCommand;
+      command =
+        if sessionModeSwitchEnabled
+        then lib.getExe sessionDispatcher
+        else sessionCommand;
       user = cfg.autoLoginUser;
     };
 
@@ -5304,15 +5370,17 @@ in
         cfg.autoLoginUser != null && (sessionModeSwitchEnabled || cfg.enableAdaptiveDisplayLayout)
       ) "d ${modeStateDirectory} 0755 ${cfg.autoLoginUser} root - -"
       ++ lib.optional sessionModeSwitchEnabled "${
-        if persistentDirectDrmBrowserDefault then "f+" else "f"
+        if persistentDirectDrmBrowserDefault
+        then "f+"
+        else "f"
       } ${modeStateFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
-      ++
-        lib.optional ((directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null)
+      ++ lib.optional ((directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null)
       "${
-            if persistentDirectDrmBrowserDefault then "f+" else "f"
+        if persistentDirectDrmBrowserDefault
+        then "f+"
+        else "f"
       } ${directDrmReturnModeFile} 0644 ${cfg.autoLoginUser} root - ${cfg.defaultSessionMode}"
-      ++
-        lib.optional ((directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null)
+      ++ lib.optional ((directDrmStreamEnabled || directDrmBrowserEnabled) && cfg.autoLoginUser != null)
       "f ${directDrmKeyboardLayoutFile} 0644 ${cfg.autoLoginUser} root - ${builtins.head (lib.splitString "," cfg.keyboardLayouts)}"
       ++ lib.optional (
         cfg.directDrmAutoSelectOutput && cfg.autoLoginUser != null
@@ -5380,7 +5448,7 @@ in
         message = "services.moonlight-client directDrmAutoSelectOutput and directDrmFixedOutput are mutually exclusive";
       }
       {
-        assertion = cfg.directDrmAudioOutputByConnector == { } || directDrmKmsConfigEnabled;
+        assertion = cfg.directDrmAudioOutputByConnector == {} || directDrmKmsConfigEnabled;
         message = "services.moonlight-client.directDrmAudioOutputByConnector requires a direct DRM KMS configuration";
       }
       {
@@ -5454,7 +5522,8 @@ in
       }
       {
         assertion =
-          cfg.browserStreamSelectorProfileDirectory == null
+          cfg.browserStreamSelectorProfileDirectory
+          == null
           || lib.hasPrefix "/" cfg.browserStreamSelectorProfileDirectory;
         message = "services.moonlight-client.browserStreamSelectorProfileDirectory must be absolute";
       }
@@ -5510,7 +5579,8 @@ in
       }
       {
         assertion =
-          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutTertiaryWorkspaces == [ ]
+          lib.intersectLists cfg.autoLayoutPrimaryWorkspaces cfg.autoLayoutTertiaryWorkspaces
+          == []
           && lib.intersectLists cfg.autoLayoutSecondaryWorkspaces cfg.autoLayoutTertiaryWorkspaces == [];
         message = "services.moonlight-client automatic tertiary workspace set must not overlap the primary or secondary sets";
       }
