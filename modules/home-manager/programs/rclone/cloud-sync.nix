@@ -97,7 +97,8 @@ in {
     home.packages = [pkgs.rclone];
 
     xdg.configFile."rclone/filters.txt".text =
-      lib.concatStringsSep "\n" cfg.filterRules;
+      lib.concatStringsSep "\n" cfg.filterRules
+      + lib.optionalString (cfg.filterRules != []) "\n";
 
     systemd.user.services = mkMerge [
       (mkIf cfg.googleDrive.enable {
