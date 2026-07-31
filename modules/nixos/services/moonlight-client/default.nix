@@ -202,6 +202,14 @@
     if cfg.browserStreamSelectorHost == null
     then cfg.browserStreamHost
     else cfg.browserStreamSelectorHost;
+  browserSelectorLocalAddress =
+    if cfg.browserStreamSelectorLocalAddress == null
+    then cfg.browserStreamLocalAddress
+    else cfg.browserStreamSelectorLocalAddress;
+  browserSelectorRemoteAddress =
+    if cfg.browserStreamSelectorRemoteAddress == null
+    then cfg.browserStreamRemoteAddress
+    else cfg.browserStreamSelectorRemoteAddress;
   directDrmStreamEnabled = cfg.enableDirectDrmStream && directStreamEnabled;
   directDrmBrowserEnabled = cfg.enableDirectDrmBrowserStreams && browserStreamEnabled;
   persistentDirectDrmBrowserDefault = cfg.defaultSessionMode == "direct-browser";
@@ -444,6 +452,8 @@
   streamEndpointPolicyEnabled = cfg.streamLocalAddress != null && cfg.streamRemoteAddress != null;
   browserStreamEndpointPolicyEnabled =
     cfg.browserStreamLocalAddress != null && cfg.browserStreamRemoteAddress != null;
+  browserSelectorEndpointPolicyEnabled =
+    browserSelectorLocalAddress != null && browserSelectorRemoteAddress != null;
   browserStreamReadinessHosts =
     if browserStreamEndpointPolicyEnabled
     then
@@ -482,7 +492,14 @@
   mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser: selector: let
     reconciliationEnabled =
       (reconcileStream && streamEndpointPolicyEnabled)
-      || (reconcileBrowser && browserStreamEndpointPolicyEnabled);
+      || (
+        reconcileBrowser
+        && (
+          if selector
+          then browserSelectorEndpointPolicyEnabled
+          else browserStreamEndpointPolicyEnabled
+        )
+      );
   in
     pkgs.writeShellApplication {
       name = "moonlight-endpoint-setup-${name}";
@@ -511,8 +528,20 @@
             else cfg.browserStreamHost
           )} \
             ${lib.escapeShellArg cfg.browserStreamEndpointMode} \
-            ${lib.escapeShellArg cfg.browserStreamLocalAddress} \
-            ${lib.escapeShellArg cfg.browserStreamRemoteAddress} ${lib.optionalString selector ''
+            ${
+            lib.escapeShellArg (
+              if selector
+              then browserSelectorLocalAddress
+              else cfg.browserStreamLocalAddress
+            )
+          } \
+            ${
+            lib.escapeShellArg (
+              if selector
+              then browserSelectorRemoteAddress
+              else cfg.browserStreamRemoteAddress
+            )
+          } ${lib.optionalString selector ''
             ${
               lib.escapeShellArg (
                 if cfg.browserStreamSelectorPort == null
@@ -540,10 +569,10 @@
         QT_QPA_PLATFORM=${lib.escapeShellArg cfg.moonlightPlatform} \
         ${selectorMoonlightExecutable} pair --pin "$1" ${
         lib.escapeShellArg (
-          if cfg.browserStreamLocalAddress == null
+          if browserSelectorLocalAddress == null
           then browserSelectorHost
           else
-            cfg.browserStreamLocalAddress
+            browserSelectorLocalAddress
             + lib.optionalString (
               cfg.browserStreamSelectorPort != null
             ) ":${toString cfg.browserStreamSelectorPort}"
@@ -4431,6 +4460,24 @@ in {
       '';
     };
 
+    browserStreamSelectorLocalAddress = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Optional RFC 1918 address for an independent protected-browser
+        selector host. Null inherits browserStreamLocalAddress.
+      '';
+    };
+
+    browserStreamSelectorRemoteAddress = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Optional VPN fallback address for an independent protected-browser
+        selector host. Null inherits browserStreamRemoteAddress.
+      '';
+    };
+
     browserStreamSelectorProfileDirectory = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -5519,6 +5566,19 @@ in {
       {
         assertion = cfg.browserStreamSelectorPort == null || cfg.browserStreamSelectorApplication != null;
         message = "services.moonlight-client.browserStreamSelectorPort requires a browser selector";
+      }
+      {
+        assertion =
+          (cfg.browserStreamSelectorLocalAddress == null)
+          == (cfg.browserStreamSelectorRemoteAddress == null);
+        message = "services.moonlight-client selector local and remote addresses must be set together";
+      }
+      {
+        assertion =
+          cfg.browserStreamSelectorLocalAddress
+          == null
+          || cfg.browserStreamSelectorApplication != null;
+        message = "services.moonlight-client selector addresses require a browser selector";
       }
       {
         assertion =
