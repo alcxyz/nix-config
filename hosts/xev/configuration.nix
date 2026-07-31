@@ -34,7 +34,6 @@
     sessionIdleTimeoutSeconds = 30 * 60;
     pipelineWatchdog.enable = true;
     vramWatchdog.enable = true;
-    protectedProfile.isolateBackend = true;
     prunedApplicationTitles = [
       "Remote Firefox"
       "Test ball"
