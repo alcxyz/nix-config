@@ -8,6 +8,7 @@
   nvidiaPackage = config.hardware.nvidia.package;
   nvidiaSmi = "${nvidiaPackage.bin}/bin/nvidia-smi";
   browserCfg = cfg.browserImages;
+  hostPublicCoordinator = cfg.publicCoordinator == "host";
   kdeConnectPackage = pkgs.kdePackages.kdeconnect-kde;
   kdeConnectExecutable = "${kdeConnectPackage}/bin/kdeconnectd";
   isolatedProtectedBackend =
@@ -1017,6 +1018,19 @@ in {
       '';
     };
 
+    publicCoordinator = lib.mkOption {
+      type = lib.types.enum [
+        "host"
+        "external"
+      ];
+      default = "host";
+      description = ''
+        Select whether this module runs the public Wolf coordinator itself or
+        supplies node-local images, runtime assets, and helpers to an external
+        single-writer supervisor such as Kubernetes.
+      '';
+    };
+
     vramWatchdog = {
       enable = lib.mkEnableOption "automatic recovery from sustained Wolf GPU-memory growth";
 
@@ -1295,7 +1309,7 @@ in {
     virtualisation.oci-containers = {
       backend = "docker";
       containers =
-        {
+        (lib.optionalAttrs hostPublicCoordinator {
           wolf = {
             image = cfg.image;
             autoStart = true;
@@ -1335,7 +1349,7 @@ in {
               "--device-cgroup-rule=c 13:* rmw"
             ];
           };
-        }
+        })
         // lib.optionalAttrs isolatedProtectedBackend {
           wolf-protected = {
             image = cfg.image;
@@ -1387,7 +1401,7 @@ in {
       wolfStreamLayout
     ];
 
-    systemd.services.docker-wolf = {
+    systemd.services.docker-wolf = lib.mkIf hostPublicCoordinator {
       restartIfChanged = false;
       after =
         [
@@ -1441,8 +1455,11 @@ in {
       {
         description = "Route Helium Moonlight sessions into the shared lobby";
         wantedBy = ["multi-user.target"];
-        after = ["docker-wolf.service"];
-        requires = ["docker-wolf.service"];
+        after =
+          if hostPublicCoordinator
+          then ["docker-wolf.service"]
+          else ["docker.service"];
+        requires = lib.optional hostPublicCoordinator "docker-wolf.service";
         serviceConfig = {
           ExecStart = lib.getExe wolfCoopManager;
           Restart = "always";
@@ -1504,7 +1521,7 @@ in {
       '';
     };
 
-    systemd.services.wolf-vram-watchdog = lib.mkIf cfg.vramWatchdog.enable {
+    systemd.services.wolf-vram-watchdog = lib.mkIf (cfg.vramWatchdog.enable && hostPublicCoordinator) {
       description = "Recover Wolf from sustained GPU-memory growth";
       after = ["docker-wolf.service"];
       serviceConfig = {
@@ -1513,7 +1530,7 @@ in {
       };
     };
 
-    systemd.timers.wolf-vram-watchdog = lib.mkIf cfg.vramWatchdog.enable {
+    systemd.timers.wolf-vram-watchdog = lib.mkIf (cfg.vramWatchdog.enable && hostPublicCoordinator) {
       description = "Periodically check Wolf GPU-memory usage";
       wantedBy = ["timers.target"];
       timerConfig = {
@@ -1546,7 +1563,7 @@ in {
         };
       };
 
-    systemd.services.wolf-pipeline-watchdog = lib.mkIf cfg.pipelineWatchdog.enable {
+    systemd.services.wolf-pipeline-watchdog = lib.mkIf (cfg.pipelineWatchdog.enable && hostPublicCoordinator) {
       description = "Recover Wolf from fatal video-pipeline failures";
       after = ["docker-wolf.service"];
       serviceConfig = {
@@ -1556,7 +1573,7 @@ in {
       };
     };
 
-    systemd.timers.wolf-pipeline-watchdog = lib.mkIf cfg.pipelineWatchdog.enable {
+    systemd.timers.wolf-pipeline-watchdog = lib.mkIf (cfg.pipelineWatchdog.enable && hostPublicCoordinator) {
       description = "Periodically check Wolf video-pipeline health";
       wantedBy = ["timers.target"];
       timerConfig = {
@@ -1594,19 +1611,16 @@ in {
       description = "Build the pinned Wolf image with AltGr modifier tracking";
       after = ["docker.service"];
       before =
-        [
-          "docker-wolf.service"
-        ]
+        lib.optional hostPublicCoordinator "docker-wolf.service"
         ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       requires = ["docker.service"];
       # Pull the image build into coordinator startup without coupling their
       # lifetimes. A changed oneshot may be restarted during activation, but
       # that must not stop already-running public or protected coordinators.
       wantedBy =
-        [
-          "docker-wolf.service"
-        ]
-        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
+        lib.optional hostPublicCoordinator "docker-wolf.service"
+        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service"
+        ++ lib.optional (!hostPublicCoordinator) "multi-user.target";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -1619,18 +1633,15 @@ in {
       restartIfChanged = false;
       after = ["docker.service"];
       before =
-        [
-          "docker-wolf.service"
-        ]
+        lib.optional hostPublicCoordinator "docker-wolf.service"
         ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
       requires = ["docker.service"];
       # Browser image refreshes are startup prerequisites, not runtime
       # dependencies of either coordinator.
       wantedBy =
-        [
-          "docker-wolf.service"
-        ]
-        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
+        lib.optional hostPublicCoordinator "docker-wolf.service"
+        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service"
+        ++ lib.optional (!hostPublicCoordinator) "multi-user.target";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
