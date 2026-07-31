@@ -46,6 +46,7 @@
     '';
   browserBaseImage = "ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14";
   wolfUiImage = "ghcr.io/games-on-whales/wolf-ui@sha256:f483f79fcc5f39294067a5029f8de55e5867f74c709a3d55cd6163e4a5f0cf6b";
+  browserImageBuildContextLabel = "io.nixbox.wolf-browser.context";
   heliumVersion = "0.14.7.1";
   heliumDeb = pkgs.fetchurl {
     url = "https://github.com/imputnet/helium-linux/releases/download/${heliumVersion}/helium-bin_${heliumVersion}-1_amd64.deb";
@@ -473,16 +474,21 @@
         || docker pull ${lib.escapeShellArg wolfUiImage}
 
       ${lib.concatMapStringsSep "\n" (image: ''
-          docker build \
-            --pull=false \
-            --build-arg BASE_APP_IMAGE=${lib.escapeShellArg browserBaseImage} \
-            --build-arg BROWSER_EXECUTABLE=${lib.escapeShellArg image.executable} \
-            --build-arg BROWSER_FAMILY=${lib.escapeShellArg image.family} \
-            --build-arg DESKTOP_PACKAGES=${lib.escapeShellArg (lib.concatStringsSep " " image.desktopPackages)} \
-            --build-arg IMAGE_SOURCE=${lib.escapeShellArg image.source} \
-            --build-arg IMAGE_VERSION=${lib.escapeShellArg image.version} \
-            --tag ${lib.escapeShellArg image.image} \
-            ${lib.escapeShellArg image.context}
+          if [ "$(docker image inspect --format '{{ index .Config.Labels "${browserImageBuildContextLabel}" }}' ${lib.escapeShellArg image.image} 2>/dev/null || true)" = ${lib.escapeShellArg image.context} ]; then
+            echo "Reusing ${lib.escapeShellArg image.image}; its Nix build context is current"
+          else
+            docker build \
+              --pull=false \
+              --build-arg BASE_APP_IMAGE=${lib.escapeShellArg browserBaseImage} \
+              --build-arg BROWSER_EXECUTABLE=${lib.escapeShellArg image.executable} \
+              --build-arg BROWSER_FAMILY=${lib.escapeShellArg image.family} \
+              --build-arg DESKTOP_PACKAGES=${lib.escapeShellArg (lib.concatStringsSep " " image.desktopPackages)} \
+              --build-arg IMAGE_SOURCE=${lib.escapeShellArg image.source} \
+              --build-arg IMAGE_VERSION=${lib.escapeShellArg image.version} \
+              --label ${lib.escapeShellArg "${browserImageBuildContextLabel}=${image.context}"} \
+              --tag ${lib.escapeShellArg image.image} \
+              ${lib.escapeShellArg image.context}
+          fi
         '')
         browserImages}
     '';
