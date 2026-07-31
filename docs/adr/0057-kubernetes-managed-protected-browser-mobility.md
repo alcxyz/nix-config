@@ -1,11 +1,13 @@
-# ADR-0057: Kubernetes-managed protected browser mobility
+# ADR-0057: Kubernetes-managed Wolf browser mobility
 
-**Status:** Accepted, staged
+**Status:** Accepted, active
 
 **Date:** 2026-07-30
 
-**Applies to:** `hosts/xyz`, `hosts/xev`, Wolf, protected browser sessions,
-Kubernetes GPU workers
+**Amended:** 2026-07-31
+
+**Applies to:** `hosts/xyz`, `hosts/xev`, Wolf, public and protected browser
+sessions, Kubernetes GPU workers
 
 ## Context
 
@@ -25,15 +27,35 @@ advertise its NVIDIA GPU, attach a Longhorn RWO volume whose three replicas
 remain on stable storage nodes, detach that volume promptly, and restart its
 k3s agent without interrupting local game processes.
 
+The protected coordinator and its single-writer state have since been promoted
+under Kubernetes, and planned fallback and return exercises preserved its Wolf
+identity and browser homes. That work also showed that leaving public Wolf
+host-native creates a second lifecycle and an implicit GPU-arbitration boundary
+on `xev`. Kubernetes already owns the primitives needed to make that contention
+explicit while preserving the two coordinator trust boundaries.
+
 ## Decision
 
-Move only the protected browser coordinator under Kubernetes lifecycle
-management. Keep the public Helium coordinator host-native on `xev`.
+Manage both Wolf coordinators under Kubernetes, but never combine them. The
+public coordinator exposes cooperative Helium only. The protected coordinator
+retains its independent selector, protected catalog, identity, pairing store,
+client profile, and browser homes. Each coordinator has its own namespace,
+singleton workload, RWO volume, Service, DNS name, backup identity, and rollback
+path.
+
+This amendment supersedes the original staging limit that kept public Helium
+host-native. It does not supersede ADR-0056's separation of public and protected
+Wolf.
 
 Run one protected-browser supervisor Pod. Prefer `xyz` and allow `xev` as the
 fallback worker. The supervisor owns exactly one node-local Wolf coordinator
 and its browser runners. Use a `Recreate` rollout and a single RWO state volume;
 never run two coordinators against the promoted state.
+
+Run public Helium as a second singleton. Prefer `xev` and migrate its existing
+state only after a fresh-profile shadow passes. Keep the host-native public
+coordinator as a read-only rollback point until client, backup, and recovery
+acceptance completes.
 
 Retain Wolf's qualified Docker runner for the first migration. Replacing it
 with a new Kubernetes-native application runner would combine an upstream
@@ -59,23 +81,47 @@ mount path in GitOps.
 
 Both eligible hosts prepare the same pinned Wolf and browser images, stable
 runtime helper paths, NVIDIA CDI support, virtual-input devices, and firewall
-policy. Add a worker/preparation mode to the reusable Wolf module so `xyz` can
-prepare artifacts without starting public or protected coordinators. `xev`
-continues to run public Wolf while also retaining the artifacts required for
-protected-browser fallback.
+policy. Worker preparation must not start either coordinator outside its
+Kubernetes supervisor.
 
 Keep protected profile definitions, PINs, pairing authority, endpoint
 assignments, and migration procedures in private configuration. Public Nix and
 GitOps configuration declares only generic runtime interfaces and workload
 policy.
 
+## Stable services and GPU arbitration
+
+Expose each coordinator through an independent LAN `LoadBalancer` Service. A
+stable VIP follows the ready singleton endpoint; private DNS gives that VIP a
+durable client name. DNS does not select between workers, and clients must not
+carry alternate worker addresses. Keep cluster-wide Service forwarding while
+the preferred disposable worker is not part of the stable load-balancer speaker
+set.
+
+Give protected Wolf higher scheduling priority on the shared fallback GPU. If
+`xyz` remains unavailable and `xev` cannot admit both workloads, public Helium
+becomes pending while protected Wolf attaches its single-writer volume. Resume
+public Helium when capacity returns. Do not attempt simultaneous allocation of
+one physical GPU.
+
+Preferred node affinity affects initial placement but does not move an already
+healthy Pod home. Use a controlled reconciliation step to return protected Wolf
+to `xyz`; only then resume public Helium on `xev`.
+
 ## State and rollout
 
-Use one expandable Longhorn RWO volume for Wolf configuration, pairings, and
-browser homes. Its durable replicas remain on the stable Longhorn storage pool;
-`xyz` may attach the volume but stores no replica.
+Use one expandable Longhorn RWO volume per coordinator for Wolf configuration,
+pairings, and browser homes. Retain the promoted protected volume at 10 GiB.
+Start public Wolf at 5 GiB based on measured state plus growth headroom. Keep
+container images and build caches outside both volumes, and expand a filesystem
+before sustained usage exceeds roughly 70 to 75 percent.
 
-Roll out in four gates:
+Each volume uses three replicas on the stable Longhorn storage pool; `xyz` may
+attach a volume but stores no replica. Replication is not a backup. Both volumes
+must complete the recurring off-volume backup policy and a disposable restore
+test before their host-native rollback point is retired.
+
+The protected migration completed its original four gates:
 
 1. Run a parked shadow workload with a fresh, non-production profile on `xyz`.
 2. Quiesce the host-native protected coordinator, seed and verify the real
@@ -84,14 +130,25 @@ Roll out in four gates:
 4. Retire the host-native protected coordinator only after a bounded rollback
    window.
 
-Keep the former `xev` state read-only during the rollback window. Rollback
+Continue in five follow-up gates:
+
+1. Restore protected-volume replica health and prove backup and restore.
+2. Add the stable protected Service and move every private client profile to it.
+3. Shadow, quiesce, migrate, and verify public Helium as a separate workload.
+4. Qualify priority, protected fallback, controlled failback, and public resume.
+5. Revalidate all clients and regression boundaries before retiring host-native
+   public Wolf.
+
+Keep former host-native state read-only during each rollback window. Rollback
 selects one authoritative copy; it never merges two writable browser trees.
 
 ## Consequences
 
-`xyz` can provide the preferred encoder without becoming a durable cluster
-dependency. A longer `xyz` outage can move the same protected browser state to
-`xev`, while a short workstation restart can return before failover begins.
+`xyz` can provide the preferred protected encoder without becoming a durable
+cluster dependency. A longer `xyz` outage can move the same protected browser
+state to `xev`, while a short workstation restart can return before failover
+begins. Public Helium accepts bounded unavailability when protected recovery
+needs the only remaining qualified GPU.
 
 The first implementation is not a pure containerd workload: Kubernetes owns
 placement, storage attachment, and supervisor lifecycle, while Wolf retains its
@@ -99,9 +156,10 @@ qualified node-local Docker runner. This preserves current browser behavior but
 requires a narrow, audited privileged boundary and identical image preparation
 on both workers.
 
-The public browser, Steam/game containers, physical input, KDE Connect,
-Synergy, and concurrent Moonlight clients remain independent regression
-boundaries.
+Stable Services remove worker addresses from Moonlight configuration, but they
+do not merge identities or pairing stores. Steam/game containers, physical
+input, KDE Connect, Synergy, and concurrent Moonlight clients remain independent
+regression boundaries.
 
 ## Alternatives considered
 
@@ -125,10 +183,23 @@ change than required to establish safe single-writer mobility.
 Rejected. The protected coordinator is a singleton, and RWO avoids an
 unnecessary NFS layer for browser database and profile hot paths.
 
+### Combine public Helium with the protected coordinator
+
+Rejected. A shared coordinator would collapse catalog visibility, pairing,
+profile, and recovery boundaries that ADR-0056 intentionally separated.
+
+### Keep public Helium host-native permanently
+
+Rejected as the target state. It retains a separate lifecycle and leaves GPU
+contention outside Kubernetes scheduling. The host-native service remains only
+as a bounded migration rollback point.
+
 ## Tracking
 
-- Forgejo milestone: **Kubernetes private browser mobility**
-- Issue #187: shadow runtime
-- Issue #188: state migration and rollback
-- Issue #189: restart and fallback qualification
-- Issue #190: host-native retirement
+- Forgejo milestone: **Kubernetes Wolf browser mobility**
+- Completed migration issues: #187–#190
+- Issue #203: stable private Wolf Service and client endpoint
+- Issue #204: independent public Helium Kubernetes migration
+- Issue #205: GPU priority and controlled failback
+- Issue #206: capacity, replica, backup, and restore qualification
+- Issue #207: dual-client acceptance and host-native public retirement
