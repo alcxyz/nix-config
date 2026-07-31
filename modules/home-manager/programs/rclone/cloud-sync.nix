@@ -1,21 +1,28 @@
 # modules/home-manager/programs/rclone/cloud-sync.nix
-{ config, lib, pkgs, ... }:
-
-with lib;
-
-let
-  cfg = config.services.cloud-sync;
-in
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+with lib; let
+  cfg = config.services.cloud-sync;
+in {
   options.services.cloud-sync = {
     enable = mkEnableOption "Cloud Drive Sync (Google Drive, Dropbox & Nextcloud)";
-    
+
     syncInterval = mkOption {
       type = types.str;
       default = "hourly";
       description = "Systemd timer interval for sync";
     };
-    
+
+    filterRules = mkOption {
+      type = types.listOf types.str;
+      default = [];
+      description = "Declarative rclone filter rules shared by enabled cloud sync jobs.";
+    };
+
     googleDrive = mkOption {
       type = types.submodule {
         options = {
@@ -87,15 +94,18 @@ in
   };
 
   config = mkIf cfg.enable {
-    home.packages = [ pkgs.rclone ];
+    home.packages = [pkgs.rclone];
+
+    xdg.configFile."rclone/filters.txt".text =
+      lib.concatStringsSep "\n" cfg.filterRules;
 
     systemd.user.services = mkMerge [
       (mkIf cfg.googleDrive.enable {
         cloud-sync-gdrive = {
           Unit = {
             Description = "Sync Google Drive with rclone";
-            After = [ "network-online.target" ];
-            Wants = [ "network-online.target" ];
+            After = ["network-online.target"];
+            Wants = ["network-online.target"];
           };
           Service = {
             Type = "oneshot";
@@ -110,8 +120,8 @@ in
         cloud-sync-dropbox = {
           Unit = {
             Description = "Sync Dropbox with rclone";
-            After = [ "network-online.target" ];
-            Wants = [ "network-online.target" ];
+            After = ["network-online.target"];
+            Wants = ["network-online.target"];
           };
           Service = {
             Type = "oneshot";
@@ -126,8 +136,8 @@ in
         cloud-sync-nextcloud = {
           Unit = {
             Description = "Sync Nextcloud with rclone";
-            After = [ "network-online.target" ];
-            Wants = [ "network-online.target" ];
+            After = ["network-online.target"];
+            Wants = ["network-online.target"];
           };
           Service = {
             Type = "oneshot";
@@ -149,7 +159,7 @@ in
             OnUnitActiveSec = cfg.syncInterval;
             Persistent = true;
           };
-          Install.WantedBy = [ "timers.target" ];
+          Install.WantedBy = ["timers.target"];
         };
       })
       (mkIf cfg.dropbox.enable {
@@ -160,7 +170,7 @@ in
             OnUnitActiveSec = cfg.syncInterval;
             Persistent = true;
           };
-          Install.WantedBy = [ "timers.target" ];
+          Install.WantedBy = ["timers.target"];
         };
       })
       (mkIf cfg.nextcloud.enable {
@@ -171,7 +181,7 @@ in
             OnUnitActiveSec = cfg.syncInterval;
             Persistent = true;
           };
-          Install.WantedBy = [ "timers.target" ];
+          Install.WantedBy = ["timers.target"];
         };
       })
     ];
