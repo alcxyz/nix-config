@@ -64,7 +64,12 @@ in {
 
   # Enable XYZ-specific programs
   programs.foot.enable = true;
-  programs.hyprland.managed.enable = true;
+  programs.hyprland.managed = {
+    enable = true;
+    extraConfig = ''
+      bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
+    '';
+  };
   programs.niri.managed.enable = true;
   programs.moonlightWolfClient.enable = true;
 
