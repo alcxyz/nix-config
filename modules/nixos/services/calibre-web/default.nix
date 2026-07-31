@@ -5,10 +5,7 @@
   username,
   ...
 }:
-
-with lib;
-
-let
+with lib; let
   cfg = config.services.calibre-web.managed;
   calibreConfigDir = "/var/lib/calibre/config";
   calibreWebPort = 8083;
@@ -26,8 +23,7 @@ let
     chown -R ${lib.escapeShellArg username}:users ${lib.escapeShellArg cfg.configDir}
     chown -R ${lib.escapeShellArg username}:users ${lib.escapeShellArg calibreConfigDir}
   '';
-in
-{
+in {
   options.services.calibre-web.managed = {
     enable = mkEnableOption "Calibre-Web managed as a native systemd service";
 
@@ -45,12 +41,14 @@ in
 
     proxySources = mkOption {
       type = types.listOf types.str;
-      default = [ ];
+      default = [];
       description = "Source addresses allowed to reach Calibre-Web.";
     };
   };
 
   config = mkIf cfg.enable {
+    # Calibre-Web trusts the username header supplied by the Kubernetes
+    # oauth2-proxy. Do not expose the service to clients that could forge it.
     networking.firewall.extraCommands = lib.mkAfter ''
       ${calibreWebFirewallRules}
     '';
@@ -83,8 +81,8 @@ in
     };
 
     systemd.services.calibre-web = {
-      conflicts = [ "docker-calibre-web.service" ];
-      serviceConfig.ExecStartPre = lib.mkBefore [ "+${calibreWebStateSetup}" ];
+      conflicts = ["docker-calibre-web.service"];
+      serviceConfig.ExecStartPre = lib.mkBefore ["+${calibreWebStateSetup}"];
     };
   };
 }
