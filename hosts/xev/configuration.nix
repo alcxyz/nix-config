@@ -31,6 +31,7 @@
   hardware.nvidia.enable = true;
   services.wolf-streaming = {
     enable = true;
+    publicCoordinator = "external";
     sessionIdleTimeoutSeconds = 30 * 60;
     pipelineWatchdog.enable = true;
     vramWatchdog.enable = true;
