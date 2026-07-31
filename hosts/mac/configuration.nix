@@ -18,6 +18,30 @@
     export NB_HOSTNAME="''${NB_HOSTNAME:-${netbirdHostname}}"
     exec ${pkgs.netbird}/bin/netbird "$@"
   '';
+  macSshOn = pkgs.writeShellScriptBin "mac-ssh-on" ''
+    set -euo pipefail
+
+    service="system/com.openssh.sshd"
+    plist="/System/Library/LaunchDaemons/ssh.plist"
+
+    if [ "$(id -u)" -ne 0 ]; then
+      exec sudo -- "$0" "$@"
+    fi
+
+    echo "enabling macOS Remote Login..." >&2
+    /bin/launchctl enable "$service"
+
+    if ! /bin/launchctl print "$service" >/dev/null 2>&1; then
+      /bin/launchctl bootstrap system "$plist"
+    fi
+
+    if /usr/bin/nc -G 3 -z 127.0.0.1 22 >/dev/null 2>&1; then
+      echo "Remote Login is listening on port 22."
+    else
+      echo "Remote Login did not start; a management policy may be blocking it." >&2
+      exit 1
+    fi
+  '';
   xyzLanAddress = "192.168.1.10";
   shellPackages = {
     bash = pkgs.bashInteractive;
@@ -143,7 +167,9 @@ in {
 
     echo "configuring xyz nfs mounts..." >&2
 
-    install -d -m 0755 /Volumes/stash
+    if [ ! -d /Volumes/stash ]; then
+      install -d -m 0755 /Volumes/stash
+    fi
 
     fstab_file=/etc/fstab
     tmp_file="$(mktemp /tmp/nix-darwin-fstab.XXXXXX)"
@@ -164,9 +190,16 @@ in {
       printf '# nix-config xyz nfs end\n'
     } >> "$tmp_file"
 
-    chown root:wheel "$tmp_file"
-    chmod 0644 "$tmp_file"
-    mv "$tmp_file" "$fstab_file"
+    if [ -f "$fstab_file" ] \
+      && grep -Fqx '# nix-config xyz nfs begin' "$fstab_file" \
+      && grep -Fqx '${xyzLanAddress}:/tank/stash /Volumes/stash nfs rw,vers=4,tcp,resvport 0 0' "$fstab_file" \
+      && grep -Fqx '# nix-config xyz nfs end' "$fstab_file"; then
+      rm -f "$tmp_file"
+    else
+      chown root:wheel "$tmp_file"
+      chmod 0644 "$tmp_file"
+      mv "$tmp_file" "$fstab_file"
+    fi
 
     if [ -x /usr/sbin/automount ]; then
       /usr/sbin/automount -vc >/dev/null || true
@@ -213,7 +246,12 @@ in {
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = pkgsets.system.mac ++ [netbirdClient];
+    systemPackages =
+      pkgsets.system.mac
+      ++ [
+        macSshOn
+        netbirdClient
+      ];
     shells = with pkgs; [
       bash
       nushell
