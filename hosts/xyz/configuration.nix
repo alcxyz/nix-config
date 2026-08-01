@@ -258,7 +258,7 @@ in {
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
-  # Only the two intentional physical keyboards pass through Kanata on xyz.
+  # Only the intentional physical keyboards pass through Kanata on xyz.
   # Composite receivers, mice, media controls, and streaming virtual devices
   # remain owned by their native consumers.
   services.kanata.keyboards.main.extraDefCfg = ''
@@ -266,6 +266,7 @@ in {
     linux-dev-names-include (
       "Glove80 Keyboard"
       "Logitech K850"
+      "Corsair Corsair Gaming K65 LUX RGB Keyboard  Keyboard"
     )
   '';
 
