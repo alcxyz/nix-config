@@ -66,6 +66,11 @@ in {
   programs.foot.enable = true;
   programs.hyprland.managed = {
     enable = true;
+    # Match the qualified couch cursor policy. KDE Connect and other absolute
+    # pointer paths can be classified as touch input by the compositor, even
+    # though they are used as mice inside a windowed Moonlight stream.
+    remotePointerInactiveTimeout = 8;
+    remotePointerHideOnTouch = false;
     extraConfig = ''
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';

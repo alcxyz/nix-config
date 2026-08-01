@@ -26,6 +26,12 @@ with lib; let
         sensitivity = ${toString cfg.inputSensitivity}
       }
     ''
+    + optionalString (cfg.remotePointerInactiveTimeout != null || cfg.remotePointerHideOnTouch != null) ''
+      cursor {
+        ${optionalString (cfg.remotePointerInactiveTimeout != null) "inactive_timeout = ${toString cfg.remotePointerInactiveTimeout}"}
+        ${optionalString (cfg.remotePointerHideOnTouch != null) "hide_on_touch = ${boolToString cfg.remotePointerHideOnTouch}"}
+      }
+    ''
   );
   inputDefaultsScript = pkgs.writeShellScript "hyprland-input-defaults" ''
     set -eu
@@ -239,6 +245,24 @@ in {
       type = types.str;
       default = "grp:alt_shift_toggle";
       description = "XKB options applied when the Hyprland graphical session starts.";
+    };
+
+    remotePointerInactiveTimeout = mkOption {
+      type = types.nullOr (types.ints.between 0 20);
+      default = null;
+      description = ''
+        Seconds to retain the cursor after remote pointer activity. Zero
+        disables inactivity hiding; null leaves the compositor default intact.
+      '';
+    };
+
+    remotePointerHideOnTouch = mkOption {
+      type = types.nullOr types.bool;
+      default = null;
+      description = ''
+        Whether touch-classified input hides the cursor. Set false for remote
+        pointer backends whose absolute axes can be classified as touch input.
+      '';
     };
 
     laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for external outputs and lid state";
