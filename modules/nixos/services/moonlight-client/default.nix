@@ -4863,7 +4863,7 @@ in {
 
     remotePointerInactiveTimeout = lib.mkOption {
       type = lib.types.ints.between 0 20;
-      default = 6;
+      default = 8;
       description = ''
         Seconds to retain the couch cursor after remote pointer activity.
         Zero disables inactivity hiding.
