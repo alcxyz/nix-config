@@ -6,16 +6,23 @@ ARG BROWSER_EXECUTABLE
 ARG BROWSER_FAMILY
 ARG DESKTOP_PACKAGES
 
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
 COPY browser.deb /tmp/browser.deb
 
 RUN set -eu; \
     dpkg-deb --extract /tmp/browser.deb /; \
     rm -f /tmp/browser.deb; \
-    if [ -n "${DESKTOP_PACKAGES}" ]; then \
-      apt-get update; \
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ${DESKTOP_PACKAGES}; \
-      rm -rf /var/lib/apt/lists/*; \
-    fi; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      fonts-noto-color-emoji \
+      fonts-noto-core \
+      ${DESKTOP_PACKAGES}; \
+    rm -rf /var/lib/apt/lists/*; \
+    fc-cache -f; \
+    test "$(locale charmap)" = UTF-8; \
+    fc-match -f '%{family}\n' 'Noto Color Emoji' | grep -F 'Noto Color Emoji'; \
     test -x "${BROWSER_EXECUTABLE}"
 
 COPY --chmod=0755 startup.sh /opt/gow/startup-app.sh

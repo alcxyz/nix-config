@@ -5,11 +5,22 @@ FROM ${BASE_APP_IMAGE}
 ARG BROWSER_EXECUTABLE
 ARG BROWSER_FAMILY
 
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
 COPY browser-store.tar /tmp/browser-store.tar
 
 RUN set -eu; \
     tar --extract --file=/tmp/browser-store.tar --directory=/; \
     rm -f /tmp/browser-store.tar; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      fonts-noto-color-emoji \
+      fonts-noto-core; \
+    rm -rf /var/lib/apt/lists/*; \
+    fc-cache -f; \
+    test "$(locale charmap)" = UTF-8; \
+    fc-match -f '%{family}\n' 'Noto Color Emoji' | grep -F 'Noto Color Emoji'; \
     test -x "${BROWSER_EXECUTABLE}"
 
 COPY --chmod=0755 startup.sh /opt/gow/startup-app.sh
