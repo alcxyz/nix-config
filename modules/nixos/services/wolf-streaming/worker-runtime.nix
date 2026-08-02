@@ -5,6 +5,7 @@
   ...
 }: let
   runtimeRoot = "/run/nixbox-private-browser-worker";
+  publicRuntimeRoot = "/run/nixbox-public-browser-worker";
   nvidiaPackage = config.hardware.nvidia.package;
   nvrtcRuntime = pkgs.callPackage ./nvrtc-runtime.nix {};
   workerStreamLayout = pkgs.writeShellApplication {
@@ -126,6 +127,8 @@ in {
   systemd.tmpfiles.rules = [
     "d ${runtimeRoot} 0700 root root - -"
     "d ${runtimeRoot}/runtime 0700 root root - -"
+    "d ${publicRuntimeRoot} 0700 root root - -"
+    "d ${publicRuntimeRoot}/runtime 0700 root root - -"
     "L+ ${runtimeRoot}/libnvidia-allocator.so.1 - - - - ${nvidiaPackage}/lib/libnvidia-allocator.so.1"
     "L+ ${runtimeRoot}/nvrtc - - - - ${nvrtcRuntime}"
     "L+ ${runtimeRoot}/10_nvidia.json - - - - ${nvidiaPackage}/share/glvnd/egl_vendor.d/10_nvidia.json"
@@ -134,15 +137,21 @@ in {
   environment.systemPackages = [workerStreamLayout];
 
   # The Kubernetes supervisor starts Wolf with host networking. Expose its
-  # isolated Moonlight port set on every qualified worker so a rescheduled pod
-  # remains reachable without host-specific firewall exceptions.
+  # isolated Moonlight port sets on every qualified worker so either
+  # rescheduled singleton remains reachable without host-specific exceptions.
   networking.firewall = {
     allowedTCPPorts = [
+      47984
+      47989
+      48010
       48984
       48989
       49010
     ];
     allowedUDPPorts = [
+      47999
+      48100
+      48200
       48999
       49100
       49200
