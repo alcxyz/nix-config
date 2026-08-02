@@ -4,7 +4,7 @@
 
 **Date:** 2026-07-30
 
-**Amended:** 2026-07-31
+**Amended:** 2026-08-02
 
 **Applies to:** `hosts/xyz`, `hosts/xev`, Wolf, public and protected browser
 sessions, Kubernetes GPU workers
@@ -63,7 +63,8 @@ runtime rewrite with a state migration and is outside this milestone. The
 supervisor may use the selected node's Docker API, but this broad capability is
 an explicit trusted-host boundary:
 
-- only the protected-browser namespace may run the supervisor;
+- only the public-browser and private-browser namespaces may run their
+  respective supervisors;
 - the workload is restricted to declared protected-browser workers;
 - the Docker socket and host devices are never exposed through a network
   service;
@@ -79,10 +80,10 @@ validate that it resolves to the expected Longhorn filesystem, and fail closed
 instead of falling back to node-local state. Do not embed a transient kubelet
 mount path in GitOps.
 
-Both eligible hosts prepare the same pinned Wolf and browser images, stable
-runtime helper paths, NVIDIA CDI support, virtual-input devices, and firewall
-policy. Worker preparation must not start either coordinator outside its
-Kubernetes supervisor.
+Both eligible hosts prepare the same pinned Wolf and browser images, separate
+public and protected runtime paths, NVIDIA CDI support, virtual-input devices,
+and both isolated Moonlight firewall port sets. Worker preparation must not
+start either coordinator outside its Kubernetes supervisor.
 
 Keep protected profile definitions, PINs, pairing authority, endpoint
 assignments, and migration procedures in private configuration. Public Nix and
@@ -98,15 +99,20 @@ carry alternate worker addresses. Keep cluster-wide Service forwarding while
 the preferred disposable worker is not part of the stable load-balancer speaker
 set.
 
-Give protected Wolf higher scheduling priority on the shared fallback GPU. If
-`xyz` remains unavailable and `xev` cannot admit both workloads, public Helium
-becomes pending while protected Wolf attaches its single-writer volume. Resume
-public Helium when capacity returns. Do not attempt simultaneous allocation of
-one physical GPU.
+Advertise exactly two time-sliced `nvidia.com/gpu` shares per qualified physical
+GPU. Each Wolf singleton requests one share, requests larger than one are
+rejected, and a third Kubernetes GPU workload is not admitted without a new
+capacity decision. Prefer protected Wolf on `xyz` and public Wolf on `xev`, but
+allow either singleton to use either qualified worker.
+
+Time-slicing is scheduler overcommit rather than GPU partitioning. It does not
+isolate VRAM, faults, or performance, and host-native GPU consumers remain
+outside Kubernetes accounting. Protected Wolf retains higher priority if the
+two advertised shares are exhausted.
 
 Preferred node affinity affects initial placement but does not move an already
-healthy Pod home. Use a controlled reconciliation step to return protected Wolf
-to `xyz`; only then resume public Helium on `xev`.
+healthy Pod home. Use a controlled reconciliation step to return each singleton
+to its preferred worker.
 
 ## State and rollout
 
@@ -130,13 +136,15 @@ The protected migration completed its original four gates:
 4. Retire the host-native protected coordinator only after a bounded rollback
    window.
 
-Continue in five follow-up gates:
+Continue in six follow-up gates:
 
 1. Restore protected-volume replica health and prove backup and restore.
 2. Add the stable protected Service and move every private client profile to it.
 3. Shadow, quiesce, migrate, and verify public Helium as a separate workload.
-4. Qualify priority, protected fallback, controlled failback, and public resume.
-5. Revalidate all clients and regression boundaries before retiring host-native
+4. Prepare both runtime roots and Moonlight port sets on every qualified worker.
+5. Enable two time-sliced shares, make public Wolf eligible for both workers,
+   and qualify simultaneous admission, worker loss, priority, and failback.
+6. Revalidate all clients and regression boundaries before retiring host-native
    public Wolf.
 
 Keep former host-native state read-only during each rollback window. Rollback
@@ -147,8 +155,12 @@ selects one authoritative copy; it never merges two writable browser trees.
 `xyz` can provide the preferred protected encoder without becoming a durable
 cluster dependency. A longer `xyz` outage can move the same protected browser
 state to `xev`, while a short workstation restart can return before failover
-begins. Public Helium accepts bounded unavailability when protected recovery
-needs the only remaining qualified GPU.
+begins. Public Helium can fall back to `xyz`, and both singletons can remain
+admitted when only one qualified physical GPU is available.
+
+Time-slicing removes the scheduler admission deadlock but does not create more
+GPU capacity. Concurrent browser sessions or a host-native GPU workload may
+degrade one another.
 
 The first implementation is not a pure containerd workload: Kubernetes owns
 placement, storage attachment, and supervisor lifecycle, while Wolf retains its
