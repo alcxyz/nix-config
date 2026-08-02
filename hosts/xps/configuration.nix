@@ -388,44 +388,6 @@ in {
     browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
-    browserStreamLayoutCommand = ''
-      case "$COUCH_STREAM_APPLICATION" in
-        Helium)
-          coordinator_args=()
-          runners=(WolfHeliumCoop)
-          ;;
-        "Wolf UI")
-          coordinator_args=(
-            --coordinator wolf-protected
-            --runtime-directory /run/wolf-streaming/protected/runtime
-          )
-          runners=(
-            WolfHeliumPrivate
-            WolfBrave
-            WolfChromium
-            WolfFirefox
-            WolfZen
-          )
-          ;;
-        *) exit 0 ;;
-      esac
-      ${lib.getExe pkgs.openssh} \
-        -o BatchMode=yes \
-        -o ConnectTimeout=5 \
-        xev \
-        wolf-stream-layout \
-          "''${coordinator_args[@]}" \
-          --presentation-scale "$COUCH_PRESENTATION_SCALE" \
-          "$COUCH_KEYBOARD_LAYOUT" \
-          "''${runners[@]}"
-    '';
-    browserStreamPrepareCommand = ''
-      ${lib.getExe pkgs.openssh} \
-        -o BatchMode=yes \
-        -o ConnectTimeout=5 \
-        xev \
-        wolf-clear-peer-sessions
-    '';
     streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
     streamArguments = [
