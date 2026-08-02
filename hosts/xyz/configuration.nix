@@ -14,22 +14,84 @@
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
   };
+  runtimePool = "xruntime";
+  runtimeDatasets = {
+    docker = "${runtimePool}/runtime/docker";
+    k3s = "${runtimePool}/runtime/k3s";
+    steam-headless = "${runtimePool}/appstate/steam-headless";
+  };
   appStateDatasets = {
     calibre = "xpool/appstate/calibre";
     calibre-web = "xpool/appstate/calibre-web";
     plex = "xpool/appstate/plex";
     qbittorrent = "xpool/appstate/qbittorrent";
     stash = "xpool/appstate/stash";
-    steam-headless = "xpool/appstate/steam-headless";
+    steam-headless = runtimeDatasets.steam-headless;
   };
   appStateBackupPool = "hitachi";
   appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
+  appStateReplicationCommands = lib.concatMapStringsSep "\n" (name: ''
+    replicate_dataset \
+      ${lib.escapeShellArg appStateDatasets.${name}} \
+      ${lib.escapeShellArg "${appStateBackupRoot}/${name}"} \
+      include-parent
+  '') (builtins.attrNames appStateDatasets);
   k8sBackupDataset = "tank/k8s-backups";
   k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
   homeBackupDataset = "xpool/home";
   homeBackupRoot = "${appStateBackupPool}/xyz/home";
   gamesDataset = "${appStateBackupPool}/games";
   gamesMountpoint = "/hitachi/games";
+  runtimeStoragePolicy = pkgs.writeShellScriptBin "xyz-runtime-storage-policy" ''
+    set -euo pipefail
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.util-linux
+        zfsKernelPkgs.zfs
+      ]
+    }
+
+    pool=${lib.escapeShellArg runtimePool}
+    if [ "$(zpool list -H -o health "$pool" 2>/dev/null || true)" != ONLINE ]; then
+      echo "runtime pool '$pool' is unavailable or unhealthy" >&2
+      exit 1
+    fi
+
+    zpool set autotrim=off "$pool"
+
+    for dataset in \
+      ${lib.escapeShellArg runtimeDatasets.docker} \
+      ${lib.escapeShellArg runtimeDatasets.k3s} \
+      ${lib.escapeShellArg runtimeDatasets.steam-headless}; do
+      if ! zfs list -H "$dataset" >/dev/null 2>&1; then
+        echo "required runtime dataset '$dataset' is missing" >&2
+        exit 1
+      fi
+      zfs set compression=zstd atime=off xattr=sa acltype=posixacl "$dataset"
+    done
+
+    zfs set quota=100G ${lib.escapeShellArg runtimeDatasets.docker}
+    zfs set quota=50G ${lib.escapeShellArg runtimeDatasets.k3s}
+    zfs set quota=40G refreservation=20G ${lib.escapeShellArg runtimeDatasets.steam-headless}
+
+    check_mount() {
+      local mountpoint="$1"
+      local expected="$2"
+      local source
+
+      source="$(findmnt -rn -o SOURCE --target "$mountpoint" 2>/dev/null || true)"
+      if [ "$source" != "$expected" ]; then
+        echo "$mountpoint is mounted from '$source', expected '$expected'" >&2
+        exit 1
+      fi
+    }
+
+    check_mount /var/lib/docker ${lib.escapeShellArg runtimeDatasets.docker}
+    check_mount /var/lib/rancher/k3s ${lib.escapeShellArg runtimeDatasets.k3s}
+    check_mount /var/lib/steam-headless ${lib.escapeShellArg runtimeDatasets.steam-headless}
+  '';
   localBackup = pkgs.writeShellScriptBin "xyz-local-backup" ''
     set -euo pipefail
 
@@ -148,7 +210,7 @@
 
     case "$backup_name" in
       appstate)
-        replicate_dataset xpool/appstate ${lib.escapeShellArg appStateBackupRoot} skip-parent
+        ${appStateReplicationCommands}
         ;;
       k8s)
         replicate_dataset ${lib.escapeShellArg k8sBackupDataset} ${lib.escapeShellArg k8sBackupRoot} include-parent
@@ -410,10 +472,12 @@ in {
   environment.systemPackages = [
     localBackup
     gamesDatasetPrepare
+    runtimeStoragePolicy
     zfsKernelPkgs.zfs
   ];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
+  boot.zfs.extraPools = [runtimePool];
   boot.zfs.forceImportRoot = false;
   swapDevices = lib.mkForce [
     {
@@ -445,6 +509,16 @@ in {
   };
   fileSystems."/var/lib/stash" = {
     device = appStateDatasets.stash;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/docker" = {
+    device = runtimeDatasets.docker;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/rancher/k3s" = {
+    device = runtimeDatasets.k3s;
     fsType = "zfs";
     options = ["nofail"];
   };
@@ -490,9 +564,59 @@ in {
   systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
 
-  systemd.services.xyz-appstate-backup = mkLocalBackupService "appstate" "Replicate xyz appstate datasets to the local backup pool";
+  services.sanoid = {
+    enable = true;
+    datasets.${runtimeDatasets.steam-headless} = {
+      hourly = 24;
+      daily = 14;
+      monthly = 3;
+      yearly = 0;
+      autosnap = true;
+      autoprune = true;
+    };
+  };
+
+  systemd.services.xyz-runtime-storage-policy = {
+    description = "Enforce and verify xyz runtime storage policy";
+    after = [
+      "zfs-mount.service"
+      "var-lib-docker.mount"
+      "var-lib-rancher-k3s.mount"
+      "var-lib-steam\\x2dheadless.mount"
+    ];
+    requires = [
+      "zfs-mount.service"
+      "var-lib-docker.mount"
+      "var-lib-rancher-k3s.mount"
+      "var-lib-steam\\x2dheadless.mount"
+    ];
+    before = [
+      "docker.service"
+      "k3s.service"
+      "sanoid.service"
+      "xyz-appstate-backup.service"
+    ];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${runtimeStoragePolicy}/bin/xyz-runtime-storage-policy";
+    };
+  };
+
+  systemd.services.xyz-appstate-backup =
+    lib.recursiveUpdate
+    (mkLocalBackupService "appstate" "Replicate xyz appstate datasets to the local backup pool")
+    {
+      after = ["xyz-runtime-storage-policy.service"];
+      requires = ["xyz-runtime-storage-policy.service"];
+    };
   systemd.services.xyz-k8s-backup = mkLocalBackupService "k8s" "Replicate xyz k8s backup dataset to the local backup pool";
   systemd.services.xyz-home-backup = mkLocalBackupService "home" "Replicate xyz home dataset to the local backup pool";
+  systemd.services.sanoid = {
+    after = ["xyz-runtime-storage-policy.service"];
+    requires = ["xyz-runtime-storage-policy.service"];
+  };
 
   systemd.services.xyz-games-dataset = {
     description = "Prepare xyz games dataset on hitachi";
@@ -517,11 +641,13 @@ in {
       "zfs-mount.service"
       "zfs-import.target"
       "zfs-auto-unlock.service"
+      "xyz-runtime-storage-policy.service"
     ];
 
     requires = [
       "zfs-mount.service"
       "zfs-auto-unlock.service"
+      "xyz-runtime-storage-policy.service"
     ];
   };
 
@@ -690,6 +816,10 @@ in {
       "--node-label=nixbox.alc.xyz/protected-browser-worker=true"
       "--node-taint=nixbox.alc.xyz/ephemeral-gpu=true:NoSchedule"
     ];
+  };
+  systemd.services.k3s = {
+    after = ["xyz-runtime-storage-policy.service"];
+    requires = ["xyz-runtime-storage-policy.service"];
   };
 
   # Longhorn still needs writable engine binaries and logs on an attachment
