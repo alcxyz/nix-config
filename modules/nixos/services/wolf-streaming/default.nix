@@ -13,7 +13,7 @@
   kdeConnectExecutable = "${kdeConnectPackage}/bin/kdeconnectd";
   isolatedProtectedBackend =
     cfg.protectedProfile.definitionFile != null && cfg.protectedProfile.isolateBackend;
-  publicRuntimeDirectory = "/run/wolf-streaming/runtime";
+  publicRuntimeDirectory = cfg.publicRuntimeDirectory;
   protectedRuntimeDirectory = "/run/wolf-streaming/protected/runtime";
   protectedStateDirectory = cfg.protectedProfile.stateDirectory;
   protectedPort = standard: standard + cfg.protectedProfile.portOffset;
@@ -1031,6 +1031,15 @@ in {
       '';
     };
 
+    publicRuntimeDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "/run/wolf-streaming/runtime";
+      description = ''
+        Host runtime directory containing the public Wolf coordinator socket.
+        External coordinators must set this to their node-local runtime path.
+      '';
+    };
+
     vramWatchdog = {
       enable = lib.mkEnableOption "automatic recovery from sustained Wolf GPU-memory growth";
 
@@ -1229,6 +1238,10 @@ in {
       {
         assertion = lib.hasPrefix "/" cfg.stateDirectory;
         message = "services.wolf-streaming.stateDirectory must be an absolute path";
+      }
+      {
+        assertion = lib.hasPrefix "/" publicRuntimeDirectory;
+        message = "services.wolf-streaming.publicRuntimeDirectory must be an absolute path";
       }
       {
         assertion = lib.hasPrefix "/dev/dri/renderD" cfg.renderNode;

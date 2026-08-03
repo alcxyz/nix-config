@@ -32,6 +32,7 @@
   services.wolf-streaming = {
     enable = true;
     publicCoordinator = "external";
+    publicRuntimeDirectory = "/run/nixbox-public-browser-worker/runtime";
     sessionIdleTimeoutSeconds = 30 * 60;
     pipelineWatchdog.enable = true;
     vramWatchdog.enable = true;
