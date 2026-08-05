@@ -290,12 +290,6 @@
     icon_png_path = "https://helium.computer/favicon.png";
     start_virtual_compositor = true;
     start_audio_server = true;
-    # A cooperative session switches between independent interpipe producers.
-    # Keep that handoff in ordinary system memory: NVIDIA CUDA-memory caps can
-    # remain pinned to the first producer and leave the consumer black after a
-    # lobby switch. The downstream Wolf pipeline still uploads and encodes on
-    # the GPU.
-    video.producer_buffer_caps = "video/x-raw";
     runner = {
       type = "process";
       run_cmd = "sleep infinity";
@@ -456,7 +450,7 @@
         --lobby-name Helium \
         --runner-name WolfHeliumCoop \
         --runner-state-folder ${lib.escapeShellArg "profile-data/moonlight-profile-id/WolfHeliumCoop"} \
-        --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw"} \
+        --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw(memory:CUDAMemory)"} \
         --kdeconnect-executable ${
         lib.escapeShellArg (
           if browserCfg.helium.kdeConnect.enable

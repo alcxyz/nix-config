@@ -242,7 +242,11 @@ def parse_args():
     parser.add_argument("--kdeconnect-executable", default="")
     parser.add_argument("--video-producer-buffer-caps", required=True)
     parser.add_argument("--poll-seconds", type=float, default=0.5)
-    parser.add_argument("--initial-join-delay", type=float, default=5.0)
+    # Creating a lobby returns after its runner has started, not after the
+    # browser has produced its first usable frame. Cold browser starts can take
+    # longer than five seconds and switching before then leaves the Moonlight
+    # consumer black until it reconnects to the warm lobby.
+    parser.add_argument("--initial-join-delay", type=float, default=15.0)
     parser.add_argument("--existing-join-delay", type=float, default=1.0)
     return parser.parse_args()
 
