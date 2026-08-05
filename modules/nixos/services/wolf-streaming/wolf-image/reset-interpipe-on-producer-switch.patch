@@ -90,12 +90,12 @@ index 20e3ca1..91c9d93 100644
              if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), pipe_name.c_str())) {
 -              /* Perform the switch */
 +              /*
-+               * READY clears the old producer's negotiated caps from the
++               * NULL clears the old producer's sticky caps from the
 +               * downstream NVIDIA elements. Changing listen-to on a live
 +               * pipeline can otherwise leave the consumer permanently black
 +               * when the lobby producer selects a different raw format.
 +               */
-+              if (gst_element_set_state(pipeline.get(), GST_STATE_READY) == GST_STATE_CHANGE_FAILURE) {
++              if (gst_element_set_state(pipeline.get(), GST_STATE_NULL) == GST_STATE_CHANGE_FAILURE) {
 +                logs::log(logs::error, "[GSTREAMER] Failed to reset video pipeline for {}", sess_id);
 +              }
 +              gst_element_get_state(pipeline.get(), nullptr, nullptr, 2 * GST_SECOND);
@@ -124,7 +124,7 @@ index 20e3ca1..91c9d93 100644
              auto pipe_name = fmt::format("interpipesrc_{}_audio", session_id);
              if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), pipe_name.c_str())) {
 -              /* Perform the switch */
-+              if (gst_element_set_state(pipeline.get(), GST_STATE_READY) == GST_STATE_CHANGE_FAILURE) {
++              if (gst_element_set_state(pipeline.get(), GST_STATE_NULL) == GST_STATE_CHANGE_FAILURE) {
 +                logs::log(logs::error, "[GSTREAMER] Failed to reset audio pipeline for {}", session_id);
 +              }
 +              gst_element_get_state(pipeline.get(), nullptr, nullptr, 2 * GST_SECOND);
