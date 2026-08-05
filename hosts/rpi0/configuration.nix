@@ -140,7 +140,10 @@ in {
     ];
 
     browserStreamHost = "Wolf";
-    browserStreamApplication = "Helium";
+    # Direct DRM must not depend on Wolf's cooperative live-producer handoff:
+    # that path can leave a hardware-decoded appliance session black. The
+    # shared Helium lobby remains available through Wolf UI when requested.
+    browserStreamApplication = "Helium (Individual)";
     browserAbsoluteMouseSensitivity = 2.0;
     browserAbsoluteMousePollIntervalMs = 1;
     browserStreamSelectorHost = "Wolf User";

@@ -383,7 +383,10 @@ in {
     # XPS is a fixed LAN client. Pin every Moonlight endpoint field to LAN so
     # host discovery cannot silently move latency-sensitive streams onto VPN.
     browserStreamHost = "Wolf";
-    browserStreamApplication = "Helium";
+    # Use the direct producer for the launcher path. Cooperative Helium remains
+    # available through Wolf UI without making ordinary browser launches rely
+    # on a live GStreamer producer switch.
+    browserStreamApplication = "Helium (Individual)";
     browserStreamSelectorHost = "Wolf User";
     browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";
