@@ -18,7 +18,7 @@
   protectedStateDirectory = cfg.protectedProfile.stateDirectory;
   protectedPort = standard: standard + cfg.protectedProfile.portOffset;
   wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
-  wolfPatchSet = "altgr-idle-presentation-interpipe-media-v5";
+  wolfPatchSet = "altgr-idle-presentation-interpipe-media-v6";
   wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
   wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}";
   wolfSource = pkgs.fetchFromGitHub {
@@ -35,6 +35,7 @@
       ./wolf-image/client-presentation-scale.patch
       ./wolf-image/idle-session-timeout.patch
       ./wolf-image/reset-interpipe-on-producer-switch.patch
+      ./wolf-image/app-producer-buffer-caps.patch
       ./wolf-image/media-keys.patch
     ];
   };
@@ -289,6 +290,12 @@
     icon_png_path = "https://helium.computer/favicon.png";
     start_virtual_compositor = true;
     start_audio_server = true;
+    # A cooperative session switches between independent interpipe producers.
+    # Keep that handoff in ordinary system memory: NVIDIA CUDA-memory caps can
+    # remain pinned to the first producer and leave the consumer black after a
+    # lobby switch. The downstream Wolf pipeline still uploads and encodes on
+    # the GPU.
+    video.producer_buffer_caps = "video/x-raw";
     runner = {
       type = "process";
       run_cmd = "sleep infinity";
@@ -449,7 +456,7 @@
         --lobby-name Helium \
         --runner-name WolfHeliumCoop \
         --runner-state-folder ${lib.escapeShellArg "profile-data/moonlight-profile-id/WolfHeliumCoop"} \
-        --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw(memory:CUDAMemory)"} \
+        --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw"} \
         --kdeconnect-executable ${
         lib.escapeShellArg (
           if browserCfg.helium.kdeConnect.enable
