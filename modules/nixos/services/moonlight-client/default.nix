@@ -1430,6 +1430,7 @@
     invocation,
     application ? null,
     prepareCommand ? null,
+    retryOnExit ? false,
   }:
     pkgs.writeShellApplication {
       inherit name;
@@ -1509,40 +1510,72 @@
           >/dev/null 2>&1 || true
 
         ${lib.optionalString (prepareCommand != null) "${prepareCommand}\n"}
-        ${lib.getExe endpointSetup}
-        ${lib.optionalString (
+        run_moonlight() {
+          ${lib.getExe endpointSetup}
+          ${lib.optionalString (
           cfg.directDrmAudioOutputByConnector != {}
         ) "${lib.getExe directDrmAudioOutputSetup}"}
-        ${invocation} &
-        moonlight_pid=$!
+          ${invocation} &
+          moonlight_pid=$!
 
-        ${lib.optionalString (cfg.browserStreamLayoutCommand != null) ''
-          (
-            COUCH_KEYBOARD_LAYOUT="$(
-              tr -d '[:space:]' \
-                < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
-                2>/dev/null \
-                || true
-            )"
-            if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
-              configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
-              COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
-            fi
-            export COUCH_KEYBOARD_LAYOUT
-            export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
-            export COUCH_STREAM_APPLICATION=${
-            lib.escapeShellArg (
-              if application == null
-              then ""
-              else application
-            )
-          }
-            ${cfg.browserStreamLayoutCommand}
-          ) &
-        ''}
+          ${lib.optionalString (cfg.browserStreamLayoutCommand != null) ''
+            (
+              COUCH_KEYBOARD_LAYOUT="$(
+                tr -d '[:space:]' \
+                  < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
+                  2>/dev/null \
+                  || true
+              )"
+              if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
+                configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+                COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
+              fi
+              export COUCH_KEYBOARD_LAYOUT
+              export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
+              export COUCH_STREAM_APPLICATION=${
+              lib.escapeShellArg (
+                if application == null
+                then ""
+                else application
+              )
+            }
+              ${cfg.browserStreamLayoutCommand}
+            ) &
+          ''}
 
-        wait "$moonlight_pid"
-        return_to_session "$?"
+          if wait "$moonlight_pid"; then
+            status=0
+          else
+            status=$?
+          fi
+        }
+
+        ${
+          if retryOnExit
+          then ''
+            # Persistent direct-display appliances should recover after a
+            # coordinator or network outage without returning to the greeter.
+            # An explicit mode change is still authoritative: its control path
+            # updates the mode file before terminating Moonlight.
+            while true; do
+              run_moonlight
+              current_mode="$(
+                tr -d '[:space:]' \
+                  < ${lib.escapeShellArg modeStateFile} \
+                  2>/dev/null \
+                  || true
+              )"
+              if [ "''${current_mode%%:*}" != "$active_mode" ]; then
+                return_to_session "$status"
+              fi
+              sleep 2
+            done
+          ''
+          else ''
+            run_moonlight
+            return_to_session "$status"
+          ''
+        }
       '';
     };
   directDrmBrowserSession = mkDirectDrmSession {
@@ -1552,6 +1585,7 @@
     invocation = directDrmBrowserMoonlightInvocation;
     application = cfg.browserStreamApplication;
     prepareCommand = cfg.browserStreamPrepareCommand;
+    retryOnExit = persistentDirectDrmBrowserDefault;
   };
   directDrmBrowserSelectorSession = mkDirectDrmSession {
     name = "moonlight-direct-drm-browser-selector-session";
