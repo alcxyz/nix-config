@@ -100,7 +100,11 @@ in {
     batteryMonitorTimeout = 0;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
-  services.hyprlock.enable = true;
+  services.hyprlock = {
+    enable = true;
+    turnOffDisplaysOnLock = true;
+    displayOffDelay = 360;
+  };
   services.waynergy = {
     enable = true;
     screenName = "xyz";
