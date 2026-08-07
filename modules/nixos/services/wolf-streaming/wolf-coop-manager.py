@@ -66,7 +66,9 @@ def find_app(apps, title):
     return next((app for app in apps if app.get("title") == title), None)
 
 
-def cooperative_runner(individual_app, runner_name, kdeconnect_executable):
+def cooperative_runner(
+    individual_app, runner_name, kdeconnect_executable, kdeconnect_host_port
+):
     runner = copy.deepcopy(individual_app["runner"])
     runner["name"] = runner_name
 
@@ -98,10 +100,17 @@ def cooperative_runner(individual_app, runner_name, kdeconnect_executable):
     ports = [
         item
         for item in runner.get("ports", [])
-        if item not in ("1716:1716", "1716:1716:tcp", "1716:1716:udp")
+        if item != "1716:1716"
+        and not item.endswith(":1716:tcp")
+        and not item.endswith(":1716:udp")
     ]
     if kdeconnect_executable:
-        ports.extend(["1716:1716:tcp", "1716:1716:udp"])
+        ports.extend(
+            [
+                f"{kdeconnect_host_port}:1716:tcp",
+                f"{kdeconnect_host_port}:1716:udp",
+            ]
+        )
     runner["ports"] = ports
 
     create_options = json.loads(runner.get("base_create_json") or "{}")
@@ -119,6 +128,7 @@ def create_lobby_payload(
     runner_name,
     runner_state_folder,
     kdeconnect_executable,
+    kdeconnect_host_port,
     video_producer_buffer_caps,
 ):
     render_node = individual_app["render_node"]
@@ -142,7 +152,10 @@ def create_lobby_payload(
         "client_settings": session.get("client_settings"),
         "runner_state_folder": runner_state_folder,
         "runner": cooperative_runner(
-            individual_app, runner_name, kdeconnect_executable
+            individual_app,
+            runner_name,
+            kdeconnect_executable,
+            kdeconnect_host_port,
         ),
     }
 
@@ -195,6 +208,7 @@ def reconcile_once(api, args):
                 args.runner_name,
                 args.runner_state_folder,
                 args.kdeconnect_executable,
+                args.kdeconnect_host_port,
                 args.video_producer_buffer_caps,
             )
             result = api.post("/api/v1/lobbies/create", payload)
@@ -240,11 +254,15 @@ def parse_args():
     parser.add_argument("--runner-name", required=True)
     parser.add_argument("--runner-state-folder", required=True)
     parser.add_argument("--kdeconnect-executable", default="")
+    parser.add_argument("--kdeconnect-host-port", type=int, default=1816)
     parser.add_argument("--video-producer-buffer-caps", required=True)
     parser.add_argument("--poll-seconds", type=float, default=0.5)
     parser.add_argument("--initial-join-delay", type=float, default=5.0)
     parser.add_argument("--existing-join-delay", type=float, default=1.0)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not 1 <= args.kdeconnect_host_port <= 65535:
+        parser.error("--kdeconnect-host-port must be between 1 and 65535")
+    return args
 
 
 def main():

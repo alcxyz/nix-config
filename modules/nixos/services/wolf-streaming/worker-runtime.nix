@@ -6,6 +6,7 @@
 }: let
   runtimeRoot = "/run/nixbox-private-browser-worker";
   publicRuntimeRoot = "/run/nixbox-public-browser-worker";
+  publicKdeConnectHostPort = 1816;
   nvidiaPackage = config.hardware.nvidia.package;
   nvrtcRuntime = pkgs.callPackage ./nvrtc-runtime.nix {};
   workerStreamLayout = pkgs.writeShellApplication {
@@ -141,6 +142,7 @@ in {
   # rescheduled singleton remains reachable without host-specific exceptions.
   networking.firewall = {
     allowedTCPPorts = [
+      publicKdeConnectHostPort
       47984
       47989
       48010
@@ -149,6 +151,7 @@ in {
       49010
     ];
     allowedUDPPorts = [
+      publicKdeConnectHostPort
       47999
       48100
       48200

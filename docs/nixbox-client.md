@@ -8,8 +8,8 @@ forking its launch, input, audio, or recovery logic.
 
 - a controller-first Hyprland session with remote Steam and browser streams;
 - a compact, auto-hiding DMS shell with idle locking and suspension disabled;
-- KDE Connect keyboard, pointer, click, and scrolling support through the
-  XWayland/Hyprland bridge;
+- KDE Connect keyboard, pointer, click, and scrolling support through either
+  the XWayland/Hyprland bridge or a direct-display uinput bridge;
 - LAN-only Waynergy input from a Synergy server, using an output-bound WLR
   pointer so movement follows the active couch display;
 - compositor-owned login, logout, reboot, and shutdown transitions, with an
@@ -68,14 +68,14 @@ remains fixed at 1920×1080 at 60 Hz. Moonlight scales presentation locally;
 absolute pointer input still covers the complete remote desktop because its
 coordinates follow the requested stream resolution.
 
-Direct-display mode deliberately suspends host-local, compositor-bound DMS, KDE
-Connect, and Waynergy processes. KDE Connect running inside a remote browser
-capsule remains available through that stream. Physical keyboard, mouse, and
-controller input continue to reach Moonlight directly, but that does not imply
-that a host-side shortcut listener is active. Exiting a one-shot stream restores
-its return mode and Hyprland starts the suspended user services when that return
-mode is composited. Use the normal Hyprland/XWayland stream path when host-local
-phone or Synergy input is required.
+Direct-display mode deliberately suspends host-local compositor-bound DMS and
+Waynergy processes. KDE Connect instead restarts on an isolated Xvfb display;
+its narrowly scoped preload shim forwards keyboard, pointer, click, and scroll
+events into a user-owned uinput device that Moonlight reads like physical
+input. Physical keyboard, mouse, and controller input continue to reach
+Moonlight directly. Exiting a one-shot stream restores its return mode, and
+Hyprland restarts KDE Connect on XWayland together with the other composited
+services. Synergy still requires the normal Hyprland/Wayland stream path.
 
 ## Recovery behavior
 
@@ -104,8 +104,9 @@ bounded service-stop fallback remains the final recovery boundary.
 
 ## Switching and recovery workflow
 
-Use the normal Helium, protected-user, and Steam launchers when DMS, KDE
-Connect, or Synergy input is needed during the stream. The corresponding
+Use the normal Helium, protected-user, and Steam launchers when DMS or Synergy
+input is needed during the stream. Host-local KDE Connect remains available in
+both composited and direct-display modes. The corresponding
 direct-display launchers are one-shot sessions: they save the current
 compositor mode and keyboard layout, restart the greetd session with Moonlight
 owning DRM, and return to the saved mode when Moonlight exits. A direct-display
@@ -212,8 +213,9 @@ systemctl --user is-active couch-dms.service kdeconnect.service waynergy.service
 couch-audio-output status
 ```
 
-Direct-display mode intentionally has no host-local compositor-bound phone or
-Synergy path. Use physical input to operate or exit it and SSH to select or
-recover the local mode. KDE Connect inside a remote browser capsule remains a
-remote-browser input path and cannot change the compact client's local session
-mode.
+Direct-display mode intentionally has no host-local Synergy path. KDE Connect
+phone input reaches the local Moonlight client through uinput, while KDE
+Connect inside the cooperative remote browser remains a distinct identity that
+controls that browser desktop directly. The remote-browser identity cannot
+change the compact client's local session mode; physical input and SSH remain
+the recovery paths.

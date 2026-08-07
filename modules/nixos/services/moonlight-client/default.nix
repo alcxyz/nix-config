@@ -6,6 +6,7 @@
   ...
 }: let
   cfg = config.services.moonlight-client;
+  kdeConnectExecutable = lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd";
   moonlightPackage = cfg.package.overrideAttrs (old: {
     patches =
       (old.patches or [])
@@ -239,6 +240,8 @@
     cfg.enableDirectModeInputShortcuts
     && sessionModeSwitchEnabled
     && (directDrmStreamEnabled || directDrmBrowserEnabled);
+  kdeConnectDirectInputEnabled =
+    cfg.enableKdeConnect && (directDrmStreamEnabled || directDrmBrowserEnabled);
   dynamicExternalLayoutEnabled = cfg.autoLayoutExternalOutputs || cfg.autoMirrorExternalOutputs;
   defaultOutputMode =
     if dynamicExternalLayoutEnabled
@@ -1509,6 +1512,13 @@
           xdg-desktop-portal-gtk.service \
           >/dev/null 2>&1 || true
 
+        ${lib.optionalString cfg.enableKdeConnect ''
+          # Direct DRM has no compositor-owned X display. The supervised KDE
+          # Connect launcher supplies an isolated Xvfb display while its
+          # preload shim forwards phone input into the direct uinput bridge.
+          systemctl --user restart kdeconnect.service >/dev/null 2>&1 || true
+        ''}
+
         ${lib.optionalString (prepareCommand != null) "${prepareCommand}\n"}
         run_moonlight() {
           ${lib.getExe endpointSetup}
@@ -1823,11 +1833,13 @@
   };
 
   directModeInputDaemonSource = pkgs.writeText "nixbox-direct-input.py" ''
+    import os
     import select
+    import socket
     import subprocess
     import time
 
-    from evdev import InputDevice, ecodes, list_devices
+    from evdev import InputDevice, UInput, ecodes, list_devices
 
 
     MODE_FILE = ${builtins.toJSON modeStateFile}
@@ -1835,7 +1847,38 @@
     CONTROLLER_HOLD_SECONDS = ${toString cfg.controllerHoldSeconds}
     DEVICE_REFRESH_SECONDS = 1.0
     INACTIVE_MODE_SLEEP_SECONDS = 0.5
+    KDECONNECT_DIRECT_INPUT = ${
+      if kdeConnectDirectInputEnabled
+      then "True"
+      else "False"
+    }
+    KDECONNECT_SOCKET_PATH = os.path.join(
+        os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
+        "kdeconnect-hypr-pointer.sock",
+    )
     IGNORED_KEYBOARD_NAMES = ("kde connect", "moonlight", "uinput", "virtual", "waynergy")
+    KDECONNECT_BUTTONS = {
+        1: ecodes.BTN_LEFT,
+        2: ecodes.BTN_MIDDLE,
+        3: ecodes.BTN_RIGHT,
+        8: ecodes.BTN_SIDE,
+        9: ecodes.BTN_EXTRA,
+    }
+    KDECONNECT_SCROLL = {
+        4: (ecodes.REL_WHEEL, 1),
+        5: (ecodes.REL_WHEEL, -1),
+        6: (ecodes.REL_HWHEEL, -1),
+        7: (ecodes.REL_HWHEEL, 1),
+    }
+    KDECONNECT_UINPUT_CAPABILITIES = {
+        ecodes.EV_KEY: list(range(1, ecodes.KEY_MAX + 1)),
+        ecodes.EV_REL: [
+            ecodes.REL_X,
+            ecodes.REL_Y,
+            ecodes.REL_WHEEL,
+            ecodes.REL_HWHEEL,
+        ],
+    }
     COMMANDS = {
         ${lib.optionalString directDrmBrowserEnabled ''
       "direct-browser": [${builtins.toJSON (lib.getExe sessionMode)}, "direct-browser"],
@@ -1855,6 +1898,81 @@
                 return mode_file.read().strip().split(":", 1)[0]
         except OSError:
             return ""
+
+
+    def open_kdeconnect_input():
+        if not KDECONNECT_DIRECT_INPUT:
+            return None, None
+        try:
+            os.unlink(KDECONNECT_SOCKET_PATH)
+        except FileNotFoundError:
+            pass
+        input_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        try:
+            input_socket.bind(KDECONNECT_SOCKET_PATH)
+            os.chmod(KDECONNECT_SOCKET_PATH, 0o600)
+            input_socket.setblocking(False)
+            virtual_input = UInput(
+                KDECONNECT_UINPUT_CAPABILITIES,
+                name="Nixbox KDE Connect Direct Input",
+            )
+        except Exception:
+            input_socket.close()
+            try:
+                os.unlink(KDECONNECT_SOCKET_PATH)
+            except FileNotFoundError:
+                pass
+            raise
+        print("Listening for direct KDE Connect input", flush=True)
+        return input_socket, virtual_input
+
+
+    def close_kdeconnect_input(input_socket, virtual_input):
+        if input_socket is None and virtual_input is None:
+            return
+        if input_socket is not None:
+            input_socket.close()
+        if virtual_input is not None:
+            virtual_input.close()
+        try:
+            os.unlink(KDECONNECT_SOCKET_PATH)
+        except FileNotFoundError:
+            pass
+
+
+    def inject_kdeconnect_message(virtual_input, message):
+        try:
+            kind, first, second = message.decode().split()
+            first = int(first)
+            second = int(second)
+        except (UnicodeDecodeError, ValueError):
+            return
+
+        if kind == "K":
+            # Xorg's standard evdev keycodes are Linux input codes plus eight.
+            code = first - 8
+            if 0 < code <= ecodes.KEY_MAX:
+                virtual_input.write(ecodes.EV_KEY, code, int(bool(second)))
+                virtual_input.syn()
+        elif kind == "B":
+            if first in KDECONNECT_SCROLL:
+                if second:
+                    code, value = KDECONNECT_SCROLL[first]
+                    virtual_input.write(ecodes.EV_REL, code, value)
+                    virtual_input.syn()
+            elif first in KDECONNECT_BUTTONS:
+                virtual_input.write(
+                    ecodes.EV_KEY,
+                    KDECONNECT_BUTTONS[first],
+                    int(bool(second)),
+                )
+                virtual_input.syn()
+        elif kind == "M" and (first or second):
+            if first:
+                virtual_input.write(ecodes.EV_REL, ecodes.REL_X, first)
+            if second:
+                virtual_input.write(ecodes.EV_REL, ecodes.REL_Y, second)
+            virtual_input.syn()
 
 
     def close_devices(devices):
@@ -1950,36 +2068,72 @@
 
     devices = {}
     next_refresh = 0.0
+    kdeconnect_socket = None
+    kdeconnect_uinput = None
 
     while True:
         if not current_mode().startswith("direct-"):
             close_devices(devices)
+            close_kdeconnect_input(kdeconnect_socket, kdeconnect_uinput)
+            kdeconnect_socket = None
+            kdeconnect_uinput = None
             next_refresh = 0.0
             time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
             continue
+
+        if KDECONNECT_DIRECT_INPUT and kdeconnect_socket is None:
+            try:
+                kdeconnect_socket, kdeconnect_uinput = open_kdeconnect_input()
+            except (OSError, PermissionError) as error:
+                print(f"Waiting for KDE Connect direct input: {error}", flush=True)
+                time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
+                continue
 
         now = time.monotonic()
         if now >= next_refresh:
             refresh_devices(devices)
             next_refresh = now + DEVICE_REFRESH_SECONDS
 
-        if not devices:
+        readers = [state["device"].fd for state in devices.values()]
+        if kdeconnect_socket is not None:
+            readers.append(kdeconnect_socket)
+        if not readers:
             time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
             continue
 
         try:
             readable, _, _ = select.select(
-                [state["device"].fd for state in devices.values()],
+                readers,
                 [],
                 [],
                 0.1,
             )
         except (OSError, ValueError):
             close_devices(devices)
+            close_kdeconnect_input(kdeconnect_socket, kdeconnect_uinput)
+            kdeconnect_socket = None
+            kdeconnect_uinput = None
             next_refresh = 0.0
             continue
 
-        readable_fds = set(readable)
+        if kdeconnect_socket is not None and kdeconnect_socket in readable:
+            while True:
+                try:
+                    message = kdeconnect_socket.recv(96)
+                except BlockingIOError:
+                    break
+                try:
+                    inject_kdeconnect_message(kdeconnect_uinput, message)
+                except OSError:
+                    close_kdeconnect_input(kdeconnect_socket, kdeconnect_uinput)
+                    kdeconnect_socket = None
+                    kdeconnect_uinput = None
+                    break
+
+        readable_fds = {
+            item if isinstance(item, int) else item.fileno()
+            for item in readable
+        }
         for path, state in list(devices.items()):
             if state["device"].fd not in readable_fds:
                 continue
@@ -2047,6 +2201,7 @@
         xcb_connection_t *, xcb_window_t, xcb_window_t,
         int16_t, int16_t, uint16_t, uint16_t, int16_t, int16_t);
     typedef Bool (*fake_button_fn)(Display *, unsigned int, Bool, unsigned long);
+    typedef Bool (*fake_key_fn)(Display *, unsigned int, Bool, unsigned long);
 
     static void send_motion(const char *kind, int x, int y)
     {
@@ -2130,7 +2285,25 @@
             }
         }
 
+        send_motion("B", (int)button, is_press ? 1 : 0);
         return real_fake_button(display, button, is_press, delay);
+    }
+
+    Bool XTestFakeKeyEvent(
+        Display *display,
+        unsigned int keycode,
+        Bool is_press,
+        unsigned long delay)
+    {
+        static fake_key_fn real_fake_key;
+
+        if (!real_fake_key)
+            real_fake_key = (fake_key_fn)dlsym(RTLD_NEXT, "XTestFakeKeyEvent");
+        if (!real_fake_key)
+            return False;
+
+        send_motion("K", (int)keycode, is_press ? 1 : 0);
+        return real_fake_key(display, keycode, is_press, delay);
     }
 
     xcb_void_cookie_t xcb_warp_pointer(
@@ -2206,6 +2379,78 @@
         $(${pkgs.pkg-config}/bin/pkg-config --libs x11 xcb xi xtst) \
         -ldl
     '';
+
+  kdeConnectSessionLauncher = pkgs.writeShellApplication {
+    name = "nixbox-kdeconnect-session";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.xorg-server
+    ];
+    text = ''
+      mode="$(
+        tr -d '[:space:]' \
+          < ${lib.escapeShellArg modeStateFile} \
+          2>/dev/null \
+          || true
+      )"
+      case "''${mode%%:*}" in
+        direct-*) ;;
+        *)
+          export DISPLAY=:0
+          exec ${kdeConnectExecutable} --replace
+          ;;
+      esac
+
+      display_file="$(mktemp -p "''${XDG_RUNTIME_DIR:-/tmp}" kdeconnect-xvfb.XXXXXX)"
+      xvfb_pid=
+      kdeconnect_pid=
+
+      cleanup() {
+        trap - EXIT INT TERM
+        if [ -n "$kdeconnect_pid" ]; then
+          kill "$kdeconnect_pid" >/dev/null 2>&1 || true
+        fi
+        if [ -n "$xvfb_pid" ]; then
+          kill "$xvfb_pid" >/dev/null 2>&1 || true
+        fi
+        rm -f "$display_file"
+      }
+      terminate() {
+        exit 0
+      }
+      trap cleanup EXIT
+      trap terminate INT TERM
+
+      ${lib.getExe' pkgs.xorg-server "Xvfb"} \
+        -displayfd 3 \
+        -nolisten tcp \
+        -noreset \
+        -screen 0 2560x1440x24 \
+        3>"$display_file" &
+      xvfb_pid=$!
+
+      for _attempt in $(seq 1 50); do
+        if [ -s "$display_file" ]; then
+          break
+        fi
+        if ! kill -0 "$xvfb_pid" >/dev/null 2>&1; then
+          echo "KDE Connect Xvfb exited before becoming ready" >&2
+          exit 1
+        fi
+        sleep 0.1
+      done
+      if [ ! -s "$display_file" ]; then
+        echo "KDE Connect Xvfb did not become ready" >&2
+        exit 1
+      fi
+
+      display_number="$(tr -d '[:space:]' < "$display_file")"
+      export DISPLAY=":$display_number"
+      ${kdeConnectExecutable} --replace &
+      kdeconnect_pid=$!
+      wait "$kdeconnect_pid"
+    '';
+  };
 
   pointerSyncSource = pkgs.writeText "couch-xwayland-pointer-bridge.py" ''
     import json
@@ -5292,6 +5537,10 @@ in {
 
     programs.kdeconnect.enable = cfg.enableKdeConnect;
 
+    hardware.uinput = lib.mkIf kdeConnectDirectInputEnabled {
+      enable = true;
+    };
+
     # Route both eager startup and D-Bus activation through one supervised
     # XWayland daemon. The preload shim preserves KDE Connect's XTest keyboard,
     # click and scroll path while forwarding pointer motion rejected by
@@ -5299,7 +5548,6 @@ in {
     systemd.user.services.kdeconnect = lib.mkIf cfg.enableKdeConnect {
       description = "KDE Connect with Hyprland pointer integration";
       environment = {
-        DISPLAY = ":0";
         KDECONNECT_SCROLL_INTERVAL_MS = toString cfg.kdeConnectScrollIntervalMs;
         QT_QPA_PLATFORM = "xcb";
         LD_PRELOAD = "${kdeConnectPointerShim}/lib/libkdeconnect-hypr-pointer-shim.so";
@@ -5307,14 +5555,16 @@ in {
       serviceConfig = {
         Type = "dbus";
         BusName = "org.kde.kdeconnect";
-        ExecStart = lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd";
+        ExecStart = lib.getExe kdeConnectSessionLauncher;
         Restart = "on-failure";
         RestartSec = 2;
       };
     };
 
-    systemd.user.services.nixbox-direct-input = lib.mkIf directModeInputShortcutsEnabled {
-      description = "Non-grabbing direct-display input shortcuts";
+    systemd.user.services.nixbox-direct-input = lib.mkIf (
+      directModeInputShortcutsEnabled || kdeConnectDirectInputEnabled
+    ) {
+      description = "Direct-display shortcuts and KDE Connect input bridge";
       wantedBy = ["default.target"];
       serviceConfig = {
         Type = "simple";

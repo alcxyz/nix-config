@@ -457,7 +457,8 @@
           then kdeConnectExecutable
           else ""
         )
-      }
+      } \
+        --kdeconnect-host-port ${toString browserCfg.helium.kdeConnect.hostPort}
     '';
   };
   buildBrowserImages = pkgs.writeShellApplication {
@@ -1128,9 +1129,21 @@ in {
             session.
           '';
         };
-        kdeConnect.enable = lib.mkEnableOption ''
-          KDE Connect inside the shared Helium desktop session
-        '';
+        kdeConnect = {
+          enable = lib.mkEnableOption ''
+            KDE Connect inside the shared Helium desktop session
+          '';
+          hostPort = lib.mkOption {
+            type = lib.types.port;
+            default = 1816;
+            description = ''
+              Worker host port forwarded to KDE Connect's fixed container
+              port 1716. Keeping it distinct avoids collisions with a worker's
+              own desktop KDE Connect daemon; the stable LAN Service translates
+              the public port back to 1716.
+            '';
+          };
+        };
         image = lib.mkOption {
           type = lib.types.str;
           default = "nixbox/wolf-helium:${heliumVersion}";
@@ -1670,7 +1683,7 @@ in {
           47989
           48010
         ]
-        ++ lib.optional browserCfg.helium.kdeConnect.enable 1716
+        ++ lib.optional browserCfg.helium.kdeConnect.enable browserCfg.helium.kdeConnect.hostPort
         ++ lib.optionals isolatedProtectedBackend [
           (protectedPort 47984)
           (protectedPort 47989)
@@ -1682,7 +1695,7 @@ in {
           48100
           48200
         ]
-        ++ lib.optional browserCfg.helium.kdeConnect.enable 1716
+        ++ lib.optional browserCfg.helium.kdeConnect.enable browserCfg.helium.kdeConnect.hostPort
         ++ lib.optionals isolatedProtectedBackend [
           (protectedPort 47999)
           (protectedPort 48100)

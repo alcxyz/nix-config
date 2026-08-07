@@ -60,7 +60,9 @@ The NixOS module:
 - mounts the Docker socket, DRM and virtual-input devices required by Wolf;
 - stores certificates, pairings, profiles, and application homes in separate
   configurable persistent state directories for public and protected use;
-- exposes only Wolf's documented Moonlight protocol ports; and
+- exposes Wolf's documented Moonlight protocol ports, plus the explicitly
+  enabled KDE Connect port for the single cooperative public Helium runner;
+  and
 - pins the Wolf image by platform digest instead of following a mutable tag.
 
 Treat the state directories as private runtime data. Do not commit their generated
@@ -70,6 +72,13 @@ coordinator exposes Wolf UI, whose PIN-protected profile contains isolated
 Helium, Brave, Chromium, Firefox, and Zen applications for private use and
 comparative testing. Their homes remain separate and persistent across
 on-demand container replacement.
+
+The cooperative public Helium home also owns a distinct KDE Connect identity.
+Its fixed container port is published through a non-conflicting worker host
+port and translated back to port 1716 by the stable public Service. Pairing
+keys therefore follow the same single-writer volume across worker movement.
+This browser identity controls the shared remote desktop; it does not replace
+host-local KDE Connect on a Moonlight appliance.
 
 Build every browser as a distinct local image on top of the same pinned GoW
 `base-app` image. Helium and Brave use their pinned Debian release artifacts;
