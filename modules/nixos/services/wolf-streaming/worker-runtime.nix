@@ -6,7 +6,7 @@
 }: let
   runtimeRoot = "/run/nixbox-private-browser-worker";
   publicRuntimeRoot = "/run/nixbox-public-browser-worker";
-  publicKdeConnectHostPort = 1816;
+  publicKdeConnectHostPort = 1716;
   nvidiaPackage = config.hardware.nvidia.package;
   nvrtcRuntime = pkgs.callPackage ./nvrtc-runtime.nix {};
   workerStreamLayout = pkgs.writeShellApplication {

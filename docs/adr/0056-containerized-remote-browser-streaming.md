@@ -74,11 +74,11 @@ comparative testing. Their homes remain separate and persistent across
 on-demand container replacement.
 
 The cooperative public Helium home also owns a distinct KDE Connect identity.
-Its fixed container port is published through a non-conflicting worker host
-port and translated back to port 1716 by the stable public Service. Pairing
-keys therefore follow the same single-writer volume across worker movement.
-This browser identity controls the shared remote desktop; it does not replace
-host-local KDE Connect on a Moonlight appliance.
+The singleton runner uses host networking so KDE Connect receives the original
+LAN peer address through a source-preserving public Service rather than a
+Docker bridge proxy address. Pairing keys follow the same single-writer volume
+across worker movement. This browser identity controls the shared remote
+desktop; it does not replace host-local KDE Connect on a Moonlight appliance.
 
 Build every browser as a distinct local image on top of the same pinned GoW
 `base-app` image. Helium and Brave use their pinned Debian release artifacts;
