@@ -56,6 +56,12 @@ in {
       description = "Enable KDE Connect input and the Hyprland pointer bridge.";
     };
 
+    kdeConnectScrollIntervalMs = lib.mkOption {
+      type = lib.types.ints.between 0 1000;
+      default = 80;
+      description = "Minimum interval between KDE Connect wheel steps in milliseconds.";
+    };
+
     enableLocalUtilities = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -163,6 +169,7 @@ in {
       enableDms = cfg.enableDms;
       enableMergedProfile = false;
       enableKdeConnect = cfg.enableKdeConnect;
+      kdeConnectScrollIntervalMs = cfg.kdeConnectScrollIntervalMs;
       fallbackBrowserPackage = null;
       protectedBrowserPackage = null;
       browserScaleFactor = cfg.presentationScale;

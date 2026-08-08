@@ -21,7 +21,10 @@ if [[ -n "${NIXBOX_KDECONNECT_EXECUTABLE:-}" ]]; then
   (
     set +e
     while true; do
-      LC_ALL=C.UTF-8 QT_QPA_PLATFORM=xcb \
+      LC_ALL=C.UTF-8 \
+        QT_QPA_PLATFORM=xcb \
+        KDECONNECT_SCROLL_INTERVAL_MS="${NIXBOX_KDECONNECT_SCROLL_INTERVAL_MS:-80}" \
+        LD_PRELOAD="/opt/gow/libkdeconnect-scroll-throttle.so${LD_PRELOAD:+:${LD_PRELOAD}}" \
         "${NIXBOX_KDECONNECT_EXECUTABLE}" --replace
       sleep 2
     done

@@ -11,6 +11,8 @@
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  kdeConnectScrollThrottle =
+    pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-scroll-throttle" {};
   barPointerGuard = pkgs.writeShellApplication {
     name = "hyprland-bar-pointer-guard";
     runtimeInputs = [pkgs.coreutils];
@@ -196,7 +198,11 @@ in {
   systemd.user.services.kdeconnect.Service = {
     Type = "dbus";
     BusName = "org.kde.kdeconnect";
-    Environment = ["QT_QPA_PLATFORM=xcb"];
+    Environment = [
+      "QT_QPA_PLATFORM=xcb"
+      "KDECONNECT_SCROLL_INTERVAL_MS=80"
+      "LD_PRELOAD=${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so"
+    ];
     Restart = lib.mkForce "on-failure";
   };
   # The package's stock D-Bus service starts a second unmanaged daemon. Route

@@ -2257,7 +2257,7 @@
     {
         static fake_button_fn real_fake_button;
         static long long last_scroll_ns;
-        static Bool suppress_release[6];
+        static Bool suppress_release[8];
         struct timespec now;
         long interval;
         long long now_ns;
@@ -2269,7 +2269,7 @@
             return False;
 
         interval = scroll_interval_ms();
-        if ((button == 4 || button == 5) && interval > 0) {
+        if (button >= 4 && button <= 7 && interval > 0) {
             if (!is_press && suppress_release[button]) {
                 suppress_release[button] = False;
                 return True;
@@ -5159,7 +5159,7 @@ in {
 
     kdeConnectScrollIntervalMs = lib.mkOption {
       type = lib.types.ints.between 0 1000;
-      default = 0;
+      default = 80;
       description = ''
         Minimum interval between KDE Connect XTest wheel steps in
         milliseconds. Zero preserves upstream packet-for-packet scrolling.

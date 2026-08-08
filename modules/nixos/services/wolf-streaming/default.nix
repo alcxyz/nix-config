@@ -11,6 +11,7 @@
   hostPublicCoordinator = cfg.publicCoordinator == "host";
   kdeConnectPackage = pkgs.kdePackages.kdeconnect-kde;
   kdeConnectExecutable = "${kdeConnectPackage}/bin/kdeconnectd";
+  kdeConnectScrollThrottle = pkgs.callPackage ../kdeconnect-scroll-throttle {};
   isolatedProtectedBackend =
     cfg.protectedProfile.definitionFile != null && cfg.protectedProfile.isolateBackend;
   publicRuntimeDirectory = cfg.publicRuntimeDirectory;
@@ -66,6 +67,7 @@
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
       cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
+      cp ${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so "$out/libkdeconnect-scroll-throttle.so"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       cp ${deb} "$out/browser.deb"
@@ -82,6 +84,7 @@
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
       cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
+      cp ${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so "$out/libkdeconnect-scroll-throttle.so"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       tar \
@@ -271,6 +274,7 @@
         ]
         ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_EXECUTABLE=${kdeConnectExecutable}"
         ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_SENSITIVITY=${toString browserCfg.helium.kdeConnect.pointerSensitivity}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_SCROLL_INTERVAL_MS=${toString browserCfg.helium.kdeConnect.scrollIntervalMs}"
         ++ lib.optional restoreSession "NIXBOX_RESTORE_LAST_SESSION=1";
       devices = [];
       ports = [];
@@ -1158,6 +1162,14 @@ in {
               Relative KDE Connect pointer multiplier inside the cooperative
               Helium desktop. The hidden X pointer and Sway cursor are moved
               together so clicks remain aligned.
+            '';
+          };
+          scrollIntervalMs = lib.mkOption {
+            type = lib.types.ints.between 0 1000;
+            default = 80;
+            description = ''
+              Minimum interval between KDE Connect XTest wheel steps inside
+              Helium. Zero preserves upstream packet-for-packet scrolling.
             '';
           };
         };
