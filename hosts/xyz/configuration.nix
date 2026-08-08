@@ -308,6 +308,7 @@ in {
     "${configDir}/modules/nixos/services/calibre-web/default.nix"
     "${configDir}/modules/nixos/services/flatpak/default.nix"
     "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
+    "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
@@ -337,6 +338,34 @@ in {
   programs.hyprlock.enable = true;
   programs.kdeconnect.enable = true;
   security.pam.services.hyprlock.u2f.enable = true;
+
+  # Keep the disposable GPU worker ready to host the public Wolf singleton.
+  # The Kubernetes supervisor remains the only coordinator owner.
+  services.wolf-streaming = {
+    enable = true;
+    publicCoordinator = "external";
+    publicRuntimeDirectory = "/run/nixbox-public-browser-worker/runtime";
+    sessionIdleTimeoutSeconds = 30 * 60;
+    pipelineWatchdog.enable = true;
+    vramWatchdog.enable = true;
+    prunedApplicationTitles = [
+      "Remote Firefox"
+      "Test ball"
+    ];
+    browserImages = {
+      enable = true;
+      helium = {
+        enable = true;
+        publish = true;
+        cooperativeDefault = true;
+        kdeConnect.enable = true;
+      };
+      brave.enable = true;
+      chromium.enable = true;
+      firefox.enable = true;
+      zen.enable = true;
+    };
+  };
 
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
