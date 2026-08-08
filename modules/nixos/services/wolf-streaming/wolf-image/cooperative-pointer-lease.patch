@@ -1,0 +1,171 @@
+diff --git a/src/moonlight-server/control/control.cpp b/src/moonlight-server/control/control.cpp
+index 01a0f41..4419e2d 100644
+--- a/src/moonlight-server/control/control.cpp
++++ b/src/moonlight-server/control/control.cpp
+@@ -6,6 +6,7 @@
+ #include <state/sessions.hpp>
+ #include <atomic>
+ #include <mutex>
++#include <set>
+ #include <unordered_map>
+ #include <sys/socket.h>
+ 
+@@ -133,6 +134,7 @@ std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer) {
+ 
+ void run_control(int port,
+                  const state::SessionsAtoms &running_sessions,
++                 const std::shared_ptr<immer::atom<immer::vector<events::Lobby>>> &lobbies,
+                  const std::shared_ptr<events::EventBusType> &event_bus,
+                  int peers,
+                  std::chrono::milliseconds timeout,
+@@ -145,6 +147,101 @@ void run_control(int port,
+ 
+   immer::atom<enet_clients_map> connected_clients;
+ 
++  const auto cooperative_pointer_lease = std::chrono::milliseconds(
++      std::stoull(utils::get_env("WOLF_COOPERATIVE_POINTER_LEASE_MS", "750")));
++  struct PointerLease {
++    std::size_t owner_session_id;
++    std::chrono::steady_clock::time_point expires_at;
++    std::set<unsigned char> pressed_buttons;
++  };
++  auto pointer_lease_mutex = std::make_shared<std::mutex>();
++  auto pointer_leases = std::make_shared<std::unordered_map<std::string, PointerLease>>();
++
++  auto is_pointer_packet = [](INPUT_TYPE type) {
++    switch (type) {
++    case MOUSE_MOVE_REL:
++    case MOUSE_MOVE_ABS:
++    case MOUSE_BUTTON_PRESS:
++    case MOUSE_BUTTON_RELEASE:
++    case MOUSE_SCROLL:
++    case MOUSE_HSCROLL:
++      return true;
++    default:
++      return false;
++    }
++  };
++
++  auto should_forward_pointer = [=](const events::StreamSession &session, const INPUT_PKT &pkt) {
++    if (cooperative_pointer_lease.count() == 0 || !is_pointer_packet(pkt.type)) {
++      return true;
++    }
++
++    auto lobby = state::get_lobby_by_connected_session(
++        lobbies->load().get(), std::to_string(session.session_id));
++    if (!lobby || !lobby->multi_user || lobby->connected_sessions->load()->size() < 2) {
++      return true;
++    }
++
++    const auto now = std::chrono::steady_clock::now();
++    const auto expires_at = now + cooperative_pointer_lease;
++    std::scoped_lock lock(*pointer_lease_mutex);
++    auto current = pointer_leases->find(lobby->id);
++    const bool owns_lease = current != pointer_leases->end() &&
++                            current->second.owner_session_id == session.session_id;
++    const bool lease_expired = current == pointer_leases->end() || current->second.expires_at <= now;
++    const bool active_drag = current != pointer_leases->end() && !current->second.pressed_buttons.empty();
++
++    // A deliberate click or scroll takes control immediately, except while
++    // another client has a button held. Keeping ownership through the release
++    // makes cooperative drags atomic and avoids cross-client button state.
++    const bool explicit_takeover = pkt.type == MOUSE_BUTTON_PRESS ||
++                                   pkt.type == MOUSE_SCROLL ||
++                                   pkt.type == MOUSE_HSCROLL;
++    if (owns_lease) {
++      if (pkt.type == MOUSE_BUTTON_PRESS) {
++        current->second.pressed_buttons.insert(static_cast<const MOUSE_BUTTON_PACKET &>(pkt).button);
++      } else if (pkt.type == MOUSE_BUTTON_RELEASE) {
++        current->second.pressed_buttons.erase(static_cast<const MOUSE_BUTTON_PACKET &>(pkt).button);
++      }
++      current->second.expires_at = expires_at;
++      return true;
++    }
++    if (active_drag || pkt.type == MOUSE_BUTTON_RELEASE) {
++      return false;
++    }
++    if (!lease_expired && !explicit_takeover) {
++      return false;
++    }
++
++    PointerLease next{session.session_id, expires_at, {}};
++    if (pkt.type == MOUSE_BUTTON_PRESS) {
++      next.pressed_buttons.insert(static_cast<const MOUSE_BUTTON_PACKET &>(pkt).button);
++    }
++    if (current == pointer_leases->end()) {
++      pointer_leases->emplace(lobby->id, std::move(next));
++    } else {
++      current->second = std::move(next);
++    }
++    logs::log(logs::debug,
++              "[INPUT] Cooperative lobby {} pointer lease moved to session {}",
++              lobby->id,
++              session.session_id);
++    return true;
++  };
++
++  auto relinquish_pointer_lease = [=](const events::StreamSession &session) {
++    auto lobby = state::get_lobby_by_connected_session(
++        lobbies->load().get(), std::to_string(session.session_id));
++    if (!lobby) {
++      return;
++    }
++    std::scoped_lock lock(*pointer_lease_mutex);
++    auto current = pointer_leases->find(lobby->id);
++    if (current != pointer_leases->end() && current->second.owner_session_id == session.session_id) {
++      pointer_leases->erase(current);
++    }
++  };
++
+   const auto idle_timeout = std::chrono::seconds(
+       std::stoull(utils::get_env("WOLF_SESSION_IDLE_TIMEOUT_SECONDS", "0")));
+   using IdleToken = std::shared_ptr<std::atomic_bool>;
+@@ -225,6 +322,7 @@ void run_control(int port,
+           break;
+         case ENET_EVENT_TYPE_DISCONNECT:
+           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
++          relinquish_pointer_lease(client_session.value());
+           connected_clients.update([peer = event.peer](const enet_clients_map &m) { return m.erase(peer); });
+           event_bus->fire_event(
+               immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
+@@ -259,8 +357,11 @@ void run_control(int port,
+                 event_bus->fire_event(
+                     immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
+               } else if (sub_type == INPUT_DATA) {
+-                immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(event.peer)};
+-                handle_input(client_session.value(), enet_client, (INPUT_PKT *)decrypted.data());
++                auto input_pkt = (INPUT_PKT *)decrypted.data();
++                if (should_forward_pointer(client_session.value(), *input_pkt)) {
++                  immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(event.peer)};
++                  handle_input(client_session.value(), enet_client, input_pkt);
++                }
+               } else if (sub_type == IDR_FRAME) {
+                 auto ev = IDRRequestEvent{.session_id = client_session->session_id};
+                 event_bus->fire_event(immer::box<IDRRequestEvent>{ev});
+diff --git a/src/moonlight-server/control/control.hpp b/src/moonlight-server/control/control.hpp
+index ed1bb75..fc4b936 100644
+--- a/src/moonlight-server/control/control.hpp
++++ b/src/moonlight-server/control/control.hpp
+@@ -16,6 +16,7 @@ using namespace wolf::core;
+ 
+ void run_control(int port,
+                  const state::SessionsAtoms &running_sessions,
++                 const std::shared_ptr<immer::atom<immer::vector<events::Lobby>>> &lobbies,
+                  const std::shared_ptr<events::EventBusType> &event_bus,
+                  int peers = 20,
+                  std::chrono::milliseconds timeout = 1000ms,
+diff --git a/src/moonlight-server/wolf.cpp b/src/moonlight-server/wolf.cpp
+index 1ea4bc6..0a98eaf 100644
+--- a/src/moonlight-server/wolf.cpp
++++ b/src/moonlight-server/wolf.cpp
+@@ -206,8 +206,8 @@ int main(int argc, char *argv[]) {
+   }).detach();
+ 
+   // Control
+-  std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
+-    control::run_control(state::get_port(state::CONTROL_PORT), sessions, ev_bus);
++  std::thread([sessions = local_state->running_sessions, lobbies = local_state->lobbies, ev_bus = local_state->event_bus]() {
++    control::run_control(state::get_port(state::CONTROL_PORT), sessions, lobbies, ev_bus);
+   }).detach();
+ 
+   // RTP
