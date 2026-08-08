@@ -687,11 +687,25 @@
               "$container" \
               swaymsg seat seat0 xcursor_theme Adwaita "$cursor_size" \
                 >/dev/null 2>&1 || true
-            # TV-oriented Nixbox clients render a responsive cursor locally in
-            # Moonlight. Hide Wolf's remote cursor after activity so absolute
-            # virtual pointers cannot leave a stale click-position cursor in
-            # the stream. Desktop clients retain the normal remote cursor.
-            if [ "$presentation_scale" = 1.5 ]; then
+            # The in-runner KDE pointer bridge owns remote cursor visibility
+            # and needs the remote cursor to outlive phone motion long enough
+            # for a click. Do not replace its eight-second policy with the
+            # near-immediate TV-client timeout merely because the joining
+            # Moonlight client uses 1.5x presentation scaling.
+            if docker exec "$container" sh -c \
+              '[ -n "''${NIXBOX_KDECONNECT_EXECUTABLE:-}" ]' \
+                >/dev/null 2>&1; then
+              docker exec \
+                -u ${toString cfg.defaultRunUid} \
+                -e "SWAYSOCK=$runtime_directory/sway.socket" \
+                "$container" \
+                swaymsg seat seat0 hide_cursor 8000 \
+                  >/dev/null 2>&1 || true
+            # Other TV-oriented Nixbox clients render a responsive cursor
+            # locally in Moonlight. Hide Wolf's remote cursor after activity
+            # so absolute virtual pointers cannot leave a stale click-position
+            # cursor in the stream. Desktop clients retain the remote cursor.
+            elif [ "$presentation_scale" = 1.5 ]; then
               docker exec \
                 -u ${toString cfg.defaultRunUid} \
                 -e "SWAYSOCK=$runtime_directory/sway.socket" \
