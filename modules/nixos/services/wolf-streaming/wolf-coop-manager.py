@@ -170,7 +170,16 @@ def matching_lobby(lobbies, lobby_name, runner_name):
     )
 
 
-def reconcile_once(api, args):
+def stream_fingerprint(session):
+    """Identify one RTSP stream generation for a persistent Wolf client."""
+    return (
+        session.get("aes_key"),
+        session.get("aes_iv"),
+        session.get("rtsp_fake_ip"),
+    )
+
+
+def reconcile_once(api, args, observed_streams):
     apps = api.get("/api/v1/apps").get("apps", [])
     entry_app = find_app(apps, args.entry_title)
     individual_app = find_app(apps, args.individual_title)
@@ -181,6 +190,11 @@ def reconcile_once(api, args):
     entry_sessions = [
         session for session in sessions if session.get("app_id") == entry_app["id"]
     ]
+    current_session_ids = {
+        session.get("client_id") for session in entry_sessions if session.get("client_id")
+    }
+    for session_id in set(observed_streams) - current_session_ids:
+        del observed_streams[session_id]
     if not entry_sessions:
         return
 
@@ -194,7 +208,19 @@ def reconcile_once(api, args):
 
     for session in entry_sessions:
         session_id = session.get("client_id")
-        if not session_id or session_id in connected_sessions:
+        if not session_id:
+            continue
+        fingerprint = stream_fingerprint(session)
+        previous_fingerprint = observed_streams.get(session_id)
+        if session_id in connected_sessions:
+            observed_streams[session_id] = fingerprint
+            continue
+        if previous_fingerprint == fingerprint:
+            # Wolf retains the session record after Moonlight disconnects and
+            # removes it from the lobby. Rejoining that stopped generation
+            # switches no live consumer; the next launch then looks joined
+            # and remains on the black entry-app producer. Wait until RTSP
+            # refreshes the stream credentials before joining it again.
             continue
 
         if lobby is None:
@@ -237,6 +263,7 @@ def reconcile_once(api, args):
                 "moonlight_session_id": session_id,
             },
         )
+        observed_streams[session_id] = fingerprint
         connected_sessions.add(session_id)
         logging.info("joined a Moonlight session to the shared %s lobby", args.lobby_name)
 
@@ -262,10 +289,11 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     api = WolfApi(args.socket)
     last_error = None
+    observed_streams = {}
 
     while True:
         try:
-            reconcile_once(api, args)
+            reconcile_once(api, args, observed_streams)
             last_error = None
             time.sleep(args.poll_seconds)
         except (OSError, WolfApiError, KeyError, TypeError, ValueError) as error:
