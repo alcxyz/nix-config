@@ -14,6 +14,7 @@
   isolatedProtectedBackend =
     cfg.protectedProfile.definitionFile != null && cfg.protectedProfile.isolateBackend;
   publicRuntimeDirectory = cfg.publicRuntimeDirectory;
+  publicRuntimeRoot = builtins.dirOf publicRuntimeDirectory;
   protectedRuntimeDirectory = "/run/wolf-streaming/protected/runtime";
   protectedStateDirectory = cfg.protectedProfile.stateDirectory;
   protectedPort = standard: standard + cfg.protectedProfile.portOffset;
@@ -1332,6 +1333,13 @@ in {
         "d ${protectedStateDirectory} 0700 root root - -"
         "d /run/wolf-streaming/protected 0700 root root - -"
         "d ${protectedRuntimeDirectory} 0700 root root - -"
+      ]
+      ++ lib.optionals (!hostPublicCoordinator) [
+        # The Kubernetes supervisor runs this before starting its external
+        # coordinator so persisted profiles receive the same managed catalog
+        # reconciliation as the host-native coordinator.
+        "L+ ${publicRuntimeRoot}/reconcile-apps - - - - ${lib.getExe reconcileWolfApps}"
+        "L+ ${publicRuntimeRoot}/managed-apps.json - - - - ${managedMoonlightAppsFile}"
       ];
 
     virtualisation.oci-containers = {
