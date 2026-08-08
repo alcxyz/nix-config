@@ -334,7 +334,7 @@ in {
         "DP-7"
       ];
     };
-    directDrmAudioOutputByConnector."DP-3" = "alsa_output.pci-0000_00_1f.3.playback.8.0";
+    directDrmAudioOutputByConnector."DP-3" = "alsa_output.pci-0000_00_1f.3.playback.3.0";
     fallbackBrowserPackage = null;
     protectedBrowserPackage = pkgs.brave;
     protectedBrowserName = "Brave (Private)";
