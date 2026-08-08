@@ -1,0 +1,23 @@
+diff --git a/dms/Services/IdleService.qml b/dms/Services/IdleService.qml
+index 16e2f39..9091cbd 100644
+--- a/dms/Services/IdleService.qml
++++ b/dms/Services/IdleService.qml
+@@ -12,7 +12,7 @@ Singleton {
+     readonly property var log: Log.scoped("IdleService")
+ 
+     property bool enabled: true
+-    property bool respectInhibitors: true
++    property bool respectInhibitors: @respectExternalInhibitors@
+ 
+     readonly property bool externalInhibitActive: DMSService.screensaverInhibited
+ 
+@@ -39,7 +39,7 @@ Singleton {
+         // Gate on the shell's own inhibit state rather than relying on the
+         // compositor honoring the bar-surface zwp_idle_inhibit inhibitor,
+         // which goes inactive whenever the bar surface is occluded
+         // (fullscreen windows) or hidden (auto-hide).
+-        const base = enabled && !SessionService.idleInhibited && !externalInhibitActive;
++        const base = enabled && !SessionService.idleInhibited && (!respectInhibitors || !externalInhibitActive);
+         monitorOffMonitor.enabled = base && monitorTimeout > 0 && !postLockMonitorActive;
+         postLockMonitorOffMonitor.enabled = enabled && postLockMonitorActive;
+         lockMonitor.enabled = base && lockTimeout > 0;

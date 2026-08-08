@@ -163,6 +163,7 @@ in {
     command = config.services.hyprlock.lockCommand;
     acMonitorTimeout = 360;
     batteryMonitorTimeout = 0;
+    respectExternalInhibitors = false;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
   services.hyprlock = {

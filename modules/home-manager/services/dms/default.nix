@@ -266,6 +266,9 @@
       + ''
         chmod -R u+w "$out/share/quickshell/dms"
         patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
+        patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-configurable-external-idle-inhibitors.patch}
+        substituteInPlace "$out/share/quickshell/dms/Services/IdleService.qml" \
+          --subst-var-by respectExternalInhibitors ${lib.boolToString cfg.idleLock.respectExternalInhibitors}
         substituteInPlace "$out/share/quickshell/dms/Modals/PolkitAuthSurfaceModal.qml" \
           --subst-var-by polkitModalWidth ${toString cfg.polkitDialog.width} \
           --subst-var-by polkitModalHeight ${toString cfg.polkitDialog.height}
@@ -336,6 +339,12 @@ in {
         type = lib.types.int;
         default = 300;
         description = "Battery power idle lock timeout in seconds.";
+      };
+
+      respectExternalInhibitors = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether application idle inhibitors may suppress DMS lock, monitor-off, and suspend timers.";
       };
 
       acMonitorTimeout = lib.mkOption {
