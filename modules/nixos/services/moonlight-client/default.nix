@@ -1529,29 +1529,29 @@
           moonlight_pid=$!
 
           ${lib.optionalString (cfg.browserStreamLayoutCommand != null) ''
-            (
-              COUCH_KEYBOARD_LAYOUT="$(
-                tr -d '[:space:]' \
-                  < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
-                  2>/dev/null \
-                  || true
-              )"
-              if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
-                configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
-                COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
-              fi
-              export COUCH_KEYBOARD_LAYOUT
-              export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
-              export COUCH_STREAM_APPLICATION=${
-              lib.escapeShellArg (
-                if application == null
-                then ""
-                else application
-              )
-            }
-              ${cfg.browserStreamLayoutCommand}
-            ) &
-          ''}
+          (
+            COUCH_KEYBOARD_LAYOUT="$(
+              tr -d '[:space:]' \
+                < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
+                2>/dev/null \
+                || true
+            )"
+            if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
+              configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+              COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
+            fi
+            export COUCH_KEYBOARD_LAYOUT
+            export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
+            export COUCH_STREAM_APPLICATION=${
+            lib.escapeShellArg (
+              if application == null
+              then ""
+              else application
+            )
+          }
+            ${cfg.browserStreamLayoutCommand}
+          ) &
+        ''}
 
           if wait "$moonlight_pid"; then
             status=0
@@ -2661,6 +2661,8 @@
       pkgs.wireplumber
     ];
     text = ''
+      connector_audio_outputs=${lib.escapeShellArg (builtins.toJSON cfg.directDrmAudioOutputByConnector)}
+
       request_recovery() {
         systemctl --user --no-block start couch-audio-health-recovery.service \
           >/dev/null 2>&1 || true
@@ -2773,16 +2775,64 @@
         esac
       }
 
+      single_connector_target_id() {
+        if [ "$(jq 'length' <<<"$connector_audio_outputs")" -eq 0 ]; then
+          return
+        fi
+
+        monitors="$(
+          timeout --kill-after=1 4 hyprctl -j monitors all 2>/dev/null \
+            || printf '[]'
+        )"
+        connector="$(
+          jq -r '
+            [
+              .[]
+              | select(
+                  .disabled == false
+                  and (.name | test("^(eDP|LVDS)-") | not)
+                )
+              | .name
+            ]
+            | if length == 1 then .[0] else "" end
+          ' <<<"$monitors"
+        )"
+        if [ -z "$connector" ]; then
+          return
+        fi
+
+        connector_target="$(
+          jq -r --arg connector "$connector" \
+            '.[$connector] // ""' <<<"$connector_audio_outputs"
+        )"
+        if [ -z "$connector_target" ]; then
+          return
+        fi
+
+        jq -r --arg target "$connector_target" '
+          [
+            .[]
+            | select(.name == $target or .description == $target)
+          ][0].id // ""
+        ' <<<"$sinks"
+      }
+
       select_layout_fallback() {
         layout="''${1:-}"
         if [ -z "$layout" ]; then
           layout="$(tr -d '[:space:]' < ${lib.escapeShellArg displayLayoutStateFile} 2>/dev/null || true)"
         fi
-        target="$(layout_target "$layout")"
-        target_id="$(
-          jq -r --arg target "$target" \
-            '[.[] | select(.description == $target)][0].id // ""' <<<"$sinks"
-        )"
+        # A semantic layout can fall back to the only physically connected TV.
+        # Prefer that connector's known audio path so, for example, a bedroom
+        # layout using DP-3 cannot retain the disconnected Secondary TV PCM.
+        target_id="$(single_connector_target_id)"
+        if [ -z "$target_id" ]; then
+          target="$(layout_target "$layout")"
+          target_id="$(
+            jq -r --arg target "$target" \
+              '[.[] | select(.description == $target)][0].id // ""' <<<"$sinks"
+          )"
+        fi
         if [ -z "$target_id" ]; then
           # Adaptive or unavailable-role fallback: select the highest-priority
           # non-Bluetooth sink rather than retaining a vanished endpoint.
@@ -4856,7 +4906,9 @@ in {
         PipeWire sinks selected together with each connector in a direct-DRM
         session. Connector names use their kernel/Hyprland form; each value
         must match the sink's PipeWire node name, WirePlumber description, or
-        nickname.
+        nickname. The composited couch session also uses this association when
+        exactly one external connector is enabled, preventing a semantic
+        display-layout fallback from selecting another connector's HDMI PCM.
       '';
     };
 
@@ -5561,18 +5613,19 @@ in {
       };
     };
 
-    systemd.user.services.nixbox-direct-input = lib.mkIf (
-      directModeInputShortcutsEnabled || kdeConnectDirectInputEnabled
-    ) {
-      description = "Direct-display shortcuts and KDE Connect input bridge";
-      wantedBy = ["default.target"];
-      serviceConfig = {
-        Type = "simple";
-        ExecStart = lib.getExe directModeInputDaemon;
-        Restart = "always";
-        RestartSec = 1;
+    systemd.user.services.nixbox-direct-input =
+      lib.mkIf (
+        directModeInputShortcutsEnabled || kdeConnectDirectInputEnabled
+      ) {
+        description = "Direct-display shortcuts and KDE Connect input bridge";
+        wantedBy = ["default.target"];
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = lib.getExe directModeInputDaemon;
+          Restart = "always";
+          RestartSec = 1;
+        };
       };
-    };
 
     systemd.user.services.couch-moonlight-stream = lib.mkIf cfg.enableControllerShortcuts {
       description = "Controller-launched Moonlight stream";
