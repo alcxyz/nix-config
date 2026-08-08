@@ -2780,10 +2780,24 @@
           return
         fi
 
-        monitors="$(
-          timeout --kill-after=1 4 hyprctl -j monitors all 2>/dev/null \
-            || printf '[]'
-        )"
+        if [ -z "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+          for socket in \
+            "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/hypr/*/.socket.sock; do
+            [ -S "$socket" ] || continue
+            HYPRLAND_INSTANCE_SIGNATURE="''${socket%/.socket.sock}"
+            HYPRLAND_INSTANCE_SIGNATURE="''${HYPRLAND_INSTANCE_SIGNATURE##*/}"
+            export HYPRLAND_INSTANCE_SIGNATURE
+            break
+          done
+        fi
+        if [ -z "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+          return
+        fi
+        if ! monitors="$(
+          timeout --kill-after=1 4 hyprctl -j monitors all 2>/dev/null
+        )"; then
+          return
+        fi
         connector="$(
           jq -r '
             [
