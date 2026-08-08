@@ -904,6 +904,7 @@ in {
     enable = true;
     packages = [
       "com.heroicgameslauncher.hgl"
+      "net.retrodeck.retrodeck"
     ];
     overrides."com.heroicgameslauncher.hgl" = [
       "--filesystem=/ext4"
