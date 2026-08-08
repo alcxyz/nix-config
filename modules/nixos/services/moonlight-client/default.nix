@@ -1529,29 +1529,29 @@
           moonlight_pid=$!
 
           ${lib.optionalString (cfg.browserStreamLayoutCommand != null) ''
-          (
-            COUCH_KEYBOARD_LAYOUT="$(
-              tr -d '[:space:]' \
-                < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
-                2>/dev/null \
-                || true
-            )"
-            if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
-              configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
-              COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
-            fi
-            export COUCH_KEYBOARD_LAYOUT
-            export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
-            export COUCH_STREAM_APPLICATION=${
-            lib.escapeShellArg (
-              if application == null
-              then ""
-              else application
-            )
-          }
-            ${cfg.browserStreamLayoutCommand}
-          ) &
-        ''}
+            (
+              COUCH_KEYBOARD_LAYOUT="$(
+                tr -d '[:space:]' \
+                  < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
+                  2>/dev/null \
+                  || true
+              )"
+              if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
+                configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+                COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
+              fi
+              export COUCH_KEYBOARD_LAYOUT
+              export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
+              export COUCH_STREAM_APPLICATION=${
+              lib.escapeShellArg (
+                if application == null
+                then ""
+                else application
+              )
+            }
+              ${cfg.browserStreamLayoutCommand}
+            ) &
+          ''}
 
           if wait "$moonlight_pid"; then
             status=0
@@ -5613,19 +5613,18 @@ in {
       };
     };
 
-    systemd.user.services.nixbox-direct-input =
-      lib.mkIf (
-        directModeInputShortcutsEnabled || kdeConnectDirectInputEnabled
-      ) {
-        description = "Direct-display shortcuts and KDE Connect input bridge";
-        wantedBy = ["default.target"];
-        serviceConfig = {
-          Type = "simple";
-          ExecStart = lib.getExe directModeInputDaemon;
-          Restart = "always";
-          RestartSec = 1;
-        };
+    systemd.user.services.nixbox-direct-input = lib.mkIf (
+      directModeInputShortcutsEnabled || kdeConnectDirectInputEnabled
+    ) {
+      description = "Direct-display shortcuts and KDE Connect input bridge";
+      wantedBy = ["default.target"];
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = lib.getExe directModeInputDaemon;
+        Restart = "always";
+        RestartSec = 1;
       };
+    };
 
     systemd.user.services.couch-moonlight-stream = lib.mkIf cfg.enableControllerShortcuts {
       description = "Controller-launched Moonlight stream";
