@@ -79,6 +79,9 @@ LAN peer address through a source-preserving public Service rather than a
 Docker bridge proxy address. Pairing keys follow the same single-writer volume
 across worker movement. This browser identity controls the shared remote
 desktop; it does not replace host-local KDE Connect on a Moonlight appliance.
+Its pointer bridge applies the same 2.0 relative-motion baseline used by the
+direct-display couch client while keeping the hidden X pointer and compositor
+cursor aligned for clicks and drags.
 
 Build every browser as a distinct local image on top of the same pinned GoW
 `base-app` image. Helium and Brave use their pinned Debian release artifacts;

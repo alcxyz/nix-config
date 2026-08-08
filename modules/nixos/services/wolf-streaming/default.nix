@@ -268,6 +268,7 @@
           "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
         ]
         ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_EXECUTABLE=${kdeConnectExecutable}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_SENSITIVITY=${toString browserCfg.helium.kdeConnect.pointerSensitivity}"
         ++ lib.optional restoreSession "NIXBOX_RESTORE_LAST_SESSION=1";
       devices = [];
       ports = [];
@@ -1128,11 +1129,22 @@ in {
             session.
           '';
         };
-        kdeConnect.enable = lib.mkEnableOption ''
-          KDE Connect inside the shared Helium desktop session. The single
-          cooperative runner uses host networking so KDE Connect receives the
-          original LAN peer address.
-        '';
+        kdeConnect = {
+          enable = lib.mkEnableOption ''
+            KDE Connect inside the shared Helium desktop session. The single
+            cooperative runner uses host networking so KDE Connect receives the
+            original LAN peer address.
+          '';
+          pointerSensitivity = lib.mkOption {
+            type = lib.types.numbers.positive;
+            default = 2.0;
+            description = ''
+              Relative KDE Connect pointer multiplier inside the cooperative
+              Helium desktop. The hidden X pointer and Sway cursor are moved
+              together so clicks remain aligned.
+            '';
+          };
+        };
         image = lib.mkOption {
           type = lib.types.str;
           default = "nixbox/wolf-helium:${heliumVersion}";

@@ -64,6 +64,9 @@ class XPointer:
         self.x11.XOpenDisplay.restype = ctypes.c_void_p
         self.x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
         self.x11.XDefaultRootWindow.restype = ctypes.c_ulong
+        self.x11.XDefaultScreen.argtypes = [ctypes.c_void_p]
+        self.x11.XDisplayWidth.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self.x11.XDisplayHeight.argtypes = [ctypes.c_void_p, ctypes.c_int]
         self.x11.XQueryPointer.argtypes = [
             ctypes.c_void_p,
             ctypes.c_ulong,
@@ -76,11 +79,26 @@ class XPointer:
             ctypes.POINTER(ctypes.c_uint),
         ]
         self.x11.XQueryPointer.restype = ctypes.c_int
+        self.x11.XWarpPointer.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint,
+            ctypes.c_uint,
+            ctypes.c_int,
+            ctypes.c_int,
+        ]
+        self.x11.XFlush.argtypes = [ctypes.c_void_p]
 
         self.display = self.x11.XOpenDisplay(display_name.encode())
         if not self.display:
             raise RuntimeError("unable to open the X display")
         self.root = self.x11.XDefaultRootWindow(self.display)
+        screen = self.x11.XDefaultScreen(self.display)
+        self.width = self.x11.XDisplayWidth(self.display, screen)
+        self.height = self.x11.XDisplayHeight(self.display, screen)
 
     def position(self):
         root = ctypes.c_ulong()
@@ -104,6 +122,23 @@ class XPointer:
         if not visible:
             return None
         return root_x.value, root_y.value
+
+    def set_position(self, x, y):
+        x = max(0, min(self.width - 1, x))
+        y = max(0, min(self.height - 1, y))
+        self.x11.XWarpPointer(
+            self.display,
+            0,
+            self.root,
+            0,
+            0,
+            0,
+            0,
+            x,
+            y,
+        )
+        self.x11.XFlush(self.display)
+        return x, y
 
 
 class KdeConnectGate:
@@ -137,7 +172,17 @@ class KdeConnectGate:
         self.loop = GLib.MainLoop()
         self.thread = threading.Thread(target=self.loop.run, daemon=True)
         self.thread.start()
+        self.refresh_thread = threading.Thread(
+            target=self._periodic_refresh,
+            daemon=True,
+        )
+        self.refresh_thread.start()
         self._refresh()
+
+    def _periodic_refresh(self):
+        while True:
+            self._refresh()
+            time.sleep(1)
 
     def _refresh(self, *_args, **_kwargs):
         try:
@@ -165,6 +210,11 @@ def main():
     poll_seconds = float(os.environ.get("NIXBOX_CURSOR_POLL_MS", "1")) / 1000
     cursor_size = int(os.environ.get("NIXBOX_CURSOR_SIZE", "48"))
     cursor_theme = os.environ.get("NIXBOX_CURSOR_THEME", "Adwaita")
+    pointer_sensitivity = float(
+        os.environ.get("NIXBOX_KDECONNECT_POINTER_SENSITIVITY", "2.0")
+    )
+    if pointer_sensitivity <= 0:
+        raise ValueError("KDE Connect pointer sensitivity must be positive")
 
     sway.command(f"seat seat0 hide_cursor {hide_timeout}")
     sway.command("seat seat0 hide_cursor when-typing disable")
@@ -187,6 +237,20 @@ def main():
             position = pointer.position()
             if position is not None and position != last_position:
                 now = time.monotonic()
+                if pointer_sensitivity != 1.0 and last_position is not None:
+                    position = (
+                        round(
+                            last_position[0]
+                            + (position[0] - last_position[0])
+                            * pointer_sensitivity
+                        ),
+                        round(
+                            last_position[1]
+                            + (position[1] - last_position[1])
+                            * pointer_sensitivity
+                        ),
+                    )
+                    position = pointer.set_position(*position)
                 if hidden:
                     sway.command(
                         "seat seat0 hide_cursor 0; "
