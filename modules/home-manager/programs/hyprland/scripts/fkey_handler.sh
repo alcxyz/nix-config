@@ -1,49 +1,69 @@
 #!/usr/bin/env bash
 
-# Script to handle F-key taps for single and double tap actions on NixOS
+set -euo pipefail
 
-# Ensure coreutils (for date) and hyprland (for hyprctl) are in PATH.
-# This is typically handled by your NixOS configuration.
+DOUBLE_TAP_MS=300
+GUARD_SERVICE="hyprland-bar-pointer-guard.service"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}"
+TAP_STATE_FILE="$RUNTIME_DIR/hypr-fkey-tap.state"
+HELD_MARKER="$RUNTIME_DIR/hyprland-bar-pointer-guard.held"
 
-KEY_NAME="$1"      # e.g., "F1", "F2"
-WORKSPACE_NUM="$2" # e.g., "1", "2"
-TIMEOUT_MS=300     # Milliseconds to consider a double tap
+usage() {
+    echo "Usage: fkey_handler.sh [press|release] KEY WORKSPACE" >&2
+    echo "       fkey_handler.sh KEY WORKSPACE" >&2
+    exit 2
+}
 
-# Using a state file in /tmp, which is standard
-STATE_FILE="/tmp/hypr_fkey_tap.state"
-CURRENT_TIME_NS=$(date +%s%N)
+handle_tap() {
+    local key_name="$1"
+    local workspace_num="$2"
+    local current_time_ns last_key_name last_time_ns time_diff_ns timeout_ns
 
-# Default action: switch workspace
-ACTION_CMD="hyprctl dispatch workspace $WORKSPACE_NUM"
-PERFORM_DEFAULT_ACTION=true
+    current_time_ns="$(date +%s%N)"
+    timeout_ns=$((DOUBLE_TAP_MS * 1000000))
 
-if [ -f "$STATE_FILE" ]; then
-    # Read last key and time. Use `read -r` to prevent backslash interpretation.
-    if IFS=' ' read -r LAST_KEY_NAME LAST_TIME_NS < "$STATE_FILE"; then
-        TIME_DIFF_NS=$((CURRENT_TIME_NS - LAST_TIME_NS))
-        TIMEOUT_NS=$((TIMEOUT_MS * 1000000)) # Convert TIMEOUT_MS to nanoseconds
-
-        if [ "$LAST_KEY_NAME" == "$KEY_NAME" ] && [ "$TIME_DIFF_NS" -lt "$TIMEOUT_NS" ]; then
-            # Double tap detected
-            ACTION_CMD="hyprctl dispatch togglespecialworkspace"
-            # Clear state file to prevent triple tap from re-triggering special
-            # and to ensure next single tap works as expected.
-            rm -f "$STATE_FILE"
-            PERFORM_DEFAULT_ACTION=false # We are doing the special action instead
+    if [[ -f "$TAP_STATE_FILE" ]] \
+        && IFS=' ' read -r last_key_name last_time_ns < "$TAP_STATE_FILE" \
+        && [[ "$last_key_name" == "$key_name" ]] \
+        && [[ "$last_time_ns" =~ ^[0-9]+$ ]]; then
+        time_diff_ns=$((current_time_ns - last_time_ns))
+        if ((time_diff_ns < timeout_ns)); then
+            rm -f "$TAP_STATE_FILE"
+            hyprctl dispatch togglespecialworkspace
+            return
         fi
-    else
-        # If reading fails, reset state by ensuring default action and writing new state
-        PERFORM_DEFAULT_ACTION=true
-        # Optionally, log an error here if you want to debug state file issues
-        # echo "Error reading state file: $STATE_FILE" >&2
     fi
+
+    printf '%s %s\n' "$key_name" "$current_time_ns" > "$TAP_STATE_FILE"
+    hyprctl dispatch workspace "$workspace_num"
+}
+
+# Preserve the original two-argument behavior for profiles that have not
+# adopted press/release gesture bindings.
+if (($# == 2)); then
+    handle_tap "$1" "$2"
+    exit
 fi
 
-# If not a double tap, or if it's a different key, or first tap, or read error
-if [ "$PERFORM_DEFAULT_ACTION" = true ]; then
-    echo "$KEY_NAME $CURRENT_TIME_NS" > "$STATE_FILE"
-fi
+(($# == 3)) || usage
+action="$1"
+key_name="$2"
+workspace_num="$3"
 
-# Execute the determined command
-# Using `eval` here is generally okay as ACTION_CMD is constructed from controlled inputs.
-eval "$ACTION_CMD"
+[[ "$key_name" =~ ^F[1-6]$ ]] || usage
+[[ "$workspace_num" =~ ^[1-6]$ ]] || usage
+
+case "$action" in
+    press)
+        handle_tap "$key_name" "$workspace_num"
+        systemctl --user start --no-block "$GUARD_SERVICE"
+        ;;
+    release)
+        if [[ -e "$HELD_MARKER" ]]; then
+            rm -f "$TAP_STATE_FILE"
+        fi
+
+        systemctl --user stop --no-block "$GUARD_SERVICE"
+        ;;
+    *) usage ;;
+esac

@@ -11,6 +11,63 @@
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  barPointerGuard = pkgs.writeShellApplication {
+    name = "hyprland-bar-pointer-guard";
+    runtimeInputs = [pkgs.coreutils];
+    text = let
+      dms = lib.getExe config.programs.dank-material-shell.package;
+      hyprctl = lib.getExe' pkgs.hyprland "hyprctl";
+    in ''
+      toggle_reveal() {
+        "${dms}" ipc call bar toggleReveal index 0 2>/dev/null || true
+      }
+
+      ensure_revealed() {
+        result="$(toggle_reveal)"
+        if [[ "$result" == "BAR_TUCK_SUCCESS" ]]; then
+          toggle_reveal >/dev/null
+        fi
+      }
+
+      ensure_tucked() {
+        result="$(toggle_reveal)"
+        if [[ "$result" == "BAR_REVEAL_SUCCESS" ]]; then
+          toggle_reveal >/dev/null
+        fi
+      }
+
+      held_marker="''${XDG_RUNTIME_DIR:?}/hyprland-bar-pointer-guard.held"
+      activated=false
+
+      cleanup() {
+        rm -f "$held_marker"
+        if [[ "$activated" == true ]]; then
+          ensure_tucked
+        fi
+      }
+      trap cleanup EXIT
+      trap 'exit 0' HUP INT TERM
+
+      rm -f "$held_marker"
+      sleep 0.3
+      touch "$held_marker"
+      activated=true
+      ensure_revealed
+
+      while true; do
+        position="$("${hyprctl}" cursorpos 2>/dev/null || true)"
+        x="''${position%%,*}"
+        y="''${position##*, }"
+
+        if [[ "$x" =~ ^[0-9]+$ && "$y" =~ ^[0-9]+$ ]] \
+          && ((x >= 1280 && x < 3840 && y < 1456)); then
+          "${hyprctl}" dispatch movecursor "$x" 1456 >/dev/null 2>&1 || true
+        fi
+
+        sleep 0.004
+      done
+    '';
+  };
 in {
   # Import the common Linux configuration
   imports = [
@@ -72,6 +129,14 @@ in {
     remotePointerInactiveTimeout = 8;
     remotePointerHideOnTouch = false;
     extraConfig = ''
+      # Center the secondary display above the primary ultrawide. Its EDID
+      # omits 1440p, so use a CVT reduced-blanking modeline to keep the iGPU's
+      # compositing load below the native 4K mode. The small logical gap acts
+      # as a soft pointer barrier for the auto-hiding bar: precise movement
+      # stops at the bar while a deliberate upward movement still crosses.
+      monitor = DP-1, preferred, 0x1456, 1
+      monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
+
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
   };
@@ -104,6 +169,18 @@ in {
     enable = true;
     turnOffDisplaysOnLock = true;
     displayOffDelay = 360;
+  };
+  systemd.user.services.hyprland-bar-pointer-guard = {
+    Unit = {
+      Description = "Hold the DMS bar open and guard the upper monitor edge";
+      PartOf = ["graphical-session.target"];
+      After = ["graphical-session.target"];
+    };
+    Service = {
+      ExecStart = lib.getExe barPointerGuard;
+      Restart = "no";
+      TimeoutStopSec = 1;
+    };
   };
   services.waynergy = {
     enable = true;
