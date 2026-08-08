@@ -154,7 +154,7 @@ class KdeConnectGate:
             self.bus.get_object(self._service, self._daemon_path),
             self._daemon_interface,
         )
-        self.reachable = threading.Event()
+        self.enabled = threading.Event()
         self.bus.add_signal_receiver(
             self._refresh,
             dbus_interface=self._daemon_interface,
@@ -186,19 +186,23 @@ class KdeConnectGate:
 
     def _refresh(self, *_args, **_kwargs):
         try:
-            has_reachable_device = bool(self.daemon.devices(True, True))
+            # Keep the bridge armed whenever a paired device exists. KDE
+            # Connect's reachability state can remain false after kdeconnectd
+            # is reactivated even while remote-input XTest events are arriving.
+            # Actual pointer movement remains the trigger for cursor mirroring.
+            has_paired_device = bool(self.daemon.devices(False, True))
         except dbus.DBusException:
-            has_reachable_device = False
-        if has_reachable_device:
-            self.reachable.set()
+            has_paired_device = False
+        if has_paired_device:
+            self.enabled.set()
         else:
-            self.reachable.clear()
+            self.enabled.clear()
 
     def _service_changed(self, _name, _old_owner, new_owner):
         if new_owner:
             self._refresh()
         else:
-            self.reachable.clear()
+            self.enabled.clear()
 
 
 def main():
@@ -221,7 +225,7 @@ def main():
     sway.command(f"seat seat0 xcursor_theme {cursor_theme} {cursor_size}")
 
     while True:
-        kdeconnect.reachable.wait()
+        kdeconnect.enabled.wait()
         last_position = pointer.position()
         if last_position is None:
             sway.command("seat seat0 hide_cursor 0")
@@ -233,7 +237,7 @@ def main():
         last_motion = time.monotonic()
         hidden = False
 
-        while kdeconnect.reachable.is_set():
+        while kdeconnect.enabled.is_set():
             position = pointer.position()
             if position is not None and position != last_position:
                 now = time.monotonic()
