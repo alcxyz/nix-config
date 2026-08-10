@@ -6,7 +6,10 @@
   ...
 }: let
   cfg = config.services.moonlight-client;
+  kdeConnectInputDefaults = import ../../../shared/kdeconnect-input.nix;
   kdeConnectExecutable = lib.getExe' pkgs.kdePackages.kdeconnect-kde "kdeconnectd";
+  kdeConnectHyprlandInput =
+    pkgs.callPackage ../kdeconnect-hyprland-input {};
   moonlightPackage = cfg.package.overrideAttrs (old: {
     patches =
       (old.patches or [])
@@ -2603,12 +2606,7 @@
         time.sleep(1 / 60)
   '';
 
-  pointerSync = pkgs.writeShellApplication {
-    name = "couch-xwayland-pointer-bridge";
-    text = ''
-      exec ${pkgs.python3}/bin/python ${pointerSyncSource}
-    '';
-  };
+  pointerSync = kdeConnectHyprlandInput;
 
   kdeConnectDbusServiceOverride = pkgs.writeTextFile {
     name = "kdeconnect-dbus-systemd-service";
@@ -5159,11 +5157,35 @@ in {
 
     kdeConnectScrollIntervalMs = lib.mkOption {
       type = lib.types.ints.between 0 1000;
-      default = 80;
+      default = kdeConnectInputDefaults.scrollIntervalMs;
       description = ''
         Minimum interval between KDE Connect XTest wheel steps in
         milliseconds. Zero preserves upstream packet-for-packet scrolling.
       '';
+    };
+
+    kdeConnectPointerSensitivity = lib.mkOption {
+      type = lib.types.numbers.positive;
+      default = kdeConnectInputDefaults.pointerSensitivity;
+      description = "Maximum KDE Connect pointer gain during fast motion.";
+    };
+
+    kdeConnectPointerPrecisionSensitivity = lib.mkOption {
+      type = lib.types.numbers.positive;
+      default = kdeConnectInputDefaults.pointerPrecisionSensitivity;
+      description = "KDE Connect pointer gain during slow, precise motion.";
+    };
+
+    kdeConnectPointerAccelerationStart = lib.mkOption {
+      type = lib.types.numbers.nonnegative;
+      default = kdeConnectInputDefaults.pointerAccelerationStart;
+      description = "Pointer speed where KDE Connect acceleration starts.";
+    };
+
+    kdeConnectPointerAccelerationFull = lib.mkOption {
+      type = lib.types.numbers.positive;
+      default = kdeConnectInputDefaults.pointerAccelerationFull;
+      description = "Pointer speed where KDE Connect reaches maximum gain.";
     };
 
     keyboardLayouts = lib.mkOption {
@@ -5208,7 +5230,7 @@ in {
 
     remotePointerInactiveTimeout = lib.mkOption {
       type = lib.types.ints.between 0 20;
-      default = 8;
+      default = kdeConnectInputDefaults.cursorInactiveTimeoutSeconds;
       description = ''
         Seconds to retain the couch cursor after remote pointer activity.
         Zero disables inactivity hiding.
@@ -5615,8 +5637,15 @@ in {
       description = "KDE Connect with Hyprland pointer integration";
       environment = {
         KDECONNECT_SCROLL_INTERVAL_MS = toString cfg.kdeConnectScrollIntervalMs;
+        KDECONNECT_POINTER_SENSITIVITY = toString cfg.kdeConnectPointerSensitivity;
+        KDECONNECT_POINTER_PRECISION_SENSITIVITY =
+          toString cfg.kdeConnectPointerPrecisionSensitivity;
+        KDECONNECT_POINTER_ACCELERATION_START =
+          toString cfg.kdeConnectPointerAccelerationStart;
+        KDECONNECT_POINTER_ACCELERATION_FULL =
+          toString cfg.kdeConnectPointerAccelerationFull;
         QT_QPA_PLATFORM = "xcb";
-        LD_PRELOAD = "${kdeConnectPointerShim}/lib/libkdeconnect-hypr-pointer-shim.so";
+        LD_PRELOAD = "${kdeConnectHyprlandInput}/lib/libkdeconnect-hypr-pointer-shim.so";
       };
       serviceConfig = {
         Type = "dbus";
@@ -5816,6 +5845,18 @@ in {
     };
 
     assertions = [
+      {
+        assertion =
+          cfg.kdeConnectPointerPrecisionSensitivity
+          <= cfg.kdeConnectPointerSensitivity;
+        message = "KDE Connect precision pointer gain must not exceed its maximum gain";
+      }
+      {
+        assertion =
+          cfg.kdeConnectPointerAccelerationStart
+          < cfg.kdeConnectPointerAccelerationFull;
+        message = "KDE Connect pointer acceleration full speed must exceed its start speed";
+      }
       {
         assertion = cfg.autoLoginUser == null || config.services.greetd.enable;
         message = "services.moonlight-client.autoLoginUser requires services.greetd.enable";

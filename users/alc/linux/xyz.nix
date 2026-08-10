@@ -195,15 +195,37 @@ in {
   # Hyprland's portal does not provide RemoteDesktop. Run KDE Connect through
   # XWayland so phone pointer and keyboard events use XTest instead of evdev;
   # this also keeps them entirely outside Kanata's device-grab path.
-  systemd.user.services.kdeconnect.Service = {
+  systemd.user.services.kdeconnect.Service = let
+    defaults = import "${configDir}/modules/shared/kdeconnect-input.nix";
+    hyprlandInput =
+      pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-hyprland-input" {};
+  in {
     Type = "dbus";
     BusName = "org.kde.kdeconnect";
     Environment = [
       "QT_QPA_PLATFORM=xcb"
-      "KDECONNECT_SCROLL_INTERVAL_MS=80"
-      "LD_PRELOAD=${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so"
+      "KDECONNECT_SCROLL_INTERVAL_MS=${toString defaults.scrollIntervalMs}"
+      "KDECONNECT_POINTER_SENSITIVITY=${toString defaults.pointerSensitivity}"
+      "KDECONNECT_POINTER_PRECISION_SENSITIVITY=${toString defaults.pointerPrecisionSensitivity}"
+      "KDECONNECT_POINTER_ACCELERATION_START=${toString defaults.pointerAccelerationStart}"
+      "KDECONNECT_POINTER_ACCELERATION_FULL=${toString defaults.pointerAccelerationFull}"
+      "LD_PRELOAD=${hyprlandInput}/lib/libkdeconnect-hypr-pointer-shim.so"
     ];
     Restart = lib.mkForce "on-failure";
+  };
+  systemd.user.services.kdeconnect-hypr-pointer = let
+    hyprlandInput =
+      pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-hyprland-input" {};
+  in {
+    Unit = {
+      Description = "KDE Connect Hyprland pointer bridge";
+    };
+    Service = {
+      ExecStart = lib.getExe hyprlandInput;
+      Restart = "always";
+      RestartSec = 1;
+    };
+    Install.WantedBy = ["default.target"];
   };
   # The package's stock D-Bus service starts a second unmanaged daemon. Route
   # activation to the supervised XWayland unit instead.

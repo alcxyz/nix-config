@@ -5,6 +5,7 @@
   ...
 }: let
   cfg = config.services.nixbox-client;
+  kdeConnectInputDefaults = import ../../../shared/kdeconnect-input.nix;
 in {
   imports = [../nixbox-session/default.nix];
 
@@ -58,7 +59,7 @@ in {
 
     kdeConnectScrollIntervalMs = lib.mkOption {
       type = lib.types.ints.between 0 1000;
-      default = 80;
+      default = kdeConnectInputDefaults.scrollIntervalMs;
       description = "Minimum interval between KDE Connect wheel steps in milliseconds.";
     };
 

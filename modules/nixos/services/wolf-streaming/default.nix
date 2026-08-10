@@ -5,6 +5,7 @@
   ...
 }: let
   cfg = config.services.wolf-streaming;
+  kdeConnectInputDefaults = import ../../../shared/kdeconnect-input.nix;
   nvidiaPackage = config.hardware.nvidia.package;
   nvidiaSmi = "${nvidiaPackage.bin}/bin/nvidia-smi";
   browserCfg = cfg.browserImages;
@@ -1160,7 +1161,7 @@ in {
           '';
           pointerSensitivity = lib.mkOption {
             type = lib.types.numbers.positive;
-            default = 2.0;
+            default = kdeConnectInputDefaults.pointerSensitivity;
             description = ''
               Maximum relative KDE Connect pointer gain inside the cooperative
               Helium desktop, reached during fast motion. The hidden X pointer
@@ -1169,7 +1170,7 @@ in {
           };
           pointerPrecisionSensitivity = lib.mkOption {
             type = lib.types.numbers.positive;
-            default = 0.55;
+            default = kdeConnectInputDefaults.pointerPrecisionSensitivity;
             description = ''
               Relative KDE Connect pointer gain for slow, precise motion inside
               the cooperative Helium desktop.
@@ -1177,7 +1178,7 @@ in {
           };
           pointerAccelerationStart = lib.mkOption {
             type = lib.types.numbers.nonnegative;
-            default = 120;
+            default = kdeConnectInputDefaults.pointerAccelerationStart;
             description = ''
               Pointer speed in pixels per second where KDE Connect acceleration
               starts increasing above the precision gain.
@@ -1185,7 +1186,7 @@ in {
           };
           pointerAccelerationFull = lib.mkOption {
             type = lib.types.numbers.positive;
-            default = 900;
+            default = kdeConnectInputDefaults.pointerAccelerationFull;
             description = ''
               Pointer speed in pixels per second where KDE Connect reaches its
               maximum pointer gain.
@@ -1193,7 +1194,7 @@ in {
           };
           scrollIntervalMs = lib.mkOption {
             type = lib.types.ints.between 0 1000;
-            default = 80;
+            default = kdeConnectInputDefaults.scrollIntervalMs;
             description = ''
               Minimum interval between KDE Connect XTest wheel steps inside
               Helium. Zero preserves upstream packet-for-packet scrolling.

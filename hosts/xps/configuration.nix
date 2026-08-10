@@ -310,8 +310,6 @@ in {
     disableInternalDisplay = false;
     enableDms = false;
     enableMergedProfile = true;
-    kdeConnectScrollIntervalMs = 80;
-    remotePointerInactiveTimeout = 8;
     keyboardLayouts = "no,us";
     keyboardLayoutDeviceOverrides.us = ["glove80"];
     keyboardOptions = "grp:alt_shift_toggle";
