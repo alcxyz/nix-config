@@ -379,6 +379,7 @@ in {
   boot.extraModprobeConfig = ''
     options btusb reset=1 enable_autosuspend=0
     options mt7925e disable_aspm=1
+    options zfs zfs_arc_max=17179869184
   '';
 
   systemd.services.bluetooth-keyboard-reconnect = {
