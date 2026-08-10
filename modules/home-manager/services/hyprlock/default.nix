@@ -13,16 +13,35 @@ let
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 
+  displayIdleConfig = pkgs.writeTextDir "hypr/hypridle.conf" ''
+    general {
+      ignore_dbus_inhibit = true
+    }
+
+    listener {
+      timeout = ${toString cfg.displayOffDelay}
+      ignore_inhibit = true
+      on-timeout = ${pkgs.hyprland}/bin/hyprctl dispatch dpms off
+      on-resume = ${pkgs.hyprland}/bin/hyprctl dispatch dpms on
+    }
+  '';
+
   lockScript = pkgs.writeShellScriptBin "lock-screen" ''
     HYPRLOCK="${cfg.package}/bin/hyprlock"
     HYPRCTL="${pkgs.hyprland}/bin/hyprctl"
     if ${boolToString cfg.turnOffDisplaysOnLock}; then
       $HYPRLOCK &
       lock_pid="$!"
-      ${pkgs.coreutils}/bin/sleep ${toString cfg.displayOffDelay}
-      if kill -0 "$lock_pid" 2>/dev/null; then
-        $HYPRCTL dispatch dpms off
-      fi
+      XDG_CONFIG_HOME=${displayIdleConfig} ${pkgs.hypridle}/bin/hypridle --quiet &
+      idle_pid="$!"
+
+      cleanup() {
+        kill "$idle_pid" 2>/dev/null || true
+        wait "$idle_pid" 2>/dev/null || true
+        $HYPRCTL dispatch dpms on >/dev/null 2>&1 || true
+      }
+      trap cleanup EXIT
+
       wait "$lock_pid"
     else
       exec $HYPRLOCK

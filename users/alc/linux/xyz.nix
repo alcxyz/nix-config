@@ -13,61 +13,22 @@
   };
   kdeConnectScrollThrottle =
     pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-scroll-throttle" {};
-  barPointerGuard = pkgs.writeShellApplication {
-    name = "hyprland-bar-pointer-guard";
-    runtimeInputs = [pkgs.coreutils];
-    text = let
-      dms = lib.getExe config.programs.dank-material-shell.package;
-      hyprctl = lib.getExe' pkgs.hyprland "hyprctl";
-    in ''
-      toggle_reveal() {
-        "${dms}" ipc call bar toggleReveal index 0 2>/dev/null || true
-      }
-
-      ensure_revealed() {
-        result="$(toggle_reveal)"
-        if [[ "$result" == "BAR_TUCK_SUCCESS" ]]; then
-          toggle_reveal >/dev/null
+  xwaylandPrimaryOutput = pkgs.writeShellApplication {
+    name = "hyprland-xwayland-primary-output";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.xrandr
+    ];
+    text = ''
+      for _ in $(seq 1 120); do
+        if DISPLAY="''${DISPLAY:-:0}" xrandr --output DP-1 --primary >/dev/null 2>&1; then
+          exit 0
         fi
-      }
-
-      ensure_tucked() {
-        result="$(toggle_reveal)"
-        if [[ "$result" == "BAR_REVEAL_SUCCESS" ]]; then
-          toggle_reveal >/dev/null
-        fi
-      }
-
-      held_marker="''${XDG_RUNTIME_DIR:?}/hyprland-bar-pointer-guard.held"
-      activated=false
-
-      cleanup() {
-        rm -f "$held_marker"
-        if [[ "$activated" == true ]]; then
-          ensure_tucked
-        fi
-      }
-      trap cleanup EXIT
-      trap 'exit 0' HUP INT TERM
-
-      rm -f "$held_marker"
-      sleep 0.3
-      touch "$held_marker"
-      activated=true
-      ensure_revealed
-
-      while true; do
-        position="$("${hyprctl}" cursorpos 2>/dev/null || true)"
-        x="''${position%%,*}"
-        y="''${position##*, }"
-
-        if [[ "$x" =~ ^[0-9]+$ && "$y" =~ ^[0-9]+$ ]] \
-          && ((x >= 1280 && x < 3840 && y < 1456)); then
-          "${hyprctl}" dispatch movecursor "$x" 1456 >/dev/null 2>&1 || true
-        fi
-
-        sleep 0.004
+        sleep 0.25
       done
+
+      echo "Failed to mark DP-1 as the XWayland primary output" >&2
+      exit 1
     '';
   };
 in {
@@ -104,6 +65,39 @@ in {
     ++ [
       pkgs.paperweight
     ];
+
+  # Keep launchers with cached pre-0.0.32 desktop commands working after the
+  # upstream executable was renamed from t3code to t3code-desktop. DMS stores
+  # the old arguments in its usage history, so discard the obsolete sandbox
+  # flag and any unexpanded desktop-entry URL placeholders.
+  home.file.".local/bin/t3code" = {
+    executable = true;
+    text = ''
+      #!${pkgs.runtimeShell}
+      filtered=()
+      for arg in "$@"; do
+        case "$arg" in
+          --no-sandbox|%u|%U) ;;
+          *) filtered+=("$arg") ;;
+        esac
+      done
+      exec ${pkgs.t3code}/bin/t3code-desktop "''${filtered[@]}"
+    '';
+  };
+
+  # DMS can retain the package entry's former bare command across upgrades.
+  # Prefer a user entry with an immutable executable path.
+  xdg.desktopEntries.t3code = {
+    name = "T3 Code (Alpha)";
+    comment = "Minimal web GUI for coding agents";
+    icon = "t3code";
+    # T3 Code does not currently consume files or URLs, and DMS can pass an
+    # unexpanded %U placeholder through as an application argument.
+    exec = "${pkgs.t3code}/bin/t3code-desktop";
+    categories = ["Development"];
+    settings.TryExec = "${pkgs.t3code}/bin/t3code-desktop";
+  };
+
   # Symlink configs directly to repo checkout for live editing
   xdg.configFile."ncspot/config.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/ncspot/config.toml";
@@ -136,9 +130,10 @@ in {
       # compositing load below the native 4K mode. The small logical gap acts
       # as a soft pointer barrier for the auto-hiding bar: precise movement
       # stops at the bar while a deliberate upward movement still crosses.
-      monitor = DP-1, preferred, 0x1456, 1
+      monitor = DP-1, 5120x1440@120, 0x1456, 1
       monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
 
+      exec-once = ${lib.getExe xwaylandPrimaryOutput}
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
   };
@@ -160,30 +155,23 @@ in {
   };
 
   services.dms.enable = true;
+  services.dms.settings = {
+    audioVisualizerEnabled = false;
+    scrollTitleEnabled = false;
+    waveProgressEnabled = false;
+  };
   services.dms.idleLock = {
     enable = true;
     command = config.services.hyprlock.lockCommand;
     acMonitorTimeout = 360;
     batteryMonitorTimeout = 0;
-    respectExternalInhibitors = false;
+    respectExternalInhibitors = true;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
   services.hyprlock = {
     enable = true;
     turnOffDisplaysOnLock = true;
     displayOffDelay = 360;
-  };
-  systemd.user.services.hyprland-bar-pointer-guard = {
-    Unit = {
-      Description = "Hold the DMS bar open and guard the upper monitor edge";
-      PartOf = ["graphical-session.target"];
-      After = ["graphical-session.target"];
-    };
-    Service = {
-      ExecStart = lib.getExe barPointerGuard;
-      Restart = "no";
-      TimeoutStopSec = 1;
-    };
   };
   services.waynergy = {
     enable = true;

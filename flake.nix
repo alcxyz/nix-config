@@ -72,7 +72,9 @@
     };
 
     dankMaterialShell = {
-      url = "github:AvengeMedia/DankMaterialShell";
+      # Track stable releases explicitly: DMS is part of the interactive
+      # desktop, so development-branch churn is a poor fit here.
+      url = "github:AvengeMedia/DankMaterialShell/v1.5.3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
