@@ -77,6 +77,10 @@ in {
       options = {
         calibreLibrary = cfg.libraryDir;
         enableBookUploading = false;
+        reverseProxyAuth = {
+          enable = cfg.proxySources != [];
+          header = "X-Forwarded-Preferred-Username";
+        };
       };
     };
 
