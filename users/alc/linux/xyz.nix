@@ -133,10 +133,9 @@ in {
       monitor = DP-1, 5120x1440@120, 0x1456, 1
       monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
 
-      # `exec-once` does not run when Home Manager reloads Hyprland in an
-      # existing session, leaving XWayland without a primary output until the
-      # next login. Reassert it on reload as well as at session startup.
-      exec = ${lib.getExe xwaylandPrimaryOutput}
+      # Set this before XWayland games start. Reasserting it on every Hyprland
+      # reload emits a RandR change that can resize an active Wine window.
+      exec-once = ${lib.getExe xwaylandPrimaryOutput}
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
   };
