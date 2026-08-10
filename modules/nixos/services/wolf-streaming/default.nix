@@ -274,6 +274,9 @@
         ]
         ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_EXECUTABLE=${kdeConnectExecutable}"
         ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_SENSITIVITY=${toString browserCfg.helium.kdeConnect.pointerSensitivity}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_PRECISION_SENSITIVITY=${toString browserCfg.helium.kdeConnect.pointerPrecisionSensitivity}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_ACCELERATION_START=${toString browserCfg.helium.kdeConnect.pointerAccelerationStart}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_ACCELERATION_FULL=${toString browserCfg.helium.kdeConnect.pointerAccelerationFull}"
         ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_SCROLL_INTERVAL_MS=${toString browserCfg.helium.kdeConnect.scrollIntervalMs}"
         ++ lib.optional restoreSession "NIXBOX_RESTORE_LAST_SESSION=1";
       devices = [];
@@ -1159,9 +1162,33 @@ in {
             type = lib.types.numbers.positive;
             default = 2.0;
             description = ''
-              Relative KDE Connect pointer multiplier inside the cooperative
-              Helium desktop. The hidden X pointer and Sway cursor are moved
-              together so clicks remain aligned.
+              Maximum relative KDE Connect pointer gain inside the cooperative
+              Helium desktop, reached during fast motion. The hidden X pointer
+              and Sway cursor are moved together so clicks remain aligned.
+            '';
+          };
+          pointerPrecisionSensitivity = lib.mkOption {
+            type = lib.types.numbers.positive;
+            default = 0.55;
+            description = ''
+              Relative KDE Connect pointer gain for slow, precise motion inside
+              the cooperative Helium desktop.
+            '';
+          };
+          pointerAccelerationStart = lib.mkOption {
+            type = lib.types.numbers.nonnegative;
+            default = 120;
+            description = ''
+              Pointer speed in pixels per second where KDE Connect acceleration
+              starts increasing above the precision gain.
+            '';
+          };
+          pointerAccelerationFull = lib.mkOption {
+            type = lib.types.numbers.positive;
+            default = 900;
+            description = ''
+              Pointer speed in pixels per second where KDE Connect reaches its
+              maximum pointer gain.
             '';
           };
           scrollIntervalMs = lib.mkOption {
@@ -1302,6 +1329,18 @@ in {
       {
         assertion = !browserCfg.helium.kdeConnect.enable || browserCfg.helium.cooperativeDefault;
         message = "in-session KDE Connect requires cooperative Helium";
+      }
+      {
+        assertion =
+          browserCfg.helium.kdeConnect.pointerPrecisionSensitivity
+          <= browserCfg.helium.kdeConnect.pointerSensitivity;
+        message = "KDE Connect precision pointer gain must not exceed its maximum gain";
+      }
+      {
+        assertion =
+          browserCfg.helium.kdeConnect.pointerAccelerationStart
+          < browserCfg.helium.kdeConnect.pointerAccelerationFull;
+        message = "KDE Connect pointer acceleration full speed must exceed its start speed";
       }
       {
         assertion =

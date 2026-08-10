@@ -2,6 +2,7 @@
 """Mirror KDE Connect's XTest pointer into the nested Sway seat."""
 
 import ctypes
+import math
 import os
 import socket
 import struct
@@ -205,6 +206,61 @@ class KdeConnectGate:
             self.enabled.clear()
 
 
+class PointerAcceleration:
+    def __init__(self, minimum_gain, maximum_gain, start_speed, full_speed):
+        if minimum_gain <= 0:
+            raise ValueError("minimum pointer gain must be positive")
+        if maximum_gain < minimum_gain:
+            raise ValueError("maximum pointer gain must not be below minimum gain")
+        if start_speed < 0:
+            raise ValueError("pointer acceleration start speed must not be negative")
+        if full_speed <= start_speed:
+            raise ValueError(
+                "pointer acceleration full speed must exceed its start speed"
+            )
+        self.minimum_gain = minimum_gain
+        self.maximum_gain = maximum_gain
+        self.start_speed = start_speed
+        self.full_speed = full_speed
+        self.remainder_x = 0.0
+        self.remainder_y = 0.0
+        self.last_sample = None
+
+    def reset(self, now):
+        self.remainder_x = 0.0
+        self.remainder_y = 0.0
+        self.last_sample = now
+
+    def scale(self, delta_x, delta_y, now):
+        elapsed = now - self.last_sample if self.last_sample is not None else 0.05
+        # An idle pause should not make the first sample of a fast swipe look
+        # artificially slow, while the floor prevents a short scheduler tick
+        # from producing an unbounded velocity estimate.
+        elapsed = max(0.001, min(elapsed, 0.05))
+        self.last_sample = now
+        speed = math.hypot(delta_x, delta_y) / elapsed
+        progress = max(
+            0.0,
+            min(
+                1.0,
+                (speed - self.start_speed)
+                / (self.full_speed - self.start_speed),
+            ),
+        )
+        smooth_progress = progress * progress * (3.0 - 2.0 * progress)
+        gain = self.minimum_gain + (
+            self.maximum_gain - self.minimum_gain
+        ) * smooth_progress
+
+        scaled_x = delta_x * gain + self.remainder_x
+        scaled_y = delta_y * gain + self.remainder_y
+        output_x = math.trunc(scaled_x)
+        output_y = math.trunc(scaled_y)
+        self.remainder_x = scaled_x - output_x
+        self.remainder_y = scaled_y - output_y
+        return output_x, output_y
+
+
 def main():
     pointer = XPointer(os.environ["DISPLAY"])
     kdeconnect = KdeConnectGate()
@@ -217,8 +273,21 @@ def main():
     pointer_sensitivity = float(
         os.environ.get("NIXBOX_KDECONNECT_POINTER_SENSITIVITY", "2.0")
     )
-    if pointer_sensitivity <= 0:
-        raise ValueError("KDE Connect pointer sensitivity must be positive")
+    precision_sensitivity = float(
+        os.environ.get("NIXBOX_KDECONNECT_POINTER_PRECISION_SENSITIVITY", "0.55")
+    )
+    acceleration_start = float(
+        os.environ.get("NIXBOX_KDECONNECT_POINTER_ACCELERATION_START", "120")
+    )
+    acceleration_full = float(
+        os.environ.get("NIXBOX_KDECONNECT_POINTER_ACCELERATION_FULL", "900")
+    )
+    acceleration = PointerAcceleration(
+        precision_sensitivity,
+        pointer_sensitivity,
+        acceleration_start,
+        acceleration_full,
+    )
 
     sway.command(f"seat seat0 hide_cursor {hide_timeout}")
     sway.command("seat seat0 hide_cursor when-typing disable")
@@ -235,24 +304,22 @@ def main():
                 f"seat seat0 cursor set {last_position[0]} {last_position[1]}"
             )
         last_motion = time.monotonic()
+        acceleration.reset(last_motion)
         hidden = False
 
         while kdeconnect.enabled.is_set():
             position = pointer.position()
             if position is not None and position != last_position:
                 now = time.monotonic()
-                if pointer_sensitivity != 1.0 and last_position is not None:
+                if last_position is not None:
+                    delta_x, delta_y = acceleration.scale(
+                        position[0] - last_position[0],
+                        position[1] - last_position[1],
+                        now,
+                    )
                     position = (
-                        round(
-                            last_position[0]
-                            + (position[0] - last_position[0])
-                            * pointer_sensitivity
-                        ),
-                        round(
-                            last_position[1]
-                            + (position[1] - last_position[1])
-                            * pointer_sensitivity
-                        ),
+                        last_position[0] + delta_x,
+                        last_position[1] + delta_y,
                     )
                     position = pointer.set_position(*position)
                 if hidden:
