@@ -1752,6 +1752,25 @@ in {
       };
     };
 
+    # Docker's age-based prune can remove locally built browser images because
+    # their reproducible creation timestamps are older than the most recent
+    # host-side build. Reconcile the qualified catalog after a successful prune
+    # instead of leaving the Kubernetes placement controller without a healthy
+    # failover target until the next host activation.
+    systemd.services.docker-prune = lib.mkIf (browserCfg.enable && config.virtualisation.docker.autoPrune.enable) {
+      unitConfig.OnSuccess = lib.mkAfter ["wolf-browser-images-after-docker-prune.service"];
+    };
+
+    systemd.services.wolf-browser-images-after-docker-prune = lib.mkIf (browserCfg.enable && config.virtualisation.docker.autoPrune.enable) {
+      description = "Reconcile local Wolf browser images after Docker pruning";
+      after = ["docker-prune.service"];
+      requires = ["docker.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe buildBrowserImages;
+      };
+    };
+
     networking.firewall = lib.mkIf cfg.openFirewall {
       allowedTCPPorts =
         [
