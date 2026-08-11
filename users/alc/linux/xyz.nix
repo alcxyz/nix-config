@@ -31,6 +31,64 @@
       exit 1
     '';
   };
+  droptermToggle = pkgs.writeShellApplication {
+    name = "dropterm-toggle";
+    runtimeInputs = [
+      config.programs.hyprscratch.package
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+    ];
+    text = ''
+      target_json="$(hyprctl monitors -j | jq -ce '.[] | select(.focused)')"
+      target_workspace="$(jq -r '.activeWorkspace.id' <<<"$target_json")"
+      active_is_dropterm="$(
+        hyprctl activewindow -j \
+          | jq -r '(.initialClass == "dropterm" or .initialTitle == "dropterm") // false'
+      )"
+
+      hyprscratch toggle dropterm
+
+      # An active dropterm was just hidden; leave its parked geometry alone.
+      if [[ "$active_is_dropterm" == true ]]; then
+        exit 0
+      fi
+
+      # Hyprscratch processes toggle requests asynchronously. Wait until the
+      # persistent client reaches the workspace that was focused at invocation.
+      client_json=""
+      for _ in $(seq 1 40); do
+        client_json="$(
+          hyprctl clients -j \
+            | jq -c --argjson workspace "$target_workspace" \
+                '.[] | select(
+                  (.initialClass == "dropterm" or .initialTitle == "dropterm")
+                  and .workspace.id == $workspace
+                )' \
+            | head -n 1
+        )"
+        [[ -n "$client_json" ]] && break
+        sleep 0.025
+      done
+
+      if [[ -z "$client_json" ]]; then
+        echo "dropterm did not appear on the focused workspace" >&2
+        exit 1
+      fi
+
+      address="$(jq -r '.address' <<<"$client_json")"
+      read -r target_x target_y target_width target_height < <(
+        jq -r '[.x, .y, .width, .height] | @tsv' <<<"$target_json"
+      )
+      read -r window_width window_height < <(
+        jq -r '[.size[0], .size[1]] | @tsv' <<<"$client_json"
+      )
+
+      x=$((target_x + (target_width - window_width) / 2))
+      y=$((target_y + (target_height - window_height) / 2))
+      hyprctl dispatch movewindowpixel "exact $x $y,address:$address" >/dev/null
+    '';
+  };
 in {
   # Import the common Linux configuration
   imports = [
@@ -63,6 +121,7 @@ in {
   home.packages =
     pkgsets.home.${hostRole.homePackageSet}
     ++ [
+      droptermToggle
       pkgs.paperweight
     ];
 
