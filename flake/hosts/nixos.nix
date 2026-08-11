@@ -22,6 +22,7 @@ in
         hostAttrs.configuration
         inputs.nix-secrets.nixosModules.forgejoActionsRunnerDefaults
         inputs.nix-secrets.nixosModules.forgeMirrorDefaults
+        inputs.nix-secrets.nixosModules.storageBackupPolicy
         inputs.sops-nix.nixosModules.sops
       ];
     }

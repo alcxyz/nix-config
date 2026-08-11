@@ -26,7 +26,6 @@
     plex = "xpool/appstate/plex";
     qbittorrent = "xpool/appstate/qbittorrent";
     stash = "xpool/appstate/stash";
-    steam-headless = runtimeDatasets.steam-headless;
   };
   appStateBackupPool = "hitachi";
   appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
@@ -38,8 +37,6 @@
   '') (builtins.attrNames appStateDatasets);
   k8sBackupDataset = "tank/k8s-backups";
   k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
-  homeBackupDataset = "xpool/home";
-  homeBackupRoot = "${appStateBackupPool}/xyz/home";
   gamesDataset = "${appStateBackupPool}/games";
   gamesMountpoint = "/hitachi/games";
   runtimeStoragePolicy = pkgs.writeShellScriptBin "xyz-runtime-storage-policy" ''
@@ -101,7 +98,7 @@
     fi
 
     if [ "$#" -ne 1 ]; then
-      echo "usage: xyz-local-backup {appstate|k8s|home}" >&2
+      echo "usage: xyz-local-backup {appstate|k8s}" >&2
       exit 64
     fi
 
@@ -215,11 +212,8 @@
       k8s)
         replicate_dataset ${lib.escapeShellArg k8sBackupDataset} ${lib.escapeShellArg k8sBackupRoot} include-parent
         ;;
-      home)
-        replicate_dataset ${lib.escapeShellArg homeBackupDataset} ${lib.escapeShellArg homeBackupRoot} include-parent
-        ;;
       *)
-        echo "unknown backup target '$backup_name'; expected appstate, k8s, or home" >&2
+        echo "unknown backup target '$backup_name'; expected appstate or k8s" >&2
         exit 64
         ;;
     esac
@@ -553,7 +547,7 @@ in {
     options = ["nofail"];
   };
   fileSystems."/var/lib/steam-headless" = {
-    device = appStateDatasets.steam-headless;
+    device = runtimeDatasets.steam-headless;
     fsType = "zfs";
     options = ["nofail"];
   };
@@ -594,18 +588,6 @@ in {
   systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
 
-  services.sanoid = {
-    enable = true;
-    datasets.${runtimeDatasets.steam-headless} = {
-      hourly = 24;
-      daily = 14;
-      monthly = 3;
-      yearly = 0;
-      autosnap = true;
-      autoprune = true;
-    };
-  };
-
   systemd.services.xyz-runtime-storage-policy = {
     description = "Enforce and verify xyz runtime storage policy";
     after = [
@@ -623,7 +605,6 @@ in {
     before = [
       "docker.service"
       "k3s.service"
-      "sanoid.service"
       "xyz-appstate-backup.service"
     ];
     wantedBy = ["multi-user.target"];
@@ -642,10 +623,33 @@ in {
       requires = ["xyz-runtime-storage-policy.service"];
     };
   systemd.services.xyz-k8s-backup = mkLocalBackupService "k8s" "Replicate xyz k8s backup dataset to the local backup pool";
-  systemd.services.xyz-home-backup = mkLocalBackupService "home" "Replicate xyz home dataset to the local backup pool";
-  systemd.services.sanoid = {
-    after = ["xyz-runtime-storage-policy.service"];
-    requires = ["xyz-runtime-storage-policy.service"];
+
+  services.snapshot-restic-home = {
+    enable = true;
+    sourceDataset = "xpool/home";
+    sourceMountPoint = "/home";
+    sourceRelativePath = username;
+    repositoryDataset = "hitachi/xyz/home-restic";
+    repositoryMountPoint = "/var/lib/xyz-home-restic";
+    repositoryQuota = "300G";
+    schedule = "*-*-* 05:50:00";
+    excludePatterns = [
+      "/.cache"
+      "/Downloads"
+      "/.local/share/Steam"
+      "/.local/share/Trash"
+      "/.local/share/lutris/runners"
+      "/.local/share/lutris/runtime"
+      "/.local/share/nvim/lazy"
+      "/.local/share/nvim/mason"
+      "/.local/share/pnpm/store"
+      "/.var/app/*/cache"
+    ];
+    retention = {
+      daily = 7;
+      weekly = 4;
+      monthly = 6;
+    };
   };
 
   systemd.services.xyz-games-dataset = {
@@ -662,7 +666,6 @@ in {
 
   systemd.timers.xyz-appstate-backup = mkLocalBackupTimer "*-*-* 05:20:00" "Daily xyz appstate backup";
   systemd.timers.xyz-k8s-backup = mkLocalBackupTimer "*-*-* 06:45:00" "Daily xyz k8s backup replication";
-  systemd.timers.xyz-home-backup = mkLocalBackupTimer "*-*-* 05:50:00" "Daily xyz home backup";
 
   # Docker - ZFS relationship
 

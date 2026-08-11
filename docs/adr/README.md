@@ -54,7 +54,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0047](0047-k8s-api-vip.md) | Kubernetes API floating VIP | Accepted | k3s, keepalived, hosts |
 | [ADR-0048](0048-xyz-small-nvme-retirement.md) | xyz storage maintenance private runbook boundary | Accepted, redacted | xyz, private runbooks |
 | [ADR-0049](0049-xyz-sensitive-host-bootstrap-boundary.md) | xyz sensitive host bootstrap boundary | Accepted | xyz, private runbooks |
-| [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted | xyz, ZFS, backups |
+| [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted, amended | xyz, ZFS, backups |
 | [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) | xev replaces rpi0 as a k3s server | Accepted | k3s, xev, rpi0, etcd |
 | [ADR-0052](0052-xev-primary-k8s-backup-target.md) | xev primary Kubernetes backup target with xyz ZFS replica | Accepted, staged | xev, xyz, k3s backups |
 | [ADR-0053](0053-controller-first-xps-couch-session.md) | Controller-first XPS couch session | Accepted | xps, couch, Moonlight, SteamHeadless |
@@ -62,4 +62,5 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0055](0055-nixbox-session-and-system-splash-boundary.md) | Stage the NIXBOX splash across boot and graphical session | Accepted | xps, couch, Plymouth, Quickshell |
 | [ADR-0056](0056-containerized-remote-browser-streaming.md) | Containerized remote browser streaming | Accepted, implemented | xev, xps, Wolf, Moonlight, browsers |
 | [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Accepted, active | xyz, xev, Wolf, Kubernetes, Longhorn |
-| [ADR-0058](0058-xyz-dedicated-runtime-storage.md) | Dedicated xyz runtime storage | Accepted, staged | xyz, Docker, k3s, Steam-headless, ZFS |
+| [ADR-0058](0058-xyz-dedicated-runtime-storage.md) | Dedicated xyz runtime storage | Accepted, amended | xyz, Docker, k3s, Steam-headless, ZFS |
+| [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) | File-selective home backup and host storage monitoring | Accepted | xyz, home backup, storage monitoring |

@@ -33,6 +33,8 @@ in {
     ../../shared/host-metadata.nix
     ../../shared/shell.nix
     ./distributed-build-client.nix
+    ../services/snapshot-restic-home/default.nix
+    ../services/storage-health-monitor/default.nix
   ];
 
   # ==================== Nix Configuration ====================
