@@ -1,6 +1,8 @@
+# Quality-first baseline. Reintroduce lower-cost role tiers only after evals
+# show that they preserve classification and extraction accuracy.
 [roles.fast]
 provider    = "openai"
-model       = "gpt-5.4-mini"
+model       = "gpt-5.6-sol"
 transport   = "cli"
 api_key_env = "OPENAI_API_KEY"
 
@@ -12,7 +14,7 @@ api_key_env = "ANTHROPIC_API_KEY"
 
 [roles.strong]
 provider    = "openai"
-model       = "gpt-5.4"
+model       = "gpt-5.6-sol"
 transport   = "cli"
 api_key_env = "OPENAI_API_KEY"
 
