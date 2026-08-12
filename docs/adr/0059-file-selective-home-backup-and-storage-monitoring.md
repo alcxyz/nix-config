@@ -1,6 +1,6 @@
 # ADR-0059: File-selective home backup and host storage monitoring
 
-**Status:** Accepted
+**Status:** Accepted, amended 2026-08-12
 
 **Date:** 2026-08-11
 
@@ -38,10 +38,20 @@ an initial backup, a full-data integrity check, a restore test, and a second
 incremental backup. Remove the former replica only after all four gates pass.
 
 Run a host-level monitor on storage-bearing systems. It checks expected mounts
-or ZFS pools, read/write state, free-space and utilization thresholds, required
-storage services, and recent success of host backup and mirror units. Results
-are sent to the existing private Healthchecks endpoint. Endpoint values and
-repository credentials remain in the private configuration boundary.
+or ZFS pools, read/write state, absolute free-space floors, required storage
+services, and recent success of host backup and mirror units. Results are sent
+to the existing private Healthchecks endpoint. The corresponding dead-man
+checks use a 30-minute period and 15-minute grace for the 15-minute host timer.
+
+Beszel owns percentage-based filesystem and pool-capacity history and sustained
+resource alerts. Host agents report the root filesystem and explicitly selected
+additional filesystems. The host-level monitor retains ZFS-specific correctness
+checks because generic disk metrics do not prove pool availability, health, or
+writability. Endpoint values, repository credentials, host-specific paths, and
+agent credentials remain in the private configuration boundary.
+
+The cross-repository alert ownership and reconciler policy is recorded in
+GitOps ADR-048.
 
 ## Consequences
 
@@ -53,9 +63,11 @@ repository credentials remain in the private configuration boundary.
 - The local backup still does not protect against whole-host or site loss.
 - Exclusion changes require review because an overly broad pattern can remove
   valuable data from future snapshots.
-- Capacity, mount failures, unhealthy pools, inactive storage services, and
-  stale host backup jobs produce centralized alerts instead of relying on
-  occasional manual audits.
+- Beszel provides capacity history and percentage alerts, while mount failures,
+  unhealthy pools, absolute free-space breaches, inactive storage services,
+  and stale host backup jobs continue to produce Healthchecks alerts.
+- A stopped host timer or unreachable host is detected within approximately 45
+  minutes rather than inheriting Healthchecks' one-day auto-provisioning period.
 
 ## Alternatives considered
 
