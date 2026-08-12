@@ -4,10 +4,11 @@
   pkgs,
   inputs,
   ...
-}: let
+}:
+let
   cfg = config.services.forgejo-actions-runner;
 
-  settingsFormat = pkgs.formats.yaml {};
+  settingsFormat = pkgs.formats.yaml { };
   stateDir = "/var/lib/forgejo/runner";
   runtimeDir = "/run/forgejo-runner";
   envFile = "${runtimeDir}/${cfg.name}.env";
@@ -17,7 +18,7 @@
   secretName = key: "forgejo_runner_${key}";
   secretPath = key: "/run/secrets/${secretName key}";
 
-  secretKeys = lib.unique (["runner_token"] ++ lib.attrValues cfg.secretEnv);
+  secretKeys = lib.unique ([ "runner_token" ] ++ lib.attrValues cfg.secretEnv);
 
   allEnvNames = lib.unique ((lib.attrNames cfg.jobEnv) ++ (lib.attrNames cfg.secretEnv));
   containerOptions = lib.concatStringsSep " " (map (name: "-e ${name}") allEnvNames);
@@ -38,7 +39,7 @@
       privileged = false;
       options = containerOptions;
       workdir_parent = null;
-      valid_volumes = ["/var/run/docker.sock"];
+      valid_volumes = [ "/var/run/docker.sock" ];
       docker_host = cfg.dockerHost;
       force_pull = false;
     };
@@ -48,8 +49,7 @@
   literalEnvScript = lib.concatLines (
     lib.mapAttrsToList (name: value: ''
       printf '%s=%s\n' ${lib.escapeShellArg name} ${lib.escapeShellArg value} >> "$env_tmp"
-    '')
-    cfg.jobEnv
+    '') cfg.jobEnv
   );
 
   secretEnvScript = lib.concatLines (
@@ -57,23 +57,64 @@
       printf '%s=' ${lib.escapeShellArg name} >> "$env_tmp"
       ${pkgs.coreutils}/bin/tr -d '\n' < ${lib.escapeShellArg (secretPath key)} >> "$env_tmp"
       printf '\n' >> "$env_tmp"
-    '')
-    cfg.secretEnv
+    '') cfg.secretEnv
   );
 
   secretChecksScript = lib.concatLines (
     map (key: ''
       test -s ${lib.escapeShellArg (secretPath key)}
-    '')
-    secretKeys
+    '') secretKeys
   );
 
   labelsWanted = lib.concatStringsSep "," cfg.labels;
-in {
+
+  cachePressurePrune = pkgs.writeShellApplication {
+    name = "forgejo-runner-cache-pressure-prune";
+    runtimeInputs = with pkgs; [
+      coreutils
+      docker
+      gawk
+      util-linux
+    ];
+    text = ''
+      set -euo pipefail
+
+      read -r filesystem_bytes used_percent < <(
+        df --block-size=1 --output=size,pcent ${lib.escapeShellArg cfg.cachePressure.mountPoint} |
+          awk 'NR == 2 { gsub(/%/, "", $2); print $1, $2 }'
+      )
+
+      if (( used_percent < ${toString cfg.cachePressure.triggerPercent} )); then
+        exit 0
+      fi
+
+      target_free_bytes=$((filesystem_bytes * ${toString cfg.cachePressure.targetFreePercent} / 100))
+      prune_args=(
+        --all
+        --force
+        --min-free-space "''${target_free_bytes}B"
+        --reserved-space ${lib.escapeShellArg cfg.cachePressure.reservedCacheSpace}
+      )
+
+      if (( used_percent < ${toString cfg.cachePressure.criticalPercent} )); then
+        prune_args+=(--filter ${lib.escapeShellArg "until=${cfg.cachePressure.minUnusedAge}"})
+        policy="cache unused for at least ${cfg.cachePressure.minUnusedAge}"
+      else
+        policy="all unused cache"
+      fi
+
+      logger -t forgejo-runner-cache-pressure-prune \
+        "${cfg.cachePressure.mountPoint} is ''${used_percent}% full; pruning $policy toward ${toString cfg.cachePressure.targetFreePercent}% free"
+
+      docker builder prune "''${prune_args[@]}"
+    '';
+  };
+in
+{
   options.services.forgejo-actions-runner = {
     enable = lib.mkEnableOption "native Forgejo Actions runner";
 
-    package = lib.mkPackageOption pkgs "forgejo-runner" {};
+    package = lib.mkPackageOption pkgs "forgejo-runner" { };
 
     name = lib.mkOption {
       type = lib.types.str;
@@ -95,7 +136,7 @@ in {
 
     labels = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [];
+      default = [ ];
       description = "Forgejo runner labels and execution backends.";
     };
 
@@ -124,13 +165,13 @@ in {
 
     jobEnv = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = {};
+      default = { };
       description = "Literal environment values written to the runner job env file.";
     };
 
     secretEnv = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = {};
+      default = { };
       description = "Mapping from job env variable names to keys in the runner SOPS file.";
     };
 
@@ -148,25 +189,81 @@ in {
       ];
       description = "Packages available to the runner process and explicit host-label jobs.";
     };
+
+    cachePressure = {
+      enable = lib.mkEnableOption "disk-pressure-aware Docker build-cache pruning" // {
+        default = true;
+      };
+
+      mountPoint = lib.mkOption {
+        type = lib.types.str;
+        default = "/";
+        description = "Filesystem whose usage triggers build-cache pruning.";
+      };
+
+      triggerPercent = lib.mkOption {
+        type = lib.types.ints.between 1 99;
+        default = 70;
+        description = "Used-space percentage at which unused build cache is pruned.";
+      };
+
+      criticalPercent = lib.mkOption {
+        type = lib.types.ints.between 1 99;
+        default = 80;
+        description = "Used-space percentage at which all unused build cache may be pruned regardless of age.";
+      };
+
+      minUnusedAge = lib.mkOption {
+        type = lib.types.str;
+        default = "48h";
+        description = "Minimum cache age eligible for pruning below the critical threshold.";
+      };
+
+      targetFreePercent = lib.mkOption {
+        type = lib.types.ints.between 1 99;
+        default = 40;
+        description = "Free-space percentage requested from BuildKit after pruning starts.";
+      };
+
+      reservedCacheSpace = lib.mkOption {
+        type = lib.types.str;
+        default = "10GB";
+        description = "Minimum BuildKit cache space retained during pressure pruning.";
+      };
+
+      interval = lib.mkOption {
+        type = lib.types.str;
+        default = "15m";
+        description = "Interval between inexpensive filesystem pressure checks.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.labels != [];
+        assertion = cfg.labels != [ ];
         message = "services.forgejo-actions-runner.labels must not be empty.";
       }
       {
         assertion = config.virtualisation.docker.enable;
         message = "services.forgejo-actions-runner requires Docker for docker:// labels.";
       }
+      {
+        assertion = cfg.cachePressure.targetFreePercent > 100 - cfg.cachePressure.triggerPercent;
+        message = "services.forgejo-actions-runner.cachePressure.targetFreePercent must provide hysteresis beyond the trigger.";
+      }
+      {
+        assertion = cfg.cachePressure.criticalPercent > cfg.cachePressure.triggerPercent;
+        message = "services.forgejo-actions-runner.cachePressure.criticalPercent must exceed triggerPercent.";
+      }
     ];
 
-    users.groups.forgejo-runner = {};
+    users.groups.forgejo-runner = { };
     users.users.forgejo-runner = {
       isSystemUser = true;
       group = "forgejo-runner";
-      extraGroups = ["docker"];
+      extraGroups = [ "docker" ];
     };
 
     # Runner jobs leave build cache and pulled images in the host Docker
@@ -182,6 +279,27 @@ in {
       ];
     };
 
+    systemd.services.forgejo-runner-cache-pressure-prune = lib.mkIf cfg.cachePressure.enable {
+      description = "Prune Forgejo runner build cache under disk pressure";
+      after = [ "docker.service" ];
+      requires = [ "docker.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe cachePressurePrune;
+      };
+    };
+
+    systemd.timers.forgejo-runner-cache-pressure-prune = lib.mkIf cfg.cachePressure.enable {
+      description = "Check Forgejo runner build-cache disk pressure";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "10m";
+        OnUnitActiveSec = cfg.cachePressure.interval;
+        RandomizedDelaySec = "2m";
+        Persistent = true;
+      };
+    };
+
     sops.secrets = lib.listToAttrs (
       map (key: {
         name = secretName key;
@@ -192,10 +310,9 @@ in {
           owner = "forgejo-runner";
           group = "forgejo-runner";
           mode = "0400";
-          restartUnits = ["forgejo-actions-runner.service"];
+          restartUnits = [ "forgejo-actions-runner.service" ];
         };
-      })
-      secretKeys
+      }) secretKeys
     );
 
     systemd.tmpfiles.rules = [
@@ -206,7 +323,7 @@ in {
 
     systemd.services.forgejo-actions-runner = {
       description = "Forgejo Actions Runner (${cfg.name})";
-      wants = ["network-online.target"];
+      wants = [ "network-online.target" ];
       after = [
         "network-online.target"
         "docker.service"
@@ -214,8 +331,8 @@ in {
       requires = [
         "docker.service"
       ];
-      wantedBy = ["multi-user.target"];
-      path = [cfg.package] ++ cfg.extraPackages;
+      wantedBy = [ "multi-user.target" ];
+      path = [ cfg.package ] ++ cfg.extraPackages;
       environment = {
         HOME = stateDir;
         DOCKER_HOST = cfg.dockerHost;
@@ -223,7 +340,7 @@ in {
       serviceConfig = {
         User = "forgejo-runner";
         Group = "forgejo-runner";
-        SupplementaryGroups = ["docker"];
+        SupplementaryGroups = [ "docker" ];
         WorkingDirectory = stateDir;
         RuntimeDirectory = "forgejo-runner";
         RuntimeDirectoryMode = "0750";

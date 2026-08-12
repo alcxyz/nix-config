@@ -1,6 +1,6 @@
 # ADR-0041: Native Forgejo Actions runners
 
-**Status:** Implemented (amended 2026-05-31: `xev` primary pool)
+**Status:** Implemented (amended 2026-08-12: pressure-aware build-cache lifecycle)
 **Date:** 2026-05-07
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -33,6 +33,8 @@ The NixOS module should:
 - expose explicit host and capability labels
 - support Docker-backed job labels for clean per-job containers
 - fail the systemd unit if required tools, sockets, or secrets are unavailable
+- bound unused Docker build cache according to both filesystem pressure and
+  cache recency
 
 Run native Docker-capable runners on `xyz`, `xev`, `nux`, and `nex`. Normal
 jobs use Docker-backed labels. No host-backed labels are exposed unless a
@@ -60,6 +62,10 @@ The default runner priority is represented with labels:
   workflows.
 - Primary and secondary scheduling intent is visible in labels instead of hidden
   in runner capacity assumptions.
+- Build cache is preserved while the host filesystem is healthy. Under moderate
+  pressure, only cache unused for the configured grace period is eligible for
+  removal; under critical pressure, all unused cache may be reclaimed. Running
+  containers, images needed by containers, and volumes are outside this policy.
 
 ## Alternatives Considered
 
@@ -84,6 +90,11 @@ clean per-job environments. Host-level jobs should be explicit exceptions.
 - Routine GitOps workflows target the primary `xyz`/`xev` runner pool. `nux`
   and `nex` are kept available for explicit fallback work without taking normal
   jobs from the larger hosts.
+- Runner hosts check filesystem pressure frequently instead of relying only on a
+  fixed cleanup schedule. The default policy starts age-filtered build-cache
+  pruning at 70% used, permits all unused cache to be pruned at 80% used, aims
+  for 40% free, and retains at least 10 GB of BuildKit cache. The existing
+  weekly age-based Docker cleanup remains responsible for old unused images.
 
 ## Work Items
 
