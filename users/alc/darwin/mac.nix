@@ -12,15 +12,15 @@
 }:
 # macOS-specific packages
 let
-  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" { inherit pkgs inputs; };
-in
-{
+  pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {inherit pkgs inputs;};
+in {
   imports = [
     "${configDir}/users/alc/common.nix"
     "${configDir}/modules/home-manager/programs/wezterm/default.nix"
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/programs/karabiner/default.nix"
     "${configDir}/modules/home-manager/programs/paneru/default.nix"
+    "${configDir}/modules/home-manager/programs/moonlight-endpoints/default.nix"
     inputs.nix-secrets.homeManagerModules.darwinOperator
   ];
 
@@ -30,6 +30,17 @@ in
   programs.karabiner.managed.enable = true;
   programs.paneru.managed.enable = false;
   programs.atuin.daemon.enable = false;
+  programs.moonlightEndpoints.launchers = [
+    {
+      hostname = "Wolf User";
+      application = "Wolf UI";
+      arguments = [
+        "--absolute-mouse"
+        "--display-mode"
+        "windowed"
+      ];
+    }
+  ];
 
   home.sessionPath = [
     "${config.home.homeDirectory}/.nix-profile/bin"
@@ -109,29 +120,29 @@ in
     };
 
     /*
-      conditionalSigningConfigs = {
-        # Condition for work projects
-        "gitdir:~/work/" = {
-          "user.name" = "Alc Work";
-          "user.email" = "alc@company.com";
-          "user.signingkey" = "${config.home.homeDirectory}/.ssh/id_ed25519_work.pub";
-          "commit.gpgsign" = "true"; # Ensure work commits are signed
-          # "gpg.format" = "ssh"; # Inherits global, or override if work key is different type
-        };
-
-        # Condition for a specific personal project needing a different key/email
-        "gitdir:~/personal/my-special-project/" = {
-          "user.email" = "alc+specialproject@personal.com";
-          "user.signingkey" = "${config.home.homeDirectory}/.ssh/id_ed25519_special.pub";
-          # Inherits global user.name ("alcxyz")
-          # Inherits global commit.gpgsign ("true") unless explicitly set to "false"
-        };
-
-        # Condition for projects where you don't want to sign commits
-        "gitdir:~/personal/no-signing-repos/" = {
-          "commit.gpgsign" = "false"; # Explicitly disable signing
-        };
+    conditionalSigningConfigs = {
+      # Condition for work projects
+      "gitdir:~/work/" = {
+        "user.name" = "Alc Work";
+        "user.email" = "alc@company.com";
+        "user.signingkey" = "${config.home.homeDirectory}/.ssh/id_ed25519_work.pub";
+        "commit.gpgsign" = "true"; # Ensure work commits are signed
+        # "gpg.format" = "ssh"; # Inherits global, or override if work key is different type
       };
+
+      # Condition for a specific personal project needing a different key/email
+      "gitdir:~/personal/my-special-project/" = {
+        "user.email" = "alc+specialproject@personal.com";
+        "user.signingkey" = "${config.home.homeDirectory}/.ssh/id_ed25519_special.pub";
+        # Inherits global user.name ("alcxyz")
+        # Inherits global commit.gpgsign ("true") unless explicitly set to "false"
+      };
+
+      # Condition for projects where you don't want to sign commits
+      "gitdir:~/personal/no-signing-repos/" = {
+        "commit.gpgsign" = "false"; # Explicitly disable signing
+      };
+    };
     */
   };
 }

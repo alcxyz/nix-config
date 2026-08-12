@@ -1,0 +1,287 @@
+diff --git a/quickshell/DMSShell.qml b/quickshell/DMSShell.qml
+index 0c9768f..0026a84 100644
+--- a/quickshell/DMSShell.qml
++++ b/quickshell/DMSShell.qml
+@@ -432,26 +432,28 @@ Item {
+     LazyLoader {
+         id: polkitAuthModalLoader
+         active: false
+-        readonly property PolkitAuthModal loadedModal: item as PolkitAuthModal
++        readonly property PolkitAuthSurfaceModal loadedModal: item as PolkitAuthSurfaceModal
+ 
+-        PolkitAuthModal {
++        PolkitAuthSurfaceModal {
+             id: polkitAuthModal
+ 
+             Component.onCompleted: {
+                 PopoutService.polkitAuthModal = polkitAuthModal;
+             }
+         }
+     }
+ 
+     Connections {
+         target: PolkitService.agent
+         enabled: PolkitService.polkitAvailable
+ 
+         function onAuthenticationRequestStarted() {
+             if (PopoutService.systemUpdatePopout?.shouldBeVisible)
+                 return;
+             polkitAuthModalLoader.active = true;
+-            if (polkitAuthModalLoader.loadedModal)
+-                polkitAuthModalLoader.loadedModal.show();
++            if (polkitAuthModalLoader.loadedModal) {
++                polkitAuthModalLoader.loadedModal.targetScreen = CompositorService.getFocusedScreen();
++                polkitAuthModalLoader.loadedModal.open();
++            }
+         }
+     }
+diff --git a/quickshell/Modals/PolkitAuthContent.qml b/quickshell/Modals/PolkitAuthContent.qml
+index f72e020..b0c321a 100644
+--- a/quickshell/Modals/PolkitAuthContent.qml
++++ b/quickshell/Modals/PolkitAuthContent.qml
+@@ -1,4 +1,5 @@
+ import QtQuick
++import Quickshell
+ import Quickshell.Io
+ import qs.Common
+ import qs.Services
+@@ -12,6 +13,19 @@ FocusScope {
+     property bool isLoading: false
+     property bool awaitingFprintForPassword: false
+     property var windowControls: null
+     readonly property int inputFieldHeight: Theme.fontSizeMedium + Theme.spacingL * 2
++    readonly property var requestDetails: currentFlow?.details ?? ({})
++    readonly property string requestCommand: requestDetails.command_line ?? requestDetails.program ?? ""
++    readonly property string requestAction: currentFlow?.actionId ?? ""
++    readonly property string requestIdentity: currentFlow?.selectedIdentity?.displayName ?? ""
++    readonly property bool hasTechnicalDetails: requestAction !== "" || requestCommand !== "" || requestIdentity !== ""
++    property bool technicalDetailsExpanded: false
++    property var elevationContext: ({})
++    property bool elevationContextAccepted: false
++    readonly property bool hasElevationContext: elevationContextAccepted && requestAction === "org.freedesktop.policykit.exec"
++    readonly property string requestTitle: hasElevationContext ? elevationContext.title : I18n.tr("Administrator permission required")
++    readonly property string requestReason: hasElevationContext ? elevationContext.reason : (currentFlow?.message ?? "")
++    readonly property string requestImpact: hasElevationContext ? (elevationContext.impact ?? "") : ""
++    readonly property string requestCommandLabel: hasElevationContext ? (elevationContext.commandLabel ?? "") : ""
+ 
+     property string polkitEtcPamText: ""
+@@ -69,3 +83,7 @@ FocusScope {
++        elevationContext = ({});
++        elevationContextAccepted = false;
++        elevationContextFile.reload();
+         isLoading = false;
+         awaitingFprintForPassword = false;
++        technicalDetailsExpanded = false;
+     }
+@@ -122,3 +140,30 @@ FocusScope {
++    FileView {
++        id: elevationContextFile
++
++        path: (Quickshell.env("XDG_RUNTIME_DIR") || "") + "/dms-elevation-context.json"
++        printErrors: false
++        watchChanges: true
++        onLoaded: {
++            root.elevationContextAccepted = false;
++            try {
++                const context = JSON.parse(text());
++                const age = Date.now() - Number(context.createdAt ?? 0);
++                if (context.requestId && context.title && context.reason && age >= -2000 && age <= 30000) {
++                    root.elevationContext = context;
++                    root.elevationContextAccepted = true;
++                } else {
++                    root.elevationContext = ({});
++                }
++            } catch (error) {
++                root.elevationContext = ({});
++            }
++        }
++        onLoadFailed: {
++            root.elevationContext = ({});
++            root.elevationContextAccepted = false;
++        }
++    }
++
+     Item {
+         id: headerSection
+         anchors.left: parent.left
+@@ -153,6 +198,10 @@ FocusScope {
+             StyledText {
+-                text: I18n.tr("Authentication Required")
++                text: root.requestTitle
+                 font.pixelSize: Theme.fontSizeLarge
+                 color: Theme.surfaceText
+                 font.weight: Font.Medium
++                width: parent.width
++                wrapMode: Text.Wrap
++                maximumLineCount: 2
++                elide: Text.ElideRight
+             }
+@@ -160,10 +209,19 @@ FocusScope {
+             StyledText {
+-                text: root.currentFlow?.message ?? ""
++                text: root.requestReason
+                 font.pixelSize: Theme.fontSizeMedium
+                 color: Theme.surfaceTextMedium
+                 width: parent.width
+                 wrapMode: Text.Wrap
+                 maximumLineCount: 2
+                 elide: Text.ElideRight
+                 visible: text !== ""
+             }
++
++            StyledText {
++                text: root.requestImpact
++                font.pixelSize: Theme.fontSizeMedium
++                color: Theme.surfaceTextMedium
++                width: parent.width
++                wrapMode: Text.Wrap
++                visible: root.hasElevationContext && text !== ""
++            }
+@@ -251,5 +309,125 @@ FocusScope {
+         }
+     }
+ 
++    Rectangle {
++        id: requestSummary
++
++        anchors.left: parent.left
++        anchors.right: parent.right
++        anchors.top: headerSection.bottom
++        anchors.margins: Theme.spacingM
++        readonly property real maxHeight: bottomSection.y - y - Theme.spacingM
++        height: visible ? Math.min(detailsColumn.implicitHeight + Theme.spacingM * 2, maxHeight) : 0
++        color: Theme.surfaceContainerHigh
++        radius: Theme.cornerRadius
++        visible: root.hasTechnicalDetails || root.hasElevationContext
++        clip: true
++
++        Flickable {
++            id: detailsFlickable
++
++            anchors.fill: parent
++            anchors.margins: Theme.spacingM
++            contentHeight: detailsColumn.implicitHeight
++            clip: true
++            interactive: contentHeight > height
++            boundsBehavior: Flickable.StopAtBounds
++
++            Column {
++                id: detailsColumn
++
++                width: detailsFlickable.width
++                spacing: Theme.spacingXS
++
++                Item {
++                    width: parent.width
++                    height: Math.max(detailsIcon.height, detailsTitle.implicitHeight) + Theme.spacingM
++
++                    Row {
++                        anchors.fill: parent
++                        spacing: Theme.spacingS
++
++                        DankIcon {
++                            id: detailsIcon
++
++                            name: root.technicalDetailsExpanded ? "expand_less" : "expand_more"
++                            size: Theme.iconSizeSmall
++                            anchors.verticalCenter: parent.verticalCenter
++                        }
++
++                        StyledText {
++                            id: detailsTitle
++
++                            text: I18n.tr("Technical details")
++                            font.pixelSize: Theme.fontSizeMedium
++                            font.weight: Font.Medium
++                            color: Theme.surfaceText
++                            width: parent.width - detailsIcon.width - Theme.spacingS
++                            elide: Text.ElideRight
++                            anchors.verticalCenter: parent.verticalCenter
++                        }
++                    }
++
++                    Accessible.role: Accessible.Button
++                    Accessible.name: I18n.tr("Technical details")
++                    Accessible.onPressAction: root.technicalDetailsExpanded = !root.technicalDetailsExpanded
++
++                    MouseArea {
++                        anchors.fill: parent
++                        hoverEnabled: true
++                        cursorShape: Qt.PointingHandCursor
++                        onClicked: root.technicalDetailsExpanded = !root.technicalDetailsExpanded
++                    }
++                }
++
++                StyledText {
++                    text: root.requestIdentity !== "" ? I18n.tr("Authenticating as %1").arg(root.requestIdentity) : ""
++                    font.pixelSize: Theme.fontSizeSmall
++                    color: Theme.surfaceTextMedium
++                    width: parent.width
++                    visible: root.technicalDetailsExpanded && root.requestIdentity !== ""
++                }
++
++                StyledText {
++                    text: root.requestCommandLabel !== "" ? I18n.tr("Operation: %1").arg(root.requestCommandLabel) : ""
++                    font.pixelSize: Theme.fontSizeSmall
++                    color: Theme.surfaceTextMedium
++                    width: parent.width
++                    wrapMode: Text.WrapAnywhere
++                    visible: root.technicalDetailsExpanded && root.requestCommandLabel !== ""
++                }
++
++                StyledText {
++                    text: root.requestAction !== "" ? I18n.tr("Polkit action: %1").arg(root.requestAction) : ""
++                    font.pixelSize: Theme.fontSizeSmall
++                    font.family: "monospace"
++                    color: Theme.surfaceText
++                    width: parent.width
++                    wrapMode: Text.WrapAnywhere
++                    visible: root.technicalDetailsExpanded && root.requestAction !== ""
++                }
++
++                StyledText {
++                    text: root.requestCommand !== "" ? I18n.tr("Command: %1").arg(root.requestCommand) : ""
++                    font.pixelSize: Theme.fontSizeSmall
++                    font.family: "monospace"
++                    color: Theme.surfaceText
++                    width: parent.width
++                    wrapMode: Text.WrapAnywhere
++                    visible: root.technicalDetailsExpanded && root.requestCommand !== ""
++                }
++
++                StyledText {
++                    text: root.hasElevationContext && (root.currentFlow?.message ?? "") !== "" ? I18n.tr("System message: %1").arg(root.currentFlow.message) : ""
++                    font.pixelSize: Theme.fontSizeSmall
++                    color: Theme.surfaceTextMedium
++                    width: parent.width
++                    wrapMode: Text.WrapAnywhere
++                    visible: root.technicalDetailsExpanded && text !== ""
++                }
++            }
++        }
++    }
++
+     Column {
+         id: bottomSection
+@@ -351,7 +529,7 @@ FocusScope {
+                     StyledText {
+                         id: authText
+                         anchors.centerIn: parent
+-                        text: I18n.tr("Authenticate")
++                        text: I18n.tr("Authorize")
+                         font.pixelSize: Theme.fontSizeMedium
+                         color: Theme.background
+                         font.weight: Font.Medium
+diff --git a/quickshell/Modals/PolkitAuthSurfaceModal.qml b/quickshell/Modals/PolkitAuthSurfaceModal.qml
+index 94662cd..265980e 100644
+--- a/quickshell/Modals/PolkitAuthSurfaceModal.qml
++++ b/quickshell/Modals/PolkitAuthSurfaceModal.qml
+@@ -10,6 +10,6 @@ DankModal {
+     property var parentPopout: null
+ 
+     layerNamespace: "dms:polkit-auth-surface"
+-    modalWidth: 460
+-    modalHeight: 220
++    modalWidth: @polkitModalWidth@
++    modalHeight: @polkitModalHeight@
+     backgroundColor: Theme.withAlpha(Theme.surfaceContainer, Theme.popupTransparency)

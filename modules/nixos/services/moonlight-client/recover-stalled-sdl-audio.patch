@@ -1,0 +1,75 @@
+diff --git a/app/streaming/audio/renderers/sdlaud.cpp b/app/streaming/audio/renderers/sdlaud.cpp
+index 5843892..962209b 100644
+--- a/app/streaming/audio/renderers/sdlaud.cpp
++++ b/app/streaming/audio/renderers/sdlaud.cpp
+@@ -3,6 +3,26 @@
+ #include <Limelight.h>
+ #include <SDL.h>
+ 
++#include <fstream>
++#include <string>
++
++static std::string readAudioReopenToken()
++{
++    const char* runtimeDir = SDL_getenv("XDG_RUNTIME_DIR");
++    if (runtimeDir == nullptr) {
++        return {};
++    }
++
++    std::ifstream marker(std::string(runtimeDir) + "/moonlight-audio-reopen");
++    std::string token;
++    std::getline(marker, token);
++    return token;
++}
++
++static bool s_AudioReopenTokenInitialized = false;
++static std::string s_AudioReopenToken;
++static Uint32 s_LastAudioReopenCheck = 0;
++
+ SdlAudioRenderer::SdlAudioRenderer()
+     : m_AudioDevice(0),
+       m_AudioBuffer(nullptr)
+@@ -107,6 +124,26 @@ bool SdlAudioRenderer::submitAudio(int bytesWritten)
+         return true;
+     }
+ 
++    // Output selection is performed outside Moonlight so it can follow local
++    // display and Bluetooth state. A successful PulseAudio stream move may
++    // leave SDL running with timing inherited from the old sink. Recreate only
++    // the audio renderer when the route helper advances its generation marker.
++    Uint32 now = SDL_GetTicks();
++    if (now - s_LastAudioReopenCheck >= 250) {
++        s_LastAudioReopenCheck = now;
++        std::string reopenToken = readAudioReopenToken();
++        if (!s_AudioReopenTokenInitialized) {
++            s_AudioReopenToken = reopenToken;
++            s_AudioReopenTokenInitialized = true;
++        }
++        else if (!reopenToken.empty() && reopenToken != s_AudioReopenToken) {
++            s_AudioReopenToken = reopenToken;
++            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
++                        "Audio output changed; recreating audio device");
++            return false;
++        }
++    }
++
+     // Don't queue if there's already more than 30 ms of audio data waiting
+     // in Moonlight's audio queue.
+     if (LiGetPendingAudioDuration() > 30) {
+@@ -127,6 +127,16 @@ bool SdlAudioRenderer::submitAudio(int bytesWritten)
+         SDL_Delay(1);
+     }
+ 
++    // A dead PulseAudio/PipeWire connection may leave SDL reporting PLAYING
++    // even though its queue has stopped draining. Treat that as device loss so
++    // Moonlight's existing renderer reinitialization path opens the new
++    // default device without reconnecting the stream session.
++    if (SDL_GetQueuedAudioSize(m_AudioDevice) / m_FrameSize > 10) {
++        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
++                    "Audio queue stopped draining; recreating audio device");
++        return false;
++    }
++
+     if (SDL_QueueAudio(m_AudioDevice, m_AudioBuffer, bytesWritten) < 0) {
+         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                      "Failed to queue audio sample: %s",

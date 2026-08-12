@@ -1,0 +1,71 @@
+diff --git a/src/moonlight-server/control/input_handler.cpp b/src/moonlight-server/control/input_handler.cpp
+index 6f7f6ae..cabfb8f 100644
+--- a/src/moonlight-server/control/input_handler.cpp
++++ b/src/moonlight-server/control/input_handler.cpp
+@@ -375,6 +375,18 @@ void keyboard_key(const KEYBOARD_PACKET &pkt, events::StreamSession &session) {
+     return;
+   }
+ 
++  if (pkt.type == KEY_PRESS) {
++    session.pressed_keyboard_keys.insert(moonlight_key);
++  }
++
++  // The GameStream modifier mask does not distinguish left from right Alt.
++  // Moonlight still sends the real modifier key packet, so prefer that state
++  // and retain synthetic left Alt only as a fallback for clients that omit it.
++  const bool real_alt_pressed =
++      session.pressed_keyboard_keys.contains(0x12) || session.pressed_keyboard_keys.contains(0xA4) ||
++      session.pressed_keyboard_keys.contains(0xA5);
++  const bool synthesize_alt = pkt.modifiers & KEYBOARD_MODIFIERS::ALT && !real_alt_pressed;
++
+   if (pkt.type == KEY_PRESS) {
+     int wolf_ui_combo_pressed = 0;
+     if (pkt.modifiers & KEYBOARD_MODIFIERS::SHIFT && moonlight_key != M_SHIFT)
+@@ -405,7 +417,7 @@ void keyboard_key(const KEYBOARD_PACKET &pkt, events::StreamSession &session) {
+       std::visit([](auto &keyboard) { keyboard.press(M_SHIFT); }, session.keyboard->value());
+     if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && moonlight_key != M_CTRL)
+       std::visit([](auto &keyboard) { keyboard.press(M_CTRL); }, session.keyboard->value());
+-    if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && moonlight_key != M_ALT)
++    if (synthesize_alt)
+       std::visit([](auto &keyboard) { keyboard.press(M_ALT); }, session.keyboard->value());
+     if (pkt.modifiers & KEYBOARD_MODIFIERS::META && moonlight_key != M_META)
+       std::visit([](auto &keyboard) { keyboard.press(M_META); }, session.keyboard->value());
+@@ -418,13 +430,14 @@ void keyboard_key(const KEYBOARD_PACKET &pkt, events::StreamSession &session) {
+       std::visit([](auto &keyboard) { keyboard.release(M_SHIFT); }, session.keyboard->value());
+     if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && moonlight_key != M_CTRL)
+       std::visit([](auto &keyboard) { keyboard.release(M_CTRL); }, session.keyboard->value());
+-    if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && moonlight_key != M_ALT)
++    if (synthesize_alt)
+       std::visit([](auto &keyboard) { keyboard.release(M_ALT); }, session.keyboard->value());
+     if (pkt.modifiers & KEYBOARD_MODIFIERS::META && moonlight_key != M_META)
+       std::visit([](auto &keyboard) { keyboard.release(M_META); }, session.keyboard->value());
+ 
+   } else {
+     std::visit([moonlight_key](auto &keyboard) { keyboard.release(moonlight_key); }, session.keyboard->value());
++    session.pressed_keyboard_keys.erase(moonlight_key);
+   }
+ }
+ 
+diff --git a/src/moonlight-server/events/events.hpp b/src/moonlight-server/events/events.hpp
+index d46fd98..9f41e60 100644
+--- a/src/moonlight-server/events/events.hpp
++++ b/src/moonlight-server/events/events.hpp
+@@ -20,6 +20,7 @@
+ #include <rfl.hpp>
+ #include <rfl/json.hpp>
+ #include <state/serialised_config.hpp>
++#include <set>
+ #include <string_view>
+ 
+ namespace wolf::core::events {
+@@ -453,6 +454,10 @@ struct StreamSession {
+   std::shared_ptr<std::optional<TouchScreenTypes>> touch_screen =
+       std::make_shared<std::optional<TouchScreenTypes>>(); /* Now added at the start */
+ 
++  // Keep the real Moonlight key state so packet modifier hints do not
++  // synthesize a left-side modifier over an already held right-side key.
++  std::set<short> pressed_keyboard_keys;
++
+   std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<JoypadList>>();
+ 
+   std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =

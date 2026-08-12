@@ -1,0 +1,12 @@
+diff --git a/src/core/src/platforms/linux/virtual-display/gst-wayland-display.cpp b/src/core/src/platforms/linux/virtual-display/gst-wayland-display.cpp
+index 2a2915e..2333fcf 100644
+--- a/src/core/src/platforms/linux/virtual-display/gst-wayland-display.cpp
++++ b/src/core/src/platforms/linux/virtual-display/gst-wayland-display.cpp
+@@ -179,5 +179,7 @@ static const std::map<unsigned int, unsigned int> key_mappings = {
+     {0xA2, KEY_LEFTCTRL},   {0xA3, KEY_RIGHTCTRL},
+     {0xA4, KEY_LEFTALT},    {0xA5, KEY_RIGHTALT},
++    {0xB0, KEY_NEXTSONG},   {0xB1, KEY_PREVIOUSSONG},
++    {0xB2, KEY_STOPCD},     {0xB3, KEY_PLAYPAUSE},
+     {0xBA, KEY_SEMICOLON},  {0xBB, KEY_EQUAL},
+     {0xBC, KEY_COMMA},      {0xBD, KEY_MINUS},
+     {0xBE, KEY_DOT},        {0xBF, KEY_SLASH},

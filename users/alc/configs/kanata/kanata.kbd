@@ -1,7 +1,3 @@
-(defcfg
-  process-unmapped-keys yes
-)
-
 ;; Define timeout values
 (defvar
   tap-timeout 150

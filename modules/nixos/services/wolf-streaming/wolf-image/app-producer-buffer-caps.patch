@@ -1,0 +1,14 @@
+diff --git a/src/moonlight-server/state/configTOML.cpp b/src/moonlight-server/state/configTOML.cpp
+index d532b70..c147116 100644
+--- a/src/moonlight-server/state/configTOML.cpp
++++ b/src/moonlight-server/state/configTOML.cpp
+@@ -190,7 +190,8 @@ std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>> parse_apps
+                                  .id = generate_app_id(app),
+                                  .support_hdr = false,
+                                  .icon_png_path = app.icon_png_path},
+-                        .video_producer_buffer_caps = default_video_settings.producer_buffer_caps.value(),
++                        .video_producer_buffer_caps = app_video_settings.producer_buffer_caps.value_or(
++                            default_video_settings.producer_buffer_caps.value()),
+                         .h264_gst_pipeline = h264_gst_pipeline,
+                         .hevc_gst_pipeline = hevc_gst_pipeline,
+                         .av1_gst_pipeline = av1_gst_pipeline,

@@ -20,6 +20,46 @@ with lib; let
     else toString configDir;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
+  managedOverridesConfig = pkgs.writeText "hyprland-managed-overrides.conf" (
+    optionalString (cfg.inputSensitivity != null) ''
+      input {
+        sensitivity = ${toString cfg.inputSensitivity}
+      }
+    ''
+    + optionalString (cfg.remotePointerInactiveTimeout != null || cfg.remotePointerHideOnTouch != null) ''
+      cursor {
+        ${optionalString (cfg.remotePointerInactiveTimeout != null) "inactive_timeout = ${toString cfg.remotePointerInactiveTimeout}"}
+        ${optionalString (cfg.remotePointerHideOnTouch != null) "hide_on_touch = ${boolToString cfg.remotePointerHideOnTouch}"}
+      }
+    ''
+  );
+  inputDefaultsScript = pkgs.writeShellScript "hyprland-input-defaults" ''
+    set -eu
+
+    for _attempt in $(${pkgs.coreutils}/bin/seq 1 50); do
+      if ${pkgs.hyprland}/bin/hyprctl keyword input:kb_layout ${escapeShellArg cfg.inputLayouts} >/dev/null 2>&1; then
+        ${pkgs.hyprland}/bin/hyprctl keyword input:kb_options ${escapeShellArg cfg.inputOptions} >/dev/null
+        ${pkgs.hyprland}/bin/hyprctl switchxkblayout all 0 >/dev/null
+        exit 0
+      fi
+      ${pkgs.coreutils}/bin/sleep 0.1
+    done
+
+    echo "Hyprland was not ready for keyboard input defaults" >&2
+    exit 1
+  '';
+  hostConfig = pkgs.writeText "hyprland-host.conf" (
+    cfg.extraConfig
+    + optionalString cfg.laptopDisplayAutoSwitch.enable ''
+      exec-once = ${laptopDisplayScript}
+    ''
+  );
+  colorsConfig = pkgs.writeText "hyprland-colors.conf" ''
+    general {
+      col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
+      col.inactive_border = 0xff${colors.base00}
+    }
+  '';
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''
     set -eu
 
@@ -31,6 +71,7 @@ with lib; let
     ]}
 
     lid_closed() {
+      local state
       for state in /proc/acpi/button/lid/*/state; do
         [ -r "$state" ] || continue
         grep -qi closed "$state" && return 0
@@ -78,6 +119,38 @@ with lib; let
               | sort_by(.refreshRate)
               | last.mode
             ) // "preferred"
+          elif (
+            try (
+              (($monitor.availableModes // [])[0] // "")
+              | capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate
+              | tonumber
+            ) catch 60
+          ) < 50 then
+            (
+              ($monitor.availableModes // [])
+              | map(
+                  select(startswith("2560x1440@"))
+                  | {
+                      mode: (sub("Hz$"; "")),
+                      refreshRate: (capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate | tonumber)
+                    }
+                  | select(.refreshRate >= 59)
+                )
+              | sort_by(.refreshRate)
+              | last.mode
+            ) // (
+              ($monitor.availableModes // [])
+              | map(
+                  select(startswith("1920x1080@"))
+                  | {
+                      mode: (sub("Hz$"; "")),
+                      refreshRate: (capture("@(?<refreshRate>[0-9.]+)Hz$").refreshRate | tonumber)
+                    }
+                  | select(.refreshRate >= 59)
+                )
+              | sort_by(.refreshRate)
+              | last.mode
+            ) // "preferred"
           else
             "preferred"
           end
@@ -88,7 +161,18 @@ with lib; let
       output="$1"
       position="$2"
       mode="$(monitor_mode "$output")"
-      hyprctl keyword monitor "$output, $mode, $position, 1" >/dev/null
+      result="$(hyprctl eval "hl.monitor({ output = \"$output\", mode = \"$mode\", position = \"$position\", scale = \"1\", disabled = false })" 2>&1 || true)"
+      if [ "$result" != ok ]; then
+        hyprctl keyword monitor "$output, $mode, $position, 1" >/dev/null
+      fi
+    }
+
+    disable_monitor() {
+      output="$1"
+      result="$(hyprctl eval "hl.monitor({ output = \"$output\", disabled = true })" 2>&1 || true)"
+      if [ "$result" != ok ]; then
+        hyprctl keyword monitor "$output, disable" >/dev/null
+      fi
     }
 
     apply_display_state() {
@@ -105,7 +189,7 @@ with lib; let
 
         for internal in "''${internals[@]}"; do
           if lid_closed; then
-            hyprctl keyword monitor "$internal, disable" >/dev/null
+            disable_monitor "$internal"
           else
             configure_monitor "$internal" "auto-right"
           fi
@@ -151,7 +235,43 @@ in {
       description = "Optional Hyprland input sensitivity override in the range -1.0 to 1.0.";
     };
 
+    inputLayouts = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Optional comma-separated XKB layouts applied when the Hyprland graphical session starts.";
+    };
+
+    inputOptions = mkOption {
+      type = types.str;
+      default = "grp:alt_shift_toggle";
+      description = "XKB options applied when the Hyprland graphical session starts.";
+    };
+
+    remotePointerInactiveTimeout = mkOption {
+      type = types.nullOr (types.ints.between 0 20);
+      default = null;
+      description = ''
+        Seconds to retain the cursor after remote pointer activity. Zero
+        disables inactivity hiding; null leaves the compositor default intact.
+      '';
+    };
+
+    remotePointerHideOnTouch = mkOption {
+      type = types.nullOr types.bool;
+      default = null;
+      description = ''
+        Whether touch-classified input hides the cursor. Set false for remote
+        pointer backends whose absolute axes can be classified as touch input.
+      '';
+    };
+
     laptopDisplayAutoSwitch.enable = mkEnableOption "automatic laptop display switching for external outputs and lid state";
+
+    manageLegacyConfig = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Install the legacy hyprland.conf configuration and its fragments.";
+    };
 
     extraConfig = mkOption {
       type = types.lines;
@@ -179,46 +299,72 @@ in {
       executable = true;
     };
 
-    # Symlink hyprland configs directly to the repo checkout so edits take
-    # effect immediately without a home-manager rebuild.
-    xdg.configFile."hypr/hyprland.conf" = {
-      force = true;
-      source = config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf";
+    # Hyprland watches its configuration tree and reloads immediately. Home
+    # Manager normally unlinks the old generation before linking the new one,
+    # which exposes a briefly incomplete configuration to the running
+    # compositor. Keep these links outside linkGeneration and replace each one
+    # atomically instead. Repo-backed files still update live without a rebuild.
+    home.activation.hyprlandLegacyConfig = mkIf cfg.manageLegacyConfig (
+      lib.hm.dag.entryAfter ["linkGeneration"] ''
+        hypr_dir=${escapeShellArg "${config.home.homeDirectory}/.config/hypr"}
+        dms_dir="$hypr_dir/dms"
+        mkdir -p "$hypr_dir" "$dms_dir"
+
+        install_link() {
+          source_path="$1"
+          target_path="$2"
+
+          if [ -L "$target_path" ] \
+            && [ "$(readlink "$target_path")" = "$source_path" ]; then
+            return
+          fi
+
+          temporary_path="$target_path.home-manager-new"
+          rm -f "$temporary_path"
+          ln -s "$source_path" "$temporary_path"
+          mv -Tf "$temporary_path" "$target_path"
+        }
+
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf"} "$hypr_dir/hyprland.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds.conf"} "$hypr_dir/binds.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf"} "$hypr_dir/binds-scrolling.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf"} "$hypr_dir/binds-dwindle.conf"
+        install_link ${escapeShellArg "${managedOverridesConfig}"} "$hypr_dir/managed-overrides.conf"
+        install_link ${escapeShellArg "${hostConfig}"} "$hypr_dir/host.conf"
+        install_link ${escapeShellArg "${colorsConfig}"} "$hypr_dir/colors.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/cursor.conf"} "$dms_dir/cursor.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/windowrules.conf"} "$dms_dir/windowrules.conf"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/outputs.conf"} "$dms_dir/outputs.conf"
+      ''
+    );
+
+    # XPS starts this explicitly only for its normal desktop session. Keeping
+    # the unit out of WantedBy prevents it from changing the dedicated couch
+    # session's fixed display layout.
+    systemd.user.services.hypr-laptop-display-autoswitch = mkIf cfg.laptopDisplayAutoSwitch.enable {
+      Unit = {
+        Description = "Adjust Hyprland outputs for laptop and dock state";
+        PartOf = ["graphical-session.target"];
+        After = ["graphical-session.target"];
+      };
+      Service = {
+        ExecStart = laptopDisplayScript;
+        Restart = "on-failure";
+        RestartSec = 2;
+      };
     };
-    xdg.configFile."hypr/binds.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds.conf";
-    xdg.configFile."hypr/binds-scrolling.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf";
-    xdg.configFile."hypr/binds-dwindle.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf";
 
-    xdg.configFile."hypr/managed-overrides.conf".text = optionalString (cfg.inputSensitivity != null) ''
-      input {
-        sensitivity = ${toString cfg.inputSensitivity}
-      }
-    '';
-
-    xdg.configFile."hypr/host.conf".text =
-      cfg.extraConfig
-      + optionalString cfg.laptopDisplayAutoSwitch.enable ''
-        exec-once = ~/.config/hypr/scripts/laptop_display_autoswitch.sh
-      '';
-
-    # DMS user-editable configs — live symlinks so edits take effect immediately.
-    # colors.conf and layout.conf are excluded: DMS generates them at runtime.
-    xdg.configFile."hypr/dms/cursor.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/cursor.conf";
-    xdg.configFile."hypr/dms/windowrules.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/windowrules.conf";
-    xdg.configFile."hypr/dms/outputs.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${localConfigDir}/users/${username}/configs/dms/outputs.conf";
-
-    # Keep colors.conf generated from nix-colors
-    xdg.configFile."hypr/colors.conf".text = ''
-      general {
-        col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
-        col.inactive_border = 0xff${colors.base00}
-      }
-    '';
+    systemd.user.services.hyprland-input-defaults = mkIf (cfg.inputLayouts != null) {
+      Unit = {
+        Description = "Apply Hyprland keyboard layout defaults";
+        PartOf = ["graphical-session.target"];
+        After = ["graphical-session.target"];
+      };
+      Service = {
+        Type = "oneshot";
+        ExecStart = inputDefaultsScript;
+      };
+      Install.WantedBy = ["graphical-session.target"];
+    };
   };
 }

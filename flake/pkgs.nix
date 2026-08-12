@@ -66,6 +66,15 @@ in
               });
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
+              reportcraft = inputs.reportcraft.packages.${system}.default;
+              nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
+              nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
+                quickshell = inputs.quickshell.packages.${system}.default;
+              };
+              ffmpeg-v4l2-request = _prev.callPackage ../packages/ffmpeg-v4l2-request {};
+              moonlight-v4l2-request = _prev.moonlight-qt.override {
+                ffmpeg = _final.ffmpeg-v4l2-request;
+              };
               paneru = inputs.paneru.packages.${system}.default;
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.

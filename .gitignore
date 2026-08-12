@@ -2,5 +2,7 @@
 .direnv/
 result
 result-*
+__pycache__/
+*.pyc
 
 secrets/secrets.yaml

@@ -43,7 +43,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0036](0036-host-inventory-source-of-truth.md) | Host inventory as source of truth | Accepted | hosts, roles, packages, workspace, k3s |
 | [ADR-0037](0037-flake-parts-output-structure.md) | Flake output structure via flake-parts | Accepted | `flake.nix`, `flake/` |
 | [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Accepted | unifi, nux, rpi0 |
-| [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Accepted | xyz, ZFS, k3s backups |
+| [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by ADR-0052 | xyz, ZFS, k3s backups |
 | [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Proposed | unifi, nux, rpi0, failover |
 | [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Implemented | forgejo, runners, systemd, docker |
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Accepted | media, torrent, stash, xyz |
@@ -54,5 +54,13 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0047](0047-k8s-api-vip.md) | Kubernetes API floating VIP | Accepted | k3s, keepalived, hosts |
 | [ADR-0048](0048-xyz-small-nvme-retirement.md) | xyz storage maintenance private runbook boundary | Accepted, redacted | xyz, private runbooks |
 | [ADR-0049](0049-xyz-sensitive-host-bootstrap-boundary.md) | xyz sensitive host bootstrap boundary | Accepted | xyz, private runbooks |
-| [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted | xyz, ZFS, backups |
+| [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted, amended | xyz, ZFS, backups |
 | [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) | xev replaces rpi0 as a k3s server | Accepted | k3s, xev, rpi0, etcd |
+| [ADR-0052](0052-xev-primary-k8s-backup-target.md) | xev primary Kubernetes backup target with xyz ZFS replica | Accepted, staged | xev, xyz, k3s backups |
+| [ADR-0053](0053-controller-first-xps-couch-session.md) | Controller-first XPS couch session | Accepted | xps, couch, Moonlight, SteamHeadless |
+| [ADR-0054](0054-mac-hosted-synergy1-with-waynergy-clients.md) | Mac-hosted Synergy 1 with Waynergy clients | Accepted | mac, xps, xyz, Synergy, Waynergy |
+| [ADR-0055](0055-nixbox-session-and-system-splash-boundary.md) | Stage the NIXBOX splash across boot and graphical session | Accepted | xps, couch, Plymouth, Quickshell |
+| [ADR-0056](0056-containerized-remote-browser-streaming.md) | Containerized remote browser streaming | Accepted, implemented | xev, xps, Wolf, Moonlight, browsers |
+| [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Accepted, active | xyz, xev, Wolf, Kubernetes, Longhorn |
+| [ADR-0058](0058-xyz-dedicated-runtime-storage.md) | Dedicated xyz runtime storage | Accepted, amended | xyz, Docker, k3s, Steam-headless, ZFS |
+| [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) | File-selective home backup and host storage monitoring | Accepted, amended | xyz, home backup, storage monitoring |

@@ -1,0 +1,61 @@
+diff --git a/dms/Services/IdleService.qml b/dms/Services/IdleService.qml
+index 16e2f39..9091cbd 100644
+--- a/dms/Services/IdleService.qml
++++ b/dms/Services/IdleService.qml
+@@ -12,7 +12,7 @@ Singleton {
+     readonly property var log: Log.scoped("IdleService")
+ 
+     property bool enabled: true
+-    property bool respectInhibitors: true
++    property bool respectInhibitors: @respectExternalInhibitors@
+ 
+     readonly property bool externalInhibitActive: DMSService.screensaverInhibited
+ 
+@@ -38,8 +38,8 @@ Singleton {
+         // Gate on the shell's own inhibit state rather than relying on the
+         // compositor honoring the bar-surface zwp_idle_inhibit inhibitor,
+         // which goes inactive whenever the bar surface is occluded
+         // (fullscreen windows) or hidden (auto-hide).
+-        const base = enabled && !SessionService.idleInhibited && !externalInhibitActive;
++        const base = enabled && !SessionService.idleInhibited && (!respectInhibitors || !externalInhibitActive);
+         monitorOffMonitor.enabled = base && monitorTimeout > 0 && !postLockMonitorActive;
+         postLockMonitorOffMonitor.enabled = enabled && postLockMonitorActive;
+         lockMonitor.enabled = base && lockTimeout > 0;
+@@ -77,7 +77,9 @@ Singleton {
+     IdleMonitor {
+         id: monitorOffMonitor
+         timeout: root.monitorTimeout > 0 ? root.monitorTimeout : 86400
+-        respectInhibitors: root.respectInhibitors
++        // Inhibitors are gated explicitly above. Do not let the shell's own
++        // layer-surface inhibitor feed back into and block its idle monitors.
++        respectInhibitors: false
+         enabled: false
+         onIsIdleChanged: {
+             if (!enabled)
+@@ -100,7 +102,7 @@ Singleton {
+     IdleMonitor {
+         id: postLockMonitorOffMonitor
+         timeout: root.postLockMonitorTimeout > 0 ? root.postLockMonitorTimeout : 86400
+-        respectInhibitors: root.respectInhibitors
++        respectInhibitors: false
+         enabled: false
+         onIsIdleChanged: {
+             if (!enabled)
+@@ -116,7 +118,7 @@ Singleton {
+     IdleMonitor {
+         id: lockMonitor
+         timeout: root.lockTimeout > 0 ? root.lockTimeout : 86400
+-        respectInhibitors: root.respectInhibitors
++        respectInhibitors: false
+         enabled: false
+         onIsIdleChanged: {
+             if (!enabled)
+@@ -138,7 +140,7 @@ Singleton {
+     IdleMonitor {
+         id: suspendMonitor
+         timeout: root.suspendTimeout > 0 ? root.suspendTimeout : 86400
+-        respectInhibitors: root.respectInhibitors
++        respectInhibitors: false
+         enabled: false
+         onIsIdleChanged: {
+             if (!enabled)

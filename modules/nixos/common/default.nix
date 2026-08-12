@@ -33,6 +33,8 @@ in {
     ../../shared/host-metadata.nix
     ../../shared/shell.nix
     ./distributed-build-client.nix
+    ../services/snapshot-restic-home/default.nix
+    ../services/storage-health-monitor/default.nix
   ];
 
   # ==================== Nix Configuration ====================
@@ -44,12 +46,26 @@ in {
       ];
       publicKey = sshKeys.keys.xyz_host_ed25519;
     };
+    nux = {
+      hostNames = [
+        "nux"
+        "192.168.1.15"
+      ];
+      publicKey = sshKeys.keys.nux_host_ed25519;
+    };
     xev = {
       hostNames = [
         "xev"
         "192.168.1.13"
       ];
       publicKey = sshKeys.keys.xev_host_ed25519;
+    };
+    nex = {
+      hostNames = [
+        "nex"
+        "192.168.1.16"
+      ];
+      publicKey = sshKeys.keys.nex_host_ed25519;
     };
   };
 

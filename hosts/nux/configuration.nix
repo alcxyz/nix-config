@@ -90,8 +90,11 @@ in {
 
   k3s = {
     enable = true;
-    clusterInit = true;
     nodeIp = "192.168.1.15";
+    nodeInterface = "eno1";
+    # nex is the retained authoritative member during nux root replacement.
+    # A clean nux must join it, never initialize an independent etcd cluster.
+    serverAddr = "https://192.168.1.16:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
     tlsSans = [
       "k8s-api.local"
@@ -99,13 +102,20 @@ in {
     ];
   };
 
+  # The target 1 TB NVMe deliberately shares its root filesystem with
+  # Longhorn. The bind mount distinguishes intentional root-backed storage
+  # from an accidental ordinary directory at /var/lib/longhorn and lets the
+  # fail-closed storage guard remain authoritative.
+  system.activationScripts.longhornDataDirectory.text = ''
+    install -d -m 0755 /var/lib/longhorn-data
+  '';
+
   fileSystems."/var/lib/longhorn" = {
-    device = "/dev/disk/by-label/nux-longhorn";
-    fsType = "ext4";
+    device = "/var/lib/longhorn-data";
+    fsType = "none";
     options = [
+      "bind"
       "nofail"
-      "x-systemd.device-timeout=30s"
-      "x-systemd.mount-timeout=30s"
     ];
   };
 
@@ -166,6 +176,17 @@ in {
       "network-online.target"
       "time-sync.target"
     ];
+  };
+
+  # Pi-hole and UniFi also persist timestamps and certificates.  On a clean
+  # install they must not start while the RTC still reports a historical date.
+  systemd.services.pihole-ftl = {
+    requires = ["k3s-clock-sanity.service"];
+    after = ["k3s-clock-sanity.service"];
+  };
+  systemd.services.unifi = {
+    requires = ["k3s-clock-sanity.service"];
+    after = ["k3s-clock-sanity.service"];
   };
 
   services.pihole-native = {

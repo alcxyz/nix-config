@@ -14,22 +14,81 @@
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
   };
+  runtimePool = "xruntime";
+  runtimeDatasets = {
+    docker = "${runtimePool}/runtime/docker";
+    k3s = "${runtimePool}/runtime/k3s";
+    steam-headless = "${runtimePool}/appstate/steam-headless";
+  };
   appStateDatasets = {
     calibre = "xpool/appstate/calibre";
     calibre-web = "xpool/appstate/calibre-web";
     plex = "xpool/appstate/plex";
     qbittorrent = "xpool/appstate/qbittorrent";
     stash = "xpool/appstate/stash";
-    steam-headless = "xpool/appstate/steam-headless";
   };
   appStateBackupPool = "hitachi";
   appStateBackupRoot = "${appStateBackupPool}/xyz/appstate";
+  appStateReplicationCommands = lib.concatMapStringsSep "\n" (name: ''
+    replicate_dataset \
+      ${lib.escapeShellArg appStateDatasets.${name}} \
+      ${lib.escapeShellArg "${appStateBackupRoot}/${name}"} \
+      include-parent
+  '') (builtins.attrNames appStateDatasets);
   k8sBackupDataset = "tank/k8s-backups";
   k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
-  homeBackupDataset = "xpool/home";
-  homeBackupRoot = "${appStateBackupPool}/xyz/home";
   gamesDataset = "${appStateBackupPool}/games";
   gamesMountpoint = "/hitachi/games";
+  runtimeStoragePolicy = pkgs.writeShellScriptBin "xyz-runtime-storage-policy" ''
+    set -euo pipefail
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.util-linux
+        zfsKernelPkgs.zfs
+      ]
+    }
+
+    pool=${lib.escapeShellArg runtimePool}
+    if [ "$(zpool list -H -o health "$pool" 2>/dev/null || true)" != ONLINE ]; then
+      echo "runtime pool '$pool' is unavailable or unhealthy" >&2
+      exit 1
+    fi
+
+    zpool set autotrim=off "$pool"
+
+    for dataset in \
+      ${lib.escapeShellArg runtimeDatasets.docker} \
+      ${lib.escapeShellArg runtimeDatasets.k3s} \
+      ${lib.escapeShellArg runtimeDatasets.steam-headless}; do
+      if ! zfs list -H "$dataset" >/dev/null 2>&1; then
+        echo "required runtime dataset '$dataset' is missing" >&2
+        exit 1
+      fi
+      zfs set compression=zstd atime=off xattr=sa acltype=posixacl "$dataset"
+    done
+
+    zfs set quota=100G ${lib.escapeShellArg runtimeDatasets.docker}
+    zfs set quota=50G ${lib.escapeShellArg runtimeDatasets.k3s}
+    zfs set quota=40G refreservation=20G ${lib.escapeShellArg runtimeDatasets.steam-headless}
+
+    check_mount() {
+      local mountpoint="$1"
+      local expected="$2"
+      local source
+
+      source="$(findmnt -rn -o SOURCE --target "$mountpoint" 2>/dev/null || true)"
+      if [ "$source" != "$expected" ]; then
+        echo "$mountpoint is mounted from '$source', expected '$expected'" >&2
+        exit 1
+      fi
+    }
+
+    check_mount /var/lib/docker ${lib.escapeShellArg runtimeDatasets.docker}
+    check_mount /var/lib/rancher/k3s ${lib.escapeShellArg runtimeDatasets.k3s}
+    check_mount /var/lib/steam-headless ${lib.escapeShellArg runtimeDatasets.steam-headless}
+  '';
   localBackup = pkgs.writeShellScriptBin "xyz-local-backup" ''
     set -euo pipefail
 
@@ -39,7 +98,7 @@
     fi
 
     if [ "$#" -ne 1 ]; then
-      echo "usage: xyz-local-backup {appstate|k8s|home}" >&2
+      echo "usage: xyz-local-backup {appstate|k8s}" >&2
       exit 64
     fi
 
@@ -148,16 +207,13 @@
 
     case "$backup_name" in
       appstate)
-        replicate_dataset xpool/appstate ${lib.escapeShellArg appStateBackupRoot} skip-parent
+        ${appStateReplicationCommands}
         ;;
       k8s)
         replicate_dataset ${lib.escapeShellArg k8sBackupDataset} ${lib.escapeShellArg k8sBackupRoot} include-parent
         ;;
-      home)
-        replicate_dataset ${lib.escapeShellArg homeBackupDataset} ${lib.escapeShellArg homeBackupRoot} include-parent
-        ;;
       *)
-        echo "unknown backup target '$backup_name'; expected appstate, k8s, or home" >&2
+        echo "unknown backup target '$backup_name'; expected appstate or k8s" >&2
         exit 64
         ;;
     esac
@@ -237,6 +293,7 @@ in {
     "${configDir}/modules/nixos/common/desktop.nix"
     inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
+    inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/hardware/amd.nix"
     "${configDir}/modules/nixos/services/torrent/default.nix"
@@ -245,19 +302,64 @@ in {
     "${configDir}/modules/nixos/services/calibre-web/default.nix"
     "${configDir}/modules/nixos/services/flatpak/default.nix"
     "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
+    "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
+    "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/gpu-passthrough.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
+    "${configDir}/modules/nixos/virtualisation/k3s/nvidia-runtime.nix"
+    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
+
+  # Only the intentional physical keyboards pass through Kanata on xyz.
+  # Composite receivers, mice, media controls, and streaming virtual devices
+  # remain owned by their native consumers.
+  services.kanata.keyboards.main.extraDefCfg = ''
+    process-unmapped-keys yes
+    linux-dev-names-include (
+      "Glove80 Keyboard"
+      "Logitech K850"
+      "Corsair Corsair Gaming K65 LUX RGB Keyboard  Keyboard"
+    )
+  '';
 
   # ==================== Host-specific Settings ====================
 
   programs.hyprlock.enable = true;
+  programs.kdeconnect.enable = true;
   security.pam.services.hyprlock.u2f.enable = true;
+
+  # Keep the disposable GPU worker ready to host the public Wolf singleton.
+  # The Kubernetes supervisor remains the only coordinator owner.
+  services.wolf-streaming = {
+    enable = true;
+    publicCoordinator = "external";
+    publicRuntimeDirectory = "/run/nixbox-public-browser-worker/runtime";
+    sessionIdleTimeoutSeconds = 30 * 60;
+    pipelineWatchdog.enable = true;
+    vramWatchdog.enable = true;
+    prunedApplicationTitles = [
+      "Remote Firefox"
+      "Test ball"
+    ];
+    browserImages = {
+      enable = true;
+      helium = {
+        enable = true;
+        publish = true;
+        cooperativeDefault = true;
+        kdeConnect.enable = true;
+      };
+      brave.enable = true;
+      chromium.enable = true;
+      firefox.enable = true;
+      zen.enable = true;
+    };
+  };
 
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
@@ -271,6 +373,7 @@ in {
   boot.extraModprobeConfig = ''
     options btusb reset=1 enable_autosuspend=0
     options mt7925e disable_aspm=1
+    options zfs zfs_arc_max=17179869184
   '';
 
   systemd.services.bluetooth-keyboard-reconnect = {
@@ -393,13 +496,16 @@ in {
   environment.systemPackages = [
     localBackup
     gamesDatasetPrepare
+    runtimeStoragePolicy
     zfsKernelPkgs.zfs
   ];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
+  boot.zfs.extraPools = [runtimePool];
+  boot.zfs.forceImportRoot = false;
   swapDevices = lib.mkForce [
     {
-      device = "/dev/disk/by-partuuid/34b759ea-2e88-4ea1-9cd5-f79cee42e952";
+      device = "/dev/disk/by-partlabel/xyz-swap";
       randomEncryption.enable = true;
       options = ["nofail"];
     }
@@ -430,8 +536,18 @@ in {
     fsType = "zfs";
     options = ["nofail"];
   };
+  fileSystems."/var/lib/docker" = {
+    device = runtimeDatasets.docker;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
+  fileSystems."/var/lib/rancher/k3s" = {
+    device = runtimeDatasets.k3s;
+    fsType = "zfs";
+    options = ["nofail"];
+  };
   fileSystems."/var/lib/steam-headless" = {
-    device = appStateDatasets.steam-headless;
+    device = runtimeDatasets.steam-headless;
     fsType = "zfs";
     options = ["nofail"];
   };
@@ -472,18 +588,69 @@ in {
   systemd.services."zfs-mount".after = ["zfs-auto-unlock.service"];
   systemd.services."zfs-mount".requires = ["zfs-auto-unlock.service"];
 
+  systemd.services.xyz-runtime-storage-policy = {
+    description = "Enforce and verify xyz runtime storage policy";
+    after = [
+      "zfs-mount.service"
+      "var-lib-docker.mount"
+      "var-lib-rancher-k3s.mount"
+      "var-lib-steam\\x2dheadless.mount"
+    ];
+    requires = [
+      "zfs-mount.service"
+      "var-lib-docker.mount"
+      "var-lib-rancher-k3s.mount"
+      "var-lib-steam\\x2dheadless.mount"
+    ];
+    before = [
+      "docker.service"
+      "k3s.service"
+      "xyz-appstate-backup.service"
+    ];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${runtimeStoragePolicy}/bin/xyz-runtime-storage-policy";
+    };
+  };
+
   systemd.services.xyz-appstate-backup =
-    mkLocalBackupService
-    "appstate"
-    "Replicate xyz appstate datasets to the local backup pool";
-  systemd.services.xyz-k8s-backup =
-    mkLocalBackupService
-    "k8s"
-    "Replicate xyz k8s backup dataset to the local backup pool";
-  systemd.services.xyz-home-backup =
-    mkLocalBackupService
-    "home"
-    "Replicate xyz home dataset to the local backup pool";
+    lib.recursiveUpdate
+    (mkLocalBackupService "appstate" "Replicate xyz appstate datasets to the local backup pool")
+    {
+      after = ["xyz-runtime-storage-policy.service"];
+      requires = ["xyz-runtime-storage-policy.service"];
+    };
+  systemd.services.xyz-k8s-backup = mkLocalBackupService "k8s" "Replicate xyz k8s backup dataset to the local backup pool";
+
+  services.snapshot-restic-home = {
+    enable = true;
+    sourceDataset = "xpool/home";
+    sourceMountPoint = "/home";
+    sourceRelativePath = username;
+    repositoryDataset = "hitachi/xyz/home-restic";
+    repositoryMountPoint = "/var/lib/xyz-home-restic";
+    repositoryQuota = "300G";
+    schedule = "*-*-* 05:50:00";
+    excludePatterns = [
+      "/.cache"
+      "/Downloads"
+      "/.local/share/Steam"
+      "/.local/share/Trash"
+      "/.local/share/lutris/runners"
+      "/.local/share/lutris/runtime"
+      "/.local/share/nvim/lazy"
+      "/.local/share/nvim/mason"
+      "/.local/share/pnpm/store"
+      "/.var/app/*/cache"
+    ];
+    retention = {
+      daily = 7;
+      weekly = 4;
+      monthly = 6;
+    };
+  };
 
   systemd.services.xyz-games-dataset = {
     description = "Prepare xyz games dataset on hitachi";
@@ -497,18 +664,8 @@ in {
     };
   };
 
-  systemd.timers.xyz-appstate-backup =
-    mkLocalBackupTimer
-    "*-*-* 05:20:00"
-    "Daily xyz appstate backup";
-  systemd.timers.xyz-k8s-backup =
-    mkLocalBackupTimer
-    "*-*-* 05:35:00"
-    "Daily xyz k8s backup replication";
-  systemd.timers.xyz-home-backup =
-    mkLocalBackupTimer
-    "*-*-* 05:50:00"
-    "Daily xyz home backup";
+  systemd.timers.xyz-appstate-backup = mkLocalBackupTimer "*-*-* 05:20:00" "Daily xyz appstate backup";
+  systemd.timers.xyz-k8s-backup = mkLocalBackupTimer "*-*-* 06:45:00" "Daily xyz k8s backup replication";
 
   # Docker - ZFS relationship
 
@@ -517,12 +674,42 @@ in {
       "zfs-mount.service"
       "zfs-import.target"
       "zfs-auto-unlock.service"
+      "xyz-runtime-storage-policy.service"
     ];
 
     requires = [
       "zfs-mount.service"
       "zfs-auto-unlock.service"
+      "xyz-runtime-storage-policy.service"
     ];
+  };
+
+  # xyz provides host-level services on 192.168.1.10. The replacement-system
+  # boot exposed that this address previously depended on an implicit DHCP
+  # lease: NetworkManager accepted 192.168.1.200 while RustFS remained bound to
+  # the now-unassigned service address. Keep the host identity declarative and
+  # tied to the physical Ethernet adapter.
+  networking.networkmanager = {
+    settings.main.no-auto-default = "9c:6b:00:7e:74:65";
+    ensureProfiles.profiles.xyz-wired = {
+      connection = {
+        id = "xyz-wired";
+        uuid = "8e724127-a8d6-3154-a8a3-66a91da6c626";
+        type = "ethernet";
+        interface-name = "enp8s0";
+        autoconnect = true;
+        autoconnect-priority = 100;
+      };
+      ethernet.mac-address = "9c:6b:00:7e:74:65";
+      ipv4 = {
+        method = "manual";
+        addresses = "192.168.1.10/24";
+        gateway = "192.168.1.1";
+        dns = "192.168.1.15;192.168.1.3;";
+        dns-search = "local;";
+      };
+      ipv6.method = "auto";
+    };
   };
 
   # ==================== Services ====================
@@ -576,8 +763,14 @@ in {
     quota = "1T";
     apiAddress = "192.168.1.10:9100";
     consoleAddress = "127.0.0.1:9101";
+    # Preserve the existing RustFS group ownership of the ZFS object tree.
+    # Changing this during the role reversal would require an unnecessary
+    # recursive metadata rewrite across the backup dataset.
+    serviceGid = 986;
     accessKeyFile = config.sops.secrets.k8s_backup_s3_root_user.path;
     secretKeyFile = config.sops.secrets.k8s_backup_s3_root_password.path;
+    mirrorSourceEndpoint = "http://192.168.1.13:9200";
+    mirrorSchedule = "*-*-* 06:10:00";
   };
 
   # NFS mount from nux — shared directory for paperless-ingest and future services
@@ -646,9 +839,58 @@ in {
   };
 
   k3s = {
-    enable = false;
+    enable = true;
+    nodeIp = "192.168.1.10";
+    nodeInterface = "enp8s0";
     serverAddr = "https://k8s-api.local:6443";
     tokenFile = config.sops.secrets.k3s_server_token.path;
+    extraFlags = [
+      "--node-label=nixbox.alc.xyz/ephemeral-gpu=true"
+      "--node-label=nixbox.alc.xyz/protected-browser-worker=true"
+      "--node-taint=nixbox.alc.xyz/ephemeral-gpu=true:NoSchedule"
+    ];
+  };
+  systemd.services.k3s = {
+    after = ["xyz-runtime-storage-policy.service"];
+    requires = ["xyz-runtime-storage-policy.service"];
+  };
+
+  # Longhorn still needs writable engine binaries and logs on an attachment
+  # node. Keep those transient files in bounded memory while the durable volume
+  # replicas remain on the stable storage nodes.
+  fileSystems."/var/lib/longhorn" = {
+    device = "none";
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=1G"
+      "nosuid"
+      "nodev"
+    ];
+  };
+  alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
+
+  # XYZ is an expendable interactive worker, never a control-plane or storage
+  # dependency. Bound planned shutdowns so an attached browser volume is
+  # released cleanly without making workstation restarts unreasonably slow.
+  services.k3s.gracefulNodeShutdown = {
+    enable = true;
+    shutdownGracePeriod = "30s";
+    shutdownGracePeriodCriticalPods = "10s";
+  };
+
+  # Agents do not have the server admin kubeconfig. The kube-proxy identity has
+  # the read-only node inventory needed by the LAN path audit.
+  systemd.services.k3s-network-path-audit = {
+    environment.KUBECONFIG = "/var/lib/rancher/k3s/agent/kubeproxy.kubeconfig";
+    serviceConfig = {
+      Restart = "on-failure";
+      RestartSec = "10s";
+    };
+    unitConfig = {
+      StartLimitIntervalSec = 120;
+      StartLimitBurst = 12;
+    };
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
@@ -666,6 +908,7 @@ in {
     enable = true;
     packages = [
       "com.heroicgameslauncher.hgl"
+      "net.retrodeck.retrodeck"
     ];
     overrides."com.heroicgameslauncher.hgl" = [
       "--filesystem=/ext4"
@@ -712,6 +955,9 @@ in {
   };
 
   # Steam Stream
+  # Keep Sunshine's fixed service ports out of the ephemeral client-port pool.
+  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010";
+
   networking.firewall = {
     allowedUDPPortRanges = [
       {

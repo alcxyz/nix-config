@@ -11,6 +11,84 @@
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
+  kdeConnectScrollThrottle =
+    pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-scroll-throttle" {};
+  xwaylandPrimaryOutput = pkgs.writeShellApplication {
+    name = "hyprland-xwayland-primary-output";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.xrandr
+    ];
+    text = ''
+      for _ in $(seq 1 120); do
+        if DISPLAY="''${DISPLAY:-:0}" xrandr --output DP-1 --primary >/dev/null 2>&1; then
+          exit 0
+        fi
+        sleep 0.25
+      done
+
+      echo "Failed to mark DP-1 as the XWayland primary output" >&2
+      exit 1
+    '';
+  };
+  droptermToggle = pkgs.writeShellApplication {
+    name = "dropterm-toggle";
+    runtimeInputs = [
+      config.programs.hyprscratch.package
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+    ];
+    text = ''
+      target_json="$(hyprctl monitors -j | jq -ce '.[] | select(.focused)')"
+      target_workspace="$(jq -r '.activeWorkspace.id' <<<"$target_json")"
+      active_is_dropterm="$(
+        hyprctl activewindow -j \
+          | jq -r '(.initialClass == "dropterm" or .initialTitle == "dropterm") // false'
+      )"
+
+      hyprscratch toggle dropterm
+
+      # An active dropterm was just hidden; leave its parked geometry alone.
+      if [[ "$active_is_dropterm" == true ]]; then
+        exit 0
+      fi
+
+      # Hyprscratch processes toggle requests asynchronously. Wait until the
+      # persistent client reaches the workspace that was focused at invocation.
+      client_json=""
+      for _ in $(seq 1 40); do
+        client_json="$(
+          hyprctl clients -j \
+            | jq -c --argjson workspace "$target_workspace" \
+                '.[] | select(
+                  (.initialClass == "dropterm" or .initialTitle == "dropterm")
+                  and .workspace.id == $workspace
+                )' \
+            | head -n 1
+        )"
+        [[ -n "$client_json" ]] && break
+        sleep 0.025
+      done
+
+      if [[ -z "$client_json" ]]; then
+        echo "dropterm did not appear on the focused workspace" >&2
+        exit 1
+      fi
+
+      address="$(jq -r '.address' <<<"$client_json")"
+      read -r target_x target_y target_width target_height < <(
+        jq -r '[.x, .y, .width, .height] | @tsv' <<<"$target_json"
+      )
+      read -r window_width window_height < <(
+        jq -r '[.size[0], .size[1]] | @tsv' <<<"$client_json"
+      )
+
+      x=$((target_x + (target_width - window_width) / 2))
+      y=$((target_y + (target_height - window_height) / 2))
+      hyprctl dispatch movewindowpixel "exact $x $y,address:$address" >/dev/null
+    '';
+  };
 in {
   # Import the common Linux configuration
   imports = [
@@ -21,11 +99,13 @@ in {
     "${configDir}/modules/home-manager/programs/niri/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
     "${configDir}/modules/home-manager/services/hyprlock/default.nix"
+    "${configDir}/modules/home-manager/services/waynergy/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
 
     "${configDir}/modules/home-manager/programs/ai/default.nix"
+    "${configDir}/modules/home-manager/programs/moonlight-wolf-client/default.nix"
     "${configDir}/modules/home-manager/programs/stashdb-pop/default.nix"
 
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
@@ -41,8 +121,42 @@ in {
   home.packages =
     pkgsets.home.${hostRole.homePackageSet}
     ++ [
+      droptermToggle
       pkgs.paperweight
     ];
+
+  # Keep launchers with cached pre-0.0.32 desktop commands working after the
+  # upstream executable was renamed from t3code to t3code-desktop. DMS stores
+  # the old arguments in its usage history, so discard the obsolete sandbox
+  # flag and any unexpanded desktop-entry URL placeholders.
+  home.file.".local/bin/t3code" = {
+    executable = true;
+    text = ''
+      #!${pkgs.runtimeShell}
+      filtered=()
+      for arg in "$@"; do
+        case "$arg" in
+          --no-sandbox|%u|%U) ;;
+          *) filtered+=("$arg") ;;
+        esac
+      done
+      exec ${pkgs.t3code}/bin/t3code-desktop "''${filtered[@]}"
+    '';
+  };
+
+  # DMS can retain the package entry's former bare command across upgrades.
+  # Prefer a user entry with an immutable executable path.
+  xdg.desktopEntries.t3code = {
+    name = "T3 Code (Alpha)";
+    comment = "Minimal web GUI for coding agents";
+    icon = "t3code";
+    # T3 Code does not currently consume files or URLs, and DMS can pass an
+    # unexpanded %U placeholder through as an application argument.
+    exec = "${pkgs.t3code}/bin/t3code-desktop";
+    categories = ["Development"];
+    settings.TryExec = "${pkgs.t3code}/bin/t3code-desktop";
+  };
+
   # Symlink configs directly to repo checkout for live editing
   xdg.configFile."ncspot/config.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/ncspot/config.toml";
@@ -62,8 +176,30 @@ in {
 
   # Enable XYZ-specific programs
   programs.foot.enable = true;
-  programs.hyprland.managed.enable = true;
+  programs.hyprland.managed = {
+    enable = true;
+    # Match the qualified couch cursor policy. KDE Connect and other absolute
+    # pointer paths can be classified as touch input by the compositor, even
+    # though they are used as mice inside a windowed Moonlight stream.
+    remotePointerInactiveTimeout = 8;
+    remotePointerHideOnTouch = false;
+    extraConfig = ''
+      # Center the secondary display above the primary ultrawide. Its EDID
+      # omits 1440p, so use a CVT reduced-blanking modeline to keep the iGPU's
+      # compositing load below the native 4K mode. The small logical gap acts
+      # as a soft pointer barrier for the auto-hiding bar: precise movement
+      # stops at the bar while a deliberate upward movement still crosses.
+      monitor = DP-1, 5120x1440@120, 0x1456, 1
+      monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
+
+      # Set this before XWayland games start. Reasserting it on every Hyprland
+      # reload emits a RandR change that can resize an active Wine window.
+      exec-once = ${lib.getExe xwaylandPrimaryOutput}
+      bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
+    '';
+  };
   programs.niri.managed.enable = true;
+  programs.moonlightWolfClient.enable = true;
 
   programs.hyprscratch = {
     enable = true;
@@ -80,14 +216,74 @@ in {
   };
 
   services.dms.enable = true;
+  services.dms.settings = {
+    audioVisualizerEnabled = false;
+    scrollTitleEnabled = false;
+    waveProgressEnabled = false;
+  };
   services.dms.idleLock = {
     enable = true;
     command = config.services.hyprlock.lockCommand;
     acMonitorTimeout = 360;
     batteryMonitorTimeout = 0;
+    respectExternalInhibitors = true;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
-  services.hyprlock.enable = true;
+  services.hyprlock = {
+    enable = true;
+    turnOffDisplaysOnLock = true;
+    displayOffDelay = 360;
+  };
+  services.waynergy = {
+    enable = true;
+    screenName = "xyz";
+    sourceKeyboard = "mac";
+    requireLanAddress = true;
+  };
+  services.kdeconnect.enable = true;
+  # Hyprland's portal does not provide RemoteDesktop. Run KDE Connect through
+  # XWayland so phone pointer and keyboard events use XTest instead of evdev;
+  # this also keeps them entirely outside Kanata's device-grab path.
+  systemd.user.services.kdeconnect.Service = let
+    defaults = import "${configDir}/modules/shared/kdeconnect-input.nix";
+    hyprlandInput =
+      pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-hyprland-input" {};
+  in {
+    Type = "dbus";
+    BusName = "org.kde.kdeconnect";
+    Environment = [
+      "QT_QPA_PLATFORM=xcb"
+      "KDECONNECT_SCROLL_INTERVAL_MS=${toString defaults.scrollIntervalMs}"
+      "KDECONNECT_POINTER_SENSITIVITY=${toString defaults.pointerSensitivity}"
+      "KDECONNECT_POINTER_PRECISION_SENSITIVITY=${toString defaults.pointerPrecisionSensitivity}"
+      "KDECONNECT_POINTER_ACCELERATION_START=${toString defaults.pointerAccelerationStart}"
+      "KDECONNECT_POINTER_ACCELERATION_FULL=${toString defaults.pointerAccelerationFull}"
+      "LD_PRELOAD=${hyprlandInput}/lib/libkdeconnect-hypr-pointer-shim.so"
+    ];
+    Restart = lib.mkForce "on-failure";
+  };
+  systemd.user.services.kdeconnect-hypr-pointer = let
+    hyprlandInput =
+      pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-hyprland-input" {};
+  in {
+    Unit = {
+      Description = "KDE Connect Hyprland pointer bridge";
+    };
+    Service = {
+      ExecStart = lib.getExe hyprlandInput;
+      Restart = "always";
+      RestartSec = 1;
+    };
+    Install.WantedBy = ["default.target"];
+  };
+  # The package's stock D-Bus service starts a second unmanaged daemon. Route
+  # activation to the supervised XWayland unit instead.
+  xdg.dataFile."dbus-1/services/org.kde.kdeconnect.service".text = ''
+    [D-BUS Service]
+    Name=org.kde.kdeconnect
+    Exec=${pkgs.systemd}/bin/systemctl --user start kdeconnect.service
+    SystemdService=kdeconnect.service
+  '';
   services.udiskie = {
     enable = true;
     tray = "never";

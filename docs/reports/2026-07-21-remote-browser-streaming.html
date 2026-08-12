@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <meta
+      name="description"
+      content="Nixbox remote browser streaming acceptance report for Helium, Brave, Chromium, Firefox, and Zen."
+    >
+    <title>Nixbox report — remote browser streaming</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f3ef;
+        --surface-1: #ffffff;
+        --surface-2: #ebeae5;
+        --ink: #1c1e22;
+        --ink-muted: #5a5f68;
+        --line: #d2d0ca;
+        --accent: #956624;
+        --accent-soft: #efe3cf;
+        --ok: #2c6e49;
+        --ok-soft: #dcece3;
+        --warn: #855700;
+        --warn-soft: #f3e6ca;
+        --bad: #963b3b;
+        --bad-soft: #f2dddd;
+        --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --radius: 0.35rem;
+        --content: 74rem;
+        --space-1: 0.4rem;
+        --space-2: 0.75rem;
+        --space-3: 1.15rem;
+        --space-4: 1.75rem;
+        --space-5: 2.75rem;
+        --space-6: 4rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #11151a;
+          --surface-1: #191e25;
+          --surface-2: #212731;
+          --ink: #e9e7e2;
+          --ink-muted: #a1a7b1;
+          --line: #343c48;
+          --accent: #d7a658;
+          --accent-soft: #342b20;
+          --ok: #80c8a0;
+          --ok-soft: #1d3028;
+          --warn: #e1b765;
+          --warn-soft: #352b19;
+          --bad: #df8d8d;
+          --bad-soft: #352122;
+        }
+      }
+
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #f4f3ef;
+        --surface-1: #ffffff;
+        --surface-2: #ebeae5;
+        --ink: #1c1e22;
+        --ink-muted: #5a5f68;
+        --line: #d2d0ca;
+        --accent: #956624;
+        --accent-soft: #efe3cf;
+        --ok: #2c6e49;
+        --ok-soft: #dcece3;
+        --warn: #855700;
+        --warn-soft: #f3e6ca;
+        --bad: #963b3b;
+        --bad-soft: #f2dddd;
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #11151a;
+        --surface-1: #191e25;
+        --surface-2: #212731;
+        --ink: #e9e7e2;
+        --ink-muted: #a1a7b1;
+        --line: #343c48;
+        --accent: #d7a658;
+        --accent-soft: #342b20;
+        --ok: #80c8a0;
+        --ok-soft: #1d3028;
+        --warn: #e1b765;
+        --warn-soft: #352b19;
+        --bad: #df8d8d;
+        --bad-soft: #352122;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        font-size: clamp(16px, 0.75rem + 0.58vw, 26px);
+        scroll-padding-top: 1rem;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 1rem/1.62 var(--sans);
+        text-rendering: optimizeLegibility;
+      }
+
+      a {
+        color: var(--accent);
+        text-underline-offset: 0.16em;
+      }
+
+      a:hover {
+        text-decoration-thickness: 0.12em;
+      }
+
+      button,
+      summary {
+        font: inherit;
+      }
+
+      :focus-visible {
+        outline: 0.14rem solid var(--accent);
+        outline-offset: 0.16rem;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 20;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.6rem 0.85rem;
+        transform: translateY(-180%);
+        background: var(--surface-1);
+        border: 1px solid var(--accent);
+        color: var(--ink);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .shell {
+        width: min(calc(100% - 2rem), var(--content));
+        margin-inline: auto;
+      }
+
+      .masthead {
+        padding-block: var(--space-5) var(--space-4);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .masthead-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+
+      .eyebrow,
+      .meta,
+      .section-kicker,
+      .metric,
+      td.metric,
+      .report-id {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .eyebrow,
+      .section-kicker {
+        margin: 0 0 var(--space-1);
+        color: var(--accent);
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin-top: 0;
+        line-height: 1.16;
+        text-wrap: balance;
+      }
+
+      h1 {
+        max-width: 18ch;
+        margin-bottom: var(--space-2);
+        font-size: 2rem;
+        letter-spacing: -0.035em;
+      }
+
+      h2 {
+        margin-bottom: var(--space-3);
+        font-size: 1.45rem;
+        letter-spacing: -0.02em;
+      }
+
+      h3 {
+        margin-bottom: var(--space-2);
+        font-size: 1.12rem;
+      }
+
+      p,
+      ul,
+      ol,
+      dl {
+        margin-top: 0;
+      }
+
+      .meta {
+        max-width: 72ch;
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: 0.82rem;
+      }
+
+      .theme-toggle {
+        flex: 0 0 auto;
+        min-height: 2.4rem;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface-1);
+        color: var(--ink);
+        cursor: pointer;
+      }
+
+      .section-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem 1rem;
+        margin-top: var(--space-4);
+      }
+
+      .section-nav a {
+        color: var(--ink-muted);
+        font-size: 0.86rem;
+      }
+
+      main > section {
+        padding-block: var(--space-5);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .verdict {
+        position: relative;
+        padding-bottom: calc(var(--space-5) + 0.35rem);
+      }
+
+      .verdict::after {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 0.12rem;
+        background: var(--accent);
+        box-shadow: 0 0.6rem 1.4rem color-mix(in srgb, var(--accent) 28%, transparent);
+        content: "";
+      }
+
+      .verdict-line {
+        max-width: 55ch;
+        margin-bottom: var(--space-4);
+        font-size: 1.18rem;
+        line-height: 1.5;
+      }
+
+      .verdict-line strong {
+        font-weight: 750;
+      }
+
+      .recommendation {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(15rem, 0.75fr);
+        gap: var(--space-3);
+      }
+
+      .recommendation > div,
+      .evidence-card,
+      .defect,
+      details,
+      .callout {
+        padding: var(--space-3);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface-1);
+      }
+
+      .recommendation-primary {
+        border-left: 0.18rem solid var(--accent) !important;
+      }
+
+      .badge,
+      .status,
+      .defect-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35em;
+        font-weight: 720;
+        letter-spacing: 0.045em;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+
+      .badge {
+        padding: 0.22rem 0.48rem;
+        border: 1px solid var(--accent);
+        border-radius: var(--radius);
+        color: var(--accent);
+        font-size: 0.78rem;
+      }
+
+      .status {
+        color: var(--ok);
+      }
+
+      .defect-chip {
+        padding: 0.14rem 0.38rem;
+        border: 1px dashed var(--warn);
+        border-radius: var(--radius);
+        color: var(--warn);
+        font-size: 0.75rem;
+        text-decoration: none;
+      }
+
+      .supporting {
+        color: var(--ink-muted);
+      }
+
+      .comparison-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface-1);
+      }
+
+      caption {
+        padding-bottom: var(--space-2);
+        color: var(--ink-muted);
+        text-align: left;
+      }
+
+      th,
+      td {
+        padding: 0.78rem 0.8rem;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      thead th {
+        color: var(--ink-muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.055em;
+        text-transform: uppercase;
+      }
+
+      tbody th {
+        min-width: 8.5rem;
+      }
+
+      td.metric {
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      tr.pass > th {
+        border-left: 0.18rem solid var(--ok);
+      }
+
+      tr.qualified > th {
+        border-left: 0.18rem dashed var(--warn);
+      }
+
+      tr.fail > th {
+        border-left: 0.28rem double var(--bad);
+      }
+
+      tr.default-row {
+        outline: 1px solid var(--accent);
+        outline-offset: -1px;
+      }
+
+      .chain {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-2);
+        margin: var(--space-4) 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .chain li {
+        position: relative;
+        padding: var(--space-3);
+        border: 1px solid var(--line);
+        background: var(--surface-1);
+      }
+
+      .chain li:not(:last-child)::after {
+        position: absolute;
+        top: 50%;
+        right: -0.75rem;
+        z-index: 2;
+        width: 1.5rem;
+        color: var(--accent);
+        background: var(--bg);
+        content: "→";
+        text-align: center;
+        transform: translateY(-50%);
+      }
+
+      .chain strong,
+      .chain span {
+        display: block;
+      }
+
+      .chain span {
+        color: var(--ink-muted);
+        font-size: 0.84rem;
+      }
+
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-3);
+      }
+
+      .evidence-card p:last-child,
+      .recommendation p:last-child,
+      .defect p:last-child,
+      details > *:last-child {
+        margin-bottom: 0;
+      }
+
+      .client-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        margin-top: var(--space-4);
+        border: 1px solid var(--line);
+        background: var(--line);
+      }
+
+      .client-metrics dl {
+        margin: 0;
+        padding: var(--space-3);
+        background: var(--surface-1);
+      }
+
+      .client-metrics dt {
+        margin-bottom: var(--space-1);
+        color: var(--ink-muted);
+        font-size: 0.78rem;
+      }
+
+      .client-metrics dd {
+        margin: 0;
+        font: 700 1.2rem/1.3 var(--mono);
+      }
+
+      .defect {
+        border-left: 0.18rem dashed var(--warn);
+      }
+
+      .defect:target {
+        outline: 0.14rem solid var(--accent);
+        outline-offset: 0.25rem;
+      }
+
+      details + details,
+      .defect + .defect {
+        margin-top: var(--space-3);
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 720;
+      }
+
+      details[open] summary {
+        margin-bottom: var(--space-3);
+      }
+
+      .plain-list,
+      .actions {
+        padding-left: 1.3rem;
+      }
+
+      .plain-list li + li,
+      .actions li + li {
+        margin-top: var(--space-2);
+      }
+
+      .actions {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .actions li {
+        display: grid;
+        grid-template-columns: 1.2rem 1fr;
+        gap: var(--space-2);
+      }
+
+      .actions li::before {
+        color: var(--accent);
+        content: "→";
+        font-weight: 800;
+      }
+
+      footer {
+        padding-block: var(--space-4) var(--space-6);
+        color: var(--ink-muted);
+        font-size: 0.78rem;
+      }
+
+      @media (max-width: 1023px) {
+        .recommendation,
+        .evidence-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .comparison-wrap {
+          overflow: visible;
+        }
+
+        .comparison thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        .comparison,
+        .comparison tbody,
+        .comparison tr,
+        .comparison th,
+        .comparison td {
+          display: block;
+          width: 100%;
+        }
+
+        .comparison {
+          background: transparent;
+        }
+
+        .comparison tr {
+          margin-bottom: var(--space-3);
+          padding: var(--space-2);
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface-1);
+        }
+
+        .comparison th,
+        .comparison td {
+          padding: 0.42rem 0.55rem;
+          border: 0;
+          text-align: left;
+          white-space: normal;
+        }
+
+        .comparison th {
+          padding-top: 0.65rem;
+          padding-bottom: 0.7rem;
+          font-size: 1.16rem;
+        }
+
+        .comparison td::before {
+          display: inline-block;
+          min-width: 7.5rem;
+          margin-right: var(--space-1);
+          color: var(--ink-muted);
+          content: attr(data-label) ":";
+          font: 0.74rem/1.4 var(--mono);
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+      }
+
+      @media (max-width: 639px) {
+        .shell {
+          width: min(calc(100% - 1.25rem), var(--content));
+        }
+
+        .masthead-top {
+          display: block;
+          position: relative;
+        }
+
+        .theme-toggle {
+          position: absolute;
+          top: -0.3rem;
+          right: 0;
+          min-height: 2rem;
+          padding: 0.3rem 0.55rem;
+          font-size: 0.85rem;
+        }
+
+        main > section {
+          padding-block: var(--space-4);
+        }
+
+        .chain,
+        .client-metrics {
+          grid-template-columns: 1fr;
+        }
+
+        .chain li:not(:last-child)::after {
+          top: auto;
+          right: 50%;
+          bottom: -0.8rem;
+          transform: translateX(50%) rotate(90deg);
+        }
+
+        .comparison td::before {
+          display: block;
+          min-width: 0;
+          margin-bottom: 0.12rem;
+        }
+      }
+
+      @media (min-width: 1920px) {
+        :root {
+          --content: 88rem;
+        }
+
+        main > section {
+          padding-block: var(--space-6);
+        }
+
+        .status {
+          font-size: 1.22rem;
+        }
+
+        th,
+        td {
+          padding-block: 1rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        html {
+          scroll-behavior: smooth;
+        }
+
+        body,
+        button {
+          transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+        }
+      }
+
+      @media print {
+        :root,
+        :root[data-theme="dark"] {
+          color-scheme: light;
+          --bg: #ffffff;
+          --surface-1: #ffffff;
+          --surface-2: #eeeeeb;
+          --ink: #111111;
+          --ink-muted: #4f4f4f;
+          --line: #b9b9b5;
+          --accent: #68491d;
+          --ok: #235c3d;
+          --warn: #704a00;
+          --bad: #7c3030;
+        }
+
+        html {
+          font-size: 11pt;
+        }
+
+        body {
+          background: #ffffff;
+        }
+
+        .shell {
+          width: 100%;
+          max-width: none;
+        }
+
+        .theme-toggle,
+        .skip-link,
+        .section-nav {
+          display: none;
+        }
+
+        .verdict::after {
+          box-shadow: none;
+        }
+
+        section,
+        article,
+        details,
+        tr {
+          break-inside: avoid;
+        }
+
+        thead {
+          display: table-header-group;
+        }
+
+        details:not([open]) > :not(summary) {
+          display: block !important;
+        }
+
+        a[href^="http"]::after {
+          content: " (" attr(href) ")";
+          font-size: 0.8em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to report</a>
+
+    <header class="masthead">
+      <div class="shell">
+        <div class="masthead-top">
+          <div>
+            <p class="eyebrow">Nixbox field report</p>
+            <h1>Remote browser streaming at 1440p60</h1>
+            <p class="meta">
+              <span class="report-id">NB-RBS-2026-07</span> · Wolf · Moonlight · HEVC 40 Mbit/s ·
+              five isolated browser containers · 2026-07-21
+            </p>
+          </div>
+          <button class="theme-toggle" type="button" aria-label="Change color theme">
+            Theme: system
+          </button>
+        </div>
+        <nav class="section-nav" aria-label="Report sections">
+          <a href="#verdict">Verdict</a>
+          <a href="#results">Results</a>
+          <a href="#evidence">Evidence</a>
+          <a href="#defects">Defects</a>
+          <a href="#method">Method</a>
+          <a href="#actions">Actions</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="content" class="shell">
+      <section id="verdict" class="verdict" aria-labelledby="verdict-title">
+        <p class="section-kicker">Decision</p>
+        <h2 id="verdict-title">All transports passed; Helium stays default</h2>
+        <p class="verdict-line">
+          <strong>5 of 5</strong> passed transport; Helium is the recommended default;
+          <strong>1 known visual defect</strong> is registered below.
+        </p>
+        <div class="recommendation">
+          <div class="recommendation-primary">
+            <span class="badge"><span aria-hidden="true">◆</span> DEFAULT</span>
+            <h3>Use Helium for ordinary couch browsing</h3>
+            <p>
+              It combined a clean subjective playback result with stable transport and moderate
+              memory use. The recommendation is based on observed rendering quality, not merely a
+              successful connection.
+            </p>
+          </div>
+          <div>
+            <span class="status"><span aria-hidden="true">✔</span> PASS</span>
+            <h3>Keep the full private matrix</h3>
+            <p>
+              Chromium, Firefox, and Zen are valid compatibility alternatives. Brave remains
+              available for its synced private profile despite its qualified visual result.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="results" aria-labelledby="results-title">
+        <p class="section-kicker">Comparison</p>
+        <h2 id="results-title">Browser outcomes</h2>
+        <div class="comparison-wrap">
+          <table class="comparison" role="table">
+            <caption>
+              Sustained playback of the same 1440p video through the accepted stream profile.
+            </caption>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Browser</th>
+                <th role="columnheader" scope="col">Transport</th>
+                <th role="columnheader" scope="col">Role</th>
+                <th role="columnheader" scope="col">Browser CPU</th>
+                <th role="columnheader" scope="col">Memory</th>
+                <th role="columnheader" scope="col">Observed experience</th>
+              </tr>
+            </thead>
+            <tbody role="rowgroup">
+              <tr class="pass default-row" role="row">
+                <th role="rowheader" scope="row">Helium</th>
+                <td role="cell" data-label="Transport">
+                  <span class="status"><span aria-hidden="true">✔</span> PASS</span>
+                </td>
+                <td role="cell" data-label="Role">
+                  <span class="badge"><span aria-hidden="true">◆</span> DEFAULT</span>
+                </td>
+                <td class="metric" role="cell" data-label="Browser CPU">1.7–3.1 cores</td>
+                <td class="metric" role="cell" data-label="Memory">0.94–1.00 GiB</td>
+                <td role="cell" data-label="Observed experience">Cleanest rendering; no visible glitches reported.</td>
+              </tr>
+              <tr class="qualified" role="row">
+                <th role="rowheader" scope="row">Brave</th>
+                <td role="cell" data-label="Transport">
+                  <span class="status"><span aria-hidden="true">✔</span> PASS</span>
+                  <a class="defect-chip" href="#d-01"><span aria-hidden="true">△</span> D-01</a>
+                </td>
+                <td role="cell" data-label="Role">Private synced profile</td>
+                <td class="metric" role="cell" data-label="Browser CPU">1.6–3.3 cores</td>
+                <td class="metric" role="cell" data-label="Memory">0.88–0.98 GiB</td>
+                <td role="cell" data-label="Observed experience">Transport healthy; motion and animated UI could visibly glitch.</td>
+              </tr>
+              <tr class="pass" role="row">
+                <th role="rowheader" scope="row">Chromium</th>
+                <td role="cell" data-label="Transport">
+                  <span class="status"><span aria-hidden="true">✔</span> PASS</span>
+                </td>
+                <td role="cell" data-label="Role">Compatibility baseline</td>
+                <td class="metric" role="cell" data-label="Browser CPU">2.0–3.6 cores</td>
+                <td class="metric" role="cell" data-label="Memory">1.04–1.10 GiB</td>
+                <td role="cell" data-label="Observed experience">Qualified telemetry run completed without relevant errors.</td>
+              </tr>
+              <tr class="pass" role="row">
+                <th role="rowheader" scope="row">Firefox</th>
+                <td role="cell" data-label="Transport">
+                  <span class="status"><span aria-hidden="true">✔</span> PASS</span>
+                </td>
+                <td role="cell" data-label="Role">Independent engine</td>
+                <td class="metric" role="cell" data-label="Browser CPU">1.0–1.5 cores</td>
+                <td class="metric" role="cell" data-label="Memory">1.03–1.07 GiB</td>
+                <td role="cell" data-label="Observed experience">Lowest sustained browser CPU range in this run.</td>
+              </tr>
+              <tr class="pass" role="row">
+                <th role="rowheader" scope="row">Zen</th>
+                <td role="cell" data-label="Transport">
+                  <span class="status"><span aria-hidden="true">✔</span> PASS</span>
+                </td>
+                <td role="cell" data-label="Role">Firefox-family alternative</td>
+                <td class="metric" role="cell" data-label="Browser CPU">0.7–2.1 cores</td>
+                <td class="metric" role="cell" data-label="Memory">1.16–1.34 GiB</td>
+                <td role="cell" data-label="Observed experience">Technically stable; highest memory footprint.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <ol class="chain" aria-label="Streaming workload path">
+          <li>
+            <strong>Browser on XEV</strong>
+            <span>isolated persistent home · disposable runner</span>
+          </li>
+          <li>
+            <strong>Wolf + NVENC</strong>
+            <span>virtual 1440p60 display · HEVC encode</span>
+          </li>
+          <li>
+            <strong>Moonlight on XPS</strong>
+            <span>Intel VA-API decode · Hyprland presentation</span>
+          </li>
+        </ol>
+      </section>
+
+      <section id="evidence" aria-labelledby="evidence-title">
+        <p class="section-kicker">Evidence</p>
+        <h2 id="evidence-title">The stream cost stayed consistent</h2>
+        <div class="evidence-grid">
+          <article class="evidence-card">
+            <h3>Remote encode</h3>
+            <p>
+              Wolf remained roughly <span class="metric">26–38%</span> of one CPU core across the
+              matrix. NVENC stayed around <span class="metric">24–28%</span> during qualified
+              playback. No encoder error, container restart, or abnormal growth appeared.
+            </p>
+          </article>
+          <article class="evidence-card">
+            <h3>Client decode</h3>
+            <p>
+              Browser choice did not materially change XPS load. Moonlight stayed near
+              <span class="metric">18%</span> of one CPU core and <span class="metric">272 MiB</span>
+              RSS while Intel VA-API handled decode.
+            </p>
+          </article>
+        </div>
+
+        <div class="client-metrics" aria-label="Typical XPS client measurements">
+          <dl>
+            <dt>Moonlight CPU</dt>
+            <dd>≈ 18%</dd>
+          </dl>
+          <dl>
+            <dt>Moonlight RSS</dt>
+            <dd>≈ 272 MiB</dd>
+          </dl>
+          <dl>
+            <dt>Package temperature</dt>
+            <dd>54–59 °C</dd>
+          </dl>
+        </div>
+      </section>
+
+      <section id="defects" aria-labelledby="defects-title">
+        <p class="section-kicker">Defect register</p>
+        <h2 id="defects-title">Known visual qualification</h2>
+        <article id="d-01" class="defect">
+          <h3><span aria-hidden="true">△</span> D-01 — Brave motion and UI glitching</h3>
+          <p><strong>Severity:</strong> experience-affecting, non-blocking · <strong>Affects:</strong> Brave</p>
+          <p>
+            Animated page elements, scrolling chat, address-bar interaction, and occasionally the
+            playing video showed visible stutter or graphical glitches. Wolf, NVENC, Moonlight,
+            and resource telemetry stayed healthy, so this qualifies Brave's application result
+            rather than failing the transport.
+          </p>
+        </article>
+      </section>
+
+      <section id="method" aria-labelledby="method-title">
+        <p class="section-kicker">Method</p>
+        <h2 id="method-title">Like-for-like sustained playback</h2>
+        <details open data-mobile-collapse>
+          <summary>Test procedure and acceptance conditions</summary>
+          <ol class="plain-list">
+            <li>Launch one isolated browser runner through the protected Wolf selector.</li>
+            <li>
+              Open the same
+              <a href="https://www.youtube.com/watch?v=ywBF2Bm1jjY">YouTube test video</a>, clear
+              consent or advertisements, and explicitly select 1440p.
+            </li>
+            <li>Play actual footage for at least two minutes through a 2560×1440/60 HEVC stream at 40 Mbit/s.</li>
+            <li>Sample browser container CPU/memory, Wolf CPU, NVENC use, XPS Moonlight CPU/RSS, and thermals.</li>
+            <li>Scan browser, Wolf, and Moonlight logs for crashes, encoder/decoder faults, drops, or timeouts.</li>
+          </ol>
+        </details>
+        <details open data-mobile-collapse>
+          <summary>Interpretation boundary</summary>
+          <p>
+            Resource and log telemetry can qualify transport stability, but it does not measure
+            every rendered-frame defect. Subjective visual observations therefore remain evidence
+            alongside the measurements rather than being overwritten by them.
+          </p>
+        </details>
+      </section>
+
+      <section aria-labelledby="limits-title">
+        <p class="section-kicker">Limits</p>
+        <h2 id="limits-title">What this report does not claim</h2>
+        <ul class="plain-list">
+          <li>The ranges are comparative observations from one controlled campaign, not universal browser benchmarks.</li>
+          <li>Advertisements and consent screens were excluded from qualified timing windows.</li>
+          <li>Background Moonlight clients still decode and consume network/thermal budget until explicitly closed.</li>
+          <li>Clipboard, Synergy pointer feel, and KDE Connect pointer behavior were outside this playback acceptance run.</li>
+        </ul>
+      </section>
+
+      <section id="actions" aria-labelledby="actions-title">
+        <p class="section-kicker">Next</p>
+        <h2 id="actions-title">Practical follow-ups</h2>
+        <ul class="actions">
+          <li><span>Keep public remote Helium as the couch-session default.</span></li>
+          <li><span>Retain all five protected choices as isolated compatibility and diagnostic profiles.</span></li>
+          <li><span>Investigate Brave's application-side rendering path without treating it as a stream failure.</span></li>
+          <li><span>Address clipboard and Synergy/KDE Connect pointer refinement as separate input projects.</span></li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="shell">
+      <p>
+        Archive: <span class="report-id">docs/adr/0056-containerized-remote-browser-streaming.md</span> ·
+        operational guide: <span class="report-id">docs/xps-media-center.md</span> ·
+        visual report format v1
+      </p>
+    </footer>
+
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const toggle = document.querySelector(".theme-toggle");
+        const themes = ["system", "dark", "light"];
+
+        const applyTheme = (theme) => {
+          if (theme === "system") {
+            root.removeAttribute("data-theme");
+          } else {
+            root.dataset.theme = theme;
+          }
+          toggle.textContent = `Theme: ${theme}`;
+          toggle.setAttribute("aria-label", `Color theme is ${theme}; activate to change`);
+        };
+
+        let theme = "system";
+        try {
+          const saved = localStorage.getItem("reportcraft-theme");
+          if (themes.includes(saved)) theme = saved;
+        } catch (_error) {
+          // file:// and hardened browser profiles may deny storage.
+        }
+        applyTheme(theme);
+
+        toggle.addEventListener("click", () => {
+          theme = themes[(themes.indexOf(theme) + 1) % themes.length];
+          applyTheme(theme);
+          try {
+            localStorage.setItem("reportcraft-theme", theme);
+          } catch (_error) {
+            // Theme still works for this page load.
+          }
+        });
+
+        const disclosures = [...document.querySelectorAll("details[data-mobile-collapse]")];
+        if (window.matchMedia("(max-width: 639px)").matches) {
+          disclosures.forEach((item) => item.removeAttribute("open"));
+        }
+
+        let printState = [];
+        window.addEventListener("beforeprint", () => {
+          printState = disclosures.map((item) => item.open);
+          disclosures.forEach((item) => (item.open = true));
+        });
+        window.addEventListener("afterprint", () => {
+          disclosures.forEach((item, index) => (item.open = printState[index]));
+        });
+      })();
+    </script>
+  </body>
+</html>

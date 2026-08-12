@@ -1,0 +1,354 @@
+# NIXBOX media-center boot and shutdown theme.
+
+fun clamp(value)
+  {
+    if (value < 0)
+      return 0;
+    if (value > 1)
+      return 1;
+    return value;
+  }
+
+fun smooth(value)
+  {
+    value = clamp(value);
+    return value * value * (3 - 2 * value);
+  }
+
+fun ease_out(value)
+  {
+    value = clamp(value);
+    inverse = 1 - value;
+    return 1 - inverse * inverse * inverse;
+  }
+
+fun setup_letter(index, filename)
+  {
+    local.original = Image(filename);
+    global.letters[index].image = local.original.Scale(
+      Math.Int(104 * global.layout_scale),
+      Math.Int(106 * global.layout_scale)
+    );
+    global.letters[index].sprite = Sprite(global.letters[index].image);
+    global.letters[index].final_x = global.word_x + index * global.slot_width;
+    global.letters[index].sprite.SetPosition(
+      global.letters[index].final_x,
+      global.word_y,
+      20
+    );
+  }
+
+Window.SetBackgroundTopColor(0.043, 0.047, 0.059);
+Window.SetBackgroundBottomColor(0.043, 0.047, 0.059);
+Plymouth.SetRefreshRate(60);
+
+global.mode = Plymouth.GetMode();
+global.shutdown = global.mode == "shutdown" || global.mode == "reboot";
+global.frame = 0;
+global.boot_progress = 0;
+global.visual_progress = 0;
+global.animation_started = 0;
+global.force_complete = 0;
+
+# A KMS handoff changes Plymouth's virtual canvas. Rebuild every scaled sprite
+# against the new bounds so the same centered composition appears on every
+# pixel display instead of retaining the transient framebuffer geometry.
+fun setup_layout()
+  {
+    global.layout_scale = Window.GetWidth() / 1920;
+    local.height_scale = Window.GetHeight() / 1080;
+    if (local.height_scale < global.layout_scale)
+      global.layout_scale = local.height_scale;
+
+    global.slot_width = 104 * global.layout_scale;
+    global.word_width = 624 * global.layout_scale;
+    global.word_x = Window.GetX() + Window.GetWidth() / 2 - global.word_width / 2;
+    global.word_y = Window.GetY() + Window.GetHeight() / 2 - 116 * global.layout_scale;
+    global.word_center_x = Window.GetX() + Window.GetWidth() / 2 - 52 * global.layout_scale;
+
+    setup_letter(0, "letter-N.png");
+    setup_letter(1, "letter-I.png");
+    setup_letter(2, "letter-X.png");
+    setup_letter(3, "letter-B.png");
+    setup_letter(4, "letter-O.png");
+    setup_letter(5, "letter-X.png");
+
+    if (global.shutdown)
+      {
+        global.watermark.original = Image("nix-snowflake-white.png");
+        global.watermark.size = Math.Int(Window.GetWidth() * 0.58);
+        global.watermark.image = global.watermark.original.Scale(global.watermark.size, global.watermark.size);
+        global.watermark.x = Window.GetX() + Window.GetWidth() / 2 - global.watermark.size / 2;
+        global.watermark.y = Window.GetY() + Window.GetHeight() / 2 - global.watermark.size / 2;
+        global.watermark.z = 10;
+      }
+    else
+      {
+        global.watermark.original = Image("nix-snowflake-compact.png");
+        global.watermark.size = Math.Int(64 * global.layout_scale);
+        global.watermark.image = global.watermark.original.Scale(global.watermark.size, global.watermark.size);
+        global.watermark.x = Window.GetX() + Window.GetWidth() / 2 - global.watermark.size / 2;
+        global.watermark.y = Window.GetY() + Window.GetHeight() / 2 + 32 * global.layout_scale;
+        global.watermark.z = 30;
+      }
+    global.watermark.sprite = Sprite(global.watermark.image);
+    global.watermark.sprite.SetPosition(
+      global.watermark.x,
+      global.watermark.y,
+      global.watermark.z
+    );
+
+    if (global.shutdown)
+      {
+        global.subtitle.original = Image("subtitle-powering-off.png");
+        global.subtitle.width = Math.Int(600 * global.layout_scale);
+        global.subtitle.height = Math.Int(36 * global.layout_scale);
+        global.subtitle.image = global.subtitle.original.Scale(global.subtitle.width, global.subtitle.height);
+        global.subtitle.sprite = Sprite(global.subtitle.image);
+        global.subtitle.sprite.SetPosition(
+          Window.GetX() + Window.GetWidth() / 2 - global.subtitle.width / 2,
+          Window.GetY() + Window.GetHeight() / 2 + 44 * global.layout_scale,
+          20
+        );
+      }
+
+    global.progress_track.original = Image("progress-track.png");
+    global.progress_track.width = Math.Int(520 * global.layout_scale);
+    global.progress_track.height = Math.Int(10 * global.layout_scale);
+    if (global.progress_track.height < 4)
+      global.progress_track.height = 4;
+    global.progress_track.image = global.progress_track.original.Scale(
+      global.progress_track.width,
+      global.progress_track.height
+    );
+    global.progress_track.sprite = Sprite(global.progress_track.image);
+    global.progress_track.x = Window.GetX() + Window.GetWidth() / 2 - global.progress_track.width / 2;
+    global.progress_track.y = Window.GetY() + Window.GetHeight() / 2 + 128 * global.layout_scale;
+    global.progress_track.sprite.SetPosition(global.progress_track.x, global.progress_track.y, 30);
+
+    global.progress_fill.original = Image("progress-fill.png");
+    global.progress_fill.image = global.progress_fill.original.Scale(
+      global.progress_track.width,
+      global.progress_track.height
+    );
+    global.progress_fill.sprite = Sprite(global.progress_fill.image);
+    global.progress_fill.sprite.SetPosition(global.progress_track.x, global.progress_track.y, 31);
+
+    if (global.shutdown)
+      {
+        global.watermark.sprite.SetOpacity(0.05);
+        global.subtitle.sprite.SetOpacity(1);
+        global.progress_track.sprite.SetOpacity(0);
+        global.progress_fill.sprite.SetOpacity(0);
+        for (index = 0; index < 6; index++)
+          global.letters[index].sprite.SetOpacity(1);
+      }
+    else
+      {
+        global.watermark.sprite.SetOpacity(0);
+        global.progress_track.sprite.SetOpacity(0);
+        global.progress_fill.sprite.SetOpacity(0);
+        for (index = 0; index < 6; index++)
+          global.letters[index].sprite.SetOpacity(0);
+        global.letters[2].sprite.SetX(global.word_center_x);
+        global.letters[5].sprite.SetX(global.word_center_x);
+
+        # Until userspace has settled the dock-backed outputs, present a
+        # deliberate static mark rather than letting the off-screen animation
+        # expose an arbitrary late frame when a display appears.
+        if (!global.animation_started)
+          {
+            global.letters[2].sprite.SetOpacity(1);
+            global.letters[5].sprite.SetOpacity(1);
+          }
+      }
+  }
+
+setup_layout();
+
+# The firmware framebuffer is replaced by i915 and dock-backed pixel displays
+# shortly after Plymouth starts. Rebuild the composition for each new canvas;
+# the XPS boot sequencer reloads the theme once output discovery has settled,
+# which gives the visible display a deliberate frame-zero start.
+fun display_hotplug_callback()
+  {
+    setup_layout();
+  }
+
+Plymouth.SetDisplayHotplugFunction(display_hotplug_callback);
+
+fun boot_progress_callback(duration, progress)
+  {
+    local.progress = clamp(progress);
+    if (local.progress > global.boot_progress)
+      global.boot_progress = local.progress;
+  }
+
+Plymouth.SetBootProgressFunction(boot_progress_callback);
+
+fun show_complete_boot_lockup()
+  {
+    global.watermark.sprite.SetOpacity(1);
+    global.progress_track.sprite.SetOpacity(1);
+
+    for (index = 0; index < 6; index++)
+      {
+        global.letters[index].sprite.SetX(global.letters[index].final_x);
+        global.letters[index].sprite.SetOpacity(1);
+      }
+
+    local.fill_image = global.progress_fill.original.Scale(
+      global.progress_track.width,
+      global.progress_track.height
+    );
+    global.progress_fill.sprite.SetImage(local.fill_image);
+    global.progress_fill.sprite.SetOpacity(1);
+  }
+
+# The XPS boot sequencer uses messages as renderer-independent stage signals.
+# Reloading the theme restores the static prelude; the start signal begins a
+# fresh visible epoch, while the completion signal guarantees a coherent final
+# lockup even when a high-resolution output cannot sustain the requested rate.
+fun display_message_callback(message)
+  {
+    if (message == "nixbox:start")
+      {
+        global.animation_started = 1;
+        global.force_complete = 0;
+        global.frame = 0;
+        global.visual_progress = 0;
+        setup_layout();
+      }
+
+    if (message == "nixbox:complete")
+      {
+        global.animation_started = 1;
+        global.force_complete = 1;
+        show_complete_boot_lockup();
+      }
+  }
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+
+fun refresh_callback()
+  {
+    if (!global.shutdown && !global.animation_started)
+      return;
+
+    if (!global.shutdown && global.force_complete)
+      {
+        show_complete_boot_lockup();
+        return;
+      }
+
+    global.frame += 1;
+    # The external 4K path advances Plymouth's refresh callback at roughly
+    # 24 frames per second despite a 60 Hz request. Pace the designed motion
+    # against that observed renderer rate; the explicit completion stage above
+    # remains the hard wall-clock guarantee.
+    local.time = global.frame / 24;
+
+    if (global.shutdown)
+      {
+        local.watermark_fade = clamp((local.time - 0.6) / 1.8);
+        global.watermark.sprite.SetOpacity(0.05 * (1 - local.watermark_fade * local.watermark_fade * local.watermark_fade));
+
+        local.subtitle_fade = clamp((local.time - 1.2) / 0.8);
+        global.subtitle.sprite.SetOpacity(1 - local.subtitle_fade * local.subtitle_fade * local.subtitle_fade);
+
+        local.fade = clamp((local.time - 0.7) / 0.5);
+        global.letters[0].sprite.SetOpacity(1 - local.fade * local.fade * local.fade);
+        local.fade = clamp((local.time - 0.8) / 0.5);
+        global.letters[1].sprite.SetOpacity(1 - local.fade * local.fade * local.fade);
+        local.fade = clamp((local.time - 0.9) / 0.5);
+        global.letters[3].sprite.SetOpacity(1 - local.fade * local.fade * local.fade);
+        local.fade = clamp((local.time - 1.0) / 0.5);
+        global.letters[4].sprite.SetOpacity(1 - local.fade * local.fade * local.fade);
+
+        local.travel = smooth((local.time - 1.7) / 1.1);
+        global.letters[2].sprite.SetX(
+          global.letters[2].final_x + (global.word_center_x - global.letters[2].final_x) * local.travel
+        );
+        global.letters[5].sprite.SetX(
+          global.letters[5].final_x + (global.word_center_x - global.letters[5].final_x) * local.travel
+        );
+        local.x_fade = clamp((local.time - 3.0) / 0.6);
+        global.letters[2].sprite.SetOpacity(1 - local.x_fade * local.x_fade * local.x_fade);
+        global.letters[5].sprite.SetOpacity(1 - local.x_fade * local.x_fade * local.x_fade);
+
+        local.black = clamp((local.time - 3.0) / 1.0);
+        local.background = 0.043 * (1 - local.black * local.black * local.black);
+        Window.SetBackgroundTopColor(local.background, local.background, local.background);
+        Window.SetBackgroundBottomColor(local.background, local.background, local.background);
+      }
+    else
+      {
+        local.x_opacity = ease_out((local.time - 0.1) / 0.5);
+        global.letters[2].sprite.SetOpacity(local.x_opacity);
+        global.letters[5].sprite.SetOpacity(local.x_opacity);
+
+        local.travel = smooth((local.time - 0.9) / 1.3);
+        global.letters[2].sprite.SetX(
+          global.word_center_x + (global.letters[2].final_x - global.word_center_x) * local.travel
+        );
+        global.letters[5].sprite.SetX(
+          global.word_center_x + (global.letters[5].final_x - global.word_center_x) * local.travel
+        );
+
+        global.letters[0].sprite.SetOpacity(ease_out((local.time - 2.30) / 0.7));
+        global.letters[1].sprite.SetOpacity(ease_out((local.time - 2.42) / 0.7));
+        global.letters[3].sprite.SetOpacity(ease_out((local.time - 2.54) / 0.7));
+        global.letters[4].sprite.SetOpacity(ease_out((local.time - 2.66) / 0.7));
+        global.watermark.sprite.SetOpacity(ease_out((local.time - 3.0) / 0.8));
+        global.progress_track.sprite.SetOpacity(ease_out((local.time - 3.25) / 0.65));
+
+        local.prototype_progress = ease_out((local.time - 3.45) / 3.1);
+        local.progress_target = global.boot_progress;
+        if (local.prototype_progress > local.progress_target)
+          local.progress_target = local.prototype_progress;
+        if (local.progress_target > global.visual_progress)
+          global.visual_progress = local.progress_target;
+
+        local.fill_width = Math.Int(global.progress_track.width * global.visual_progress);
+        if (local.fill_width > 0)
+          {
+            local.fill_image = global.progress_fill.original.Scale(local.fill_width, global.progress_track.height);
+            global.progress_fill.sprite.SetImage(local.fill_image);
+            global.progress_fill.sprite.SetOpacity(global.progress_track.sprite.GetOpacity());
+          }
+      }
+  }
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# Plymouth also invokes this callback while reloading a theme. Paint the final
+# handoff only after the userspace sequencer has explicitly completed the
+# visible epoch; an ordinary reload must preserve the static Nix/X prelude.
+fun quit_callback()
+  {
+    if (!global.shutdown && global.force_complete)
+      show_complete_boot_lockup();
+  }
+
+Plymouth.SetQuitFunction(quit_callback);
+
+# Keep password prompts usable if an encrypted or recovery path needs them.
+fun display_password_callback(prompt, bullets)
+  {
+    local.message = Image.Text(prompt, 0.91, 0.93, 0.96);
+    global.password_sprite = Sprite(local.message);
+    global.password_sprite.SetPosition(
+      Window.GetX() + Window.GetWidth() / 2 - local.message.GetWidth() / 2,
+      Window.GetY() + Window.GetHeight() * 0.72,
+      100
+    );
+  }
+
+fun display_normal_callback()
+  {
+    if (global.password_sprite)
+      global.password_sprite.SetOpacity(0);
+  }
+
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayNormalFunction(display_normal_callback);

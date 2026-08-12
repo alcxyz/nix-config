@@ -12,12 +12,17 @@
 
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     nix-packages = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git?ref=dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    reportcraft = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -67,7 +72,9 @@
     };
 
     dankMaterialShell = {
-      url = "github:AvengeMedia/DankMaterialShell";
+      # Track stable releases explicitly: DMS is part of the interactive
+      # desktop, so development-branch churn is a poor fit here.
+      url = "github:AvengeMedia/DankMaterialShell/v1.5.3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -82,7 +89,7 @@
     };
 
     rustfs = {
-      url = "github:rustfs/rustfs";
+      url = "github:rustfs/rustfs/1.0.0-beta.10";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

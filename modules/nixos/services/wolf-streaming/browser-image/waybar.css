@@ -1,0 +1,38 @@
+@define-color background rgba(24, 24, 31, 0.96);
+@define-color foreground #f2f2f7;
+@define-color accent #a58af9;
+
+* {
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+window#waybar {
+    background: @background;
+    color: @foreground;
+}
+
+#workspaces button,
+#window,
+#language,
+#pulseaudio,
+#clock {
+    padding: 0 12px;
+}
+
+#workspaces button {
+    color: alpha(@foreground, 0.65);
+    background: transparent;
+}
+
+#workspaces button.focused {
+    color: @foreground;
+    background: alpha(@accent, 0.34);
+}
+
+#window {
+    color: alpha(@foreground, 0.82);
+}
