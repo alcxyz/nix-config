@@ -18,8 +18,12 @@
         };
         target = lib.mkOption {type = lib.types.str;};
         maximumUsedPercent = lib.mkOption {
-          type = lib.types.ints.between 1 100;
+          type = lib.types.nullOr (lib.types.ints.between 1 100);
           default = 80;
+          description = ''
+            Optional utilization threshold. Set to null when a metrics system
+            such as Beszel owns percentage-based resource alerts.
+          '';
         };
         minimumFreeBytes = lib.mkOption {
           type = lib.types.ints.unsigned;
@@ -49,13 +53,17 @@
       };
     }
   );
+  renderMaximumUsedPercent = check:
+    if check.maximumUsedPercent == null
+    then "-1"
+    else toString check.maximumUsedPercent;
   renderedChecks =
     lib.concatMapStringsSep "\n" (check: ''
       check_storage \
         ${lib.escapeShellArg check.name} \
         ${lib.escapeShellArg check.kind} \
         ${lib.escapeShellArg check.target} \
-        ${toString check.maximumUsedPercent} \
+        ${renderMaximumUsedPercent check} \
         ${toString check.minimumFreeBytes} \
         ${lib.boolToString check.requireReadWrite}
     '')
@@ -146,7 +154,7 @@
           fi
         fi
 
-        if [ "$used" -ge "$maximum_used" ]; then
+        if [ "$maximum_used" -ge 0 ] && [ "$used" -ge "$maximum_used" ]; then
           record_issue "$name: capacity is ''${used}% (threshold ''${maximum_used}%)"
         fi
         if [ "$minimum_free" -gt 0 ] && [ "$free" -lt "$minimum_free" ]; then
