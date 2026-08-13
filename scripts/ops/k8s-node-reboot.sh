@@ -314,6 +314,58 @@ collect_displaced_workloads() {
   rm -f "$pod_list"
 }
 
+workload_requires_target_node() {
+  local namespace="$1"
+  local workload="$2"
+
+  kubectl -n "$namespace" get "$workload" -o json 2>/dev/null | jq -e --arg node "$NODE" '
+    .spec.template.spec as $pod
+    | (($pod.nodeSelector["kubernetes.io/hostname"] // "") == $node)
+      or (
+        ($pod.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms // []) as $terms
+        | ($terms | length) > 0
+        and all($terms[];
+          any((.matchExpressions // [])[];
+            .key == "kubernetes.io/hostname"
+            and .operator == "In"
+            and ((.values // []) | length) > 0
+            and all((.values // [])[]; . == $node)
+          )
+          or any((.matchFields // [])[];
+            .key == "metadata.name"
+            and .operator == "In"
+            and ((.values // []) | length) > 0
+            and all((.values // [])[]; . == $node)
+          )
+        )
+      )' >/dev/null
+}
+
+collect_target_pinned_pending_workloads() {
+  local pod_list
+  local namespace
+  local pod
+  local workload_key
+  local workload
+
+  pod_list=$(mktemp)
+  kubectl get pods --all-namespaces \
+    --field-selector 'status.phase=Pending' \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\n"}{end}' >"$pod_list"
+
+  while IFS=$'\t' read -r namespace pod; do
+    [[ -n "$namespace" && -n "$pod" ]] || continue
+    workload_key=$(workload_key_for_pod "$namespace" "$pod")
+    [[ -n "$workload_key" ]] || continue
+    IFS=$'\t' read -r namespace workload <<<"$workload_key"
+    if workload_requires_target_node "$namespace" "$workload"; then
+      printf '%s\t%s\n' "$namespace" "$workload"
+    fi
+  done <"$pod_list" | sort -u
+
+  rm -f "$pod_list"
+}
+
 wait_for_workloads() {
   local workloads_file="$1"
   local namespace
@@ -330,6 +382,11 @@ wait_for_workloads() {
 
   while IFS=$'\t' read -r namespace workload; do
     [[ -n "$namespace" && -n "$workload" ]] || continue
+
+    if workload_requires_target_node "$namespace" "$workload"; then
+      log "deferring target-pinned ${namespace}/${workload} until ${NODE} returns"
+      continue
+    fi
 
     case "$workload" in
       deployment/* | statefulset/*)
@@ -1374,6 +1431,7 @@ prepare_node_for_disruption() {
 
   if [[ "$RESUME_MAINTENANCE" == true ]]; then
     verify_resumed_maintenance_state
+    collect_target_pinned_pending_workloads >"$workloads_file"
     return 0
   fi
 
@@ -1469,6 +1527,7 @@ run_poweroff() {
 }
 
 run_poweron_finalize() {
+  WORKLOADS_FILE=$(mktemp)
   trap cleanup_runtime_state EXIT
 
   log "checking Kubernetes node ${NODE}"
@@ -1482,10 +1541,12 @@ run_poweron_finalize() {
   verify_returned_node_network
   wait_for_longhorn_survivability
   wait_for_cloudnativepg_survivability
+  collect_target_pinned_pending_workloads >"$WORKLOADS_FILE"
 
   log "uncordoning ${NODE}"
   kubectl uncordon "$NODE"
 
+  wait_for_workloads "$WORKLOADS_FILE"
   wait_for_longhorn_health
   wait_for_cloudnativepg_health
   wait_for_no_bad_pods

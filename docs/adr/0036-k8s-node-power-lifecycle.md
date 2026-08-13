@@ -67,6 +67,14 @@ nodes. CloudNativePG clusters must retain a Ready primary away from the target
 and enough Ready instances for one-node-down operation. Full Longhorn and
 CloudNativePG health is required again after the node is returned to service.
 
+A controller whose Pod template explicitly requires the maintenance target by
+hostname cannot recover while that node is cordoned. The pre-reboot displaced
+workload gate records but defers such a controller instead of waiting on an
+impossible condition. After reboot and uncordon, the ordinary rollout gate
+requires every recorded controller to settle. Resumed reboot and split
+power-off/power-on flows reconstruct the deferred set from Pending Pods so they
+retain the same post-return verification.
+
 Longhorn marks replicas on a briefly unavailable node as failed, then retains
 them for `replica-replenishment-wait-interval` so they can be reused through a
 delta or fast rebuild instead of replaced by a full copy. The default recovery
