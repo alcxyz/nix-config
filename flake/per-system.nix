@@ -88,6 +88,11 @@
         shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
       '';
 
+      check-k8s-node-reboot-workload-phases =
+        mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash] ''
+          bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
+        '';
+
       report-assets =
         mkRepoCheck "report-assets-check"
         [

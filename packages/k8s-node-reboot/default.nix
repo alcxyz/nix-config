@@ -7,7 +7,7 @@
 }:
 stdenv.mkDerivation {
   pname = "k8s-node-reboot";
-  version = "0.7.2";
+  version = "0.7.3";
 
   src = ../../scripts/ops;
 

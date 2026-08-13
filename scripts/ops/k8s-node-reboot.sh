@@ -383,11 +383,6 @@ wait_for_workloads() {
   while IFS=$'\t' read -r namespace workload; do
     [[ -n "$namespace" && -n "$workload" ]] || continue
 
-    if workload_requires_target_node "$namespace" "$workload"; then
-      log "deferring target-pinned ${namespace}/${workload} until ${NODE} returns"
-      continue
-    fi
-
     case "$workload" in
       deployment/* | statefulset/*)
         log "waiting for ${namespace}/${workload}"
@@ -462,6 +457,11 @@ wait_for_displaced_workload_survivability() {
 
   while IFS=$'\t' read -r namespace workload; do
     [[ -n "$namespace" && -n "$workload" ]] || continue
+
+    if workload_requires_target_node "$namespace" "$workload"; then
+      log "deferring target-pinned ${namespace}/${workload} until ${NODE} returns"
+      continue
+    fi
 
     case "$workload" in
       deployment/* | replicaset/*)
@@ -1616,4 +1616,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
