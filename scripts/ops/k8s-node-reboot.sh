@@ -746,11 +746,11 @@ wait_for_longhorn_health() {
 
   if [[ -n "$bad_volumes" && "$replica_rebuild_limit" == 0 && "$CHECK_ONLY" == false ]]; then
     LONGHORN_REBUILD_LIMIT_ORIGINAL="$replica_rebuild_limit"
-    log "temporarily enabling one guarded Longhorn replica rebuild per node"
+    log "temporarily enabling two guarded Longhorn replica rebuilds per node"
     kubectl -n longhorn-system patch settings.longhorn.io \
       concurrent-replica-rebuild-per-node-limit \
       --type=merge \
-      -p '{"value":"1"}' >/dev/null
+      -p '{"value":"2"}' >/dev/null
   fi
 
   while ((SECONDS < deadline)); do

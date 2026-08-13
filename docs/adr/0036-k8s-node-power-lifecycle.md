@@ -71,11 +71,13 @@ delta or fast rebuild instead of replaced by a full copy. The default recovery
 timeout must exceed that interval plus bounded rebuild time. If the cluster
 sets `concurrent-replica-rebuild-per-node-limit` to `0`, automatic admission is
 disabled. When the helper encounters degraded attached volumes in this state,
-it temporarily admits one rebuild per node, waits for the retained replicas to
-return through the one-at-a-time queue, and restores the original value on
-success or process exit. A full storage-node restart can therefore need the
-reuse interval plus the complete queue; the default health wait allows 90
-minutes and reports the temporary admission state. Recovery output is
+it temporarily admits two rebuilds per node, waits for the retained replicas to
+return through the bounded queue, and restores the original value on success or
+process exit. This remains below Longhorn's ordinary default of five while
+avoiding an unnecessarily serialized recovery for a node carrying many
+volumes. A full storage-node restart can therefore need the reuse interval plus
+the complete queue; the default health wait allows 90 minutes and reports the
+temporary admission state. Recovery output is
 aggregated by the number of unhealthy attached volumes and rate-limited to one
 progress report every five minutes; the complete list is printed only if the
 deadline expires. This keeps the helper waiting on the real safety gate without
