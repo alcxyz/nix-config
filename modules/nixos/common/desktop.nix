@@ -121,10 +121,12 @@ in
   services.greetd = {
     enable = true;
     settings = {
+      initial_session = {
+        command = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
+        user = username;
+      };
       default_session = {
-        # Use tuigreet (a TTY-based greeter)
-        #command = "bash -l -c '${pkgs.tuigreet}/bin/tuigreet --time --remember --cmd \"uwsm start hyprland-uwsm.desktop\"'";
-        command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --sessions /run/current-system/sw/share/wayland-sessions";
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd '${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop'";
         user = "greeter";
       };
     };
