@@ -33,7 +33,9 @@ Open-iSCSI 2.1.12, the helper removes only that obsolete field before using
 `iscsiadm` to log out the exact target and delete its record. Any attachment,
 mount, holder, open device, unexpected target name, or ambiguous host state
 remains a hard stop. `--check-only` validates that reconciliation would be safe
-without changing a session or record.
+without changing a session or record. Host activation also removes that exact
+obsolete field from retained records so a package upgrade cannot leave the
+Open-iSCSI cache unreadable before the next maintenance operation.
 
 Before cordoning, the helper plans CloudNativePG primary switchovers to healthy
 replicas on surviving Ready, schedulable stable nodes. A power operation uses

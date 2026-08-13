@@ -117,6 +117,17 @@ in
       "L+ /sbin/umount.nfs - - - - ${pkgs.nfs-utils}/bin/umount.nfs"
     ];
 
+    # Open-iSCSI 2.1.12 rejects node records written by older releases when
+    # they contain this removed field. The records are connection cache, and
+    # removing only the unsupported key does not alter live kernel sessions.
+    system.activationScripts.longhornOpeniscsiNodeRecordCompatibility.text = ''
+      if test -d /etc/iscsi/nodes; then
+        ${pkgs.findutils}/bin/find /etc/iscsi/nodes -type f -name default \
+          -exec ${pkgs.gnused}/bin/sed -i \
+            '/^node\.session\.conn_reopen_log_freq[[:space:]]*=/d' {} +
+      fi
+    '';
+
     # A missing data filesystem must not prevent the node from booting, but an
     # ordinary directory on the root filesystem must never become an accidental
     # Longhorn disk. When the configured mount is unavailable, bind an empty
