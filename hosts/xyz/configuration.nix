@@ -10,10 +10,15 @@
   lib,
   ...
 }: let
-  zfsKernelPkgs = import inputs.nixpkgs-zfs-master {
-    system = pkgs.stdenv.hostPlatform.system;
-    config.allowUnfree = true;
-  };
+  zfsPackage = pkgs.openzfs_7_1;
+  zfsKernelPackages = pkgs.linuxPackages_latest.extend (
+    _final: kernelPackages: {
+      openzfs_7_1 = zfsPackage.override {
+        configFile = "kernel";
+        kernel = kernelPackages.kernel;
+      };
+    }
+  );
   runtimePool = "xruntime";
   runtimeDatasets = {
     docker = "${runtimePool}/runtime/docker";
@@ -46,7 +51,7 @@
       lib.makeBinPath [
         pkgs.coreutils
         pkgs.util-linux
-        zfsKernelPkgs.zfs
+        zfsPackage
       ]
     }
 
@@ -109,7 +114,7 @@
         pkgs.coreutils
         pkgs.util-linux
         pkgs.sanoid
-        zfsKernelPkgs.zfs
+        zfsPackage
       ]
     }
 
@@ -244,7 +249,7 @@
       lib.makeBinPath [
         pkgs.coreutils
         pkgs.util-linux
-        zfsKernelPkgs.zfs
+        zfsPackage
       ]
     }
 
@@ -364,10 +369,10 @@ in {
   # Prevent ZFS warning - stable host ID
   networking.hostId = "4e7ded69";
 
-  # See docs/adr/0035-host-kernel-policy.md: xyz has ZFS root and should not
-  # track linuxPackages_latest unless the full system evaluates cleanly.
-  boot.kernelPackages = zfsKernelPkgs.linuxPackages;
-  boot.zfs.package = zfsKernelPkgs.zfs;
+  # See docs/adr/0035-host-kernel-policy.md: the matching OpenZFS module has
+  # been compiled against this kernel before any separate activation step.
+  boot.kernelPackages = zfsKernelPackages;
+  boot.zfs.package = zfsPackage;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   boot.kernelParams = ["usbcore.autosuspend=-1"];
   boot.extraModprobeConfig = ''
@@ -497,7 +502,7 @@ in {
     localBackup
     gamesDatasetPrepare
     runtimeStoragePolicy
-    zfsKernelPkgs.zfs
+    zfsPackage
   ];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";

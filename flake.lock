@@ -918,11 +918,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1786514932,
-        "narHash": "sha256-/b1IM+Saii77XafPqLIv6SVot+dm8JeBCkvpWmqJwa8=",
+        "lastModified": 1786594249,
+        "narHash": "sha256-M+YbmuaP4ofwt658SAjktlQpvyP2b0cyEnVDxOC+8Xk=",
         "ref": "dev",
-        "rev": "b9bd0f2eef6376d0235f77b83f0a5c89f672e89a",
-        "revCount": 442,
+        "rev": "5347cd14017f21dd7118c82f3e2fb3d17f1c0988",
+        "revCount": 446,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1026,22 +1026,6 @@
       "original": {
         "owner": "NixOS",
         "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs-zfs-master": {
-      "locked": {
-        "lastModified": 1786554647,
-        "narHash": "sha256-f7bhR4nBrKLAVHvYjZxExGeSAyBUoI9LqJeD62sLKcE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "57cdda925571849f02f3546a711c44505da37029",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "master",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -1226,7 +1210,6 @@
         "nix-packages": "nix-packages",
         "nix-secrets": "nix-secrets",
         "nixpkgs": "nixpkgs_2",
-        "nixpkgs-zfs-master": "nixpkgs-zfs-master",
         "paneru": "paneru",
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",

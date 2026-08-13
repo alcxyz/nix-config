@@ -1,7 +1,7 @@
 # ADR-0035: Host kernel policy
 
 **Status:** Accepted
-**Date:** 2026-05-05
+**Date:** 2026-05-05 (amended 2026-08-13)
 **Applies to:** `hosts/nux`, `hosts/nex`, `hosts/xyz`, `hosts/rpi0`, kernel selection
 
 ## Context
@@ -40,8 +40,9 @@ This applies to:
 - `nux`
 - `nex`
 
-Keep `xyz` on the nixpkgs default kernel until ZFS support for the latest kernel
-evaluates cleanly in the pinned nixpkgs revision.
+`xyz` originally remained on the nixpkgs default kernel until ZFS support for
+the latest kernel evaluated cleanly. The 2026-08-13 amendment below replaces
+that temporary exception.
 
 Keep `rpi0` on `pkgs.linuxPackages_latest`; it already used that policy before
 this ADR.
@@ -86,5 +87,30 @@ maintenance. The helper is responsible for cordon/drain, Longhorn-aware health
 checks, storage-detach gates, boot identity verification, workload settle
 checks, and uncordon. See ADR-0036 for the full node power lifecycle.
 
-`xyz` can be reconsidered for `linuxPackages_latest` when a dry-run of the full
-system no longer fails on ZFS for the latest kernel.
+## Amendment: Linux 7.1 on `xyz`
+
+OpenZFS development revision
+[`a35e8d892628d01e50af23aee5ba501be426baf6`](https://github.com/openzfs/zfs/commit/a35e8d892628d01e50af23aee5ba501be426baf6)
+is the first upstream revision that declares Linux 7.1 compatibility. Stable
+OpenZFS 2.4.3 and the corresponding nixpkgs package still declare Linux 7.0 as
+their maximum supported kernel.
+
+Pin that exact OpenZFS revision and source hash in the public `nix-packages`
+flake as the narrowly scoped `openzfs-7-1` overlay. Apply only that named
+overlay in `nix-config`; the filtered package policy from ADR-0007 remains in
+place for the rest of `nix-packages`.
+
+On `xyz`, select `pkgs.linuxPackages_latest` and extend its package set with a
+matching `openzfs_7_1` kernel module. Use the same pinned revision for the ZFS
+userspace tools. This replaces the temporary default-kernel policy for `xyz`.
+
+The OpenZFS revision is an unreleased development snapshot, so adoption
+requires more than evaluation: both userspace tools and the kernel module must
+compile, and the complete `xyz` system closure must build before the change is
+eligible for a separately approved activation. Building or publishing the
+configuration does not authorize activation, reboot, or pool feature upgrades.
+
+Future OpenZFS or kernel updates must keep the source revision, declared kernel
+compatibility range, userspace tools, and kernel module aligned. Once a stable
+OpenZFS release supports the selected kernel, replace the development pin with
+that release after the same build validation.

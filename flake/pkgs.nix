@@ -9,6 +9,10 @@ in
   lib.genAttrs supportedSystems (
     system: let
       overlays = [
+        # This named overlay only adds the pinned OpenZFS package. Unlike the
+        # package whitelist below, it must instantiate against this nixpkgs so
+        # its kernel module uses the selected kernel's build environment.
+        nix-packages.overlays.openzfs-7-1
         (
           _final: _prev: let
             np = nix-packages.packages.${system};
