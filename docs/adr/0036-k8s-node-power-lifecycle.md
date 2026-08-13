@@ -24,14 +24,15 @@ Before a power action, the helper must:
 5. verify that the host has no residual Longhorn CSI global mount or iSCSI
    session.
 
-Before cordoning, the helper also reports any zero-disruption PDB that selects
-a pod on the target node. This turns operator failover requirements—such as a
-CloudNativePG primary switchover—into an immediate preflight failure instead of
-spending the full drain timeout retrying an eviction that cannot succeed. Pod
-capacity is evaluated in aggregate across the remaining Ready, schedulable
-stable nodes after accounting for the target's evictable pods; an individually
-busy node does not block maintenance when another stable node has the required
-headroom.
+Before cordoning, the helper plans CloudNativePG primary switchovers to healthy
+replicas on surviving Ready, schedulable stable nodes. A power operation uses
+the operator's supported promotion interface and waits for full cluster health
+before continuing; `--check-only` validates and reports the same plan without
+changing it. Other zero-disruption PDBs remain immediate preflight failures
+instead of consuming the full drain timeout. Pod capacity is evaluated in
+aggregate across the remaining Ready, schedulable stable nodes after accounting
+for the target's evictable pods; an individually busy node does not block
+maintenance when another stable node has the required headroom.
 
 The Longhorn health gate requires every attached or attaching volume to have a
 live desired replica count of at least three before it waits for `healthy`

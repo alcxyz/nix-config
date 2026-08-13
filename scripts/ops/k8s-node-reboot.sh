@@ -27,6 +27,7 @@ MIN_SURVIVING_LONGHORN_REPLICAS=2
 REMOTE_BOOT_ID=""
 WORKLOADS_FILE=""
 NETWORK_AUDIT_SCRIPT="${K8S_NODE_NETWORK_AUDIT_SCRIPT:-}"
+CNPG_SWITCHOVERS=""
 
 usage() {
   cat <<'EOF'
@@ -37,8 +38,10 @@ Usage: kreboot [options] <host>
 Kubernetes-aware node power helpers.
 
 Commands:
-  kreboot                  Cordon, drain, reboot, wait for Ready, uncordon.
-  koff                     Cordon, drain, power off, leave cordoned.
+  kreboot                  Move database primaries, cordon, drain, reboot,
+                           wait for Ready, and uncordon.
+  koff                     Move database primaries, cordon, drain, power off,
+                           and leave cordoned.
   kon                      Wait for host/node to return, uncordon, settle.
 
 Options:
@@ -51,8 +54,8 @@ Options:
   --resume-maintenance     Reuse an already cordoned, drained, and detached
                            node for another power cycle. Fails closed if the
                            maintenance-state gates do not pass.
-  --check-only             Validate preflight or resumed-maintenance gates
-                           without cordoning, draining, or powering the host.
+  --check-only             Validate preflight or resumed-maintenance gates and
+                           report planned database switchovers without changes.
   --drain-timeout <dur>    kubectl drain duration. Default: 10m.
   --ready-timeout <dur>    kubectl wait duration. Default: 10m.
   --settle-timeout <dur>   Workload/Longhorn health wait duration. Default: 90m.
@@ -547,6 +550,108 @@ wait_for_cloudnativepg_health() {
   die "CloudNativePG clusters did not return to full health"
 }
 
+load_cloudnativepg_primary_switchovers() {
+  CNPG_SWITCHOVERS=""
+
+  if ! kubectl get clusters.postgresql.cnpg.io --all-namespaces >/dev/null 2>&1; then
+    return 0
+  fi
+
+  CNPG_SWITCHOVERS=$(
+    kubectl get clusters.postgresql.cnpg.io --all-namespaces -o json | jq -r \
+      --arg node "$NODE" \
+      --slurpfile pods <(kubectl get pods --all-namespaces -o json) \
+      --slurpfile nodes <(kubectl get nodes -o json) '
+        ($pods[0].items
+          | map({key: (.metadata.namespace + "/" + .metadata.name), value: .})
+          | from_entries) as $pod_index
+        | ($nodes[0].items
+          | map({key: .metadata.name, value: .})
+          | from_entries) as $node_index
+        | .items[]
+        | . as $cluster
+        | (.status.currentPrimary // "") as $primary
+        | ($pod_index[.metadata.namespace + "/" + $primary] // {}) as $primary_pod
+        | select(($primary_pod.spec.nodeName // "") == $node)
+        | ([
+            $pods[0].items[]
+            | select(.metadata.namespace == $cluster.metadata.namespace)
+            | select((.metadata.labels["cnpg.io/cluster"] // "") == $cluster.metadata.name)
+            | select((.metadata.labels["cnpg.io/podRole"] // "") == "instance")
+            | select((.metadata.labels["cnpg.io/instanceRole"] // "") == "replica")
+            | . as $candidate_pod
+            | select(.metadata.name != $primary)
+            | select((.spec.nodeName // "") != $node)
+            | select(.metadata.deletionTimestamp == null)
+            | select(.status.phase == "Running")
+            | select((.status.containerStatuses // [] | length) > 0)
+            | select(.status.containerStatuses | all(.ready == true))
+            | select(($cluster.status.instancesStatus.healthy // []) | index($candidate_pod.metadata.name) != null)
+            | select(
+                ($node_index[.spec.nodeName].spec.unschedulable // false) != true
+                and ($node_index[.spec.nodeName].metadata.labels["workload-class"] // "") == "stable"
+                and ($node_index[.spec.nodeName].status.conditions // [] | any(.type == "Ready" and .status == "True"))
+              )
+          ] | sort_by(.metadata.name) | .[0] // {}) as $candidate
+        | [
+            .metadata.namespace,
+            .metadata.name,
+            $primary,
+            ($candidate.metadata.name // ""),
+            ($candidate.spec.nodeName // "")
+          ]
+        | @tsv'
+  )
+}
+
+plan_cloudnativepg_primary_switchovers() {
+  local namespace
+  local cluster
+  local primary
+  local candidate
+  local candidate_node
+  local missing_candidate=false
+
+  load_cloudnativepg_primary_switchovers
+  [[ -n "$CNPG_SWITCHOVERS" ]] || return 0
+
+  printf 'namespace\tcluster\tcurrent-primary\ttarget-primary\ttarget-node\n'
+  while IFS=$'\t' read -r namespace cluster primary candidate candidate_node; do
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "$namespace" "$cluster" "$primary" "${candidate:-unavailable}" "${candidate_node:-unavailable}"
+    if [[ -z "$candidate" || -z "$candidate_node" ]]; then
+      missing_candidate=true
+    fi
+  done <<<"$CNPG_SWITCHOVERS"
+
+  [[ "$missing_candidate" == false ]] ||
+    die "CloudNativePG primary on ${NODE} has no healthy replica on a surviving stable node"
+}
+
+switch_cloudnativepg_primaries_off_node() {
+  local namespace
+  local cluster
+  local primary
+  local candidate
+  local candidate_node
+
+  log "planning CloudNativePG primary switchovers away from ${NODE}"
+  plan_cloudnativepg_primary_switchovers
+  [[ -n "$CNPG_SWITCHOVERS" ]] || {
+    log "no CloudNativePG primaries need to move"
+    return 0
+  }
+
+  need_command kubectl-cnpg
+  while IFS=$'\t' read -r namespace cluster primary candidate candidate_node; do
+    log "switching ${namespace}/${cluster} primary from ${primary} to ${candidate} on ${candidate_node}"
+    kubectl cnpg promote -n "$namespace" "$cluster" "$candidate"
+  done <<<"$CNPG_SWITCHOVERS"
+
+  wait_for_cloudnativepg_health
+  wait_for_cloudnativepg_survivability
+}
+
 wait_for_longhorn_health() {
   local deadline
   local settle_seconds
@@ -653,12 +758,16 @@ wait_for_longhorn_health() {
 }
 
 check_pdb_eviction_blockers() {
+  local ignore_cnpg_primaries="${1:-false}"
   local report
 
   log "checking PodDisruptionBudgets on ${NODE}"
   report=$(
     kubectl get poddisruptionbudgets.policy --all-namespaces -o json |
-      jq -r --arg node "$NODE" --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
+      jq -r \
+        --arg node "$NODE" \
+        --argjson ignore_cnpg_primaries "$ignore_cnpg_primaries" \
+        --slurpfile pods <(kubectl get pods --all-namespaces -o json) '
         def selector_matches($labels; $selector):
           (($selector.matchLabels // {}) | to_entries | all(
             . as $entry | ($labels[$entry.key] // null) == $entry.value
@@ -688,6 +797,11 @@ check_pdb_eviction_blockers() {
         | select((.metadata.ownerReferences // [] | map(.kind) | index("DaemonSet")) | not)
         | select((.metadata.labels["longhorn.io/component"] // "") != "instance-manager")
         | select(selector_matches(.metadata.labels // {}; $pdb.spec.selector // {}))
+        | select(
+            ($ignore_cnpg_primaries
+              and (.metadata.labels["cnpg.io/instanceRole"] // "") == "primary")
+            | not
+          )
         | [
             .metadata.namespace,
             $pdb.metadata.name,
@@ -1094,8 +1208,12 @@ prepare_node_for_disruption() {
   wait_for_longhorn_health
   wait_for_cloudnativepg_health
   wait_for_no_bad_pods
-  check_pdb_eviction_blockers
+  log "planning CloudNativePG primary switchovers away from ${NODE}"
+  plan_cloudnativepg_primary_switchovers
+  check_pdb_eviction_blockers true
   check_stable_node_pod_slots
+  switch_cloudnativepg_primaries_off_node
+  check_pdb_eviction_blockers
 
   collect_displaced_workloads >"$workloads_file"
 
@@ -1213,7 +1331,9 @@ run_check_only() {
     wait_for_longhorn_health
     wait_for_cloudnativepg_health
     wait_for_no_bad_pods
-    check_pdb_eviction_blockers
+    log "planning CloudNativePG primary switchovers away from ${NODE}"
+    plan_cloudnativepg_primary_switchovers
+    check_pdb_eviction_blockers true
     check_stable_node_pod_slots
   fi
 

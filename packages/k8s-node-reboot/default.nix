@@ -1,12 +1,13 @@
 {
   jq,
+  kubectl-cnpg,
   lib,
   makeWrapper,
   stdenv,
 }:
 stdenv.mkDerivation {
   pname = "k8s-node-reboot";
-  version = "0.5.0";
+  version = "0.6.0";
 
   src = ../../scripts/ops;
 
@@ -20,15 +21,15 @@ stdenv.mkDerivation {
     makeWrapper $out/libexec/k8s-node-reboot $out/bin/kreboot \
       --set K8S_NODE_POWER_ACTION reboot \
       --set K8S_NODE_NETWORK_AUDIT_SCRIPT $out/libexec/k8s-node-network-audit \
-      --prefix PATH : ${lib.makeBinPath [jq]}
+      --prefix PATH : ${lib.makeBinPath [jq kubectl-cnpg]}
     makeWrapper $out/libexec/k8s-node-reboot $out/bin/koff \
       --set K8S_NODE_POWER_ACTION off \
       --set K8S_NODE_NETWORK_AUDIT_SCRIPT $out/libexec/k8s-node-network-audit \
-      --prefix PATH : ${lib.makeBinPath [jq]}
+      --prefix PATH : ${lib.makeBinPath [jq kubectl-cnpg]}
     makeWrapper $out/libexec/k8s-node-reboot $out/bin/kon \
       --set K8S_NODE_POWER_ACTION on \
       --set K8S_NODE_NETWORK_AUDIT_SCRIPT $out/libexec/k8s-node-network-audit \
-      --prefix PATH : ${lib.makeBinPath [jq]}
+      --prefix PATH : ${lib.makeBinPath [jq kubectl-cnpg]}
   '';
 
   meta = with lib; {
