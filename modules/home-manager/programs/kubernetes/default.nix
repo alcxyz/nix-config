@@ -258,7 +258,7 @@ in {
 
     home.packages =
       lib.optionals cfg.wrap.kubectl [
-        (wrapCommand "kubectl" pkgs.kubectl "kubectl")
+        (lib.hiPrio (wrapCommand "kubectl" pkgs.kubectl "kubectl"))
       ]
       ++ lib.optionals cfg.wrap.flux [
         (wrapCommand "flux" pkgs.fluxcd "flux")

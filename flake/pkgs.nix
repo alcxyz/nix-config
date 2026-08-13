@@ -59,15 +59,6 @@ in
               stashdb-pop = stashdb-pop.default;
             }
             // {
-              # Current nixpkgs lock has a stale fetchFromGitHub hash for croc 10.4.5.
-              croc = _prev.croc.overrideAttrs (old: {
-                src = _prev.fetchFromGitHub {
-                  owner = "schollz";
-                  repo = "croc";
-                  rev = "v${old.version}";
-                  hash = "sha256-u262LwHUL6+rPE7nzIda7W5dAXaikQ/cKwtUEIbcbH0=";
-                };
-              });
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
               reportcraft = inputs.reportcraft.packages.${system}.default;
