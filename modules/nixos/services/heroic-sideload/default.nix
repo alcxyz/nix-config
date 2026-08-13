@@ -33,8 +33,9 @@
       };
 
       source = lib.mkOption {
-        type = lib.types.path;
-        description = "Source directory or zip file to copy/extract into installDir.";
+        type = lib.types.nullOr lib.types.path;
+        default = null;
+        description = "Optional source directory or zip file to copy/extract into installDir. Leave null to register an existing installation.";
       };
 
       art = lib.mkOption {
@@ -53,6 +54,12 @@
         type = lib.types.bool;
         default = false;
         description = "Whether to create desktop and application-menu shortcuts for this sideload.";
+      };
+
+      manageGameConfig = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether to write Heroic's per-game launch configuration for this sideload.";
       };
     };
   });
@@ -126,7 +133,7 @@
         file = format.generate "heroic-${app.appName}.json" (mkGameConfig app);
       }
     )
-    cfg.apps;
+    (lib.filterAttrs (_: app: app.manageGameConfig) cfg.apps);
   shortcutFiles =
     lib.mapAttrsToList (
       _: app: {
@@ -200,7 +207,7 @@ in {
 
             chown -R "$user:users" "$install_dir"
           '')
-          (lib.attrValues cfg.apps)}
+          (lib.attrValues (lib.filterAttrs (_: app: app.source != null) cfg.apps))}
 
         library_target="$heroic_config/sideload_apps/library.json"
         if [ -f "$library_target" ]; then

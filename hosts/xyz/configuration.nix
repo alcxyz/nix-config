@@ -926,6 +926,14 @@ in {
   services.heroicSideload = {
     enable = true;
     user = username;
+    apps.battle-net = {
+      title = "Battle.net";
+      appName = "tiJeeLoWxRnVACPf7WYvkr";
+      installDir = "/ext4/games/Heroic/Prefixes/default/Battle.net/pfx/drive_c/Program Files (x86)/Battle.net";
+      executable = "Battle.net.exe";
+      art = "https://cdn2.steamgriddb.com/grid/18c968e3898f39820946387c9e8aa5c8.png";
+      manageGameConfig = false;
+    };
     apps.totem-quest = {
       title = "Totem Quest";
       appName = "rcFYseiJyPmfqM9tn2Di7a";
