@@ -94,6 +94,7 @@ in
 
     # Keep NFS userspace available for Longhorn RWX/share-manager support.
     environment.systemPackages = with pkgs; [
+      cryptsetup
       nfs-utils
       util-linux
     ];
@@ -107,6 +108,7 @@ in
     # - RWX volumes need mount plus mount.nfs/umount.nfs.
     systemd.tmpfiles.rules = [
       "L+ /usr/bin/iscsiadm - - - - ${pkgs.openiscsi}/bin/iscsiadm"
+      "L+ /usr/bin/cryptsetup - - - - ${pkgs.cryptsetup}/bin/cryptsetup"
       "L+ /usr/bin/mount - - - - ${pkgs.util-linux}/bin/mount"
       "L+ /usr/bin/umount - - - - ${pkgs.util-linux}/bin/umount"
       "L+ /usr/sbin/mount.nfs - - - - ${pkgs.nfs-utils}/bin/mount.nfs"

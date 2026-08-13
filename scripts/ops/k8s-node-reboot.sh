@@ -28,6 +28,7 @@ REMOTE_BOOT_ID=""
 WORKLOADS_FILE=""
 NETWORK_AUDIT_SCRIPT="${K8S_NODE_NETWORK_AUDIT_SCRIPT:-}"
 CNPG_SWITCHOVERS=""
+LONGHORN_REBUILD_LIMIT_ORIGINAL=""
 
 usage() {
   cat <<'EOF'
@@ -84,6 +85,33 @@ cleanup_workloads_file() {
   if [[ -n "$WORKLOADS_FILE" ]]; then
     rm -f -- "$WORKLOADS_FILE"
   fi
+}
+
+restore_longhorn_rebuild_limit() {
+  local original="$LONGHORN_REBUILD_LIMIT_ORIGINAL"
+
+  [[ -n "$original" ]] || return 0
+  log "restoring Longhorn replica rebuild admission to ${original}"
+  if kubectl -n longhorn-system patch settings.longhorn.io \
+    concurrent-replica-rebuild-per-node-limit \
+    --type=merge \
+    -p "{\"value\":\"${original}\"}" >/dev/null; then
+    LONGHORN_REBUILD_LIMIT_ORIGINAL=""
+    return 0
+  fi
+
+  printf 'error: failed to restore Longhorn replica rebuild admission to %s\n' \
+    "$original" >&2
+  return 1
+}
+
+cleanup_runtime_state() {
+  local status=$?
+
+  trap - EXIT
+  restore_longhorn_rebuild_limit || status=1
+  cleanup_workloads_file
+  exit "$status"
 }
 
 need_command() {
@@ -708,6 +736,23 @@ wait_for_longhorn_health() {
   fi
   deadline=$((SECONDS + settle_seconds))
 
+  bad_volumes=$(
+    kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '
+      .items[]
+      | select(.status.state == "attached" or .status.state == "attaching")
+      | select(.status.robustness != "healthy")
+      | "\(.metadata.name)\t\(.status.state)\t\(.status.robustness)\t\(.status.kubernetesStatus.namespace // "")/\(.status.kubernetesStatus.pvcName // "")"'
+  )
+
+  if [[ -n "$bad_volumes" && "$replica_rebuild_limit" == 0 && "$CHECK_ONLY" == false ]]; then
+    LONGHORN_REBUILD_LIMIT_ORIGINAL="$replica_rebuild_limit"
+    log "temporarily enabling one guarded Longhorn replica rebuild per node"
+    kubectl -n longhorn-system patch settings.longhorn.io \
+      concurrent-replica-rebuild-per-node-limit \
+      --type=merge \
+      -p '{"value":"1"}' >/dev/null
+  fi
+
   while ((SECONDS < deadline)); do
     bad_volumes=$(
       kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '
@@ -733,6 +778,8 @@ wait_for_longhorn_health() {
     printf '%s\n' "$bad_volumes" >&2
     die "Longhorn volumes are not healthy"
   fi
+
+  restore_longhorn_rebuild_limit
 
   if kubectl -n longhorn-system get backuptargets.longhorn.io default >/dev/null 2>&1; then
     log "checking Longhorn backup target"
@@ -951,6 +998,7 @@ wait_for_node_storage_detach() {
   local deadline
   local timeout_seconds
   local attached_volumes=""
+  local volume_attachments=""
 
   if kubectl -n longhorn-system get volumes.longhorn.io >/dev/null 2>&1; then
     log "waiting for Longhorn volumes to detach from ${NODE}"
@@ -974,26 +1022,155 @@ wait_for_node_storage_detach() {
     [[ -z "$attached_volumes" ]] || die "Longhorn volumes remain attached to ${NODE}"
   fi
 
+  log "waiting for Longhorn VolumeAttachments to leave ${NODE}"
+  timeout_seconds=$(duration_to_seconds "$DRAIN_TIMEOUT")
+  deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS < deadline)); do
+    volume_attachments=$(
+      kubectl get volumeattachments.storage.k8s.io -o json | jq -r --arg node "$NODE" '
+        .items[]
+        | select(.spec.nodeName == $node and .spec.attacher == "driver.longhorn.io")
+        | "\(.metadata.name)\t\(.spec.source.persistentVolumeName // "")\tattached=\(.status.attached // false)"'
+    )
+
+    [[ -n "$volume_attachments" ]] || break
+    printf '%s\n' "$volume_attachments" >&2
+    sleep "$POLL_SECONDS"
+  done
+
+  [[ -z "$volume_attachments" ]] || die "Longhorn VolumeAttachments remain on ${NODE}"
+
   log "checking ${SSH_TARGET} for residual Longhorn mounts and iSCSI sessions"
-  if ! remote_root_shell <<'EOF'; then
+  if ! {
+    printf 'cleanup_sessions=%q\n' "$([[ "$CHECK_ONLY" == false ]] && printf true || printf false)"
+    cat <<'EOF'
 set -euo pipefail
+shopt -s nullglob
 
 command -v findmnt >/dev/null
 command -v iscsiadm >/dev/null
+command -v lsof >/dev/null
+command -v lsblk >/dev/null
+command -v sed >/dev/null
+command -v udevadm >/dev/null
 
 mounts=$(
   findmnt -rn -o TARGET \
     | grep -E '^/var/lib/kubelet/plugins/kubernetes.io/csi/driver\.longhorn\.io/.+/globalmount$' \
     || true
 )
-sessions=$(iscsiadm -m session 2>/dev/null | grep -F 'io.longhorn' || true)
 
-if [[ -n "$mounts" || -n "$sessions" ]]; then
-  [[ -z "$mounts" ]] || printf 'Residual Longhorn mounts:\n%s\n' "$mounts" >&2
-  [[ -z "$sessions" ]] || printf 'Residual Longhorn iSCSI sessions:\n%s\n' "$sessions" >&2
+if [[ -n "$mounts" ]]; then
+  printf 'Residual Longhorn mounts:\n%s\n' "$mounts" >&2
+  exit 1
+fi
+
+mapfile -t sessions < <(
+  iscsiadm -m session 2>/dev/null \
+    | awk '$4 ~ /^iqn\.2019-10\.io\.longhorn:/ { print $2, $3, $4 }'
+)
+
+if ((${#sessions[@]} == 0)); then
+  exit 0
+fi
+
+printf 'Found %d detached Longhorn iSCSI session(s); validating host use\n' \
+  "${#sessions[@]}" >&2
+
+for session in "${sessions[@]}"; do
+  read -r sid portal target <<<"$session"
+  sid=${sid#[}
+  sid=${sid%]}
+
+  [[ "$sid" =~ ^[0-9]+$ ]] || {
+    printf 'Unsafe iSCSI session ID: %s\n' "$sid" >&2
+    exit 1
+  }
+  [[ "$portal" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:3260,1$ ]] || {
+    printf 'Unsafe Longhorn iSCSI portal: %s\n' "$portal" >&2
+    exit 1
+  }
+  [[ "$target" =~ ^iqn\.2019-10\.io\.longhorn:pvc-[0-9a-f-]+$ ]] || {
+    printf 'Unsafe Longhorn iSCSI target: %s\n' "$target" >&2
+    exit 1
+  }
+
+  session_path="/sys/class/iscsi_session/session${sid}"
+  [[ -r "$session_path/targetname" ]] || {
+    printf 'Missing sysfs state for Longhorn iSCSI session %s\n' "$sid" >&2
+    exit 1
+  }
+  [[ "$(<"$session_path/targetname")" == "$target" ]] || {
+    printf 'iSCSI session %s target changed while validating\n' "$sid" >&2
+    exit 1
+  }
+
+  block_paths=("$session_path"/device/target*/*/block/*)
+  for block_path in "${block_paths[@]}"; do
+    device=${block_path##*/}
+    [[ "$device" =~ ^[A-Za-z0-9._-]+$ && -b "/dev/$device" ]] || {
+      printf 'Unsafe block device for iSCSI session %s: %s\n' "$sid" "$device" >&2
+      exit 1
+    }
+
+    while IFS= read -r related_device; do
+      [[ "$related_device" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
+
+      if lsblk -nr -o MOUNTPOINTS "/dev/$related_device" | grep -q '[^[:space:]]'; then
+        printf 'Longhorn iSCSI device /dev/%s is still mounted\n' "$related_device" >&2
+        exit 1
+      fi
+
+      if [[ -d "/sys/class/block/$related_device/holders" ]] \
+        && find "/sys/class/block/$related_device/holders" -mindepth 1 -maxdepth 1 -print -quit \
+          | grep -q .; then
+        printf 'Longhorn iSCSI device /dev/%s still has block holders\n' "$related_device" >&2
+        exit 1
+      fi
+
+      if lsof -t -- "/dev/$related_device" 2>/dev/null | grep -q .; then
+        printf 'Longhorn iSCSI device /dev/%s is still open\n' "$related_device" >&2
+        exit 1
+      fi
+    done < <(lsblk -nr -o NAME "/dev/$device")
+  done
+done
+
+if [[ "$cleanup_sessions" != true ]]; then
+  printf 'Detached Longhorn iSCSI sessions are safe to reconcile during maintenance\n' >&2
+  exit 0
+fi
+
+printf 'Reconciling %d detached Longhorn iSCSI session(s)\n' "${#sessions[@]}" >&2
+for session in "${sessions[@]}"; do
+  read -r sid portal target <<<"$session"
+  sid=${sid#[}
+  sid=${sid%]}
+  portal_address=${portal%,1}
+  record_portal=${portal/:3260,1/,3260,1}
+  record="/etc/iscsi/nodes/$target/$record_portal/default"
+
+  # Open-iSCSI 2.1.12 rejects records created by older releases when they
+  # contain this removed key. Migrate only the exact validated record before
+  # asking iscsiadm to log out and remove it.
+  if [[ -f "$record" ]]; then
+    sed -i '/^node\.session\.conn_reopen_log_freq[[:space:]]*=/d' "$record"
+  fi
+
+  iscsiadm -m node -T "$target" -p "$portal_address" --logout
+  iscsiadm -m node -T "$target" -p "$portal_address" --op=delete
+done
+
+udevadm settle
+
+remaining=$(iscsiadm -m session 2>/dev/null | grep -F 'iqn.2019-10.io.longhorn:' || true)
+if [[ -n "$remaining" ]]; then
+  printf 'Longhorn iSCSI sessions remain after reconciliation:\n%s\n' "$remaining" >&2
   exit 1
 fi
 EOF
+  } | remote_root_shell; then
     die "residual Longhorn storage is still active on ${SSH_TARGET}"
   fi
 }
@@ -1255,7 +1432,7 @@ prepare_node_for_disruption() {
 
 run_reboot() {
   WORKLOADS_FILE=$(mktemp)
-  trap cleanup_workloads_file EXIT
+  trap cleanup_runtime_state EXIT
 
   prepare_node_for_disruption "$WORKLOADS_FILE"
   reboot_host
@@ -1282,7 +1459,7 @@ run_reboot() {
 
 run_poweroff() {
   WORKLOADS_FILE=$(mktemp)
-  trap cleanup_workloads_file EXIT
+  trap cleanup_runtime_state EXIT
 
   prepare_node_for_disruption "$WORKLOADS_FILE"
   poweroff_host
@@ -1292,6 +1469,8 @@ run_poweroff() {
 }
 
 run_poweron_finalize() {
+  trap cleanup_runtime_state EXIT
+
   log "checking Kubernetes node ${NODE}"
   kubectl get node "$NODE" >/dev/null
 

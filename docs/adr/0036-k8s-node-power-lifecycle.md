@@ -21,8 +21,19 @@ Before a power action, the helper must:
    drain, while leaving the node-local Longhorn instance-manager in place;
 3. wait for controller-owned workloads to settle;
 4. verify that no Longhorn volume is attached to the node; and
-5. verify that the host has no residual Longhorn CSI global mount or iSCSI
-   session.
+5. verify that the node has no Longhorn `VolumeAttachment` or CSI global mount;
+   and
+6. reconcile only detached Longhorn iSCSI sessions whose block devices are
+   unmounted, have no holders, and are not open, then verify that no session
+   remains.
+
+Open-iSCSI node records are persistent host cache, not volume data. When a
+validated detached session has an older record containing a setting removed by
+Open-iSCSI 2.1.12, the helper removes only that obsolete field before using
+`iscsiadm` to log out the exact target and delete its record. Any attachment,
+mount, holder, open device, unexpected target name, or ambiguous host state
+remains a hard stop. `--check-only` validates that reconciliation would be safe
+without changing a session or record.
 
 Before cordoning, the helper plans CloudNativePG primary switchovers to healthy
 replicas on surviving Ready, schedulable stable nodes. A power operation uses
@@ -59,15 +70,17 @@ them for `replica-replenishment-wait-interval` so they can be reused through a
 delta or fast rebuild instead of replaced by a full copy. The default recovery
 timeout must exceed that interval plus bounded rebuild time. If the cluster
 sets `concurrent-replica-rebuild-per-node-limit` to `0`, automatic admission is
-disabled and the retained replicas require the cluster's guarded sequential
-recovery procedure. A full storage-node restart can therefore need the reuse
-interval plus the complete one-volume-at-a-time queue; the default health wait
-allows 90 minutes and reports the disabled admission state. Recovery output is
+disabled. When the helper encounters degraded attached volumes in this state,
+it temporarily admits one rebuild per node, waits for the retained replicas to
+return through the one-at-a-time queue, and restores the original value on
+success or process exit. A full storage-node restart can therefore need the
+reuse interval plus the complete queue; the default health wait allows 90
+minutes and reports the temporary admission state. Recovery output is
 aggregated by the number of unhealthy attached volumes and rate-limited to one
 progress report every five minutes; the complete list is printed only if the
 deadline expires. This keeps the helper waiting on the real safety gate without
-flooding the operator while the guarded procedure temporarily masks and
-restores the remaining queue.
+flooding the operator while preserving the cluster's normally closed rebuild
+policy.
 
 An already cordoned node is not treated as a fresh maintenance target. Another
 power cycle requires `--resume-maintenance`, which verifies the existing
