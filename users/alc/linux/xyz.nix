@@ -91,8 +91,12 @@
         hyprctl eval \
           "hl.dispatch(hl.dsp.window.move({ x = $x, y = $y, window = \"address:$address\" }))" \
           >/dev/null
+        hyprctl eval \
+          "hl.dispatch(hl.dsp.focus({ window = \"address:$address\" }))" \
+          >/dev/null
       else
         hyprctl dispatch movewindowpixel "exact $x $y,address:$address" >/dev/null
+        hyprctl dispatch focuswindow "address:$address" >/dev/null
       fi
     '';
   };
