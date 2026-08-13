@@ -20,6 +20,23 @@ workspace_num="$2"
 
 current_time_ns="$(date +%s%N)"
 timeout_ns=$((DOUBLE_TAP_MS * 1000000))
+config_provider="$(hyprctl status -j 2>/dev/null | sed -n 's/.*"configProvider": *"\([^"]*\)".*/\1/p')"
+
+toggle_special_workspace() {
+    if [[ "$config_provider" == lua ]]; then
+        hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special(""))'
+    else
+        hyprctl dispatch togglespecialworkspace
+    fi
+}
+
+focus_workspace() {
+    if [[ "$config_provider" == lua ]]; then
+        hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = \"$workspace_num\" }))"
+    else
+        hyprctl dispatch workspace "$workspace_num"
+    fi
+}
 
 if [[ -f "$TAP_STATE_FILE" ]] \
     && IFS=' ' read -r last_key_name last_time_ns < "$TAP_STATE_FILE" \
@@ -28,11 +45,11 @@ if [[ -f "$TAP_STATE_FILE" ]] \
     time_diff_ns=$((current_time_ns - last_time_ns))
     if ((time_diff_ns < timeout_ns)); then
         rm -f "$TAP_STATE_FILE"
-        hyprctl dispatch togglespecialworkspace
+        toggle_special_workspace
         exit
     fi
 fi
 
 umask 077
 printf '%s %s\n' "$key_name" "$current_time_ns" > "$TAP_STATE_FILE"
-hyprctl dispatch workspace "$workspace_num"
+focus_workspace

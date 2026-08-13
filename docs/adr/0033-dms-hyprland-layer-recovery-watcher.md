@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-03
-**Applies to:** `modules/home-manager/programs/hyprland/scripts/dms_resume_watcher.sh`, `users/alc/configs/hypr/hyprland.conf`
+**Applies to:** `modules/home-manager/programs/hyprland/scripts/dms_resume_watcher.sh`, `users/alc/configs/hypr/hyprland.lua`
 
 ## Context
 
@@ -18,7 +18,7 @@ Those triggers were incomplete. Plain monitor DPMS sleep does not always emit sy
 
 ## Decision
 
-Keep DMS launched from Hyprland `exec-once`, and run a companion `dms_resume_watcher.sh` process from the same session.
+Keep DMS launched from Hyprland's session-start hook, and run a companion `dms_resume_watcher.sh` process from the same session.
 
 The watcher treats display sleep and wake as state, not as a single socket event. It arms itself when:
 

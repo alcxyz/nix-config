@@ -86,7 +86,14 @@
 
       x=$((target_x + (target_width - window_width) / 2))
       y=$((target_y + (target_height - window_height) / 2))
-      hyprctl dispatch movewindowpixel "exact $x $y,address:$address" >/dev/null
+      provider="$(hyprctl status -j | jq -r '.configProvider // empty')"
+      if [[ "$provider" == lua ]]; then
+        hyprctl eval \
+          "hl.dispatch(hl.dsp.window.move({ x = $x, y = $y, window = \"address:$address\" }))" \
+          >/dev/null
+      else
+        hyprctl dispatch movewindowpixel "exact $x $y,address:$address" >/dev/null
+      fi
     '';
   };
 in {
@@ -178,24 +185,32 @@ in {
   programs.foot.enable = true;
   programs.hyprland.managed = {
     enable = true;
+    manageLegacyConfig = false;
+    manageLuaConfig = true;
     # Match the qualified couch cursor policy. KDE Connect and other absolute
     # pointer paths can be classified as touch input by the compositor, even
     # though they are used as mice inside a windowed Moonlight stream.
     remotePointerInactiveTimeout = 8;
     remotePointerHideOnTouch = false;
-    extraConfig = ''
-      # Center the secondary display above the primary ultrawide. Its EDID
-      # omits 1440p, so use a CVT reduced-blanking modeline to keep the iGPU's
-      # compositing load below the native 4K mode. The small logical gap acts
-      # as a soft pointer barrier for the auto-hiding bar: precise movement
-      # stops at the bar while a deliberate upward movement still crosses.
-      monitor = DP-1, 5120x1440@120, 0x1456, 1
-      monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
+    extraLuaConfig = ''
+      -- Center the secondary display above the primary ultrawide. Its EDID
+      -- omits 1440p, so use a CVT reduced-blanking modeline to keep the iGPU's
+      -- compositing load below the native 4K mode. The small logical gap acts
+      -- as a soft pointer barrier for the auto-hiding bar.
+      hl.monitor({ output = "DP-1", mode = "5120x1440@120", position = "0x1456", scale = 1 })
+      hl.monitor({
+        output = "HDMI-A-1",
+        mode = "modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync",
+        position = "1280x0",
+        scale = 1,
+      })
 
-      # Set this before XWayland games start. Reasserting it on every Hyprland
-      # reload emits a RandR change that can resize an active Wine window.
-      exec-once = ${lib.getExe xwaylandPrimaryOutput}
-      bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
+      -- Set this before XWayland games start. Reasserting it on every config
+      -- reload emits a RandR change that can resize an active Wine window.
+      hl.on("hyprland.start", function()
+        hl.exec_cmd("${lib.getExe xwaylandPrimaryOutput}")
+      end)
+      hl.bind("CTRL + SHIFT + R", hl.dsp.exec_cmd("moonlight-wolf-ui-lan"))
     '';
   };
   programs.niri.managed.enable = true;

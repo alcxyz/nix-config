@@ -122,11 +122,11 @@ in
     enable = true;
     settings = {
       initial_session = {
-        command = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
+        command = "${pkgs.uwsm}/bin/uwsm start -g -1 -e -D Hyprland hyprland.desktop";
         user = username;
       };
       default_session = {
-        command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd '${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop'";
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd '${pkgs.uwsm}/bin/uwsm start -g -1 -e -D Hyprland hyprland.desktop'";
         user = "greeter";
       };
     };

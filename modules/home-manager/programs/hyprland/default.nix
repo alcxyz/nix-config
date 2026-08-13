@@ -20,6 +20,7 @@ with lib; let
     else toString configDir;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
+  toLua = generators.toLua {};
   managedOverridesConfig = pkgs.writeText "hyprland-managed-overrides.conf" (
     optionalString (cfg.inputSensitivity != null) ''
       input {
@@ -33,12 +34,26 @@ with lib; let
       }
     ''
   );
+  managedOverridesLua = pkgs.writeText "hyprland-managed-overrides.lua" ''
+    hl.config({
+      ${optionalString (cfg.inputSensitivity != null) ''
+        input = {
+          sensitivity = ${toString cfg.inputSensitivity},
+        },
+      ''}
+      ${optionalString (cfg.remotePointerInactiveTimeout != null || cfg.remotePointerHideOnTouch != null) ''
+        cursor = {
+          ${optionalString (cfg.remotePointerInactiveTimeout != null) "inactive_timeout = ${toString cfg.remotePointerInactiveTimeout},"}
+          ${optionalString (cfg.remotePointerHideOnTouch != null) "hide_on_touch = ${boolToString cfg.remotePointerHideOnTouch},"}
+        },
+      ''}
+    })
+  '';
   inputDefaultsScript = pkgs.writeShellScript "hyprland-input-defaults" ''
     set -eu
 
     for _attempt in $(${pkgs.coreutils}/bin/seq 1 50); do
-      if ${pkgs.hyprland}/bin/hyprctl keyword input:kb_layout ${escapeShellArg cfg.inputLayouts} >/dev/null 2>&1; then
-        ${pkgs.hyprland}/bin/hyprctl keyword input:kb_options ${escapeShellArg cfg.inputOptions} >/dev/null
+      if ${pkgs.hyprland}/bin/hyprctl eval ${escapeShellArg "hl.config({ input = { kb_layout = ${toLua (if cfg.inputLayouts == null then "" else cfg.inputLayouts)}, kb_options = ${toLua cfg.inputOptions} } })"} >/dev/null 2>&1; then
         ${pkgs.hyprland}/bin/hyprctl switchxkblayout all 0 >/dev/null
         exit 0
       fi
@@ -54,11 +69,32 @@ with lib; let
       exec-once = ${laptopDisplayScript}
     ''
   );
+  hostLua = pkgs.writeText "hyprland-host.lua" (
+    cfg.extraLuaConfig
+    + optionalString cfg.laptopDisplayAutoSwitch.enable ''
+      hl.on("hyprland.start", function()
+        hl.exec_cmd(${toLua (toString laptopDisplayScript)})
+      end)
+    ''
+  );
   colorsConfig = pkgs.writeText "hyprland-colors.conf" ''
     general {
       col.active_border = 0xff${colors.base0C} 0xff${colors.base0D} 270deg
       col.inactive_border = 0xff${colors.base00}
     }
+  '';
+  colorsLua = pkgs.writeText "hyprland-colors.lua" ''
+    hl.config({
+      general = {
+        col = {
+          active_border = {
+            colors = { "0xff${colors.base0C}", "0xff${colors.base0D}" },
+            angle = 270,
+          },
+          inactive_border = "0xff${colors.base00}",
+        },
+      },
+    })
   '';
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''
     set -eu
@@ -175,6 +211,14 @@ with lib; let
       fi
     }
 
+    focus_monitor() {
+      output="$1"
+      result="$(hyprctl eval "hl.dispatch(hl.dsp.focus({ monitor = \"$output\" }))" 2>&1 || true)"
+      if [ "$result" != ok ]; then
+        hyprctl dispatch focusmonitor "$output" >/dev/null
+      fi
+    }
+
     apply_display_state() {
       mapfile -t internals < <(internal_outputs)
       mapfile -t externals < <(external_outputs)
@@ -195,7 +239,7 @@ with lib; let
           fi
         done
 
-        hyprctl dispatch focusmonitor "$primary" >/dev/null || true
+        focus_monitor "$primary" || true
       elif ((''${#internals[@]} > 0)); then
         primary="$(first_output "^(eDP|LVDS)-")"
         configure_monitor "$primary" "0x0"
@@ -204,7 +248,7 @@ with lib; let
           configure_monitor "$internal" "auto-right"
         done
 
-        hyprctl dispatch focusmonitor "$primary" >/dev/null || true
+        focus_monitor "$primary" || true
       fi
     }
 
@@ -273,10 +317,22 @@ in {
       description = "Install the legacy hyprland.conf configuration and its fragments.";
     };
 
+    manageLuaConfig = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Install the Hyprland Lua configuration and its modules.";
+    };
+
     extraConfig = mkOption {
       type = types.lines;
       default = "";
       description = "Host-specific Hyprland configuration appended after shared config.";
+    };
+
+    extraLuaConfig = mkOption {
+      type = types.lines;
+      default = "";
+      description = "Host-specific Hyprland Lua configuration loaded after shared config.";
     };
   };
 
@@ -335,6 +391,62 @@ in {
         install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/cursor.conf"} "$dms_dir/cursor.conf"
         install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/windowrules.conf"} "$dms_dir/windowrules.conf"
         install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/outputs.conf"} "$dms_dir/outputs.conf"
+      ''
+    );
+
+    # Install Lua configuration links atomically for the same reason as the
+    # legacy activation above. During migration, retain the files used by a
+    # currently running hyprlang session; the next Lua session (or activation
+    # without a running compositor) removes only those obsolete managed links.
+    home.activation.hyprlandLuaConfig = mkIf cfg.manageLuaConfig (
+      lib.hm.dag.entryAfter ["linkGeneration"] ''
+        hypr_dir=${escapeShellArg "${config.home.homeDirectory}/.config/hypr"}
+        dms_dir="$hypr_dir/dms"
+        mkdir -p "$hypr_dir" "$dms_dir"
+
+        install_link() {
+          source_path="$1"
+          target_path="$2"
+
+          if [ -L "$target_path" ] \
+            && [ "$(readlink "$target_path")" = "$source_path" ]; then
+            return
+          fi
+
+          temporary_path="$target_path.home-manager-new"
+          rm -f "$temporary_path"
+          ln -s "$source_path" "$temporary_path"
+          mv -Tf "$temporary_path" "$target_path"
+        }
+
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/hyprland.lua"} "$hypr_dir/hyprland.lua"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds.lua"} "$hypr_dir/binds.lua"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.lua"} "$hypr_dir/binds-scrolling.lua"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.lua"} "$hypr_dir/binds-dwindle.lua"
+        install_link ${escapeShellArg "${managedOverridesLua}"} "$hypr_dir/managed-overrides.lua"
+        install_link ${escapeShellArg "${hostLua}"} "$hypr_dir/host.lua"
+        install_link ${escapeShellArg "${colorsLua}"} "$hypr_dir/colors.lua"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/outputs.lua"} "$dms_dir/outputs.lua"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/cursor.lua"} "$dms_dir/cursor.lua"
+        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/windowrules.lua"} "$dms_dir/windowrules.lua"
+
+        provider="$(${pkgs.hyprland}/bin/hyprctl status -j 2>/dev/null \
+          | ${pkgs.jq}/bin/jq -r '.configProvider // empty' 2>/dev/null || true)"
+        if [ "$provider" != hyprlang ]; then
+          for legacy_path in \
+            "$hypr_dir/hyprland.conf" \
+            "$hypr_dir/binds.conf" \
+            "$hypr_dir/binds-scrolling.conf" \
+            "$hypr_dir/binds-dwindle.conf" \
+            "$hypr_dir/managed-overrides.conf" \
+            "$hypr_dir/host.conf" \
+            "$hypr_dir/colors.conf" \
+            "$dms_dir/cursor.conf" \
+            "$dms_dir/windowrules.conf" \
+            "$dms_dir/outputs.conf"; do
+            [ -L "$legacy_path" ] && rm -f "$legacy_path"
+          done
+        fi
       ''
     );
 

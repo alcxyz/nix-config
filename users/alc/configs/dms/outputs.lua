@@ -1,0 +1,2 @@
+-- DMS-managed output overrides. Host defaults live in hyprland.lua and
+-- host.lua; display settings may write additional rules here.

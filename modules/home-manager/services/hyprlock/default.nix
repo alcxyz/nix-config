@@ -13,6 +13,25 @@ let
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
 
+  dpmsScript = pkgs.writeShellScript "hyprland-dpms" ''
+    set -eu
+
+    state="''${1:?expected on or off}"
+    provider="$(${pkgs.hyprland}/bin/hyprctl status -j 2>/dev/null \
+      | ${pkgs.jq}/bin/jq -r '.configProvider // empty' 2>/dev/null || true)"
+    if [ "$provider" = lua ]; then
+      case "$state" in
+        on) action=set ;;
+        off) action=unset ;;
+        *) exit 2 ;;
+      esac
+      exec ${pkgs.hyprland}/bin/hyprctl eval \
+        "hl.dispatch(hl.dsp.dpms({ action = \"$action\" }))"
+    fi
+
+    exec ${pkgs.hyprland}/bin/hyprctl dispatch dpms "$state"
+  '';
+
   displayIdleConfig = pkgs.writeTextDir "hypr/hypridle.conf" ''
     general {
       ignore_dbus_inhibit = true
@@ -21,14 +40,13 @@ let
     listener {
       timeout = ${toString cfg.displayOffDelay}
       ignore_inhibit = true
-      on-timeout = ${pkgs.hyprland}/bin/hyprctl dispatch dpms off
-      on-resume = ${pkgs.hyprland}/bin/hyprctl dispatch dpms on
+      on-timeout = ${dpmsScript} off
+      on-resume = ${dpmsScript} on
     }
   '';
 
   lockScript = pkgs.writeShellScriptBin "lock-screen" ''
     HYPRLOCK="${cfg.package}/bin/hyprlock"
-    HYPRCTL="${pkgs.hyprland}/bin/hyprctl"
     if ${boolToString cfg.turnOffDisplaysOnLock}; then
       $HYPRLOCK &
       lock_pid="$!"
@@ -38,7 +56,7 @@ let
       cleanup() {
         kill "$idle_pid" 2>/dev/null || true
         wait "$idle_pid" 2>/dev/null || true
-        $HYPRCTL dispatch dpms on >/dev/null 2>&1 || true
+        ${dpmsScript} on >/dev/null 2>&1 || true
       }
       trap cleanup EXIT
 
