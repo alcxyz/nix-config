@@ -298,6 +298,7 @@ in {
     "${configDir}/modules/nixos/common/desktop.nix"
     inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
+    inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/hardware/amd.nix"
@@ -971,33 +972,14 @@ in {
   # Keep Sunshine's fixed service ports out of the ephemeral client-port pool.
   boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010";
 
-  networking.firewall = {
-    allowedUDPPortRanges = [
-      {
-        from = 27031;
-        to = 27036;
-      }
-    ];
-  };
-
+  # Streaming ingress is scoped to trusted interfaces by the private host policy.
   networking.firewall.allowedTCPPorts = [
     3774
     5201
-    18083
-    27036
-    47984
-    47989
-    47990
-    48010
   ];
 
   networking.firewall.allowedUDPPorts = [
     3774
-    47998
-    47999
-    48000
-    48002
-    48010
     5353
   ];
 
