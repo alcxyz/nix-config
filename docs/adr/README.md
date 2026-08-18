@@ -42,9 +42,9 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0035](0035-host-kernel-policy.md) | Host kernel policy | Accepted | kernels, hosts, k3s |
 | [ADR-0036](0036-host-inventory-source-of-truth.md) | Host inventory as source of truth | Accepted | hosts, roles, packages, workspace, k3s |
 | [ADR-0037](0037-flake-parts-output-structure.md) | Flake output structure via flake-parts | Accepted | `flake.nix`, `flake/` |
-| [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Accepted | unifi, nux, rpi0 |
+| [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Retired | unifi, nux, rpi0 |
 | [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by ADR-0052 | xyz, ZFS, k3s backups |
-| [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Proposed | unifi, nux, rpi0, failover |
+| [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Retired | unifi, nux, rpi0, failover |
 | [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Implemented | forgejo, runners, systemd, docker |
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Accepted | media, torrent, stash, xyz |
 | [ADR-0043](0043-selective-external-nix-config-pattern-adoption.md) | Selective external nix-config pattern adoption | Accepted, partially implemented | modules, hosts, checks, workflow |

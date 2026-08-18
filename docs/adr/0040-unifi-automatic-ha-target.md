@@ -1,8 +1,11 @@
 # ADR-0040: UniFi automatic HA target
 
-**Status:** Proposed
+**Status:** Retired (2026-08-19)
 **Date:** 2026-05-07
 **Applies to:** `modules/nixos/services/unifi-native/`, `hosts/nux`, `hosts/rpi0`, UniFi fallback automation
+
+This proposal was retired when the Network Application moved to a gateway
+console. Host-level controller failover is no longer a target.
 
 ## Context
 

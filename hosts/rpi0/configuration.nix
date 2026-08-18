@@ -26,7 +26,6 @@ in {
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/profiles/nixbox-client/default.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
-    "${configDir}/modules/nixos/services/unifi-native/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/bluetooth-audio-receiver/default.nix"
     inputs.nix-secrets.nixosModules.rpi0Private
@@ -269,13 +268,6 @@ in {
     passwordFile = config.sops.secrets.pihole_secret_key.path;
     disableWebPassword = true;
     webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16,+192.168.1.23,+192.168.1.24";
-  };
-
-  services.unifi-native = {
-    enable = true;
-    role = "standby";
-    openFirewall = true;
-    maximumJavaHeapSize = 768;
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];

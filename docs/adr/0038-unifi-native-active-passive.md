@@ -1,8 +1,12 @@
 # ADR-0038: UniFi native NixOS active/passive runtime
 
-**Status:** Accepted
+**Status:** Retired (2026-08-19)
 **Date:** 2026-05-06
 **Applies to:** `modules/nixos/services/unifi-native/`, `hosts/nux`, `hosts/rpi0`
+
+The host-managed active/passive deployment was retired after the Network
+Application moved to a gateway console. The generic module remains available,
+but no host enables it.
 
 ## Context
 
