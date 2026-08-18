@@ -52,7 +52,6 @@ in {
     "${configDir}/modules/nixos/services/forge-mirror-audit/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
-    "${configDir}/modules/nixos/services/unifi-native/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
@@ -178,13 +177,9 @@ in {
     ];
   };
 
-  # Pi-hole and UniFi also persist timestamps and certificates.  On a clean
-  # install they must not start while the RTC still reports a historical date.
+  # Pi-hole persists timestamps and certificates. On a clean install it must
+  # not start while the RTC still reports a historical date.
   systemd.services.pihole-ftl = {
-    requires = ["k3s-clock-sanity.service"];
-    after = ["k3s-clock-sanity.service"];
-  };
-  systemd.services.unifi = {
     requires = ["k3s-clock-sanity.service"];
     after = ["k3s-clock-sanity.service"];
   };
@@ -201,12 +196,6 @@ in {
     passwordFile = config.sops.secrets.pihole_secret_key.path;
     disableWebPassword = true;
     webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16,+192.168.1.23,+192.168.1.24";
-  };
-
-  services.unifi-native = {
-    enable = true;
-    role = "active";
-    openFirewall = true;
   };
 
   # NFS mount from xyz — shared state for gitops tools (tokens, cross-host config)
