@@ -51,7 +51,6 @@ in {
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/forge-mirror-audit/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
-    "${configDir}/modules/nixos/services/pihole-native/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
@@ -65,11 +64,6 @@ in {
   alc.distributedBuildClient.enable = true;
 
   sops.secrets = {
-    pihole_secret_key = {
-      sopsFile = "${inputs.nix-secrets}/apps/secrets.yaml";
-      owner = "pihole";
-      group = "pihole";
-    };
     flux_age_key = {
       key = "flux_age_key";
     };
@@ -145,59 +139,6 @@ in {
     ];
   };
 
-  services.unbound = {
-    enable = true;
-    resolveLocalQueries = false;
-    settings.server = {
-      interface = ["127.0.0.1"];
-      port = 5335;
-      access-control = ["127.0.0.0/8 allow"];
-      do-ip4 = true;
-      do-ip6 = false;
-      do-udp = true;
-      do-tcp = true;
-      prefer-ip6 = false;
-      edns-buffer-size = 1232;
-      harden-glue = true;
-      harden-dnssec-stripped = true;
-      prefetch = true;
-      qname-minimisation = true;
-      rrset-roundrobin = true;
-    };
-  };
-
-  systemd.services.unbound = {
-    after = [
-      "network-online.target"
-      "time-sync.target"
-    ];
-    wants = [
-      "network-online.target"
-      "time-sync.target"
-    ];
-  };
-
-  # Pi-hole persists timestamps and certificates. On a clean install it must
-  # not start while the RTC still reports a historical date.
-  systemd.services.pihole-ftl = {
-    requires = ["k3s-clock-sanity.service"];
-    after = ["k3s-clock-sanity.service"];
-  };
-
-  services.pihole-native = {
-    enable = true;
-    listenInterface = "eno1";
-    hostName = "pihole.nux.local";
-    webPort = 8081;
-    upstream = "127.0.0.1#5335";
-    rateLimitCount = 10000;
-    rateLimitInterval = 60;
-    stateDirectory = "/var/lib/pihole/etc";
-    passwordFile = config.sops.secrets.pihole_secret_key.path;
-    disableWebPassword = true;
-    webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16,+192.168.1.23,+192.168.1.24";
-  };
-
   # NFS mount from xyz — shared state for gitops tools (tokens, cross-host config)
   fileSystems."/mnt/gitops-state" = {
     device = "192.168.1.10:/home/alc/.local/share/gitops-state";
@@ -235,6 +176,4 @@ in {
   nix.settings.max-jobs = 1; # prefer xyz for builds, but allow local fallback
 
   networking.hosts."127.0.0.1" = ["git.local"];
-  networking.firewall.allowedTCPPorts = [53];
-  networking.firewall.allowedUDPPorts = [53];
 }
