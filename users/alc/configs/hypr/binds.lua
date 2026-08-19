@@ -5,8 +5,8 @@ local mail = "thunderbird"
 local lock = "lock-screen"
 
 -- Help and session.
-hl.bind("SUPER + SHIFT + escape", hl.dsp.exit())
 hl.bind("SUPER + Q", hl.dsp.exec_cmd(lock))
+hl.bind("SUPER + SHIFT + Q", hl.dsp.exec_cmd(lock .. " --display-off-immediately"))
 hl.bind("SUPER + BACKSPACE", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
 
