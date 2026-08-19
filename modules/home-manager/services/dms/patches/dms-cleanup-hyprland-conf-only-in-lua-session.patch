@@ -1,0 +1,51 @@
+diff --git a/internal/config/hyprland_lua.go b/internal/config/hyprland_lua.go
+index 1de366e..9523fa7 100644
+--- a/internal/config/hyprland_lua.go
++++ b/internal/config/hyprland_lua.go
+@@ -1,11 +1,13 @@
+ package config
+ 
+ import (
++	"encoding/json"
+ 	"fmt"
+ 	"os"
++	"os/exec"
+ 	"path/filepath"
+ 	"regexp"
+ 	"strconv"
+ 	"strings"
+ 	"time"
+ )
+@@ -138,14 +140,31 @@ func readExistingHyprlandConfig(configDir string) (data string, sourcePath strin
+ 	return "", "", nil
+ }
+ 
++func activeHyprlandConfigIsLua() bool {
++	output, err := exec.Command("hyprctl", "status", "-j").Output()
++	if err != nil {
++		return false
++	}
++	var status struct {
++		ConfigProvider string `json:"configProvider"`
++	}
++	if err := json.Unmarshal(output, &status); err != nil {
++		return false
++	}
++	return status.ConfigProvider == "lua"
++}
++
+ // CleanupStrayHyprlandConfFile moves stray ~/.config/hypr/hyprland.conf and
+ // top-level ~/.config/hypr/dms/*.conf files into .dms-backups/<timestamp>/ only
+-// when hyprland.lua also exists as the live config.
++// when hyprland.lua also exists and the active compositor is using it.
+ func CleanupStrayHyprlandConfFile(logFn func(format string, v ...any)) {
+ 	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
+ 		return
+ 	}
++	if !activeHyprlandConfigIsLua() {
++		return
++	}
+ 	home := os.Getenv("HOME")
+ 	if home == "" {
+ 		return
+ 	}

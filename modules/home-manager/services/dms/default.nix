@@ -7,35 +7,36 @@
   username,
   configDir,
   ...
-}: let
+}:
+let
   cfg = config.services.dms;
   compact = cfg.profile == "compact";
   idleLockCfg = cfg.idleLock;
   dockCfg = cfg.dock;
-  optionalSetting = name: value:
+  optionalSetting =
+    name: value:
     lib.optionalAttrs (value != null) {
       ${name} = value;
     };
-  idleLockSettings =
-    {
-      acLockTimeout = idleLockCfg.acTimeout;
-      batteryLockTimeout = idleLockCfg.batteryTimeout;
-      customPowerActionLock = idleLockCfg.command;
-      fadeToLockEnabled = idleLockCfg.fadeToLock;
-    }
-    // optionalSetting "acMonitorTimeout" idleLockCfg.acMonitorTimeout
-    // optionalSetting "batteryMonitorTimeout" idleLockCfg.batteryMonitorTimeout
-    // optionalSetting "acSuspendTimeout" idleLockCfg.acSuspendTimeout
-    // optionalSetting "batterySuspendTimeout" idleLockCfg.batterySuspendTimeout
-    // optionalSetting "acPostLockMonitorTimeout" idleLockCfg.acPostLockMonitorTimeout
-    // optionalSetting "batteryPostLockMonitorTimeout" idleLockCfg.batteryPostLockMonitorTimeout
-    // optionalSetting "fadeToLockGracePeriod" idleLockCfg.fadeToLockGracePeriod
-    // optionalSetting "fadeToDpmsEnabled" idleLockCfg.fadeToDpms
-    // optionalSetting "fadeToDpmsGracePeriod" idleLockCfg.fadeToDpmsGracePeriod
-    // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
-      loginctlLockIntegration = false;
-      lockBeforeSuspend = false;
-    };
+  idleLockSettings = {
+    acLockTimeout = idleLockCfg.acTimeout;
+    batteryLockTimeout = idleLockCfg.batteryTimeout;
+    customPowerActionLock = idleLockCfg.command;
+    fadeToLockEnabled = idleLockCfg.fadeToLock;
+  }
+  // optionalSetting "acMonitorTimeout" idleLockCfg.acMonitorTimeout
+  // optionalSetting "batteryMonitorTimeout" idleLockCfg.batteryMonitorTimeout
+  // optionalSetting "acSuspendTimeout" idleLockCfg.acSuspendTimeout
+  // optionalSetting "batterySuspendTimeout" idleLockCfg.batterySuspendTimeout
+  // optionalSetting "acPostLockMonitorTimeout" idleLockCfg.acPostLockMonitorTimeout
+  // optionalSetting "batteryPostLockMonitorTimeout" idleLockCfg.batteryPostLockMonitorTimeout
+  // optionalSetting "fadeToLockGracePeriod" idleLockCfg.fadeToLockGracePeriod
+  // optionalSetting "fadeToDpmsEnabled" idleLockCfg.fadeToDpms
+  // optionalSetting "fadeToDpmsGracePeriod" idleLockCfg.fadeToDpmsGracePeriod
+  // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
+    loginctlLockIntegration = false;
+    lockBeforeSuspend = false;
+  };
   compactSettings = lib.optionalAttrs compact {
     acMonitorTimeout = 0;
     acLockTimeout = 0;
@@ -62,7 +63,7 @@
         name = "Nixbox";
         enabled = true;
         position = 0;
-        screenPreferences = ["all"];
+        screenPreferences = [ "all" ];
         showOnLastDisplay = true;
         leftWidgets = [
           "launcherButton"
@@ -96,21 +97,20 @@
     ];
   };
   generatedSettings = lib.recursiveUpdate compactSettings (
-    lib.recursiveUpdate
-    (lib.optionalAttrs idleLockCfg.enable idleLockSettings)
-    (lib.optionalAttrs dockCfg.enable {
-      showDock = true;
-      dockAutoHide = dockCfg.autoHide;
-    })
+    lib.recursiveUpdate (lib.optionalAttrs idleLockCfg.enable idleLockSettings) (
+      lib.optionalAttrs dockCfg.enable {
+        showDock = true;
+        dockAutoHide = dockCfg.autoHide;
+      }
+    )
   );
   managedSettings = lib.recursiveUpdate generatedSettings cfg.settings;
-  managedSettingsFile = pkgs.writeText "dms-managed-settings.json" (
-    builtins.toJSON managedSettings
-  );
+  managedSettingsFile = pkgs.writeText "dms-managed-settings.json" (builtins.toJSON managedSettings);
   basePluginSettings =
-    if cfg.pluginSettingsFile == null || !(builtins.pathExists cfg.pluginSettingsFile)
-    then {}
-    else builtins.fromJSON (builtins.readFile cfg.pluginSettingsFile);
+    if cfg.pluginSettingsFile == null || !(builtins.pathExists cfg.pluginSettingsFile) then
+      { }
+    else
+      builtins.fromJSON (builtins.readFile cfg.pluginSettingsFile);
   managedPluginSettings = lib.recursiveUpdate basePluginSettings cfg.pluginSettings;
   managedPluginSettingsFile = pkgs.writeText "dms-managed-plugin-settings.json" (
     builtins.toJSON managedPluginSettings
@@ -245,39 +245,44 @@
   };
   quickshellBasePkg = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
   quickshellUnwrappedPkg = quickshellBasePkg.unwrapped.overrideAttrs (old: {
-    patches =
-      (old.patches or [])
-      ++ [
-        ./patches/quickshell-polkit-details.patch
-      ];
+    patches = (old.patches or [ ]) ++ [
+      ./patches/quickshell-polkit-details.patch
+    ];
   });
   quickshellPkg = quickshellBasePkg.overrideAttrs (_: {
     installPhase = ''
       mkdir -p "$out"
       cp -r ${quickshellUnwrappedPkg}/* "$out"
     '';
-    passthru = (quickshellBasePkg.passthru or {}) // {unwrapped = quickshellUnwrappedPkg;};
+    passthru = (quickshellBasePkg.passthru or { }) // {
+      unwrapped = quickshellUnwrappedPkg;
+    };
   });
-  dmsPkg = inputs.dankMaterialShell.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs (old: {
-    postInstall =
-      (old.postInstall or "")
-      + ''
-        chmod -R u+w "$out/share/quickshell/dms"
-        patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
-        patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-configurable-external-idle-inhibitors.patch}
-        substituteInPlace "$out/share/quickshell/dms/Services/IdleService.qml" \
-          --subst-var-by respectExternalInhibitors ${lib.boolToString cfg.idleLock.respectExternalInhibitors}
-        substituteInPlace "$out/share/quickshell/dms/Modals/PolkitAuthSurfaceModal.qml" \
-          --subst-var-by polkitModalWidth ${toString cfg.polkitDialog.width} \
-          --subst-var-by polkitModalHeight ${toString cfg.polkitDialog.height}
-        ${lib.optionalString (cfg.audioOutputCommand != null) ''
-          patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-external-audio-output.patch}
-          substituteInPlace "$out/share/quickshell/dms/Services/AudioService.qml" \
-            --subst-var-by audioOutputCommand ${lib.escapeShellArg cfg.audioOutputCommand}
-        ''}
-      '';
-  });
-in {
+  dmsPkg =
+    inputs.dankMaterialShell.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
+      (old: {
+        patches = (old.patches or [ ]) ++ [
+          ./patches/dms-cleanup-hyprland-conf-only-in-lua-session.patch
+        ];
+        postInstall = (old.postInstall or "") + ''
+          chmod -R u+w "$out/share/quickshell/dms"
+          patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-use-live-hyprland-provider.patch}
+          patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
+          patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-configurable-external-idle-inhibitors.patch}
+          substituteInPlace "$out/share/quickshell/dms/Services/IdleService.qml" \
+            --subst-var-by respectExternalInhibitors ${lib.boolToString cfg.idleLock.respectExternalInhibitors}
+          substituteInPlace "$out/share/quickshell/dms/Modals/PolkitAuthSurfaceModal.qml" \
+            --subst-var-by polkitModalWidth ${toString cfg.polkitDialog.width} \
+            --subst-var-by polkitModalHeight ${toString cfg.polkitDialog.height}
+          ${lib.optionalString (cfg.audioOutputCommand != null) ''
+            patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-external-audio-output.patch}
+            substituteInPlace "$out/share/quickshell/dms/Services/AudioService.qml" \
+              --subst-var-by audioOutputCommand ${lib.escapeShellArg cfg.audioOutputCommand}
+          ''}
+        '';
+      });
+in
+{
   options.services.dms = {
     enable = lib.mkEnableOption "Enable DankMaterialShell suite";
 
@@ -302,13 +307,13 @@ in {
 
     settings = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
-      default = {};
+      default = { };
       description = "DMS settings.json keys to manage declaratively. These override generated settings for the same keys.";
     };
 
     pluginSettings = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
-      default = {};
+      default = { };
       description = "DMS plugin_settings.json keys to manage declaratively. These override the base plugin settings file for the same keys.";
     };
 
@@ -443,13 +448,14 @@ in {
   ];
 
   config = lib.mkIf cfg.enable {
-    home.packages =
-      [elevationPkg]
-      ++ lib.optionals (!compact) [
-        dankcalendarPkg
-        dankaiusagePkg
-        pkgs.translate-shell
-      ];
+    home.packages = [
+      elevationPkg
+    ]
+    ++ lib.optionals (!compact) [
+      dankcalendarPkg
+      dankaiusagePkg
+      pkgs.translate-shell
+    ];
 
     xdg.configFile = lib.optionalAttrs (!compact) {
       "dankcalendar/config.json".source =
@@ -486,6 +492,10 @@ in {
         DankCalculator = {
           enable = !compact;
           src = plugins.calculator;
+        };
+        dmsScreenshot = {
+          enable = !compact;
+          src = plugins.screenshot;
         };
         DankQuickSearch = {
           enable = !compact;
@@ -571,14 +581,14 @@ in {
       };
     };
 
-    home.activation.dmsManagedSettings = lib.mkIf (managedSettings != {}) (
-      lib.hm.dag.entryAfter ["writeBoundary"] ''
+    home.activation.dmsManagedSettings = lib.mkIf (managedSettings != { }) (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         ${mergeJsonInto "${config.xdg.configHome}/DankMaterialShell/settings.json" managedSettingsFile}
       ''
     );
 
-    home.activation.dmsManagedPluginSettings = lib.mkIf (managedPluginSettings != {}) (
-      lib.hm.dag.entryAfter ["linkGeneration"] ''
+    home.activation.dmsManagedPluginSettings = lib.mkIf (managedPluginSettings != { }) (
+      lib.hm.dag.entryAfter [ "linkGeneration" ] ''
         ${mergeJsonInto "${config.xdg.configHome}/DankMaterialShell/plugin_settings.json" managedPluginSettingsFile}
       ''
     );
