@@ -672,7 +672,7 @@ in {
   services.devlog.enable = true;
   services.devlog.weekly.enable = true;
 
-  services.t3code.enable = false;
+  services.t3code.enable = true;
   services.t3code.port = 3773;
 
   programs.ai.enable = true;
