@@ -720,7 +720,7 @@ in {
         method = "manual";
         addresses = "192.168.1.10/24";
         gateway = "192.168.1.1";
-        dns = "192.168.1.15;192.168.1.3;";
+        dns = "192.168.1.3;192.168.1.4;";
         dns-search = "local;";
       };
       ipv6.method = "auto";
