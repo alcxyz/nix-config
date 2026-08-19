@@ -5,7 +5,8 @@
   lib,
   inputs,
   configDir,
-  username,
+  accountUsername,
+  accountHomeDirectory,
   hostInventory,
   ...
 }: let
@@ -238,9 +239,12 @@ in {
   # ============================================================================
   # Primary User (Required for system defaults)
   # ============================================================================
-  system.primaryUser = username;
+  system.primaryUser = accountUsername;
 
-  users.users.${username}.shell = shellPackages.${config.alc.shell.default};
+  users.users.${accountUsername} = {
+    home = accountHomeDirectory;
+    shell = shellPackages.${config.alc.shell.default};
+  };
 
   # ============================================================================
   # System Packages
@@ -342,7 +346,7 @@ in {
 
     screencapture = {
       disable-shadow = true;
-      location = "/Users/${username}/Pictures/Screenshots";
+      location = "${accountHomeDirectory}/Pictures/Screenshots";
       type = "png";
     };
 
