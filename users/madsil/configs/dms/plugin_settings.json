@@ -29,6 +29,19 @@
     "trigger": "=",
     "noTrigger": false
   },
+  "dmsScreenshot": {
+    "enabled": true,
+    "mode": "interactive",
+    "showPointer": false,
+    "saveToDisk": true,
+    "copyToClipboard": true,
+    "showNotify": true,
+    "showToast": false,
+    "stdout": false,
+    "delaySeconds": 0,
+    "format": "png",
+    "quality": 90
+  },
   "dankQuickSearch": {
     "enabled": true,
     "trigger": "!",
