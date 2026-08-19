@@ -88,18 +88,26 @@
       if mode == "lan"
       then "LAN"
       else "VPN";
-    displayName = "${launcher.hostname} (${routeLabel})";
+    displayNameBase =
+      if launcher.displayName == null
+      then launcher.hostname
+      else launcher.displayName;
+    displayName = "${displayNameBase} (${routeLabel})";
     slug = lib.toLower (
       builtins.replaceStrings [" " "." "_"] ["-" "-" "-"] launcher.hostname
     );
     commandName = "moonlight-${slug}-${mode}";
+    routeArguments =
+      if mode == "lan"
+      then launcher.lanArguments
+      else launcher.vpnArguments;
     command = pkgs.writeShellApplication {
       name = commandName;
       text = ''
         address="$(${lib.getExe selectEndpoint} \
           ${lib.escapeShellArg launcher.hostname} ${lib.escapeShellArg mode})"
         exec ${lib.getExe pkgs.moonlight-qt} \
-          ${lib.escapeShellArgs launcher.arguments} \
+          ${lib.escapeShellArgs (launcher.arguments ++ routeArguments)} \
           stream "$address" ${lib.escapeShellArg launcher.application}
       '';
     };
@@ -175,10 +183,28 @@ in {
               type = lib.types.nonEmptyStr;
               description = "Moonlight application launched by both route entries.";
             };
+
+            displayName = lib.mkOption {
+              type = lib.types.nullOr lib.types.nonEmptyStr;
+              default = null;
+              description = "Optional application label used for the generated macOS bundles.";
+            };
             arguments = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = ["--absolute-mouse"];
-              description = "Moonlight options placed before the stream command.";
+              description = "Moonlight options shared by the LAN and VPN launchers.";
+            };
+
+            lanArguments = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Additional Moonlight options used only by the LAN launcher.";
+            };
+
+            vpnArguments = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Additional Moonlight options used only by the VPN launcher.";
             };
           };
         }

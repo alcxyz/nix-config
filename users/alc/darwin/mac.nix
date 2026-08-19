@@ -37,6 +37,28 @@ in {
         "--display-mode"
         "windowed"
       ];
+      lanArguments = [
+        "--video-codec"
+        "H.264"
+        "--bitrate"
+        "60000"
+      ];
+    }
+    {
+      hostname = "Wolf";
+      application = "Helium";
+      displayName = "Helium";
+      arguments = [
+        "--absolute-mouse"
+        "--display-mode"
+        "windowed"
+      ];
+      lanArguments = [
+        "--video-codec"
+        "H.264"
+        "--bitrate"
+        "60000"
+      ];
     }
   ];
 

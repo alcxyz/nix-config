@@ -218,7 +218,16 @@ in {
     '';
   };
   programs.niri.managed.enable = true;
-  programs.moonlightWolfClient.enable = true;
+  programs.moonlightWolfClient = {
+    enable = true;
+    videoCodec = "H.264";
+    bitrateKbps = 60000;
+    public = {
+      enable = true;
+      videoCodec = "H.264";
+      bitrateKbps = 60000;
+    };
+  };
 
   programs.hyprscratch = {
     enable = true;
