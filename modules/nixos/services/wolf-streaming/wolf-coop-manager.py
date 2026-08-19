@@ -181,14 +181,17 @@ def stream_fingerprint(session):
 
 def reconcile_once(api, args, observed_streams):
     apps = api.get("/api/v1/apps").get("apps", [])
-    entry_app = find_app(apps, args.entry_title)
+    entry_apps = [
+        app for title in args.entry_title if (app := find_app(apps, title)) is not None
+    ]
     individual_app = find_app(apps, args.individual_title)
-    if entry_app is None or individual_app is None:
+    if not entry_apps or individual_app is None:
         return
 
     sessions = api.get("/api/v1/sessions").get("sessions", [])
+    entry_app_ids = {app["id"] for app in entry_apps}
     entry_sessions = [
-        session for session in sessions if session.get("app_id") == entry_app["id"]
+        session for session in sessions if session.get("app_id") in entry_app_ids
     ]
     current_session_ids = {
         session.get("client_id") for session in entry_sessions if session.get("client_id")
@@ -271,7 +274,7 @@ def reconcile_once(api, args, observed_streams):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--socket", required=True)
-    parser.add_argument("--entry-title", required=True)
+    parser.add_argument("--entry-title", action="append", required=True)
     parser.add_argument("--individual-title", required=True)
     parser.add_argument("--lobby-name", required=True)
     parser.add_argument("--runner-name", required=True)
@@ -279,7 +282,10 @@ def parse_args():
     parser.add_argument("--kdeconnect-executable", default="")
     parser.add_argument("--video-producer-buffer-caps", required=True)
     parser.add_argument("--poll-seconds", type=float, default=0.5)
-    parser.add_argument("--initial-join-delay", type=float, default=5.0)
+    # The runner container can exist before its first producer caps are
+    # stable. Switching the live Moonlight pipeline during that window leaves
+    # the catalog producer attached permanently on "Starting Helium".
+    parser.add_argument("--initial-join-delay", type=float, default=15.0)
     parser.add_argument("--existing-join-delay", type=float, default=1.0)
     return parser.parse_args()
 

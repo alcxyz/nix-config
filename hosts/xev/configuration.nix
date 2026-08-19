@@ -46,6 +46,7 @@
         enable = true;
         publish = true;
         cooperativeDefault = true;
+        pi3Compatibility = true;
         kdeConnect.enable = true;
       };
       brave.enable = true;
