@@ -18,6 +18,7 @@ RUN set -eu; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       fonts-noto-color-emoji \
       fonts-noto-core \
+      xinput \
       ${DESKTOP_PACKAGES}; \
     rm -rf /var/lib/apt/lists/*; \
     fc-cache -f; \
@@ -27,8 +28,8 @@ RUN set -eu; \
 
 COPY --chmod=0755 startup.sh /opt/gow/startup-app.sh
 COPY --chmod=0755 desktop-session.sh /opt/gow/desktop-session.sh
+COPY --chmod=0755 kdeconnect-session.sh /opt/gow/kdeconnect-session.sh
 COPY --chmod=0755 kde-pointer-bridge.py /opt/gow/kde-pointer-bridge.py
-COPY --chmod=0755 libkdeconnect-scroll-throttle.so /opt/gow/libkdeconnect-scroll-throttle.so
 COPY waybar.jsonc /cfg/waybar/config.jsonc
 COPY waybar.css /cfg/waybar/style.css
 

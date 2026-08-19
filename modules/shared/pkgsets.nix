@@ -79,6 +79,20 @@ in rec {
   # Home-manager package sets
   # =======================================================================
   hm = rec {
+    # Small operator baseline for low-memory, SD-card-backed appliances.
+    embedded = with pkgs; [
+      bat
+      btop
+      fd
+      git
+      jq
+      neovim
+      ripgrep
+      tmux
+      tree
+      wget
+    ];
+
     /*
     -------------------------------------------------------------------
     CLI / non-GUI base: cross-platform
@@ -341,8 +355,8 @@ in rec {
     # Dedicated server: base + linux + k8s + dev + IaC (future powerful host).
     server = hm.base ++ hm.linux ++ hm.k8s ++ hm.dev ++ hm.iac;
 
-    # Embedded/edge: minimal CLI base + linux-specific only.
-    embedded = hm.base ++ hm.linux;
+    # Embedded/edge: only the small appliance operator baseline.
+    embedded = hm.embedded;
 
     # Family gaming client: desktop and gaming basics without infra-admin,
     # Kubernetes, cloud, AI, or operator-heavy workstation extras.

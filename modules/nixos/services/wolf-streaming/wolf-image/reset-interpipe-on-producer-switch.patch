@@ -67,15 +67,16 @@ diff --git a/src/moonlight-server/streaming/streaming.cpp b/src/moonlight-server
 index 20e3ca1..91c9d93 100644
 --- a/src/moonlight-server/streaming/streaming.cpp
 +++ b/src/moonlight-server/streaming/streaming.cpp
-@@ -416,6 +416,17 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
+@@ -416,6 +416,18 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
        configure_appsink(app_sink_el, udp_sink.get());
        gst_object_unref(app_sink_el);
      }
 +
 +    /*
-+     * Configure interpipesrc before the pipeline enters PLAYING. NVIDIA
-+     * zero-copy pipelines cannot reliably renegotiate if these properties
-+     * are changed only after switching to a lobby producer.
++     * Switching nodes always asks GstAppSrc to accept the replacement
++     * producer's caps, even when they are equivalent. Permit that operation;
++     * the application config normalizes switchable producers to identical
++     * raw caps so it does not trigger a downstream format change.
 +     */
 +    auto video_pipe_name = fmt::format("interpipesrc_{}_video", video_session->session_id);
 +    if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), video_pipe_name.c_str())) {
@@ -85,28 +86,7 @@ index 20e3ca1..91c9d93 100644
  
      auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
      gst_bus_set_sync_handler(bus, bus_sync_handler, ctx_data_ptr.get(), nullptr);
-@@ -470,7 +481,19 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
-             auto pipe_name = fmt::format("interpipesrc_{}_video", sess_id);
-             if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), pipe_name.c_str())) {
--              /* Perform the switch */
-+              /*
-+               * NULL clears the old producer's sticky caps from the
-+               * downstream NVIDIA elements. Changing listen-to on a live
-+               * pipeline can otherwise leave the consumer permanently black
-+               * when the lobby producer selects a different raw format.
-+               */
-+              if (gst_element_set_state(pipeline.get(), GST_STATE_NULL) == GST_STATE_CHANGE_FAILURE) {
-+                logs::log(logs::error, "[GSTREAMER] Failed to reset video pipeline for {}", sess_id);
-+              }
-+              gst_element_get_state(pipeline.get(), nullptr, nullptr, 2 * GST_SECOND);
-               auto video_interpipe = fmt::format("{}_video", switch_ev->interpipe_src_id);
-               g_object_set(src, "listen-to", video_interpipe.c_str(), nullptr);
-+              if (gst_element_set_state(pipeline.get(), GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
-+                logs::log(logs::error, "[GSTREAMER] Failed to resume video pipeline for {}", sess_id);
-+              }
-               gst_object_unref(src);
-             } else {
-@@ -536,6 +547,12 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
+@@ -536,6 +536,12 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
        custom_sink::configure_appsink(app_sink_el, udp_sink.get());
        gst_object_unref(app_sink_el);
      }
@@ -119,19 +99,3 @@ index 20e3ca1..91c9d93 100644
  
      auto pause_handler = event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
          [session_id, pipeline](const immer::box<events::PauseStreamEvent> &ev) {
-@@ -568,8 +585,14 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
- 
-             auto pipe_name = fmt::format("interpipesrc_{}_audio", session_id);
-             if (auto src = gst_bin_get_by_name(GST_BIN(pipeline.get()), pipe_name.c_str())) {
--              /* Perform the switch */
-+              if (gst_element_set_state(pipeline.get(), GST_STATE_NULL) == GST_STATE_CHANGE_FAILURE) {
-+                logs::log(logs::error, "[GSTREAMER] Failed to reset audio pipeline for {}", session_id);
-+              }
-+              gst_element_get_state(pipeline.get(), nullptr, nullptr, 2 * GST_SECOND);
-               auto audio_interpipe = fmt::format("{}_audio", switch_ev->interpipe_src_id);
-               g_object_set(src, "listen-to", audio_interpipe.c_str(), nullptr);
-+              if (gst_element_set_state(pipeline.get(), GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
-+                logs::log(logs::error, "[GSTREAMER] Failed to resume audio pipeline for {}", session_id);
-+              }
-               gst_object_unref(src);
-             } else {

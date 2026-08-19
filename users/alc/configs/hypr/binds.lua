@@ -5,8 +5,8 @@ local mail = "thunderbird"
 local lock = "lock-screen"
 
 -- Help and session.
-hl.bind("SUPER + SHIFT + escape", hl.dsp.exit())
 hl.bind("SUPER + Q", hl.dsp.exec_cmd(lock))
+hl.bind("SUPER + SHIFT + Q", hl.dsp.exec_cmd(lock .. " --display-off-immediately"))
 hl.bind("SUPER + BACKSPACE", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
 
@@ -64,6 +64,7 @@ for i = 1, 10 do
 end
 
 -- Scratchpad.
+hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:" }))
 hl.bind("SUPER + ALT + ESCAPE", hl.dsp.window.move({ workspace = "special:", follow = false }))
 hl.bind("SUPER + ESCAPE", hl.dsp.workspace.toggle_special(""))
 
@@ -85,6 +86,25 @@ hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "r-1" }))
 -- Window rules.
 hl.window_rule({ name = "foot-opacity", match = { class = "^(foot)$" }, opacity = 0.98 })
 hl.window_rule({ name = "dropterm-opacity", match = { class = "^(dropterm)$" }, opacity = 0.90 })
+hl.window_rule({
+	name = "battle-net-tracker-no-focus",
+	match = {
+		class = "^steam_app_default$",
+		title = "^TrackerWindow$",
+		xwayland = true,
+	},
+	no_focus = true,
+})
+hl.window_rule({
+	name = "heroes-floating",
+	match = {
+		class = "^steam_app_default$",
+		title = "^Heroes of the Storm$",
+		xwayland = true,
+	},
+	float = true,
+	suppress_event = "maximize",
+})
 
 -- Layout switching. The Lua callback updates the live config without the
 -- deprecated hyprctl keyword interface.

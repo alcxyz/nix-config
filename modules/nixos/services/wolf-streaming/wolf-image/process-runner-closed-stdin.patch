@@ -1,0 +1,13 @@
+diff --git a/src/moonlight-server/runners/process.cpp b/src/moonlight-server/runners/process.cpp
+index c7dce78..57092b7 100644
+--- a/src/moonlight-server/runners/process.cpp
++++ b/src/moonlight-server/runners/process.cpp
+@@ -32,8 +32,7 @@ void RunProcess::run(std::string_view session_id,
+     };
+ 
+     child_proc = bp::child(this->run_cmd,
+                            env,
+-                           bp::std_in.close(),
+ #if BOOST_VERSION < 108800
+                            bp::std_out > std_out,
+                            bp::std_err > err_out,

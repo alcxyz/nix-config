@@ -66,6 +66,9 @@ hl.config({
 	},
 	misc = {
 		disable_hyprland_logo = true,
+		-- Permit the lock wrapper to replace a crashed locker without clearing
+		-- the compositor's secure lock state.
+		allow_session_lock_restore = true,
 	},
 	scrolling = {
 		column_width = 0.333,

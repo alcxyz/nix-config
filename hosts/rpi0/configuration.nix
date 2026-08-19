@@ -128,7 +128,7 @@ in {
       "--audio-config"
       "stereo"
       "--video-codec"
-      "HEVC"
+      "H.264"
       "--video-decoder"
       "hardware"
       "--no-hdr"
@@ -149,12 +149,9 @@ in {
     browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
-    # Browser runners are resumable across clients and are standardized on a
-    # 1440p desktop. Keep that stream coordinate space even on the 1080p TV;
-    # Moonlight scales presentation locally while absolute pointer input still
-    # reaches every remote pixel. Steam retains the 1080p base arguments.
+    # Browser runners are resumable across clients. Keep rpi0's browser stream
+    # at the same 1080p resolution as its fixed TV output.
     browserStreamArguments = [
-      "--1440"
       "--absolute-mouse"
       "--capture-system-keys"
       "never"

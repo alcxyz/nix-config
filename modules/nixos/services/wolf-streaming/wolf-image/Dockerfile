@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
-      build-essential ca-certificates ccache clang cmake git ninja-build pkg-config \
+      build-essential ca-certificates ccache clang cmake git meson ninja-build pkg-config \
       libboost-container-dev libboost-filesystem-dev libboost-json-dev \
       libboost-locale-dev libboost-log-dev libboost-stacktrace-dev libboost-thread-dev \
       libcurl4-openssl-dev libdrm-dev libegl-dev libevdev-dev libgbm-dev \
@@ -20,6 +20,13 @@ RUN apt-get update -y && \
 
 COPY . /wolf/
 WORKDIR /wolf
+
+RUN meson setup /cache/gst-interpipe-build /wolf/gst-interpipe \
+      --buildtype=release \
+      --libdir=lib/x86_64-linux-gnu \
+      -Dtests=disabled \
+      -Denable-gtk-doc=false && \
+    ninja -C /cache/gst-interpipe-build
 
 RUN --mount=type=cache,target=/cache/ccache \
     cmake -B/cache/cmake-build \
@@ -38,3 +45,4 @@ RUN --mount=type=cache,target=/cache/ccache \
 FROM ${RUNTIME_IMAGE}
 
 COPY --from=wolf-builder /wolf/wolf-patched /wolf/wolf
+COPY --from=wolf-builder /cache/gst-interpipe-build/gst/interpipe/libgstinterpipe.so /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/libgstinterpipe.so

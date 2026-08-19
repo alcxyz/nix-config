@@ -401,7 +401,7 @@ in {
       "--audio-config"
       "stereo"
       "--video-codec"
-      "HEVC"
+      "H.264"
       "--video-decoder"
       "hardware"
       "--no-hdr"

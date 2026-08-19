@@ -5,6 +5,7 @@ import ipaddress
 import os
 from pathlib import Path
 import re
+import socket
 import sys
 import tempfile
 
@@ -14,6 +15,27 @@ RFC1918 = (
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
 )
+
+
+def resolve_address(value):
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError:
+        candidates = []
+        try:
+            answers = socket.getaddrinfo(value, None, type=socket.SOCK_STREAM)
+        except socket.gaierror as error:
+            raise ValueError(f"unable to resolve Moonlight endpoint {value!r}") from error
+        for _family, _type, _protocol, _canonical_name, sockaddr in answers:
+            candidate = ipaddress.ip_address(sockaddr[0].split("%", 1)[0])
+            if candidate not in candidates:
+                candidates.append(candidate)
+        if not candidates:
+            raise ValueError(f"Moonlight endpoint {value!r} resolved to no addresses")
+        return next(
+            (candidate for candidate in candidates if candidate.version == 4),
+            candidates[0],
+        )
 
 
 def main():
@@ -26,8 +48,8 @@ def main():
     config_path = Path(sys.argv[1])
     hostname = sys.argv[2]
     mode = sys.argv[3]
-    lan_address = ipaddress.ip_address(sys.argv[4])
-    remote_address = ipaddress.ip_address(sys.argv[5])
+    lan_address = resolve_address(sys.argv[4])
+    remote_address = resolve_address(sys.argv[5])
     http_port = int(sys.argv[6]) if len(sys.argv) == 8 and sys.argv[6] else None
     previous_hostname = sys.argv[7] if len(sys.argv) == 8 else ""
     if http_port is not None and not 1 <= http_port <= 65535:

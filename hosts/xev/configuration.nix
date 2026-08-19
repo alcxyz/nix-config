@@ -46,6 +46,7 @@
         enable = true;
         publish = true;
         cooperativeDefault = true;
+        pi3Compatibility = true;
         kdeConnect.enable = true;
       };
       brave.enable = true;
@@ -81,7 +82,7 @@
   k3s = {
     enable = true;
     nodeIp = "192.168.1.13";
-    nodeInterface = "enp6s0";
+    nodeInterface = "enp10s0";
     # Hardware watchdog reset path has not passed qualification on this host.
     rebootWatchdogSec = "0";
     serverAddr = "https://k8s-api.local:6443";
@@ -142,7 +143,7 @@
 
   services.k8s-api-vip = {
     enable = true;
-    interface = "enp6s0";
+    interface = "enp10s0";
     sourceIp = "192.168.1.13";
     peers = [
       "192.168.1.15"

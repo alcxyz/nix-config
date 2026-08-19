@@ -11,13 +11,42 @@ index 16e2f39..9091cbd 100644
  
      readonly property bool externalInhibitActive: DMSService.screensaverInhibited
  
-@@ -38,8 +38,8 @@ Singleton {
+@@ -25,6 +25,28 @@ Singleton {
+     readonly property bool postLockMonitorActive: isShellLocked && postLockMonitorTimeout > 0
+ 
+     readonly property bool mediaPlaying: MprisController.activePlayer !== null && MprisController.activePlayer.isPlaying
++    readonly property bool automaticInhibitRequested: respectInhibitors && (externalInhibitActive || mediaPlaying)
++    property bool automaticInhibitSuppressed: false
++    readonly property bool automaticInhibitActive: automaticInhibitRequested && !automaticInhibitSuppressed
++    readonly property bool inhibitActive: SessionService.idleInhibited || automaticInhibitActive
++
++    function setInhibit(active) {
++        if (active) {
++            automaticInhibitSuppressed = false;
++            if (!automaticInhibitRequested && !SessionService.idleInhibited)
++                SessionService.enableIdleInhibit();
++        } else {
++            automaticInhibitSuppressed = automaticInhibitRequested;
++            if (SessionService.idleInhibited)
++                SessionService.disableIdleInhibit();
++        }
++
++        _rearmIdleMonitors();
++    }
++
++    function toggleInhibit() {
++        setInhibit(!inhibitActive);
++    }
+ 
+     onEnabledChanged: _applyMonitorEnableds()
+     onPostLockMonitorActiveChanged: _applyMonitorEnableds()
+@@ -38,8 +40,8 @@ Singleton {
          // Gate on the shell's own inhibit state rather than relying on the
          // compositor honoring the bar-surface zwp_idle_inhibit inhibitor,
          // which goes inactive whenever the bar surface is occluded
          // (fullscreen windows) or hidden (auto-hide).
 -        const base = enabled && !SessionService.idleInhibited && !externalInhibitActive;
-+        const base = enabled && !SessionService.idleInhibited && (!respectInhibitors || !externalInhibitActive);
++        const base = enabled && !inhibitActive;
          monitorOffMonitor.enabled = base && monitorTimeout > 0 && !postLockMonitorActive;
          postLockMonitorOffMonitor.enabled = enabled && postLockMonitorActive;
          lockMonitor.enabled = base && lockTimeout > 0;
@@ -59,3 +88,158 @@ index 16e2f39..9091cbd 100644
          enabled: false
          onIsIdleChanged: {
              if (!enabled)
+@@ -192,12 +216,26 @@ Singleton {
+     onExternalInhibitActiveChanged: {
+         if (externalInhibitActive) {
+             const apps = DMSService.screensaverInhibitors.map(i => i.appName).join(", ");
+             log.info("External idle inhibit active from:", apps || "unknown");
+         } else {
+             log.info("External idle inhibit released");
+         }
+         _rearmIdleMonitors();
+     }
++
++    onAutomaticInhibitRequestedChanged: {
++        if (!automaticInhibitRequested)
++            automaticInhibitSuppressed = false;
++    }
++
++    onMediaPlayingChanged: {
++        if (mediaPlaying) {
++            log.info("Media playback idle inhibit active");
++        } else {
++            log.info("Media playback idle inhibit released");
++        }
++        _rearmIdleMonitors();
++    }
+ 
+     Component.onCompleted: _applyMonitorEnableds()
+ }
+diff --git a/dms/DMSShellIPC.qml b/dms/DMSShellIPC.qml
+index 3a97902..ae997b8 100644
+--- a/dms/DMSShellIPC.qml
++++ b/dms/DMSShellIPC.qml
+@@ -474,19 +474,19 @@ Item {
+     IpcHandler {
+         function toggle(): string {
+-            SessionService.toggleIdleInhibit();
+-            return SessionService.idleInhibited ? "Idle inhibit enabled" : "Idle inhibit disabled";
++            IdleService.toggleInhibit();
++            return IdleService.inhibitActive ? "Idle inhibit enabled" : "Idle inhibit disabled";
+         }
+ 
+         function enable(): string {
+-            SessionService.enableIdleInhibit();
++            IdleService.setInhibit(true);
+             return "Idle inhibit enabled";
+         }
+ 
+         function disable(): string {
+-            SessionService.disableIdleInhibit();
++            IdleService.setInhibit(false);
+             return "Idle inhibit disabled";
+         }
+ 
+         function status(): string {
+-            return SessionService.idleInhibited ? "Idle inhibit is enabled" : "Idle inhibit is disabled";
++            return IdleService.inhibitActive ? "Idle inhibit is enabled" : "Idle inhibit is disabled";
+         }
+ 
+         function reason(newReason: string): string {
+diff --git a/dms/Modules/DankBar/DankBarWindow.qml b/dms/Modules/DankBar/DankBarWindow.qml
+index 2c9156a..7de39ef 100644
+--- a/dms/Modules/DankBar/DankBarWindow.qml
++++ b/dms/Modules/DankBar/DankBarWindow.qml
+@@ -674,7 +674,7 @@ PanelWindow {
+ 
+     IdleInhibitor {
+         window: barWindow
+-        enabled: SessionService.idleInhibited || IdleService.externalInhibitActive
++        enabled: IdleService.inhibitActive
+     }
+ 
+     Connections {
+diff --git a/dms/Modules/DankBar/Widgets/IdleInhibitor.qml b/dms/Modules/DankBar/Widgets/IdleInhibitor.qml
+index 265058c..4678f2d 100644
+--- a/dms/Modules/DankBar/Widgets/IdleInhibitor.qml
++++ b/dms/Modules/DankBar/Widgets/IdleInhibitor.qml
+@@ -15,7 +15,7 @@ BasePill {
+             DankIcon {
+                 id: icon
+                 anchors.centerIn: parent
+-                name: SessionService.idleInhibited ? "motion_sensor_active" : "motion_sensor_idle"
++                name: IdleService.inhibitActive ? "motion_sensor_active" : "motion_sensor_idle"
+                 size: Theme.barIconSize(root.barThickness, -4, root.barConfig?.maximizeWidgetIcons, root.barConfig?.iconScale)
+                 color: Theme.widgetTextColor
+             }
+@@ -29,7 +29,7 @@ BasePill {
+             root.triggerRipple(this, mouse.x, mouse.y);
+         }
+         onClicked: {
+-            SessionService.toggleIdleInhibit();
++            IdleService.toggleInhibit();
+         }
+     }
+ }
+diff --git a/dms/Modules/DankBar/Widgets/ControlCenterButton.qml b/dms/Modules/DankBar/Widgets/ControlCenterButton.qml
+index b21ca7f..7d03ed4 100644
+--- a/dms/Modules/DankBar/Widgets/ControlCenterButton.qml
++++ b/dms/Modules/DankBar/Widgets/ControlCenterButton.qml
+@@ -357,7 +357,7 @@ BasePill {
+         case "printer":
+             return root.showPrinterIcon && CupsService.cupsAvailable && root.hasPrintJobs();
+         case "idleInhibitor":
+-            return root.showIdleInhibitorIcon && SessionService.idleInhibited;
++            return root.showIdleInhibitorIcon && IdleService.inhibitActive;
+         case "doNotDisturb":
+             return root.showDoNotDisturbIcon && SessionData.doNotDisturb;
+         default:
+diff --git a/dms/Modules/ControlCenter/Components/DragDropGrid.qml b/dms/Modules/ControlCenter/Components/DragDropGrid.qml
+index 262d99f..f019255 100644
+--- a/dms/Modules/ControlCenter/Components/DragDropGrid.qml
++++ b/dms/Modules/ControlCenter/Components/DragDropGrid.qml
+@@ -750,7 +750,7 @@ Item {
+                 case "darkMode":
+                     return I18n.tr("Dark Mode");
+                 case "idleInhibitor":
+-                    return SessionService.idleInhibited ? I18n.tr("Keeping Awake") : I18n.tr("Keep Awake");
++                    return IdleService.inhibitActive ? I18n.tr("Keeping Awake") : I18n.tr("Keep Awake");
+                 default:
+                     return I18n.tr("Unknown", "widget status");
+                 }
+@@ -772,7 +772,7 @@ Item {
+                 case "darkMode":
+                     return !SessionData.isLightMode;
+                 case "idleInhibitor":
+-                    return SessionService.idleInhibited || false;
++                    return IdleService.inhibitActive;
+                 default:
+                     return false;
+                 }
+@@ -799,7 +799,7 @@ Item {
+                     }
+                 case "idleInhibitor":
+                     {
+-                        SessionService.toggleIdleInhibit();
++                        IdleService.toggleInhibit();
+                         break;
+                     }
+                 }
+@@ -848,7 +848,7 @@ Item {
+                 case "doNotDisturb":
+                     return SessionData.doNotDisturb || false;
+                 case "idleInhibitor":
+-                    return SessionService.idleInhibited || false;
++                    return IdleService.inhibitActive;
+                 default:
+                     return false;
+                 }
+@@ -880,7 +880,7 @@ Item {
+                     }
+                 case "idleInhibitor":
+                     {
+-                        SessionService.toggleIdleInhibit();
++                        IdleService.toggleInhibit();
+                         break;
+                     }
+                 }

@@ -124,18 +124,18 @@ SSH:
 
 ```sh
 # Report the persisted mode.
-ssh rpi0 xps-session-mode
+ssh rpi0 nixbox-mode
 
 # Select the local direct-display client.
-ssh rpi0 xps-session-mode direct-browser # public Helium
-ssh rpi0 xps-session-mode direct-stream  # Steam
-ssh rpi0 xps-session-mode direct-private # protected browser selector
+ssh rpi0 nixbox-mode direct-browser # public Helium
+ssh rpi0 nixbox-mode direct-stream  # Steam
+ssh rpi0 nixbox-mode direct-private # protected browser selector
 
 # Force an active direct-display session back to the compositor.
-ssh rpi0 xps-session-mode couch
+ssh rpi0 nixbox-mode couch
 ```
 
-`xps-session-mode` is the compatibility name of the shared session command; it
+`nixbox-mode` is the shared session command; it
 is also installed by compact clients. The `direct-private` mode opens the
 protected Wolf selector; the browser choice occurs inside that stream. A mode
 change replaces only the local greetd/Moonlight presentation. It does not

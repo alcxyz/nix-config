@@ -65,14 +65,6 @@ in {
                 #UseKeychain = "yes";
               };
 
-            "rpi1" = {
-              User = "root";
-            };
-
-            "rpi2" = {
-              User = "root";
-            };
-
             "github" = {
               HostName = "github.com";
               User = "git";

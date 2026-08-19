@@ -12,7 +12,6 @@
   hostPublicCoordinator = cfg.publicCoordinator == "host";
   kdeConnectPackage = pkgs.kdePackages.kdeconnect-kde;
   kdeConnectExecutable = "${kdeConnectPackage}/bin/kdeconnectd";
-  kdeConnectScrollThrottle = pkgs.callPackage ../kdeconnect-scroll-throttle {};
   isolatedProtectedBackend =
     cfg.protectedProfile.definitionFile != null && cfg.protectedProfile.isolateBackend;
   publicRuntimeDirectory = cfg.publicRuntimeDirectory;
@@ -21,7 +20,7 @@
   protectedStateDirectory = cfg.protectedProfile.stateDirectory;
   protectedPort = standard: standard + cfg.protectedProfile.portOffset;
   wolfRevision = "d6d41dec9cf758b086768e19a7dc02c20ffce22c";
-  wolfPatchSet = "altgr-idle-presentation-interpipe-media-pointer-v9";
+  wolfPatchSet = "altgr-idle-presentation-interpipe-media-pointer-process-live-switch-v15";
   wolfBaseImage = "ghcr.io/games-on-whales/wolf@sha256:8515dd1a88fa6c4a39a814c7c2f7eee4106d5b60c8140be6d0ef689324a079a2";
   wolfPatchedImage = "nixbox/wolf:${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}";
   wolfSource = pkgs.fetchFromGitHub {
@@ -41,19 +40,34 @@
       ./wolf-image/app-producer-buffer-caps.patch
       ./wolf-image/media-keys.patch
       ./wolf-image/cooperative-pointer-lease.patch
+      ./wolf-image/process-runner-closed-stdin.patch
     ];
+  };
+  gstInterpipeSource = pkgs.fetchFromGitHub {
+    owner = "RidgeRun";
+    repo = "gst-interpipe";
+    rev = "v1.1.10";
+    hash = "sha256-Z7yeUxsTebKPynYzhtst2rlApoXzU1u/32ZqzBvQ6eY=";
+  };
+  patchedGstInterpipeSource = pkgs.applyPatches {
+    name = "gst-interpipe-1.1.10-fixed-equivalent-caps-source";
+    src = gstInterpipeSource;
+    patches = [./wolf-image/gst-interpipe-equivalent-caps.patch];
   };
   wolfBuildContext =
     pkgs.runCommand "wolf-${builtins.substring 0 12 wolfRevision}-${wolfPatchSet}-image-context" {}
     ''
       cp -r ${patchedWolfSource} "$out"
       chmod -R u+w "$out"
+      cp -r ${patchedGstInterpipeSource} "$out/gst-interpipe"
+      printf '\n!gst-interpipe\n!gst-interpipe/**\n' >> "$out/.dockerignore"
       cp ${./wolf-image/Dockerfile} "$out/Dockerfile"
     '';
   browserBaseImage = "ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14";
   wolfUiImage = "ghcr.io/games-on-whales/wolf-ui@sha256:f483f79fcc5f39294067a5029f8de55e5867f74c709a3d55cd6163e4a5f0cf6b";
   browserImageBuildContextLabel = "io.nixbox.wolf-browser.context";
   heliumVersion = "0.14.7.1";
+  heliumImageTag = "${heliumVersion}-pointer-v2";
   heliumDeb = pkgs.fetchurl {
     url = "https://github.com/imputnet/helium-linux/releases/download/${heliumVersion}/helium-bin_${heliumVersion}-1_amd64.deb";
     hash = "sha256-FSSqAA2q64ubpGTBcd6l2VGK4DmSY0FVRNRhu4ZOfIc=";
@@ -67,8 +81,8 @@
       cp ${./browser-image/Dockerfile} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
+      cp ${./browser-image/kdeconnect-session.sh} "$out/kdeconnect-session.sh"
       cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
-      cp ${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so "$out/libkdeconnect-scroll-throttle.so"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       cp ${deb} "$out/browser.deb"
@@ -84,8 +98,8 @@
       cp ${./browser-image/Dockerfile.nix} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
+      cp ${./browser-image/kdeconnect-session.sh} "$out/kdeconnect-session.sh"
       cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
-      cp ${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so "$out/libkdeconnect-scroll-throttle.so"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       tar \
@@ -301,9 +315,57 @@
     icon_png_path = "https://helium.computer/favicon.png";
     start_virtual_compositor = true;
     start_audio_server = true;
+    # The cold catalog producer exists only until the cooperative lobby is
+    # ready. Keeping its frames in CUDA memory makes cudaconvertscale reject
+    # the initial BGRA caps and Moonlight remains on "Starting Helium" before
+    # the lobby can take over. Normalize the temporary and lobby producers in
+    # system memory, then upload NV12 for the normal NVENC pipeline.
+    video = {
+      # Both the temporary catalog compositor and the cooperative lobby must
+      # publish byte-for-byte compatible caps. waylanddisplaysrc otherwise
+      # gives the first producer an effectively unspecified pixel aspect
+      # ratio, while the replacement producer omits the field entirely;
+      # gst-interpipe then treats the live handoff as renegotiation.
+      producer_buffer_caps = "video/x-raw, pixel-aspect-ratio=1/1";
+      video_params = ''
+        videoconvertscale add-borders=false !
+        video/x-raw, width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1 !
+        cudaupload !
+        video/x-raw(memory:CUDAMemory), width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1
+      '';
+      # Emit a periodic IDR and repeat SPS/PPS so recovery after the live
+      # catalog-to-lobby switch does not depend on preserving the initial
+      # codec headers across that handoff.
+      h264_encoder = ''
+        nvh264enc preset=low-latency-hq zerolatency=true gop-size=60 rc-mode=cbr-ld-hq bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false !
+        h264parse config-interval=-1 !
+        video/x-h264, profile=main, stream-format=byte-stream
+      '';
+    };
     runner = {
       type = "process";
       run_cmd = "sleep infinity";
+    };
+  };
+  # bcm2835-codec rejects the low-latency NVENC H.264 bitstream even though it
+  # accepts equivalent 1080p streams from x264. Keep the shared lobby and
+  # publish a conservative software-encoded entry only for Pi 3 clients.
+  heliumPi3CooperativeEntryApp = heliumCooperativeEntryApp // {
+    title = "Helium (Pi 3)";
+    video = heliumCooperativeEntryApp.video // {
+      video_params = ''
+        videoconvertscale add-borders=false !
+        video/x-raw, width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1 !
+        cudaupload !
+        video/x-raw(memory:CUDAMemory), width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1 !
+        cudadownload !
+        video/x-raw, width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1
+      '';
+      h264_encoder = ''
+        x264enc tune=zerolatency speed-preset=ultrafast bitrate={bitrate} key-int-max=60 bframes=0 byte-stream=true aud=true cabac=false !
+        h264parse config-interval=-1 !
+        video/x-h264, profile=constrained-baseline, stream-format=byte-stream
+      '';
     };
   };
   mkWolfUiApp = runtimeDirectory: {
@@ -333,10 +395,10 @@
     lib.optional (!isolatedProtectedBackend) (mkWolfUiApp publicRuntimeDirectory)
     ++ lib.optionals browserCfg.helium.publish (
       if browserCfg.helium.cooperativeDefault
-      then [
-        heliumCooperativeEntryApp
-        heliumIndividualApp
-      ]
+      then
+        [heliumCooperativeEntryApp]
+        ++ lib.optional browserCfg.helium.pi3Compatibility heliumPi3CooperativeEntryApp
+        ++ [heliumIndividualApp]
       else [heliumIndividualApp]
     )
     ++ lib.optional browserCfg.brave.publish (mkMoonlightBrowserApp {
@@ -354,6 +416,7 @@
         [
           "Wolf UI"
           "Helium"
+          "Helium (Pi 3)"
           "Brave"
           "Chromium"
           "Firefox"
@@ -457,11 +520,12 @@
       exec python3 ${./wolf-coop-manager.py} \
         --socket ${lib.escapeShellArg "${publicRuntimeDirectory}/wolf.sock"} \
         --entry-title Helium \
+        ${lib.optionalString browserCfg.helium.pi3Compatibility "--entry-title ${lib.escapeShellArg "Helium (Pi 3)"} \\"}
         --individual-title ${lib.escapeShellArg "Helium (Individual)"} \
         --lobby-name Helium \
         --runner-name WolfHeliumCoop \
         --runner-state-folder ${lib.escapeShellArg "profile-data/moonlight-profile-id/WolfHeliumCoop"} \
-        --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw(memory:CUDAMemory)"} \
+        --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw, pixel-aspect-ratio=1/1"} \
         --kdeconnect-executable ${
         lib.escapeShellArg (
           if browserCfg.helium.kdeConnect.enable
@@ -1153,6 +1217,9 @@ in {
             session.
           '';
         };
+        pi3Compatibility = lib.mkEnableOption ''
+          a software-encoded Helium catalog entry for Raspberry Pi 3 clients
+        '';
         kdeConnect = {
           enable = lib.mkEnableOption ''
             KDE Connect inside the shared Helium desktop session. The single
@@ -1203,7 +1270,7 @@ in {
         };
         image = lib.mkOption {
           type = lib.types.str;
-          default = "nixbox/wolf-helium:${heliumVersion}";
+          default = "nixbox/wolf-helium:${heliumImageTag}";
           description = "Local Docker image name used by the Helium Wolf application.";
         };
       };

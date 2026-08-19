@@ -15,16 +15,19 @@ in {
       hostName: hostAttrs:
         inputs.nixpkgs.lib.nixosSystem {
           specialArgs = hostLib.specialArgsFor hostName hostAttrs;
-          modules = [
-            inputs.nixpkgs.nixosModules.readOnlyPkgs
-            {nixpkgs.pkgs = pkgsFor.${hostAttrs.system};}
-            hostAttrs.configuration
-            inputs.nix-secrets.nixosModules.beszelAgentDefaults
-            inputs.nix-secrets.nixosModules.forgejoActionsRunnerDefaults
-            inputs.nix-secrets.nixosModules.forgeMirrorDefaults
-            inputs.nix-secrets.nixosModules.storageBackupPolicy
-            inputs.sops-nix.nixosModules.sops
-          ];
+          modules =
+            [
+              inputs.nixpkgs.nixosModules.readOnlyPkgs
+              {nixpkgs.pkgs = pkgsFor.${hostAttrs.system};}
+              hostAttrs.configuration
+              inputs.nix-secrets.nixosModules.beszelAgentDefaults
+              inputs.nix-secrets.nixosModules.forgejoActionsRunnerDefaults
+              inputs.nix-secrets.nixosModules.forgeMirrorDefaults
+              inputs.nix-secrets.nixosModules.storageBackupPolicy
+              inputs.sops-nix.nixosModules.sops
+            ]
+            ++ lib.optional (inputs.nix-secrets.nixosModules ? operatorLogin)
+            inputs.nix-secrets.nixosModules.operatorLogin;
         }
     )
     nixosHosts;

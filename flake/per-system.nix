@@ -1,4 +1,9 @@
-{config, ...}: {
+{
+  config,
+  inputs,
+  self,
+  ...
+}: {
   perSystem = {system, ...}: let
     pkgs = config.alc.pkgsFor.${system};
     lib = pkgs.lib;
@@ -16,6 +21,7 @@
     formattedNixFiles = [
       "inventory.nix"
       "flake/per-system.nix"
+      "flake/pkgs.nix"
       "flake/hosts/lib.nix"
       "hosts/madsil/configuration.nix"
       "hosts/madsil/hardware-configuration.nix"
@@ -23,6 +29,9 @@
       "hosts/nex/configuration.nix"
       "hosts/nux/configuration.nix"
       "hosts/rpi0/configuration.nix"
+      "hosts/rpi1/configuration.nix"
+      "hosts/rpi2/configuration.nix"
+      "hosts/rpi3/configuration.nix"
       "hosts/xev/configuration.nix"
       "hosts/xps/configuration.nix"
       "hosts/xps/hardware-configuration.nix"
@@ -35,6 +44,8 @@
       "modules/nixos/common/pkgsets.nix"
       "modules/nixos/common/server.nix"
       "modules/nixos/profiles/nixbox-client/default.nix"
+      "modules/nixos/profiles/nixbox-direct-client/default.nix"
+      "modules/nixos/profiles/raspberry-pi-3-direct-client/default.nix"
       "modules/home-manager/services/waynergy/default.nix"
       "modules/home-manager/services/dms/default.nix"
       "modules/nixos/common/ssh-keys.nix"
@@ -58,6 +69,10 @@
       "users/alc/linux/nux.nix"
       "users/alc/linux/operator.nix"
       "users/alc/linux/rpi0.nix"
+      "users/alc/linux/embedded.nix"
+      "users/alc/linux/rpi1.nix"
+      "users/alc/linux/rpi2.nix"
+      "users/alc/linux/rpi3.nix"
       "users/alc/linux/xev.nix"
       "users/alc/linux/xps.nix"
       "users/alc/linux/xyz.nix"
@@ -81,16 +96,26 @@
       '';
 
       check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-        shellcheck scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
+        shellcheck scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
       '';
 
       check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.shfmt] ''
-        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
+        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
       '';
 
-      check-k8s-node-reboot-workload-phases =
-        mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash] ''
-          bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
+      check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''
+        bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
+      '';
+
+      wolf-browser-input-contract =
+        mkRepoCheck "wolf-browser-input-contract" [
+          pkgs.bash
+          pkgs.coreutils
+          pkgs.gawk
+          pkgs.gnugrep
+          pkgs.gnused
+        ] ''
+          bash scripts/checks/test-wolf-browser-input-contract.sh
         '';
 
       report-assets =
@@ -105,6 +130,26 @@
       forbid-submodule-config = mkRepoCheck "forbid-submodule-config" [] ''
         test ! -e .gitmodules
       '';
+
+      rpi3-direct-client-contract = let
+        rpi1 = self.nixosConfigurations.rpi1.config;
+        rpi2 = self.nixosConfigurations.rpi2.config;
+        rpi3 = self.nixosConfigurations.rpi3.config;
+      in
+        assert rpi1.services.nixbox-direct-client.streamFps == 30;
+        assert rpi2.services.nixbox-direct-client.streamFps == 60;
+        assert rpi3.services.nixbox-direct-client.streamFps == 60;
+        assert rpi1.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
+        assert rpi2.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
+        assert rpi3.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
+        assert rpi1.services.moonlight-client.defaultSessionMode == "direct-browser";
+        assert rpi1.systemd.services.greetd.serviceConfig.Restart == "always";
+        assert rpi1.security.sudo.wheelNeedsPassword;
+        assert !(inputs.nix-secrets.nixosModules ? operatorLogin)
+        || rpi1.users.users.alc.hashedPasswordFile != null;
+          pkgs.runCommand "rpi3-direct-client-contract" {} ''
+            touch "$out"
+          '';
     };
 
     packages =

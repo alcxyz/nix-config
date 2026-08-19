@@ -1,0 +1,21 @@
+diff --git a/gst/interpipe/gstinterpipesrc.c b/gst/interpipe/gstinterpipesrc.c
+index 70f1738..494b6e4 100644
+--- a/gst/interpipe/gstinterpipesrc.c
++++ b/gst/interpipe/gstinterpipesrc.c
+@@ -601,6 +601,17 @@ gst_inter_pipe_src_set_caps (GstInterPipeIListener * iface,
+   appsrc = GST_APP_SRC (src);
+ 
+   appcaps = gst_app_src_get_caps (appsrc);
++  if (appcaps && gst_caps_is_equal (appcaps, caps)) {
++    /*
++     * Switching to a producer with identical caps is not renegotiation.
++     * Calling gst_app_src_set_caps() here still emits a fresh CAPS event,
++     * which can make hardware encoders reject an otherwise seamless switch.
++     */
++    GST_DEBUG_OBJECT (src, "Keeping equivalent caps %" GST_PTR_FORMAT,
++        appcaps);
++    gst_caps_unref (appcaps);
++    return TRUE;
++  }
+   if (appcaps && !src->allow_renegotiation)
+     goto allow_renegotiation_disabled;

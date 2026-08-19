@@ -6,6 +6,7 @@
 
   hostNames = builtins.attrNames inventory.hosts;
   nixosHostNames = lib.filter (host: inventory.hosts.${host}.platform == "nixos") hostNames;
+  homeManagerHostNames = lib.filter (host: inventory.hosts.${host}.homeManager or true) hostNames;
 
   deployableInAll = host: inventory.hosts.${host}.deployAll or true;
 
@@ -57,6 +58,7 @@
 
   deployHostData =
     bashArray "KNOWN_HOSTS" hostNames
+    + bashArray "HOME_MANAGER_HOSTS" homeManagerHostNames
     + bashArray "REMOTE_HOSTS" remoteHostNames
     + bashArray "DEPLOY_ALL_HOSTS" deployAllHostNames
     + bashAssoc "HOST_ALIASES" aliases "alias" "host"

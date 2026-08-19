@@ -339,6 +339,14 @@ in {
   programs.kdeconnect.enable = true;
   security.pam.services.hyprlock.u2f.enable = true;
 
+  # DMS owns unlocked idle handling, while the Home Manager lock wrapper starts
+  # a private hypridle only for an active Hyprlock. Prevent the package-provided
+  # configless unit from crash-looping when the graphical session starts.
+  systemd.user.services.hypridle = {
+    overrideStrategy = "asDropin";
+    unitConfig.ConditionPathExists = "/run/xyz-enable-hypridle";
+  };
+
   # Keep the disposable GPU worker ready to host the public Wolf singleton.
   # The Kubernetes supervisor remains the only coordinator owner.
   services.wolf-streaming = {
@@ -358,6 +366,7 @@ in {
         enable = true;
         publish = true;
         cooperativeDefault = true;
+        pi3Compatibility = true;
         kdeConnect.enable = true;
       };
       brave.enable = true;

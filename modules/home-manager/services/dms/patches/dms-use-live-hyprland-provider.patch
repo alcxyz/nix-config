@@ -1,0 +1,202 @@
+diff --git a/dms/Services/HyprlandService.qml b/dms/Services/HyprlandService.qml
+index acd12f3..75af003 100644
+--- a/dms/Services/HyprlandService.qml
++++ b/dms/Services/HyprlandService.qml
+@@ -18,9 +18,15 @@ Singleton {
+     readonly property string layoutPath: hyprDmsDir + "/layout.lua"
+     readonly property string cursorPath: hyprDmsDir + "/cursor.lua"
+     readonly property string windowrulesPath: hyprDmsDir + "/windowrules.lua"
+-    readonly property bool luaConfigActive: CompositorService.isHyprland && (Hyprland.usingLua === true || luaConfigDetected)
++    // Runtime dispatch syntax must follow the provider reported by the running
++    // compositor. Config files prepared for another session are not evidence
++    // of the provider active in this one.
++    readonly property bool luaConfigActive: CompositorService.isHyprland && runtimeConfigProvider === "lua"
+ 
+     property int _lastGapValue: -1
++    property string runtimeConfigProvider: ""
++    property bool runtimeConfigProviderLoading: false
++    property var pendingRuntimeDispatches: []
+     property bool luaConfigDetected: false
+     property bool luaConfigStatusReady: false
+     property bool luaConfigStatusLoading: false
+@@ -55,6 +63,7 @@ Singleton {
+ 
+     Component.onCompleted: {
+         if (CompositorService.isHyprland) {
++            refreshRuntimeConfigProvider();
+             refreshLuaConfigStatus();
+             if (luaConfigActive)
+                 ensureDmsLuaConfigs();
+@@ -92,11 +101,14 @@ Singleton {
+         target: CompositorService
+         function onIsHyprlandChanged() {
+             if (CompositorService.isHyprland) {
++                refreshRuntimeConfigProvider();
+                 refreshLuaConfigStatus();
+                 if (luaConfigActive)
+                     ensureDmsLuaConfigs();
+                 return;
+             }
++            runtimeConfigProvider = "";
++            pendingRuntimeDispatches = [];
+             luaConfigDetected = false;
+             luaConfigStatusReady = false;
+             luaConfigStatusLoading = false;
+@@ -104,6 +114,59 @@ Singleton {
+         }
+     }
+ 
++    function refreshRuntimeConfigProvider() {
++        if (!CompositorService.isHyprland) {
++            runtimeConfigProvider = "";
++            runtimeConfigProviderLoading = false;
++            return;
++        }
++        if (runtimeConfigProviderLoading)
++            return;
++
++        runtimeConfigProviderLoading = true;
++        Proc.runCommand("hypr-runtime-config-provider", ["hyprctl", "status", "-j"], (output, exitCode) => {
++            runtimeConfigProviderLoading = false;
++            let provider = "";
++            if (exitCode === 0) {
++                try {
++                    const status = JSON.parse(output.trim());
++                    provider = status.configProvider ?? "";
++                } catch (e) {
++                    log.warn("Failed to parse the active Hyprland config provider:", e);
++                }
++            }
++
++            runtimeConfigProvider = provider;
++            const pending = pendingRuntimeDispatches;
++            pendingRuntimeDispatches = [];
++            if (provider !== "lua" && provider !== "hyprlang") {
++                if (pending.length > 0)
++                    log.warn("Could not determine the active Hyprland config provider; discarding", pending.length, "deferred dispatches");
++                return;
++            }
++
++            for (const request of pending)
++                Hyprland.dispatch(provider === "lua" ? request.luaCommand : request.legacyCommand);
++        });
++    }
++
++    function dispatchForRuntimeProvider(luaCommand, legacyCommand) {
++        if (runtimeConfigProvider === "lua") {
++            Hyprland.dispatch(luaCommand);
++            return;
++        }
++        if (runtimeConfigProvider === "hyprlang") {
++            Hyprland.dispatch(legacyCommand);
++            return;
++        }
++
++        pendingRuntimeDispatches = pendingRuntimeDispatches.concat([{
++            luaCommand,
++            legacyCommand
++        }]);
++        refreshRuntimeConfigProvider();
++    }
++
+     function getOutputIdentifier(output, outputName) {
+         if (output.explicitIdentifier)
+             return outputName;
+@@ -533,19 +596,11 @@ Singleton {
+         if (!wsId)
+             return;
+         const fullName = wsId + " " + newName;
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.workspace.rename({ workspace = ${luaValue(wsId)}, name = ${luaString(fullName)} })`);
+-        } else {
+-            Hyprland.dispatch(`renameworkspace ${wsId} ${fullName}`);
+-        }
++        dispatchForRuntimeProvider(`hl.dsp.workspace.rename({ workspace = ${luaValue(wsId)}, name = ${luaString(fullName)} })`, `renameworkspace ${wsId} ${fullName}`);
+     }
+ 
+     function focusWorkspace(workspace) {
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.focus({ workspace = ${luaValue(workspace)} })`);
+-        } else {
+-            Hyprland.dispatch(`workspace ${workspace}`);
+-        }
++        dispatchForRuntimeProvider(`hl.dsp.focus({ workspace = ${luaValue(workspace)} })`, `workspace ${workspace}`);
+     }
+ 
+     function luaString(value) {
+@@ -573,11 +628,7 @@ Singleton {
+         if (!selector)
+             return;
+ 
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.focus({ window = ${luaString(selector)} })`);
+-        } else {
+-            Hyprland.dispatch(`focuswindow ${selector}`);
+-        }
++        dispatchForRuntimeProvider(`hl.dsp.focus({ window = ${luaString(selector)} })`, `focuswindow ${selector}`);
+     }
+ 
+     function closeWindow(windowAddress) {
+@@ -586,11 +637,7 @@ Singleton {
+         if (!selector)
+             return;
+ 
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.window.close(${luaString(selector)})`);
+-        } else {
+-            Hyprland.dispatch(`closewindow ${selector}`);
+-        }
++        dispatchForRuntimeProvider(`hl.dsp.window.close(${luaString(selector)})`, `closewindow ${selector}`);
+     }
+ 
+     function moveToWorkspace(workspace, windowAddress, follow = true) {
+@@ -597,43 +644,23 @@ Singleton {
+         if (!selector)
+             return;
+ 
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${luaValue(workspace)}, window = ${luaString(selector)}, follow = ${follow ? "true" : "false"} })`);
+-        } else {
+-            const dispatcher = follow ? "movetoworkspace" : "movetoworkspacesilent";
+-            Hyprland.dispatch(`${dispatcher} ${workspace},${selector}`);
+-        }
++        const dispatcher = follow ? "movetoworkspace" : "movetoworkspacesilent";
++        dispatchForRuntimeProvider(`hl.dsp.window.move({ workspace = ${luaValue(workspace)}, window = ${luaString(selector)}, follow = ${follow ? "true" : "false"} })`, `${dispatcher} ${workspace},${selector}`);
+     }
+ 
+     function toggleSpecial(specialName) {
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.workspace.toggle_special(${luaString(specialName)})`);
+-        } else {
+-            Hyprland.dispatch("togglespecialworkspace " + specialName);
+-        }
++        dispatchForRuntimeProvider(`hl.dsp.workspace.toggle_special(${luaString(specialName)})`, "togglespecialworkspace " + specialName);
+     }
+ 
+     function exit() {
+-        if (luaConfigActive) {
+-            Hyprland.dispatch("hl.dsp.exit()");
+-        } else {
+-            Hyprland.dispatch("exit");
+-        }
++        dispatchForRuntimeProvider("hl.dsp.exit()", "exit");
+     }
+ 
+     function dpmsOff() {
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.dpms({ action = "disable" })`);
+-        } else {
+-            Hyprland.dispatch("dpms off");
+-        }
++        dispatchForRuntimeProvider(`hl.dsp.dpms({ action = "disable" })`, "dpms off");
+     }
+ 
+     function dpmsOn() {
+-        if (luaConfigActive) {
+-            Hyprland.dispatch(`hl.dsp.dpms({ action = "enable" })`);
+-        } else {
+-            Hyprland.dispatch("dpms on");
+-        }
++        dispatchForRuntimeProvider(`hl.dsp.dpms({ action = "enable" })`, "dpms on");
+     }
+ }

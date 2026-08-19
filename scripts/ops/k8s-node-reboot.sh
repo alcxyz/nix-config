@@ -317,28 +317,89 @@ collect_displaced_workloads() {
 workload_requires_target_node() {
   local namespace="$1"
   local workload="$2"
+  local workload_json
+  local nodes_json
 
-  kubectl -n "$namespace" get "$workload" -o json 2>/dev/null | jq -e --arg node "$NODE" '
-    .spec.template.spec as $pod
-    | (($pod.nodeSelector["kubernetes.io/hostname"] // "") == $node)
-      or (
-        ($pod.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms // []) as $terms
-        | ($terms | length) > 0
-        and all($terms[];
-          any((.matchExpressions // [])[];
-            .key == "kubernetes.io/hostname"
-            and .operator == "In"
-            and ((.values // []) | length) > 0
-            and all((.values // [])[]; . == $node)
-          )
-          or any((.matchFields // [])[];
-            .key == "metadata.name"
-            and .operator == "In"
-            and ((.values // []) | length) > 0
-            and all((.values // [])[]; . == $node)
-          )
-        )
-      )' >/dev/null
+  workload_json=$(kubectl -n "$namespace" get "$workload" -o json 2>/dev/null) || return 1
+  nodes_json=$(kubectl get nodes -o json 2>/dev/null) || return 1
+
+  jq -en \
+    --arg node "$NODE" \
+    --argjson workload "$workload_json" \
+    --argjson nodes "$nodes_json" '
+      def requirement_matches($value; $requirement):
+        ($requirement.operator // "") as $operator
+        | ($requirement.values // []) as $values
+        | if $operator == "In" then
+            $value != null and ($values | index($value) != null)
+          elif $operator == "NotIn" then
+            $value != null and ($values | index($value) == null)
+          elif $operator == "Exists" then
+            $value != null
+          elif $operator == "DoesNotExist" then
+            $value == null
+          elif $operator == "Gt" then
+            $value != null
+            and (($value | tonumber? // null) as $actual
+              | (($values[0] // "") | tonumber? // null) as $expected
+              | $actual != null and $expected != null and $actual > $expected)
+          elif $operator == "Lt" then
+            $value != null
+            and (($value | tonumber? // null) as $actual
+              | (($values[0] // "") | tonumber? // null) as $expected
+              | $actual != null and $expected != null and $actual < $expected)
+          else
+            false
+          end;
+
+      def node_selector_matches($node; $selector):
+        ($selector // {})
+        | to_entries
+        | all(. as $entry
+          | ($node.metadata.labels[$entry.key] // null) == $entry.value);
+
+      def node_affinity_term_matches($node; $term):
+        all(($term.matchExpressions // [])[];
+          . as $requirement
+          | requirement_matches(
+              ($node.metadata.labels[$requirement.key] // null);
+              $requirement
+            ))
+        and all(($term.matchFields // [])[];
+          . as $requirement
+          | requirement_matches(
+              (if $requirement.key == "metadata.name" then
+                $node.metadata.name
+              else
+                null
+              end);
+              $requirement
+            ));
+
+      def required_node_affinity_matches($node; $affinity):
+        ($affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms // []) as $terms
+        | ($terms | length) == 0
+          or any($terms[]; node_affinity_term_matches($node; .));
+
+      def pod_matches_node($pod; $node):
+        node_selector_matches($node; $pod.nodeSelector)
+        and required_node_affinity_matches($node; $pod.affinity.nodeAffinity // {});
+
+      def node_is_ready($node):
+        any(($node.status.conditions // [])[];
+          .type == "Ready" and .status == "True");
+
+      ($workload.spec.template.spec // {}) as $pod
+      | ($nodes.items // []) as $all_nodes
+      | ($all_nodes | map(select(.metadata.name == $node)) | first) as $target
+      | $target != null
+        and pod_matches_node($pod; $target)
+        and ([$all_nodes[]
+          | select(.metadata.name != $node)
+          | select(.spec.unschedulable != true)
+          | select(node_is_ready(.))
+          | select(pod_matches_node($pod; .))]
+          | length) == 0' >/dev/null
 }
 
 collect_target_pinned_pending_workloads() {
