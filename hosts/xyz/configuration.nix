@@ -452,6 +452,9 @@ in {
 
   # ==================== Users ====================
   users.users.${username} = {
+    # Keep the user manager—and therefore the headless T3 service—running
+    # across graphical logouts and start it during boot.
+    linger = true;
     extraGroups = [
       "media"
       "render"

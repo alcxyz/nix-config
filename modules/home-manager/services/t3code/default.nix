@@ -1,15 +1,16 @@
 # modules/home-manager/services/t3code/default.nix
 #
 # Runs t3code in headless server mode (t3 serve), listening on all interfaces.
-# The NixOS firewall restricts the port to the Netbird (wt0) interface.
-{ config, lib, pkgs, ... }:
-
-with lib;
-
-let
-  cfg = config.services.t3code;
-in
+# The host firewall controls access to the configured port.
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+with lib; let
+  cfg = config.services.t3code;
+in {
   options.services.t3code = {
     enable = mkEnableOption "t3code headless server";
 
@@ -36,19 +37,21 @@ in
     systemd.user.services.t3code = {
       Unit = {
         Description = "t3code headless server";
-        After = [ "network-online.target" ];
-        Wants = [ "network-online.target" ];
+        After = ["network-online.target"];
+        Wants = ["network-online.target"];
       };
       Service = {
         Type = "simple";
         ExecStart = "${pkgs.t3code}/bin/t3 serve --host ${cfg.host} --port ${toString cfg.port} --base-dir ${cfg.baseDir}";
         Environment = "SHELL=${pkgs.bash}/bin/bash";
-        Restart = "on-failure";
+        # A clean provider/server exit is still unexpected for a persistent
+        # headless environment. Systemd stop operations suppress restarts.
+        Restart = "always";
         RestartSec = "10s";
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      Install.WantedBy = [ "default.target" ];
+      Install.WantedBy = ["default.target"];
     };
   };
 }
