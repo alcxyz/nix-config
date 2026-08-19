@@ -373,6 +373,9 @@ in {
     nxsw-nux = "deploy --nixos nux";
     nxsw-nex = "deploy --nixos nex";
     nxsw-rpi0 = "deploy --nixos rpi0";
+    nxsw-rpi1 = "deploy --nixos rpi1";
+    nxsw-rpi2 = "deploy --nixos rpi2";
+    nxsw-rpi3 = "deploy --nixos rpi3";
     hmsw-nux = "deploy --hm nux";
     hmsw-nex = "deploy --hm nex";
     hmsw-rpi0 = "deploy --hm rpi0";

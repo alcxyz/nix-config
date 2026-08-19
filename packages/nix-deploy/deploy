@@ -61,6 +61,12 @@ is_known() {
   return 1
 }
 
+uses_home_manager() {
+  local h="$1"
+  for k in "${HOME_MANAGER_HOSTS[@]}"; do [[ "$k" == "$h" ]] && return 0; done
+  return 1
+}
+
 canonical_host() {
   local h="$1"
 
@@ -411,8 +417,12 @@ hm_remote() {
   local result
   result=$(nix build --no-link --print-out-paths ".#homeConfigurations.alc-${host}.activationPackage")
   nix copy --substitute-on-destination --to "ssh://alc@$(ssh_host "$host")" "$result"
+  # Home Manager creates a tiny profile-link derivation during activation.
+  # Permit that one local job even on appliances whose global max-jobs=0
+  # policy prevents package compilation on constrained hardware. The complete
+  # activation closure has already been built and copied above.
   # shellcheck disable=SC2029
-  ssh "${SSH_ARGS[@]}" "alc@$(ssh_host "$host")" "$result/activate"
+  ssh "${SSH_ARGS[@]}" "alc@$(ssh_host "$host")" "env NIX_CONFIG='max-jobs = 1' '$result/activate'"
 }
 
 do_deploy() {
@@ -423,6 +433,15 @@ do_deploy() {
     echo "deploy: unknown host '$host'" >&2
     echo "Known hosts: ${KNOWN_HOSTS[*]}" >&2
     exit 1
+  fi
+
+  if [[ "$mode" == "hm" ]] && ! uses_home_manager "$host"; then
+    echo "deploy: ${host} is configured as a NixOS-only host" >&2
+    exit 1
+  fi
+
+  if [[ "$mode" == "full" ]] && ! uses_home_manager "$host"; then
+    mode="nixos"
   fi
 
   local is_local=false
