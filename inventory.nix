@@ -154,6 +154,39 @@
       osIcon = "";
     };
 
+    rpi1 = {
+      system = "aarch64-linux";
+      platform = "nixos";
+      role = "embedded";
+      k8sRole = null;
+      deployAll = false;
+      skipManagedUserSshSecrets = true;
+      configuration = ./hosts/rpi1/configuration.nix;
+      osIcon = "";
+    };
+
+    rpi2 = {
+      system = "aarch64-linux";
+      platform = "nixos";
+      role = "embedded";
+      k8sRole = null;
+      deployAll = false;
+      skipManagedUserSshSecrets = true;
+      configuration = ./hosts/rpi2/configuration.nix;
+      osIcon = "";
+    };
+
+    rpi3 = {
+      system = "aarch64-linux";
+      platform = "nixos";
+      role = "embedded";
+      k8sRole = null;
+      deployAll = false;
+      skipManagedUserSshSecrets = true;
+      configuration = ./hosts/rpi3/configuration.nix;
+      osIcon = "";
+    };
+
     mac = {
       system = "aarch64-darwin";
       platform = "darwin";

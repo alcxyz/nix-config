@@ -7,11 +7,16 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    nixos-hardware = {
+      url = "github:NixOS/nixos-hardware/master";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     flake-parts.url = "github:hercules-ci/flake-parts";
 
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git?ref=dev";
+      url = "git+https://git.alc.xyz/alcxyz/nix-secrets.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

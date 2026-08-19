@@ -70,11 +70,30 @@ in
               moonlight-v4l2-request = _prev.moonlight-qt.override {
                 ffmpeg = _final.ffmpeg-v4l2-request;
               };
+              # Keep the Pi 3 client as its own derivation so board-specific
+              # Moonlight/FFmpeg fixes can evolve independently of rpi0.
+              moonlight-rpi3 = _prev.moonlight-qt.overrideAttrs (old: {
+                pname = "moonlight-rpi3";
+                patches =
+                  (old.patches or [])
+                  ++ [
+                    ../packages/moonlight-rpi3/use-qt-drm-master.patch
+                    ../packages/moonlight-rpi3/log-periodic-video-stats.patch
+                  ];
+                 qmakeFlags = (old.qmakeFlags or []) ++ ["CONFIG+=gpuslow"];
+               });
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.
             # Skip nushell tests to avoid build failure on managed Macs.
             // lib.optionalAttrs (system == "aarch64-darwin") {
               nushell = _prev.nushell.overrideAttrs {doCheck = false;};
+            }
+            # Raspberry Pi kernels omit modules that the generic NixOS module
+            # closure expects. Apply nixos-hardware's allow-missing workaround
+            # here because NixOS receives this package set as read-only.
+            // lib.optionalAttrs (system == "aarch64-linux") {
+              makeModulesClosure = args:
+                _prev.makeModulesClosure (args // {allowMissing = true;});
             }
         )
       ];

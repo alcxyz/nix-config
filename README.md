@@ -12,6 +12,9 @@ Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, serv
 | xev | x86_64-linux | k3s server + stable workload host with Longhorn storage and primary Forgejo runner capacity |
 | xps | x86_64-linux | Dell XPS workstation; Kubernetes participation deferred until wired networking is reliable |
 | rpi0 | aarch64-linux | Rock Pi 4. Host-native DNS/Pi-hole and standby UniFi; kept outside k3s |
+| rpi1 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
+| rpi2 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
+| rpi3 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
 | mac | aarch64-darwin | MacBook. nix-darwin + Home Manager + bootstrapped aarch64 Linux builder |
 
 Planned hosts are documented before they are added to inventory:
@@ -54,7 +57,7 @@ justfile                           # Operator command surface for checks, rebuil
 .pre-commit-config.yaml            # Local repository hygiene hooks
 scripts/checks/                    # Shell checks used by pre-commit and flake checks
 hosts/
-  {xyz,nux,nex,xev,xps,rpi0}/
+  {xyz,nux,nex,xev,xps,rpi0,rpi1,rpi2,rpi3}/
     configuration.nix              # Host-specific NixOS config
     hardware-configuration.nix     # Generated hardware config
   mac/
@@ -69,7 +72,7 @@ modules/
       distributed-build-client.nix # Optional distributed builds through xyz
       ssh-keys.nix                 # Public SSH key catalog grouped by purpose
       desktop.nix                  # Workstation layer (xyz)
-      server.nix                   # Server layer (nux, nex, rpi0)
+      server.nix                   # Headless system package and X server defaults
     hardware/
       amd.nix                      # AMD GPU/CPU
       nvidia.nix                   # Nvidia GPU (legacy_580)

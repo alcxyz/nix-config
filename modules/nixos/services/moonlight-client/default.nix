@@ -276,7 +276,8 @@
       "QT_QPA_EGLFS_KMS_CONFIG=${directDrmActiveKmsConfigFile}"
     ]
     ++ lib.optional (cfg.directDrmFixedOutput != null)
-    "QT_QPA_EGLFS_ALWAYS_SET_MODE=1";
+    "QT_QPA_EGLFS_ALWAYS_SET_MODE=1"
+    ++ cfg.directDrmExtraEnvironment;
   mkMoonlightExecutable = name: profileDirectory:
     if profileDirectory == null
     then lib.getExe moonlightPackage
@@ -332,23 +333,27 @@
     cfg.streamApplication
   );
   browserMoonlightInvocation = lib.optionalString browserStreamEnabled (
-    mkMoonlightInvocation defaultMoonlightExecutable [
-      "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
-      "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
-      "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
-      "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
-    ]
+    mkMoonlightInvocation defaultMoonlightExecutable (
+      [
+        "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+        "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
+        "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
+      ]
+      ++ lib.optional cfg.browserShowLocalCursor "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+    )
     cfg.browserStreamArguments
     cfg.browserStreamHost
     cfg.browserStreamApplication
   );
   browserSelectorMoonlightInvocation = lib.optionalString browserSelectorEnabled (
-    mkMoonlightInvocation selectorMoonlightExecutable [
-      "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
-      "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
-      "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
-      "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
-    ]
+    mkMoonlightInvocation selectorMoonlightExecutable (
+      [
+        "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
+        "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
+        "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
+      ]
+      ++ lib.optional cfg.browserShowLocalCursor "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
+    )
     cfg.browserStreamArguments
     browserSelectorHost
     cfg.browserStreamSelectorApplication
@@ -359,8 +364,8 @@
         "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
         "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
         "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
-        "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
       ]
+      ++ lib.optional cfg.browserShowLocalCursor "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
       ++ directDrmEnvironment
     )
     cfg.browserStreamArguments
@@ -375,8 +380,8 @@
           "MOONLIGHT_POLL_ABSOLUTE_MOUSE=1"
           "MOONLIGHT_ABSOLUTE_MOUSE_POLL_INTERVAL_MS=${toString cfg.browserAbsoluteMousePollIntervalMs}"
           "MOONLIGHT_ABSOLUTE_MOUSE_SENSITIVITY=${toString cfg.browserAbsoluteMouseSensitivity}"
-          "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
         ]
+        ++ lib.optional cfg.browserShowLocalCursor "MOONLIGHT_SHOW_LOCAL_CURSOR=1"
         ++ directDrmEnvironment
       )
       cfg.browserStreamArguments
@@ -572,7 +577,13 @@
         exit 2
       fi
       exec ${pkgs.coreutils}/bin/env \
-        QT_QPA_PLATFORM=${lib.escapeShellArg cfg.moonlightPlatform} \
+        QT_QPA_PLATFORM=${
+        lib.escapeShellArg (
+          if cfg.enableCompositedSession
+          then cfg.moonlightPlatform
+          else "offscreen"
+        )
+      } \
         ${selectorMoonlightExecutable} pair --pin "$1" ${
         lib.escapeShellArg (
           if browserSelectorLocalAddress == null
@@ -589,60 +600,67 @@
 
   activeKeyboardLayout = pkgs.writeShellApplication {
     name = "couch-active-keyboard-layout";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.hyprland
-      pkgs.jq
-    ];
-    text = ''
-      configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
-      fallback_layout="''${configured_layouts%%,*}"
-      active_keymap=""
+    runtimeInputs =
+      [pkgs.coreutils]
+      ++ lib.optionals cfg.enableCompositedSession [
+        pkgs.hyprland
+        pkgs.jq
+      ];
+    text =
+      if !cfg.enableCompositedSession
+      then ''
+        configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+        printf '%s\n' "''${configured_layouts%%,*}"
+      ''
+      else ''
+        configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+        fallback_layout="''${configured_layouts%%,*}"
+        active_keymap=""
 
-      # Give hot-plugged USB receivers a brief chance to appear at graphical
-      # login. Hyprland's "main" keyboard can remain the internal laptop
-      # device even while an external keyboard is the one being used.
-      for attempt in $(seq 1 20); do
-        devices="$(hyprctl -j devices 2>/dev/null || true)"
-        if printf '%s' "$devices" \
-          | jq -e 'type == "object" and (.keyboards | type == "array")' \
-            >/dev/null 2>&1; then
-          while IFS= read -r keyboard_name; do
-            keyboard_name="$(printf '%s' "$keyboard_name" | tr '[:upper:]' '[:lower:]')"
-            case "$keyboard_name" in
-              ${lib.concatStringsSep "\n              " (
-        lib.flatten (
-          lib.mapAttrsToList (
-            layout: matches:
-              map (
-                match: "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
-              )
-              matches
+        # Give hot-plugged USB receivers a brief chance to appear at graphical
+        # login. Hyprland's "main" keyboard can remain the internal laptop
+        # device even while an external keyboard is the one being used.
+        for attempt in $(seq 1 20); do
+          devices="$(hyprctl -j devices 2>/dev/null || true)"
+          if printf '%s' "$devices" \
+            | jq -e 'type == "object" and (.keyboards | type == "array")' \
+              >/dev/null 2>&1; then
+            while IFS= read -r keyboard_name; do
+              keyboard_name="$(printf '%s' "$keyboard_name" | tr '[:upper:]' '[:lower:]')"
+              case "$keyboard_name" in
+                ${lib.concatStringsSep "\n              " (
+          lib.flatten (
+            lib.mapAttrsToList (
+              layout: matches:
+                map (
+                  match: "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
+                )
+                matches
+            )
+            cfg.keyboardLayoutDeviceOverrides
           )
-          cfg.keyboardLayoutDeviceOverrides
-        )
-      )}
-            esac
-          done < <(printf '%s' "$devices" | jq -r '.keyboards[].name')
+        )}
+              esac
+            done < <(printf '%s' "$devices" | jq -r '.keyboards[].name')
 
-          active_keymap="$(
-            printf '%s' "$devices" \
-              | jq -r 'first(.keyboards[] | select(.main)).active_keymap // empty'
-          )"
-          if [ "$attempt" -ge 8 ] && [ -n "$active_keymap" ]; then
-            break
+            active_keymap="$(
+              printf '%s' "$devices" \
+                | jq -r 'first(.keyboards[] | select(.main)).active_keymap // empty'
+            )"
+            if [ "$attempt" -ge 8 ] && [ -n "$active_keymap" ]; then
+              break
+            fi
           fi
-        fi
-        sleep 0.25
-      done
+          sleep 0.25
+        done
 
-      case "$active_keymap" in
-        *Norwegian*) printf '%s\n' no ;;
-        *Russian*) printf '%s\n' ru ;;
-        *"English (US)"*) printf '%s\n' us ;;
-        *) printf '%s\n' "$fallback_layout" ;;
-      esac
-    '';
+        case "$active_keymap" in
+          *Norwegian*) printf '%s\n' no ;;
+          *Russian*) printf '%s\n' ru ;;
+          *"English (US)"*) printf '%s\n' us ;;
+          *) printf '%s\n' "$fallback_layout" ;;
+        esac
+      '';
   };
 
   directDrmOutputSnapshot = pkgs.writeShellApplication {
@@ -781,7 +799,7 @@
       output="$(
         jq -r \
           '[.outputs[] | select(.primary == true)][0].name // empty' \
-          ${lib.escapeShellArg directDrmKmsConfigFile} \
+          ${lib.escapeShellArg directDrmActiveKmsConfigFile} \
           2>/dev/null \
           || true
       )"
@@ -818,6 +836,7 @@
         )"
         if [ -n "$target_id" ]; then
           wpctl set-default "$target_id"
+          wpctl set-volume "$target_id" ${lib.escapeShellArg "${toString cfg.audioOutputStartupVolumePercent}%"}
           printf 'Direct DRM audio output: %s\n' "$target"
           exit 0
         fi
@@ -1446,6 +1465,12 @@
       ];
       text = ''
         active_mode=${lib.escapeShellArg mode}
+        persist_mode() {
+          mode_tmp="$(mktemp ${lib.escapeShellArg "${modeStateFile}.XXXXXX"})"
+          printf '%s\n' "$1" > "$mode_tmp"
+          chmod 0644 "$mode_tmp"
+          mv -f "$mode_tmp" ${lib.escapeShellArg modeStateFile}
+        }
         return_mode="$(
           tr -d '[:space:]' \
             < ${lib.escapeShellArg directDrmReturnModeFile} \
@@ -1471,11 +1496,15 @@
               || true
           )"
           current_mode="''${current_mode%%:*}"
+          if [ -z "$current_mode" ]; then
+            current_mode=${lib.escapeShellArg cfg.defaultSessionMode}
+          fi
           # An operator may force a direct session back to couch over SSH.
           # Preserve that explicit request instead of racing it with the
           # exiting DRM wrapper's normal return mode.
-          if [ "$current_mode" = "$active_mode" ]; then
-            printf '%s\n' "$return_mode" > ${lib.escapeShellArg modeStateFile}
+          if [ "$current_mode" = "$active_mode" ] \
+              && [ "$return_mode" != "$current_mode" ]; then
+            persist_mode "$return_mode"
             # Keep greetd's initial session alive long enough for the path unit
             # to restart it. Otherwise greetd can race ahead to its greeter,
             # which then needs the bounded stop timeout before recovery.
@@ -1524,43 +1553,81 @@
 
         ${lib.optionalString (prepareCommand != null) "${prepareCommand}\n"}
         run_moonlight() {
-          ${lib.getExe endpointSetup}
+          if ${lib.getExe endpointSetup}; then
+            :
+          else
+            status=$?
+            return "$status"
+          fi
           ${lib.optionalString (
           cfg.directDrmAudioOutputByConnector != {}
         ) "${lib.getExe directDrmAudioOutputSetup}"}
-          ${invocation} &
+          ${
+          if cfg.directDrmLogToJournal
+          then ''
+            log_dir="$(mktemp -d "''${XDG_RUNTIME_DIR:-/tmp}/moonlight-direct-drm.XXXXXX")"
+            log_fifo="$log_dir/output"
+            pid_file="$log_dir/pid"
+            mkfifo -m 600 "$log_fifo"
+            (
+              while IFS= read -r line || [ -n "$line" ]; do
+                printf '%s\n' "$line" > /dev/tty1
+                printf '%s\n' "$line"
+                case "$line" in
+                  *"Connection terminated:"*)
+                    if read -r failed_pid < "$pid_file"; then
+                      kill -TERM "$failed_pid" 2>/dev/null || true
+                    fi
+                    ;;
+                esac
+              done < "$log_fifo"
+            ) | ${pkgs.systemd}/bin/systemd-cat --identifier=moonlight-direct-drm &
+            logger_pid=$!
+            ${invocation} \
+              > "$log_fifo" 2>&1 &
+          ''
+          else "${invocation} &"
+        }
           moonlight_pid=$!
+          ${lib.optionalString cfg.directDrmLogToJournal ''
+          printf '%s\n' "$moonlight_pid" > "$pid_file"
+        ''}
 
           ${lib.optionalString (cfg.browserStreamLayoutCommand != null) ''
-            (
-              COUCH_KEYBOARD_LAYOUT="$(
-                tr -d '[:space:]' \
-                  < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
-                  2>/dev/null \
-                  || true
-              )"
-              if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
-                configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
-                COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
-              fi
-              export COUCH_KEYBOARD_LAYOUT
-              export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
-              export COUCH_STREAM_APPLICATION=${
-              lib.escapeShellArg (
-                if application == null
-                then ""
-                else application
-              )
-            }
-              ${cfg.browserStreamLayoutCommand}
-            ) &
-          ''}
+          (
+            COUCH_KEYBOARD_LAYOUT="$(
+              tr -d '[:space:]' \
+                < ${lib.escapeShellArg directDrmKeyboardLayoutFile} \
+                2>/dev/null \
+                || true
+            )"
+            if [ -z "$COUCH_KEYBOARD_LAYOUT" ]; then
+              configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
+              COUCH_KEYBOARD_LAYOUT="''${configured_layouts%%,*}"
+            fi
+            export COUCH_KEYBOARD_LAYOUT
+            export COUCH_PRESENTATION_SCALE=${toString cfg.browserPresentationScale}
+            export COUCH_STREAM_APPLICATION=${
+            lib.escapeShellArg (
+              if application == null
+              then ""
+              else application
+            )
+          }
+            ${cfg.browserStreamLayoutCommand}
+          ) &
+        ''}
 
           if wait "$moonlight_pid"; then
             status=0
           else
             status=$?
           fi
+          ${lib.optionalString cfg.directDrmLogToJournal ''
+          wait "$logger_pid" 2>/dev/null || true
+          rm -f "$log_fifo" "$pid_file"
+          rmdir "$log_dir"
+        ''}
         }
 
         ${
@@ -1571,14 +1638,22 @@
             # An explicit mode change is still authoritative: its control path
             # updates the mode file before terminating Moonlight.
             while true; do
-              run_moonlight
+              if run_moonlight; then
+                :
+              else
+                status=$?
+              fi
               current_mode="$(
                 tr -d '[:space:]' \
                   < ${lib.escapeShellArg modeStateFile} \
                   2>/dev/null \
-                  || true
+                || true
               )"
-              if [ "''${current_mode%%:*}" != "$active_mode" ]; then
+              current_mode="''${current_mode%%:*}"
+              if [ -z "$current_mode" ]; then
+                current_mode=${lib.escapeShellArg cfg.defaultSessionMode}
+              fi
+              if [ "$current_mode" != "$active_mode" ]; then
                 return_to_session "$status"
               fi
               sleep 2
@@ -4113,7 +4188,7 @@
   };
 
   sessionMode = pkgs.writeShellApplication {
-    name = "xps-session-mode";
+    name = "nixbox-mode";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.procps
@@ -4122,6 +4197,14 @@
     ];
     text = ''
       mode_file=${lib.escapeShellArg modeStateFile}
+      persist_state() {
+        state_file="$1"
+        state_value="$2"
+        state_tmp="$(mktemp "$state_file.XXXXXX")"
+        printf '%s\n' "$state_value" > "$state_tmp"
+        chmod 0644 "$state_tmp"
+        mv -f "$state_tmp" "$state_file"
+      }
       current="$(tr -d '[:space:]' < "$mode_file" 2>/dev/null || true)"
       current_mode="''${current%%:*}"
       supported_modes="couch${
@@ -4143,7 +4226,7 @@
             printf 'Nixbox is already configured for %s mode\n' "$1"
             exit 0
           fi
-          printf '%s\n' "$1" > "$mode_file"
+          persist_state "$mode_file" "$1"
           ${lib.optionalString persistentDirectDrmBrowserDefault ''
         case "$current_mode" in
           direct-*)
@@ -4204,8 +4287,7 @@
         ''}
               ;;
           esac
-          printf '%s\n' "$return_mode" \
-            > ${lib.escapeShellArg directDrmReturnModeFile}
+          persist_state ${lib.escapeShellArg directDrmReturnModeFile} "$return_mode"
             # Stop compositor clients while their Wayland/XWayland connections
             # are still valid. Letting greetd tear them down first can leave
             # otherwise expected disconnects recorded as failed user units.
@@ -4232,12 +4314,12 @@
               xdg-desktop-portal-gtk.service \
               >/dev/null 2>&1 || true
           boot_id="$(tr -d '[:space:]' < /proc/sys/kernel/random/boot_id)"
-          printf '%s:%s\n' "$1" "$boot_id" > "$mode_file"
+          persist_state "$mode_file" "$1:$boot_id"
           printf 'Switching Nixbox to %s mode\n' "$1"
           ;;
       ''}
         *)
-          echo "usage: xps-session-mode [$supported_modes]" >&2
+          echo "usage: nixbox-mode [$supported_modes]" >&2
           exit 2
           ;;
       esac
@@ -4590,7 +4672,10 @@
     '';
   };
 
-  sessionCommand = sessionLauncher;
+  sessionCommand =
+    if cfg.enableCompositedSession
+    then sessionLauncher
+    else lib.getExe directDrmBrowserSession;
 
   sessionDispatcher = pkgs.writeShellApplication {
     name = "couch-session-dispatcher";
@@ -4599,6 +4684,12 @@
       pkgs.systemd
     ];
     text = ''
+      persist_mode() {
+        mode_tmp="$(mktemp ${lib.escapeShellArg "${modeStateFile}.XXXXXX"})"
+        printf '%s\n' "$1" > "$mode_tmp"
+        chmod 0644 "$mode_tmp"
+        mv -f "$mode_tmp" ${lib.escapeShellArg modeStateFile}
+      }
       mode="$(tr -d '[:space:]' < ${lib.escapeShellArg modeStateFile} 2>/dev/null || true)"
       mode_name="''${mode%%:*}"
       mode_token=""
@@ -4625,8 +4716,7 @@
           if [ "$mode_token" = "$boot_id" ]; then
             exec ${lib.getExe directDrmStreamSession}
           fi
-          printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
-            > ${lib.escapeShellArg modeStateFile}
+          persist_mode ${lib.escapeShellArg cfg.defaultSessionMode}
           exec ${sessionCommand}
           ;;
       ''}
@@ -4636,8 +4726,7 @@
           if [ "$mode_token" = "$boot_id" ]${lib.optionalString persistentDirectDrmBrowserDefault " || [ -z \"$mode_token\" ]"}; then
             exec ${lib.getExe directDrmBrowserSession}
           fi
-          printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
-            > ${lib.escapeShellArg modeStateFile}
+          persist_mode ${lib.escapeShellArg cfg.defaultSessionMode}
           exec ${sessionCommand}
           ;;
         ${lib.optionalString browserSelectorEnabled ''
@@ -4646,8 +4735,7 @@
             if [ "$mode_token" = "$boot_id" ]; then
               exec ${lib.getExe directDrmBrowserSelectorSession}
             fi
-            printf '%s\n' ${lib.escapeShellArg cfg.defaultSessionMode} \
-              > ${lib.escapeShellArg modeStateFile}
+            persist_mode ${lib.escapeShellArg cfg.defaultSessionMode}
             exec ${sessionCommand}
             ;;
         ''}
@@ -4661,6 +4749,16 @@
 in {
   options.services.moonlight-client = {
     enable = lib.mkEnableOption "a dedicated Moonlight Hyprland session";
+
+    enableCompositedSession = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Provide the Hyprland couch session and use it as the recovery path.
+        Disable this for direct-display appliances whose only sessions let
+        Moonlight own DRM through EGLFS.
+      '';
+    };
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -4924,6 +5022,22 @@ in {
       '';
     };
 
+    directDrmExtraEnvironment = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      example = ["MOONLIGHT_VIDEO_STATS_LOG_INTERVAL_MS=5000"];
+      description = "Additional NAME=VALUE environment entries for direct-DRM Moonlight sessions.";
+    };
+
+    directDrmLogToJournal = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Mirror direct-DRM Moonlight output to the system journal while
+        retaining it on the appliance's virtual console.
+      '';
+    };
+
     directDrmStreamArguments = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
@@ -4978,6 +5092,16 @@ in {
       description = ''
         Poll interval in milliseconds for physical pointer input in
         absolute-mouse browser sessions.
+      '';
+    };
+
+    browserShowLocalCursor = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Show Moonlight's local cursor during browser streams. Disable this for
+        direct-display clients where the local cursor otherwise remains parked
+        over the streamed desktop.
       '';
     };
 
@@ -5570,8 +5694,8 @@ in {
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages =
-      [
-        moonlightPackage
+      [moonlightPackage]
+      ++ lib.optionals cfg.enableCompositedSession [
         couchApplications
         couchStreamControl
         closeActiveWindow
@@ -5618,7 +5742,7 @@ in {
       couchFallbackBrowser.package
       ++ lib.optional (cfg.protectedBrowserPackage != null) protectedBrowser
       ++ lib.optional sessionModeSwitchEnabled sessionMode;
-    services.displayManager.sessionPackages = [sessionPackage];
+    services.displayManager.sessionPackages = lib.optional cfg.enableCompositedSession sessionPackage;
 
     # Install udev rules for common controllers, including Steam hardware.
     hardware.steam-hardware.enable = true;
@@ -5656,18 +5780,19 @@ in {
       };
     };
 
-    systemd.user.services.nixbox-direct-input = lib.mkIf (
-      directModeInputShortcutsEnabled || kdeConnectDirectInputEnabled
-    ) {
-      description = "Direct-display shortcuts and KDE Connect input bridge";
-      wantedBy = ["default.target"];
-      serviceConfig = {
-        Type = "simple";
-        ExecStart = lib.getExe directModeInputDaemon;
-        Restart = "always";
-        RestartSec = 1;
+    systemd.user.services.nixbox-direct-input =
+      lib.mkIf (
+        directModeInputShortcutsEnabled || kdeConnectDirectInputEnabled
+      ) {
+        description = "Direct-display shortcuts and KDE Connect input bridge";
+        wantedBy = ["default.target"];
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = lib.getExe directModeInputDaemon;
+          Restart = "always";
+          RestartSec = 1;
+        };
       };
-    };
 
     systemd.user.services.couch-moonlight-stream = lib.mkIf cfg.enableControllerShortcuts {
       description = "Controller-launched Moonlight stream";
@@ -5684,46 +5809,58 @@ in {
       };
     };
 
-    systemd.user.services.couch-moonlight-browser-stream = lib.mkIf browserStreamEnabled {
-      description = "Controller-launched remote browser stream";
-      restartIfChanged = false;
-      serviceConfig = {
-        Type = "simple";
-        ExecStartPre = "-${lib.getExe mergedUiControl} game";
-        ExecStart = lib.getExe moonlightBrowserSession;
-        ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
-        TimeoutStopSec = 3;
-        KillMode = "control-group";
-        SendSIGKILL = true;
+    systemd.user.services.couch-moonlight-browser-stream =
+      lib.mkIf (
+        cfg.enableCompositedSession && browserStreamEnabled
+      ) {
+        description = "Controller-launched remote browser stream";
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "simple";
+          ExecStartPre = "-${lib.getExe mergedUiControl} game";
+          ExecStart = lib.getExe moonlightBrowserSession;
+          ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
+          TimeoutStopSec = 3;
+          KillMode = "control-group";
+          SendSIGKILL = true;
+        };
       };
-    };
 
-    systemd.user.services.couch-moonlight-browser-selector = lib.mkIf browserSelectorEnabled {
-      description = "PIN-protected remote browser selector";
-      restartIfChanged = false;
-      serviceConfig = {
-        Type = "simple";
-        ExecStartPre = "-${lib.getExe mergedUiControl} game";
-        ExecStart = lib.getExe moonlightBrowserSelectorSession;
-        ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
-        TimeoutStopSec = 3;
-        KillMode = "control-group";
-        SendSIGKILL = true;
+    systemd.user.services.couch-moonlight-browser-selector =
+      lib.mkIf (
+        cfg.enableCompositedSession && browserSelectorEnabled
+      ) {
+        description = "PIN-protected remote browser selector";
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "simple";
+          ExecStartPre = "-${lib.getExe mergedUiControl} game";
+          ExecStart = lib.getExe moonlightBrowserSelectorSession;
+          ExecStopPost = "-${lib.getExe mergedUiControl} refresh";
+          TimeoutStopSec = 3;
+          KillMode = "control-group";
+          SendSIGKILL = true;
+        };
       };
-    };
 
-    systemd.user.services.couch-protected-browser = lib.mkIf (cfg.protectedBrowserPackage != null) {
-      description = "Independent protected couch browser supervisor";
-      serviceConfig = {
-        Type = "exec";
-        ExecStart = lib.getExe protectedBrowserSession;
+    systemd.user.services.couch-protected-browser =
+      lib.mkIf (
+        cfg.enableCompositedSession && cfg.protectedBrowserPackage != null
+      ) {
+        description = "Independent protected couch browser supervisor";
+        serviceConfig = {
+          Type = "exec";
+          ExecStart = lib.getExe protectedBrowserSession;
+        };
       };
-    };
 
-    systemd.user.services.xdg-desktop-portal-gtk = lib.mkIf persistentDirectDrmBrowserDefault {
-      overrideStrategy = "asDropin";
-      serviceConfig.ExecCondition = compositorSessionCondition;
-    };
+    systemd.user.services.xdg-desktop-portal-gtk =
+      lib.mkIf (
+        cfg.enableCompositedSession && persistentDirectDrmBrowserDefault
+      ) {
+        overrideStrategy = "asDropin";
+        serviceConfig.ExecCondition = compositorSessionCondition;
+      };
 
     systemd.user.services.couch-dms = lib.mkIf cfg.enableDms {
       description = "Supervised DMS shell for the dedicated couch session";
@@ -5785,11 +5922,32 @@ in {
       user = cfg.autoLoginUser;
     };
 
+    # greetd validates default_session even when initial_session handles the
+    # automatic login. Direct-only appliances have no desktop greeter, so use
+    # the same dispatcher as their recovery session as well.
+    services.greetd.settings.default_session =
+      lib.mkIf (
+        cfg.autoLoginUser != null && !cfg.enableCompositedSession
+      ) {
+        command =
+          if sessionModeSwitchEnabled
+          then lib.getExe sessionDispatcher
+          else sessionCommand;
+        user = cfg.autoLoginUser;
+      };
+
     # A persistent direct-display appliance must recover its initial session
     # after an operator or service restart as well as after a mode-file change.
     systemd.services.greetd.preStart = lib.mkIf persistentDirectDrmBrowserDefault ''
       rm -f /run/greetd.run
     '';
+
+    # Direct-display appliances have no fallback greeter or compositor. Keep
+    # the display session supervised even when greetd's child exits cleanly.
+    systemd.services.greetd.serviceConfig = lib.mkIf persistentDirectDrmBrowserDefault {
+      Restart = "always";
+      RestartSec = 2;
+    };
 
     systemd.tmpfiles.rules =
       lib.optional (
@@ -5845,6 +6003,10 @@ in {
     };
 
     assertions = [
+      {
+        assertion = cfg.enableCompositedSession || cfg.defaultSessionMode == "direct-browser";
+        message = "services.moonlight-client without a composited session requires direct-browser as its default session mode";
+      }
       {
         assertion =
           cfg.kdeConnectPointerPrecisionSensitivity

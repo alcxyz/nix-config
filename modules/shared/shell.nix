@@ -8,7 +8,7 @@
         "bash"
         "xonsh"
       ];
-      default = "nu";
+      default = "zsh";
       description = "Default interactive login shell for the primary user.";
     };
 

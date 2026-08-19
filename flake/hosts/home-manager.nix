@@ -8,8 +8,15 @@
   inherit (config.alc) inventory pkgsFor username;
   hostLib = import ./lib.nix {inherit config inputs self;};
 
-  nixosHosts = lib.filterAttrs (_: hostAttrs: hostAttrs.platform == "nixos") inventory.hosts;
-  darwinHosts = lib.filterAttrs (_: hostAttrs: hostAttrs.platform == "darwin") inventory.hosts;
+  homeManagerEnabled = hostAttrs: hostAttrs.homeManager or true;
+  nixosHosts =
+    lib.filterAttrs
+    (_: hostAttrs: hostAttrs.platform == "nixos" && homeManagerEnabled hostAttrs)
+    inventory.hosts;
+  darwinHosts =
+    lib.filterAttrs
+    (_: hostAttrs: hostAttrs.platform == "darwin" && homeManagerEnabled hostAttrs)
+    inventory.hosts;
 
   mkHomeConfiguration = hostName: hostAttrs: homeConfigPath:
     inputs.home-manager.lib.homeManagerConfiguration {

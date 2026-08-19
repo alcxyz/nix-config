@@ -10,6 +10,14 @@ with lib; let
   cfg = config.programs.wezterm; # Use the built-in module's enable option
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
+  xonshPackage = pkgs.xonsh-with-direnv or pkgs.xonsh;
+  defaultShellProgram = {
+    bash = "${pkgs.bashInteractive}/bin/bash";
+    nu = "${pkgs.nushell}/bin/nu";
+    nushell = "${pkgs.nushell}/bin/nu";
+    xonsh = "${xonshPackage}/bin/xonsh";
+    zsh = "${pkgs.zsh}/bin/zsh";
+  }.${config.alc.shell.default};
 
   # Define a color scheme based on the nix-colors palette
   paletteColorScheme = {
@@ -56,7 +64,7 @@ in {
 
       config.color_scheme = "PaletteScheme"
 
-      config.default_prog = { "${pkgs.nushell}/bin/nu", "-l" }
+      config.default_prog = { "${defaultShellProgram}", "-l" }
 
       config.font = wezterm.font("JetBrainsMono Nerd Font", { weight = "Regular" })
       config.font_size = 14.0

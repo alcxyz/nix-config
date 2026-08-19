@@ -377,12 +377,12 @@ controller input also continue to reach Moonlight directly. The normal
 
 ```sh
 # Start a one-shot session on the primary TV.
-xps-session-mode direct-browser
-xps-session-mode direct-private
-xps-session-mode direct-stream
+nixbox-mode direct-browser
+nixbox-mode direct-private
+nixbox-mode direct-stream
 
 # Force recovery to the normal XPS media-center profile.
-xps-session-mode merged
+nixbox-mode merged
 ```
 
 The direct request is boot-scoped. A stale one-shot direct request cannot reopen
@@ -421,7 +421,7 @@ compositor-bound session services.
 These commands report the current persisted choices without changing them:
 
 ```sh
-xps-session-mode
+nixbox-mode
 couch-display-layout status
 couch-display-mirror status
 couch-audio-output status

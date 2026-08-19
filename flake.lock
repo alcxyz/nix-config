@@ -227,17 +227,18 @@
         "displaycontrol": "displaycontrol",
         "firstparty": "firstparty",
         "quicksearch": "quicksearch",
+        "screenshot": "screenshot",
         "spotify": "spotify",
         "translate": "translate",
         "vault": "vault",
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1784473423,
-        "narHash": "sha256-qxIOx6qUC9hovcXHnrzxi+u+m5vPoFo/R33NARn04e8=",
+        "lastModified": 1786882393,
+        "narHash": "sha256-UpIkEixj5RDoarXuD1drIQkqd9JAgA+Z2SfEr0sxK5E=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "447ed315f395ae47b174b820f08262436e2f4197",
+        "rev": "da88c7d873f6e6c880eae238f00ef9837f122151",
         "type": "github"
       },
       "original": {
@@ -884,18 +885,39 @@
         ]
       },
       "locked": {
-        "lastModified": 1786690162,
-        "narHash": "sha256-nJtKEiztM0hOtJHd1piD61Wz8bsk4bTvaxfzYfZz2KE=",
+        "lastModified": 1787092568,
+        "narHash": "sha256-gZkGJwxPjljN4s6GLlP+1WoWdBNBayMDctrF+aRvRlM=",
         "ref": "dev",
-        "rev": "5a6e3263779680d346bb5b416635ace335e4601f",
-        "revCount": 306,
+        "rev": "43b488f3354ef160e01038d0cb3fa5c43ec98e34",
+        "revCount": 311,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
+        "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
       "original": {
         "ref": "dev",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-secrets.git"
+        "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
+      }
+    },
+    "nixos-hardware": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786528975,
+        "narHash": "sha256-8KuasCs+mVQ7WbLONUf/QB7NZeQvovyXRyxAj4nOOzY=",
+        "owner": "NixOS",
+        "repo": "nixos-hardware",
+        "rev": "3e7edd9afe17e45521300e041c65de3015f4a302",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "master",
+        "repo": "nixos-hardware",
+        "type": "github"
       }
     },
     "nixpkgs": {
@@ -1115,6 +1137,7 @@
         "nix-colors": "nix-colors",
         "nix-packages": "nix-packages",
         "nix-secrets": "nix-secrets",
+        "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_2",
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",
@@ -1167,6 +1190,23 @@
         "owner": "rustfs",
         "ref": "1.0.0-beta.10",
         "repo": "rustfs",
+        "type": "github"
+      }
+    },
+    "screenshot": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786173229,
+        "narHash": "sha256-TjX+mcEdbl///VGCkjD2Cve17SBTV0PRbyEE8P0WbI4=",
+        "owner": "alcxyz",
+        "repo": "DMS-Screenshot",
+        "rev": "663eecc48d8532143c5995148aa561122d6bfd7e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "ref": "main",
+        "repo": "DMS-Screenshot",
         "type": "github"
       }
     },

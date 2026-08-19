@@ -1,0 +1,47 @@
+diff --git a/app/streaming/video/ffmpeg.cpp b/app/streaming/video/ffmpeg.cpp
+index 8e8b537..4803d9c 100644
+--- a/app/streaming/video/ffmpeg.cpp
++++ b/app/streaming/video/ffmpeg.cpp
+@@ -1752,18 +1752,27 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
+ 
+     // Flip stats windows roughly every second
+     if (SDL_TICKS_PASSED(SDL_GetTicks(), m_ActiveWndVideoStats.measurementStartTimestamp + 1000)) {
++        VIDEO_STATS lastTwoWndStats = {};
++        addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
++        addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
++
+         // Update overlay stats if it's enabled
+         if (Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug)) {
+-            VIDEO_STATS lastTwoWndStats = {};
+-            addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
+-            addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
+-
+             stringifyVideoStats(lastTwoWndStats,
+                                 Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug),
+                                 Session::get()->getOverlayManager().getOverlayMaxTextLength());
+             Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
+         }
+ 
++        const char* statsLogIntervalValue = SDL_getenv("MOONLIGHT_VIDEO_STATS_LOG_INTERVAL_MS");
++        int statsLogInterval = statsLogIntervalValue != nullptr ? SDL_atoi(statsLogIntervalValue) : 0;
++        if (statsLogInterval > 0 &&
++                (m_LastVideoStatsLogTimestamp == 0 ||
++                 SDL_TICKS_PASSED(SDL_GetTicks(), m_LastVideoStatsLogTimestamp + statsLogInterval))) {
++            logVideoStats(lastTwoWndStats, "Rolling video stats");
++            m_LastVideoStatsLogTimestamp = SDL_GetTicks();
++        }
++
+         // Accumulate these values into the global stats
+         addVideoStats(m_ActiveWndVideoStats, m_GlobalVideoStats);
+ 
+diff --git a/app/streaming/video/ffmpeg.h b/app/streaming/video/ffmpeg.h
+index 6b53cb4..299f92b 100644
+--- a/app/streaming/video/ffmpeg.h
++++ b/app/streaming/video/ffmpeg.h
+@@ -100,5 +100,6 @@ private:
+     VIDEO_STATS m_LastWndVideoStats;
+     VIDEO_STATS m_GlobalVideoStats;
+ 
++    Uint32 m_LastVideoStatsLogTimestamp = 0;
+     int m_FramesIn;
+     int m_FramesOut;

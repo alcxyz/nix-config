@@ -38,6 +38,8 @@ in {
   ];
 
   # ==================== Nix Configuration ====================
+  programs.zsh.enable = config.alc.shell.enableZsh;
+
   programs.ssh.knownHosts = {
     xyz = {
       hostNames = [

@@ -1,0 +1,38 @@
+diff --git a/app/streaming/video/ffmpeg-renderers/drm.cpp b/app/streaming/video/ffmpeg-renderers/drm.cpp
+index 0e72944..b883c7f 100644
+--- a/app/streaming/video/ffmpeg-renderers/drm.cpp
++++ b/app/streaming/video/ffmpeg-renderers/drm.cpp
+@@ -325,6 +325,25 @@ bool DrmRenderer::initialize(PDECODER_PARAMETERS params)
+     m_VideoFormat = params->videoFormat;
+     m_SwFrameMapper.setVideoFormat(params->videoFormat);
+ 
++    // Qt's EGLFS backend already owns the primary DRM node. On Raspberry Pi
++    // 3, find and reuse the primary-node FD that actually owns DRM master so
++    // decoded YUV frames can bypass the much slower SDL texture-upload path.
++    if (SDL_getenv("MOONLIGHT_DRM_USE_QT_MASTER_FD") != nullptr) {
++        for (int candidateFd = 0; candidateFd < 1024; candidateFd++) {
++            if (drmGetNodeTypeFromFd(candidateFd) == DRM_NODE_PRIMARY
++                    && drmIsMaster(candidateFd)) {
++                m_DrmFd = candidateFd;
++                m_SdlOwnsDrmFd = true;
++                break;
++            }
++        }
++    }
++
++    if (m_DrmFd >= 0) {
++        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
++                    "Sharing active DRM master FD with Qt EGLFS");
++    }
++    else {
+ #if SDL_VERSION_ATLEAST(2, 0, 15)
+     SDL_SysWMinfo info;
+ 
+@@ -389,6 +408,7 @@
+             }
+         }
+     }
++    }
+ 
+     // Create the device context first because it is needed whether we can
+     // actually use direct rendering or not.
