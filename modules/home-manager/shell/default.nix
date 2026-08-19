@@ -17,6 +17,7 @@
 
   shellAliases = {
     tf = "terraform";
+    np = "nix-shell -p";
     v = "nvim";
     d = "docker";
     dcd = "docker compose down";
@@ -139,6 +140,7 @@ in {
     zsh = {
       enable = enableZsh;
       enableCompletion = true;
+      defaultKeymap = "viins";
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
     };
