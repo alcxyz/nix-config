@@ -333,24 +333,6 @@
         "type": "github"
       }
     },
-    "flake-parts_2": {
-      "inputs": {
-        "nixpkgs-lib": "nixpkgs-lib_3"
-      },
-      "locked": {
-        "lastModified": 1777898446,
-        "narHash": "sha256-tTEOTTjMHd8Vffn4hehLTPgOXXxJ27xfkf4DoyZgD7s=",
-        "owner": "hercules-ci",
-        "repo": "flake-parts",
-        "rev": "5d82aa3d6b5da25dbfec1a995750a70a03b8c659",
-        "type": "github"
-      },
-      "original": {
-        "owner": "hercules-ci",
-        "repo": "flake-parts",
-        "type": "github"
-      }
-    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -853,21 +835,6 @@
         "type": "github"
       }
     },
-    "import-tree": {
-      "locked": {
-        "lastModified": 1773693634,
-        "narHash": "sha256-BtZ2dtkBdSUnFPPFc+n0kcMbgaTxzFNPv2iaO326Ffg=",
-        "owner": "vic",
-        "repo": "import-tree",
-        "rev": "c41e7d58045f9057880b0d85e1152d6a4430dbf1",
-        "type": "github"
-      },
-      "original": {
-        "owner": "vic",
-        "repo": "import-tree",
-        "type": "github"
-      }
-    },
     "nix-colors": {
       "inputs": {
         "base16-schemes": "base16-schemes",
@@ -887,28 +854,6 @@
         "type": "github"
       }
     },
-    "nix-darwin": {
-      "inputs": {
-        "nixpkgs": [
-          "paneru",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1777780666,
-        "narHash": "sha256-8wURyQMdDkGUarSTKOGdCuFfYiwa3HbzwscUfn3STDE=",
-        "owner": "nix-darwin",
-        "repo": "nix-darwin",
-        "rev": "8c62fba0854ba15c8917aed18894dbccb48a3777",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-darwin",
-        "ref": "master",
-        "repo": "nix-darwin",
-        "type": "github"
-      }
-    },
     "nix-packages": {
       "inputs": {
         "flake-utils": "flake-utils_3",
@@ -918,11 +863,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1786594249,
-        "narHash": "sha256-M+YbmuaP4ofwt658SAjktlQpvyP2b0cyEnVDxOC+8Xk=",
+        "lastModified": 1787122549,
+        "narHash": "sha256-s6bpp2uinOMXrjre7csnvNcyoEi01bdbApk7/S4dTv0=",
         "ref": "dev",
-        "rev": "5347cd14017f21dd7118c82f3e2fb3d17f1c0988",
-        "revCount": 446,
+        "rev": "29cabecbf42fd356c11472495eb677edde5923f1",
+        "revCount": 462,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -999,21 +944,6 @@
         "type": "github"
       }
     },
-    "nixpkgs-lib_3": {
-      "locked": {
-        "lastModified": 1777168982,
-        "narHash": "sha256-GOkGPcboWE9BmGCRMLX3worL4EMnsnG8MyKmXNeYuhQ=",
-        "owner": "nix-community",
-        "repo": "nixpkgs.lib",
-        "rev": "f5901329dade4a6ea039af1433fb087bd9c1fe14",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-community",
-        "repo": "nixpkgs.lib",
-        "type": "github"
-      }
-    },
     "nixpkgs-unstable": {
       "locked": {
         "lastModified": 1783522502,
@@ -1043,30 +973,6 @@
         "owner": "NixOS",
         "ref": "nixos-unstable",
         "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "paneru": {
-      "inputs": {
-        "flake-parts": "flake-parts_2",
-        "import-tree": "import-tree",
-        "nix-darwin": "nix-darwin",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1780069798,
-        "narHash": "sha256-mxpp4ODSecaErYnvSLfpV+h3gohugowMRCDr9s9lpjI=",
-        "owner": "alcxyz",
-        "repo": "paneru",
-        "rev": "9671f9a33ee92221e71c5efefd20bedb44d13446",
-        "type": "github"
-      },
-      "original": {
-        "owner": "alcxyz",
-        "ref": "qa/alc-dev",
-        "repo": "paneru",
         "type": "github"
       }
     },
@@ -1210,7 +1116,6 @@
         "nix-packages": "nix-packages",
         "nix-secrets": "nix-secrets",
         "nixpkgs": "nixpkgs_2",
-        "paneru": "paneru",
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",
         "quickshell": "quickshell",

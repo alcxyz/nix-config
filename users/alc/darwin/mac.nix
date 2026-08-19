@@ -19,7 +19,6 @@ in {
     "${configDir}/modules/home-manager/programs/wezterm/default.nix"
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/programs/karabiner/default.nix"
-    "${configDir}/modules/home-manager/programs/paneru/default.nix"
     "${configDir}/modules/home-manager/programs/moonlight-endpoints/default.nix"
     inputs.nix-secrets.homeManagerModules.darwinOperator
   ];
@@ -28,7 +27,6 @@ in {
 
   programs.wezterm.enable = true;
   programs.karabiner.managed.enable = true;
-  programs.paneru.managed.enable = false;
   programs.atuin.daemon.enable = false;
   programs.moonlightEndpoints.launchers = [
     {
