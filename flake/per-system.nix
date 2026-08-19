@@ -103,10 +103,9 @@
         shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
       '';
 
-      check-k8s-node-reboot-workload-phases =
-        mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash] ''
-          bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
-        '';
+      check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''
+        bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
+      '';
 
       wolf-browser-input-contract =
         mkRepoCheck "wolf-browser-input-contract" [

@@ -10,6 +10,79 @@ source "$ROOT/scripts/ops/k8s-node-reboot.sh"
 
 export NODE=worker-a
 export SETTLE_TIMEOUT=1s
+
+NODES_JSON='{
+  "items": [
+    {
+      "metadata": {
+        "name": "worker-a",
+        "labels": {
+          "kubernetes.io/hostname": "worker-a",
+          "browser-worker": "true"
+        }
+      },
+      "spec": {},
+      "status": {"conditions": [{"type": "Ready", "status": "True"}]}
+    },
+    {
+      "metadata": {
+        "name": "worker-b",
+        "labels": {"kubernetes.io/hostname": "worker-b"}
+      },
+      "spec": {},
+      "status": {"conditions": [{"type": "Ready", "status": "True"}]}
+    }
+  ]
+}'
+WORKLOAD_JSON=""
+
+# Invoked indirectly by workload_requires_target_node from the sourced script.
+# shellcheck disable=SC2329
+kubectl() {
+  if [[ "$*" == "get nodes -o json" ]]; then
+    printf '%s\n' "$NODES_JSON"
+    return 0
+  fi
+
+  if [[ "$*" == *"get deployment/fixture -o json" ]]; then
+    printf '%s\n' "$WORKLOAD_JSON"
+    return 0
+  fi
+
+  printf 'unexpected pinning-test kubectl call: %s\n' "$*" >&2
+  return 1
+}
+
+WORKLOAD_JSON='{
+  "spec": {"template": {"spec": {"nodeSelector": {"browser-worker": "true"}}}}
+}'
+# The implementation is imported from the sourced operations script. A test
+# double with the same name is installed below for the phase-ordering checks.
+# shellcheck disable=SC2218
+workload_requires_target_node default deployment/fixture
+
+WORKLOAD_JSON='{
+  "spec": {"template": {"spec": {}}}
+}'
+if workload_requires_target_node default deployment/fixture; then
+  printf 'portable workload was incorrectly classified as target-pinned\n' >&2
+  exit 1
+fi
+
+WORKLOAD_JSON='{
+  "spec": {"template": {"spec": {"affinity": {"nodeAffinity": {
+    "requiredDuringSchedulingIgnoredDuringExecution": {"nodeSelectorTerms": [{
+      "matchExpressions": [{
+        "key": "browser-worker",
+        "operator": "In",
+        "values": ["true"]
+      }]
+    }]}
+  }}}}}
+}'
+# shellcheck disable=SC2218
+workload_requires_target_node default deployment/fixture
+
 WORKLOADS="$TMP/workloads"
 PREFLIGHT_CALLS="$TMP/preflight-calls"
 RETURN_CALLS="$TMP/return-calls"
