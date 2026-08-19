@@ -158,6 +158,7 @@
       system = "aarch64-darwin";
       platform = "darwin";
       role = "mac";
+      accountUsername = "andre-lucas.carvalho";
       k8sRole = null;
       aliases = ["AM-VYH2F56CR6"];
       darwinNetworkName = "AM-VYH2F56CR6";

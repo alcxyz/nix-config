@@ -4,6 +4,7 @@
   pkgs,
   lib,
   username,
+  accountUsername,
   hostName,
   configDir,
   inputs,
@@ -67,12 +68,12 @@ in
     ];
 
     # ==================== Home Manager Core Settings ====================
-    home.username = username;
+    home.username = accountUsername;
     # This still needs a conditional, as `homeDirectory` is fundamentally different!
     home.homeDirectory =
       if pkgs.stdenv.isDarwin
-      then "/Users/${username}"
-      else "/home/${username}";
+      then "/Users/${accountUsername}"
+      else "/home/${accountUsername}";
     home.stateVersion = "24.11";
 
     programs.home-manager.enable = true;

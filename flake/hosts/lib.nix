@@ -15,6 +15,8 @@
 in {
   specialArgsFor = hostName: hostAttrs: {
     inherit inputs inventory hostName username;
+    # Keep the repository identity stable when a host's OS account name differs.
+    accountUsername = hostAttrs.accountUsername or username;
     configDir = self;
     hostInventory = hostAttrs;
     hostRole = inventory.roles.${hostAttrs.role};

@@ -4,7 +4,7 @@
   hostInventory,
   hostRole,
   hostK8sRole ? null,
-  username,
+  accountUsername,
   ...
 }: let
   inherit (lib) mkOption types;
@@ -88,7 +88,7 @@ in {
   config.alc.host = {
     name = hostName;
     inherit (hostInventory) system platform role;
-    primaryUser = username;
+    primaryUser = accountUsername;
     aliases = hostInventory.aliases or [];
     roleMetadata = hostRole;
     inventory = hostInventory;

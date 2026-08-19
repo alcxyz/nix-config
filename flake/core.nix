@@ -7,7 +7,7 @@
   options.alc = {
     username = lib.mkOption {
       type = lib.types.str;
-      description = "Primary user managed by this flake.";
+      description = "Canonical user identity used for flake outputs and repository paths.";
     };
 
     inventory = lib.mkOption {
