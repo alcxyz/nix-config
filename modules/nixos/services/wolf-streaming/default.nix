@@ -12,7 +12,6 @@
   hostPublicCoordinator = cfg.publicCoordinator == "host";
   kdeConnectPackage = pkgs.kdePackages.kdeconnect-kde;
   kdeConnectExecutable = "${kdeConnectPackage}/bin/kdeconnectd";
-  kdeConnectScrollThrottle = pkgs.callPackage ../kdeconnect-scroll-throttle {};
   isolatedProtectedBackend =
     cfg.protectedProfile.definitionFile != null && cfg.protectedProfile.isolateBackend;
   publicRuntimeDirectory = cfg.publicRuntimeDirectory;
@@ -54,6 +53,7 @@
   wolfUiImage = "ghcr.io/games-on-whales/wolf-ui@sha256:f483f79fcc5f39294067a5029f8de55e5867f74c709a3d55cd6163e4a5f0cf6b";
   browserImageBuildContextLabel = "io.nixbox.wolf-browser.context";
   heliumVersion = "0.14.7.1";
+  heliumImageTag = "${heliumVersion}-pointer-v2";
   heliumDeb = pkgs.fetchurl {
     url = "https://github.com/imputnet/helium-linux/releases/download/${heliumVersion}/helium-bin_${heliumVersion}-1_amd64.deb";
     hash = "sha256-FSSqAA2q64ubpGTBcd6l2VGK4DmSY0FVRNRhu4ZOfIc=";
@@ -67,8 +67,8 @@
       cp ${./browser-image/Dockerfile} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
+      cp ${./browser-image/kdeconnect-session.sh} "$out/kdeconnect-session.sh"
       cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
-      cp ${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so "$out/libkdeconnect-scroll-throttle.so"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       cp ${deb} "$out/browser.deb"
@@ -84,8 +84,8 @@
       cp ${./browser-image/Dockerfile.nix} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
+      cp ${./browser-image/kdeconnect-session.sh} "$out/kdeconnect-session.sh"
       cp ${./browser-image/kde-pointer-bridge.py} "$out/kde-pointer-bridge.py"
-      cp ${kdeConnectScrollThrottle}/lib/libkdeconnect-scroll-throttle.so "$out/libkdeconnect-scroll-throttle.so"
       cp ${./browser-image/waybar.jsonc} "$out/waybar.jsonc"
       cp ${./browser-image/waybar.css} "$out/waybar.css"
       tar \
@@ -1203,7 +1203,7 @@ in {
         };
         image = lib.mkOption {
           type = lib.types.str;
-          default = "nixbox/wolf-helium:${heliumVersion}";
+          default = "nixbox/wolf-helium:${heliumImageTag}";
           description = "Local Docker image name used by the Helium Wolf application.";
         };
       };

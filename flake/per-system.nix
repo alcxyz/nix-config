@@ -81,16 +81,27 @@
       '';
 
       check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-        shellcheck scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
+        shellcheck scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
       '';
 
       check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.shfmt] ''
-        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy
+        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
       '';
 
       check-k8s-node-reboot-workload-phases =
         mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash] ''
           bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
+        '';
+
+      wolf-browser-input-contract =
+        mkRepoCheck "wolf-browser-input-contract" [
+          pkgs.bash
+          pkgs.coreutils
+          pkgs.gawk
+          pkgs.gnugrep
+          pkgs.gnused
+        ] ''
+          bash scripts/checks/test-wolf-browser-input-contract.sh
         '';
 
       report-assets =
