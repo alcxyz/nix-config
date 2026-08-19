@@ -230,6 +230,14 @@
       fi
     '';
   };
+  t3codeWebUrl = "https://t3code.alc.xyz";
+  t3codeWebLauncher = pkgs.writeShellApplication {
+    name = "t3code-web";
+    runtimeInputs = [pkgs.xdg-utils];
+    text = ''
+      exec xdg-open ${lib.escapeShellArg t3codeWebUrl}
+    '';
+  };
 in {
   assertions = let
     legacyBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.conf";
@@ -329,36 +337,30 @@ in {
       pkgs.paperweight
     ];
 
-  # Keep launchers with cached pre-0.0.32 desktop commands working after the
-  # upstream executable was renamed from t3code to t3code-desktop. DMS stores
-  # the old arguments in its usage history, so discard the obsolete sandbox
-  # flag and any unexpanded desktop-entry URL placeholders.
-  home.file.".local/bin/t3code" = {
-    executable = true;
-    text = ''
-      #!${pkgs.runtimeShell}
-      filtered=()
-      for arg in "$@"; do
-        case "$arg" in
-          --no-sandbox|%u|%U) ;;
-          *) filtered+=("$arg") ;;
-        esac
-      done
-      exec ${pkgs.t3code}/bin/t3code-desktop "''${filtered[@]}"
-    '';
+  # xyz is the canonical headless T3 environment. Keep both historical
+  # desktop command names pointed at its web client so cached launchers and
+  # compositor bindings cannot accidentally start a second local backend.
+  home.file = {
+    ".local/bin/t3code" = {
+      executable = true;
+      source = "${t3codeWebLauncher}/bin/t3code-web";
+    };
+    ".local/bin/t3code-desktop" = {
+      executable = true;
+      source = "${t3codeWebLauncher}/bin/t3code-web";
+    };
   };
 
-  # DMS can retain the package entry's former bare command across upgrades.
-  # Prefer a user entry with an immutable executable path.
+  # Override the package's Electron desktop entry with the canonical web
+  # client. The Electron binary remains available from the package store for
+  # explicit troubleshooting, but it is not part of the normal xyz workflow.
   xdg.desktopEntries.t3code = {
-    name = "T3 Code (Alpha)";
-    comment = "Minimal web GUI for coding agents";
+    name = "T3 Code (xyz)";
+    comment = "Connect to the headless T3 Code service on xyz";
     icon = "t3code";
-    # T3 Code does not currently consume files or URLs, and DMS can pass an
-    # unexpanded %U placeholder through as an application argument.
-    exec = "${pkgs.t3code}/bin/t3code-desktop";
+    exec = "${t3codeWebLauncher}/bin/t3code-web";
     categories = ["Development"];
-    settings.TryExec = "${pkgs.t3code}/bin/t3code-desktop";
+    settings.TryExec = "${t3codeWebLauncher}/bin/t3code-web";
   };
 
   # Symlink configs directly to repo checkout for live editing
