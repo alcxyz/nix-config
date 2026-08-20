@@ -1,49 +1,27 @@
 # ADR-0017: k3s cluster topology for the current homelab phase
 
-**Status:** Accepted (amended by ADR-0051)
+**Status:** Accepted (amended by ADR-0051 and ADR-0060)
 **Date:** 2026-04-26
-**Updated:** 2026-05-31
-**Applies to:** `hosts/xev`, `hosts/nux`, `hosts/nex`, `hosts/rpi0`, `hosts/xyz`, infrastructure
+**Updated:** 2026-08-20
+**Applies to:** stable k3s servers, workstation agents, independent network services
 
 ## Context
 
-The original migration plan assumed most services still lived in Docker Compose on
-`nux`. That is no longer true.
-
-The current state is:
-
-- most application workloads have already moved into the single-node k3s cluster on `nux`
-- Docker on `nux` is now mostly legacy/host-infra residue rather than the primary app platform
-- the intentionally host-native services left outside the cluster are:
-  - `Pi-hole`
-  - `UniFi Network Application`
-- `Pi-hole` is more critical than the cluster itself and should remain independent of it
-- `UniFi` is useful but less mission-critical than DNS and can remain host-native for now
-
-So the real question is no longer “should we adopt k3s?” It is “how do we evolve the
-existing single-node k3s install into a more resilient topology without dragging
-network-critical services into the cluster?”
-
-Available hardware:
-
-- `nux` — x86_64 NUC, 32 GB RAM, current single-node k3s server and main workload host
-- `rpi0` — RK3399 SBC, 4 GB RAM, suitable for host-native DNS and standby network services
-- `xyz` — Ryzen 9 workstation, 64 GB RAM, suitable as opportunistic worker capacity but not a stable quorum member
-- `nex` — future x86_64 NUC, not yet installed/configured
-- `xev` — Ryzen 1700X server, suitable for stable workloads, Longhorn, and control-plane duty
+Application workloads run in a multi-server k3s cluster. DNS must remain usable
+when Kubernetes is unavailable, while the UniFi Network Application now ships
+with and runs on the network gateway. Host-managed UniFi active/passive service
+plans are retired by ADR-0060.
 
 ## Decision
 
-Keep `Pi-hole` and `UniFi` outside k3s, and evolve the cluster in stages:
+Keep the network-critical control surfaces outside k3s:
 
 ### Host-native services
 
-- `Pi-hole` remains outside k3s
-  - `nux` stays primary DNS
-  - `rpi0` stays secondary DNS
-- `UniFi` remains outside k3s
-  - `nux` stays the active controller
-  - `rpi0` remains the standby/fallback location
+- Pi-hole and Unbound run as a two-host native NixOS resolver pair outside k3s.
+- The gateway console owns the UniFi Network Application runtime.
+- GitOps may manage selected UniFi desired state, but no general-purpose host
+  runs an active or standby controller.
 
 These services should not depend on the current cluster for availability.
 
@@ -52,33 +30,21 @@ These services should not depend on the current cluster for availability.
 Run the steady-state three-server embedded-etcd topology on the more capable
 stable machines:
 
-| Node | Hardware | Role | Scheduling |
-|------|----------|------|------------|
-| `xev` | Ryzen 1700X server | `server + worker` | normal workload host |
-| `nux` | Intel NUC, 32 GB | `server + worker` | normal workload host |
-| `nex` | Intel NUC, 16-32 GB | `server + worker` | normal workload host |
-| `xyz` | Ryzen 9 workstation, 64 GB | `agent` | opportunistic / burst compute |
-| `rpi0` | RK3399 SBC, 4 GB | no k3s role | host-native DNS and standby UniFi |
+| Node class | Role | Scheduling |
+|------------|------|------------|
+| stable servers | `server + worker` | normal workloads and control plane |
+| workstation agents | `agent` | selected opportunistic workloads |
+| resolver hosts | no k3s role | native DNS only |
 
-The cluster keeps a three-server control plane and can tolerate loss of one
-control-plane node while keeping quorum. `rpi0` remains intentionally outside
-k3s so DNS and standby network services do not depend on cluster health and do
-not compete with k3s server state on a small root filesystem.
+The cluster keeps a three-server control plane and one-server failure tolerance.
+The resolver pair remains intentionally outside k3s so LAN DNS does not depend
+on cluster health.
 
 ## Migration order
 
-### Already done
-
-1. Install k3s on `nux`
-2. Migrate the majority of application workloads from Docker Compose into k3s
-3. Leave `Pi-hole` and `UniFi` outside the cluster intentionally
-
-### Current migration
-
-1. Promote `xev` from stable agent to k3s server-worker.
-2. Verify the four-member transition state is healthy.
-3. Drain and remove `rpi0` from Kubernetes and embedded etcd.
-4. Deploy `rpi0` as host-native DNS/Pi-hole and standby UniFi only.
+The cluster migration and network-service separation are complete. ADR-0051
+records the control-plane transition. ADR-0060 records the later controller and
+resolver cutover.
 
 ## Alternatives considered
 
@@ -87,10 +53,10 @@ not compete with k3s server state on a small root filesystem.
 Rejected. DNS is more critical than the cluster itself and should stay independent
 while the control plane is still maturing.
 
-### Move `UniFi` into k3s now
+### Run UniFi on a general-purpose host or in k3s
 
-Rejected. UniFi is better treated as a host-native service until the cluster reaches
-its intended multi-server shape.
+Superseded. The gateway console now owns the application lifecycle, removing
+the need for a separate controller runtime.
 
 ### Keep `rpi0` out of k3s
 
@@ -112,9 +78,10 @@ Rejected. The whole point of the future `nex` addition is to complete the
 - **Better now:** control-plane quorum runs on `xev`, `nux`, and `nex`
 - **Still limited:** three embedded-etcd members tolerate one server failure,
   not two
-- **Safer networking:** `Pi-hole` and `UniFi` remain independent of cluster health
+- **Safer networking:** DNS and the gateway control plane remain independent of
+  cluster health
 - **Mixed-role reality:** the homelab remains hybrid for a while:
   - k3s for most apps
-  - host-native network services outside the cluster
+  - native resolvers and the gateway console outside the cluster
 - **Operational clarity:** the topology is now staged explicitly instead of pretending
   the original “everything still in Docker” context still applies

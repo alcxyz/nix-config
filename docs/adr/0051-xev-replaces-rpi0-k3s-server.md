@@ -1,6 +1,6 @@
 # ADR-0051: xev replaces rpi0 as a k3s server
 
-**Status:** Accepted
+**Status:** Accepted (amended by ADR-0060)
 **Date:** 2026-05-31
 **Applies to:** `inventory.nix`, `hosts/xev`, `hosts/rpi0`, `hosts/nux`, `hosts/nex`, `modules/nixos/services/k8s-api-vip`, k3s control-plane topology
 
@@ -9,7 +9,7 @@
 The k3s control plane reached a three-server embedded-etcd shape with `nux`,
 `nex`, and `rpi0`. `rpi0` was useful as an early control-plane-only member, but
 it is an embedded ARM board with a small root filesystem. Running NixOS, k3s
-server state, etcd snapshots, host-native DNS, and standby UniFi on that root
+server state, etcd snapshots, and host-native DNS on that root
 disk creates recurring storage pressure.
 
 `xev` is now installed, stable, Longhorn-eligible, and already carries normal
@@ -34,8 +34,9 @@ to:
 Kubernetes API VIP. `rpi0` leaves k3s and no longer participates in embedded
 etcd or keepalived for the Kubernetes API.
 
-`rpi0` remains a host-native network-services node for DNS/Pi-hole and standby
-UniFi. Those services stay outside Kubernetes so local DNS does not depend on
+`rpi0` remains a host-native DNS/Pi-hole node. ADR-0060 later established the
+second independent resolver and moved UniFi lifecycle ownership to the gateway
+console. DNS stays outside Kubernetes so name resolution does not depend on
 cluster health.
 
 ## Rollout Order

@@ -1,6 +1,6 @@
 # ADR-0038: UniFi native NixOS active/passive runtime
 
-**Status:** Retired (2026-08-19)
+**Status:** Retired (2026-08-19; superseded by ADR-0060)
 **Date:** 2026-05-06
 **Applies to:** `modules/nixos/services/unifi-native/`, `hosts/nux`, `hosts/rpi0`
 
