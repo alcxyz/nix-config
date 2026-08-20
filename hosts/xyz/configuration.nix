@@ -702,11 +702,10 @@ in {
     ];
   };
 
-  # xyz provides host-level services on 192.168.1.10. The replacement-system
-  # boot exposed that this address previously depended on an implicit DHCP
-  # lease: NetworkManager accepted 192.168.1.200 while RustFS remained bound to
-  # the now-unassigned service address. Keep the host identity declarative and
-  # tied to the physical Ethernet adapter.
+  # xyz provides host-level services on 192.168.1.10. UniFi owns that stable
+  # address through a DHCP reservation for the physical Ethernet adapter, so
+  # the host also receives the current gateway and resolver settings from the
+  # network instead of duplicating them here.
   networking.networkmanager = {
     settings.main.no-auto-default = "9c:6b:00:7e:74:65";
     ensureProfiles.profiles.xyz-wired = {
@@ -720,11 +719,8 @@ in {
       };
       ethernet.mac-address = "9c:6b:00:7e:74:65";
       ipv4 = {
-        method = "manual";
-        addresses = "192.168.1.10/24";
-        gateway = "192.168.1.1";
-        dns = "192.168.1.3;192.168.1.4;";
-        dns-search = "local;";
+        method = "auto";
+        ignore-auto-dns = false;
       };
       ipv6.method = "auto";
     };
