@@ -11,8 +11,8 @@ Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, serv
 | nex | x86_64-linux | NUC k3s server + stable workload host |
 | xev | x86_64-linux | k3s server + stable workload host with Longhorn storage and primary Forgejo runner capacity |
 | xps | x86_64-linux | Dell XPS workstation; Kubernetes participation deferred until wired networking is reliable |
-| rpi0 | aarch64-linux | Rock Pi 4. Host-native DNS/Pi-hole and standby UniFi; kept outside k3s |
-| rpi1 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
+| rpi0 | aarch64-linux | Rock Pi 4. Primary host-native DNS/Pi-hole; kept outside k3s |
+| rpi1 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance and backup host-native DNS/Pi-hole |
 | rpi2 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
 | rpi3 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
 | mac | aarch64-darwin | MacBook. nix-darwin + Home Manager + bootstrapped aarch64 Linux builder |

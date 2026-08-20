@@ -12,7 +12,7 @@ The Kubernetes cluster currently has:
 - `nex` - k3s server, embedded etcd, schedulable stable worker, Longhorn storage
 - `xev` - k3s server, embedded etcd, schedulable stable worker, Longhorn
   storage, native Forgejo runner
-- `rpi0` - host-native DNS/Pi-hole and standby UniFi, outside k3s
+- `rpi0` - primary host-native DNS/Pi-hole, outside k3s
 - `xyz` - k3s agent, schedulable but labeled `workload-class=ephemeral`,
   workload-only for selected pinned workloads, not a normal Longhorn storage
   node
