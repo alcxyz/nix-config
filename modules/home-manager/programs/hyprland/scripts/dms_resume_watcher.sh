@@ -82,10 +82,10 @@ wait_for_dms_layers() {
 
 restart_dms() {
   log "restarting DMS after display wake"
-  dms kill >/dev/null 2>&1 || true
-  pkill -f '(^|/)dms( .*)? run' 2>/dev/null || true
-  sleep 1
-  setsid -f dms run >/tmp/dms-resume-watcher.log 2>&1
+  if ! systemctl --user restart dms.service; then
+    log "failed to restart the systemd-managed DMS service"
+    return 1
+  fi
   last_restart=$(date +%s)
 }
 
