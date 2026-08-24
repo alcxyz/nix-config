@@ -1,0 +1,40 @@
+diff --git a/crates/ecstore/src/bucket/lifecycle/bucket_lifecycle_ops.rs b/crates/ecstore/src/bucket/lifecycle/bucket_lifecycle_ops.rs
+index 029fa2fe..d3578a68 100644
+--- a/crates/ecstore/src/bucket/lifecycle/bucket_lifecycle_ops.rs
++++ b/crates/ecstore/src/bucket/lifecycle/bucket_lifecycle_ops.rs
+@@ -57,7 +57,7 @@ use rustfs_config::{
+ };
+ use rustfs_data_usage::TierStats;
+ use rustfs_filemeta::{FileInfo, FileInfoOpts, NULL_VERSION_ID, RestoreStatusOps, get_file_info, is_restored_object_on_disk};
+-use rustfs_utils::{get_env_i64, get_env_usize, path::encode_dir_object, string::strings_has_prefix_fold};
++use rustfs_utils::{get_env_i64, get_env_usize, path::encode_dir_object, string::{parse_bool, strings_has_prefix_fold}};
+ use s3s::dto::{
+     BucketLifecycleConfiguration, DefaultRetention, ExpirationStatus, ObjectLockConfiguration, RestoreRequest,
+     RestoreRequestType, RestoreStatus, Timestamp,
+@@ -116,6 +116,7 @@ pub const AMZ_ENCRYPTION_KMS: &str = "aws:kms";
+ pub const ERR_INVALID_STORAGECLASS: &str = "invalid tier.";
+ const ENV_STALE_UPLOADS_EXPIRY: &str = "RUSTFS_API_STALE_UPLOADS_EXPIRY";
+ const ENV_STALE_UPLOADS_CLEANUP_INTERVAL: &str = "RUSTFS_API_STALE_UPLOADS_CLEANUP_INTERVAL";
++const ENV_TIER_FREE_VERSION_RECOVERY_ENABLED: &str = "RUSTFS_TIER_FREE_VERSION_RECOVERY_ENABLED";
+ const DEFAULT_STALE_UPLOADS_EXPIRY: StdDuration = StdDuration::from_secs(24 * 60 * 60);
+ const DEFAULT_STALE_UPLOADS_CLEANUP_INTERVAL: StdDuration = StdDuration::from_secs(6 * 60 * 60);
+ const DATE_EXPIRY_EXISTING_OBJECTS_GRACE_SECS: i64 = 5;
+@@ -1399,7 +1400,18 @@ pub async fn init_background_expiry(api: Arc<ECStore>) {
+     spawn_tier_delete_journal_recovery_once(api);
+ }
+ 
++fn tier_free_version_recovery_enabled() -> bool {
++    env::var(ENV_TIER_FREE_VERSION_RECOVERY_ENABLED)
++        .ok()
++        .and_then(|value| parse_bool(value.trim()).ok())
++        .unwrap_or(true)
++}
++
+ fn spawn_tier_free_version_recovery_once(api: Arc<ECStore>) {
++    if !tier_free_version_recovery_enabled() {
++        return;
++    }
++
+     if TIER_FREE_VERSION_RECOVERY_STARTED.set(()).is_err() {
+         return;
+     }
