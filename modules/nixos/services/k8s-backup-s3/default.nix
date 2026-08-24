@@ -136,6 +136,15 @@ in
       '';
     };
 
+    runtimeWorkerThreads = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = null;
+      description = ''
+        Optional RustFS Tokio worker count. Small backup targets can use a low
+        value to avoid idle scheduler overhead from one worker per CPU.
+      '';
+    };
+
     openFirewall = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -275,7 +284,8 @@ in
           "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency"
           "RUSTFS_SCANNER_ENABLED=${lib.boolToString cfg.scannerEnabled}"
           "RUSTFS_HEAL_ENABLED=${lib.boolToString cfg.healEnabled}"
-        ];
+        ] ++ lib.optional (cfg.runtimeWorkerThreads != null)
+          "RUSTFS_RUNTIME_WORKER_THREADS=${toString cfg.runtimeWorkerThreads}";
         Restart = "on-failure";
         RestartSec = "5s";
         NoNewPrivileges = true;
