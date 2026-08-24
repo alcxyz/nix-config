@@ -7,7 +7,11 @@
 }:
 let
   cfg = config.services.k8s-backup-s3;
-  rustfsPackage = inputs.rustfs.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  rustfsPackage =
+    inputs.rustfs.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
+      (old: {
+        patches = (old.patches or [ ]) ++ [ ./rustfs-tier-free-version-recovery-switch.patch ];
+      });
   localEndpoint = "http://${cfg.apiAddress}";
   mirrorEnabled = cfg.mirrorSourceEndpoint != null;
   apiPort = lib.toInt (lib.last (lib.splitString ":" cfg.apiAddress));
@@ -124,6 +128,26 @@ in
         Enable RustFS background healing. This has no repair value for a
         single-disk target and can cause the same continuous object walks as
         the scanner.
+      '';
+    };
+
+    tierFreeVersionRecoveryEnabled = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Enable RustFS recovery of remotely tiered free versions. Disable this
+        when object tiering is unused; RustFS beta.10 otherwise walks every
+        bucket once per minute even when its scanner is disabled.
+      '';
+    };
+
+    capacityScanIntervalSeconds = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 120;
+      description = ''
+        Interval between RustFS recursive object-capacity inventories. This
+        only refreshes cached capacity reporting and may be lengthened for
+        large, low-activity backup targets.
       '';
     };
 
@@ -284,8 +308,12 @@ in
           "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency"
           "RUSTFS_SCANNER_ENABLED=${lib.boolToString cfg.scannerEnabled}"
           "RUSTFS_HEAL_ENABLED=${lib.boolToString cfg.healEnabled}"
-        ] ++ lib.optional (cfg.runtimeWorkerThreads != null)
-          "RUSTFS_RUNTIME_WORKER_THREADS=${toString cfg.runtimeWorkerThreads}";
+          "RUSTFS_TIER_FREE_VERSION_RECOVERY_ENABLED=${lib.boolToString cfg.tierFreeVersionRecoveryEnabled}"
+          "RUSTFS_CAPACITY_SCHEDULED_INTERVAL=${toString cfg.capacityScanIntervalSeconds}"
+        ]
+        ++ lib.optional (
+          cfg.runtimeWorkerThreads != null
+        ) "RUSTFS_RUNTIME_WORKER_THREADS=${toString cfg.runtimeWorkerThreads}";
         Restart = "on-failure";
         RestartSec = "5s";
         NoNewPrivileges = true;
