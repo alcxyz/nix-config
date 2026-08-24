@@ -864,18 +864,18 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1787122549,
-        "narHash": "sha256-s6bpp2uinOMXrjre7csnvNcyoEi01bdbApk7/S4dTv0=",
+        "lastModified": 1787563501,
+        "narHash": "sha256-rWuqMuP1X4pLwnpAB1hda0/D35e5IgiZf+KJebE+C+g=",
         "ref": "dev",
-        "rev": "29cabecbf42fd356c11472495eb677edde5923f1",
-        "revCount": 462,
+        "rev": "dc2d0ccd3fdc0fdfc1d677ce7030bd70f00c51b7",
+        "revCount": 481,
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
+        "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
       "original": {
         "ref": "dev",
         "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git"
+        "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       }
     },
     "nix-secrets": {

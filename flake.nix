@@ -21,7 +21,9 @@
     };
 
     nix-packages = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/nix-packages.git?ref=dev";
+      # Public HTTPS keeps the lock refresh usable by unattended CI without
+      # distributing an SSH identity merely to read public package sources.
+      url = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
