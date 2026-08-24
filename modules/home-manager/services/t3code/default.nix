@@ -192,6 +192,8 @@ in {
         Type = "oneshot";
         ExecStart = "${autoUpdate}/bin/t3code-auto-update";
         TimeoutStartSec = "3h";
+        RestartForceExitStatus = "75";
+        RestartSec = "15m";
       };
     };
 
