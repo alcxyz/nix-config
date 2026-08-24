@@ -50,6 +50,14 @@
           type = lib.types.ints.positive;
           default = 129600;
         };
+        allowPendingFirstTimer = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Do not report a missing completion timestamp while the matching
+            timer is active and has not reached its first trigger yet.
+          '';
+        };
       };
     }
   );
@@ -73,7 +81,8 @@
       check_unit \
         ${lib.escapeShellArg unit.name} \
         ${lib.escapeShellArg unit.mode} \
-        ${toString unit.maximumAgeSeconds}
+        ${toString unit.maximumAgeSeconds} \
+        ${lib.boolToString unit.allowPendingFirstTimer}
     '')
     cfg.units;
   monitorScript = pkgs.writeShellApplication {
@@ -167,6 +176,7 @@
         unit="$1"
         mode="$2"
         maximum_age="$3"
+        allow_pending_first_timer="$4"
 
         if [ "$mode" = active ]; then
           if [ "$(systemctl is-active "$unit" 2>/dev/null || true)" != active ]; then
@@ -183,6 +193,13 @@
           return
         fi
         if ! [[ "$finished" =~ ^[0-9]+$ ]] || [ "$finished" -eq 0 ]; then
+          timer="''${unit%.service}.timer"
+          last_trigger="$(systemctl show "$timer" -p LastTriggerUSec --value 2>/dev/null || true)"
+          if [ "$allow_pending_first_timer" = true ] \
+            && [ "$(systemctl is-active "$timer" 2>/dev/null || true)" = active ] \
+            && [ -z "$last_trigger" ]; then
+            return
+          fi
           record_issue "$unit: no successful completion timestamp"
           return
         fi
