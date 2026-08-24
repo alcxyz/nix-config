@@ -20,7 +20,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0013](0013-safe-nix-gc-no-generation-deletion.md) | Safe nix GC — never auto-delete profile generations | Accepted | mac, nix.gc |
 | [ADR-0014](0014-self-package-zen-browser.md) | Self-package Zen Browser instead of third-party flake | Accepted | `flake.nix`, packages |
 | [ADR-0015](0015-dms-plugin-meta-flake.md) | DMS plugin meta-flake | Accepted | `flake.nix`, DMS |
-| [ADR-0016](0016-devlog-go-binary-with-weekly-hedgedoc.md) | Devlog as Go binary with weekly summaries and HedgeDoc posting | Accepted | devlog, services |
+| [ADR-0016](0016-devlog-go-binary-with-weekly-hedgedoc.md) | Devlog as Go binary with weekly summaries | Accepted, amended | devlog, services |
 | [ADR-0017](0017-k3s-cluster-topology.md) | k3s cluster topology for home infrastructure | Accepted, amended | infrastructure, hosts |
 | [ADR-0018](0018-flux-gitops.md) | Flux as the GitOps operator for k3s | Accepted | k3s, infrastructure |
 | [ADR-0019](0019-forge-mirror-pull-systemd-timer.md) | Periodic Forgejo/GitHub drift audit via systemd timer | Accepted | services, forge-mirror |

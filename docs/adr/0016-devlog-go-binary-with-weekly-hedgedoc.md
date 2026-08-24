@@ -1,6 +1,6 @@
-# ADR-0016: Devlog as Go binary with weekly summaries and HedgeDoc posting
+# ADR-0016: Devlog as Go binary with weekly summaries
 
-**Status:** Accepted
+**Status:** Accepted, amended 2026-08-24
 **Date:** 2026-04-25
 **Applies to:** `modules/home-manager/services/devlog/`, `nix-packages/tools/devlog/`
 
@@ -8,7 +8,7 @@
 
 The automated devlog system initially ran as bash scripts (`devlog.sh`, `weekly-devlog.sh`) in the journal repo. The daily script was invoked by a systemd timer at 23:00 for the current day, leaving a gap between 23:00 and midnight where activity was missed. The scripts also needed to duplicate their dependency list between the script PATH and the systemd service Environment.
 
-A weekly summary was requested to improve readability — synthesizing daily entries into a higher-level narrative with weekday/weekend separation, and posting it to HedgeDoc for browsing outside git.
+A weekly summary was requested to improve readability by synthesizing daily entries into a higher-level narrative with weekday/weekend separation.
 
 ## Decision
 
@@ -16,7 +16,7 @@ A weekly summary was requested to improve readability — synthesizing daily ent
 
 2. **Schedule shift and catch-up**: Daily timer runs at 05:00 and invokes `devlog catch-up`, which scans a configurable recent window (`services.devlog.catchUpDays`, default 30) through the last completed devlog day. A devlog day is the local-time window from 05:00 through 04:59 the next calendar day, so late-night activity stays attached to the previous day's entry while host or timer outages are backfilled.
 
-3. **Weekly timer**: Runs Monday at 06:00 (after Sunday's daily entry is generated at 05:00). Produces `weekly/YYYY-WNN.md` with ISO week numbering and posts to HedgeDoc via sops-decrypted credentials. The weekly file contains a Claude-synthesized summary (split into distinct **Weekdays** and **Weekend** sections) followed by all raw daily entries stitched below a `# Daily entries` heading, so the full week is readable in one file.
+3. **Weekly timer**: Runs Monday at 06:00 (after Sunday's daily entry is generated at 05:00). Produces `weekly/YYYY-WNN.md` with ISO week numbering. The weekly file contains an LLM-synthesized summary (split into distinct **Weekdays** and **Weekend** sections) followed by all raw daily entries stitched below a `# Daily entries` heading, so the full week is readable in one file.
 
 4. **Module structure**: The NixOS module uses `lib.mkMerge` to conditionally add the weekly service/timer when `services.devlog.weekly.enable` is set, keeping weekly as an opt-in extension of the daily system.
 
@@ -33,4 +33,7 @@ A weekly summary was requested to improve readability — synthesizing daily ent
 - Weekly files are self-contained: the summary provides the narrative, and the stitched daily entries provide the detail, eliminating the need to open individual daily files.
 - Weekly summaries for completed weeks are refreshed when catch-up creates a missing daily entry in that week.
 - The `devlog` binary must be in the nix-packages overlay for the systemd service to reference it as `pkgs.devlog`.
-- HedgeDoc credentials are decrypted at runtime via sops in the Go binary; the systemd service needs `sops` and `age` in PATH plus `SOPS_AGE_KEY_FILE` set.
+
+## Amendment: retire HedgeDoc publishing
+
+The original implementation also posted each weekly file as a new HedgeDoc note. This was removed because the Git-backed weekly Markdown file is already the canonical, browsable artifact, no journal workflow links back to the generated HedgeDoc notes, and regenerated weeks could leave stale duplicate notes. HedgeDoc remains available for collaborative Markdown documents, but is no longer part of devlog delivery.

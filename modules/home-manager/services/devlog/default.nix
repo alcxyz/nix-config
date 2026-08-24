@@ -27,32 +27,12 @@ in
     };
 
     weekly = {
-      enable = lib.mkEnableOption "Weekly devlog summary and HedgeDoc posting";
+      enable = lib.mkEnableOption "Weekly devlog summary";
 
       schedule = lib.mkOption {
         type = lib.types.str;
         default = "Mon 06:00";
         description = "Systemd timer OnCalendar value for the weekly summary.";
-      };
-
-      hedgedoc = {
-        enable = lib.mkOption {
-          type = lib.types.bool;
-          default = true;
-          description = "Whether to post the weekly summary to HedgeDoc.";
-        };
-
-        secretsFile = lib.mkOption {
-          type = lib.types.str;
-          default = "/home/alc/src/infra/gitops/tools/hedgedoc/secrets.env";
-          description = "Path to the sops-encrypted HedgeDoc secrets.env file.";
-        };
-
-        binPath = lib.mkOption {
-          type = lib.types.str;
-          default = "/home/alc/src/infra/gitops/tools/hedgedoc/hedgedoc";
-          description = "Path to the hedgedoc CLI binary.";
-        };
       };
     };
   };
@@ -87,25 +67,16 @@ in
 
     (lib.mkIf cfg.weekly.enable {
       systemd.user.services.devlog-weekly = {
-        Unit.Description = "Generate weekly devlog summary and post to HedgeDoc";
+        Unit.Description = "Generate weekly devlog summary";
         Service = {
           Type = "oneshot";
           ExecStart = "${pkgs.devlog}/bin/devlog weekly -repo ${cfg.repoPath}";
           StandardOutput = "journal";
           StandardError = "journal";
           Environment = [
-            "PATH=${lib.makeBinPath ([
-              pkgs.git pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.openssh
-            ] ++ lib.optionals cfg.weekly.hedgedoc.enable [
-              pkgs.sops pkgs.age
-            ])}"
+            "PATH=${lib.makeBinPath [ pkgs.git pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.openssh ]}"
             "HOME=${config.home.homeDirectory}"
             "SSH_AUTH_SOCK=%t/ssh-agent"
-          ] ++ lib.optionals cfg.weekly.hedgedoc.enable [
-            "HEDGEDOC_POST=1"
-            "HEDGEDOC_SECRETS_FILE=${cfg.weekly.hedgedoc.secretsFile}"
-            "HEDGEDOC_BIN=${cfg.weekly.hedgedoc.binPath}"
-            "SOPS_AGE_KEY_FILE=${config.home.homeDirectory}/.config/sops/age/keys.txt"
           ];
         };
       };
