@@ -1,0 +1,49 @@
+name: Refresh nix-packages lock
+run-name: "nix-packages lock refresh (${{ forgejo.event_name }})"
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: Build, verify, and merge current packages
+    runs-on: ubuntu-latest
+    concurrency:
+      group: nix-packages-lock-update
+      cancel-in-progress: false
+    env:
+      BASE_BRANCH: dev
+      UPDATE_BRANCH: update/nix-packages-lock
+
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          github-server-url: https://git.alc.xyz
+          ref: dev
+
+      - name: Install runner prerequisites
+        run: |
+          apt-get update
+          apt-get install -y jq sudo
+
+      - uses: https://github.com/cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Refresh and verify nix-packages
+        id: update
+        run: scripts/update-inputs/update-nix-packages.sh
+
+      - name: Publish and merge verified lock update
+        if: steps.update.outputs.updated == 'true'
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          FORGEJO_URL: https://git.alc.xyz
+          FORGEJO_OWNER: alcxyz
+          FORGEJO_REPO: nix-config
+          REVISION: ${{ steps.update.outputs.revision }}
+        run: scripts/forgejo/publish-nix-packages-lock.sh
