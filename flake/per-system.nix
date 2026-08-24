@@ -43,6 +43,7 @@
       "modules/nixos/common/distributed-build-client.nix"
       "modules/nixos/common/pkgsets.nix"
       "modules/nixos/common/server.nix"
+      "modules/nixos/hardware/openzfs-7-1.nix"
       "modules/nixos/profiles/nixbox-client/default.nix"
       "modules/nixos/profiles/nixbox-direct-client/default.nix"
       "modules/nixos/profiles/raspberry-pi-3-direct-client/default.nix"

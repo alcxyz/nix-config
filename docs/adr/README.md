@@ -65,3 +65,4 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0058](0058-xyz-dedicated-runtime-storage.md) | Dedicated xyz runtime storage | Accepted, amended | xyz, Docker, k3s, Steam-headless, ZFS |
 | [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) | File-selective home backup and host storage monitoring | Accepted, amended | xyz, home backup, storage monitoring |
 | [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md) | Gateway-owned UniFi and independent DNS pair | Accepted | unifi, dns, network services |
+| [ADR-0061](0061-xev-tank-storage-and-media-service-migration.md) | Move tank storage ownership and media services to xev | Accepted, staged | xev, xyz, ZFS, media services |

@@ -18,17 +18,22 @@
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
+    "${configDir}/modules/nixos/hardware/openzfs-7-1.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/nvidia-runtime.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
+    inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xevK8sBackupReplica
     inputs.nix-secrets.nixosModules.xevPrivate
   ];
 
   boot.initrd.systemd.enable = true;
-  boot.kernelPackages = pkgs.linuxPackages_latest;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   hardware.nvidia.enable = true;
+
+  # Randomly assigned ZFS host ID; it is stable and is not derived from a
+  # hardware identifier. Merely enabling ZFS support does not import a pool.
+  networking.hostId = "abe0d0f3";
   services.wolf-streaming = {
     enable = true;
     publicCoordinator = "external";
