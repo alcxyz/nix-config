@@ -86,25 +86,6 @@ hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "r-1" }))
 -- Window rules.
 hl.window_rule({ name = "foot-opacity", match = { class = "^(foot)$" }, opacity = 0.98 })
 hl.window_rule({ name = "dropterm-opacity", match = { class = "^(dropterm)$" }, opacity = 0.90 })
-hl.window_rule({
-	name = "battle-net-tracker-no-focus",
-	match = {
-		class = "^steam_app_default$",
-		title = "^TrackerWindow$",
-		xwayland = true,
-	},
-	no_focus = true,
-})
-hl.window_rule({
-	name = "heroes-floating",
-	match = {
-		class = "^steam_app_default$",
-		title = "^Heroes of the Storm$",
-		xwayland = true,
-	},
-	float = true,
-	suppress_event = "maximize",
-})
 
 -- Layout switching. The Lua callback updates the live config without the
 -- deprecated hyprctl keyword interface.
