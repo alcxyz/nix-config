@@ -18,112 +18,18 @@
     name = "hyprland-xwayland-primary-output";
     runtimeInputs = [
       pkgs.coreutils
-      pkgs.gnugrep
-      pkgs.hyprland
-      pkgs.jq
-      pkgs.socat
-      pkgs.util-linux
       pkgs.xrandr
     ];
     text = ''
-      exec 9>"''${XDG_RUNTIME_DIR:?}/hyprland-xwayland-primary-output.lock"
-      flock -n 9 || exit 0
-
-      repair_primary() {
-        stable_samples=0
-
-        for _ in $(seq 1 20); do
-        # XRandR queries can wake the HDMI output while the compositor has it
-        # in DPMS-off. Leave XWayland completely untouched until every enabled
-        # Hyprland output is awake again.
-        if ! hyprctl monitors all -j 2>/dev/null \
-          | jq -e 'length > 0 and all(.[]; .disabled or .dpmsStatus)' >/dev/null; then
-            stable_samples=0
-            sleep 0.25
-          continue
+      for _ in $(seq 1 120); do
+        if DISPLAY="''${DISPLAY:-:0}" xrandr --output DP-1 --primary >/dev/null 2>&1; then
+          exit 0
         fi
-
-        outputs="$(DISPLAY="''${DISPLAY:-:0}" xrandr --query 2>/dev/null || true)"
-
-        if grep -q '^DP-1 connected primary ' <<<"$outputs"; then
-            return 0
-        elif grep -q '^DP-1 connected ' <<<"$outputs"; then
-            stable_samples=$((stable_samples + 1))
-
-          # Require two stable samples after hotplug. XWayland rebuilds its
-          # RandR output list while the OLED reconnects and can otherwise clear
-          # a primary assignment made during that transition.
-            if ((stable_samples >= 2)); then
-              DISPLAY="''${DISPLAY:-:0}" xrandr --output DP-1 --primary
-              return
-          fi
-        else
-            stable_samples=0
-        fi
-
-          sleep 0.25
-        done
-
-        echo "Failed to mark DP-1 as the XWayland primary output" >&2
-        return 1
-      }
-
-      repair_primary || true
-
-      socket="''${XDG_RUNTIME_DIR:?}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
-      while true; do
-        while IFS= read -r event; do
-          case "$event" in
-            monitoradded\>\>* | monitoraddedv2\>\>*) repair_primary || true ;;
-          esac
-        done < <(socat -U - UNIX-CONNECT:"$socket" 2>/dev/null)
-
-        sleep 1
+        sleep 0.25
       done
-    '';
-  };
-  centeredFloatToggle = pkgs.writeShellApplication {
-    name = "hyprland-toggle-floating-centered";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.hyprland
-      pkgs.jq
-    ];
-    text = ''
-      client_json="$(hyprctl activewindow -j)"
-      address="$(jq -r '.address // empty' <<<"$client_json")"
 
-      if [[ ! "$address" =~ ^0x[0-9a-fA-F]+$ ]]; then
-        echo "No active Hyprland window" >&2
-        exit 1
-      fi
-
-      provider="$(hyprctl status -j | jq -r '.configProvider // empty')"
-      if [[ "$provider" == lua ]]; then
-        hyprctl eval \
-          "hl.dispatch(hl.dsp.window.float({ action = \"toggle\", window = \"address:$address\" }))" \
-          >/dev/null
-      else
-        hyprctl dispatch togglefloating >/dev/null
-      fi
-
-      # XWayland exposes the vertically stacked outputs to clients as one
-      # horizontal strip. Wine games can consequently restore a floating
-      # geometry centered on the synthetic boundary between those outputs.
-      # Once the toggle has settled, center a newly floating window using the
-      # compositor's real monitor coordinates instead.
-      sleep 0.05
-      if hyprctl clients -j \
-        | jq -e --arg address "$address" \
-            '.[] | select(.address == $address and .floating)' >/dev/null; then
-        if [[ "$provider" == lua ]]; then
-          hyprctl eval \
-            "hl.dispatch(hl.dsp.window.center({ window = \"address:$address\" }))" \
-            >/dev/null
-        else
-          hyprctl dispatch centerwindow >/dev/null
-        fi
-      fi
+      echo "Failed to mark DP-1 as the XWayland primary output" >&2
+      exit 1
     '';
   };
   droptermToggle = pkgs.writeShellApplication {
@@ -242,26 +148,8 @@ in {
   assertions = let
     legacyBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.conf";
     luaBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.lua";
-    hostLegacyConfig = config.programs.hyprland.managed.extraConfig;
     hostLuaConfig = config.programs.hyprland.managed.extraLuaConfig;
   in [
-    {
-      assertion = lib.all (rule: lib.hasInfix rule legacyBinds) [
-        "windowrule = no_focus on, match:class ^steam_app_default$, match:title ^TrackerWindow$"
-        "windowrule = float on, match:class ^steam_app_default$, match:title ^Heroes of the Storm$"
-        "windowrule = suppress_event maximize, match:class ^steam_app_default$, match:title ^Heroes of the Storm$"
-      ];
-      message = "The legacy Hyprland config must retain the Heroes floating/maximize regression rules.";
-    }
-    {
-      assertion = lib.all (rule: lib.hasInfix rule luaBinds) [
-        ''name = "battle-net-tracker-no-focus"''
-        ''name = "heroes-floating"''
-        ''title = "^Heroes of the Storm$"''
-        ''suppress_event = "maximize"''
-      ];
-      message = "The Lua Hyprland config must retain the Heroes floating/maximize regression rule.";
-    }
     {
       assertion =
         lib.hasInfix ''hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:" }))'' luaBinds
@@ -275,19 +163,6 @@ in {
         lib.hasInfix ''hl.bind("SUPER + SHIFT + Q", hl.dsp.exec_cmd(lock .. " --display-off-immediately"))'' luaBinds
         && lib.hasInfix "bind = SUPER SHIFT, Q, exec, $lock --display-off-immediately" legacyBinds;
       message = "Super+Shift+Q must lock with immediate display power-off in both Hyprland configs.";
-    }
-    {
-      assertion =
-        lib.hasInfix ''move = "840 1456"'' hostLuaConfig
-        && lib.hasInfix ''hl.on("window.open", settle_heroes_window)'' hostLuaConfig
-        && lib.hasInfix ''hl.on("window.title", settle_heroes_window)'' hostLuaConfig
-        && lib.hasInfix ''hl.on("monitor.layout_changed", settle_heroes_after_monitor_reconnect)'' hostLuaConfig
-        && lib.hasInfix ''hl.timer(function()'' hostLuaConfig
-        && !lib.hasInfix ''hl.dsp.focus'' hostLuaConfig
-        && !lib.hasInfix ''center = true'' hostLuaConfig
-        && lib.hasInfix "windowrule = move 840 1456, match:class ^steam_app_default$, match:title ^Heroes of the Storm$" hostLegacyConfig
-        && !lib.hasInfix "windowrule = center on, match:class ^steam_app_default$, match:title ^Heroes of the Storm$" hostLegacyConfig;
-      message = "Heroes must use fixed compositor coordinates and a focus-neutral event settle; XWayland-relative centering is unsafe after DPMS reconnects.";
     }
     {
       assertion =
@@ -399,17 +274,6 @@ in {
     extraConfig = ''
       monitor = DP-1, 5120x1440@120, 0x1456, 1
       monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
-      # Heroes recreates its XWayland window when its display mode changes and
-      # can reassert EWMH fullscreen during that remap. Keep the game in the
-      # intended ultrawide window independently of its client hint. Use the
-      # compositor coordinate explicitly: `center` can resolve against
-      # XWayland's temporary horizontal RandR layout after DPMS reconnects.
-      windowrule = suppress_event fullscreen, match:class ^steam_app_default$, match:title ^Heroes of the Storm$
-      windowrule = sync_fullscreen off, match:class ^steam_app_default$, match:title ^Heroes of the Storm$
-      windowrule = size 3440 1440, match:class ^steam_app_default$, match:title ^Heroes of the Storm$
-      windowrule = move 840 1456, match:class ^steam_app_default$, match:title ^Heroes of the Storm$
-      unbind = SUPER, S
-      bind = SUPER, S, exec, ${lib.getExe centeredFloatToggle}
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
     extraLuaConfig = ''
@@ -444,97 +308,6 @@ in {
         scrolling_width = 0.5,
       })
 
-      hl.window_rule({
-        name = "heroes-centered-ultrawide",
-        match = {
-          class = "^steam_app_default$",
-          title = "^Heroes of the Storm$",
-          xwayland = true,
-        },
-        suppress_event = "fullscreen",
-        sync_fullscreen = false,
-        size = "3440 1440",
-        move = "840 1456",
-      })
-
-      -- Static window effects are evaluated when a window first maps, using
-      -- its initial X11 identity. Wine assigns the final Heroes title later
-      -- and can issue another ConfigureWindow request after the static size
-      -- and move, especially after XWayland rebuilt RandR during DPMS. React
-      -- to the final title and reassert the intended geometry for a bounded
-      -- launch-settle period. This never changes keyboard or pointer focus.
-      local heroes_settling = {}
-      local heroes_settle_timers = {}
-
-      local function is_heroes_window(window)
-        return window ~= nil
-          and window.mapped
-          and window.xwayland
-          and window.class == "steam_app_default"
-          and window.title == "Heroes of the Storm"
-      end
-
-      local function apply_heroes_geometry(window)
-        if not is_heroes_window(window) then
-          return
-        end
-
-        hl.dispatch(hl.dsp.window.float({ action = "set", window = window }))
-        hl.dispatch(hl.dsp.window.resize({ x = 3440, y = 1440, window = window }))
-        hl.dispatch(hl.dsp.window.move({ x = 840, y = 1456, window = window }))
-      end
-
-      local function settle_heroes_window(window)
-        if not is_heroes_window(window) then
-          return
-        end
-
-        local address = window.address
-        if heroes_settling[address] then
-          return
-        end
-
-        heroes_settling[address] = 4
-        apply_heroes_geometry(window)
-
-        for _, timeout in ipairs({ 100, 300, 750, 1500 }) do
-          local timer
-          timer = hl.timer(function()
-            apply_heroes_geometry(hl.get_window("address:" .. address))
-
-            heroes_settling[address] = heroes_settling[address] - 1
-            if heroes_settling[address] == 0 then
-              heroes_settling[address] = nil
-            end
-            heroes_settle_timers[timer] = nil
-          end, { timeout = timeout, type = "oneshot" })
-          heroes_settle_timers[timer] = true
-        end
-      end
-
-      hl.on("window.open", settle_heroes_window)
-      hl.on("window.title", settle_heroes_window)
-
-      local function settle_heroes_after_monitor_reconnect()
-        local primary = hl.get_monitor("DP-1")
-        local secondary = hl.get_monitor("HDMI-A-1")
-        if primary == nil
-          or secondary == nil
-          or not primary.dpms_status
-          or not secondary.dpms_status
-        then
-          return
-        end
-
-        for _, window in ipairs(hl.get_windows()) do
-          settle_heroes_window(window)
-        end
-      end
-
-      hl.on("monitor.layout_changed", settle_heroes_after_monitor_reconnect)
-
-      hl.unbind("SUPER + S")
-      hl.bind("SUPER + S", hl.dsp.exec_cmd("${lib.getExe centeredFloatToggle}"))
       hl.bind("CTRL + SHIFT + R", hl.dsp.exec_cmd("moonlight-wolf-ui-lan"))
     '';
   };
@@ -576,6 +349,15 @@ in {
   };
 
   services.dms.enable = true;
+  services.dms.autoDoNotDisturb = {
+    enable = true;
+    windowMatchers = [
+      {
+        classRegex = "^steam_app_default$";
+        titleRegex = "^Heroes of the Storm$";
+      }
+    ];
+  };
   services.dms.settings = {
     audioVisualizerEnabled = false;
     scrollTitleEnabled = false;
@@ -596,14 +378,13 @@ in {
   };
   systemd.user.services.hyprland-xwayland-primary-output = {
     Unit = {
-      Description = "Keep the 49-inch display primary in XWayland";
+      Description = "Set the 49-inch display primary in XWayland at session startup";
       PartOf = ["graphical-session.target"];
       After = ["graphical-session.target"];
     };
     Service = {
+      Type = "oneshot";
       ExecStart = lib.getExe xwaylandPrimaryOutput;
-      Restart = "always";
-      RestartSec = 2;
     };
     Install.WantedBy = ["graphical-session.target"];
   };

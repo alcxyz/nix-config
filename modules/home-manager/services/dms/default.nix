@@ -281,6 +281,99 @@ let
           ''}
         '';
       });
+  autoDoNotDisturbCfg = cfg.autoDoNotDisturb;
+  autoDoNotDisturbMatchers = builtins.toJSON autoDoNotDisturbCfg.windowMatchers;
+  autoDoNotDisturbWatcher = pkgs.writeShellApplication {
+    name = "dms-auto-do-not-disturb";
+    runtimeInputs = [
+      dmsPkg
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.netcat-openbsd
+    ];
+    text = ''
+      matchers=${lib.escapeShellArg autoDoNotDisturbMatchers}
+      owned_marker="''${XDG_RUNTIME_DIR:?}/dms-auto-do-not-disturb.owned"
+      socket="''${XDG_RUNTIME_DIR:?}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
+      matching=false
+
+      has_matching_window() {
+        hyprctl clients -j 2>/dev/null \
+          | jq -e --argjson matchers "$matchers" '
+              any(.[]; . as $window |
+                any($matchers[]; . as $matcher |
+                  (($matcher.classRegex == null)
+                    or (($window.class // "") | test($matcher.classRegex)))
+                  and (($matcher.titleRegex == null)
+                    or (($window.title // "") | test($matcher.titleRegex)))
+                  and (($matcher.initialClassRegex == null)
+                    or (($window.initialClass // "") | test($matcher.initialClassRegex)))
+                  and (($matcher.initialTitleRegex == null)
+                    or (($window.initialTitle // "") | test($matcher.initialTitleRegex)))
+                )
+              )
+            ' >/dev/null
+      }
+
+      dnd_is_enabled() {
+        [[ "$(dms ipc call notifications getDoNotDisturb 2>/dev/null || true)" == true ]]
+      }
+
+      enable_owned_dnd() {
+        if dms ipc call notifications enableDoNotDisturbIndefinitely >/dev/null 2>&1; then
+          touch "$owned_marker"
+          return 0
+        fi
+        return 1
+      }
+
+      release_owned_dnd() {
+        if [[ -e "$owned_marker" ]]; then
+          if dnd_is_enabled; then
+            dms ipc call notifications disableDoNotDisturb >/dev/null 2>&1 \
+              || return 1
+          fi
+          rm -f "$owned_marker"
+        fi
+      }
+
+      trap 'release_owned_dnd || true' EXIT
+      trap 'exit 0' HUP INT TERM
+
+      sync_dnd() {
+        if has_matching_window; then
+          if [[ "$matching" != true ]]; then
+            if dnd_is_enabled; then
+              matching=true
+            elif enable_owned_dnd; then
+              matching=true
+            fi
+          fi
+        else
+          release_owned_dnd
+          matching=false
+        fi
+      }
+
+      sync_dnd
+      while true; do
+        while IFS= read -r event; do
+          case "$event" in
+            openwindow\>\>* | openwindowv2\>\>* \
+              | closewindow\>\>* | closewindowv2\>\>* \
+              | windowtitle\>\>* | windowtitlev2\>\>*)
+              # Let Hyprland finish updating its client list before evaluating.
+              sleep 0.05
+              sync_dnd
+              ;;
+          esac
+        done < <(timeout 5 nc -U "$socket" 2>/dev/null || true)
+        sleep 1
+        sync_dnd
+      done
+    '';
+  };
 in
 {
   options.services.dms = {
@@ -321,6 +414,44 @@ in
       type = lib.types.nullOr lib.types.str;
       default = "${configDir}/users/${username}/configs/dms/plugin_settings.json";
       description = "Optional base plugin_settings.json file to merge before services.dms.pluginSettings.";
+    };
+
+    autoDoNotDisturb = {
+      enable = lib.mkEnableOption "Automatically enable DMS Do Not Disturb while matching Hyprland applications are running";
+
+      windowMatchers = lib.mkOption {
+        type = lib.types.listOf (
+          lib.types.submodule {
+            options = {
+              classRegex = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Regular expression matched against the current window class.";
+              };
+
+              titleRegex = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Regular expression matched against the current window title.";
+              };
+
+              initialClassRegex = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Regular expression matched against the initial window class.";
+              };
+
+              initialTitleRegex = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Regular expression matched against the initial window title.";
+              };
+            };
+          }
+        );
+        default = [ ];
+        description = "Hyprland window matchers that activate DMS Do Not Disturb while at least one matching window exists.";
+      };
     };
 
     idleLock = {
@@ -448,6 +579,21 @@ in
   ];
 
   config = lib.mkIf cfg.enable {
+    assertions = lib.optional autoDoNotDisturbCfg.enable {
+      assertion =
+        autoDoNotDisturbCfg.windowMatchers != [ ]
+        && lib.all (
+          matcher:
+          lib.any (field: matcher.${field} != null) [
+            "classRegex"
+            "titleRegex"
+            "initialClassRegex"
+            "initialTitleRegex"
+          ]
+        ) autoDoNotDisturbCfg.windowMatchers;
+      message = "services.dms.autoDoNotDisturb requires at least one non-empty Hyprland window matcher.";
+    };
+
     home.packages = [
       elevationPkg
     ]
@@ -579,6 +725,20 @@ in
           src = plugins.firstparty + "/DankStickerSearch";
         };
       };
+    };
+
+    systemd.user.services.dms-auto-do-not-disturb = lib.mkIf autoDoNotDisturbCfg.enable {
+      Unit = {
+        Description = "Toggle DMS Do Not Disturb for configured Hyprland applications";
+        BindsTo = [ "wayland-wm@hyprland.desktop.service" ];
+        After = [ "wayland-wm@hyprland.desktop.service" ];
+      };
+      Service = {
+        ExecStart = lib.getExe autoDoNotDisturbWatcher;
+        Restart = "always";
+        RestartSec = 1;
+      };
+      Install.WantedBy = [ "wayland-wm@hyprland.desktop.service" ];
     };
 
     home.activation.dmsManagedSettings = lib.mkIf (managedSettings != { }) (
