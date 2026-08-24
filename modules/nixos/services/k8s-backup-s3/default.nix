@@ -107,6 +107,35 @@ in
       description = "Calendar schedule for mirroring the authoritative target.";
     };
 
+    scannerEnabled = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Enable the RustFS background scanner. Disable this when retention and
+        integrity handling are external and continuous bucket scans would only
+        add load to a single-disk backup target.
+      '';
+    };
+
+    healEnabled = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Enable RustFS background healing. This has no repair value for a
+        single-disk target and can cause the same continuous object walks as
+        the scanner.
+      '';
+    };
+
+    alwaysOn = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Keep the RustFS endpoint running independently of consumers. Disable
+        this for a replica that should run only while its mirror job needs it.
+      '';
+    };
+
     openFirewall = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -225,7 +254,8 @@ in
 
     systemd.services.k8s-backup-rustfs = {
       description = "RustFS backup target for Kubernetes";
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = lib.optional cfg.alwaysOn "multi-user.target";
+      unitConfig.StopWhenUnneeded = !cfg.alwaysOn;
       after = [
         "network-online.target"
         "k8s-backup-s3-storage.service"
@@ -241,7 +271,11 @@ in
           "rustfs_secret_key:${cfg.secretKeyFile}"
         ];
         ExecStart = "${rustfsPackage}/bin/rustfs server --address=${cfg.apiAddress} --console-enable --console-address=${cfg.consoleAddress} --access-key-file=%d/rustfs_access_key --secret-key-file=%d/rustfs_secret_key ${toString cfg.dataDir}";
-        Environment = "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency";
+        Environment = [
+          "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency"
+          "RUSTFS_SCANNER_ENABLED=${lib.boolToString cfg.scannerEnabled}"
+          "RUSTFS_HEAL_ENABLED=${lib.boolToString cfg.healEnabled}"
+        ];
         Restart = "on-failure";
         RestartSec = "5s";
         NoNewPrivileges = true;
