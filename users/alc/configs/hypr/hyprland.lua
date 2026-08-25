@@ -95,10 +95,18 @@ hl.animation({ leaf = "specialWorkspace", enabled = false })
 hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1 })
 hl.monitor({ output = "HDMI-A-3", disabled = true })
 
-require("colors")
-require("binds")
-require("managed-overrides")
-require("dms.outputs")
-require("dms.cursor")
-require("dms.windowrules")
-require("host")
+local function reload_module(name)
+	-- Hyprland keeps the Lua VM alive across configuration reloads. Clear the
+	-- standard require cache so every declared module is reapplied after the
+	-- compositor resets its configuration state.
+	package.loaded[name] = nil
+	require(name)
+end
+
+reload_module("colors")
+reload_module("binds")
+reload_module("managed-overrides")
+reload_module("dms.outputs")
+reload_module("dms.cursor")
+reload_module("dms.windowrules")
+reload_module("host")

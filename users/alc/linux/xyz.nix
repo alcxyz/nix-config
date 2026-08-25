@@ -264,6 +264,7 @@ in {
     enable = true;
     manageLegacyConfig = false;
     manageLuaConfig = true;
+    liveConfigEditing = false;
     # Match the qualified couch cursor policy. KDE Connect and other absolute
     # pointer paths can be classified as touch input by the compositor, even
     # though they are used as mice inside a windowed Moonlight stream.
