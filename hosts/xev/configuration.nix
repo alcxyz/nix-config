@@ -22,6 +22,7 @@
     "${configDir}/modules/nixos/virtualisation/k3s/nvidia-runtime.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     inputs.nix-secrets.nixosModules.xevK8sBackupReplica
+    inputs.nix-secrets.nixosModules.xevPrinter
     inputs.nix-secrets.nixosModules.xevPrivate
   ];
 
