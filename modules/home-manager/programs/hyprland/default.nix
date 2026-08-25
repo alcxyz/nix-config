@@ -113,6 +113,52 @@ with lib; let
       },
     })
   '';
+  immutableLuaConfig = pkgs.linkFarm "hyprland-lua-config" [
+    {
+      name = "hyprland.lua";
+      path = "${configSourceDir}/users/${username}/configs/hypr/hyprland.lua";
+    }
+    {
+      name = "binds.lua";
+      path = "${configSourceDir}/users/${username}/configs/hypr/binds.lua";
+    }
+    {
+      name = "binds-scrolling.lua";
+      path = "${configSourceDir}/users/${username}/configs/hypr/binds-scrolling.lua";
+    }
+    {
+      name = "binds-dwindle.lua";
+      path = "${configSourceDir}/users/${username}/configs/hypr/binds-dwindle.lua";
+    }
+    {
+      name = "managed-overrides.lua";
+      path = managedOverridesLua;
+    }
+    {
+      name = "host.lua";
+      path = hostLua;
+    }
+    {
+      name = "colors.lua";
+      path = colorsLua;
+    }
+    {
+      name = "dms/outputs.lua";
+      path = "${configSourceDir}/users/${username}/configs/dms/outputs.lua";
+    }
+    {
+      name = "dms/cursor.lua";
+      path = "${configSourceDir}/users/${username}/configs/dms/cursor.lua";
+    }
+    {
+      name = "dms/windowrules.lua";
+      path = "${configSourceDir}/users/${username}/configs/dms/windowrules.lua";
+    }
+  ];
+  luaConfigDir =
+    if cfg.liveConfigEditing
+    then "${config.home.homeDirectory}/.config/hypr"
+    else immutableLuaConfig;
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''
     set -eu
 
@@ -347,8 +393,9 @@ in {
       default = true;
       description = ''
         Link shared Hyprland and DMS configuration directly to the mutable
-        workspace checkout. Disable this on interactive machines where source
-        control operations must not reload the running compositor.
+        workspace checkout. When disabled, the session starts directly from a
+        complete immutable Nix-store tree and configuration updates take effect
+        only when a new compositor session starts.
       '';
     };
 
@@ -366,6 +413,11 @@ in {
   };
 
   config = mkIf cfg.enable {
+    assertions = optional (!cfg.liveConfigEditing) {
+      assertion = cfg.manageLuaConfig;
+      message = "Immutable Hyprland configuration currently requires programs.hyprland.managed.manageLuaConfig.";
+    };
+
     # Shared wayland settings (cursor, GTK, ozone)
     programs.wayland-common.enable = true;
 
@@ -378,7 +430,7 @@ in {
         [Desktop Entry]
         Name=Hyprland
         Comment=An intelligent dynamic tiling Wayland compositor
-        Exec=${pkgs.hyprland}/bin/start-hyprland -- --config ${config.home.homeDirectory}/.config/hypr/hyprland.lua
+        Exec=${pkgs.coreutils}/bin/env HYPRLAND_CONFIG_DIR=${luaConfigDir} ${pkgs.hyprland}/bin/start-hyprland -- --config ${luaConfigDir}/hyprland.lua
         Type=Application
         DesktopNames=Hyprland
         Keywords=tiling;wayland;compositor;
@@ -442,11 +494,11 @@ in {
       ''
     );
 
-    # Install Lua configuration links atomically for the same reason as the
-    # legacy activation above. During migration, retain the files used by a
-    # currently running hyprlang session; the next Lua session (or activation
-    # without a running compositor) removes only those obsolete managed links.
-    home.activation.hyprlandLuaConfig = mkIf cfg.manageLuaConfig (
+    # Live-editing profiles retain atomic workspace links. Immutable profiles
+    # deliberately leave ~/.config/hypr untouched: their desktop entry starts
+    # directly from immutableLuaConfig, so activation cannot reload a running
+    # compositor by changing a watched path.
+    home.activation.hyprlandLuaConfig = mkIf (cfg.manageLuaConfig && cfg.liveConfigEditing) (
       lib.hm.dag.entryAfter ["linkGeneration"] ''
         hypr_dir=${escapeShellArg "${config.home.homeDirectory}/.config/hypr"}
         dms_dir="$hypr_dir/dms"

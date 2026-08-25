@@ -6,6 +6,8 @@ local lock = "lock-screen"
 
 -- Help and session.
 hl.bind("SUPER + Q", hl.dsp.exec_cmd(lock))
+-- The K850 lock-logo action on F11 emits XF86ScreenSaver outside F-key mode.
+hl.bind("XF86ScreenSaver", hl.dsp.exec_cmd(lock))
 hl.bind("SUPER + SHIFT + Q", hl.dsp.exec_cmd(lock .. " --display-off-immediately"))
 hl.bind("SUPER + BACKSPACE", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
@@ -86,6 +88,11 @@ hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "r-1" }))
 -- Window rules.
 hl.window_rule({ name = "foot-opacity", match = { class = "^(foot)$" }, opacity = 0.98 })
 hl.window_rule({ name = "dropterm-opacity", match = { class = "^(dropterm)$" }, opacity = 0.90 })
+hl.window_rule({
+	name = "helium-opaque",
+	match = { class = "^(helium)$" },
+	opacity = "1.0 override 1.0 override 1.0 override",
+})
 
 -- Layout switching. The Lua callback updates the live config without the
 -- deprecated hyprctl keyword interface.

@@ -148,6 +148,9 @@ in {
   assertions = let
     legacyBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.conf";
     luaBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.lua";
+    luaConfig = builtins.readFile "${configDir}/users/alc/configs/hypr/hyprland.lua";
+    luaScrollingBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-scrolling.lua";
+    hostLegacyConfig = config.programs.hyprland.managed.extraConfig;
     hostLuaConfig = config.programs.hyprland.managed.extraLuaConfig;
   in [
     {
@@ -166,14 +169,49 @@ in {
     }
     {
       assertion =
+        lib.hasInfix ''hl.bind("XF86ScreenSaver", hl.dsp.exec_cmd(lock))'' luaBinds
+        && lib.hasInfix "bind = , XF86ScreenSaver, exec, $lock" legacyBinds;
+      message = "The K850 lock-logo key must use the normal lock-screen path in both Hyprland configs.";
+    }
+    {
+      assertion =
         lib.hasInfix ''workspace = "special:special"'' hostLuaConfig
         && lib.hasInfix ''gaps_in = 0'' hostLuaConfig
         && lib.hasInfix ''gaps_out = 0'' hostLuaConfig
         && lib.hasInfix ''border_size = 0'' hostLuaConfig
+        && lib.hasInfix ''name = "shared-special-workspace-opaque"'' hostLuaConfig
+        && lib.hasInfix ''match = { workspace = "name:special:special" }'' hostLuaConfig
+        && lib.hasInfix ''opacity = "1.0 override 1.0 override 1.0 override"'' hostLuaConfig
+        && lib.hasInfix "windowrule = opacity 1.0 override 1.0 override 1.0 override, match:workspace name:special:special" hostLegacyConfig
         && lib.hasInfix ''name = "moonlight-native-half-width"'' hostLuaConfig
         && lib.hasInfix ''class = "^com.moonlight_stream.Moonlight$"'' hostLuaConfig
         && lib.hasInfix ''scrolling_width = 0.5'' hostLuaConfig;
-      message = "The shared special workspace must retain zero gaps and borders so two tiled windows are exact 2560x1440 halves of DP-1.";
+      message = "The shared special workspace must retain exact geometry and fully opaque windows in both Hyprland configs.";
+    }
+    {
+      assertion =
+        !config.programs.hyprland.managed.liveConfigEditing
+        && lib.hasInfix ''os.getenv("HYPRLAND_CONFIG_DIR")'' luaConfig;
+      message = "xyz must start Hyprland from an immutable session configuration instead of the mutable workspace.";
+    }
+    {
+      assertion =
+        lib.hasInfix ''explicit_column_widths = "0.25,0.333,0.5,0.666,1"'' luaConfig
+        && lib.hasInfix ''workspace = "10"'' luaConfig
+        && lib.hasInfix ''local frontend_viewport_widths = { 390, 430, 768, 900, 1024, 1280, 1440, 1920 }'' luaScrollingBinds
+        && lib.hasInfix ''rawget(_G, "alc_scrolling_column_widths_by_monitor")'' luaScrollingBinds
+        && lib.hasInfix ''["HDMI-A-1"] = { 0.5, 0.666, 1 }'' hostLuaConfig;
+      message = "xyz must retain context-aware scrolling widths for workspace 10 and the upper display.";
+    }
+    {
+      assertion = lib.all (hyprConfig: !lib.hasInfix "Heroes of the Storm" hyprConfig) [
+        legacyBinds
+        luaBinds
+        luaConfig
+        hostLegacyConfig
+        hostLuaConfig
+      ];
+      message = "Heroes-specific behavior belongs only in the DND matcher, never in Hyprland configuration.";
     }
   ];
 
@@ -275,9 +313,16 @@ in {
     extraConfig = ''
       monitor = DP-1, 5120x1440@120, 0x1456, 1
       monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
+      windowrule = opacity 1.0 override 1.0 override 1.0 override, match:workspace name:special:special
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
     extraLuaConfig = ''
+      -- The secondary panel is physically 4K even though it runs at 1440p in
+      -- this layout. Its useful scrolling widths start at half the output.
+      alc_scrolling_column_widths_by_monitor = {
+        ["HDMI-A-1"] = { 0.5, 0.666, 1 },
+      }
+
       -- Center the secondary display above the primary ultrawide. Its EDID
       -- omits 1440p, so use a CVT reduced-blanking modeline to keep the iGPU's
       -- compositing load below the native 4K mode. The small logical gap acts
@@ -298,6 +343,11 @@ in {
         gaps_in = 0,
         gaps_out = 0,
         border_size = 0,
+      })
+      hl.window_rule({
+        name = "shared-special-workspace-opaque",
+        match = { workspace = "name:special:special" },
+        opacity = "1.0 override 1.0 override 1.0 override",
       })
 
       -- Keep Moonlight tiled while giving its 2560x1440 stream an exact half
