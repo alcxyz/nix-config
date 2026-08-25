@@ -4,12 +4,17 @@
 # The host firewall controls access to the configured port.
 {
   config,
+  configDir,
   lib,
   pkgs,
   ...
 }:
 with lib; let
   cfg = config.services.t3code;
+  configurationSource =
+    if builtins.isAttrs configDir && configDir ? outPath
+    then configDir.outPath
+    else toString configDir;
   activationGuard = pkgs.writeShellApplication {
     name = "t3code-activation-guard";
     runtimeInputs = with pkgs; [
@@ -89,9 +94,14 @@ with lib; let
       openssh
     ];
     text = ''
-      target=${escapeShellArg "${cfg.autoUpdate.flakeUri}#homeConfigurations.${cfg.autoUpdate.homeConfiguration}.activationPackage"}
-      echo "Building Home Manager activation from $target"
-      activation=$(nix build --refresh --no-link --print-out-paths "$target")
+      target=${escapeShellArg "${configurationSource}#homeConfigurations.${cfg.autoUpdate.homeConfiguration}.activationPackage"}
+      package_flake=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
+      echo "Building the pinned Home Manager configuration with refreshed packages from $package_flake"
+      activation=$(
+        nix build --refresh --no-link --print-out-paths \
+          --override-input nix-packages "$package_flake" \
+          "$target"
+      )
       exec "$activation/activate"
     '';
   };
@@ -128,12 +138,18 @@ in {
     };
 
     autoUpdate = {
-      enable = mkEnableOption "unattended Home Manager updates for the host running T3 Code";
+      enable = mkEnableOption "unattended T3 Code and provider package updates using the pinned Home Manager configuration";
 
       flakeUri = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Deprecated configuration-flake URI retained for compatibility; unattended activation never evaluates it.";
+      };
+
+      packageFlakeUri = mkOption {
         type = types.str;
-        example = "git+https://code.example.net/operator/nix-config.git?ref=dev";
-        description = "Flake URI to refresh and build. The URI must not contain a fragment.";
+        example = "git+https://code.example.net/operator/nix-packages.git?ref=dev";
+        description = "Flake URI used only to override the nix-packages input of the immutable configuration snapshot. The URI must not contain a fragment.";
       };
 
       homeConfiguration = mkOption {
@@ -156,6 +172,11 @@ in {
   };
 
   config = mkIf cfg.enable {
+    assertions = optional cfg.autoUpdate.enable {
+      assertion = !hasInfix "#" cfg.autoUpdate.packageFlakeUri;
+      message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
+    };
+
     systemd.user.services.t3code = {
       Unit = {
         Description = "t3code headless server";
@@ -184,7 +205,7 @@ in {
 
     systemd.user.services.t3code-auto-update = mkIf cfg.autoUpdate.enable {
       Unit = {
-        Description = "Refresh and activate the configured Home Manager generation";
+        Description = "Refresh T3 Code packages within the pinned Home Manager configuration";
         After = ["network-online.target"];
         Wants = ["network-online.target"];
       };
@@ -198,7 +219,7 @@ in {
     };
 
     systemd.user.timers.t3code-auto-update = mkIf cfg.autoUpdate.enable {
-      Unit.Description = "Nightly Home Manager update for T3 Code and its providers";
+      Unit.Description = "Nightly package-only update for T3 Code and its providers";
       Timer = {
         OnCalendar = cfg.autoUpdate.calendar;
         RandomizedDelaySec = cfg.autoUpdate.randomizedDelaySec;
