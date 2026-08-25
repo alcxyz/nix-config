@@ -298,6 +298,7 @@ in {
     "${configDir}/modules/nixos/common/desktop.nix"
     inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
+    inputs.nix-secrets.nixosModules.xyzPrinter
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
     "${configDir}/modules/nixos/hardware/nvidia.nix"
@@ -528,6 +529,9 @@ in {
       options = ["nofail"];
     }
   ];
+  # Keep swap as an OOM safety net, but prefer retaining latency-sensitive
+  # desktop and game memory over filesystem cache during routine pressure.
+  boot.kernel.sysctl."vm.swappiness" = 10;
 
   fileSystems."/var/lib/calibre" = {
     device = appStateDatasets.calibre;
@@ -730,6 +734,9 @@ in {
   services.printing = {
     enable = true;
     drivers = [pkgs.hplipWithPlugin];
+    # The xev-backed queue below is managed explicitly; do not create a second
+    # implicit queue for the same Bonjour advertisement.
+    browsed.enable = false;
   };
 
   services.torrent.enable = true;
@@ -978,8 +985,7 @@ in {
 
   # Steam Stream
   # Keep Sunshine's fixed service ports out of the ephemeral client-port pool.
-  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" =
-    "47984,47989-47990,47998-48000,48002,48010,49984,49989,49999,50010,50100,50200";
+  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010,49984,49989,49999,50010,50100,50200";
 
   # Streaming ingress is scoped to trusted interfaces by the private host policy.
   networking.firewall.allowedTCPPorts = [
