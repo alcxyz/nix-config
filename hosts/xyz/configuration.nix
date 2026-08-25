@@ -978,7 +978,8 @@ in {
 
   # Steam Stream
   # Keep Sunshine's fixed service ports out of the ephemeral client-port pool.
-  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010";
+  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" =
+    "47984,47989-47990,47998-48000,48002,48010,49984,49989,49999,50010,50100,50200";
 
   # Streaming ingress is scoped to trusted interfaces by the private host policy.
   networking.firewall.allowedTCPPorts = [
