@@ -141,6 +141,7 @@ in {
       enable = enableZsh;
       enableCompletion = true;
       defaultKeymap = "viins";
+      shellAliases.".." = "builtin cd ..";
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
     };

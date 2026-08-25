@@ -44,6 +44,7 @@ in {
       enable = true;
       enableCompletion = true;
       defaultKeymap = "viins";
+      shellAliases.".." = "builtin cd ..";
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
     };
@@ -51,6 +52,10 @@ in {
       enable = true;
       enableBashIntegration = true;
       enableZshIntegration = true;
+    };
+    tmux = {
+      enable = true;
+      shell = "${pkgs.zsh}/bin/zsh";
     };
   };
 }
