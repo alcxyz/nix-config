@@ -104,6 +104,12 @@ local function reload_module(name)
 end
 
 reload_module("colors")
+
+-- Lua keybind objects survive a configuration reload. Remove the previous
+-- registry before recreating it, otherwise every reload doubles each action.
+hl.unbind("all")
+package.loaded["binds-scrolling"] = nil
+package.loaded["binds-dwindle"] = nil
 reload_module("binds")
 reload_module("managed-overrides")
 reload_module("dms.outputs")
