@@ -9,66 +9,68 @@
   configDir,
   ...
 }:
-with lib;
-let
+with lib; let
   cfg = config.programs.hyprland.managed;
-  # Operator profiles use their live workspace checkout. Smaller profiles such
-  # as madsil do not import the workspace module and retain the immutable flake
-  # source behavior that predates the live-symlink optimization.
-  localConfigDir =
-    if lib.hasAttrByPath [ "programs" "workspace" "root" ] options then
-      "${config.programs.workspace.root}/infra/nix-config"
-    else
-      toString configDir;
+  # Live editing is convenient on development-only profiles, but a compositor
+  # must also be able to consume an immutable snapshot. Otherwise unrelated
+  # source-control operations can trigger a live Hyprland reload.
+  configSourceDir =
+    if cfg.liveConfigEditing && lib.hasAttrByPath ["programs" "workspace" "root"] options
+    then "${config.programs.workspace.root}/infra/nix-config"
+    else toString configDir;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
-  toLua = generators.toLua { };
+  toLua = generators.toLua {};
   managedOverridesConfig = pkgs.writeText "hyprland-managed-overrides.conf" (
     optionalString (cfg.inputSensitivity != null) ''
       input {
         sensitivity = ${toString cfg.inputSensitivity}
       }
     ''
-    +
-      optionalString (cfg.remotePointerInactiveTimeout != null || cfg.remotePointerHideOnTouch != null)
-        ''
-          cursor {
-            ${optionalString (
-              cfg.remotePointerInactiveTimeout != null
-            ) "inactive_timeout = ${toString cfg.remotePointerInactiveTimeout}"}
-            ${optionalString (
-              cfg.remotePointerHideOnTouch != null
-            ) "hide_on_touch = ${boolToString cfg.remotePointerHideOnTouch}"}
-          }
-        ''
+    + optionalString (cfg.remotePointerInactiveTimeout != null || cfg.remotePointerHideOnTouch != null)
+    ''
+      cursor {
+        ${optionalString (
+        cfg.remotePointerInactiveTimeout != null
+      ) "inactive_timeout = ${toString cfg.remotePointerInactiveTimeout}"}
+        ${optionalString (
+        cfg.remotePointerHideOnTouch != null
+      ) "hide_on_touch = ${boolToString cfg.remotePointerHideOnTouch}"}
+      }
+    ''
   );
   managedOverridesLua = pkgs.writeText "hyprland-managed-overrides.lua" ''
     hl.config({
       ${optionalString (cfg.inputSensitivity != null) ''
-        input = {
-          sensitivity = ${toString cfg.inputSensitivity},
+      input = {
+        sensitivity = ${toString cfg.inputSensitivity},
+      },
+    ''}
+      ${
+      optionalString
+      (cfg.remotePointerInactiveTimeout != null || cfg.remotePointerHideOnTouch != null)
+      ''
+        cursor = {
+          ${optionalString (
+          cfg.remotePointerInactiveTimeout != null
+        ) "inactive_timeout = ${toString cfg.remotePointerInactiveTimeout},"}
+          ${optionalString (
+          cfg.remotePointerHideOnTouch != null
+        ) "hide_on_touch = ${boolToString cfg.remotePointerHideOnTouch},"}
         },
-      ''}
-      ${optionalString
-        (cfg.remotePointerInactiveTimeout != null || cfg.remotePointerHideOnTouch != null)
-        ''
-          cursor = {
-            ${optionalString (
-              cfg.remotePointerInactiveTimeout != null
-            ) "inactive_timeout = ${toString cfg.remotePointerInactiveTimeout},"}
-            ${optionalString (
-              cfg.remotePointerHideOnTouch != null
-            ) "hide_on_touch = ${boolToString cfg.remotePointerHideOnTouch},"}
-          },
-        ''
-      }
+      ''
+    }
     })
   '';
   inputDefaultsScript = pkgs.writeShellScript "hyprland-input-defaults" ''
     set -eu
 
     for _attempt in $(${pkgs.coreutils}/bin/seq 1 50); do
-      if ${pkgs.hyprland}/bin/hyprctl eval ${escapeShellArg "hl.config({ input = { kb_layout = ${toLua (if cfg.inputLayouts == null then "" else cfg.inputLayouts)}, kb_options = ${toLua cfg.inputOptions} } })"} >/dev/null 2>&1; then
+      if ${pkgs.hyprland}/bin/hyprctl eval ${escapeShellArg "hl.config({ input = { kb_layout = ${toLua (
+      if cfg.inputLayouts == null
+      then ""
+      else cfg.inputLayouts
+    )}, kb_options = ${toLua cfg.inputOptions} } })"} >/dev/null 2>&1; then
         ${pkgs.hyprland}/bin/hyprctl switchxkblayout all 0 >/dev/null
         exit 0
       fi
@@ -286,8 +288,7 @@ let
       sleep 2
     done
   '';
-in
-{
+in {
   options.programs.hyprland.managed = {
     enable = mkEnableOption "Manage Hyprland-related user files (scripts, colors)";
 
@@ -341,6 +342,16 @@ in
       description = "Install the Hyprland Lua configuration and its modules.";
     };
 
+    liveConfigEditing = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Link shared Hyprland and DMS configuration directly to the mutable
+        workspace checkout. Disable this on interactive machines where source
+        control operations must not reload the running compositor.
+      '';
+    };
+
     extraConfig = mkOption {
       type = types.lines;
       default = "";
@@ -386,18 +397,19 @@ in
 
     home.file.".config/hypr/scripts/laptop_display_autoswitch.sh" =
       mkIf cfg.laptopDisplayAutoSwitch.enable
-        {
-          source = laptopDisplayScript;
-          executable = true;
-        };
+      {
+        source = laptopDisplayScript;
+        executable = true;
+      };
 
     # Hyprland watches its configuration tree and reloads immediately. Home
     # Manager normally unlinks the old generation before linking the new one,
     # which exposes a briefly incomplete configuration to the running
     # compositor. Keep these links outside linkGeneration and replace each one
-    # atomically instead. Repo-backed files still update live without a rebuild.
+    # atomically instead. Workspace-backed files update live only when
+    # liveConfigEditing is explicitly retained.
     home.activation.hyprlandLegacyConfig = mkIf cfg.manageLegacyConfig (
-      lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      lib.hm.dag.entryAfter ["linkGeneration"] ''
         hypr_dir=${escapeShellArg "${config.home.homeDirectory}/.config/hypr"}
         dms_dir="$hypr_dir/dms"
         mkdir -p "$hypr_dir" "$dms_dir"
@@ -417,16 +429,16 @@ in
           mv -Tf "$temporary_path" "$target_path"
         }
 
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf"} "$hypr_dir/hyprland.conf"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds.conf"} "$hypr_dir/binds.conf"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf"} "$hypr_dir/binds-scrolling.conf"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf"} "$hypr_dir/binds-dwindle.conf"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/hyprland.conf"} "$hypr_dir/hyprland.conf"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds.conf"} "$hypr_dir/binds.conf"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds-scrolling.conf"} "$hypr_dir/binds-scrolling.conf"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds-dwindle.conf"} "$hypr_dir/binds-dwindle.conf"
         install_link ${escapeShellArg "${managedOverridesConfig}"} "$hypr_dir/managed-overrides.conf"
         install_link ${escapeShellArg "${hostConfig}"} "$hypr_dir/host.conf"
         install_link ${escapeShellArg "${colorsConfig}"} "$hypr_dir/colors.conf"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/cursor.conf"} "$dms_dir/cursor.conf"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/windowrules.conf"} "$dms_dir/windowrules.conf"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/outputs.conf"} "$dms_dir/outputs.conf"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/cursor.conf"} "$dms_dir/cursor.conf"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/windowrules.conf"} "$dms_dir/windowrules.conf"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/outputs.conf"} "$dms_dir/outputs.conf"
       ''
     );
 
@@ -435,7 +447,7 @@ in
     # currently running hyprlang session; the next Lua session (or activation
     # without a running compositor) removes only those obsolete managed links.
     home.activation.hyprlandLuaConfig = mkIf cfg.manageLuaConfig (
-      lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      lib.hm.dag.entryAfter ["linkGeneration"] ''
         hypr_dir=${escapeShellArg "${config.home.homeDirectory}/.config/hypr"}
         dms_dir="$hypr_dir/dms"
         mkdir -p "$hypr_dir" "$dms_dir"
@@ -455,16 +467,16 @@ in
           mv -Tf "$temporary_path" "$target_path"
         }
 
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/hyprland.lua"} "$hypr_dir/hyprland.lua"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds.lua"} "$hypr_dir/binds.lua"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.lua"} "$hypr_dir/binds-scrolling.lua"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.lua"} "$hypr_dir/binds-dwindle.lua"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/hyprland.lua"} "$hypr_dir/hyprland.lua"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds.lua"} "$hypr_dir/binds.lua"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds-scrolling.lua"} "$hypr_dir/binds-scrolling.lua"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds-dwindle.lua"} "$hypr_dir/binds-dwindle.lua"
         install_link ${escapeShellArg "${managedOverridesLua}"} "$hypr_dir/managed-overrides.lua"
         install_link ${escapeShellArg "${hostLua}"} "$hypr_dir/host.lua"
         install_link ${escapeShellArg "${colorsLua}"} "$hypr_dir/colors.lua"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/outputs.lua"} "$dms_dir/outputs.lua"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/cursor.lua"} "$dms_dir/cursor.lua"
-        install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/windowrules.lua"} "$dms_dir/windowrules.lua"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/outputs.lua"} "$dms_dir/outputs.lua"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/cursor.lua"} "$dms_dir/cursor.lua"
+        install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/windowrules.lua"} "$dms_dir/windowrules.lua"
 
         provider="$(${pkgs.hyprland}/bin/hyprctl status -j 2>/dev/null \
           | ${pkgs.jq}/bin/jq -r '.configProvider // empty' 2>/dev/null || true)"
@@ -472,16 +484,16 @@ in
           # Keep the current legacy session complete during a live migration.
           # DMS must not leave that running compositor on Hyprland's generated
           # fallback merely because the next session is configured for Lua.
-          install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/hyprland.conf"} "$hypr_dir/hyprland.conf"
-          install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds.conf"} "$hypr_dir/binds.conf"
-          install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-scrolling.conf"} "$hypr_dir/binds-scrolling.conf"
-          install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/hypr/binds-dwindle.conf"} "$hypr_dir/binds-dwindle.conf"
+          install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/hyprland.conf"} "$hypr_dir/hyprland.conf"
+          install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds.conf"} "$hypr_dir/binds.conf"
+          install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds-scrolling.conf"} "$hypr_dir/binds-scrolling.conf"
+          install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/hypr/binds-dwindle.conf"} "$hypr_dir/binds-dwindle.conf"
           install_link ${escapeShellArg "${managedOverridesConfig}"} "$hypr_dir/managed-overrides.conf"
           install_link ${escapeShellArg "${hostConfig}"} "$hypr_dir/host.conf"
           install_link ${escapeShellArg "${colorsConfig}"} "$hypr_dir/colors.conf"
-          install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/cursor.conf"} "$dms_dir/cursor.conf"
-          install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/windowrules.conf"} "$dms_dir/windowrules.conf"
-          install_link ${escapeShellArg "${localConfigDir}/users/${username}/configs/dms/outputs.conf"} "$dms_dir/outputs.conf"
+          install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/cursor.conf"} "$dms_dir/cursor.conf"
+          install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/windowrules.conf"} "$dms_dir/windowrules.conf"
+          install_link ${escapeShellArg "${configSourceDir}/users/${username}/configs/dms/outputs.conf"} "$dms_dir/outputs.conf"
         else
           for legacy_path in \
             "$hypr_dir/hyprland.conf" \
@@ -506,8 +518,8 @@ in
     systemd.user.services.hypr-laptop-display-autoswitch = mkIf cfg.laptopDisplayAutoSwitch.enable {
       Unit = {
         Description = "Adjust Hyprland outputs for laptop and dock state";
-        PartOf = [ "graphical-session.target" ];
-        After = [ "graphical-session.target" ];
+        PartOf = ["graphical-session.target"];
+        After = ["graphical-session.target"];
       };
       Service = {
         ExecStart = laptopDisplayScript;
@@ -519,14 +531,14 @@ in
     systemd.user.services.hyprland-input-defaults = mkIf (cfg.inputLayouts != null) {
       Unit = {
         Description = "Apply Hyprland keyboard layout defaults";
-        PartOf = [ "graphical-session.target" ];
-        After = [ "graphical-session.target" ];
+        PartOf = ["graphical-session.target"];
+        After = ["graphical-session.target"];
       };
       Service = {
         Type = "oneshot";
         ExecStart = inputDefaultsScript;
       };
-      Install.WantedBy = [ "graphical-session.target" ];
+      Install.WantedBy = ["graphical-session.target"];
     };
   };
 }
