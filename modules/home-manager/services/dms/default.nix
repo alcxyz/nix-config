@@ -7,36 +7,35 @@
   username,
   configDir,
   ...
-}:
-let
+}: let
   cfg = config.services.dms;
   compact = cfg.profile == "compact";
   idleLockCfg = cfg.idleLock;
   dockCfg = cfg.dock;
-  optionalSetting =
-    name: value:
+  optionalSetting = name: value:
     lib.optionalAttrs (value != null) {
       ${name} = value;
     };
-  idleLockSettings = {
-    acLockTimeout = idleLockCfg.acTimeout;
-    batteryLockTimeout = idleLockCfg.batteryTimeout;
-    customPowerActionLock = idleLockCfg.command;
-    fadeToLockEnabled = idleLockCfg.fadeToLock;
-  }
-  // optionalSetting "acMonitorTimeout" idleLockCfg.acMonitorTimeout
-  // optionalSetting "batteryMonitorTimeout" idleLockCfg.batteryMonitorTimeout
-  // optionalSetting "acSuspendTimeout" idleLockCfg.acSuspendTimeout
-  // optionalSetting "batterySuspendTimeout" idleLockCfg.batterySuspendTimeout
-  // optionalSetting "acPostLockMonitorTimeout" idleLockCfg.acPostLockMonitorTimeout
-  // optionalSetting "batteryPostLockMonitorTimeout" idleLockCfg.batteryPostLockMonitorTimeout
-  // optionalSetting "fadeToLockGracePeriod" idleLockCfg.fadeToLockGracePeriod
-  // optionalSetting "fadeToDpmsEnabled" idleLockCfg.fadeToDpms
-  // optionalSetting "fadeToDpmsGracePeriod" idleLockCfg.fadeToDpmsGracePeriod
-  // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
-    loginctlLockIntegration = false;
-    lockBeforeSuspend = false;
-  };
+  idleLockSettings =
+    {
+      acLockTimeout = idleLockCfg.acTimeout;
+      batteryLockTimeout = idleLockCfg.batteryTimeout;
+      customPowerActionLock = idleLockCfg.command;
+      fadeToLockEnabled = idleLockCfg.fadeToLock;
+    }
+    // optionalSetting "acMonitorTimeout" idleLockCfg.acMonitorTimeout
+    // optionalSetting "batteryMonitorTimeout" idleLockCfg.batteryMonitorTimeout
+    // optionalSetting "acSuspendTimeout" idleLockCfg.acSuspendTimeout
+    // optionalSetting "batterySuspendTimeout" idleLockCfg.batterySuspendTimeout
+    // optionalSetting "acPostLockMonitorTimeout" idleLockCfg.acPostLockMonitorTimeout
+    // optionalSetting "batteryPostLockMonitorTimeout" idleLockCfg.batteryPostLockMonitorTimeout
+    // optionalSetting "fadeToLockGracePeriod" idleLockCfg.fadeToLockGracePeriod
+    // optionalSetting "fadeToDpmsEnabled" idleLockCfg.fadeToDpms
+    // optionalSetting "fadeToDpmsGracePeriod" idleLockCfg.fadeToDpmsGracePeriod
+    // lib.optionalAttrs idleLockCfg.disableLoginctlIntegration {
+      loginctlLockIntegration = false;
+      lockBeforeSuspend = false;
+    };
   compactSettings = lib.optionalAttrs compact {
     acMonitorTimeout = 0;
     acLockTimeout = 0;
@@ -63,7 +62,7 @@ let
         name = "Nixbox";
         enabled = true;
         position = 0;
-        screenPreferences = [ "all" ];
+        screenPreferences = ["all"];
         showOnLastDisplay = true;
         leftWidgets = [
           "launcherButton"
@@ -107,10 +106,9 @@ let
   managedSettings = lib.recursiveUpdate generatedSettings cfg.settings;
   managedSettingsFile = pkgs.writeText "dms-managed-settings.json" (builtins.toJSON managedSettings);
   basePluginSettings =
-    if cfg.pluginSettingsFile == null || !(builtins.pathExists cfg.pluginSettingsFile) then
-      { }
-    else
-      builtins.fromJSON (builtins.readFile cfg.pluginSettingsFile);
+    if cfg.pluginSettingsFile == null || !(builtins.pathExists cfg.pluginSettingsFile)
+    then {}
+    else builtins.fromJSON (builtins.readFile cfg.pluginSettingsFile);
   managedPluginSettings = lib.recursiveUpdate basePluginSettings cfg.pluginSettings;
   managedPluginSettingsFile = pkgs.writeText "dms-managed-plugin-settings.json" (
     builtins.toJSON managedPluginSettings
@@ -245,26 +243,34 @@ let
   };
   quickshellBasePkg = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
   quickshellUnwrappedPkg = quickshellBasePkg.unwrapped.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [
-      ./patches/quickshell-polkit-details.patch
-    ];
+    patches =
+      (old.patches or [])
+      ++ [
+        ./patches/quickshell-polkit-details.patch
+      ];
   });
   quickshellPkg = quickshellBasePkg.overrideAttrs (_: {
     installPhase = ''
       mkdir -p "$out"
       cp -r ${quickshellUnwrappedPkg}/* "$out"
     '';
-    passthru = (quickshellBasePkg.passthru or { }) // {
-      unwrapped = quickshellUnwrappedPkg;
-    };
+    passthru =
+      (quickshellBasePkg.passthru or {})
+      // {
+        unwrapped = quickshellUnwrappedPkg;
+      };
   });
   dmsPkg =
     inputs.dankMaterialShell.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
-      (old: {
-        patches = (old.patches or [ ]) ++ [
+    (old: {
+      patches =
+        (old.patches or [])
+        ++ [
           ./patches/dms-cleanup-hyprland-conf-only-in-lua-session.patch
         ];
-        postInstall = (old.postInstall or "") + ''
+      postInstall =
+        (old.postInstall or "")
+        + ''
           chmod -R u+w "$out/share/quickshell/dms"
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-use-live-hyprland-provider.patch}
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
@@ -280,7 +286,7 @@ let
               --subst-var-by audioOutputCommand ${lib.escapeShellArg cfg.audioOutputCommand}
           ''}
         '';
-      });
+    });
   autoDoNotDisturbCfg = cfg.autoDoNotDisturb;
   autoDoNotDisturbMatchers = builtins.toJSON autoDoNotDisturbCfg.windowMatchers;
   autoDoNotDisturbWatcher = pkgs.writeShellApplication {
@@ -374,8 +380,7 @@ let
       done
     '';
   };
-in
-{
+in {
   options.services.dms = {
     enable = lib.mkEnableOption "Enable DankMaterialShell suite";
 
@@ -400,13 +405,13 @@ in
 
     settings = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
-      default = { };
+      default = {};
       description = "DMS settings.json keys to manage declaratively. These override generated settings for the same keys.";
     };
 
     pluginSettings = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
-      default = { };
+      default = {};
       description = "DMS plugin_settings.json keys to manage declaratively. These override the base plugin settings file for the same keys.";
     };
 
@@ -449,7 +454,7 @@ in
             };
           }
         );
-        default = [ ];
+        default = [];
         description = "Hyprland window matchers that activate DMS Do Not Disturb while at least one matching window exists.";
       };
     };
@@ -581,27 +586,30 @@ in
   config = lib.mkIf cfg.enable {
     assertions = lib.optional autoDoNotDisturbCfg.enable {
       assertion =
-        autoDoNotDisturbCfg.windowMatchers != [ ]
+        autoDoNotDisturbCfg.windowMatchers
+        != []
         && lib.all (
           matcher:
-          lib.any (field: matcher.${field} != null) [
-            "classRegex"
-            "titleRegex"
-            "initialClassRegex"
-            "initialTitleRegex"
-          ]
-        ) autoDoNotDisturbCfg.windowMatchers;
+            lib.any (field: matcher.${field} != null) [
+              "classRegex"
+              "titleRegex"
+              "initialClassRegex"
+              "initialTitleRegex"
+            ]
+        )
+        autoDoNotDisturbCfg.windowMatchers;
       message = "services.dms.autoDoNotDisturb requires at least one non-empty Hyprland window matcher.";
     };
 
-    home.packages = [
-      elevationPkg
-    ]
-    ++ lib.optionals (!compact) [
-      dankcalendarPkg
-      dankaiusagePkg
-      pkgs.translate-shell
-    ];
+    home.packages =
+      [
+        elevationPkg
+      ]
+      ++ lib.optionals (!compact) [
+        dankcalendarPkg
+        dankaiusagePkg
+        pkgs.translate-shell
+      ];
 
     xdg.configFile = lib.optionalAttrs (!compact) {
       "dankcalendar/config.json".source =
@@ -730,25 +738,25 @@ in
     systemd.user.services.dms-auto-do-not-disturb = lib.mkIf autoDoNotDisturbCfg.enable {
       Unit = {
         Description = "Toggle DMS Do Not Disturb for configured Hyprland applications";
-        BindsTo = [ "wayland-wm@hyprland.desktop.service" ];
-        After = [ "wayland-wm@hyprland.desktop.service" ];
+        BindsTo = ["wayland-wm@hyprland.desktop.service"];
+        After = ["wayland-wm@hyprland.desktop.service"];
       };
       Service = {
         ExecStart = lib.getExe autoDoNotDisturbWatcher;
         Restart = "always";
         RestartSec = 1;
       };
-      Install.WantedBy = [ "wayland-wm@hyprland.desktop.service" ];
+      Install.WantedBy = ["wayland-wm@hyprland.desktop.service"];
     };
 
-    home.activation.dmsManagedSettings = lib.mkIf (managedSettings != { }) (
-      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.dmsManagedSettings = lib.mkIf (managedSettings != {}) (
+      lib.hm.dag.entryAfter ["writeBoundary"] ''
         ${mergeJsonInto "${config.xdg.configHome}/DankMaterialShell/settings.json" managedSettingsFile}
       ''
     );
 
-    home.activation.dmsManagedPluginSettings = lib.mkIf (managedPluginSettings != { }) (
-      lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+    home.activation.dmsManagedPluginSettings = lib.mkIf (managedPluginSettings != {}) (
+      lib.hm.dag.entryAfter ["linkGeneration"] ''
         ${mergeJsonInto "${config.xdg.configHome}/DankMaterialShell/plugin_settings.json" managedPluginSettingsFile}
       ''
     );
