@@ -457,6 +457,7 @@ in {
 
   services.t3code.enable = true;
   services.t3code.port = 3773;
+  services.t3code.autoUpdate.packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";
 
   programs.ai.enable = true;
   programs.stashdb-pop.enable = true;
