@@ -506,9 +506,15 @@ in {
   services.devlog.enable = true;
   services.devlog.weekly.enable = true;
 
-  services.t3code.enable = true;
-  services.t3code.port = 3773;
-  services.t3code.autoUpdate.packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";
+  services.t3code = {
+    enable = true;
+    port = 3773;
+    autoUpdate = {
+      packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";
+      calendar = lib.mkForce "*-*-* 05:45:00";
+      randomizedDelaySec = lib.mkForce "0";
+    };
+  };
 
   programs.ai.enable = true;
   programs.stashdb-pop.enable = true;
