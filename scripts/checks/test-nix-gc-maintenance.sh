@@ -33,6 +33,12 @@ cat >"$BIN_DIR/sudo" <<'EOF'
 printf 'sudo' >>"$CALL_LOG"
 printf ' <%s>' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
+if [[ "${1:-}" == "-H" ]]; then
+  shift
+fi
+if [[ "${1:-}" == "-u" ]]; then
+  shift 2
+fi
 "$@"
 EOF
 
@@ -44,7 +50,34 @@ printf '\n' >>"$CALL_LOG"
 cat >/dev/null
 EOF
 
-chmod +x "$BIN_DIR/nix-env" "$BIN_DIR/nix-store" "$BIN_DIR/ssh" "$BIN_DIR/sudo"
+cat >"$BIN_DIR/id-user" <<'EOF'
+#!/usr/bin/env bash
+printf '501\n'
+EOF
+
+cat >"$BIN_DIR/id-root" <<'EOF'
+#!/usr/bin/env bash
+printf '0\n'
+EOF
+
+cat >"$BIN_DIR/df" <<'EOF'
+#!/usr/bin/env bash
+cat <<'OUT'
+Filesystem 1024-blocks Used Available Capacity Mounted on
+test       1000        500  500       50%      /nix
+OUT
+EOF
+
+cat >"$BIN_DIR/df-low" <<'EOF'
+#!/usr/bin/env bash
+cat <<'OUT'
+Filesystem 1024-blocks Used Available Capacity Mounted on
+test       1000        900  100       90%      /nix
+OUT
+EOF
+
+chmod +x "$BIN_DIR/df" "$BIN_DIR/df-low" "$BIN_DIR/id-root" "$BIN_DIR/id-user" \
+  "$BIN_DIR/nix-env" "$BIN_DIR/nix-store" "$BIN_DIR/ssh" "$BIN_DIR/sudo"
 
 export CALL_LOG
 NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
@@ -52,12 +85,16 @@ NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
   NIX_ENV_BIN="$BIN_DIR/nix-env" \
   NIX_STORE_BIN="$BIN_DIR/nix-store" \
   SUDO_BIN="$BIN_DIR/sudo" \
+  ID_BIN="$BIN_DIR/id-user" \
   "$MAINTENANCE" >/dev/null
 
 expected=$(
   cat <<EOF
+nix-store <-qR> <$PROFILE_ROOT/home-manager>
 nix-env <--profile> <$PROFILE_ROOT/home-manager> <--delete-generations> <+10>
+nix-store <-qR> <$PROFILE_ROOT/profile>
 nix-env <--profile> <$PROFILE_ROOT/profile> <--delete-generations> <+10>
+nix-store <-qR> <$SYSTEM_PROFILE>
 sudo <$BIN_DIR/nix-env> <--profile> <$SYSTEM_PROFILE> <--delete-generations> <+10>
 nix-env <--profile> <$SYSTEM_PROFILE> <--delete-generations> <+10>
 sudo <$BIN_DIR/nix-store> <--gc> <--max-freed> <10737418240>
@@ -73,6 +110,95 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 
 : >"$CALL_LOG"
+no_action_output=$(
+  NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
+    NIX_GC_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+    NIX_ENV_BIN="$BIN_DIR/nix-env" \
+    NIX_STORE_BIN="$BIN_DIR/nix-store" \
+    SUDO_BIN="$BIN_DIR/sudo" \
+    DF_BIN="$BIN_DIR/df" \
+    ID_BIN="$BIN_DIR/id-user" \
+    env -u HOME "$MAINTENANCE" --automatic-retention --user alc \
+    --home "$TEST_ROOT/home" --check-only
+)
+grep -Fq 'retention not required' <<<"$no_action_output"
+if [[ -s "$CALL_LOG" ]]; then
+  printf 'below-threshold audit unexpectedly called Nix commands\n' >&2
+  exit 1
+fi
+
+: >"$CALL_LOG"
+low_space_output=$(
+  NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
+    NIX_GC_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+    NIX_ENV_BIN="$BIN_DIR/nix-env" \
+    NIX_STORE_BIN="$BIN_DIR/nix-store" \
+    SUDO_BIN="$BIN_DIR/sudo" \
+    DF_BIN="$BIN_DIR/df-low" \
+    ID_BIN="$BIN_DIR/id-user" \
+    "$MAINTENANCE" --automatic-retention --user alc \
+    --home "$TEST_ROOT/home" --check-only
+)
+grep -Fq 'retention trigger: free space is below 15%' <<<"$low_space_output"
+grep -Fq 'all profiles already retain 10 generations or fewer' <<<"$low_space_output"
+
+for generation in $(seq 1 12); do
+  ln -s "$PROFILE_ROOT/home-manager" "$PROFILE_ROOT/home-manager-${generation}-link"
+done
+for generation in $(seq 1 5); do
+  ln -s "$PROFILE_ROOT/profile" "$PROFILE_ROOT/profile-${generation}-link"
+done
+for generation in $(seq 1 21); do
+  ln -s "$SYSTEM_PROFILE" "$TEST_ROOT/system-${generation}-link"
+done
+
+: >"$CALL_LOG"
+audit_output=$(
+  NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
+    NIX_GC_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+    NIX_ENV_BIN="$BIN_DIR/nix-env" \
+    NIX_STORE_BIN="$BIN_DIR/nix-store" \
+    SUDO_BIN="$BIN_DIR/sudo" \
+    DF_BIN="$BIN_DIR/df" \
+    ID_BIN="$BIN_DIR/id-user" \
+    "$MAINTENANCE" --automatic-retention --user alc \
+    --home "$TEST_ROOT/home" --check-only
+)
+
+grep -Fq "retention trigger: $SYSTEM_PROFILE exceeds 20 generations" \
+  <<<"$audit_output"
+grep -Fq "check-only: would retain 10 generations in $PROFILE_ROOT/home-manager" \
+  <<<"$audit_output"
+grep -Fq "check-only: would retain 10 generations in $SYSTEM_PROFILE" \
+  <<<"$audit_output"
+if grep -Fq 'nix-env' "$CALL_LOG"; then
+  printf 'check-only mode attempted generation deletion\n' >&2
+  exit 1
+fi
+
+: >"$CALL_LOG"
+NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
+  NIX_GC_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+  NIX_ENV_BIN="$BIN_DIR/nix-env" \
+  NIX_STORE_BIN="$BIN_DIR/nix-store" \
+  SUDO_BIN="$BIN_DIR/sudo" \
+  DF_BIN="$BIN_DIR/df" \
+  ID_BIN="$BIN_DIR/id-root" \
+  "$MAINTENANCE" --automatic-retention --user alc \
+  --home "$TEST_ROOT/home" >/dev/null
+
+grep -Fq \
+  "sudo <-H> <-u> <alc> <$BIN_DIR/nix-env> <--profile> <$PROFILE_ROOT/home-manager> <--delete-generations> <+10>" \
+  "$CALL_LOG"
+grep -Fq \
+  "nix-env <--profile> <$SYSTEM_PROFILE> <--delete-generations> <+10>" \
+  "$CALL_LOG"
+if grep -Fq -- '--gc' "$CALL_LOG"; then
+  printf 'automatic retention unexpectedly ran garbage collection\n' >&2
+  exit 1
+fi
+
+: >"$CALL_LOG"
 SSH_BIN="$BIN_DIR/ssh" "$MAINTENANCE" nux >/dev/null
 
 expected="ssh <-tt> <nux> <bash> <-s>"
@@ -82,5 +208,7 @@ if [[ "$actual" != "$expected" ]]; then
     "$expected" "$actual" >&2
   exit 1
 fi
+
+bash -s -- --help <"$MAINTENANCE" >/dev/null
 
 printf 'nix GC maintenance contract: PASS\n'

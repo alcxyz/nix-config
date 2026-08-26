@@ -275,6 +275,12 @@ just update
 just update nix-packages
 ```
 
+Automatic maintenance keeps ordinary GC capped at 10 GiB per run. Before that
+GC, guarded retention checks the system and managed user's profiles. It prunes
+profiles back to 10 generations only when a profile exceeds 20 generations or
+the Nix filesystem has less than 15% free, and only after validating every
+current profile closure. `just gc [host]` remains the explicit override.
+
 The flake also exposes repository checks, so `nix flake check --keep-going`
 remains the direct CI-style command. The current formatting check is scoped to
 the files owned by the ADR-0043 implementation until the historical repository

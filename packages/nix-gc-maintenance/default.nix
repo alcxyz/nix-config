@@ -1,5 +1,8 @@
 {
+  bash,
   coreutils,
+  findutils,
+  gawk,
   lib,
   makeWrapper,
   nix,
@@ -17,9 +20,10 @@ stdenvNoCC.mkDerivation {
 
   installPhase = ''
     install -Dm755 "$src" "$out/libexec/nix-gc-maintenance"
+    patchShebangs "$out/libexec/nix-gc-maintenance"
     makeWrapper "$out/libexec/nix-gc-maintenance" "$out/bin/nix-gc-maintenance" \
       --set NIX_GC_SCRIPT_SOURCE "$out/libexec/nix-gc-maintenance" \
-      --prefix PATH : ${lib.makeBinPath [coreutils nix openssh]}
+      --prefix PATH : ${lib.makeBinPath [bash coreutils findutils gawk nix openssh]}
   '';
 
   meta = {
