@@ -285,6 +285,11 @@ local kubeconfigs, and Home Manager command wrappers:
 - The merged config starts with a writable current-context file, then the SOPS-managed kubeconfig, then any configured local kubeconfig files that exist.
 - Operator machines can import private flake modules such as `bn-bootstrap` to
   append additional kubeconfig files and install engagement-specific tooling.
+- Linux and macOS operator profiles also include the optional, separately generated
+  `~/.kube/local-bullet-platform-lab-config` and
+  `~/.kube/local-funhouse-lab-config` files. Their context names use a
+  `local-` prefix to distinguish disposable labs from real clusters; absent
+  files are ignored.
 
 This means plain shells, agent subprocesses, and GUI-launched commands do not
 need to inherit a global `KUBECONFIG`, and local/script-created contexts can
