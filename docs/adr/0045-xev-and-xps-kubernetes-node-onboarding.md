@@ -1,8 +1,13 @@
 # ADR-0045: xev and xps Kubernetes node onboarding
 
-**Status:** Accepted (xev promoted to k3s server; xps workstation-only for now)
+**Status:** Accepted (amended by ADR-0061: xyz retired; xps workstation-only)
 **Date:** 2026-05-11
 **Applies to:** `inventory.nix`, `hosts/xev/`, `hosts/xps/`, `modules/nixos/virtualisation/k3s`, `modules/nixos/virtualisation/longhorn-prereqs`, Forgejo runner services, gitops cluster manifests
+
+## Current amendment
+
+ADR-0061 retires `xyz` from k3s. The stable cluster members are now `xev`,
+`nux`, and `nex`; `xps` and `xyz` remain workstation-only.
 
 ## Context
 

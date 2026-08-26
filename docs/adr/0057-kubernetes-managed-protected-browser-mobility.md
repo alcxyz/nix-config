@@ -1,13 +1,21 @@
 # ADR-0057: Kubernetes-managed Wolf browser mobility
 
-**Status:** Accepted, active
+**Status:** Superseded by ADR-0061
 
 **Date:** 2026-07-30
 
-**Amended:** 2026-08-02
+**Amended:** 2026-08-26
 
 **Applies to:** `hosts/xyz`, `hosts/xev`, Wolf, public and protected browser
 sessions, Kubernetes GPU workers
+
+## Retirement amendment
+
+ADR-0061 retires `xyz` as a k3s agent and browser fallback. Both browser
+singletons now run only on `xev`; the guarded placement controller, worker
+qualification DaemonSet, xyz attachment-node support, and automatic failover
+described below are retired. The historical decision remains here to document
+the migration and the single-writer constraints that still apply.
 
 ## Context
 

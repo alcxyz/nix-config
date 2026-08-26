@@ -1,10 +1,10 @@
 # ADR-0058: Dedicated xyz runtime storage
 
-**Status:** Accepted, amended
+**Status:** Accepted, amended by ADR-0061
 
 **Date:** 2026-07-30
 
-**Applies to:** `xyz`, Docker, k3s, Steam-headless, ZFS, backups
+**Applies to:** `xyz`, Docker, retired k3s runtime, Steam-headless, ZFS, backups
 
 ## Context
 
@@ -13,7 +13,8 @@ the encrypted system pool. Growth in those paths competes with the workstation
 root and home datasets. The host also has a separate SSD available for this
 work, while game installations already have their own storage boundary.
 
-`xyz` is an opportunistic Kubernetes GPU worker. Moving runtime data must not
+At the time of this decision, `xyz` was an opportunistic Kubernetes GPU worker.
+Moving runtime data could not
 turn it into a Longhorn replica-storage node or make normal workstation
 restarts depend on storage reconstruction.
 
@@ -42,6 +43,11 @@ supersedes the earlier classification of Steam-headless as durable app state.
 Keep Longhorn replica scheduling disabled on `xyz`. The new pool is not a
 Longhorn disk and does not change the node's opportunistic lifecycle.
 
+ADR-0061 later retires the k3s agent entirely. Remove the k3s dataset from the
+active mount and runtime policy while retaining the underlying dataset as an
+unmounted, non-backed-up rollback artifact until routine storage housekeeping.
+Docker and Steam-headless continue to use their dedicated datasets.
+
 Before migration, take fresh source snapshots and complete the existing
 appstate backup. Preserve the former source datasets as a bounded rollback
 point until the new mounts, services, backup replication, and a restore check
@@ -55,8 +61,9 @@ backup requirement; do not describe the local replica as satisfying it.
 
 ## Consequences
 
-- Docker, k3s, and Steam-headless growth no longer consumes workstation root
+- Docker and Steam-headless growth no longer consumes workstation root
   pool capacity.
+- The retired k3s runtime dataset is neither mounted nor backed up.
 - Workloads keep their established paths and need no path-specific changes.
 - Quotas bound each runtime workload independently.
 - Failure of the runtime SSD removes rebuildable Docker, k3s, and Steam-headless

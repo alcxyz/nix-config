@@ -22,7 +22,6 @@
   runtimePool = "xruntime";
   runtimeDatasets = {
     docker = "${runtimePool}/runtime/docker";
-    k3s = "${runtimePool}/runtime/k3s";
     steam-headless = "${runtimePool}/appstate/steam-headless";
   };
   appStateDatasets = {
@@ -65,7 +64,6 @@
 
     for dataset in \
       ${lib.escapeShellArg runtimeDatasets.docker} \
-      ${lib.escapeShellArg runtimeDatasets.k3s} \
       ${lib.escapeShellArg runtimeDatasets.steam-headless}; do
       if ! zfs list -H "$dataset" >/dev/null 2>&1; then
         echo "required runtime dataset '$dataset' is missing" >&2
@@ -75,7 +73,6 @@
     done
 
     zfs set quota=100G ${lib.escapeShellArg runtimeDatasets.docker}
-    zfs set quota=50G ${lib.escapeShellArg runtimeDatasets.k3s}
     zfs set quota=40G refreservation=20G ${lib.escapeShellArg runtimeDatasets.steam-headless}
 
     check_mount() {
@@ -91,7 +88,6 @@
     }
 
     check_mount /var/lib/docker ${lib.escapeShellArg runtimeDatasets.docker}
-    check_mount /var/lib/rancher/k3s ${lib.escapeShellArg runtimeDatasets.k3s}
     check_mount /var/lib/steam-headless ${lib.escapeShellArg runtimeDatasets.steam-headless}
   '';
   localBackup = pkgs.writeShellScriptBin "xyz-local-backup" ''
@@ -310,16 +306,11 @@ in {
     "${configDir}/modules/nixos/services/calibre-web/default.nix"
     "${configDir}/modules/nixos/services/flatpak/default.nix"
     "${configDir}/modules/nixos/services/heroic-sideload/default.nix"
-    "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
-    "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/nfs/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/default.nix"
     "${configDir}/modules/nixos/virtualisation/kvm/gpu-passthrough.nix"
-    "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
-    "${configDir}/modules/nixos/virtualisation/k3s/nvidia-runtime.nix"
-    "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
@@ -347,35 +338,6 @@ in {
   systemd.user.services.hypridle = {
     overrideStrategy = "asDropin";
     unitConfig.ConditionPathExists = "/run/xyz-enable-hypridle";
-  };
-
-  # Keep the disposable GPU worker ready to host the public Wolf singleton.
-  # The Kubernetes supervisor remains the only coordinator owner.
-  services.wolf-streaming = {
-    enable = true;
-    publicCoordinator = "external";
-    publicRuntimeDirectory = "/run/nixbox-public-browser-worker/runtime";
-    sessionIdleTimeoutSeconds = 30 * 60;
-    pipelineWatchdog.enable = true;
-    vramWatchdog.enable = true;
-    prunedApplicationTitles = [
-      "Remote Firefox"
-      "Test ball"
-    ];
-    browserImages = {
-      enable = true;
-      helium = {
-        enable = true;
-        publish = true;
-        cooperativeDefault = true;
-        pi3Compatibility = true;
-        kdeConnect.enable = true;
-      };
-      brave.enable = true;
-      chromium.enable = true;
-      firefox.enable = true;
-      zen.enable = true;
-    };
   };
 
   # Prevent ZFS warning - stable host ID
@@ -444,10 +406,6 @@ in {
   # ---- Secrets ----
   sops = {
     secrets = {
-      k3s_server_token = {
-        sopsFile = "${inputs.nix-secrets}/cluster-bootstrap/secrets.yaml";
-        key = "k3s_server_token";
-      };
       k8s_backup_s3_root_user = {
         sopsFile = "${inputs.nix-secrets}/hosts/xyz/secrets.yaml";
         owner = "root";
@@ -573,11 +531,6 @@ in {
     fsType = "zfs";
     options = ["nofail"];
   };
-  fileSystems."/var/lib/rancher/k3s" = {
-    device = runtimeDatasets.k3s;
-    fsType = "zfs";
-    options = ["nofail"];
-  };
   fileSystems."/var/lib/steam-headless" = {
     device = runtimeDatasets.steam-headless;
     fsType = "zfs";
@@ -625,18 +578,15 @@ in {
     after = [
       "zfs-mount.service"
       "var-lib-docker.mount"
-      "var-lib-rancher-k3s.mount"
       "var-lib-steam\\x2dheadless.mount"
     ];
     requires = [
       "zfs-mount.service"
       "var-lib-docker.mount"
-      "var-lib-rancher-k3s.mount"
       "var-lib-steam\\x2dheadless.mount"
     ];
     before = [
       "docker.service"
-      "k3s.service"
       "xyz-appstate-backup.service"
     ];
     wantedBy = ["multi-user.target"];
@@ -872,61 +822,6 @@ in {
     ];
   };
 
-  k3s = {
-    enable = true;
-    nodeIp = "192.168.1.10";
-    nodeInterface = "enp8s0";
-    serverAddr = "https://k8s-api.local:6443";
-    tokenFile = config.sops.secrets.k3s_server_token.path;
-    extraFlags = [
-      "--node-label=nixbox.alc.xyz/ephemeral-gpu=true"
-      "--node-label=nixbox.alc.xyz/protected-browser-worker=true"
-      "--node-taint=nixbox.alc.xyz/ephemeral-gpu=true:NoSchedule"
-    ];
-  };
-  systemd.services.k3s = {
-    after = ["xyz-runtime-storage-policy.service"];
-    requires = ["xyz-runtime-storage-policy.service"];
-  };
-
-  # Longhorn still needs writable engine binaries and logs on an attachment
-  # node. Keep those transient files in bounded memory while the durable volume
-  # replicas remain on the stable storage nodes.
-  fileSystems."/var/lib/longhorn" = {
-    device = "none";
-    fsType = "tmpfs";
-    options = [
-      "mode=0755"
-      "size=1G"
-      "nosuid"
-      "nodev"
-    ];
-  };
-  alc.longhornPrereqs.storageMountUnit = "var-lib-longhorn.mount";
-
-  # XYZ is an expendable interactive worker, never a control-plane or storage
-  # dependency. Bound planned shutdowns so an attached browser volume is
-  # released cleanly without making workstation restarts unreasonably slow.
-  services.k3s.gracefulNodeShutdown = {
-    enable = true;
-    shutdownGracePeriod = "30s";
-    shutdownGracePeriodCriticalPods = "10s";
-  };
-
-  # Agents do not have the server admin kubeconfig. The kube-proxy identity has
-  # the read-only node inventory needed by the LAN path audit.
-  systemd.services.k3s-network-path-audit = {
-    environment.KUBECONFIG = "/var/lib/rancher/k3s/agent/kubeproxy.kubeconfig";
-    serviceConfig = {
-      Restart = "on-failure";
-      RestartSec = "10s";
-    };
-    unitConfig = {
-      StartLimitIntervalSec = 120;
-      StartLimitBurst = 12;
-    };
-  };
-
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
   # t3code server — reachable via Netbird and the k8s oauth2-proxy route.
@@ -998,7 +893,7 @@ in {
 
   # Steam Stream
   # Keep Sunshine's fixed service ports out of the ephemeral client-port pool.
-  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010,49984,49989,49999,50010,50100,50200";
+  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010";
 
   # Streaming ingress is scoped to trusted interfaces by the private host policy.
   networking.firewall.allowedTCPPorts = [

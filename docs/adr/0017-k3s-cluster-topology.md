@@ -1,6 +1,6 @@
 # ADR-0017: k3s cluster topology for the current homelab phase
 
-**Status:** Accepted (amended by ADR-0051 and ADR-0060)
+**Status:** Accepted (amended by ADR-0051, ADR-0060, and ADR-0061)
 **Date:** 2026-04-26
 **Updated:** 2026-08-20
 **Applies to:** stable k3s servers, workstation agents, independent network services
@@ -33,7 +33,7 @@ stable machines:
 | Node class | Role | Scheduling |
 |------------|------|------------|
 | stable servers | `server + worker` | normal workloads and control plane |
-| workstation agents | `agent` | selected opportunistic workloads |
+| workstations | no k3s role | host-native workloads only |
 | resolver hosts | no k3s role | native DNS only |
 
 The cluster keeps a three-server control plane and one-server failure tolerance.
@@ -63,10 +63,11 @@ the need for a separate controller runtime.
 Originally rejected before `nex` existed. Superseded by ADR-0051 after `xev`
 became available as a stronger replacement server.
 
-### Count `xyz` as part of the HA control plane
+### Count `xyz` as part of the cluster
 
-Rejected. `xyz` is a workstation and may reboot, suspend, or be busy. It is a good
-agent, not a stable quorum node.
+Rejected. `xyz` is a workstation and may reboot, suspend, or be busy. Its former
+agent-only browser fallback role was retired by ADR-0061 after the operational
+coupling outweighed the availability benefit.
 
 ### Make nex only a worker
 
