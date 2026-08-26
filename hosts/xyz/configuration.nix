@@ -80,7 +80,12 @@
     if zfs list -H "$retired_k3s_dataset" >/dev/null 2>&1; then
       zfs set canmount=noauto "$retired_k3s_dataset"
       if [ "$(zfs get -H -o value mounted "$retired_k3s_dataset")" = yes ]; then
-        zfs unmount "$retired_k3s_dataset"
+        mounted_source="$(findmnt -rn -o SOURCE --target /var/lib/rancher/k3s 2>/dev/null || true)"
+        if [ "$mounted_source" != "$retired_k3s_dataset" ]; then
+          echo "/var/lib/rancher/k3s is mounted from '$mounted_source', expected '$retired_k3s_dataset'" >&2
+          exit 1
+        fi
+        umount /var/lib/rancher/k3s
       fi
     fi
 
