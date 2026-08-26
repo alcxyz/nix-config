@@ -17,7 +17,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0010](0010-amd-igpu-forced-primary-display-nvidia-workaround.md) | Force AMD iGPU as primary display device on dual-GPU workstation | Accepted | xyz, desktop |
 | [ADR-0011](0011-unified-keyboard-remapping-kanata.md) | Unified keyboard remapping via kanata across all hosts and keyboards | Accepted, amended | kanata, desktop, mac |
 | [ADR-0012](0012-remote-dev-headless-wayland-over-vm.md) | Remote development via headless Wayland session instead of a VM | Accepted | nux, remote-dev |
-| [ADR-0013](0013-safe-nix-gc-no-generation-deletion.md) | Safe nix GC — never auto-delete profile generations | Accepted | mac, nix.gc |
+| [ADR-0013](0013-safe-nix-gc-no-generation-deletion.md) | Safe nix GC — never auto-delete profile generations | Accepted, amended | all hosts, home-manager, nix.gc |
 | [ADR-0014](0014-self-package-zen-browser.md) | Self-package Zen Browser instead of third-party flake | Accepted | `flake.nix`, packages |
 | [ADR-0015](0015-dms-plugin-meta-flake.md) | DMS plugin meta-flake | Accepted | `flake.nix`, DMS |
 | [ADR-0016](0016-devlog-go-binary-with-weekly-hedgedoc.md) | Devlog as Go binary with weekly summaries | Accepted, amended | devlog, services |

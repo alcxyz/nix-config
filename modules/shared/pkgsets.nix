@@ -22,6 +22,7 @@ in rec {
     # Shared across all machines (NixOS + nix-darwin)
     base = with pkgs; [
       home-manager
+      nix-gc-maintenance
       openssl
       lsof
       dig

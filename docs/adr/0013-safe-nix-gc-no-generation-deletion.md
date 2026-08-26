@@ -1,8 +1,8 @@
 # ADR-0013: Safe nix GC — never auto-delete profile generations
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-08-26)
 **Date:** 2026-04-18
-**Applies to:** `hosts/mac/configuration.nix` (nix.gc)
+**Applies to:** all managed NixOS and nix-darwin hosts, Home Manager profiles, `nix.gc`
 
 ## Context
 
@@ -24,7 +24,17 @@ nix.gc = {
 };
 ```
 
-Profile generation cleanup is done manually with `nix-env --delete-generations +5` (keep last 5) when disk space is needed.
+Profile generation cleanup remains an explicit maintenance action. The shared
+`nix-gc-maintenance` command retains the latest 10 generations in the invoking
+user's Home Manager and user profiles, retains the latest 10 system generations,
+then performs one GC pass capped at 10 GiB. Run it through `just gc` from the
+repository or directly on any managed host. From the operator checkout on
+`xyz`, `just gc <host>` streams the same command over the managed SSH connection;
+the target does not need the new package installed first.
+
+The command must be run once for each user with a standalone Home Manager
+profile. Home Manager configurations integrated into a NixOS system generation
+are retained with that system generation.
 
 ## Alternatives Considered
 
@@ -35,5 +45,6 @@ Profile generation cleanup is done manually with `nix-env --delete-generations +
 ## Consequences
 
 - Disk usage will grow slightly faster since old profile generations accumulate. This is acceptable — profile generations are small (just symlinks), and their store path closures overlap heavily.
-- Manual generation cleanup is needed occasionally. A reasonable cadence is after major flake updates.
+- Manual generation cleanup is needed occasionally. A reasonable cadence is after major flake updates or when free-space monitoring reports pressure.
+- Ten generations are retained consistently across NixOS, nix-darwin, Home Manager, and user profiles.
 - Recovery from future store corruption is easier: old generations remain as GC roots, so rolling back with `nix-env --rollback` or `darwin-rebuild switch --rollback` remains possible.

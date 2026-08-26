@@ -7,7 +7,7 @@ check:
 
 [group("checks")]
 fmt-check:
-    nix develop -c alejandra --check flake/per-system.nix flake/hosts/lib.nix hosts/madsil/configuration.nix hosts/madsil/hardware-configuration.nix hosts/mac/configuration.nix hosts/nex/configuration.nix hosts/nux/configuration.nix hosts/rpi0/configuration.nix hosts/rpi1/configuration.nix hosts/rpi2/configuration.nix hosts/rpi3/configuration.nix hosts/xev/configuration.nix hosts/xps/configuration.nix hosts/xps/hardware-configuration.nix hosts/xyz/configuration.nix modules/home-manager/programs/ssh/default.nix modules/home-manager/programs/videdupe/default.nix modules/nixos/common/default.nix modules/nixos/common/distributed-build-client.nix modules/nixos/common/pkgsets.nix modules/nixos/common/server.nix modules/nixos/common/ssh-keys.nix modules/nixos/profiles/nixbox-direct-client/default.nix modules/nixos/profiles/raspberry-pi-3-direct-client/default.nix modules/nixos/services/flatpak/default.nix modules/nixos/services/forgejo-actions-runner/default.nix modules/nixos/services/heroic-sideload/default.nix modules/nixos/services/k8s-api-vip/default.nix modules/nixos/services/moonlight-client/default.nix modules/nixos/virtualisation/k3s/default.nix modules/shared/host-metadata.nix modules/shared/pkgsets.nix packages/nix-deploy/default.nix users/alc/common.nix users/alc/linux/madsil.nix users/alc/linux/common.nix users/alc/linux/nex.nix users/alc/linux/nux.nix users/alc/linux/operator.nix users/alc/linux/rpi0.nix users/alc/linux/xev.nix users/alc/linux/xps.nix users/alc/linux/xyz.nix users/madsil/linux/madsil.nix
+    nix develop -c alejandra --check flake/per-system.nix flake/hosts/lib.nix hosts/madsil/configuration.nix hosts/madsil/hardware-configuration.nix hosts/mac/configuration.nix hosts/nex/configuration.nix hosts/nux/configuration.nix hosts/rpi0/configuration.nix hosts/rpi1/configuration.nix hosts/rpi2/configuration.nix hosts/rpi3/configuration.nix hosts/xev/configuration.nix hosts/xps/configuration.nix hosts/xps/hardware-configuration.nix hosts/xyz/configuration.nix modules/home-manager/programs/ssh/default.nix modules/home-manager/programs/videdupe/default.nix modules/nixos/common/default.nix modules/nixos/common/distributed-build-client.nix modules/nixos/common/pkgsets.nix modules/nixos/common/server.nix modules/nixos/common/ssh-keys.nix modules/nixos/profiles/nixbox-direct-client/default.nix modules/nixos/profiles/raspberry-pi-3-direct-client/default.nix modules/nixos/services/flatpak/default.nix modules/nixos/services/forgejo-actions-runner/default.nix modules/nixos/services/heroic-sideload/default.nix modules/nixos/services/k8s-api-vip/default.nix modules/nixos/services/moonlight-client/default.nix modules/nixos/virtualisation/k3s/default.nix modules/shared/host-metadata.nix modules/shared/pkgsets.nix packages/nix-deploy/default.nix packages/nix-gc-maintenance/default.nix users/alc/common.nix users/alc/linux/madsil.nix users/alc/linux/common.nix users/alc/linux/nex.nix users/alc/linux/nux.nix users/alc/linux/operator.nix users/alc/linux/rpi0.nix users/alc/linux/xev.nix users/alc/linux/xps.nix users/alc/linux/xyz.nix users/madsil/linux/madsil.nix
     nix develop -c shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
 
 [group("checks")]
@@ -31,6 +31,10 @@ fmt:
 [group("ops")]
 k8s-node-reboot HOST:
     kreboot {{HOST}}
+
+[group("ops")]
+gc HOST="":
+    if [ -n "{{HOST}}" ]; then scripts/ops/nix-gc-maintenance.sh "{{HOST}}"; else scripts/ops/nix-gc-maintenance.sh; fi
 
 [group("ops")]
 k8s-node-preflight HOST:

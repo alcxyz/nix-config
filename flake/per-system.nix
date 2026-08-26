@@ -57,6 +57,7 @@
       "modules/shared/host-metadata.nix"
       "modules/shared/pkgsets.nix"
       "packages/k8s-node-reboot/default.nix"
+      "packages/nix-gc-maintenance/default.nix"
       "packages/ffmpeg-v4l2-request/default.nix"
       "packages/nix-deploy/default.nix"
       "packages/nixbox-plymouth-theme/default.nix"
@@ -107,6 +108,10 @@
         bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
       '';
 
+      check-nix-gc-maintenance = mkRepoCheck "check-nix-gc-maintenance" [pkgs.bash pkgs.coreutils] ''
+        bash scripts/checks/test-nix-gc-maintenance.sh
+      '';
+
       wolf-browser-input-contract =
         mkRepoCheck "wolf-browser-input-contract" [
           pkgs.bash
@@ -155,6 +160,7 @@
     packages =
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
+        nix-gc-maintenance = pkgs.nix-gc-maintenance;
         nix-deploy = pkgs.nix-deploy;
         reportcraft = pkgs.reportcraft;
       }
