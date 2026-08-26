@@ -298,6 +298,7 @@ in {
     "${configDir}/modules/nixos/common/desktop.nix"
     inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
+    inputs.nix-secrets.nixosModules.xyzStashMergerfs
     inputs.nix-secrets.nixosModules.xyzPrinter
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
@@ -517,11 +518,20 @@ in {
     gamesDatasetPrepare
     runtimeStoragePolicy
     zfsPackage
+    pkgs.acl
+    pkgs.gptfdisk
+    pkgs.mergerfs
+    pkgs.mergerfs-tools
+    pkgs.parted
+    pkgs.rsync
+    pkgs.smartmontools
+    pkgs.xfsprogs
   ];
   boot.supportedFilesystems = ["zfs"];
   boot.zfs.devNodes = "/dev/disk/by-id";
   boot.zfs.extraPools = [runtimePool];
   boot.zfs.forceImportRoot = false;
+  xyz.storage.stashMergerfs.enable = false;
   swapDevices = lib.mkForce [
     {
       device = "/dev/disk/by-partlabel/xyz-swap";
