@@ -121,8 +121,8 @@ in {
         Hour = 2;
         Minute = 0;
       };
-      # Only free space, never delete profile generations.
-      # Profile generations are managed explicitly via: nix-env --delete-generations +5
+      # Only free space, never delete profile generations automatically.
+      # Run nix-gc-maintenance to retain 10 generations explicitly.
       options = "--max-freed 10G";
     };
 

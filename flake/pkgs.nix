@@ -61,6 +61,7 @@ in
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
+              nix-gc-maintenance = _prev.callPackage ../packages/nix-gc-maintenance {};
               reportcraft = inputs.reportcraft.packages.${system}.default;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
@@ -80,8 +81,8 @@ in
                     ../packages/moonlight-rpi3/use-qt-drm-master.patch
                     ../packages/moonlight-rpi3/log-periodic-video-stats.patch
                   ];
-                 qmakeFlags = (old.qmakeFlags or []) ++ ["CONFIG+=gpuslow"];
-               });
+                qmakeFlags = (old.qmakeFlags or []) ++ ["CONFIG+=gpuslow"];
+              });
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.
             # Skip nushell tests to avoid build failure on managed Macs.

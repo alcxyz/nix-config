@@ -243,6 +243,12 @@ just pre-commit
 # Run repository hygiene checks
 just hygiene
 
+# Explicitly retain 10 system/Home Manager generations, then run capped GC
+just gc
+
+# Run the same maintenance remotely through the managed SSH host configuration
+just gc nux
+
 # Rebuild NixOS
 just rebuild xyz
 
