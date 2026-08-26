@@ -21,7 +21,9 @@ let
   secretKeys = lib.unique ([ "runner_token" ] ++ lib.attrValues cfg.secretEnv);
 
   allEnvNames = lib.unique ((lib.attrNames cfg.jobEnv) ++ (lib.attrNames cfg.secretEnv));
-  containerOptions = lib.concatStringsSep " " (map (name: "-e ${name}") allEnvNames);
+  containerRuntimeOptions = lib.concatStringsSep " " (
+    (map (name: "-e ${name}") allEnvNames) ++ cfg.containerOptions
+  );
 
   runnerConfig = settingsFormat.generate "forgejo-runner-config.yaml" {
     log.level = cfg.logLevel;
@@ -37,7 +39,7 @@ let
     container = {
       network = "";
       privileged = false;
-      options = containerOptions;
+      options = containerRuntimeOptions;
       workdir_parent = null;
       valid_volumes = [ "/var/run/docker.sock" ];
       docker_host = cfg.dockerHost;
@@ -155,6 +157,17 @@ in
     dockerHost = lib.mkOption {
       type = lib.types.str;
       default = "unix:///var/run/docker.sock";
+    };
+
+    containerOptions = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "--cpu-shares=512" ];
+      description = ''
+        Additional Docker run options applied to every job container. Prefer
+        scheduling weights over hard CPU quotas when the runner should use
+        otherwise-idle capacity but yield under contention.
+      '';
     };
 
     secretsFile = lib.mkOption {
