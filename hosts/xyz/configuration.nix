@@ -24,6 +24,7 @@
     docker = "${runtimePool}/runtime/docker";
     steam-headless = "${runtimePool}/appstate/steam-headless";
   };
+  retiredK3sRuntimeDataset = "${runtimePool}/runtime/k3s";
   appStateDatasets = {
     calibre = "xpool/appstate/calibre";
     calibre-web = "xpool/appstate/calibre-web";
@@ -74,6 +75,14 @@
 
     zfs set quota=100G ${lib.escapeShellArg runtimeDatasets.docker}
     zfs set quota=40G refreservation=20G ${lib.escapeShellArg runtimeDatasets.steam-headless}
+
+    retired_k3s_dataset=${lib.escapeShellArg retiredK3sRuntimeDataset}
+    if zfs list -H "$retired_k3s_dataset" >/dev/null 2>&1; then
+      zfs set canmount=noauto "$retired_k3s_dataset"
+      if [ "$(zfs get -H -o value mounted "$retired_k3s_dataset")" = yes ]; then
+        zfs unmount "$retired_k3s_dataset"
+      fi
+    fi
 
     check_mount() {
       local mountpoint="$1"
