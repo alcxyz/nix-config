@@ -191,7 +191,10 @@
       system = "aarch64-darwin";
       platform = "darwin";
       role = "mac";
-      accountUsername = "andre-lucas.carvalho";
+      # Directory-service aliases may differ, but the local UID, home
+      # ownership, login shell, and $USER remain tied to this short record
+      # name. Nix and Home Manager must manage the canonical account.
+      accountUsername = "alc";
       accountHomeDirectory = "/Users/alc";
       k8sRole = null;
       aliases = ["AM-VYH2F56CR6"];
