@@ -860,7 +860,10 @@ in {
   services.forgejo-actions-runner = {
     enable = true;
     name = "xyz";
-    capacity = 4;
+    capacity = 2;
+    # Let builds use idle CPU, but give each job half the default Docker CPU
+    # scheduling weight so interactive work wins when the host is busy.
+    containerOptions = ["--cpu-shares=512"];
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"
