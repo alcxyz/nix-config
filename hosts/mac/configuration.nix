@@ -51,6 +51,13 @@
     xonsh = pkgs.xonsh-with-direnv or pkgs.xonsh;
     zsh = pkgs.zsh;
   };
+  nixGenerationRetention = pkgs.writeShellScript "nix-generation-retention" ''
+    export SUDO_BIN=/usr/bin/sudo
+    exec ${lib.getExe pkgs.nix-gc-maintenance} \
+      --automatic-retention \
+      --user ${lib.escapeShellArg accountUsername} \
+      --home ${lib.escapeShellArg accountHomeDirectory}
+  '';
 
   # Define common trackpad settings using actual plist key names
   customTrackpadSettings = {
@@ -121,8 +128,8 @@ in {
         Hour = 2;
         Minute = 0;
       };
-      # Only free space, never delete profile generations automatically.
-      # Run nix-gc-maintenance to retain 10 generations explicitly.
+      # Ordinary GC only frees dead paths. Guarded generation retention runs
+      # separately shortly before this job; see ADR-0013.
       options = "--max-freed 10G";
     };
 
@@ -134,6 +141,22 @@ in {
         Minute = 0;
       };
     };
+  };
+
+  # launchd has no direct dependency edge between calendar jobs. Run guarded
+  # retention shortly before the existing Sunday GC; the retention command
+  # only manages verified roots, while nix-gc collects dead store paths.
+  launchd.daemons.nix-generation-retention.serviceConfig = {
+    ProgramArguments = ["${nixGenerationRetention}"];
+    StartCalendarInterval = {
+      Weekday = 0;
+      Hour = 1;
+      Minute = 45;
+    };
+    RunAtLoad = false;
+    ProcessType = "Background";
+    LowPriorityIO = true;
+    Nice = 10;
   };
 
   # ============================================================================

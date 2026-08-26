@@ -4,6 +4,8 @@
   pkgs,
   inputs,
   username,
+  accountUsername,
+  accountHomeDirectory,
   hostName,
   hostInventory,
   configDir,
@@ -27,6 +29,13 @@
     xonsh = pkgs.xonsh-with-direnv or pkgs.xonsh;
     zsh = pkgs.zsh;
   };
+  nixGenerationRetention = pkgs.writeShellScript "nix-generation-retention" ''
+    export SUDO_BIN=/run/wrappers/bin/sudo
+    exec ${lib.getExe pkgs.nix-gc-maintenance} \
+      --automatic-retention \
+      --user ${lib.escapeShellArg accountUsername} \
+      --home ${lib.escapeShellArg accountHomeDirectory}
+  '';
 in {
   # ==================== Imports ====================
   imports = [
@@ -105,8 +114,8 @@ in {
     gc = {
       automatic = true;
       dates = "weekly";
-      # Only free dead store paths, never delete profile generations
-      # automatically. See docs/adr/0013-safe-nix-gc-no-generation-deletion.md.
+      # Ordinary GC only frees dead paths. Guarded generation retention runs
+      # separately before this service; see ADR-0013.
       options = "--max-freed 10G";
     };
     package = pkgs.nixVersions.latest;
@@ -226,12 +235,32 @@ in {
   # ==================== Virtualisation ====================
   virtualisation.containers.enable = true;
   virtualisation.docker.enable = true;
-  systemd.services = lib.mkIf config.virtualisation.docker.enable {
-    docker.path = with pkgs; [
-      iptables
-      nftables
-    ];
-  };
+  systemd.services = lib.mkMerge [
+    {
+      # Guarded generation retention is a distinct prerequisite of automatic
+      # GC. It only prunes verified profiles when the fleet-wide pressure/count
+      # policy triggers; nix-gc remains responsible for dead store paths.
+      nix-generation-retention = {
+        description = "Apply guarded Nix generation retention";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = nixGenerationRetention;
+          Nice = 10;
+          IOSchedulingClass = "idle";
+        };
+      };
+      nix-gc = {
+        requires = ["nix-generation-retention.service"];
+        after = ["nix-generation-retention.service"];
+      };
+    }
+    (lib.mkIf config.virtualisation.docker.enable {
+      docker.path = with pkgs; [
+        iptables
+        nftables
+      ];
+    })
+  ];
 
   # ==================== sops/secrets ====================
   sops = {

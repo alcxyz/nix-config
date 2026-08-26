@@ -108,9 +108,25 @@
         bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
       '';
 
-      check-nix-gc-maintenance = mkRepoCheck "check-nix-gc-maintenance" [pkgs.bash pkgs.coreutils] ''
+      check-nix-gc-maintenance = mkRepoCheck "check-nix-gc-maintenance" [pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gawk pkgs.gnugrep] ''
         bash scripts/checks/test-nix-gc-maintenance.sh
       '';
+
+      nix-gc-retention-module-contract = let
+        nixosGc = self.nixosConfigurations.xyz.config.systemd.services.nix-gc;
+        darwinRetention = self.darwinConfigurations.mac.config.launchd.daemons.nix-generation-retention.serviceConfig;
+        darwinGc = self.darwinConfigurations.mac.config.launchd.daemons.nix-gc.serviceConfig;
+      in
+        assert builtins.elem "nix-generation-retention.service" nixosGc.requires;
+        assert builtins.elem "nix-generation-retention.service" nixosGc.after;
+        assert darwinRetention.StartCalendarInterval.Weekday == 0;
+        assert darwinRetention.StartCalendarInterval.Hour == 1;
+        assert darwinRetention.StartCalendarInterval.Minute == 45;
+        assert darwinGc.StartCalendarInterval.Weekday == 0;
+        assert darwinGc.StartCalendarInterval.Hour == 2;
+          pkgs.runCommand "nix-gc-retention-module-contract" {} ''
+            touch "$out"
+          '';
 
       wolf-browser-input-contract =
         mkRepoCheck "wolf-browser-input-contract" [
