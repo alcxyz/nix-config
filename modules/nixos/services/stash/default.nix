@@ -118,6 +118,7 @@ in
     systemd.services.stash = {
       description = "Stash media organizer";
       wantedBy = [ "multi-user.target" ];
+      unitConfig.RequiresMountsFor = [ cfg.mediaDir ];
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"

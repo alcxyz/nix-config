@@ -138,6 +138,7 @@ in {
     };
 
     systemd.services.qbittorrent = {
+      unitConfig.RequiresMountsFor = [stashDir];
       requires = [
         "zfs-mount.service"
         "torrent-shared-media-permissions.service"
@@ -203,7 +204,9 @@ in {
         )
 
         for dataset in "''${datasets[@]}"; do
-          zfs set acltype=posixacl "$dataset"
+          if zfs list -H "$dataset" >/dev/null 2>&1; then
+            zfs set acltype=posixacl "$dataset"
+          fi
         done
 
         for mountpoint in "''${mountpoints[@]}"; do
@@ -216,6 +219,7 @@ in {
 
     systemd.services.torrent-shared-media-permissions = {
       description = "Apply shared media ACLs for torrent and media workloads";
+      unitConfig.RequiresMountsFor = map (directory: directory.path) sharedMediaDirs;
       wantedBy = ["multi-user.target"];
       requires = [
         "zfs-mount.service"

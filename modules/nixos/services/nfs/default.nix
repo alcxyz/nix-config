@@ -106,7 +106,8 @@ in
       extraServiceFiles.nfs = avahiNfsService;
     };
 
-    # Wait for ZFS mounts before serving (no-op if zfs-mount.service doesn't exist)
+    # Wait for storage mounts before serving their paths.
     systemd.services.nfs-server.after = [ "zfs-mount.service" ];
+    systemd.services.nfs-server.unitConfig.RequiresMountsFor = map (share: share.path) cfg.shares;
   };
 }
