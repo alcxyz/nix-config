@@ -16,6 +16,7 @@ let
 in {
   imports = [
     "${configDir}/users/alc/common.nix"
+    "${configDir}/users/alc/kubernetes-labs.nix"
     "${configDir}/modules/home-manager/programs/wezterm/default.nix"
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/programs/karabiner/default.nix"
