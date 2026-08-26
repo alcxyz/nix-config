@@ -18,18 +18,32 @@
     name = "hyprland-xwayland-primary-output";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.gnugrep
       pkgs.xrandr
     ];
     text = ''
-      for _ in $(seq 1 120); do
-        if DISPLAY="''${DISPLAY:-:0}" xrandr --output DP-1 --primary >/dev/null 2>&1; then
-          exit 0
-        fi
-        sleep 0.25
-      done
+      set_primary() {
+        stable_samples=0
+        for _ in $(seq 1 150); do
+          if DISPLAY="''${DISPLAY:-:0}" xrandr --current 2>/dev/null \
+            | grep -q '^DP-1 connected primary '; then
+            stable_samples=$((stable_samples + 1))
+            if ((stable_samples >= 30)); then
+              return 0
+            fi
+          else
+            stable_samples=0
+            DISPLAY="''${DISPLAY:-:0}" xrandr --output DP-1 --primary \
+              >/dev/null 2>&1 || true
+          fi
+          sleep 0.1
+        done
 
-      echo "Failed to mark DP-1 as the XWayland primary output" >&2
-      exit 1
+        echo "Failed to mark DP-1 as the XWayland primary output" >&2
+        return 1
+      }
+
+      set_primary
     '';
   };
   droptermToggle = pkgs.writeShellApplication {
@@ -429,13 +443,27 @@ in {
   };
   systemd.user.services.hyprland-xwayland-primary-output = {
     Unit = {
-      Description = "Set the 49-inch display primary in XWayland at session startup";
+      Description = "Keep the 49-inch display primary in XWayland";
       PartOf = ["graphical-session.target"];
       After = ["graphical-session.target"];
     };
     Service = {
       Type = "oneshot";
       ExecStart = lib.getExe xwaylandPrimaryOutput;
+      Restart = "on-failure";
+      RestartSec = 1;
+    };
+    Install.WantedBy = ["graphical-session.target"];
+  };
+  systemd.user.paths.hyprland-xwayland-primary-output = {
+    Unit = {
+      Description = "Restore the XWayland primary output after display wake";
+      PartOf = ["graphical-session.target"];
+      After = ["graphical-session.target"];
+    };
+    Path = {
+      PathChanged = "%t/hyprlock-dpms-woke";
+      Unit = "hyprland-xwayland-primary-output.service";
     };
     Install.WantedBy = ["graphical-session.target"];
   };
