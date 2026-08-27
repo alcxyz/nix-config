@@ -271,6 +271,11 @@
       postInstall =
         (old.postInstall or "")
         + ''
+          # DMS is launched by the compositor so its lifetime and resume
+          # watcher share the real Hyprland session. Do not expose upstream's
+          # user service: activation tools can otherwise start a competing
+          # DMS instance even though the Home Manager systemd option is off.
+          rm -f "$out/share/systemd/user/dms.service"
           chmod -R u+w "$out/share/quickshell/dms"
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-use-live-hyprland-provider.patch}
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
