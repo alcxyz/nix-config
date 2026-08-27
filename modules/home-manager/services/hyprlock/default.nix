@@ -388,9 +388,9 @@ with lib; let
         # its final page flip. Let that commit settle before arming DPMS.
         ${pkgs.coreutils}/bin/sleep 0.5
 
-        run_display_idle_daemon &
+        run_display_idle_daemon 9>&- &
         idle_pid="$!"
-        ${dpmsGuardianScript} >/dev/null 2>&1 &
+        ${dpmsGuardianScript} 9>&- >/dev/null 2>&1 &
         guardian_pid="$!"
 
         # A missing or invalid private config must not silently leave a locked
