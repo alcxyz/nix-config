@@ -350,24 +350,28 @@
   # bcm2835-codec rejects the low-latency NVENC H.264 bitstream even though it
   # accepts equivalent 1080p streams from x264. Keep the shared lobby and
   # publish a conservative software-encoded entry only for Pi 3 clients.
-  heliumPi3CooperativeEntryApp = heliumCooperativeEntryApp // {
-    title = "Helium (Pi 3)";
-    video = heliumCooperativeEntryApp.video // {
-      video_params = ''
-        videoconvertscale add-borders=false !
-        video/x-raw, width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1 !
-        cudaupload !
-        video/x-raw(memory:CUDAMemory), width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1 !
-        cudadownload !
-        video/x-raw, width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1
-      '';
-      h264_encoder = ''
-        x264enc tune=zerolatency speed-preset=ultrafast bitrate={bitrate} key-int-max=60 bframes=0 byte-stream=true aud=true cabac=false !
-        h264parse config-interval=-1 !
-        video/x-h264, profile=constrained-baseline, stream-format=byte-stream
-      '';
+  heliumPi3CooperativeEntryApp =
+    heliumCooperativeEntryApp
+    // {
+      title = "Helium (Pi 3)";
+      video =
+        heliumCooperativeEntryApp.video
+        // {
+          video_params = ''
+            videoconvertscale add-borders=false !
+            video/x-raw, width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1 !
+            cudaupload !
+            video/x-raw(memory:CUDAMemory), width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1 !
+            cudadownload !
+            video/x-raw, width={width}, height={height}, format=NV12, pixel-aspect-ratio=1/1
+          '';
+          h264_encoder = ''
+            x264enc tune=zerolatency speed-preset=ultrafast bitrate={bitrate} key-int-max=60 bframes=0 byte-stream=true aud=true cabac=false !
+            h264parse config-interval=-1 !
+            video/x-h264, profile=constrained-baseline, stream-format=byte-stream
+          '';
+        };
     };
-  };
   mkWolfUiApp = runtimeDirectory: {
     title = "Wolf UI";
     icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png";
