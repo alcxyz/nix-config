@@ -4,10 +4,10 @@
 
 **Date:** 2026-07-30
 
-**Amended:** 2026-08-26
+**Amended:** 2026-08-28
 
-**Applies to:** `hosts/xyz`, `hosts/xev`, Wolf, public and protected browser
-sessions, Kubernetes GPU workers
+**Applies to:** `hosts/xev`, Wolf, public and protected browser sessions,
+Kubernetes GPU workers; historical placement on `hosts/xyz`
 
 ## Retirement amendment
 
@@ -16,6 +16,20 @@ singletons now run only on `xev`; the guarded placement controller, worker
 qualification DaemonSet, xyz attachment-node support, and automatic failover
 described below are retired. The historical decision remains here to document
 the migration and the single-writer constraints that still apply.
+
+## Active decision
+
+Run the public and private Wolf coordinators as independent Kubernetes
+singletons pinned to `xev`. Keep their separate identities, Services, RWO
+volumes, and trust boundaries, with two time-sliced GPU shares available on the
+one worker. There is no alternate Wolf worker, placement controller, worker
+qualification DaemonSet, or automatic failover/failback. Loss of `xev` makes
+both browsers unavailable until it returns; Longhorn replication and
+off-volume backups protect their persistent state.
+
+The sections below preserve the superseded two-worker design and rollout
+rationale. ADR-0061 controls wherever that historical text conflicts with the
+active decision.
 
 ## Context
 
@@ -42,7 +56,7 @@ host-native creates a second lifecycle and an implicit GPU-arbitration boundary
 on `xev`. Kubernetes already owns the primitives needed to make that contention
 explicit while preserving the two coordinator trust boundaries.
 
-## Decision
+## Historical decision (superseded for placement)
 
 Manage both Wolf coordinators under Kubernetes, but never combine them. The
 public coordinator exposes cooperative Helium only. The protected coordinator
@@ -98,7 +112,7 @@ assignments, and migration procedures in private configuration. Public Nix and
 GitOps configuration declares only generic runtime interfaces and workload
 policy.
 
-## Stable services and GPU arbitration
+## Historical stable services and GPU arbitration
 
 Expose each coordinator through an independent LAN `LoadBalancer` Service. A
 stable VIP follows the ready singleton endpoint; private DNS gives that VIP a
@@ -122,7 +136,7 @@ Preferred node affinity affects initial placement but does not move an already
 healthy Pod home. Use a controlled reconciliation step to return each singleton
 to its preferred worker.
 
-## State and rollout
+## Historical state and rollout
 
 Use one expandable Longhorn RWO volume per coordinator for Wolf configuration,
 pairings, and browser homes. Retain the promoted protected volume at 10 GiB.
@@ -158,7 +172,7 @@ Continue in six follow-up gates:
 Keep former host-native state read-only during each rollback window. Rollback
 selects one authoritative copy; it never merges two writable browser trees.
 
-## Consequences
+## Historical consequences (superseded for placement)
 
 `xyz` can provide the preferred protected encoder without becoming a durable
 cluster dependency. A longer `xyz` outage can move the same protected browser
@@ -181,7 +195,7 @@ do not merge identities or pairing stores. Steam/game containers, physical
 input, KDE Connect, Synergy, and concurrent Moonlight clients remain independent
 regression boundaries.
 
-## Alternatives considered
+## Alternatives considered at adoption
 
 ### Make `xyz` a normal Longhorn storage node
 
