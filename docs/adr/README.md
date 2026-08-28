@@ -61,7 +61,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0054](0054-mac-hosted-synergy1-with-waynergy-clients.md) | Mac-hosted Synergy 1 with Waynergy clients | Accepted | mac, xps, xyz, Synergy, Waynergy |
 | [ADR-0055](0055-nixbox-session-and-system-splash-boundary.md) | Stage the NIXBOX splash across boot and graphical session | Accepted | xps, couch, Plymouth, Quickshell |
 | [ADR-0056](0056-containerized-remote-browser-streaming.md) | Containerized remote browser streaming | Accepted, implemented | xev, xps, Wolf, Moonlight, browsers |
-| [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Accepted, active | xyz, xev, Wolf, Kubernetes, Longhorn |
+| [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Superseded by ADR-0061 | xev, Wolf, Kubernetes, Longhorn; historical xyz placement |
 | [ADR-0058](0058-xyz-dedicated-runtime-storage.md) | Dedicated xyz runtime storage | Accepted, amended | xyz, Docker, k3s, Steam-headless, ZFS |
 | [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) | File-selective home backup and host storage monitoring | Accepted, amended | xyz, home backup, storage monitoring |
 | [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md) | Gateway-owned UniFi and independent DNS pair | Accepted | unifi, dns, network services |
