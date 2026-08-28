@@ -4,52 +4,51 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   host = config.networking.hostName;
   cfg = config.alc.longhornPrereqs;
-  storageTargets = [
-    {
-      path = cfg.storagePath;
-      mountUnit = cfg.storageMountUnit;
-    }
-  ]
-  ++ cfg.additionalStorageTargets;
+  storageTargets =
+    [
+      {
+        path = cfg.storagePath;
+        mountUnit = cfg.storageMountUnit;
+      }
+    ]
+    ++ cfg.additionalStorageTargets;
   storageMountUnits = lib.unique (
     lib.filter (unit: unit != null) (map (target: target.mountUnit) storageTargets)
   );
-  guardStorageTargets = lib.concatImapStringsSep "\n" (
-    index: target:
-    let
-      storagePath = lib.escapeShellArg target.path;
-      fallback = "$RUNTIME_DIRECTORY/empty-${toString index}";
-      marker = "$RUNTIME_DIRECTORY/fallback-${toString index}-mounted";
-    in
-    ''
-      install -d -m 0755 ${storagePath}
-      install -d -m 0755 "${fallback}"
+  guardStorageTargets =
+    lib.concatImapStringsSep "\n" (
+      index: target: let
+        storagePath = lib.escapeShellArg target.path;
+        fallback = "$RUNTIME_DIRECTORY/empty-${toString index}";
+        marker = "$RUNTIME_DIRECTORY/fallback-${toString index}-mounted";
+      in ''
+        install -d -m 0755 ${storagePath}
+        install -d -m 0755 "${fallback}"
 
-      if ! mountpoint --quiet ${storagePath}; then
-        mount --bind "${fallback}" ${storagePath}
-        mount --options remount,bind,ro ${storagePath}
-        touch "${marker}"
-      fi
-    ''
-  ) storageTargets;
-  unguardStorageTargets = lib.concatImapStringsSep "\n" (
-    index: target:
-    let
-      storagePath = lib.escapeShellArg target.path;
-      marker = "$RUNTIME_DIRECTORY/fallback-${toString index}-mounted";
-    in
-    ''
-      if test -e "${marker}"; then
-        umount ${storagePath}
-      fi
-    ''
-  ) storageTargets;
-in
-{
+        if ! mountpoint --quiet ${storagePath}; then
+          mount --bind "${fallback}" ${storagePath}
+          mount --options remount,bind,ro ${storagePath}
+          touch "${marker}"
+        fi
+      ''
+    )
+    storageTargets;
+  unguardStorageTargets =
+    lib.concatImapStringsSep "\n" (
+      index: target: let
+        storagePath = lib.escapeShellArg target.path;
+        marker = "$RUNTIME_DIRECTORY/fallback-${toString index}-mounted";
+      in ''
+        if test -e "${marker}"; then
+          umount ${storagePath}
+        fi
+      ''
+    )
+    storageTargets;
+in {
   options.alc.longhornPrereqs = {
     storagePath = lib.mkOption {
       type = lib.types.str;
@@ -79,13 +78,13 @@ in
           };
         }
       );
-      default = [ ];
+      default = [];
       description = "Additional Longhorn storage paths protected against accidental root-filesystem use.";
     };
   };
 
   config = {
-    boot.kernelModules = [ "dm_crypt" ];
+    boot.kernelModules = ["dm_crypt"];
 
     services.openiscsi = {
       enable = true;
@@ -111,6 +110,7 @@ in
       "L+ /usr/bin/cryptsetup - - - - ${pkgs.cryptsetup}/bin/cryptsetup"
       "L+ /usr/bin/mount - - - - ${pkgs.util-linux}/bin/mount"
       "L+ /usr/bin/umount - - - - ${pkgs.util-linux}/bin/umount"
+      "L+ /usr/bin/fstrim - - - - ${pkgs.util-linux}/bin/fstrim"
       "L+ /usr/sbin/mount.nfs - - - - ${pkgs.nfs-utils}/bin/mount.nfs"
       "L+ /usr/sbin/umount.nfs - - - - ${pkgs.nfs-utils}/bin/umount.nfs"
       "L+ /sbin/mount.nfs - - - - ${pkgs.nfs-utils}/bin/mount.nfs"
@@ -134,8 +134,8 @@ in
     # directory over the storage path and remount it read-only before k3s starts.
     systemd.services.longhorn-storage-guard = {
       description = "Protect an unavailable Longhorn storage path";
-      before = [ "k3s.service" ];
-      after = [ "local-fs.target" ] ++ storageMountUnits;
+      before = ["k3s.service"];
+      after = ["local-fs.target"] ++ storageMountUnits;
       wants = storageMountUnits;
       path = [
         pkgs.coreutils
@@ -155,8 +155,8 @@ in
     };
 
     systemd.services.k3s = {
-      requires = [ "longhorn-storage-guard.service" ];
-      after = [ "longhorn-storage-guard.service" ];
+      requires = ["longhorn-storage-guard.service"];
+      after = ["longhorn-storage-guard.service"];
     };
 
     assertions = [
