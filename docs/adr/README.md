@@ -66,3 +66,4 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) | File-selective home backup and host storage monitoring | Accepted, amended | xyz, home backup, storage monitoring |
 | [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md) | Gateway-owned UniFi and independent DNS pair | Accepted | unifi, dns, network services |
 | [ADR-0061](0061-retire-xyz-k3s-agent.md) | Retire the xyz k3s agent | Accepted | xyz, k3s, browsers, Longhorn |
+| [ADR-0062](0062-xev-tank-storage-and-media-service-migration.md) | Move tank storage ownership and media services to xev | Accepted, staged | xev, xyz, ZFS, media services |
