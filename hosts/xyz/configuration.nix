@@ -503,7 +503,7 @@ in {
   boot.zfs.devNodes = "/dev/disk/by-id";
   boot.zfs.extraPools = [runtimePool];
   boot.zfs.forceImportRoot = false;
-  xyz.storage.stashMergerfs.enable = false;
+  xyz.storage.stashMergerfs.enable = true;
   swapDevices = lib.mkForce [
     {
       device = "/dev/disk/by-partlabel/xyz-swap";
