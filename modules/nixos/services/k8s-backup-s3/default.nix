@@ -459,7 +459,16 @@ in
             # can never converge even when every object observed at the start
             # was replicated correctly.
             write_inventory source "$bucket" "$source_checkpoint"
-            mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket" >/dev/null
+            if ! mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket" >/dev/null; then
+              if [ "$attempt" -eq 5 ]; then
+                echo "mirror failed for bucket $bucket after $attempt attempts" >&2
+                exit 1
+              fi
+
+              echo "mirror failed for bucket $bucket on attempt $attempt; retrying the resumable copy" >&2
+              sleep 2
+              continue
+            fi
             write_inventory replica "$bucket" "$replica_after"
             LC_ALL=C comm -23 "$source_checkpoint" "$replica_after" >"$missing"
 
