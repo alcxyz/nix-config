@@ -14,22 +14,27 @@ CALL_LOG="$TEST_ROOT/calls.log"
 mkdir -p "$BIN_DIR" "$PROFILE_ROOT"
 touch "$PROFILE_ROOT/home-manager" "$PROFILE_ROOT/profile" "$SYSTEM_PROFILE"
 
-cat >"$BIN_DIR/nix-env" <<'EOF'
-#!/usr/bin/env bash
+write_mock() {
+  local path="$1"
+  {
+    printf '#!%s\n' "$BASH"
+    cat
+  } >"$path"
+}
+
+write_mock "$BIN_DIR/nix-env" <<'EOF'
 printf 'nix-env' >>"$CALL_LOG"
 printf ' <%s>' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
 EOF
 
-cat >"$BIN_DIR/nix-store" <<'EOF'
-#!/usr/bin/env bash
+write_mock "$BIN_DIR/nix-store" <<'EOF'
 printf 'nix-store' >>"$CALL_LOG"
 printf ' <%s>' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
 EOF
 
-cat >"$BIN_DIR/sudo" <<'EOF'
-#!/usr/bin/env bash
+write_mock "$BIN_DIR/sudo" <<'EOF'
 printf 'sudo' >>"$CALL_LOG"
 printf ' <%s>' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
@@ -42,34 +47,29 @@ fi
 "$@"
 EOF
 
-cat >"$BIN_DIR/ssh" <<'EOF'
-#!/usr/bin/env bash
+write_mock "$BIN_DIR/ssh" <<'EOF'
 printf 'ssh' >>"$CALL_LOG"
 printf ' <%s>' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
 cat >/dev/null
 EOF
 
-cat >"$BIN_DIR/id-user" <<'EOF'
-#!/usr/bin/env bash
+write_mock "$BIN_DIR/id-user" <<'EOF'
 printf '501\n'
 EOF
 
-cat >"$BIN_DIR/id-root" <<'EOF'
-#!/usr/bin/env bash
+write_mock "$BIN_DIR/id-root" <<'EOF'
 printf '0\n'
 EOF
 
-cat >"$BIN_DIR/df" <<'EOF'
-#!/usr/bin/env bash
+write_mock "$BIN_DIR/df" <<'EOF'
 cat <<'OUT'
 Filesystem 1024-blocks Used Available Capacity Mounted on
 test       1000        500  500       50%      /nix
 OUT
 EOF
 
-cat >"$BIN_DIR/df-low" <<'EOF'
-#!/usr/bin/env bash
+write_mock "$BIN_DIR/df-low" <<'EOF'
 cat <<'OUT'
 Filesystem 1024-blocks Used Available Capacity Mounted on
 test       1000        900  100       90%      /nix
@@ -86,7 +86,7 @@ NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
   NIX_STORE_BIN="$BIN_DIR/nix-store" \
   SUDO_BIN="$BIN_DIR/sudo" \
   ID_BIN="$BIN_DIR/id-user" \
-  "$MAINTENANCE" >/dev/null
+  "$BASH" "$MAINTENANCE" >/dev/null
 
 expected=$(
   cat <<EOF
@@ -118,7 +118,7 @@ no_action_output=$(
     SUDO_BIN="$BIN_DIR/sudo" \
     DF_BIN="$BIN_DIR/df" \
     ID_BIN="$BIN_DIR/id-user" \
-    env -u HOME "$MAINTENANCE" --automatic-retention --user alc \
+    env -u HOME "$BASH" "$MAINTENANCE" --automatic-retention --user alc \
     --home "$TEST_ROOT/home" --check-only
 )
 grep -Fq 'retention not required' <<<"$no_action_output"
@@ -136,7 +136,7 @@ low_space_output=$(
     SUDO_BIN="$BIN_DIR/sudo" \
     DF_BIN="$BIN_DIR/df-low" \
     ID_BIN="$BIN_DIR/id-user" \
-    "$MAINTENANCE" --automatic-retention --user alc \
+    "$BASH" "$MAINTENANCE" --automatic-retention --user alc \
     --home "$TEST_ROOT/home" --check-only
 )
 grep -Fq 'retention trigger: free space is below 15%' <<<"$low_space_output"
@@ -161,7 +161,7 @@ audit_output=$(
     SUDO_BIN="$BIN_DIR/sudo" \
     DF_BIN="$BIN_DIR/df" \
     ID_BIN="$BIN_DIR/id-user" \
-    "$MAINTENANCE" --automatic-retention --user alc \
+    "$BASH" "$MAINTENANCE" --automatic-retention --user alc \
     --home "$TEST_ROOT/home" --check-only
 )
 
@@ -184,7 +184,7 @@ NIX_GC_PROFILE_ROOT="$PROFILE_ROOT" \
   SUDO_BIN="$BIN_DIR/sudo" \
   DF_BIN="$BIN_DIR/df" \
   ID_BIN="$BIN_DIR/id-root" \
-  "$MAINTENANCE" --automatic-retention --user alc \
+  "$BASH" "$MAINTENANCE" --automatic-retention --user alc \
   --home "$TEST_ROOT/home" >/dev/null
 
 grep -Fq \
@@ -199,7 +199,7 @@ if grep -Fq -- '--gc' "$CALL_LOG"; then
 fi
 
 : >"$CALL_LOG"
-SSH_BIN="$BIN_DIR/ssh" "$MAINTENANCE" nux >/dev/null
+SSH_BIN="$BIN_DIR/ssh" "$BASH" "$MAINTENANCE" nux >/dev/null
 
 expected="ssh <-tt> <nux> <bash> <-s>"
 actual=$(cat "$CALL_LOG")
