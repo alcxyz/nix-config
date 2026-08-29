@@ -459,7 +459,11 @@ in
             # can never converge even when every object observed at the start
             # was replicated correctly.
             write_inventory source "$bucket" "$source_checkpoint"
-            if ! mc mirror --overwrite --remove --quiet "source/$bucket" "replica/$bucket" >/dev/null; then
+            # RustFS can transiently reject an individual streaming PUT. Let
+            # mc retry that object before falling back to the more expensive
+            # full checkpoint/mirror pass, and avoid overwhelming the small
+            # on-demand replica with autodetected worker concurrency.
+            if ! mc mirror --overwrite --remove --retry --max-workers 4 --quiet "source/$bucket" "replica/$bucket" >/dev/null; then
               if [ "$attempt" -eq 5 ]; then
                 echo "mirror failed for bucket $bucket after $attempt attempts" >&2
                 exit 1
