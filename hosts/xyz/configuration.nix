@@ -618,7 +618,18 @@ in {
       after = ["xyz-runtime-storage-policy.service"];
       requires = ["xyz-runtime-storage-policy.service"];
     };
-  systemd.services.xyz-k8s-backup = mkLocalBackupService "k8s" "Replicate xyz k8s backup dataset to the local backup pool";
+  systemd.services.xyz-k8s-backup =
+    lib.recursiveUpdate
+    (mkLocalBackupService "k8s" "Replicate xyz k8s backup dataset to the local backup pool")
+    {
+      # A long S3 inventory/reconciliation can exceed the nominal 35-minute
+      # timer gap. If the mirror is still activating, snapshot only after its
+      # verified checkpoint has finished instead of capturing mid-copy state.
+      after = [
+        "zfs-mount.service"
+        "k8s-backup-s3-mirror.service"
+      ];
+    };
 
   services.snapshot-restic-home = {
     enable = true;
