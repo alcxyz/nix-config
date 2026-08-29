@@ -20,6 +20,15 @@
     }
   );
   runtimePool = "xruntime";
+  # Keep the deployed stash-only layout until the private bulk-consolidation
+  # runbook has completed its final copy, branch reshape, and ZFS retirement
+  # gates. The cutover is then a single reviewed value change to "tank-root".
+  bulkStorageLayout = "stash-root";
+  bulkStorageCutover = bulkStorageLayout == "tank-root";
+  bulkStorageZfsDependencies = lib.optionals (!bulkStorageCutover) [
+    "zfs-auto-unlock.service"
+    "zfs-mount.service"
+  ];
   runtimeDatasets = {
     docker = "${runtimePool}/runtime/docker";
     steam-headless = "${runtimePool}/appstate/steam-headless";
@@ -503,7 +512,10 @@ in {
   boot.zfs.devNodes = "/dev/disk/by-id";
   boot.zfs.extraPools = [runtimePool];
   boot.zfs.forceImportRoot = false;
-  xyz.storage.stashMergerfs.enable = true;
+  xyz.storage.stashMergerfs = {
+    enable = true;
+    layout = bulkStorageLayout;
+  };
   swapDevices = lib.mkForce [
     {
       device = "/dev/disk/by-partlabel/xyz-swap";
@@ -724,14 +736,24 @@ in {
     browsed.enable = false;
   };
 
-  services.torrent.enable = true;
+  services.torrent = {
+    enable = true;
+    zfsDatasets = lib.optionals (!bulkStorageCutover) [
+      "tank/downloads"
+      "tank/stash"
+      "tank/media"
+    ];
+    storageDependencyUnits = bulkStorageZfsDependencies;
+  };
   services.plex.managed = {
     enable = true;
     mediaDir = "/tank/media/plex";
     transcodeDir = "/tmp/plex-transcode";
+    storageDependencyUnits = lib.optionals (!bulkStorageCutover) ["zfs-mount.service"];
   };
   services.stash.managed = {
     enable = true;
+    storageDependencyUnits = lib.optionals (!bulkStorageCutover) ["zfs-mount.service"];
   };
   services.calibre-web.managed = {
     enable = true;
@@ -798,34 +820,71 @@ in {
       "192.168.1.24" # mac
       "192.168.1.15" # nux
     ];
-    shares = [
-      # Home directories
-      {path = "/home/alc/Documents";}
-      {path = "/home/alc/Downloads";}
-      {path = "/home/alc/Pictures";}
-      {path = "/home/alc/Music";}
-      {path = "/home/alc/Cloud";}
-      {path = "/home/alc/Public";}
-      # Paperless consumption
-      {path = "/home/alc/paperless-ingest";}
-      # Shared state for gitops tools (tokens, cross-host config)
-      {path = "/home/alc/.local/share/gitops-state";}
-      # ZFS datasets
-      {path = "/tank/media";}
-      {
-        path = "/tank/stash";
-        anongid = config.users.groups.media.gid;
-      }
-      {path = "/tank/downloads";}
-      {path = "/tank/games";}
-      {
-        path = "/tank/vault";
-        anonuid = 65534;
-        anongid = 65534;
-        allowedClients = ["192.168.1.0/24"];
-      }
-    ];
+    shares =
+      [
+        # Home directories
+        {path = "/home/alc/Documents";}
+        {path = "/home/alc/Downloads";}
+        {path = "/home/alc/Pictures";}
+        {path = "/home/alc/Music";}
+        {path = "/home/alc/Cloud";}
+        {path = "/home/alc/Public";}
+        # Paperless consumption
+        {path = "/home/alc/paperless-ingest";}
+        # Shared state for gitops tools (tokens, cross-host config)
+        {path = "/home/alc/.local/share/gitops-state";}
+        # Shared storage
+        {path = "/tank/media";}
+        {
+          path = "/tank/stash";
+          anongid = config.users.groups.media.gid;
+        }
+        {path = "/tank/downloads";}
+      ]
+      ++ lib.optionals (!bulkStorageCutover) [
+        {path = "/tank/games";}
+      ]
+      ++ [
+        {
+          path = "/tank/vault";
+          anonuid = 65534;
+          anongid = 65534;
+          allowedClients = ["192.168.1.0/24"];
+        }
+      ];
   };
+
+  # RequiresMountsFor resolves to the nearest parent mount and cannot prove
+  # that a nested ZFS export did not fall back to a directory on mergerfs.
+  # Refuse every export when either storage layout is not mounted exactly as
+  # declared.
+  systemd.services.nfs-server.preStart = lib.mkAfter ''
+    require_exact_mount() {
+      local target="$1"
+      local expected="$2"
+      local source
+
+      source="$(${pkgs.util-linux}/bin/findmnt -rn -o SOURCE --mountpoint "$target" 2>/dev/null || true)"
+      if [ "$source" != "$expected" ]; then
+        echo "$target is mounted from '$source', expected '$expected'" >&2
+        exit 1
+      fi
+    }
+
+    ${
+      if bulkStorageCutover
+      then ''
+        require_exact_mount /tank xyz-tank-bulk
+      ''
+      else ''
+        require_exact_mount /tank/media tank/media
+        require_exact_mount /tank/stash xyz-stash
+        require_exact_mount /tank/downloads tank/downloads
+        require_exact_mount /tank/games tank/games
+      ''
+    }
+    require_exact_mount /tank/vault tank/vault
+  '';
 
   services.netbird.managed = {
     enable = true;
@@ -932,16 +991,19 @@ in {
   ];
 
   # ==================== Tmpfiles ====================
-  systemd.tmpfiles.rules = [
-    "d /tank 0755 root root - -"
-    "z /tank 0755 root root - -"
-    "L+ /downloads - - - - /tank/downloads"
-    "L+ /vault - - - - /tank/vault"
-    "d /hitachi 0755 root root - -"
-    "d /tank/games 0770 root media - -"
-    "d /tank/vault 0770 root media - -"
+  systemd.tmpfiles.rules =
+    [
+      "d /tank 0755 root root - -"
+      "z /tank 0755 root root - -"
+      "L+ /downloads - - - - /tank/downloads"
+      "L+ /vault - - - - /tank/vault"
+      "d /hitachi 0755 root root - -"
+      "d /tank/vault 0770 root media - -"
 
-    # Ensure the filtered input directory exists on boot (tmpfs)
-    #"d /run/steam-headless-input 0755 root root - -"
-  ];
+      # Ensure the filtered input directory exists on boot (tmpfs)
+      #"d /run/steam-headless-input 0755 root root - -"
+    ]
+    ++ lib.optionals (!bulkStorageCutover) [
+      "d /tank/games 0770 root media - -"
+    ];
 }

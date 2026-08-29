@@ -28,6 +28,12 @@ in {
       default = "/tmp/plex-transcode";
       description = "Temporary transcode directory";
     };
+
+    storageDependencyUnits = mkOption {
+      type = types.listOf types.str;
+      default = ["zfs-mount.service"];
+      description = "Storage services that must complete before Plex starts.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -53,14 +59,9 @@ in {
     ];
 
     systemd.services.plex = {
-      requires = [
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
-      after = [
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
+      unitConfig.RequiresMountsFor = [cfg.mediaDir];
+      requires = cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
+      after = cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
       conflicts = ["docker-plex.service"];
       environment = {
         LD_LIBRARY_PATH = mkForce "";
