@@ -23,6 +23,7 @@ in
               "helium"
               "ghostty"
               "kdash"
+              "jean"
               "t3code"
               "claude-code"
               "codex-app-server"

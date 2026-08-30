@@ -319,6 +319,7 @@ in {
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
     inputs.nix-secrets.nixosModules.xyzStashMergerfs
     inputs.nix-secrets.nixosModules.xyzPrinter
+    inputs.nix-secrets.nixosModules.xyzJeanIngress
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
     "${configDir}/modules/nixos/hardware/nvidia.nix"
