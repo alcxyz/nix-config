@@ -98,6 +98,7 @@ in {
               pkgs.git
               pkgs.nodejs_22
               pkgs.openssh
+              pkgs.which
               pkgs.claude-code
               pkgs.codex-cli
             ]
