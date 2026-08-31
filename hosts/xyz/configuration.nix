@@ -23,7 +23,7 @@
   # Keep the deployed stash-only layout until the private bulk-consolidation
   # runbook has completed its final copy, branch reshape, and ZFS retirement
   # gates. The cutover is then a single reviewed value change to "tank-root".
-  bulkStorageLayout = "stash-root";
+  bulkStorageLayout = "tank-root";
   bulkStorageCutover = bulkStorageLayout == "tank-root";
   bulkStorageZfsDependencies = lib.optionals (!bulkStorageCutover) [
     "zfs-auto-unlock.service"
