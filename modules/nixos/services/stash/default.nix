@@ -7,8 +7,7 @@
   username,
   ...
 }:
-with lib;
-let
+with lib; let
   cfg = config.services.stash.managed;
   system = pkgs.stdenv.hostPlatform.system;
   stateDirs = [
@@ -50,8 +49,7 @@ let
       echo "Stash state is incomplete; allowing Stash to bootstrap fresh state." >&2
     fi
   '';
-in
-{
+in {
   options.services.stash.managed = {
     enable = mkEnableOption "Stash (managed as a native systemd service)";
 
@@ -82,10 +80,16 @@ in
       default = "/tank/stash";
       description = "Directory where Stash media is located.";
     };
+
+    storageDependencyUnits = mkOption {
+      type = types.listOf types.str;
+      default = ["zfs-mount.service"];
+      description = "Storage services that must complete before Stash starts.";
+    };
   };
 
   config = mkIf cfg.enable {
-    users.groups.media = { };
+    users.groups.media = {};
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
@@ -98,9 +102,9 @@ in
         "video"
       ];
     };
-    users.groups.${cfg.group} = { };
+    users.groups.${cfg.group} = {};
 
-    users.users.${username}.extraGroups = [ cfg.group ];
+    users.users.${username}.extraGroups = [cfg.group];
 
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0750 ${cfg.user} ${cfg.group} - -"
@@ -113,22 +117,15 @@ in
       "a+ ${cfg.mediaDir} - - - - g:media:rwx,d:g:media:rwx,m::rwx,d:m::rwx"
     ];
 
-    networking.firewall.allowedTCPPorts = [ 9999 ];
+    networking.firewall.allowedTCPPorts = [9999];
 
     systemd.services.stash = {
       description = "Stash media organizer";
-      wantedBy = [ "multi-user.target" ];
-      unitConfig.RequiresMountsFor = [ cfg.mediaDir ];
-      requires = [
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
-      after = [
-        "network.target"
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
-      conflicts = [ "docker-stash.service" ];
+      wantedBy = ["multi-user.target"];
+      unitConfig.RequiresMountsFor = [cfg.mediaDir];
+      requires = cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
+      after = ["network.target"] ++ cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
+      conflicts = ["docker-stash.service"];
 
       path = with pkgs; [
         ffmpeg-full

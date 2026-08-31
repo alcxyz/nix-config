@@ -6,6 +6,7 @@
   username,
   ...
 }: let
+  cfg = config.services.torrent;
   serviceUser = "rtorrent";
   serviceGroup = "rtorrent";
   sharedGroup = "media";
@@ -77,11 +78,8 @@
     }
   ];
 
-  sharedMediaDatasets = [
-    "tank/downloads"
-    "tank/stash"
-    "tank/media"
-  ];
+  sharedMediaDatasets = cfg.zfsDatasets;
+  storageDependencyUnits = cfg.storageDependencyUnits;
 
   tmpfilesRules =
     map (d: "d " + d + " 0755 " + serviceUser + " " + serviceGroup + " -") torrentDirs
@@ -93,9 +91,30 @@
     )
     sharedMediaDirs;
 in {
-  options.services.torrent.enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
+  options.services.torrent = {
+    enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
 
-  config = lib.mkIf config.services.torrent.enable {
+    zfsDatasets = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "tank/downloads"
+        "tank/stash"
+        "tank/media"
+      ];
+      description = "ZFS datasets whose ACL properties should be enforced for shared torrent storage.";
+    };
+
+    storageDependencyUnits = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "zfs-auto-unlock.service"
+        "zfs-mount.service"
+      ];
+      description = "Storage services that must complete before torrent storage permissions are applied.";
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
     users.groups.${sharedGroup} = {};
     users.groups.${serviceGroup} = {};
     users.users.${serviceUser} = {
@@ -138,15 +157,9 @@ in {
     };
 
     systemd.services.qbittorrent = {
-      unitConfig.RequiresMountsFor = [stashDir];
-      requires = [
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
-      after = [
-        "zfs-mount.service"
-        "torrent-shared-media-permissions.service"
-      ];
+      unitConfig.RequiresMountsFor = map (directory: directory.path) sharedMediaDirs;
+      requires = storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
+      after = storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
       conflicts = ["docker-qbittorrent.service"];
       path = [
         pkgs.coreutils
@@ -175,8 +188,8 @@ in {
     systemd.services.torrent-shared-media-zfs-properties = {
       description = "Enable POSIX ACLs on shared media ZFS datasets";
       wantedBy = ["multi-user.target"];
-      requires = ["zfs-auto-unlock.service"];
-      after = ["zfs-auto-unlock.service"];
+      requires = storageDependencyUnits;
+      after = storageDependencyUnits;
       before = [
         "torrent-shared-media-permissions.service"
         "docker.service"
@@ -221,14 +234,8 @@ in {
       description = "Apply shared media ACLs for torrent and media workloads";
       unitConfig.RequiresMountsFor = map (directory: directory.path) sharedMediaDirs;
       wantedBy = ["multi-user.target"];
-      requires = [
-        "zfs-mount.service"
-        "torrent-shared-media-zfs-properties.service"
-      ];
-      after = [
-        "zfs-mount.service"
-        "torrent-shared-media-zfs-properties.service"
-      ];
+      requires = storageDependencyUnits ++ ["torrent-shared-media-zfs-properties.service"];
+      after = storageDependencyUnits ++ ["torrent-shared-media-zfs-properties.service"];
       before = [
         "docker.service"
         "k3s.service"
