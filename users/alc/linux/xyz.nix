@@ -19,9 +19,13 @@
     runtimeInputs = [
       pkgs.coreutils
       pkgs.gnugrep
+      pkgs.socat
       pkgs.xrandr
     ];
     text = ''
+      socket="''${XDG_RUNTIME_DIR:?}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
+      repair_requested="''${XDG_RUNTIME_DIR:?}/hyprland-xwayland-primary-output.requested"
+
       set_primary() {
         stable_samples=0
         for _ in $(seq 1 150); do
@@ -43,7 +47,45 @@
         return 1
       }
 
-      set_primary
+      ensure_primary() {
+        current_outputs="$(DISPLAY="''${DISPLAY:-:0}" xrandr --current 2>/dev/null || true)"
+        if grep -q '^DP-1 connected primary ' <<<"$current_outputs"; then
+          return 0
+        fi
+        if ! grep -q '^DP-1 connected ' <<<"$current_outputs"; then
+          return 0
+        fi
+        set_primary
+      }
+
+      watch_output_events() {
+        while true; do
+          while IFS= read -r event; do
+            case "$event" in
+              monitoradded\>\>* | monitoraddedv2\>\>* | dpms\>\>*)
+                : >"$repair_requested"
+                ;;
+            esac
+          done < <(socat -U - UNIX-CONNECT:"$socket" 2>/dev/null)
+          sleep 1
+        done
+      }
+
+      watch_output_events &
+      watcher_pid=$!
+      trap 'kill "$watcher_pid" 2>/dev/null || true; rm -f "$repair_requested"' EXIT
+
+      : >"$repair_requested"
+      next_audit=0
+      while true; do
+        now=$SECONDS
+        if [[ -e "$repair_requested" ]] || ((now >= next_audit)); then
+          rm -f "$repair_requested"
+          ensure_primary || true
+          next_audit=$((now + 30))
+        fi
+        sleep 1
+      done
     '';
   };
   droptermToggle = pkgs.writeShellApplication {
@@ -444,27 +486,15 @@ in {
   };
   systemd.user.services.hyprland-xwayland-primary-output = {
     Unit = {
-      Description = "Keep the 49-inch display primary in XWayland";
+      Description = "Maintain the 49-inch display as XWayland primary";
       PartOf = ["graphical-session.target"];
       After = ["graphical-session.target"];
     };
     Service = {
-      Type = "oneshot";
+      Type = "simple";
       ExecStart = lib.getExe xwaylandPrimaryOutput;
       Restart = "on-failure";
       RestartSec = 1;
-    };
-    Install.WantedBy = ["graphical-session.target"];
-  };
-  systemd.user.paths.hyprland-xwayland-primary-output = {
-    Unit = {
-      Description = "Restore the XWayland primary output after display wake";
-      PartOf = ["graphical-session.target"];
-      After = ["graphical-session.target"];
-    };
-    Path = {
-      PathChanged = "%t/hyprlock-dpms-woke";
-      Unit = "hyprland-xwayland-primary-output.service";
     };
     Install.WantedBy = ["graphical-session.target"];
   };
