@@ -72,6 +72,7 @@ the bulk-storage migration.
 ## Tracking
 
 - Forgejo milestone: **XEV tank storage and media migration**
+- Issue #259 tracks the guarded `tank` to `secure` rename on `xyz`.
 - Issues #233 and #236 are narrowed to XFS/mergerfs preparation and ownership.
 - Issues #237 and #238 retain the qBittorrent, Stash, and Plex moves.
 - Issue #239 closes only bulk and media ownership; `xyz` retains `secure`.
