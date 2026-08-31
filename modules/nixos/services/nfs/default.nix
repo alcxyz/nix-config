@@ -9,11 +9,25 @@ let
   # Build export lines — one per share per allowed client
   exportLines = concatMapStringsSep "\n" (s:
     let
+      exportOptions = concatStringsSep "," (
+        [
+          "rw"
+          "nohide"
+          "insecure"
+          "no_subtree_check"
+          "all_squash"
+          "anonuid=${toString s.anonuid}"
+          "anongid=${toString s.anongid}"
+        ]
+        ++ optional (s.fsid != null) "fsid=${toString s.fsid}"
+      );
       clients = concatMapStringsSep " " (ip:
-        "${ip}(rw,nohide,insecure,no_subtree_check,all_squash,anonuid=${toString s.anonuid},anongid=${toString s.anongid})"
+        "${ip}(${exportOptions})"
       ) (cfg.allowedClients ++ s.allowedClients);
     in "${s.path}  ${clients}"
   ) cfg.shares;
+
+  explicitFsids = filter (fsid: fsid != null) (map (share: share.fsid) cfg.shares);
 
   allowedFirewallClients = unique (
     cfg.allowedClients ++ concatMap (s: s.allowedClients) cfg.shares
@@ -68,6 +82,14 @@ in
             default = 100;
             description = "GID for anonymous access (all_squash).";
           };
+          fsid = mkOption {
+            type = types.nullOr types.ints.positive;
+            default = null;
+            description = ''
+              Stable filesystem ID for this export. Set this when multiple
+              exported paths reside on the same filesystem.
+            '';
+          };
           allowedClients = mkOption {
             type = types.listOf types.str;
             default = [];
@@ -81,6 +103,13 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = length explicitFsids == length (unique explicitFsids);
+        message = "Explicit NFS export fsid values must be unique.";
+      }
+    ];
+
     services.nfs.server = {
       enable = true;
       exports = exportLines;

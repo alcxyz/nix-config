@@ -834,12 +834,19 @@ in {
         # Shared state for gitops tools (tokens, cross-host config)
         {path = "/home/alc/.local/share/gitops-state";}
         # Shared storage
-        {path = "/tank/media";}
+        {
+          path = "/tank/media";
+          fsid = 101;
+        }
         {
           path = "/tank/stash";
           anongid = config.users.groups.media.gid;
+          fsid = 102;
         }
-        {path = "/tank/downloads";}
+        {
+          path = "/tank/downloads";
+          fsid = 103;
+        }
       ]
       ++ lib.optionals (!bulkStorageCutover) [
         {path = "/tank/games";}
