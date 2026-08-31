@@ -4,6 +4,10 @@
 **Date:** 2026-05-06
 **Applies to:** `hosts/xyz`, `modules/nixos/services/k8s-backup-s3`, k3s backup posture
 
+> Historical names below describe the superseded implementation. ADR-0064
+> retains the replica on `xyz` but renames the remaining encrypted pool to
+> `secure` and its dataset to `secure/k8s-backups`.
+
 ## Context
 
 Longhorn now carries most Kubernetes application PVCs. Longhorn replication

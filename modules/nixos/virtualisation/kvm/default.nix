@@ -17,13 +17,13 @@ in {
 
     storagePoolPath = mkOption {
       type = types.str;
-      default = "/tank/vault/vm";
+      default = "/secure/vault/vm";
       description = "Path for the libvirt storage pool.";
     };
 
     isoPath = mkOption {
       type = types.str;
-      default = "/tank/vault/isos";
+      default = "/secure/vault/isos";
       description = "Path for ISO images.";
     };
   };

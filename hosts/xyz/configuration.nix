@@ -25,6 +25,9 @@
   # gates. The cutover is then a single reviewed value change to "tank-root".
   bulkStorageLayout = "tank-root";
   bulkStorageCutover = bulkStorageLayout == "tank-root";
+  secureStorageLayout = "secure";
+  securePoolName = secureStorageLayout;
+  secureStorageRoot = "/${secureStorageLayout}";
   bulkStorageZfsDependencies = lib.optionals (!bulkStorageCutover) [
     "zfs-auto-unlock.service"
     "zfs-mount.service"
@@ -49,7 +52,7 @@
       ${lib.escapeShellArg "${appStateBackupRoot}/${name}"} \
       include-parent
   '') (builtins.attrNames appStateDatasets);
-  k8sBackupDataset = "tank/k8s-backups";
+  k8sBackupDataset = "${securePoolName}/k8s-backups";
   k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
   gamesDataset = "${appStateBackupPool}/games";
   gamesMountpoint = "/hitachi/games";
@@ -516,6 +519,7 @@ in {
     enable = true;
     layout = bulkStorageLayout;
   };
+  xyz.storage.securePoolLayout = secureStorageLayout;
   swapDevices = lib.mkForce [
     {
       device = "/dev/disk/by-partlabel/xyz-swap";
@@ -786,8 +790,8 @@ in {
 
   services.k8s-backup-s3 = {
     enable = true;
-    dataset = "tank/k8s-backups";
-    dataDir = "/tank/k8s-backups/rustfs";
+    dataset = k8sBackupDataset;
+    dataDir = "${secureStorageRoot}/k8s-backups/rustfs";
     quota = "1T";
     apiAddress = "192.168.1.10:9100";
     consoleAddress = "127.0.0.1:9101";
@@ -853,7 +857,7 @@ in {
       ]
       ++ [
         {
-          path = "/tank/vault";
+          path = "${secureStorageRoot}/vault";
           anonuid = 65534;
           anongid = 65534;
           allowedClients = ["192.168.1.0/24"];
@@ -890,7 +894,7 @@ in {
         require_exact_mount /tank/games tank/games
       ''
     }
-    require_exact_mount /tank/vault tank/vault
+    require_exact_mount ${secureStorageRoot}/vault ${securePoolName}/vault
   '';
 
   services.netbird.managed = {
@@ -1003,9 +1007,10 @@ in {
       "d /tank 0755 root root - -"
       "z /tank 0755 root root - -"
       "L+ /downloads - - - - /tank/downloads"
-      "L+ /vault - - - - /tank/vault"
+      "L+ /vault - - - - ${secureStorageRoot}/vault"
       "d /hitachi 0755 root root - -"
-      "d /tank/vault 0770 root media - -"
+      "d ${secureStorageRoot} 0755 root root - -"
+      "d ${secureStorageRoot}/vault 0770 root media - -"
 
       # Ensure the filtered input directory exists on boot (tmpfs)
       #"d /run/steam-headless-input 0755 root root - -"

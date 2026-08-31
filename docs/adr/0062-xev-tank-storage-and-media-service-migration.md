@@ -1,8 +1,14 @@
 # ADR-0062: Move bulk and secure storage ownership and media services to xev
 
-**Status:** Accepted, staged
+**Status:** Accepted, amended by ADR-0064
 **Date:** 2026-08-23
 **Applies to:** `hosts/xev`, `hosts/xyz`, bulk storage, secure storage, NFS, Plex, qBittorrent, Stash, Kubernetes backup recovery
+**Amended by:** ADR-0064
+
+> ADR-0064 narrows the implemented migration to the XFS/mergerfs bulk storage
+> and media services. The secure ZFS mirror remains owned by `xyz`; its
+> previously described move and TPM prerequisites are deferred to a future
+> decision.
 
 ## Context
 

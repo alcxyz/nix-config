@@ -52,8 +52,9 @@ copy, service cutover, or physical move to `xev`.
 Keep qBittorrent, Stash, Plex, and NFS on their existing host during this
 layout change. Every service must require its real mount and must fail rather
 than write into an unmounted placeholder directory. The later host migration
-from [ADR-0062](0062-xev-tank-storage-and-media-service-migration.md) moves the
-bulk XFS pair and secure ZFS mirror as separate ownership units.
+from [ADR-0062](0062-xev-tank-storage-and-media-service-migration.md), as
+amended by [ADR-0064](0064-keep-secure-storage-on-xyz.md), moves only the bulk
+XFS pair. The secure ZFS mirror remains owned by `xyz`.
 
 ## Cutover gates
 
@@ -103,5 +104,5 @@ changes, backup changes, and rollback changes into one fault domain.
 - qBittorrent and Plex retain their current absolute content paths.
 - Bulk-data loss remains possible after a single XFS branch failure and must be
   accepted for every directory placed there.
-- The secure-pool rename and physical move remain separately reversible work.
-
+- The secure-pool rename on `xyz` and the bulk physical move to `xev` remain
+  separately reversible work.

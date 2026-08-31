@@ -1,6 +1,6 @@
 # ADR-0052: xev primary Kubernetes backup target with xyz ZFS replica
 
-**Status:** Accepted, staged
+**Status:** Accepted, amended
 **Date:** 2026-07-18
 **Applies to:** `hosts/xev`, `hosts/xyz`, host-level S3 backups, Longhorn and database backup clients
 **Supersedes:** ADR-0039
@@ -10,7 +10,7 @@
 ADR-0039 placed the host-level Kubernetes backup target on `xyz` to keep it
 outside the k3s and Longhorn dependency path. That removed the circular
 dependency on in-cluster object storage, but made routine backup writes depend
-on the workstation and its encrypted `tank` pool.
+on the workstation and its encrypted ZFS pool.
 
 `xev` now has a dedicated 1 TB hard disk that is neither its system disk nor a
 Longhorn disk. A host-level RustFS process on `xev` therefore remains outside
@@ -26,12 +26,15 @@ Use the following one-way topology:
 | Role | Host | Endpoint | Storage |
 | --- | --- | --- | --- |
 | Authoritative backup target | `xev` | `192.168.1.13:9200` | dedicated 1 TB ext4 disk at `/var/lib/k8s-backup-replica` |
-| Pull replica and recovery endpoint | `xyz` | `192.168.1.10:9100` | `tank/k8s-backups`, with ZFS snapshots and the existing local ZFS replication chain |
+| Pull replica and recovery endpoint | `xyz` | `192.168.1.10:9100` | `secure/k8s-backups`, with ZFS snapshots and the existing local ZFS replication chain |
 
 Longhorn, etcd export automation, CloudNativePG, and logical database dump jobs
 write only to `xev`. `xyz` pulls a verified S3 mirror from `xev` daily. The
 existing `xyz` ZFS backup job then snapshots and replicates that local replica;
 it runs after the S3 mirror window.
+
+ADR-0064 keeps this replica on `xyz` when the bulk XFS storage moves to `xev`,
+preserving the intended host-level failure-domain separation.
 
 The two RustFS endpoints use the same bucket credentials during migration so
 the existing object tree can be copied and validated without rewriting object
