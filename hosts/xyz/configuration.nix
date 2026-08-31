@@ -875,7 +875,10 @@ in {
       local expected="$2"
       local source
 
-      source="$(${pkgs.util-linux}/bin/findmnt -rn -o SOURCE --mountpoint "$target" 2>/dev/null || true)"
+      source="$(
+        ${pkgs.util-linux}/bin/findmnt -rn -o SOURCE --mountpoint "$target" 2>/dev/null |
+          ${pkgs.coreutils}/bin/sort -u || true
+      )"
       if [ "$source" != "$expected" ]; then
         echo "$target is mounted from '$source', expected '$expected'" >&2
         exit 1
