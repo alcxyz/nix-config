@@ -22,6 +22,7 @@
     "192.168.1.16"
     "192.168.1.23"
     "192.168.1.24"
+    "192.168.1.250"
   ];
   qbWebUiTrustedClientsCsv = lib.concatStringsSep "," qbWebUiTrustedClients;
   qbWebUiFirewallRules =
