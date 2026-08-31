@@ -16,7 +16,7 @@
 
     nix-secrets = {
       #url = "path:/home/alc/nix-secrets";
-      url = "git+https://git.alc.xyz/alcxyz/nix-secrets.git?ref=agent/tank-bulk-secure-split";
+      url = "git+https://git.alc.xyz/alcxyz/nix-secrets.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
