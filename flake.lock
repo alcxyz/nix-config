@@ -234,11 +234,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1788324813,
-        "narHash": "sha256-3kgVzDm/tdZcCgn/Lg0McNlgwKe7yVQsd+oY9cK80Rg=",
+        "lastModified": 1788325240,
+        "narHash": "sha256-7s1OnfxIxfYaNISPMr9tVhwtBWWV6NU6bx1gAJCqVJ0=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "2888747bf8a6299b229ac2429c49725590ef8333",
+        "rev": "1354e18261e0d87c76be5b8ead91c546ec92d1dc",
         "type": "github"
       },
       "original": {
