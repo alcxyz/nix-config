@@ -3,16 +3,16 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1783042690,
-        "narHash": "sha256-8EnTQvdZL9grjI8mHOTTVoJr11NAIeVU8rya9weiyEo=",
+        "lastModified": 1788092822,
+        "narHash": "sha256-pYZlj41hbyx904i+qQ8/HG2UamjfGq4sRim1mGoDPB8=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "7682d6623e3dae07af5c0b96fe5cacfd9fa7deca",
+        "rev": "b7239a228525fceed66a68fd3f399e612810247b",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "dev",
+        "ref": "main",
         "repo": "DankAIUsage",
         "type": "github"
       }
@@ -234,11 +234,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1786882393,
-        "narHash": "sha256-UpIkEixj5RDoarXuD1drIQkqd9JAgA+Z2SfEr0sxK5E=",
+        "lastModified": 1788324813,
+        "narHash": "sha256-3kgVzDm/tdZcCgn/Lg0McNlgwKe7yVQsd+oY9cK80Rg=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "da88c7d873f6e6c880eae238f00ef9837f122151",
+        "rev": "2888747bf8a6299b229ac2429c49725590ef8333",
         "type": "github"
       },
       "original": {
