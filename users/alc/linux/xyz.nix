@@ -14,6 +14,18 @@
   kdeConnectScrollThrottle =
     pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-scroll-throttle"
     {};
+  gamingWindowMatchers = [
+    {
+      classRegex = "^steam_app_default$";
+      titleRegex = "^Heroes of the Storm$";
+    }
+  ];
+  gameWindowGeometryPolicies = map (matcher:
+    matcher
+    // {
+      restoreMonitor = "DP-1";
+    })
+  gamingWindowMatchers;
   xwaylandPrimaryOutput = pkgs.writeShellApplication {
     name = "hyprland-xwayland-primary-output";
     runtimeInputs = [
@@ -85,6 +97,147 @@
           next_audit=$((now + 30))
         fi
         sleep 1
+      done
+    '';
+  };
+  gameWindowGeometryGuard = pkgs.writeShellApplication {
+    name = "hyprland-game-window-geometry-guard";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.socat
+    ];
+    text = ''
+      policies=${lib.escapeShellArg (builtins.toJSON gameWindowGeometryPolicies)}
+      socket="''${XDG_RUNTIME_DIR:?}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
+      repair_requested="''${XDG_RUNTIME_DIR:?}/hyprland-game-window-geometry-guard.requested"
+      tolerance=16
+      provider="$(hyprctl status -j | jq -r '.configProvider // empty')"
+
+      repair_geometry() {
+        monitors_json="$(hyprctl monitors -j 2>/dev/null || true)"
+        clients_json="$(hyprctl clients -j 2>/dev/null || true)"
+        [[ -n "$monitors_json" && -n "$clients_json" ]] || return 0
+
+        while IFS= read -r client_json; do
+          address="$(jq -r '.address' <<<"$client_json")"
+          monitor_id="$(jq -r '.monitor' <<<"$client_json")"
+          restore_monitor="$(jq -r '._guardRestoreMonitor' <<<"$client_json")"
+          monitor_json="$(
+            if [[ "$restore_monitor" == null ]]; then
+              jq -ce --argjson id "$monitor_id" \
+                '.[] | select(.id == $id and .dpmsStatus == true)' \
+                <<<"$monitors_json" || true
+            else
+              jq -ce --arg name "$restore_monitor" \
+                '.[] | select(.name == $name and .dpmsStatus == true)' \
+                <<<"$monitors_json" || true
+            fi
+          )"
+          [[ -n "$monitor_json" ]] || continue
+
+          read -r x y width height < <(
+            jq -r '[.at[0], .at[1], .size[0], .size[1]] | @tsv' \
+              <<<"$client_json"
+          )
+          read -r monitor_x monitor_y monitor_width monitor_height < <(
+            jq -r '[.x, .y, .width, .height] | @tsv' <<<"$monitor_json"
+          )
+
+          # Do not attempt to contain a deliberately oversized window.
+          if ((
+            width > monitor_width + (2 * tolerance)
+            || height > monitor_height + (2 * tolerance)
+          )); then
+            continue
+          fi
+
+          if ((
+            x >= monitor_x - tolerance
+            && y >= monitor_y - tolerance
+            && x + width <= monitor_x + monitor_width + tolerance
+            && y + height <= monitor_y + monitor_height + tolerance
+          )); then
+            continue
+          fi
+
+          target_x=$((monitor_x + ((monitor_width - width) / 2)))
+          target_y=$((monitor_y + ((monitor_height - height) / 2)))
+          if [[ "$provider" == lua ]]; then
+            move_result="$(hyprctl eval \
+              "hl.dispatch(hl.dsp.window.move({ x = $target_x, y = $target_y, window = \"address:$address\" }))" \
+              2>&1 || true)"
+          else
+            move_result="$(hyprctl dispatch movewindowpixel \
+              "exact $target_x $target_y,address:$address" 2>&1 || true)"
+          fi
+          if [[ "$move_result" == ok* ]]; then
+            echo "Recentered watched window $address on monitor $monitor_id"
+          else
+            echo "Failed to recenter watched window $address: $move_result" >&2
+          fi
+        done < <(
+          jq -c --argjson policies "$policies" '
+            .[] | . as $window |
+            ([$policies[] | . as $policy | select(
+              (($policy.classRegex == null)
+                or (($window.class // "") | test($policy.classRegex)))
+              and (($policy.titleRegex == null)
+                or (($window.title // "") | test($policy.titleRegex)))
+              and (($policy.initialClassRegex == null)
+                or (($window.initialClass // "") | test($policy.initialClassRegex)))
+              and (($policy.initialTitleRegex == null)
+                or (($window.initialTitle // "") | test($policy.initialTitleRegex)))
+            )] | first) as $policy |
+            select(
+              $policy != null
+              and .mapped == true
+              and .hidden == false
+              and .floating == true
+              and ((.fullscreen // 0) == 0)
+            ) |
+            . + { _guardRestoreMonitor: ($policy.restoreMonitor // null) }
+          ' <<<"$clients_json"
+        )
+      }
+
+      watch_geometry_events() {
+        while true; do
+          while IFS= read -r event; do
+            case "$event" in
+              monitoradded\>\>* | monitoraddedv2\>\>* \
+                | monitorremoved\>\>* | monitorremovedv2\>\>* \
+                | dpms\>\>*)
+                : >"$repair_requested"
+                ;;
+            esac
+          done < <(socat -U - UNIX-CONNECT:"$socket" 2>/dev/null)
+          sleep 1
+        done
+      }
+
+      watch_geometry_events &
+      watcher_pid=$!
+      trap 'kill "$watcher_pid" 2>/dev/null || true; rm -f "$repair_requested"' EXIT
+      trap 'exit 0' HUP INT TERM
+
+      # Repair a stale window after service/session startup, then stay active
+      # briefly after relevant events so delayed XWayland geometry updates are
+      # caught without continuously policing intentional window placement.
+      : >"$repair_requested"
+      active_until=0
+      while true; do
+        if [[ -e "$repair_requested" ]]; then
+          rm -f "$repair_requested"
+          active_until=$((SECONDS + 90))
+        fi
+        if ((SECONDS <= active_until)); then
+          repair_geometry
+          sleep 1
+        else
+          sleep 1
+        fi
       done
     '';
   };
@@ -267,7 +420,7 @@ in {
         hostLegacyConfig
         hostLuaConfig
       ];
-      message = "Heroes-specific behavior belongs only in the DND matcher, never in Hyprland configuration.";
+      message = "Heroes-specific behavior must not become a static Hyprland rule.";
     }
   ];
 
@@ -459,12 +612,7 @@ in {
   services.dms.enable = true;
   services.dms.autoDoNotDisturb = {
     enable = true;
-    windowMatchers = [
-      {
-        classRegex = "^steam_app_default$";
-        titleRegex = "^Heroes of the Storm$";
-      }
-    ];
+    windowMatchers = gamingWindowMatchers;
   };
   services.dms.settings = {
     audioVisualizerEnabled = false;
@@ -497,6 +645,20 @@ in {
       RestartSec = 1;
     };
     Install.WantedBy = ["graphical-session.target"];
+  };
+  systemd.user.services.hyprland-game-window-geometry-guard = {
+    Unit = {
+      Description = "Repair off-monitor game windows after output changes";
+      BindsTo = ["wayland-wm@hyprland.desktop.service"];
+      After = ["wayland-wm@hyprland.desktop.service"];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = lib.getExe gameWindowGeometryGuard;
+      Restart = "on-failure";
+      RestartSec = 1;
+    };
+    Install.WantedBy = ["wayland-wm@hyprland.desktop.service"];
   };
   services.waynergy = {
     enable = true;
