@@ -114,6 +114,25 @@
         bash scripts/checks/test-nix-gc-maintenance.sh
       '';
 
+      t3code-auto-update-contract = let
+        service = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Service;
+        timer = self.homeConfigurations.alc-xyz.config.systemd.user.timers.t3code-auto-update.Timer;
+        updater = builtins.head service.ExecStart;
+      in
+        assert service.Restart == "on-failure";
+        assert service.RestartForceExitStatus == "75";
+        assert service.RestartPreventExitStatus == "76";
+        assert timer.OnCalendar == "*-*-* 09:30:00";
+          pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
+            grep -F "promotion_flake_default='git+https://git.alc.xyz/alcxyz/nix-config.git?ref=dev'" ${updater}
+            grep -F 'promotion_flake="''${T3CODE_PROMOTION_FLAKE:-$promotion_flake_default}"' ${updater}
+            if grep -F ":-'git+" ${updater}; then
+              echo "Promotion flake default contains literal shell quotes" >&2
+              exit 1
+            fi
+            touch "$out"
+          '';
+
       nix-gc-retention-module-contract = let
         nixosGc = self.nixosConfigurations.xyz.config.systemd.services.nix-gc;
         darwinRetention = self.darwinConfigurations.mac.config.launchd.daemons.nix-generation-retention.serviceConfig;

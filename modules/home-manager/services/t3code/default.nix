@@ -13,6 +13,10 @@ with lib; let
   cfg = config.services.t3code;
   managedVersion = getVersion cfg.package;
   managedVersionState = "${cfg.baseDir}/userdata/managed-t3code-version";
+  promotionFlakeDefault =
+    if cfg.autoUpdate.promotionFlakeUri == null
+    then ""
+    else cfg.autoUpdate.promotionFlakeUri;
   configurationSource =
     if builtins.isAttrs configDir && configDir ? outPath
     then configDir.outPath
@@ -136,11 +140,8 @@ with lib; let
     text = ''
       target=${escapeShellArg "${configurationSource}#homeConfigurations.${cfg.autoUpdate.homeConfiguration}.activationPackage"}
       package_flake=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
-      promotion_flake="''${T3CODE_PROMOTION_FLAKE:-${escapeShellArg (
-        if cfg.autoUpdate.promotionFlakeUri == null
-        then ""
-        else cfg.autoUpdate.promotionFlakeUri
-      )}}"
+      promotion_flake_default=${escapeShellArg promotionFlakeDefault}
+      promotion_flake="''${T3CODE_PROMOTION_FLAKE:-$promotion_flake_default}"
       if [[ -n "$promotion_flake" ]]; then
         metadata=$(nix flake metadata --refresh --json "$promotion_flake")
         package_flake=$(jq -er '
@@ -301,7 +302,9 @@ in {
         Type = "oneshot";
         ExecStart = "${autoUpdate}/bin/t3code-auto-update";
         TimeoutStartSec = "3h";
+        Restart = "on-failure";
         RestartForceExitStatus = "75";
+        RestartPreventExitStatus = "76";
         RestartSec = "15m";
       };
     };
