@@ -23,9 +23,8 @@ hl.config({
 		full_cm_proto = true,
 	},
 	input = {
-		kb_layout = "us,no,ru,br",
-		-- Language switching is handled by explicit binds.
-		kb_options = "",
+		kb_layout = "us,no",
+		kb_options = "grp:alt_shift_toggle",
 		numlock_by_default = true,
 		follow_mouse = 2,
 		touchpad = {

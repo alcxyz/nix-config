@@ -26,13 +26,6 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd("t3code-desktop"))
 hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notifications open"))
 hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("dms ipc call wallpaper next"))
 hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("dms ipc call bar toggle index 0"))
-hl.bind("SUPER + CTRL + SPACE", hl.dsp.exec_cmd("hyprctl switchxkblayout kanata next"))
-
--- Select a specific input language by physical keycode.
-hl.bind("ALT + SHIFT + code:15", hl.dsp.exec_cmd("hyprctl switchxkblayout kanata 0"))
-hl.bind("ALT + SHIFT + code:16", hl.dsp.exec_cmd("hyprctl switchxkblayout kanata 1"))
-hl.bind("ALT + SHIFT + code:17", hl.dsp.exec_cmd("hyprctl switchxkblayout kanata 2"))
-hl.bind("ALT + SHIFT + code:18", hl.dsp.exec_cmd("hyprctl switchxkblayout kanata 3"))
 
 -- Window management.
 hl.bind("SUPER + W", hl.dsp.window.close())
