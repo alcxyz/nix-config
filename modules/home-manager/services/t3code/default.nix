@@ -11,6 +11,8 @@
 }:
 with lib; let
   cfg = config.services.t3code;
+  managedVersion = getVersion cfg.package;
+  managedVersionState = "${cfg.baseDir}/userdata/managed-t3code-version";
   configurationSource =
     if builtins.isAttrs configDir && configDir ? outPath
     then configDir.outPath
@@ -25,6 +27,45 @@ with lib; let
       systemd
     ];
     text = ''
+      managed_version=${escapeShellArg managedVersion}
+      version_state="''${T3CODE_VERSION_STATE:-${managedVersionState}}"
+
+      version_is_older() {
+        local candidate=$1
+        local accepted=$2
+        [[ "$candidate" != "$accepted" ]] \
+          && [[ "$(printf '%s\n%s\n' "$candidate" "$accepted" | sort -V | head -n1)" == "$candidate" ]]
+      }
+
+      accepted_version=""
+      if [[ -r "$version_state" ]]; then
+        read -r accepted_version < "$version_state" || true
+        if [[ ! "$accepted_version" =~ ^[0-9][0-9A-Za-z._+-]*$ ]]; then
+          echo "Ignoring invalid managed T3 Code version state at $version_state." >&2
+          accepted_version=""
+        fi
+      fi
+
+      loaded_exec=""
+      if systemctl --user --quiet is-active t3code.service; then
+        loaded_exec=$(systemctl --user show t3code.service --property=ExecStart --value \
+          | sed -nE 's/^\{ path=([^ ;]+).*/\1/p')
+        loaded_version=$(sed -nE 's#^/nix/store/[a-z0-9]+-t3code-([^/]+)/bin/t3$#\1#p' <<<"$loaded_exec")
+        if [[ -n "$loaded_version" ]] \
+          && { [[ -z "$accepted_version" ]] || version_is_older "$accepted_version" "$loaded_version"; }; then
+          accepted_version=$loaded_version
+        fi
+      fi
+
+      if [[ -n "$accepted_version" ]] && version_is_older "$managed_version" "$accepted_version"; then
+        if [[ "''${T3CODE_ALLOW_DOWNGRADE:-0}" != "1" ]]; then
+          echo "Refusing to downgrade managed T3 Code from $accepted_version to $managed_version." >&2
+          echo "Promote the newer nix-packages revision into flake.lock, or set T3CODE_ALLOW_DOWNGRADE=1 for an intentional rollback." >&2
+          exit 76
+        fi
+        echo "T3 Code downgrade from $accepted_version to $managed_version explicitly allowed." >&2
+      fi
+
       if [[ "''${T3CODE_ALLOW_ACTIVE_RESTART:-0}" == "1" ]]; then
         echo "T3 Code active-session restart guard explicitly bypassed."
         exit 0
@@ -39,8 +80,6 @@ with lib; let
         exit 0
       fi
 
-      loaded_exec=$(systemctl --user show t3code.service --property=ExecStart --value \
-        | sed -nE 's/^\{ path=([^ ;]+).*/\1/p')
       managed_exec=$(sed -nE 's/^ExecStart=([^ ]+).*/\1/p' "$managed_unit" | head -n1)
 
       if [[ -z "$loaded_exec" || -z "$managed_exec" ]]; then
@@ -90,24 +129,52 @@ with lib; let
     name = "t3code-auto-update";
     runtimeInputs = with pkgs; [
       git
+      jq
       nix
       openssh
     ];
     text = ''
       target=${escapeShellArg "${configurationSource}#homeConfigurations.${cfg.autoUpdate.homeConfiguration}.activationPackage"}
       package_flake=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
-      echo "Building the pinned Home Manager configuration with refreshed packages from $package_flake"
+      promotion_flake="''${T3CODE_PROMOTION_FLAKE:-${escapeShellArg (
+        if cfg.autoUpdate.promotionFlakeUri == null
+        then ""
+        else cfg.autoUpdate.promotionFlakeUri
+      )}}"
+      if [[ -n "$promotion_flake" ]]; then
+        metadata=$(nix flake metadata --refresh --json "$promotion_flake")
+        package_flake=$(jq -er '
+          .locks.nodes["nix-packages"].locked
+          | if .type == "git" and (.url | type) == "string" and (.ref | type) == "string" and (.rev | type) == "string"
+            then "git+\(.url)?ref=\(.ref)&rev=\(.rev)"
+            else error("promoted nix-packages lock is not a pinned git input")
+            end
+        ' <<<"$metadata")
+        echo "Using the nix-packages revision promoted by $promotion_flake"
+      fi
+      echo "Building the pinned Home Manager configuration with packages from $package_flake"
       activation=$(
-        nix build --refresh --no-link --print-out-paths \
+        nix build --no-link --print-out-paths \
           --override-input nix-packages "$package_flake" \
           "$target"
       )
+      if [[ "''${T3CODE_AUTO_UPDATE_DRY_RUN:-0}" == "1" ]]; then
+        echo "Dry run complete; built $activation without activating it."
+        exit 0
+      fi
       exec "$activation/activate"
     '';
   };
 in {
   options.services.t3code = {
     enable = mkEnableOption "t3code headless server";
+
+    package = mkOption {
+      type = types.package;
+      default = pkgs.t3code;
+      defaultText = literalExpression "pkgs.t3code";
+      description = "T3 Code package to run and protect from unintended downgrades.";
+    };
 
     port = mkOption {
       type = types.port;
@@ -152,6 +219,13 @@ in {
         description = "Flake URI used only to override the nix-packages input of the immutable configuration snapshot. The URI must not contain a fragment.";
       };
 
+      promotionFlakeUri = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "git+https://code.example.net/operator/nix-config.git?ref=dev";
+        description = "Configuration flake whose committed nix-packages lock is the package promotion authority. When set, unattended updates use its pinned revision instead of the moving packageFlakeUri ref.";
+      };
+
       homeConfiguration = mkOption {
         type = types.str;
         description = "Home Manager configuration attribute to activate.";
@@ -172,10 +246,15 @@ in {
   };
 
   config = mkIf cfg.enable {
-    assertions = optional cfg.autoUpdate.enable {
-      assertion = !hasInfix "#" cfg.autoUpdate.packageFlakeUri;
-      message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
-    };
+    assertions =
+      optional cfg.autoUpdate.enable {
+        assertion = !hasInfix "#" cfg.autoUpdate.packageFlakeUri;
+        message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
+      }
+      ++ optional (cfg.autoUpdate.enable && cfg.autoUpdate.promotionFlakeUri != null) {
+        assertion = !hasInfix "#" cfg.autoUpdate.promotionFlakeUri;
+        message = "services.t3code.autoUpdate.promotionFlakeUri must not contain a fragment.";
+      };
 
     systemd.user.services.t3code = {
       Unit = {
@@ -185,7 +264,7 @@ in {
       };
       Service = {
         Type = "simple";
-        ExecStart = "${pkgs.t3code}/bin/t3 serve --host ${cfg.host} --port ${toString cfg.port} --base-dir ${cfg.baseDir}";
+        ExecStart = "${cfg.package}/bin/t3 serve --host ${cfg.host} --port ${toString cfg.port} --base-dir ${cfg.baseDir}";
         Environment = "SHELL=${pkgs.bash}/bin/bash";
         # A clean provider/server exit is still unexpected for a persistent
         # headless environment. Systemd stop operations suppress restarts.
@@ -202,6 +281,15 @@ in {
         run ${activationGuard}/bin/t3code-activation-guard
       ''
     );
+
+    home.activation.t3codeRecordManagedVersion = lib.hm.dag.entryAfter ["reloadSystemd"] ''
+      version_state=${escapeShellArg managedVersionState}
+      run mkdir -p "$(dirname "$version_state")"
+      tmp=$(mktemp "''${version_state}.XXXXXX")
+      printf '%s\n' ${escapeShellArg managedVersion} > "$tmp"
+      chmod 0644 "$tmp"
+      run mv -f "$tmp" "$version_state"
+    '';
 
     systemd.user.services.t3code-auto-update = mkIf cfg.autoUpdate.enable {
       Unit = {

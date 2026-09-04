@@ -3,7 +3,9 @@ run-name: "nix-packages lock refresh (${{ forgejo.event_name }})"
 
 on:
   schedule:
-    - cron: "0 10 * * *"
+    # nix-packages publishes its daily package updates around 02:30 UTC. Promote
+    # the verified lock before xyz's 05:45 Europe/Oslo package activation.
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 jobs:
