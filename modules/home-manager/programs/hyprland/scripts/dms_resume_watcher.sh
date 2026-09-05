@@ -82,8 +82,8 @@ wait_for_dms_layers() {
 
 restart_dms() {
   log "restarting DMS after display wake"
-  if ! systemctl --user restart dms.service; then
-    log "failed to restart the systemd-managed DMS service"
+  if ! dms restart; then
+    log "failed to restart the compositor-managed DMS instance"
     return 1
   fi
   last_restart=$(date +%s)
