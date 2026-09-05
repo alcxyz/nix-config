@@ -50,8 +50,8 @@ local function remote_workspace_target(workspace_id)
 	local workspace = hl.get_workspace(workspace_id)
 	local monitor = workspace and workspace.monitor or nil
 
-	-- Keep remote switching a strict no-focus action. Workspaces assigned to
-	-- the focused monitor continue to use the regular focus bindings.
+	-- Workspaces assigned to the focused monitor continue to use the regular
+	-- focus bindings.
 	if not monitor or monitor.focused then
 		return nil, nil
 	end
@@ -59,10 +59,28 @@ local function remote_workspace_target(workspace_id)
 	return monitor, workspace
 end
 
+local function restore_focus_after(action)
+	local focused_window = hl.get_active_window()
+	local focused_monitor = hl.get_monitor("current")
+
+	action()
+
+	-- Hyprland 0.56's monitor workspace methods focus their target internally.
+	-- Restore the exact window when possible so remote actions leave the user's
+	-- effective focus unchanged.
+	if focused_window then
+		hl.dispatch(hl.dsp.focus({ window = focused_window }))
+	elseif focused_monitor then
+		hl.dispatch(hl.dsp.focus({ monitor = focused_monitor }))
+	end
+end
+
 local function show_workspace_without_focus(workspace_id)
 	local monitor, workspace = remote_workspace_target(workspace_id)
 	if monitor then
-		monitor:set_workspace(workspace)
+		restore_focus_after(function()
+			monitor:set_workspace({ workspace = workspace })
+		end)
 	end
 end
 
@@ -102,12 +120,10 @@ local function toggle_special_without_focus(workspace_id)
 		return
 	end
 
-	local active_special = monitor.active_special_workspace
-	if active_special and active_special.name == "special:special" then
-		monitor:set_special_workspace(nil)
-	else
-		monitor:set_special_workspace("")
-	end
+	restore_focus_after(function()
+		hl.dispatch(hl.dsp.focus({ monitor = monitor }))
+		hl.dispatch(hl.dsp.workspace.toggle_special(""))
+	end)
 end
 
 local function fkey_action(workspace_id, remote)
