@@ -939,6 +939,7 @@ in {
       "net.retrodeck.retrodeck"
     ];
     overrides."com.heroicgameslauncher.hgl" = [
+      "--env=TZ=Europe/Oslo"
       "--filesystem=/ext4"
       "--filesystem=/hitachi"
       "--filesystem=/nix/store:ro"
