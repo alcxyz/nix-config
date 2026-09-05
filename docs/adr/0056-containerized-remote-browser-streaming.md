@@ -95,8 +95,8 @@ create its unprivileged user namespace and retain its own renderer sandbox;
 they do not use Chromium's `--no-sandbox` escape hatch.
 
 Moonlight transports keyboard scan codes but does not tell Wolf which input
-layout is active on the client. Expose Norwegian, US, and Russian in each
-browser session and use `Alt+Shift` to cycle layouts inside the remote
+layout is active on the client. Expose Norwegian and US in each browser
+session and use `Alt+Shift` to cycle layouts inside the remote
 compositor. At launch, let the XPS client read its main Hyprland keyboard's
 active layout and invoke a LAN-only host helper that selects the corresponding
 nested Sway layout after the application container appears. Permit declarative
@@ -279,7 +279,7 @@ low-latency video, audio, and controller integration already used by Moonlight.
   transport run. Helium remains the preferred visual baseline; Brave retained
   visible site/UI glitches despite a healthy stream, and Zen used the most
   memory.
-- Norwegian, US, and Russian layouts in the shared browser session:
+- Norwegian and US layouts in the shared browser session:
   implemented. Moonlight does not carry the layout name, so XPS supplies it
   out-of-band from the active main keyboard and selects the matching nested
   layout at launch; `Alt+Shift` remains the explicit cycle control. Right Alt

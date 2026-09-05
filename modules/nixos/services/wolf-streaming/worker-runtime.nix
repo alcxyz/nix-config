@@ -52,9 +52,8 @@
       case "$layout" in
         no) layout_index=0 ;;
         us) layout_index=1 ;;
-        ru) layout_index=2 ;;
         *)
-          echo "usage: k8s-wolf-stream-layout [--presentation-scale {1.0|1.5}] {no|us|ru} RUNNER [RUNNER ...]" >&2
+          echo "usage: k8s-wolf-stream-layout [--presentation-scale {1.0|1.5}] {no|us} RUNNER [RUNNER ...]" >&2
           exit 2
           ;;
       esac

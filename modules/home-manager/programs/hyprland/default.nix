@@ -437,7 +437,9 @@ in {
       '';
     };
 
-    home.file.".config/hypr/scripts/fkey_handler.sh" = {
+    # Lua-managed profiles handle F-key tap state in-process. Retain the shell
+    # helper only for users that still install the legacy Hyprland config.
+    home.file.".config/hypr/scripts/fkey_handler.sh" = mkIf cfg.manageLegacyConfig {
       source = ./scripts/fkey_handler.sh;
       executable = true;
     };

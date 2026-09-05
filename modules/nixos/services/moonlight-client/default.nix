@@ -656,7 +656,6 @@
 
         case "$active_keymap" in
           *Norwegian*) printf '%s\n' no ;;
-          *Russian*) printf '%s\n' ru ;;
           *"English (US)"*) printf '%s\n' us ;;
           *) printf '%s\n' "$fallback_layout" ;;
         esac

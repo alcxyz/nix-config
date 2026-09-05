@@ -384,6 +384,14 @@ in {
     }
     {
       assertion =
+        lib.hasInfix ''hl.bind("SUPER + CTRL + " .. key, remote_workspace_action(i))'' luaBinds
+        && lib.hasInfix ''hl.bind("CTRL + " .. key, fkey_action(i, true))'' luaBinds
+        && lib.hasInfix ''hl.timer(function()'' luaBinds
+        && !lib.hasInfix ''fkey_handler.sh'' luaBinds;
+      message = "Lua workspace binds must support no-focus remote switching from the number row and F-keys without the legacy shell handler.";
+    }
+    {
+      assertion =
         lib.hasInfix ''workspace = "special:special"'' hostLuaConfig
         && lib.hasInfix ''gaps_in = 0'' hostLuaConfig
         && lib.hasInfix ''gaps_out = 0'' hostLuaConfig

@@ -1,4 +1,3 @@
-local scripts = "~/.config/hypr/scripts"
 local term = "foot"
 local file_manager = "nautilus"
 local mail = "thunderbird"
@@ -47,10 +46,37 @@ end
 hl.bind("SUPER + TAB", hl.dsp.focus({ workspace = "previous" }))
 hl.bind("ALT + TAB", hl.dsp.focus({ direction = "down" }))
 
+local function remote_workspace_target(workspace_id)
+	local workspace = hl.get_workspace(workspace_id)
+	local monitor = workspace and workspace.monitor or nil
+
+	-- Keep remote switching a strict no-focus action. Workspaces assigned to
+	-- the focused monitor continue to use the regular focus bindings.
+	if not monitor or monitor.focused then
+		return nil, nil
+	end
+
+	return monitor, workspace
+end
+
+local function show_workspace_without_focus(workspace_id)
+	local monitor, workspace = remote_workspace_target(workspace_id)
+	if monitor then
+		monitor:set_workspace(workspace)
+	end
+end
+
+local function remote_workspace_action(workspace_id)
+	return function()
+		show_workspace_without_focus(workspace_id)
+	end
+end
+
 for i = 1, 10 do
 	local key = i % 10
 	hl.bind("SUPER + " .. key, hl.dsp.focus({ workspace = i }))
 	hl.bind("SUPER + ALT + " .. key, hl.dsp.window.move({ workspace = i, follow = false }))
+	hl.bind("SUPER + CTRL + " .. key, remote_workspace_action(i))
 end
 
 -- Shift changes number-row symbols, so use physical keycodes when moving.
@@ -63,10 +89,70 @@ hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:" })
 hl.bind("SUPER + ALT + ESCAPE", hl.dsp.window.move({ workspace = "special:", follow = false }))
 hl.bind("SUPER + ESCAPE", hl.dsp.workspace.toggle_special(""))
 
--- Function keys: single/double tap handler and raw Alt passthrough.
+-- Function keys: a single tap selects the numbered workspace and a second tap
+-- within the timeout toggles the shared scratch workspace. Ctrl applies the
+-- same gesture to the workspace's non-focused monitor without moving focus.
+local fkey_double_tap_ms = 300
+local pending_fkey_tap = nil
+local fkey_tap_generation = 0
+
+local function toggle_special_without_focus(workspace_id)
+	local monitor = remote_workspace_target(workspace_id)
+	if not monitor then
+		return
+	end
+
+	local active_special = monitor.active_special_workspace
+	if active_special and active_special.name == "special:special" then
+		monitor:set_special_workspace(nil)
+	else
+		monitor:set_special_workspace("")
+	end
+end
+
+local function fkey_action(workspace_id, remote)
+	local tap_id = (remote and "remote:" or "local:") .. workspace_id
+
+	return function()
+		-- A remote gesture is meaningful only while its workspace belongs to a
+		-- non-focused monitor. Do not arm a double tap for a local no-op.
+		if remote and not remote_workspace_target(workspace_id) then
+			return
+		end
+
+		if pending_fkey_tap == tap_id then
+			pending_fkey_tap = nil
+			fkey_tap_generation = fkey_tap_generation + 1
+
+			if remote then
+				toggle_special_without_focus(workspace_id)
+			else
+				hl.dispatch(hl.dsp.workspace.toggle_special(""))
+			end
+			return
+		end
+
+		pending_fkey_tap = tap_id
+		fkey_tap_generation = fkey_tap_generation + 1
+		local generation = fkey_tap_generation
+		hl.timer(function()
+			if fkey_tap_generation == generation then
+				pending_fkey_tap = nil
+			end
+		end, { timeout = fkey_double_tap_ms, type = "oneshot" })
+
+		if remote then
+			show_workspace_without_focus(workspace_id)
+		else
+			hl.dispatch(hl.dsp.focus({ workspace = workspace_id }))
+		end
+	end
+end
+
 for i = 1, 6 do
 	local key = "F" .. i
-	hl.bind(key, hl.dsp.exec_cmd(scripts .. "/fkey_handler.sh " .. key .. " " .. i))
+	hl.bind(key, fkey_action(i, false))
+	hl.bind("CTRL + " .. key, fkey_action(i, true))
 	hl.bind("ALT + " .. key, hl.dsp.exec_cmd("wtype -k " .. key), { release = true })
 end
 

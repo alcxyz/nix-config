@@ -1194,13 +1194,11 @@ in {
           lib.types.enum [
             "no"
             "us"
-            "ru"
           ]
         );
         default = [
           "no"
           "us"
-          "ru"
         ];
         description = "Ordered XKB layouts exposed inside each streamed browser; Alt+Shift cycles them.";
       };
