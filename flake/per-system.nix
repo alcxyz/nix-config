@@ -138,10 +138,12 @@
       '';
 
       t3code-auto-update-contract = let
+        unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Unit;
         service = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Service;
         timer = self.homeConfigurations.alc-xyz.config.systemd.user.timers.t3code-auto-update.Timer;
         updater = builtins.head service.ExecStart;
       in
+        assert unit.X-RestartIfChanged == false;
         assert service.Restart == "on-failure";
         assert service.RestartForceExitStatus == "75";
         assert service.RestartPreventExitStatus == "76";

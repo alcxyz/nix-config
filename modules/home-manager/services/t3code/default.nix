@@ -297,6 +297,10 @@ in {
         Description = "Refresh T3 Code packages within the pinned Home Manager configuration";
         After = ["network-online.target"];
         Wants = ["network-online.target"];
+        # This service runs Home Manager activation itself. Its store path can
+        # change with the package override being activated, so restarting it
+        # from reloadSystemd would terminate that activation midway through.
+        X-RestartIfChanged = false;
       };
       Service = {
         Type = "oneshot";
