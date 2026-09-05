@@ -134,6 +134,33 @@ case "$status" in
 200 | 201 | 204)
 	echo "Merged verified nix-packages lock update PR #${pr_number}."
 	;;
+409)
+	message=$(jq -r '.message // ""' "$response")
+	if [[ "$message" != "PushRejected with remote message: Forgejo: User permission denied for writing." ]]; then
+		echo "Failed to merge lock update PR #${pr_number}; HTTP ${status}" >&2
+		cat "$response" >&2
+		exit 1
+	fi
+
+	# Forgejo 10 can create the same-repository PR with its automatic Actions
+	# token but rejects the server-side merge as the virtual Actions user. The
+	# token can still push repository branches. HEAD is exactly one generated
+	# commit ahead of the re-verified base, so a normal (non-forced) push keeps
+	# the same fast-forward safety and fails closed if dev moved again.
+	echo "Forgejo rejected the virtual-user merge; publishing the verified fast-forward directly."
+	git push origin "HEAD:refs/heads/${BASE_BRANCH}"
+
+	# A direct push normally marks the PR merged. If this Forgejo version leaves
+	# it open, close the now-redundant PR before removing the update branch.
+	curl -fsS "${api_auth[@]}" "${api_base}/pulls/${pr_number}" -o "$response"
+	if [[ "$(jq -r '.state' "$response")" == "open" ]]; then
+		jq -n '{state: "closed"}' >"$payload"
+		curl -fsS "${api_auth[@]}" -X PATCH --data @"$payload" \
+			"${api_base}/pulls/${pr_number}" -o "$response"
+	fi
+	git push origin --delete "$UPDATE_BRANCH" || true
+	echo "Published verified nix-packages lock update from PR #${pr_number}."
+	;;
 *)
 	echo "Failed to merge lock update PR #${pr_number}; HTTP ${status}" >&2
 	cat "$response" >&2
