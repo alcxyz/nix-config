@@ -171,6 +171,8 @@
         homeConfig = self.homeConfigurations.alc-xyz.config;
         umuServices = homeConfig.systemd.user.services;
         desktopEntries = homeConfig.xdg.desktopEntries;
+        battleNetUnit = umuServices.umu-app-battle-net.Unit;
+        profileUnit = umuServices.umu-app-heroes-profile.Unit;
         battleNetService = umuServices.umu-app-battle-net.Service;
         profileService = umuServices.umu-app-heroes-profile.Service;
         battleNetEntry = desktopEntries.umu-battle-net;
@@ -180,6 +182,8 @@
       in
         assert !(builtins.hasAttr "umu-app-battle-net-direct-qa" umuServices);
         assert !(builtins.hasAttr "umu-app-heroes-profile-direct-qa" umuServices);
+        assert battleNetUnit.X-SwitchMethod == "keep-old";
+        assert profileUnit.X-SwitchMethod == "keep-old";
         assert battleNetService.Type == "exec";
         assert profileService.Type == "exec";
         assert battleNetEntry.name == "Battle.net";

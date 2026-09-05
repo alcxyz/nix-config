@@ -296,7 +296,14 @@ in {
       lib.mapAttrs' (
         _: application:
           lib.nameValuePair (lib.removeSuffix ".service" application.unitName) {
-            Unit.Description = "Direct UMU application: ${application.app.displayName}";
+            Unit = {
+              Description = "Direct UMU application: ${application.app.displayName}";
+
+              # A Home Manager activation must never interrupt a running game.
+              # Reload the new unit for its next launch, but keep the current
+              # process tree alive when the generated runner changes.
+              X-SwitchMethod = "keep-old";
+            };
             Service = {
               Type = "exec";
               ExecStart = lib.getExe application.runner;

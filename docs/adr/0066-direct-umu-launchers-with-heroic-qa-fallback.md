@@ -42,6 +42,8 @@ The pilot must:
   XWayland startup path;
 - use a user-service lifecycle so repeated primary-launch requests are
   idempotent and conflicting primary instances are refused rather than killed;
+- keep active UMU services running across Home Manager activations, applying a
+  changed generated unit only on the application's next launch;
 - stop the direct Battle.net service from the normal close shortcut only when
   its exact main window is focused, that window belongs to the direct service,
   and no Heroes of the Storm window is present;
