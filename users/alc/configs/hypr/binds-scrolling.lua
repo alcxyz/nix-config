@@ -111,6 +111,7 @@ for _, binding in ipairs({
 	{ "SUPER + CTRL + period", "fit all" },
 	{ "SUPER + CTRL + Y", "movewindowto l" },
 	{ "SUPER + CTRL + U", "promote" },
+	{ "SUPER + C", "center" },
 }) do
 	hl.bind(binding[1], hl.dsp.layout(binding[2]))
 end

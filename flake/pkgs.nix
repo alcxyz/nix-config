@@ -97,6 +97,13 @@ in
               makeModulesClosure = args:
                 _prev.makeModulesClosure (args // {allowMissing = true;});
             }
+            // lib.optionalAttrs _prev.stdenv.isLinux {
+              hyprland = _prev.hyprland.overrideAttrs (old: {
+                patches =
+                  (old.patches or [])
+                  ++ [../packages/hyprland/center-underfilled-scrolling-column.patch];
+              });
+            }
         )
       ];
     in

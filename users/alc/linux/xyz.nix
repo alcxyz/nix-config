@@ -435,9 +435,10 @@ in {
         lib.hasInfix ''explicit_column_widths = "0.25,0.333,0.5,0.666,1"'' luaConfig
         && lib.hasInfix ''workspace = "10"'' luaConfig
         && lib.hasInfix ''local frontend_viewport_widths = { 390, 430, 768, 900, 1024, 1280, 1440, 1920 }'' luaScrollingBinds
+        && lib.hasInfix ''{ "SUPER + C", "center" }'' luaScrollingBinds
         && lib.hasInfix ''rawget(_G, "alc_scrolling_column_widths_by_monitor")'' luaScrollingBinds
         && lib.hasInfix ''["HDMI-A-1"] = { 0.5, 0.666, 1 }'' hostLuaConfig;
-      message = "xyz must retain context-aware scrolling widths for workspace 10 and the upper display.";
+      message = "xyz must retain context-aware scrolling widths and focused-column centering.";
     }
     {
       assertion = lib.all (hyprConfig: !lib.hasInfix "Heroes of the Storm" hyprConfig) [

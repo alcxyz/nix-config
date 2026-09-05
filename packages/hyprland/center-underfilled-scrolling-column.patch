@@ -1,0 +1,83 @@
+diff --git a/src/layout/algorithm/tiled/scrolling/ScrollTapeController.cpp b/src/layout/algorithm/tiled/scrolling/ScrollTapeController.cpp
+--- a/src/layout/algorithm/tiled/scrolling/ScrollTapeController.cpp
++++ b/src/layout/algorithm/tiled/scrolling/ScrollTapeController.cpp
+@@ -31,6 +31,7 @@ bool CScrollTapeController::isReversed() const {
+ }
+ 
+ void CScrollTapeController::setOffset(double offset) {
++    m_preserveExplicitCenter = false;
+     if (getScrollInhibitor().isInhibited) {
+         m_offset = getScrollInhibitor().offsetWhenInhibited;
+         Log::logger->log(Log::DEBUG, "m_offset not set - scrolling inhibited");
+@@ -47,6 +48,7 @@ double CScrollTapeController::getOffset() const {
+ }
+ 
+ void CScrollTapeController::adjustOffset(double delta) {
++    m_preserveExplicitCenter = false;
+     m_offset += delta;
+ }
+ 
+@@ -57,6 +59,7 @@ struct SScrollInhibitor& CScrollTapeController::getScrollInhibitor() {
+ }
+ 
+ size_t CScrollTapeController::addStrip(float size) {
++    m_preserveExplicitCenter = false;
+     m_strips.emplace_back();
+     m_strips.back().size = size;
+     return m_strips.size() - 1;
+@@ -64,6 +67,7 @@ size_t CScrollTapeController::addStrip(float size) {
+ }
+ 
+ void CScrollTapeController::insertStrip(ssize_t afterIndex, float size) {
++    m_preserveExplicitCenter = false;
+     if (afterIndex >= sc<ssize_t>(m_strips.size())) {
+         addStrip(size);
+         return;
+@@ -76,6 +80,7 @@ void CScrollTapeController::insertStrip(ssize_t afterIndex, float size) {
+ }
+ 
+ void CScrollTapeController::removeStrip(size_t index) {
++    m_preserveExplicitCenter = false;
+     if (index < m_strips.size())
+         m_strips.erase(m_strips.begin() + index);
+ }
+@@ -229,11 +234,11 @@ double CScrollTapeController::calculateCameraOffset(const CBox& usableArea, bool
+         return m_offset;
+ 
+     // if the content fits in viewport, center it
+-    if (maxExtent < usablePrimary)
++    if (maxExtent < usablePrimary && !m_preserveExplicitCenter)
+         setOffset(std::round((maxExtent - usablePrimary) / 2.0));
+ 
+     // if the offset is negative but we already extended and fit method is not center, reset offset to 0
+     static const auto PFITMETHOD = CConfigValue<Hyprlang::INT>("scrolling:focus_fit_method");
+-    if (maxExtent > usablePrimary && m_offset < 0.0 && *PFITMETHOD != 0)
++    if (maxExtent > usablePrimary && m_offset < 0.0 && *PFITMETHOD != 0 && !m_preserveExplicitCenter)
+         setOffset(0.0);
+ 
+     return m_offset;
+@@ -257,7 +262,9 @@ void CScrollTapeController::centerStrip(size_t stripIndex, const CBox& usableAre
+     const double stripStart    = calculateStripStart(stripIndex, usableArea, fullscreenOnOne);
+     const double stripSize     = calculateStripSize(stripIndex, usableArea, fullscreenOnOne);
+ 
++    // An explicit center request may intentionally leave empty viewport space.
+     setOffset(stripStart - (usablePrimary - stripSize) / 2.0);
++    m_preserveExplicitCenter = true;
+ }
+ 
+ void CScrollTapeController::fitStrip(size_t stripIndex, const CBox& usableArea, bool fullscreenOnOne) {
+diff --git a/src/layout/algorithm/tiled/scrolling/ScrollTapeController.hpp b/src/layout/algorithm/tiled/scrolling/ScrollTapeController.hpp
+--- a/src/layout/algorithm/tiled/scrolling/ScrollTapeController.hpp
++++ b/src/layout/algorithm/tiled/scrolling/ScrollTapeController.hpp
+@@ -80,9 +80,10 @@ namespace Layout::Tiled {
+ 
+       private:
+         eScrollDirection        m_direction = SCROLL_DIR_RIGHT;
+         std::vector<SStripData> m_strips;
+-        double                  m_offset = 0.0;
++        double                  m_offset                 = 0.0;
+         struct SScrollInhibitor m_scrollInhibitor; // for inhibiting scrolling (prevents the viewport from moving)
++        bool                    m_preserveExplicitCenter = false;
+ 
+         double                  getPrimary(const Vector2D& v) const;
+         double                  getSecondary(const Vector2D& v) const;
