@@ -54,8 +54,9 @@
   '') (builtins.attrNames appStateDatasets);
   k8sBackupDataset = "${securePoolName}/k8s-backups";
   k8sBackupRoot = "${appStateBackupPool}/xyz/k8s-backups";
-  gamesDataset = "${appStateBackupPool}/games";
-  gamesMountpoint = "/hitachi/games";
+  gamesPool = securePoolName;
+  gamesDataset = "${gamesPool}/games";
+  gamesMountpoint = "/games";
   runtimeStoragePolicy = pkgs.writeShellScriptBin "xyz-runtime-storage-policy" ''
     set -euo pipefail
 
@@ -281,7 +282,7 @@
 
     dataset=${lib.escapeShellArg gamesDataset}
     mountpoint=${lib.escapeShellArg gamesMountpoint}
-    pool=${lib.escapeShellArg appStateBackupPool}
+    pool=${lib.escapeShellArg gamesPool}
 
     if ! zpool list -H "$pool" >/dev/null 2>&1; then
       echo "games pool '$pool' is not imported" >&2
@@ -300,18 +301,28 @@
     if ! zfs list -H "$dataset" >/dev/null 2>&1; then
       zfs create -p \
         -o mountpoint="$mountpoint" \
-        -o compression=zstd \
+        -o compression=lz4 \
         -o atime=off \
         "$dataset"
     else
       zfs set mountpoint="$mountpoint" "$dataset"
-      zfs set compression=zstd "$dataset"
+      zfs set compression=lz4 "$dataset"
       zfs set atime=off "$dataset"
     fi
 
-    if ! findmnt -rn --target "$mountpoint" >/dev/null 2>&1; then
+    current_source="$(findmnt -rn -o SOURCE --mountpoint "$mountpoint" 2>/dev/null || true)"
+    if [ -n "$current_source" ] && [ "$current_source" != "$dataset" ]; then
+      echo "$mountpoint is already mounted from '$current_source', expected '$dataset'" >&2
+      exit 1
+    fi
+
+    if [ -z "$current_source" ]; then
       zfs mount "$dataset"
     fi
+    [ "$(findmnt -rn -o SOURCE --mountpoint "$mountpoint")" = "$dataset" ] || {
+      echo "$mountpoint is not mounted from '$dataset'" >&2
+      exit 1
+    }
     chown root:media "$mountpoint"
     chmod 0770 "$mountpoint"
   '';
@@ -681,7 +692,7 @@ in {
   };
 
   systemd.services.xyz-games-dataset = {
-    description = "Prepare xyz games dataset on hitachi";
+    description = "Prepare xyz games dataset";
     after = ["zfs-mount.service"];
     requires = ["zfs-mount.service"];
     wantedBy = ["multi-user.target"];
@@ -965,7 +976,7 @@ in {
     overrides."com.heroicgameslauncher.hgl" = [
       "--env=TZ=Europe/Oslo"
       "--filesystem=/ext4"
-      "--filesystem=/hitachi"
+      "--filesystem=/games"
       "--filesystem=/nix/store:ro"
       "--filesystem=home"
     ];
