@@ -43,6 +43,41 @@
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
     __NV_PRIME_RENDER_OFFLOAD = "1";
   };
+  closeActiveWindowScript = ''
+    active_window="$(hyprctl activewindow -j 2>/dev/null || true)"
+    active_class="$(jq -r '.class // empty' <<<"$active_window" 2>/dev/null || true)"
+    active_title="$(jq -r '.title // empty' <<<"$active_window" 2>/dev/null || true)"
+    active_pid="$(jq -r '.pid // 0' <<<"$active_window" 2>/dev/null || true)"
+
+    if [[ "$active_class" == steam_app_default && "$active_title" == Battle.net ]] \
+      && [[ "$active_pid" =~ ^[1-9][0-9]*$ ]] \
+      && [[ -r "/proc/$active_pid/cgroup" ]]; then
+      cgroup="$(awk -F: '$1 == "0" { print $3; exit }' "/proc/$active_pid/cgroup")"
+      clients="$(hyprctl clients -j 2>/dev/null || true)"
+
+      if [[ "$cgroup" == */umu-app-battle-net-direct-qa.service ]] \
+        && jq -e 'type == "array"' <<<"$clients" >/dev/null 2>&1 \
+        && ! jq -e 'any(.[]; .class == "steam_app_default" and .title == "Heroes of the Storm")' \
+          <<<"$clients" >/dev/null; then
+        # Closing Battle.net's window can leave its Wine runtime behind.
+        # Stop only the direct launcher's owning cgroup, and never while a
+        # Heroes window is present. All uncertain cases use normal close.
+        exec systemctl --user --no-block stop umu-app-battle-net-direct-qa.service
+      fi
+    fi
+
+    exec hyprctl dispatch killactive
+  '';
+  closeActiveWindow = pkgs.writeShellApplication {
+    name = "hyprland-close-active-window";
+    runtimeInputs = [
+      pkgs.gawk
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.systemd
+    ];
+    text = closeActiveWindowScript;
+  };
   xwaylandPrimaryOutput = pkgs.writeShellApplication {
     name = "hyprland-xwayland-primary-output";
     runtimeInputs = [
@@ -401,6 +436,20 @@ in {
     }
     {
       assertion =
+        lib.hasInfix ''window.class == "steam_app_default"'' luaBinds
+        && lib.hasInfix ''window.title == "Battle.net"'' luaBinds
+        && lib.hasInfix ''hl.dsp.exec_cmd("hyprland-close-active-window")'' luaBinds
+        && lib.hasInfix "bind = SUPER, W, exec, hyprland-close-active-window" legacyBinds
+        && lib.hasInfix ''[[ "$active_class" == steam_app_default && "$active_title" == Battle.net ]]'' closeActiveWindowScript
+        && lib.hasInfix ''[[ "$cgroup" == */umu-app-battle-net-direct-qa.service ]]'' closeActiveWindowScript
+        && lib.hasInfix ''.title == "Heroes of the Storm"'' closeActiveWindowScript
+        && lib.hasInfix ''exec hyprctl dispatch killactive'' closeActiveWindowScript
+        && !lib.hasInfix ''hl.bind("SUPER + W", hl.dsp.window.close())'' luaBinds
+        && !lib.hasInfix "bind = SUPER, W, killactive," legacyBinds;
+      message = "Super+W must preserve normal window closing unless the focused window is exactly Battle.net.";
+    }
+    {
+      assertion =
         lib.hasInfix ''hl.bind("SUPER + CTRL + " .. key, remote_workspace_action(i))'' luaBinds
         && lib.hasInfix ''hl.bind("CTRL + " .. key, fkey_action(i, true))'' luaBinds
         && lib.hasInfix ''monitor:set_workspace({ workspace = workspace })'' luaBinds
@@ -485,6 +534,7 @@ in {
   home.packages =
     pkgsets.home.${hostRole.homePackageSet}
     ++ [
+      closeActiveWindow
       droptermToggle
       pkgs.paperweight
     ];

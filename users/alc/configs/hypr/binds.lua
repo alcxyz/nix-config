@@ -27,7 +27,23 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("dms ipc call wallpaper next"))
 hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("dms ipc call bar toggle index 0"))
 
 -- Window management.
-hl.bind("SUPER + W", hl.dsp.window.close())
+local function close_active_window()
+	local window = hl.get_active_window()
+
+	-- Only Battle.net enters the managed-runtime close path. Everything else,
+	-- including similarly hosted Wine windows, keeps Hyprland's normal close.
+	if window
+		and window.class == "steam_app_default"
+		and window.title == "Battle.net"
+	then
+		hl.dispatch(hl.dsp.exec_cmd("hyprland-close-active-window"))
+		return
+	end
+
+	hl.dispatch(hl.dsp.window.close())
+end
+
+hl.bind("SUPER + W", close_active_window)
 hl.bind("SUPER + S", hl.dsp.window.float({ action = "toggle" }))
 hl.bind("SUPER + RETURN", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "toggle" }))
 hl.bind("SUPER + O", hl.dsp.exec_cmd("dms ipc call hypr toggleOverview"))

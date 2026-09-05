@@ -36,6 +36,9 @@ The pilot must:
   execution mode;
 - use a user-service lifecycle so repeated primary-launch requests are
   idempotent and conflicting primary instances are refused rather than killed;
+- stop the direct Battle.net service from the normal close shortcut only when
+  its exact main window is focused, that window belongs to the direct service,
+  and no Heroes of the Storm window is present;
 - keep Heroic and its existing entry unchanged throughout the QA period.
 
 The direct entries must be visibly labelled as QA entries. Heroic remains the
