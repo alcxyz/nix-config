@@ -10,6 +10,9 @@ hl.env("QT_QPA_PLATFORM", "wayland")
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 hl.env("QT_QPA_PLATFORMTHEME", "gtk3")
 hl.env("QT_QPA_PLATFORMTHEME_QT6", "gtk3")
+-- Hyprland 0.56's focus-grab path can immediately clear DMS modal surfaces.
+-- Let DMS use exclusive layer-shell keyboard focus for stable launchers.
+hl.env("DMS_HYPRLAND_EXCLUSIVE_FOCUS", "1")
 
 hl.on("hyprland.start", function()
 	hl.exec_cmd("wl-paste --watch cliphist store &")
