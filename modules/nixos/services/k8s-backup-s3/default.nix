@@ -111,6 +111,12 @@ in
       description = "Calendar schedule for mirroring the authoritative target.";
     };
 
+    mirrorMaxWorkers = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 4;
+      description = "Maximum concurrent workers used by each S3 mirror pass.";
+    };
+
     scannerEnabled = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -463,7 +469,7 @@ in
             # mc retry that object before falling back to the more expensive
             # full checkpoint/mirror pass, and avoid overwhelming the small
             # on-demand replica with autodetected worker concurrency.
-            if ! mc mirror --overwrite --remove --retry --max-workers 4 --quiet "source/$bucket" "replica/$bucket" >/dev/null; then
+            if ! mc mirror --overwrite --remove --retry --max-workers ${toString cfg.mirrorMaxWorkers} --quiet "source/$bucket" "replica/$bucket" >/dev/null; then
               if [ "$attempt" -eq 5 ]; then
                 echo "mirror failed for bucket $bucket after $attempt attempts" >&2
                 exit 1
