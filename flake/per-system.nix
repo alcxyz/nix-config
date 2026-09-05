@@ -39,6 +39,7 @@
       "modules/home-manager/programs/stashdb-pop/default.nix"
       "modules/home-manager/programs/moonlight-endpoints/default.nix"
       "modules/home-manager/programs/ssh/default.nix"
+      "modules/home-manager/programs/umu-apps/default.nix"
       "modules/nixos/common/default.nix"
       "modules/nixos/common/distributed-build-client.nix"
       "modules/nixos/common/pkgsets.nix"
@@ -130,6 +131,26 @@
               echo "Promotion flake default contains literal shell quotes" >&2
               exit 1
             fi
+            touch "$out"
+          '';
+
+      umu-apps-contract = let
+        battleNetService = self.homeConfigurations.alc-xyz.config.systemd.user.services.umu-app-battle-net-direct-qa.Service;
+        profileService = self.homeConfigurations.alc-xyz.config.systemd.user.services.umu-app-heroes-profile-direct-qa.Service;
+        battleNetRunner = builtins.head battleNetService.ExecStart;
+        profileRunner = builtins.head profileService.ExecStart;
+      in
+        assert battleNetService.Type == "exec";
+        assert profileService.Type == "exec";
+          pkgs.runCommand "umu-apps-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
+            grep -F 'export GAMEID=umu-default' ${battleNetRunner}
+            grep -F 'export PROTON_VERB=waitforexitandrun' ${battleNetRunner}
+            grep -F 'prefix_in_use' ${battleNetRunner}
+            grep -F '"''${1:-}" = "--check-only"' ${battleNetRunner}
+            grep -F 'GE-Proton10-4-steamcompattool' ${battleNetRunner}
+            grep -F 'export TZ=Europe/Oslo' ${battleNetRunner}
+            grep -F 'export PROTON_VERB=runinprefix' ${profileRunner}
+            grep -F 'GE-Proton10-4-steamcompattool' ${profileRunner}
             touch "$out"
           '';
 

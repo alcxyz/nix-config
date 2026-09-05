@@ -26,6 +26,23 @@
       restoreMonitor = "DP-1";
     })
   gamingWindowMatchers;
+  protonGe10_4 =
+    (pkgs.proton-ge-bin.overrideAttrs (finalAttrs: _: {
+      version = "GE-Proton10-4";
+      src = pkgs.fetchzip {
+        url = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${finalAttrs.version}/${finalAttrs.version}.tar.gz";
+        hash = "sha256-Si/CQ2PINfhmsC+uW3iFBUoSczZdkqwCZ8FAFuipu68=";
+      };
+    })).steamcompattool;
+  battleNetPrefix = "/ext4/games/Heroic/Prefixes/default/Battle.net";
+  battleNetEnvironment = {
+    DRI_PRIME = "1";
+    DXVK_CONFIG = "dxgi.maxFrameRate = 120";
+    DXVK_FRAME_RATE = "120";
+    TZ = "Europe/Oslo";
+    __GLX_VENDOR_LIBRARY_NAME = "nvidia";
+    __NV_PRIME_RENDER_OFFLOAD = "1";
+  };
   xwaylandPrimaryOutput = pkgs.writeShellApplication {
     name = "hyprland-xwayland-primary-output";
     runtimeInputs = [
@@ -448,6 +465,7 @@ in {
 
     "${configDir}/modules/home-manager/programs/ai/default.nix"
     "${configDir}/modules/home-manager/programs/moonlight-wolf-client/default.nix"
+    "${configDir}/modules/home-manager/programs/umu-apps/default.nix"
     "${configDir}/modules/home-manager/programs/stashdb-pop/default.nix"
 
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
@@ -589,6 +607,30 @@ in {
       enable = true;
       videoCodec = "H.264";
       bitrateKbps = 60000;
+    };
+  };
+  programs.umuApps = {
+    enable = true;
+    apps = {
+      battle-net-direct-qa = {
+        displayName = "Battle.net (Direct QA)";
+        comment = "Launch Battle.net directly through UMU; Heroic remains the QA fallback";
+        prefix = battleNetPrefix;
+        executable = "${battleNetPrefix}/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net.exe";
+        protonPackage = protonGe10_4;
+        environment = battleNetEnvironment;
+        useGameMode = true;
+      };
+      heroes-profile-direct-qa = {
+        displayName = "Heroes Profile (Direct QA)";
+        comment = "Launch the Heroes Profile uploader in the Battle.net compatibility prefix";
+        prefix = battleNetPrefix;
+        executable = "${battleNetPrefix}/pfx/drive_c/users/steamuser/AppData/Local/Heroesprofile/Heroesprofile.Uploader.exe";
+        protonPackage = protonGe10_4;
+        role = "companion";
+        environment = battleNetEnvironment;
+        useGameMode = true;
+      };
     };
   };
 
