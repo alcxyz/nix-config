@@ -121,22 +121,6 @@
   mkApplication = name: app: let
     unitName = "umu-app-${name}.service";
     prefixLock = builtins.substring 0 20 (builtins.hashString "sha256" app.prefix);
-    samePrefixCompanionUnits = lib.mapAttrsToList (
-      companionName: _: "umu-app-${companionName}.service"
-    ) (lib.filterAttrs (
-      companionName: companion:
-        companionName != name
-        && companion.prefix == app.prefix
-        && companion.role == "companion"
-    ) cfg.apps);
-    companionCgroupCases = lib.concatMapStrings (companionUnit: ''
-          */${companionUnit})
-            if ! systemctl --user --quiet is-active ${lib.escapeShellArg companionUnit}; then
-              printf '%s\n' conflict
-              return
-            fi
-            ;;
-    '') samePrefixCompanionUnits;
     environmentExports = lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
         variable: value: "export ${variable}=${lib.escapeShellArg value}"
@@ -153,7 +137,6 @@
       runtimeInputs = [
         pkgs.coreutils
         pkgs.gnugrep
-        pkgs.systemd
         pkgs.util-linux
       ];
       text = ''
@@ -161,10 +144,8 @@
         executable=${lib.escapeShellArg app.executable}
         lock_file="''${XDG_RUNTIME_DIR:?}/umu-prefix-${prefixLock}.lock"
 
-        prefix_state() {
-          local cgroup environment pid saw_prefix_process
-          saw_prefix_process=0
-
+        prefix_in_use() {
+          local environment pid
           for environment in /proc/[0-9]*/environ; do
             [ -r "$environment" ] || continue
             pid="''${environment#/proc/}"
@@ -174,22 +155,10 @@
             if tr '\0' '\n' 2>/dev/null <"$environment" \
               | grep -Fqx -e "STEAM_COMPAT_DATA_PATH=$prefix" \
                   -e "WINEPREFIX=$prefix" -e "WINEPREFIX=$prefix/pfx"; then
-              saw_prefix_process=1
-              cgroup="$(awk -F: '$1 == "0" { print $3; exit }' "/proc/$pid/cgroup" 2>/dev/null)"
-              case "$cgroup" in
-${companionCgroupCases}                *)
-                  printf '%s\n' conflict
-                  return
-                  ;;
-              esac
+              return 0
             fi
           done
-
-          if ((saw_prefix_process)); then
-            printf '%s\n' companions
-          else
-            printf '%s\n' idle
-          fi
+          return 1
         }
 
         [ -d "$prefix/pfx" ] || {
@@ -209,26 +178,12 @@ ${companionCgroupCases}                *)
         # application lifetime; companions must remain able to join a prefix.
         exec 9>"$lock_file"
         flock 9
-        ${
-          if app.role == "primary"
-          then ''
-            case "$(prefix_state)" in
-              idle)
-                proton_verb=waitforexitandrun
-                ;;
-              companions)
-                proton_verb=runinprefix
-                ;;
-              *)
-                echo "Refusing a primary application while the prefix has an unknown or primary owner" >&2
-                exit 75
-                ;;
-            esac
-          ''
-          else ''
-            proton_verb=runinprefix
-          ''
-        }
+        ${lib.optionalString (app.role == "primary") ''
+          if prefix_in_use; then
+            echo "Refusing a second primary application in $prefix" >&2
+            exit 75
+          fi
+        ''}
         if [ "''${1:-}" = "--check-only" ]; then
           exit 0
         fi
@@ -238,7 +193,11 @@ ${companionCgroupCases}                *)
         export PROTONPATH=${lib.escapeShellArg (toString app.protonPackage)}
         export GAMEID=${lib.escapeShellArg app.gameId}
         export STORE=${lib.escapeShellArg app.store}
-        export PROTON_VERB="$proton_verb"
+        export PROTON_VERB=${lib.escapeShellArg (
+          if app.role == "companion"
+          then "runinprefix"
+          else "waitforexitandrun"
+        )}
         ${environmentExports}
 
         # The startup decision is complete. Do not make the lifetime of the
