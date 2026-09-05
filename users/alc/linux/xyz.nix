@@ -69,6 +69,17 @@
       fi
     }
 
+    launch_mail() {
+      if [[ "$provider" == lua ]]; then
+        hyprctl eval \
+          "hl.dispatch(hl.dsp.exec_cmd(\"thunderbird\", { workspace = \"$workspace silent\" }))" \
+          >/dev/null
+      else
+        hyprctl dispatch exec "[workspace $workspace silent] thunderbird" \
+          >/dev/null
+      fi
+    }
+
     move_window() {
       local address="$1"
       if [[ "$provider" == lua ]]; then
@@ -105,8 +116,9 @@
     )
 
     if ((''${#addresses[@]} == 0)); then
+      launch_mail
       focus_workspace
-      exec thunderbird
+      exit 0
     fi
 
     for address in "''${addresses[@]}"; do
@@ -523,7 +535,8 @@ in {
         && lib.hasInfix "bind = SUPER, T, exec, hyprland-mail-workspace" legacyBinds
         && lib.hasInfix ''workspace=9'' mailWorkspaceScript
         && lib.hasInfix ''.class == "thunderbird" or .initialClass == "thunderbird"'' mailWorkspaceScript
-        && lib.hasInfix ''exec thunderbird'' mailWorkspaceScript
+        && lib.hasInfix ''hl.dsp.exec_cmd(\"thunderbird\", { workspace = \"$workspace silent\" })'' mailWorkspaceScript
+        && lib.hasInfix ''hyprctl dispatch exec "[workspace $workspace silent] thunderbird"'' mailWorkspaceScript
         && !lib.hasInfix ''SUPER + G'' luaBinds
         && !lib.hasInfix ''SUPER, G'' legacyBinds
         && !lib.hasInfix ''t3code-desktop'' luaBinds
