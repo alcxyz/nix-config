@@ -965,6 +965,7 @@ in {
     iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.13 -j nixos-fw-accept
     iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.15 -j nixos-fw-accept
     iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.16 -j nixos-fw-accept
+    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.250 -j nixos-fw-accept
   '';
 
   services.flatpak.managed = {
