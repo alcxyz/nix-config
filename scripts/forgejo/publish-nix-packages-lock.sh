@@ -14,15 +14,47 @@ if [[ "$BASE_BRANCH" != "dev" || "$UPDATE_BRANCH" != "update/nix-packages-lock" 
 	exit 1
 fi
 
-if git diff --quiet -- flake.lock; then
-	echo "No lock change to publish."
-	exit 0
-fi
+reconcile_latest_base() {
+	local attempt
+	local base_head
+	local latest_head
+	local updated_rev
 
-git fetch origin "$BASE_BRANCH"
-if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${BASE_BRANCH}")" ]]; then
-	echo "Refusing to publish from a stale ${BASE_BRANCH} checkout" >&2
-	exit 1
+	for attempt in 1 2 3; do
+		base_head=$(git rev-parse HEAD)
+		git fetch origin "$BASE_BRANCH"
+		latest_head=$(git rev-parse "origin/${BASE_BRANCH}")
+
+		if [[ "$base_head" == "$latest_head" ]]; then
+			return 0
+		fi
+
+		echo "${BASE_BRANCH} advanced during verification; regenerating the lock on ${latest_head:0:12} (attempt ${attempt}/3)."
+		git restore --source=HEAD --worktree -- flake.lock
+		git switch --detach "$latest_head"
+		nix flake lock --update-input nix-packages
+
+		updated_rev=$(python3 -c 'import json; print(json.load(open("flake.lock"))["nodes"]["nix-packages"]["locked"]["rev"])')
+		if [[ "$updated_rev" != "$REVISION" ]]; then
+			echo "Rebased lock selected ${updated_rev}, expected ${REVISION}" >&2
+			exit 1
+		fi
+
+		scripts/ci/verify-ai-package-stack.sh flake.lock
+	done
+
+	git fetch origin "$BASE_BRANCH"
+	if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${BASE_BRANCH}")" ]]; then
+		echo "${BASE_BRANCH} kept advancing while the lock was re-verified; deferring publication." >&2
+		exit 1
+	fi
+}
+
+reconcile_latest_base
+
+if git diff --quiet -- flake.lock; then
+	echo "The latest ${BASE_BRANCH} already contains nix-packages ${REVISION:0:12}."
+	exit 0
 fi
 
 git config user.name "forgejo-actions"

@@ -109,6 +109,7 @@
 
       ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.gnugrep] ''
         verifier=scripts/ci/verify-ai-package-stack.sh
+        publisher=scripts/forgejo/publish-nix-packages-lock.sh
         workflow=.forgejo/workflows/update-nix-packages.yml
 
         grep -F 'NIX_CI_EPHEMERAL_CONTAINER: "1"' "$workflow"
@@ -120,6 +121,11 @@
           echo "AI package verifier bypasses the staged Nix build wrapper" >&2
           exit 1
         fi
+
+        grep -F 'reconcile_latest_base' "$publisher"
+        grep -F 'git switch --detach "$latest_head"' "$publisher"
+        grep -F 'scripts/ci/verify-ai-package-stack.sh flake.lock' "$publisher"
+        grep -F 'kept advancing while the lock was re-verified' "$publisher"
       '';
 
       check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''
