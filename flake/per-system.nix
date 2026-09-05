@@ -138,11 +138,15 @@
       '';
 
       t3code-auto-update-contract = let
+        t3Unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code.Unit;
         unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Unit;
         service = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Service;
         timer = self.homeConfigurations.alc-xyz.config.systemd.user.timers.t3code-auto-update.Timer;
         updater = builtins.head service.ExecStart;
+        guard = lib.removePrefix "run " self.homeConfigurations.alc-xyz.config.home.activation.t3codeRestartGuard.data;
+        applyManagedUnit = self.homeConfigurations.alc-xyz.config.home.activation.t3codeApplyManagedUnit.data;
       in
+        assert t3Unit.X-RestartIfChanged == false;
         assert unit.X-RestartIfChanged == false;
         assert service.Restart == "on-failure";
         assert service.RestartForceExitStatus == "75";
@@ -155,6 +159,11 @@
               echo "Promotion flake default contains literal shell quotes" >&2
               exit 1
             fi
+            grep -F "T3CODE_CGROUP_FILE" ${guard}
+            grep -F "t3code\\.service" ${guard}
+            grep -F 'systemctl --user restart t3code.service' ${
+              pkgs.writeText "t3code-apply-managed-unit" applyManagedUnit
+            }
             touch "$out"
           '';
 

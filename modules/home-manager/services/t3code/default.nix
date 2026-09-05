@@ -13,6 +13,7 @@ with lib; let
   cfg = config.services.t3code;
   managedVersion = getVersion cfg.package;
   managedVersionState = "${cfg.baseDir}/userdata/managed-t3code-version";
+  restartMarker = "${cfg.baseDir}/userdata/managed-t3code-restart-required";
   promotionFlakeDefault =
     if cfg.autoUpdate.promotionFlakeUri == null
     then ""
@@ -33,6 +34,9 @@ with lib; let
     text = ''
       managed_version=${escapeShellArg managedVersion}
       version_state="''${T3CODE_VERSION_STATE:-${managedVersionState}}"
+      restart_marker="''${T3CODE_RESTART_MARKER:-${restartMarker}}"
+      cgroup_file="''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}"
+      rm -f "$restart_marker"
 
       version_is_older() {
         local candidate=$1
@@ -70,11 +74,6 @@ with lib; let
         echo "T3 Code downgrade from $accepted_version to $managed_version explicitly allowed." >&2
       fi
 
-      if [[ "''${T3CODE_ALLOW_ACTIVE_RESTART:-0}" == "1" ]]; then
-        echo "T3 Code active-session restart guard explicitly bypassed."
-        exit 0
-      fi
-
       if ! systemctl --user --quiet is-active t3code.service; then
         exit 0
       fi
@@ -95,9 +94,27 @@ with lib; let
         exit 0
       fi
 
+      if grep -qE '(^|/)t3code\.service(/|$)' "$cgroup_file"; then
+        echo "Refusing to restart T3 Code from a process running inside t3code.service." >&2
+        echo "Run the activation through t3code-auto-update.service so it can finish independently." >&2
+        exit 75
+      fi
+
+      allow_managed_restart() {
+        mkdir -p "$(dirname "$restart_marker")"
+        touch "$restart_marker"
+      }
+
+      if [[ "''${T3CODE_ALLOW_ACTIVE_RESTART:-0}" == "1" ]]; then
+        echo "T3 Code active-session restart guard explicitly bypassed."
+        allow_managed_restart
+        exit 0
+      fi
+
       database=${escapeShellArg "${cfg.baseDir}/userdata/state.sqlite"}
       if [[ ! -r "$database" ]]; then
         echo "T3 Code executable is changing, but no readable state database exists; continuing."
+        allow_managed_restart
         exit 0
       fi
 
@@ -126,6 +143,7 @@ with lib; let
       fi
 
       echo "T3 Code is idle; allowing the managed executable to change."
+      allow_managed_restart
     '';
   };
 
@@ -262,6 +280,10 @@ in {
         Description = "t3code headless server";
         After = ["network-online.target"];
         Wants = ["network-online.target"];
+        # Home Manager's service switch must never restart T3 implicitly. The
+        # activation guard records an approved executable change and the
+        # post-reload activation step applies that restart explicitly.
+        X-RestartIfChanged = !cfg.restartGuard.enable;
       };
       Service = {
         Type = "simple";
@@ -283,14 +305,32 @@ in {
       ''
     );
 
-    home.activation.t3codeRecordManagedVersion = lib.hm.dag.entryAfter ["reloadSystemd"] ''
-      version_state=${escapeShellArg managedVersionState}
-      run mkdir -p "$(dirname "$version_state")"
-      tmp=$(mktemp "''${version_state}.XXXXXX")
-      printf '%s\n' ${escapeShellArg managedVersion} > "$tmp"
-      chmod 0644 "$tmp"
-      run mv -f "$tmp" "$version_state"
-    '';
+    home.activation.t3codeApplyManagedUnit = mkIf cfg.restartGuard.enable (
+      lib.hm.dag.entryAfter ["reloadSystemd"] ''
+        restart_marker=${escapeShellArg restartMarker}
+        if [[ -e "$restart_marker" ]]; then
+          cgroup_file="''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}"
+          if grep -qE '(^|/)t3code\.service(/|$)' "$cgroup_file"; then
+            errorEcho "Refusing to restart T3 Code from inside its own service cgroup."
+            exit 75
+          fi
+          run systemctl --user restart t3code.service
+          run rm -f "$restart_marker"
+        fi
+      ''
+    );
+
+    home.activation.t3codeRecordManagedVersion =
+      lib.hm.dag.entryAfter (
+        ["reloadSystemd"] ++ optional cfg.restartGuard.enable "t3codeApplyManagedUnit"
+      ) ''
+        version_state=${escapeShellArg managedVersionState}
+        run mkdir -p "$(dirname "$version_state")"
+        tmp=$(mktemp "''${version_state}.XXXXXX")
+        printf '%s\n' ${escapeShellArg managedVersion} > "$tmp"
+        chmod 0644 "$tmp"
+        run mv -f "$tmp" "$version_state"
+      '';
 
     systemd.user.services.t3code-auto-update = mkIf cfg.autoUpdate.enable {
       Unit = {
