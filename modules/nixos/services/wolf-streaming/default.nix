@@ -570,6 +570,13 @@
               --tag ${lib.escapeShellArg image.image} \
               ${lib.escapeShellArg image.context}
           fi
+          # Kubernetes deliberately treats this hardware-bound host as the
+          # source of truth for browser package versions.  Keep a stable local
+          # alias so GitOps does not duplicate the Nix package version and
+          # become stale after a host update or Docker prune.
+          docker tag \
+            ${lib.escapeShellArg image.image} \
+            ${lib.escapeShellArg "nixbox/wolf-${image.name}:current"}
         '')
         browserImages}
     '';
