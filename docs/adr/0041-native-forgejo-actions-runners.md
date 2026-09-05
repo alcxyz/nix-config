@@ -1,6 +1,6 @@
 # ADR-0041: Native Forgejo Actions runners
 
-**Status:** Implemented (amended 2026-08-12: pressure-aware build-cache lifecycle)
+**Status:** Implemented (amended 2026-09-05: Nix builds in Docker jobs)
 **Date:** 2026-05-07
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -58,6 +58,12 @@ The default runner priority is represented with labels:
   socket to CI jobs.
 - Normal CI jobs use container-backed Forgejo labels, preserving clean job
   environments.
+- Nix builds inside unprivileged Docker jobs must not assume that Nix can create
+  a second sandbox. Workflows that build multi-package closures must stage
+  dependency builds and keep Nix's deliberately nonexistent build home absent
+  between invocations.
+- Do not solve missing inner Nix sandboxing by granting normal job containers
+  privileged mode or by moving routine jobs onto a host execution label.
 - Host-level labels are explicit and used only for trusted infrastructure
   workflows.
 - Primary and secondary scheduling intent is visible in labels instead of hidden
@@ -90,6 +96,9 @@ clean per-job environments. Host-level jobs should be explicit exceptions.
 - Routine GitOps workflows target the primary `xyz`/`xev` runner pool. `nux`
   and `nex` are kept available for explicit fallback work without taking normal
   jobs from the larger hosts.
+- Nix-heavy workflows remain Docker-backed. Their verification scripts isolate
+  build stages and may clean Nix's fake build home only after positively
+  identifying an explicitly opted-in ephemeral job container.
 - Runner hosts check filesystem pressure frequently instead of relying only on a
   fixed cleanup schedule. The default policy starts age-filtered build-cache
   pruning at 70% used, permits all unused cache to be pruned at 80% used, aims

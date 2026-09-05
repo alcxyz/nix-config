@@ -18,6 +18,9 @@ jobs:
       cancel-in-progress: false
     env:
       BASE_BRANCH: dev
+      # This opts the verifier into cleaning Nix's fake HOME. The guard in the
+      # script also requires Docker's container marker before removing it.
+      NIX_CI_EPHEMERAL_CONTAINER: "1"
       UPDATE_BRANCH: update/nix-packages-lock
 
     steps:

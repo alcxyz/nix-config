@@ -100,11 +100,26 @@
       '';
 
       check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-        shellcheck scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
+        shellcheck scripts/checks/*.sh scripts/ci/verify-ai-package-stack.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
       '';
 
       check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.shfmt] ''
-        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
+        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ci/verify-ai-package-stack.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
+      '';
+
+      ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.gnugrep] ''
+        verifier=scripts/ci/verify-ai-package-stack.sh
+        workflow=.forgejo/workflows/update-nix-packages.yml
+
+        grep -F 'NIX_CI_EPHEMERAL_CONTAINER: "1"' "$workflow"
+        grep -F 'NIX_CI_EPHEMERAL_CONTAINER' "$verifier"
+        grep -F 't3code.pnpmDeps' "$verifier"
+        grep -F 't3code.resourceMonitor' "$verifier"
+        grep -F 't3_out=$(nix_build "''${flake_uri}#t3code" --no-link --print-out-paths)' "$verifier"
+        if grep -F 't3_out=$(nix build' "$verifier"; then
+          echo "AI package verifier bypasses the staged Nix build wrapper" >&2
+          exit 1
+        fi
       '';
 
       check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''
