@@ -9,6 +9,7 @@ for _, binding in ipairs({
 	{ "SUPER + SHIFT + right", hl.dsp.window.move({ direction = "right" }) },
 	{ "SUPER + CTRL + J", hl.dsp.focus({ direction = "up" }) },
 	{ "SUPER + CTRL + K", hl.dsp.focus({ direction = "down" }) },
+	{ "SUPER + M", hl.dsp.layout("focus") },
 }) do
 	hl.bind(binding[1], binding[2])
 end
