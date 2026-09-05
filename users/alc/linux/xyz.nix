@@ -43,6 +43,77 @@
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
     __NV_PRIME_RENDER_OFFLOAD = "1";
   };
+  mailWorkspaceScript = ''
+    workspace=9
+    clients="$(hyprctl clients -j 2>/dev/null)"
+    jq -e 'type == "array"' <<<"$clients" >/dev/null
+    provider="$(hyprctl status -j | jq -r '.configProvider // empty')"
+
+    focus_workspace() {
+      if [[ "$provider" == lua ]]; then
+        hyprctl eval \
+          "hl.dispatch(hl.dsp.focus({ workspace = $workspace }))" \
+          >/dev/null
+      else
+        hyprctl dispatch workspace "$workspace" >/dev/null
+      fi
+    }
+
+    move_window() {
+      local address="$1"
+      if [[ "$provider" == lua ]]; then
+        hyprctl eval \
+          "hl.dispatch(hl.dsp.window.move({ workspace = $workspace, window = \"address:$address\", follow = false }))" \
+          >/dev/null
+      else
+        hyprctl dispatch movetoworkspacesilent "$workspace,address:$address" \
+          >/dev/null
+      fi
+    }
+
+    focus_window() {
+      local address="$1"
+      if [[ "$provider" == lua ]]; then
+        hyprctl eval \
+          "hl.dispatch(hl.dsp.focus({ window = \"address:$address\" }))" \
+          >/dev/null
+      else
+        hyprctl dispatch focuswindow "address:$address" >/dev/null
+      fi
+    }
+
+    mapfile -t addresses < <(
+      jq -r '
+        .[]
+        | select(
+            .mapped == true
+            and (.class == "thunderbird" or .initialClass == "thunderbird")
+            and (.address | test("^0x[0-9a-fA-F]+$"))
+          )
+        | .address
+      ' <<<"$clients"
+    )
+
+    if ((''${#addresses[@]} == 0)); then
+      focus_workspace
+      exec thunderbird
+    fi
+
+    for address in "''${addresses[@]}"; do
+      move_window "$address" || true
+    done
+    focus_workspace
+    focus_window "''${addresses[0]}" || true
+  '';
+  mailWorkspace = pkgs.writeShellApplication {
+    name = "hyprland-mail-workspace";
+    runtimeInputs = [
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.thunderbird
+    ];
+    text = mailWorkspaceScript;
+  };
   closeActiveWindowScript = ''
     active_window="$(hyprctl activewindow -j 2>/dev/null || true)"
     active_class="$(jq -r '.class // empty' <<<"$active_window" 2>/dev/null || true)"
@@ -408,7 +479,9 @@
 in {
   assertions = let
     legacyBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.conf";
+    legacyDwindleBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-dwindle.conf";
     luaBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.lua";
+    luaDwindleBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-dwindle.lua";
     luaConfig = builtins.readFile "${configDir}/users/alc/configs/hypr/hyprland.lua";
     luaScrollingBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-scrolling.lua";
     hostLegacyConfig = config.programs.hyprland.managed.extraConfig;
@@ -433,6 +506,19 @@ in {
         lib.hasInfix ''hl.bind("XF86ScreenSaver", hl.dsp.exec_cmd(lock))'' luaBinds
         && lib.hasInfix "bind = , XF86ScreenSaver, exec, $lock" legacyBinds;
       message = "The K850 lock-logo key must use the normal lock-screen path in both Hyprland configs.";
+    }
+    {
+      assertion =
+        lib.hasInfix ''hl.bind("SUPER + M", hl.dsp.exec_cmd("hyprland-mail-workspace"))'' luaBinds
+        && lib.hasInfix "bind = SUPER, M, exec, hyprland-mail-workspace" legacyBinds
+        && lib.hasInfix ''workspace=9'' mailWorkspaceScript
+        && lib.hasInfix ''.class == "thunderbird" or .initialClass == "thunderbird"'' mailWorkspaceScript
+        && lib.hasInfix ''exec thunderbird'' mailWorkspaceScript
+        && !lib.hasInfix ''SUPER + G'' luaBinds
+        && !lib.hasInfix ''SUPER, G'' legacyBinds
+        && !lib.hasInfix ''SUPER + M'' luaDwindleBinds
+        && !lib.hasInfix ''SUPER, M'' legacyDwindleBinds;
+      message = "Super+M must exclusively normalize Thunderbird onto its unpinned workspace 9.";
     }
     {
       assertion =
@@ -536,6 +622,7 @@ in {
     ++ [
       closeActiveWindow
       droptermToggle
+      mailWorkspace
       pkgs.paperweight
     ];
 
