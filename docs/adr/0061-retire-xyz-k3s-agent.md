@@ -32,10 +32,19 @@ passive rollback artifact until ordinary storage housekeeping removes it; do
 not back it up.
 
 Remove the browser placement controller and worker qualification DaemonSet.
-Pin both browser workloads and the parked browser pilot to `xev`. Remove the xyz
-taint tolerations and node eligibility from Longhorn, MetalLB, and the NVIDIA
-device plugin so cluster infrastructure and recurring jobs remain on the three
-stable servers.
+Select both browser workloads and the parked browser pilot through the
+`nixbox.alc.xyz/protected-browser-worker=true` capability label, which is
+assigned only to `xev`. This is an intentional single-worker boundary rather
+than a promise of fallback mobility. Remove the xyz taint tolerations and node
+eligibility from Longhorn, MetalLB, and the NVIDIA device plugin so cluster
+infrastructure and recurring jobs remain on the three stable servers.
+
+Nix remains the source of truth for the node-local browser package versions.
+Build each versioned image and maintain a `nixbox/wolf-<browser>:current` local
+alias for Kubernetes. GitOps validates the image provenance contract but does
+not duplicate fast-moving Nix package versions. This prevents an ordinary host
+update or post-prune image reconciliation from leaving Kubernetes pointed at a
+version that no longer exists on the only qualified worker.
 
 The host-native Kubernetes backup mirror and its ZFS-to-local-backup chain on
 `xyz` remain unchanged. They do not require cluster membership.
@@ -48,6 +57,8 @@ The host-native Kubernetes backup mirror and its ZFS-to-local-backup chain on
 - Kubernetes and Longhorn system jobs can no longer execute on `xyz`.
 - Loss or maintenance of `xev` makes both browser services unavailable until
   it returns or a new qualified GPU worker is deliberately introduced.
+- Updating a browser package on `xev` atomically advances its local `:current`
+  alias; Kubernetes does not require a matching version-only manifest change.
 - Browser state remains protected by Longhorn replicas and off-volume backups;
   this decision reduces availability, not data durability.
 - Backup volume, retention, and destination load are unchanged. Only xyz's
