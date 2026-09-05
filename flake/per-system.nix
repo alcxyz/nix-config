@@ -188,12 +188,14 @@
         assert builtins.match ".+-heroes-profile.png" profileEntry.icon != null;
           pkgs.runCommand "umu-apps-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
             grep -F 'export GAMEID=umu-default' ${battleNetRunner}
-            grep -F 'export PROTON_VERB=waitforexitandrun' ${battleNetRunner}
-            grep -F 'prefix_in_use' ${battleNetRunner}
+            grep -F 'proton_verb=waitforexitandrun' ${battleNetRunner}
+            grep -F 'proton_verb=runinprefix' ${battleNetRunner}
+            grep -F 'umu-app-heroes-profile.service' ${battleNetRunner}
+            grep -F 'prefix_state' ${battleNetRunner}
             grep -F '"''${1:-}" = "--check-only"' ${battleNetRunner}
             grep -F 'GE-Proton10-4-steamcompattool' ${battleNetRunner}
             grep -F 'export TZ=Europe/Oslo' ${battleNetRunner}
-            grep -F 'export PROTON_VERB=runinprefix' ${profileRunner}
+            grep -F 'proton_verb=runinprefix' ${profileRunner}
             grep -F 'GE-Proton10-4-steamcompattool' ${profileRunner}
             if grep -F 'gamemoderun' ${battleNetRunner} ${profileRunner}; then
               echo "Direct Battle.net launchers must not request unavailable GameMode" >&2

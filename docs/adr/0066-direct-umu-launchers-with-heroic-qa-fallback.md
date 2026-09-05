@@ -37,6 +37,8 @@ The pilot must:
   declarative configuration;
 - launch companion programs in the same prefix with Proton's same-prefix
   execution mode;
+- allow a primary application to join an already-running declared companion,
+  while continuing to reject unknown or second-primary prefix owners;
 - use a user-service lifecycle so repeated primary-launch requests are
   idempotent and conflicting primary instances are refused rather than killed;
 - stop the direct Battle.net service from the normal close shortcut only when
