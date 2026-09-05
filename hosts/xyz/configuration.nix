@@ -253,6 +253,10 @@
       Type = "oneshot";
       ExecStart = "${localBackup}/bin/xyz-local-backup ${backupName}";
       TimeoutStartSec = "12h";
+      Slice = "xyz-backups.slice";
+      Nice = 15;
+      IOSchedulingClass = "idle";
+      CPUSchedulingPolicy = "idle";
     };
   };
   mkLocalBackupTimer = onCalendar: description: {
@@ -691,6 +695,25 @@ in {
   systemd.timers.xyz-appstate-backup = mkLocalBackupTimer "*-*-* 05:20:00" "Daily xyz appstate backup";
   systemd.timers.xyz-k8s-backup = mkLocalBackupTimer "*-*-* 06:45:00" "Daily xyz k8s backup replication";
 
+  systemd.slices.xyz-backups = {
+    description = "Contention-aware xyz backup workloads";
+    sliceConfig = {
+      CPUWeight = 10;
+      IOWeight = 10;
+    };
+  };
+
+  systemd.services.k8s-backup-rustfs.serviceConfig = {
+    Slice = "xyz-backups.slice";
+    Nice = 15;
+    IOSchedulingClass = "idle";
+    CPUSchedulingPolicy = "idle";
+  };
+  systemd.services.k8s-backup-s3-mirror.serviceConfig.Slice = "xyz-backups.slice";
+  systemd.services.xyz-home-backup.serviceConfig.Slice = "xyz-backups.slice";
+  systemd.services.snapshot-restic-home-maintenance.serviceConfig.Slice = "xyz-backups.slice";
+  systemd.services.snapshot-restic-home-full-check.serviceConfig.Slice = "xyz-backups.slice";
+
   # Docker - ZFS relationship
 
   systemd.services.docker = {
@@ -804,6 +827,7 @@ in {
     secretKeyFile = config.sops.secrets.k8s_backup_s3_root_password.path;
     mirrorSourceEndpoint = "http://192.168.1.13:9200";
     mirrorSchedule = "*-*-* 06:10:00";
+    mirrorMaxWorkers = 2;
   };
 
   # NFS mount from nux — shared directory for paperless-ingest and future services
