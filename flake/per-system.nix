@@ -122,12 +122,11 @@
           exit 1
         fi
 
-        grep -F 'reconcile_latest_base' "$publisher"
+        grep -F 'prepare_verified_lock' "$publisher"
         grep -F 'git switch --detach "$latest_head"' "$publisher"
         grep -F 'scripts/ci/verify-ai-package-stack.sh flake.lock' "$publisher"
-        grep -F 'kept advancing while the lock was re-verified' "$publisher"
         grep -F 'git push origin "HEAD:refs/heads/''${BASE_BRANCH}"' "$publisher"
-        grep -F 'Forgejo rejected the virtual-user merge' "$publisher"
+        grep -F 'kept advancing while the lock was published' "$publisher"
       '';
 
       check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''

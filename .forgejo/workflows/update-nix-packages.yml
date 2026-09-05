@@ -11,7 +11,7 @@ on:
 
 jobs:
   update:
-    name: Build, verify, and merge current packages
+    name: Build, verify, and publish current packages
     runs-on: ubuntu-latest
     concurrency:
       group: nix-packages-lock-update
@@ -21,7 +21,6 @@ jobs:
       # This opts the verifier into cleaning Nix's fake HOME. The guard in the
       # script also requires Docker's container marker before removing it.
       NIX_CI_EPHEMERAL_CONTAINER: "1"
-      UPDATE_BRANCH: update/nix-packages-lock
 
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
@@ -44,7 +43,7 @@ jobs:
         id: update
         run: scripts/update-inputs/update-nix-packages.sh
 
-      - name: Publish and merge verified lock update
+      - name: Publish verified lock update
         if: steps.update.outputs.updated == 'true'
         env:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
