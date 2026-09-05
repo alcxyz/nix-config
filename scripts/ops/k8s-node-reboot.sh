@@ -27,6 +27,7 @@ MIN_SURVIVING_LONGHORN_REPLICAS=2
 REMOTE_BOOT_ID=""
 WORKLOADS_FILE=""
 NETWORK_AUDIT_SCRIPT="${K8S_NODE_NETWORK_AUDIT_SCRIPT:-}"
+NODE_SSH_USER="${K8S_NODE_SSH_USER:-root}"
 CNPG_SWITCHOVERS=""
 LONGHORN_REBUILD_LIMIT_ORIGINAL=""
 
@@ -1348,12 +1349,35 @@ verify_returned_node_network() {
   [[ "$flannel_ip" == "$internal_ip" ]] ||
     die "${NODE} Flannel public IP (${flannel_ip:-missing}) does not match InternalIP (${internal_ip})"
 
-  verify_remote_node_network_path "$internal_ip"
+  verify_all_node_network_paths
+}
+
+verify_network_path_on_node() {
+  local audit_node="$1"
+  local expected_ip="$2"
+  local audit_ssh_target="$3"
+  local remote_command
+
+  [[ -n "$expected_ip" ]] || die "${audit_node} has no Kubernetes InternalIP"
+  [[ "$audit_node" =~ ^[A-Za-z0-9._-]+$ ]] || die "unsafe Kubernetes node name: ${audit_node}"
+  [[ "$expected_ip" =~ ^[0-9A-Fa-f:.]+$ ]] || die "unsafe Kubernetes node address: ${expected_ip}"
+  [[ -n "$NETWORK_AUDIT_SCRIPT" && -r "$NETWORK_AUDIT_SCRIPT" ]] ||
+    die "Kubernetes node network audit helper is unavailable"
+
+  remote_command="bash -s -- --node ${audit_node} --expected-node-ip ${expected_ip} --disallowed-interface wt0"
+  log "checking ${audit_node} Kubernetes peer routes and Flannel underlay"
+  if ! ssh -o BatchMode=yes "$audit_ssh_target" "
+    if [[ \$(id -u) -eq 0 ]]; then
+      exec ${remote_command}
+    fi
+    exec sudo -n ${remote_command}
+  " <"$NETWORK_AUDIT_SCRIPT"; then
+    die "${audit_node} Kubernetes network path audit failed"
+  fi
 }
 
 verify_remote_node_network_path() {
   local expected_ip="${1:-}"
-  local remote_command
 
   if [[ -z "$expected_ip" ]]; then
     expected_ip=$(
@@ -1362,22 +1386,41 @@ verify_remote_node_network_path() {
     )
   fi
 
-  [[ -n "$expected_ip" ]] || die "${NODE} has no Kubernetes InternalIP"
-  [[ "$NODE" =~ ^[A-Za-z0-9._-]+$ ]] || die "unsafe Kubernetes node name: ${NODE}"
-  [[ "$expected_ip" =~ ^[0-9A-Fa-f:.]+$ ]] || die "unsafe Kubernetes node address: ${expected_ip}"
-  [[ -n "$NETWORK_AUDIT_SCRIPT" && -r "$NETWORK_AUDIT_SCRIPT" ]] ||
-    die "Kubernetes node network audit helper is unavailable"
+  verify_network_path_on_node "$NODE" "$expected_ip" "$SSH_TARGET"
+}
 
-  remote_command="bash -s -- --node ${NODE} --expected-node-ip ${expected_ip} --disallowed-interface wt0"
-  log "checking ${NODE} Kubernetes peer routes and Flannel underlay"
-  if ! ssh -o BatchMode=yes "$SSH_TARGET" "
-    if [[ \$(id -u) -eq 0 ]]; then
-      exec ${remote_command}
+verify_all_node_network_paths() {
+  local excluded_node="${1:-}"
+  local rows audit_node expected_ip ready audit_ssh_target
+
+  rows=$(
+    kubectl get nodes -o json | jq -r '
+      .items[]
+      | [
+          .metadata.name,
+          ([.status.addresses[]? | select(.type == "InternalIP") | .address]
+            | if length == 1 then .[0] else "" end),
+          ([.status.conditions[]? | select(.type == "Ready") | .status]
+            | if length == 1 then .[0] else "" end)
+        ]
+      | @tsv'
+  )
+
+  while IFS=$'\t' read -r audit_node expected_ip ready; do
+    [[ -n "$audit_node" && "$audit_node" != "$excluded_node" ]] || continue
+    [[ "$ready" == "True" ]] || die "survivor node ${audit_node} is not Ready"
+    if [[ "$audit_node" == "$NODE" ]]; then
+      audit_ssh_target="$SSH_TARGET"
+    else
+      audit_ssh_target="${NODE_SSH_USER}@${audit_node}"
     fi
-    exec sudo -n ${remote_command}
-  " <"$NETWORK_AUDIT_SCRIPT"; then
-    die "${NODE} Kubernetes network path audit failed"
-  fi
+    verify_network_path_on_node "$audit_node" "$expected_ip" "$audit_ssh_target"
+  done <<<"$rows"
+}
+
+verify_survivor_node_network_paths() {
+  log "checking survivor-node networking after ${NODE} left service"
+  verify_all_node_network_paths "$NODE"
 }
 
 verify_resumed_maintenance_state() {
@@ -1488,7 +1531,7 @@ prepare_node_for_disruption() {
   log "checking Kubernetes node ${NODE}"
   kubectl get node "$NODE" >/dev/null
   verify_remote_privilege
-  verify_remote_node_network_path
+  verify_all_node_network_paths
 
   if [[ "$RESUME_MAINTENANCE" == true ]]; then
     verify_resumed_maintenance_state
@@ -1556,6 +1599,7 @@ run_reboot() {
   prepare_node_for_disruption "$WORKLOADS_FILE"
   reboot_host
   wait_for_ssh_down
+  verify_survivor_node_network_paths
   wait_for_ssh_up
   verify_new_boot
 
@@ -1583,6 +1627,7 @@ run_poweroff() {
   prepare_node_for_disruption "$WORKLOADS_FILE"
   poweroff_host
   wait_for_ssh_down
+  verify_survivor_node_network_paths
 
   log "${NODE} is powered off and remains cordoned"
 }
@@ -1621,7 +1666,7 @@ run_check_only() {
   log "checking Kubernetes node ${NODE} without changing cluster or host state"
   kubectl get node "$NODE" >/dev/null
   verify_remote_privilege
-  verify_remote_node_network_path
+  verify_all_node_network_paths
 
   if [[ "$RESUME_MAINTENANCE" == true ]]; then
     verify_resumed_maintenance_state
@@ -1647,6 +1692,7 @@ main() {
   need_command ssh
   need_command jq
   need_command awk
+  [[ "$NODE_SSH_USER" =~ ^[A-Za-z0-9._-]+$ ]] || die "unsafe Kubernetes node SSH user: ${NODE_SSH_USER}"
 
   if [[ "$RESUME_MAINTENANCE" == true && "$ACTION" == "on" ]]; then
     die "--resume-maintenance is for reboot/off cycles; use kon to finalize maintenance"

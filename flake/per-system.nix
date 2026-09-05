@@ -133,6 +133,19 @@
         bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
       '';
 
+      check-k8s-node-reboot-network-audits = mkRepoCheck "check-k8s-node-reboot-network-audits" [pkgs.bash pkgs.jq] ''
+        bash scripts/checks/test-k8s-node-reboot-network-audits.sh
+      '';
+
+      k8s-api-vip-source-routing-contract = let
+        instance = self.nixosConfigurations.xev.config.services.keepalived.vrrpInstances.k8s_api;
+      in
+        assert instance.virtualIps == [];
+        assert lib.hasInfix "noprefixroute" instance.extraConfig;
+          pkgs.runCommand "k8s-api-vip-source-routing-contract" {} ''
+            touch "$out"
+          '';
+
       check-nix-gc-maintenance = mkRepoCheck "check-nix-gc-maintenance" [pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gawk pkgs.gnugrep] ''
         bash scripts/checks/test-nix-gc-maintenance.sh
       '';

@@ -80,14 +80,16 @@ in {
         noPreempt = true;
         unicastSrcIp = cfg.sourceIp;
         unicastPeers = cfg.peers;
-        virtualIps = [
-          {
-            addr = "${cfg.vip}/${toString cfg.prefixLength}";
-            dev = cfg.interface;
-          }
-        ];
+        # Keep the floating address out of connected-route source selection.
+        # Without noprefixroute, a VIP added before the DHCP address can become
+        # the preferred source for unrelated LAN traffic from the current
+        # holder.
+        virtualIps = [];
         trackScripts = ["k3s_api"];
         extraConfig = ''
+          virtual_ipaddress {
+            ${cfg.vip}/${toString cfg.prefixLength} dev ${cfg.interface} noprefixroute
+          }
           advert_int 1
           garp_master_delay 1
           garp_master_repeat 3
