@@ -157,13 +157,24 @@
           '';
 
       umu-apps-contract = let
-        battleNetService = self.homeConfigurations.alc-xyz.config.systemd.user.services.umu-app-battle-net-direct-qa.Service;
-        profileService = self.homeConfigurations.alc-xyz.config.systemd.user.services.umu-app-heroes-profile-direct-qa.Service;
+        homeConfig = self.homeConfigurations.alc-xyz.config;
+        umuServices = homeConfig.systemd.user.services;
+        desktopEntries = homeConfig.xdg.desktopEntries;
+        battleNetService = umuServices.umu-app-battle-net.Service;
+        profileService = umuServices.umu-app-heroes-profile.Service;
+        battleNetEntry = desktopEntries.umu-battle-net;
+        profileEntry = desktopEntries.umu-heroes-profile;
         battleNetRunner = builtins.head battleNetService.ExecStart;
         profileRunner = builtins.head profileService.ExecStart;
       in
+        assert !(builtins.hasAttr "umu-app-battle-net-direct-qa" umuServices);
+        assert !(builtins.hasAttr "umu-app-heroes-profile-direct-qa" umuServices);
         assert battleNetService.Type == "exec";
         assert profileService.Type == "exec";
+        assert battleNetEntry.name == "Battle.net";
+        assert profileEntry.name == "Heroes Profile";
+        assert builtins.match ".+-battle-net.png" battleNetEntry.icon != null;
+        assert builtins.match ".+-heroes-profile.png" profileEntry.icon != null;
           pkgs.runCommand "umu-apps-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
             grep -F 'export GAMEID=umu-default' ${battleNetRunner}
             grep -F 'export PROTON_VERB=waitforexitandrun' ${battleNetRunner}

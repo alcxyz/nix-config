@@ -70,4 +70,4 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0063](0063-split-replaceable-bulk-and-secure-storage.md) | Split replaceable bulk data from secure storage | Accepted, staged | xyz, bulk storage, ZFS, media services |
 | [ADR-0064](0064-keep-secure-storage-on-xyz.md) | Keep secure storage on xyz while moving bulk storage to xev | Accepted, staged | xyz, xev, secure storage, bulk storage, media services |
 | [ADR-0065](0065-narrow-xyz-game-session-compatibility-repairs.md) | Keep xyz game-session compatibility repairs narrow and event-scoped | Accepted | xyz, Hyprland, XWayland, DMS, Heroic |
-| [ADR-0066](0066-direct-umu-launchers-with-heroic-qa-fallback.md) | Use direct UMU launchers with a Heroic QA fallback | Accepted, staged | xyz, UMU, Proton, Battle.net, Heroic |
+| [ADR-0066](0066-direct-umu-launchers-with-heroic-qa-fallback.md) | Use direct UMU launchers with a Heroic QA fallback | Accepted | xyz, UMU, Proton, Battle.net, Heroic |

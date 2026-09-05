@@ -1,6 +1,6 @@
 # ADR-0066: Use direct UMU launchers with a Heroic QA fallback
 
-**Status:** Accepted, staged
+**Status:** Accepted
 **Date:** 2026-09-05
 **Applies to:** `modules/home-manager`, `users/alc/linux/xyz.nix`, UMU, Proton, Battle.net, Heroic
 
@@ -21,8 +21,11 @@ qualification.
 ## Decision
 
 Add a reusable Home Manager module for declarative Windows applications run
-through UMU. Pilot it on `xyz` with distinctly named direct-QA launchers for
-Battle.net and the Heroes Profile uploader.
+through UMU. It was initially qualified on `xyz` with distinctly named
+direct-QA launchers for Battle.net and the Heroes Profile uploader. After
+successful cold launches, relaunches, game sessions, companion launches, and
+close-lifecycle tests, promote those entries to their canonical production
+names and supply their proper application icons.
 
 The pilot must:
 
@@ -41,10 +44,8 @@ The pilot must:
   and no Heroes of the Storm window is present;
 - keep Heroic and its existing entry unchanged throughout the QA period.
 
-The direct entries must be visibly labelled as QA entries. Heroic remains the
-fallback until the acceptance checks are complete and a separate decision
-resolves its remaining applications. Prefix cleanup or relocation is outside
-this decision.
+Heroic remains an explicit fallback until a separate decision resolves its
+remaining applications. Prefix cleanup or relocation is outside this decision.
 
 ## Alternatives Considered
 
@@ -64,15 +65,15 @@ this decision.
 ## Consequences
 
 - Battle.net can be launched without opening Heroic or Steam.
-- The existing prefix remains the single application-data location during QA.
+- The existing prefix remains the single application-data location.
 - The direct and Heroic paths deliberately share that prefix, so only one
   primary path may run at a time.
 - The pinned Proton release becomes a declarative dependency that must be
   updated explicitly after the launcher path is stable.
 - GameMode is not requested by these launchers while the host has no GameMode
   daemon; an ineffective preload only adds startup errors.
-- Heroic continues to consume space and maintenance attention during the QA
-  window.
+- Heroic continues to consume space and maintenance attention during the
+  fallback window.
 - Cold launch, relaunch, application updates, local time, notifications,
   companion startup, focus, pointer confinement, workspace behavior, and
   display power transitions are required acceptance checks.
@@ -81,7 +82,8 @@ this decision.
 
 - Forgejo milestone: **Launcher-independent Windows applications on xyz**
 - Issue #265 adds the reusable direct-UMU module.
-- Issue #266 adds the Battle.net and Heroes Profile QA launchers.
-- Issue #267 owns qualification against the established session behavior.
+- Issue #266 adds the initial Battle.net and Heroes Profile QA launchers.
+- Issue #267 owns qualification, production promotion, and validation against
+  the established session behavior.
 - Issue #268 decides whether Heroic remains, is disabled, or is removed after
   QA and after its other applications have replacements.

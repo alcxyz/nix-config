@@ -43,6 +43,16 @@
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
     __NV_PRIME_RENDER_OFFLOAD = "1";
   };
+  battleNetIcon = pkgs.fetchurl {
+    name = "battle-net.png";
+    url = "https://lutris.net/games/icon/battlenet.png";
+    hash = "sha256-Otx9a99ZJx++nqBj/5ljwALoFFoxRPXao3zFaZpGyao=";
+  };
+  heroesProfileIcon = pkgs.fetchurl {
+    name = "heroes-profile.png";
+    url = "https://raw.githubusercontent.com/Heroes-Profile/HeroesProfile.Uploader/f73fa675d197875237a8973c2f2a899b293b6f09/Heroesprofile.Uploader.Windows/Resources/heroesprofilelogo.png";
+    hash = "sha256-T1XhH5DmAAFvFJhD3qbwaqXIvHczbt77Wi7kPZuuo+0=";
+  };
   mailWorkspaceScript = ''
     workspace=9
     clients="$(hyprctl clients -j 2>/dev/null)"
@@ -126,14 +136,14 @@
       cgroup="$(awk -F: '$1 == "0" { print $3; exit }' "/proc/$active_pid/cgroup")"
       clients="$(hyprctl clients -j 2>/dev/null || true)"
 
-      if [[ "$cgroup" == */umu-app-battle-net-direct-qa.service ]] \
+      if [[ "$cgroup" == */umu-app-battle-net.service ]] \
         && jq -e 'type == "array"' <<<"$clients" >/dev/null 2>&1 \
         && ! jq -e 'any(.[]; .class == "steam_app_default" and .title == "Heroes of the Storm")' \
           <<<"$clients" >/dev/null; then
         # Closing Battle.net's window can leave its Wine runtime behind.
         # Stop only the direct launcher's owning cgroup, and never while a
         # Heroes window is present. All uncertain cases use normal close.
-        exec systemctl --user --no-block stop umu-app-battle-net-direct-qa.service
+        exec systemctl --user --no-block stop umu-app-battle-net.service
       fi
     fi
 
@@ -531,7 +541,7 @@ in {
         && lib.hasInfix ''hl.dsp.exec_cmd("hyprland-close-active-window")'' luaBinds
         && lib.hasInfix "bind = SUPER, W, exec, hyprland-close-active-window" legacyBinds
         && lib.hasInfix ''[[ "$active_class" == steam_app_default && "$active_title" == Battle.net ]]'' closeActiveWindowScript
-        && lib.hasInfix ''[[ "$cgroup" == */umu-app-battle-net-direct-qa.service ]]'' closeActiveWindowScript
+        && lib.hasInfix ''[[ "$cgroup" == */umu-app-battle-net.service ]]'' closeActiveWindowScript
         && lib.hasInfix ''.title == "Heroes of the Storm"'' closeActiveWindowScript
         && lib.hasInfix ''exec hyprctl dispatch killactive'' closeActiveWindowScript
         && !lib.hasInfix ''hl.bind("SUPER + W", hl.dsp.window.close())'' luaBinds
@@ -756,17 +766,19 @@ in {
   programs.umuApps = {
     enable = true;
     apps = {
-      battle-net-direct-qa = {
-        displayName = "Battle.net (Direct QA)";
-        comment = "Launch Battle.net directly through UMU; Heroic remains the QA fallback";
+      battle-net = {
+        displayName = "Battle.net";
+        comment = "Launch Battle.net directly through UMU";
+        icon = toString battleNetIcon;
         prefix = battleNetPrefix;
         executable = "${battleNetPrefix}/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net.exe";
         protonPackage = protonGe10_4;
         environment = battleNetEnvironment;
       };
-      heroes-profile-direct-qa = {
-        displayName = "Heroes Profile (Direct QA)";
+      heroes-profile = {
+        displayName = "Heroes Profile";
         comment = "Launch the Heroes Profile uploader in the Battle.net compatibility prefix";
+        icon = toString heroesProfileIcon;
         prefix = battleNetPrefix;
         executable = "${battleNetPrefix}/pfx/drive_c/users/steamuser/AppData/Local/Heroesprofile/Heroesprofile.Uploader.exe";
         protonPackage = protonGe10_4;
