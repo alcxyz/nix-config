@@ -166,6 +166,10 @@
             grep -F 'export TZ=Europe/Oslo' ${battleNetRunner}
             grep -F 'export PROTON_VERB=runinprefix' ${profileRunner}
             grep -F 'GE-Proton10-4-steamcompattool' ${profileRunner}
+            if grep -F 'gamemoderun' ${battleNetRunner} ${profileRunner}; then
+              echo "Direct Battle.net launchers must not request unavailable GameMode" >&2
+              exit 1
+            fi
             touch "$out"
           '';
 

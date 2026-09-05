@@ -622,7 +622,6 @@ in {
         executable = "${battleNetPrefix}/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net.exe";
         protonPackage = protonGe10_4;
         environment = battleNetEnvironment;
-        useGameMode = true;
       };
       heroes-profile-direct-qa = {
         displayName = "Heroes Profile (Direct QA)";
@@ -632,7 +631,6 @@ in {
         protonPackage = protonGe10_4;
         role = "companion";
         environment = battleNetEnvironment;
-        useGameMode = true;
       };
     };
   };

@@ -30,8 +30,8 @@ The pilot must:
   migrating login, application, or game data;
 - use the established Proton generation during QA so launcher migration and a
   Proton upgrade are not tested at the same time;
-- reproduce the working graphics, frame-rate, timezone, and GameMode
-  environment in declarative configuration;
+- reproduce the working graphics, frame-rate, and timezone environment in
+  declarative configuration;
 - launch companion programs in the same prefix with Proton's same-prefix
   execution mode;
 - use a user-service lifecycle so repeated primary-launch requests are
@@ -66,6 +66,8 @@ this decision.
   primary path may run at a time.
 - The pinned Proton release becomes a declarative dependency that must be
   updated explicitly after the launcher path is stable.
+- GameMode is not requested by these launchers while the host has no GameMode
+  daemon; an ineffective preload only adds startup errors.
 - Heroic continues to consume space and maintenance attention during the QA
   window.
 - Cold launch, relaunch, application updates, local time, notifications,
