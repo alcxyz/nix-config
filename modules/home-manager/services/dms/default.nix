@@ -241,6 +241,7 @@
   dankaiusagePkg = pkgs.callPackage "${plugins.aiusage}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.aiusage}/plugin.json")).version;
   };
+  danksessionPkg = inputs.danksession.packages.${pkgs.stdenv.hostPlatform.system}.danksession;
   quickshellBasePkg = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
   quickshellUnwrappedPkg = quickshellBasePkg.unwrapped.overrideAttrs (old: {
     patches =
@@ -428,6 +429,16 @@ in {
       description = "Optional base plugin_settings.json file to merge before services.dms.pluginSettings.";
     };
 
+    dankSession = {
+      enable = lib.mkEnableOption "Install DankSession for pre-release QA";
+
+      autoStart = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Start the DankSession capture daemon with the graphical session. Keep disabled during manual QA.";
+      };
+    };
+
     autoDoNotDisturb = {
       enable = lib.mkEnableOption "Automatically enable DMS Do Not Disturb while matching Hyprland applications are running";
 
@@ -588,6 +599,7 @@ in {
   imports = [
     inputs.dsearch.homeModules.default
     inputs.dankMaterialShell.homeModules.dank-material-shell
+    inputs.danksession.homeManagerModules.default
   ];
 
   config = lib.mkIf cfg.enable {
@@ -626,6 +638,12 @@ in {
     programs.dsearch = {
       enable = true;
       package = dsearchPkg;
+    };
+
+    services.dankSession = lib.mkIf cfg.dankSession.enable {
+      enable = true;
+      package = danksessionPkg;
+      autoStart = cfg.dankSession.autoStart;
     };
 
     programs.dank-material-shell = {
@@ -677,6 +695,10 @@ in {
         DankCalendar = {
           enable = !compact;
           src = plugins.dankcalendar;
+        };
+        DankSession = {
+          enable = !compact && cfg.dankSession.enable;
+          src = inputs.danksession;
         };
         DankDiskUsage = {
           enable = !compact;

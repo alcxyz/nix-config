@@ -125,6 +125,11 @@
     };
 
     dms-plugins.url = "github:alcxyz/dms-plugins/main";
+
+    danksession = {
+      url = "github:alcxyz/DankSession/dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   # ---- Outputs ----------------------------------------------------------

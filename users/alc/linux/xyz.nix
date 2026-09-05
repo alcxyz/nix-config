@@ -827,6 +827,10 @@ in {
   };
 
   services.dms.enable = true;
+  services.dms.dankSession = {
+    enable = true;
+    autoStart = false;
+  };
   services.dms.autoDoNotDisturb = {
     enable = true;
     windowMatchers = gamingWindowMatchers;
@@ -844,6 +848,14 @@ in {
     respectExternalInhibitors = true;
   };
   services.dms.pluginSettings.dankAIUsage.enabled = true;
+  services.dms.pluginSettings.dankSession = {
+    enabled = true;
+    autoRestore = false;
+    captureUnconfigured = true;
+    captureTitles = false;
+    captureInterval = 15;
+    restoreTimeout = 20;
+  };
   services.hyprlock = {
     enable = true;
     turnOffDisplaysOnLock = true;
