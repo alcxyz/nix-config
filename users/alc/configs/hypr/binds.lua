@@ -16,9 +16,8 @@ hl.bind("SUPER + B", hl.dsp.exec_cmd("zen --no-remote -profile /home/alc/.zen/al
 hl.bind("SUPER + V", hl.dsp.exec_cmd('helium --profile-directory="Profile 2"'))
 hl.bind("SUPER + X", hl.dsp.exec_cmd('helium --profile-directory="Profile 1" --remote-debugging-port=9222'))
 hl.bind("SUPER + Z", hl.dsp.exec_cmd('brave --profile-directory="Profile 1" --remote-debugging-port=9223'))
-hl.bind("SUPER + G", hl.dsp.exec_cmd("hyprland-mail-workspace"))
+hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))
 hl.bind("SUPER + F", hl.dsp.exec_cmd(file_manager))
-hl.bind("SUPER + T", hl.dsp.exec_cmd("t3code-desktop"))
 
 -- System actions.
 hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notifications open"))

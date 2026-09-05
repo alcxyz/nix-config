@@ -509,16 +509,20 @@ in {
     }
     {
       assertion =
-        lib.hasInfix ''hl.bind("SUPER + G", hl.dsp.exec_cmd("hyprland-mail-workspace"))'' luaBinds
-        && lib.hasInfix "bind = SUPER, G, exec, hyprland-mail-workspace" legacyBinds
+        lib.hasInfix ''hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))'' luaBinds
+        && lib.hasInfix "bind = SUPER, T, exec, hyprland-mail-workspace" legacyBinds
         && lib.hasInfix ''workspace=9'' mailWorkspaceScript
         && lib.hasInfix ''.class == "thunderbird" or .initialClass == "thunderbird"'' mailWorkspaceScript
         && lib.hasInfix ''exec thunderbird'' mailWorkspaceScript
+        && !lib.hasInfix ''SUPER + G'' luaBinds
+        && !lib.hasInfix ''SUPER, G'' legacyBinds
+        && !lib.hasInfix ''t3code-desktop'' luaBinds
+        && !lib.hasInfix ''t3code-desktop'' legacyBinds
         && !lib.hasInfix ''SUPER + M", hl.dsp.exec_cmd("hyprland-mail-workspace")'' luaBinds
         && !lib.hasInfix ''SUPER, M, exec, hyprland-mail-workspace'' legacyBinds
         && lib.hasInfix ''SUPER + M", hl.dsp.layout("focus")'' luaDwindleBinds
         && lib.hasInfix ''SUPER, M, layoutmsg, focus'' legacyDwindleBinds;
-      message = "Super+G must normalize Thunderbird onto its unpinned workspace 9 without displacing layout bindings.";
+      message = "Super+T must normalize Thunderbird onto its unpinned workspace 9 without displacing layout bindings or launching T3 Code.";
     }
     {
       assertion =
