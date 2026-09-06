@@ -554,10 +554,13 @@ in {
         && lib.hasInfix "bind = SUPER, G, workspace, 8" legacyBinds
         && lib.hasInfix "bind = SUPER SHIFT, G, movetoworkspace, 8" legacyBinds
         && lib.hasInfix "bind = SUPER ALT, G, movetoworkspacesilent, 8" legacyBinds
+        && lib.hasInfix ''workspace = "7"'' luaConfig
+        && lib.hasInfix ''default_name = "steam"'' luaConfig
         && lib.hasInfix ''workspace = "8"'' luaConfig
-        && lib.hasInfix ''default_name = "gaming"'' luaConfig
-        && lib.hasInfix "workspace = 8, defaultName:gaming" legacyConfig;
-      message = "Super+G must focus, move to, or silently move to the unpinned gaming workspace 8 without launching an application.";
+        && lib.hasInfix ''default_name = "battle-net"'' luaConfig
+        && lib.hasInfix "workspace = 7, defaultName:steam" legacyConfig
+        && lib.hasInfix "workspace = 8, defaultName:battle-net" legacyConfig;
+      message = "The unpinned Steam and Battle.net workspaces and Battle.net workspace shortcuts must remain declarative.";
     }
     {
       assertion =
@@ -621,10 +624,12 @@ in {
           luaBinds
           luaConfig
         ]
+        && lib.hasInfix ''name = "steam-client-workspace"'' hostLuaConfig
         && lib.hasInfix ''name = "battle-net-gaming-workspace"'' hostLuaConfig
         && lib.hasInfix ''name = "wine-desktop-gaming-workspace"'' hostLuaConfig
         && lib.hasInfix ''name = "heroes-gaming-workspace"'' hostLuaConfig
         && lib.hasInfix ''workspace = "8 silent"'' hostLuaConfig
+        && lib.hasInfix "windowrule = workspace 7 silent, match:class ^steam$, match:xwayland true" hostLegacyConfig
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true" hostLegacyConfig
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true" hostLegacyConfig
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true" hostLegacyConfig
@@ -632,7 +637,7 @@ in {
         && !lib.hasInfix ''sync_fullscreen'' hostLuaConfig
         && !lib.hasInfix ''size = "3440 1440"'' hostLuaConfig
         && !lib.hasInfix ''move = "840 1456"'' hostLuaConfig;
-      message = "Battle.net, its Wine desktop helper, and Heroes may use only static workspace-8 routing; geometry, focus, fullscreen, and pointer repairs must remain event-scoped.";
+      message = "Steam, Battle.net, its Wine desktop helper, and Heroes may use only static workspace routing; geometry, focus, fullscreen, and pointer repairs must remain event-scoped.";
     }
   ];
 
@@ -739,6 +744,7 @@ in {
       monitor = DP-1, 5120x1440@120, 0x1456, 1
       monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
       windowrule = opacity 1.0 override 1.0 override 1.0 override, match:workspace name:special:special
+      windowrule = workspace 7 silent, match:class ^steam$, match:xwayland true
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
@@ -787,9 +793,18 @@ in {
         scrolling_width = 0.5,
       })
 
-      -- Gaming applications share an unpinned workspace, not a fixed output.
-      -- This is workspace routing only: geometry, focus, fullscreen, and
-      -- pointer behavior remain outside static rules.
+      -- Launcher ecosystems use separate unpinned workspaces, not fixed
+      -- outputs. Route only the Steam client; games remain opt-in by exact
+      -- identity. Geometry, focus, fullscreen, and pointer behavior remain
+      -- outside static rules.
+      hl.window_rule({
+        name = "steam-client-workspace",
+        match = {
+          class = "^steam$",
+          xwayland = true,
+        },
+        workspace = "7 silent",
+      })
       hl.window_rule({
         name = "battle-net-gaming-workspace",
         match = {

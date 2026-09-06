@@ -98,11 +98,15 @@ hl.animation({ leaf = "specialWorkspace", enabled = false })
 hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1 })
 hl.monitor({ output = "HDMI-A-3", disabled = true })
 
--- Workspace 8 is reserved for gaming without pinning it to an output or
--- attaching application lifecycle behavior to the workspace.
+-- Launcher workspaces are named but remain unpinned to outputs. Application
+-- routing is host-specific and does not attach lifecycle behavior.
+hl.workspace_rule({
+	workspace = "7",
+	default_name = "steam",
+})
 hl.workspace_rule({
 	workspace = "8",
-	default_name = "gaming",
+	default_name = "battle-net",
 })
 
 -- Workspace 10 is reserved for responsive frontend development.
