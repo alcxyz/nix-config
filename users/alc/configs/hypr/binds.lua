@@ -17,6 +17,7 @@ hl.bind("SUPER + V", hl.dsp.exec_cmd('helium --profile-directory="Profile 2"'))
 hl.bind("SUPER + X", hl.dsp.exec_cmd('helium --profile-directory="Profile 1" --remote-debugging-port=9222'))
 hl.bind("SUPER + Z", hl.dsp.exec_cmd('brave --profile-directory="Profile 1" --remote-debugging-port=9223'))
 hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))
+hl.bind("SUPER + G", hl.dsp.focus({ workspace = 8 }))
 hl.bind("SUPER + F", hl.dsp.exec_cmd(file_manager))
 
 -- System actions.

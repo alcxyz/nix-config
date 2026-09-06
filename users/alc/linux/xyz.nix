@@ -501,6 +501,7 @@
 in {
   assertions = let
     legacyBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.conf";
+    legacyConfig = builtins.readFile "${configDir}/users/alc/configs/hypr/hyprland.conf";
     legacyDwindleBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-dwindle.conf";
     luaBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.lua";
     luaDwindleBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-dwindle.lua";
@@ -537,8 +538,6 @@ in {
         && lib.hasInfix ''.class == "thunderbird" or .initialClass == "thunderbird"'' mailWorkspaceScript
         && lib.hasInfix ''hl.dsp.exec_cmd(\"thunderbird\", { workspace = \"$workspace silent\" })'' mailWorkspaceScript
         && lib.hasInfix ''hyprctl dispatch exec "[workspace $workspace silent] thunderbird"'' mailWorkspaceScript
-        && !lib.hasInfix ''SUPER + G'' luaBinds
-        && !lib.hasInfix ''SUPER, G'' legacyBinds
         && !lib.hasInfix ''t3code-desktop'' luaBinds
         && !lib.hasInfix ''t3code-desktop'' legacyBinds
         && !lib.hasInfix ''SUPER + M", hl.dsp.exec_cmd("hyprland-mail-workspace")'' luaBinds
@@ -546,6 +545,15 @@ in {
         && lib.hasInfix ''SUPER + M", hl.dsp.layout("focus")'' luaDwindleBinds
         && lib.hasInfix ''SUPER, M, layoutmsg, focus'' legacyDwindleBinds;
       message = "Super+T must normalize Thunderbird onto its unpinned workspace 9 without displacing layout bindings or launching T3 Code.";
+    }
+    {
+      assertion =
+        lib.hasInfix ''hl.bind("SUPER + G", hl.dsp.focus({ workspace = 8 }))'' luaBinds
+        && lib.hasInfix "bind = SUPER, G, workspace, 8" legacyBinds
+        && lib.hasInfix ''workspace = "8"'' luaConfig
+        && lib.hasInfix ''default_name = "gaming"'' luaConfig
+        && lib.hasInfix "workspace = 8, defaultName:gaming" legacyConfig;
+      message = "Super+G must focus the unpinned gaming workspace 8 without launching an application.";
     }
     {
       assertion =

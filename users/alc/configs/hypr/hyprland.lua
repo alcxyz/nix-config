@@ -98,6 +98,13 @@ hl.animation({ leaf = "specialWorkspace", enabled = false })
 hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1 })
 hl.monitor({ output = "HDMI-A-3", disabled = true })
 
+-- Workspace 8 is reserved for gaming without pinning it to an output or
+-- attaching application lifecycle behavior to the workspace.
+hl.workspace_rule({
+	workspace = "8",
+	default_name = "gaming",
+})
+
 -- Workspace 10 is reserved for responsive frontend development.
 -- Keep its tiled geometry exact so breakpoint-width columns are not reduced
 -- by compositor gaps or borders.
