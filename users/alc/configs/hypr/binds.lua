@@ -26,7 +26,7 @@ hl.bind("SUPER + ALT + G", hl.dsp.window.move({ workspace = 8, follow = false })
 hl.bind("SUPER + F", hl.dsp.exec_cmd(file_manager))
 
 -- System actions.
-hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notifications open"))
+hl.bind("SUPER + A", hl.dsp.exec_cmd("dms ipc call notifications open"))
 hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("dms ipc call wallpaper next"))
 hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("dms ipc call bar toggle index 0"))
 

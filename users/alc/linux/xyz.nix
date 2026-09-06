@@ -552,17 +552,21 @@ in {
         && lib.hasInfix ''hl.bind("SUPER + ALT + V", hl.dsp.exec_cmd('helium --profile-directory="Profile 2"'))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + ALT + X", hl.dsp.exec_cmd('helium --profile-directory="Profile 1" --remote-debugging-port=9222'))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + ALT + Z", hl.dsp.exec_cmd('brave --profile-directory="Profile 1" --remote-debugging-port=9223'))'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + A", hl.dsp.exec_cmd("dms ipc call notifications open"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + V", hl.dsp.exec_cmd("dms ipc call hypr toggleOverview"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + D", hl.dsp.exec_cmd("dms ipc call notepad toggle"))'' luaBinds
         && lib.hasInfix ''bind = SUPER ALT, V, exec, $helium --profile-directory="Profile 2"'' legacyBinds
         && lib.hasInfix ''bind = SUPER ALT, X, exec, $helium --profile-directory="Profile 1" --remote-debugging-port=9222'' legacyBinds
         && lib.hasInfix ''bind = SUPER ALT, Z, exec, $brave --profile-directory="Profile 1" --remote-debugging-port=9223'' legacyBinds
+        && lib.hasInfix "bind = SUPER, A, exec, dms ipc call notifications open" legacyBinds
         && lib.hasInfix "bind = SUPER, V, exec, dms ipc call hypr toggleOverview" legacyBinds
         && lib.hasInfix "bind = SUPER, D, exec, dms ipc call notepad toggle" legacyBinds
         && !lib.hasInfix ''hl.bind("SUPER + O",'' luaBinds
         && !lib.hasInfix ''hl.bind("SUPER + N",'' luaBinds
+        && !lib.hasInfix ''hl.bind("SUPER + SHIFT + N",'' luaBinds
         && !lib.hasInfix "bind = SUPER, O," legacyBinds
-        && !lib.hasInfix "bind = SUPER, N," legacyBinds;
+        && !lib.hasInfix "bind = SUPER, N," legacyBinds
+        && !lib.hasInfix "bind = SUPER SHIFT, N," legacyBinds;
       message = "Frequent launchers and overlays must retain their one-handed Caps-as-Super keymap.";
     }
     {
