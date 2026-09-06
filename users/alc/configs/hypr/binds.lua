@@ -13,9 +13,9 @@ hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
 -- Applications.
 hl.bind("ALT + RETURN", hl.dsp.exec_cmd(term))
 hl.bind("SUPER + B", hl.dsp.exec_cmd("zen --no-remote -profile /home/alc/.zen/alcxyz"))
-hl.bind("SUPER + ALT + V", hl.dsp.exec_cmd('helium --profile-directory="Profile 2"'))
-hl.bind("SUPER + ALT + X", hl.dsp.exec_cmd('helium --profile-directory="Profile 1" --remote-debugging-port=9222'))
-hl.bind("SUPER + ALT + Z", hl.dsp.exec_cmd('brave --profile-directory="Profile 1" --remote-debugging-port=9223'))
+hl.bind("SUPER + V", hl.dsp.exec_cmd('helium --profile-directory="Profile 2"'))
+hl.bind("SUPER + X", hl.dsp.exec_cmd('helium --profile-directory="Profile 1" --remote-debugging-port=9222'))
+hl.bind("SUPER + Z", hl.dsp.exec_cmd('brave --profile-directory="Profile 1" --remote-debugging-port=9223'))
 hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))
 hl.bind("SUPER + E", hl.dsp.focus({ workspace = 7 }))
 hl.bind("SUPER + SHIFT + E", hl.dsp.window.move({ workspace = 7 }))
@@ -26,7 +26,7 @@ hl.bind("SUPER + ALT + G", hl.dsp.window.move({ workspace = 8, follow = false })
 hl.bind("SUPER + F", hl.dsp.exec_cmd(file_manager))
 
 -- System actions.
-hl.bind("SUPER + A", hl.dsp.exec_cmd("dms ipc call notifications open"))
+hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notifications open"))
 hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("dms ipc call wallpaper next"))
 hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("dms ipc call bar toggle index 0"))
 
@@ -50,7 +50,7 @@ end
 hl.bind("SUPER + W", close_active_window)
 hl.bind("SUPER + S", hl.dsp.window.float({ action = "toggle" }))
 hl.bind("SUPER + RETURN", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "toggle" }))
-hl.bind("SUPER + V", hl.dsp.exec_cmd("dms ipc call hypr toggleOverview"))
+hl.bind("SUPER + O", hl.dsp.exec_cmd("dms ipc call hypr toggleOverview"))
 
 -- Workspace navigation and movement.
 for _, key in ipairs({ "J", "down" }) do
@@ -230,7 +230,7 @@ hl.bind("F8", hl.dsp.exec_cmd("dms ipc call audio mute"), { locked = true })
 hl.bind("ALT + SHIFT + code:12", hl.dsp.exec_cmd("dms screenshot full"))
 hl.bind("ALT + SHIFT + code:13", hl.dsp.exec_cmd("dms screenshot region"))
 hl.bind("ALT + SHIFT + code:14", hl.dsp.exec_cmd("dms screenshot window"))
-hl.bind("SUPER + D", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
+hl.bind("SUPER + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
 hl.bind("ALT + SPACE", hl.dsp.exec_cmd("dropterm-toggle"))
 
 require("binds-scrolling")
