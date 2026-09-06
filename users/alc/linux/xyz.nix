@@ -549,11 +549,15 @@ in {
     {
       assertion =
         lib.hasInfix ''hl.bind("SUPER + G", hl.dsp.focus({ workspace = 8 }))'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + SHIFT + G", hl.dsp.window.move({ workspace = 8 }))'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + ALT + G", hl.dsp.window.move({ workspace = 8, follow = false }))'' luaBinds
         && lib.hasInfix "bind = SUPER, G, workspace, 8" legacyBinds
+        && lib.hasInfix "bind = SUPER SHIFT, G, movetoworkspace, 8" legacyBinds
+        && lib.hasInfix "bind = SUPER ALT, G, movetoworkspacesilent, 8" legacyBinds
         && lib.hasInfix ''workspace = "8"'' luaConfig
         && lib.hasInfix ''default_name = "gaming"'' luaConfig
         && lib.hasInfix "workspace = 8, defaultName:gaming" legacyConfig;
-      message = "Super+G must focus the unpinned gaming workspace 8 without launching an application.";
+      message = "Super+G must focus, move to, or silently move to the unpinned gaming workspace 8 without launching an application.";
     }
     {
       assertion =
