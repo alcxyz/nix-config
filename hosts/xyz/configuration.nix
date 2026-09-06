@@ -305,7 +305,10 @@
         -o atime=off \
         "$dataset"
     else
-      zfs set mountpoint="$mountpoint" "$dataset"
+      current_mountpoint="$(zfs get -H -o value mountpoint "$dataset")"
+      if [ "$current_mountpoint" != "$mountpoint" ]; then
+        zfs set mountpoint="$mountpoint" "$dataset"
+      fi
       zfs set compression=lz4 "$dataset"
       zfs set atime=off "$dataset"
     fi
