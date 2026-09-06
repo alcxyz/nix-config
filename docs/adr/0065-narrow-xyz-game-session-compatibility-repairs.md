@@ -20,22 +20,25 @@ the output-transition geometry failure remained reproducible.
 
 ## Decision
 
-Retain only four independent compatibility measures:
+Retain only five independent compatibility measures:
 
 1. Keep the 49-inch gaming output selected as XWayland's primary output, with
    an event-driven repair when the output layout changes.
 2. Use an event-scoped geometry guard for explicitly matched games. For a short
    window after session or output events, move a matching game back to the
    gaming output and recenter it only when its geometry is outside that output.
-3. Enable DMS do-not-disturb while an application from a declarative matcher
+3. Route exact Battle.net and Heroes windows silently to the unpinned gaming
+   workspace 8. This rule changes no geometry, focus, fullscreen, or pointer
+   state and does not bind the workspace to an output.
+4. Enable DMS do-not-disturb while an application from a declarative matcher
    list is running.
-4. Give the Heroic Flatpak an explicit host timezone while it remains an
+5. Give the Heroic Flatpak an explicit host timezone while it remains an
    available launcher.
 
 The geometry guard must not change focus, workspace, floating/fullscreen state,
-or pointer confinement. It must not continuously enforce window placement.
-There are no static Heroes of the Storm or Battle.net Hyprland window rules in
-this baseline.
+or pointer confinement. It must not continuously enforce window placement. The
+only static Heroes of the Storm or Battle.net rules are the exact workspace-8
+routes above.
 
 Each measure has one responsibility and must be removable without changing the
 others. New game-specific repairs require a reproduced failure and should be
