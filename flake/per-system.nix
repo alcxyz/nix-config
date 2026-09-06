@@ -192,6 +192,8 @@
         profileEntry = desktopEntries.umu-heroes-profile;
         battleNetRunner = builtins.head battleNetService.ExecStart;
         profileRunner = builtins.head profileService.ExecStart;
+        battleNetStarter = battleNetEntry.exec;
+        profileStarter = profileEntry.exec;
       in
         assert !(builtins.hasAttr "umu-app-battle-net-direct-qa" umuServices);
         assert !(builtins.hasAttr "umu-app-heroes-profile-direct-qa" umuServices);
@@ -210,6 +212,13 @@
             grep -F '"''${1:-}" = "--check-only"' ${battleNetRunner}
             grep -F 'GE-Proton10-4-steamcompattool' ${battleNetRunner}
             grep -F 'export TZ=Europe/Oslo' ${battleNetRunner}
+            grep -F 'No managed window remains; restarting the stale service' ${battleNetStarter}
+            grep -F 'same_prefix_companion_active' ${battleNetStarter}
+            grep -F 'ActiveEnterTimestampMonotonic' ${battleNetStarter}
+            if grep -F 'No managed window remains; restarting the stale service' ${profileStarter}; then
+              echo "Companion launchers must not restart a shared prefix" >&2
+              exit 1
+            fi
             grep -F 'export PROTON_VERB=runinprefix' ${profileRunner}
             grep -F 'GE-Proton10-4-steamcompattool' ${profileRunner}
             if grep -F 'gamemoderun' ${battleNetRunner} ${profileRunner}; then

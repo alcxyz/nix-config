@@ -44,6 +44,10 @@ The pilot must:
   idempotent and conflicting primary instances are refused rather than killed;
 - keep active UMU services running across Home Manager activations, applying a
   changed generated unit only on the application's next launch;
+- on an explicit primary-launch request, recover an old active service only
+  when the compositor reports that neither its configured launcher nor game
+  windows remain, its startup grace period has elapsed, and no same-prefix
+  companion service is active;
 - stop the direct Battle.net service from the normal close shortcut only when
   its exact main window is focused, that window belongs to the direct service,
   and no Heroes of the Storm window is present;

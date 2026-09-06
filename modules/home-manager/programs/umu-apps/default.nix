@@ -7,6 +7,21 @@
 }: let
   cfg = config.programs.umuApps;
 
+  windowMatcherType = lib.types.submodule {
+    options = {
+      classRegex = lib.mkOption {
+        type = lib.types.nonEmptyStr;
+        description = "Regular expression matching the managed window class.";
+      };
+
+      titleRegex = lib.mkOption {
+        type = lib.types.nonEmptyStr;
+        default = ".*";
+        description = "Regular expression matching the managed window title.";
+      };
+    };
+  };
+
   appType = lib.types.submodule ({name, ...}: {
     options = {
       displayName = lib.mkOption {
@@ -90,6 +105,23 @@
         default = true;
         description = "Whether to create an application-menu entry.";
       };
+
+      staleRecoveryWindowMatchers = lib.mkOption {
+        type = lib.types.listOf windowMatcherType;
+        default = [];
+        description = ''
+          Hyprland window matchers used by a primary application's explicit
+          launcher request. When its service has been active beyond the grace
+          period but none of these windows remain, restart the stale service.
+          An active same-prefix companion always blocks recovery.
+        '';
+      };
+
+      staleRecoveryGraceSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 30;
+        description = "Minimum primary-service age before missing-window recovery is allowed.";
+      };
     };
   });
 
@@ -121,6 +153,26 @@
   mkApplication = name: app: let
     unitName = "umu-app-${name}.service";
     prefixLock = builtins.substring 0 20 (builtins.hashString "sha256" app.prefix);
+    staleRecoveryEnabled = app.role == "primary" && app.staleRecoveryWindowMatchers != [];
+    staleRecoveryMatchers = builtins.toJSON app.staleRecoveryWindowMatchers;
+    samePrefixCompanionUnits =
+      lib.mapAttrsToList (
+        companionName: _: "umu-app-${companionName}.service"
+      ) (lib.filterAttrs (
+          companionName: companion:
+            companionName
+            != name
+            && companion.prefix == app.prefix
+            && companion.role == "companion"
+        )
+        cfg.apps);
+    samePrefixCompanionCheck =
+      lib.concatMapStrings (companionUnit: ''
+        if systemctl --user --quiet is-active ${lib.escapeShellArg companionUnit}; then
+          return 0
+        fi
+      '')
+      samePrefixCompanionUnits;
     environmentExports = lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
         variable: value: "export ${variable}=${lib.escapeShellArg value}"
@@ -210,6 +262,8 @@
     starter = pkgs.writeShellApplication {
       name = "umu-app-${name}";
       runtimeInputs = [
+        pkgs.hyprland
+        pkgs.jq
         pkgs.libnotify
         pkgs.systemd
       ];
@@ -218,8 +272,60 @@
         label=${lib.escapeShellArg app.displayName}
 
         if systemctl --user --quiet is-active "$unit"; then
-          notify-send "$label" "Already running through the direct UMU path"
-          exit 0
+          ${
+          if staleRecoveryEnabled
+          then ''
+                        clients="$(hyprctl clients -j 2>/dev/null || true)"
+                        if ! jq -e 'type == "array"' <<<"$clients" >/dev/null 2>&1; then
+                          notify-send --urgency=critical "$label" \
+                            "Already running; unable to verify its windows safely"
+                          exit 1
+                        fi
+
+                        if jq -e --argjson matchers ${lib.escapeShellArg staleRecoveryMatchers} '
+                          any(.[];
+                            . as $client
+                            | any($matchers[];
+                                . as $matcher
+                                | (($client.class // "") | test($matcher.classRegex))
+                                and (($client.title // "") | test($matcher.titleRegex))))
+                        ' <<<"$clients" >/dev/null; then
+                          notify-send "$label" "Already running through the direct UMU path"
+                          exit 0
+                        fi
+
+                        same_prefix_companion_active() {
+            ${samePrefixCompanionCheck}              return 1
+                        }
+
+                        if same_prefix_companion_active; then
+                          notify-send --urgency=critical "$label" \
+                            "No managed window is visible, but a same-prefix companion is active; refusing recovery"
+                          exit 1
+                        fi
+
+                        entered_us="$(systemctl --user show "$unit" \
+                          --property=ActiveEnterTimestampMonotonic --value)"
+                        now_seconds="$(cut -d. -f1 /proc/uptime)"
+                        if [[ "$entered_us" =~ ^[0-9]+$ ]] \
+                          && ((now_seconds * 1000000 - entered_us < ${toString app.staleRecoveryGraceSeconds} * 1000000)); then
+                          notify-send "$label" "Still starting; waiting for its window"
+                          exit 0
+                        fi
+
+                        notify-send "$label" "No managed window remains; restarting the stale service"
+                        if ! systemctl --user restart "$unit"; then
+                          notify-send --urgency=critical "$label" \
+                            "Stale-service recovery failed; Heroic remains available as the QA fallback"
+                          exit 1
+                        fi
+                        exit 0
+          ''
+          else ''
+            notify-send "$label" "Already running through the direct UMU path"
+            exit 0
+          ''
+        }
         fi
 
         if ! error="$(${lib.getExe runner} --check-only 2>&1)"; then
@@ -272,6 +378,12 @@ in {
       {
         assertion = matchingPrefixContracts;
         message = "programs.umuApps entries sharing a prefix must use the same Proton and environment contract";
+      }
+      {
+        assertion = lib.all (
+          app: app.role == "primary" || app.staleRecoveryWindowMatchers == []
+        ) (lib.attrValues cfg.apps);
+        message = "programs.umuApps stale window recovery is supported only for primary applications";
       }
     ];
 

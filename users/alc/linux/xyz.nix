@@ -795,6 +795,16 @@ in {
         executable = "${battleNetPrefix}/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net.exe";
         protonPackage = protonGe10_4;
         environment = battleNetEnvironment;
+        staleRecoveryWindowMatchers = [
+          {
+            classRegex = "^steam_app_default$";
+            titleRegex = "^Battle[.]net$";
+          }
+          {
+            classRegex = "^steam_app_default$";
+            titleRegex = "^Heroes of the Storm$";
+          }
+        ];
       };
       heroes-profile = {
         displayName = "Heroes Profile";
