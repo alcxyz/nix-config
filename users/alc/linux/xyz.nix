@@ -24,6 +24,7 @@
     matcher
     // {
       restoreMonitor = "DP-1";
+      snapFullHeight = true;
     })
   gamingWindowMatchers;
   protonGe10_4 =
@@ -269,6 +270,7 @@
           address="$(jq -r '.address' <<<"$client_json")"
           monitor_id="$(jq -r '.monitor' <<<"$client_json")"
           restore_monitor="$(jq -r '._guardRestoreMonitor' <<<"$client_json")"
+          snap_full_height="$(jq -r '._guardSnapFullHeight' <<<"$client_json")"
           monitor_json="$(
             if [[ "$restore_monitor" == null ]]; then
               jq -ce --argjson id "$monitor_id" \
@@ -298,17 +300,34 @@
             continue
           fi
 
-          if ((
+          repair_description=""
+          if [[ "$snap_full_height" == true ]] && ((
+            height == monitor_height
+            && y != monitor_y
+            && y >= monitor_y - tolerance
+            && y <= monitor_y + tolerance
+            && x >= monitor_x - tolerance
+            && x + width <= monitor_x + monitor_width + tolerance
+          )); then
+            # XWayland can restore a monitor-height borderless game a few
+            # pixels above the output after DPMS. Preserve its horizontal
+            # placement and size; correct only the exposed vertical edge.
+            target_x=$x
+            target_y=$monitor_y
+            repair_description="Snapped full-height watched window"
+          elif ((
             x >= monitor_x - tolerance
             && y >= monitor_y - tolerance
             && x + width <= monitor_x + monitor_width + tolerance
             && y + height <= monitor_y + monitor_height + tolerance
           )); then
             continue
+          else
+            target_x=$((monitor_x + ((monitor_width - width) / 2)))
+            target_y=$((monitor_y + ((monitor_height - height) / 2)))
+            repair_description="Recentered watched window"
           fi
 
-          target_x=$((monitor_x + ((monitor_width - width) / 2)))
-          target_y=$((monitor_y + ((monitor_height - height) / 2)))
           if [[ "$provider" == lua ]]; then
             move_result="$(hyprctl eval \
               "hl.dispatch(hl.dsp.window.move({ x = $target_x, y = $target_y, window = \"address:$address\" }))" \
@@ -318,7 +337,7 @@
               "exact $target_x $target_y,address:$address" 2>&1 || true)"
           fi
           if [[ "$move_result" == ok* ]]; then
-            echo "Recentered watched window $address on monitor $monitor_id"
+            echo "$repair_description $address on monitor $monitor_id"
           else
             echo "Failed to recenter watched window $address: $move_result" >&2
           fi
@@ -342,7 +361,10 @@
               and .floating == true
               and ((.fullscreen // 0) == 0)
             ) |
-            . + { _guardRestoreMonitor: ($policy.restoreMonitor // null) }
+            . + {
+              _guardRestoreMonitor: ($policy.restoreMonitor // null),
+              _guardSnapFullHeight: ($policy.snapFullHeight // false)
+            }
           ' <<<"$clients_json"
         )
       }
