@@ -548,7 +548,13 @@ in {
     }
     {
       assertion =
-        lib.hasInfix ''hl.bind("SUPER + G", hl.dsp.focus({ workspace = 8 }))'' luaBinds
+        lib.hasInfix ''hl.bind("SUPER + P", hl.dsp.focus({ workspace = 7 }))'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + SHIFT + P", hl.dsp.window.move({ workspace = 7 }))'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + ALT + P", hl.dsp.window.move({ workspace = 7, follow = false }))'' luaBinds
+        && lib.hasInfix "bind = SUPER, P, workspace, 7" legacyBinds
+        && lib.hasInfix "bind = SUPER SHIFT, P, movetoworkspace, 7" legacyBinds
+        && lib.hasInfix "bind = SUPER ALT, P, movetoworkspacesilent, 7" legacyBinds
+        && lib.hasInfix ''hl.bind("SUPER + G", hl.dsp.focus({ workspace = 8 }))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + SHIFT + G", hl.dsp.window.move({ workspace = 8 }))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + ALT + G", hl.dsp.window.move({ workspace = 8, follow = false }))'' luaBinds
         && lib.hasInfix "bind = SUPER, G, workspace, 8" legacyBinds
@@ -560,7 +566,7 @@ in {
         && lib.hasInfix ''default_name = "battle-net"'' luaConfig
         && lib.hasInfix "workspace = 7, defaultName:steam" legacyConfig
         && lib.hasInfix "workspace = 8, defaultName:battle-net" legacyConfig;
-      message = "The unpinned Steam and Battle.net workspaces and Battle.net workspace shortcuts must remain declarative.";
+      message = "The unpinned Steam and Battle.net workspaces and their complete letter-based workspace shortcuts must remain declarative.";
     }
     {
       assertion =
