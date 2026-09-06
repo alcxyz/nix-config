@@ -622,15 +622,17 @@ in {
           luaConfig
         ]
         && lib.hasInfix ''name = "battle-net-gaming-workspace"'' hostLuaConfig
+        && lib.hasInfix ''name = "wine-desktop-gaming-workspace"'' hostLuaConfig
         && lib.hasInfix ''name = "heroes-gaming-workspace"'' hostLuaConfig
         && lib.hasInfix ''workspace = "8 silent"'' hostLuaConfig
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true" hostLegacyConfig
+        && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true" hostLegacyConfig
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true" hostLegacyConfig
         && !lib.hasInfix ''suppress_event = "fullscreen"'' hostLuaConfig
         && !lib.hasInfix ''sync_fullscreen'' hostLuaConfig
         && !lib.hasInfix ''size = "3440 1440"'' hostLuaConfig
         && !lib.hasInfix ''move = "840 1456"'' hostLuaConfig;
-      message = "Battle.net and Heroes may use only static workspace-8 routing; geometry, focus, fullscreen, and pointer repairs must remain event-scoped.";
+      message = "Battle.net, its Wine desktop helper, and Heroes may use only static workspace-8 routing; geometry, focus, fullscreen, and pointer repairs must remain event-scoped.";
     }
   ];
 
@@ -738,6 +740,7 @@ in {
       monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
       windowrule = opacity 1.0 override 1.0 override 1.0 override, match:workspace name:special:special
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true
+      windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
@@ -792,6 +795,15 @@ in {
         match = {
           class = "^steam_app_default$",
           title = "^Battle[.]net$",
+          xwayland = true,
+        },
+        workspace = "8 silent",
+      })
+      hl.window_rule({
+        name = "wine-desktop-gaming-workspace",
+        match = {
+          class = "^steam_app_default$",
+          title = "^$",
           xwayland = true,
         },
         workspace = "8 silent",
