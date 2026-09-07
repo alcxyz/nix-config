@@ -110,6 +110,9 @@ in
     home.file.".claude/CLAUDE.md".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";
 
+    home.file.".codex/AGENTS.md".source =
+      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/AGENTS.md";
+
     home.file."AGENTS.md".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/nix/nix-secrets/shared/AGENTS.md";
 

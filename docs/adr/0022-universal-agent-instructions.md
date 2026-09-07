@@ -21,6 +21,11 @@ Maintain a universal `AGENTS.md` file as the source of truth for all agent
 conventions, deployed to `~/AGENTS.md` via home-manager. Keep `CLAUDE.md`
 as a parallel copy with Claude-specific additions.
 
+Codex loads global instructions from `~/.codex/AGENTS.md`, not from the home
+directory ancestor of a Git checkout. Home Manager also links that path to
+`~/AGENTS.md`, preserving one canonical source. This covers the default Codex
+home; custom `CODEX_HOME` profiles need an equivalent link.
+
 ### File structure
 
 ```

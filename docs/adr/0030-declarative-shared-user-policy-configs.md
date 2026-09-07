@@ -117,7 +117,8 @@ the proper secret-management flow.
 ### Agent instructions
 
 - canonical source files live in `nix-secrets/shared/`
-- Home Manager deploys them to `~/AGENTS.md` and `~/.claude/CLAUDE.md`
+- Home Manager deploys them to `~/AGENTS.md` and `~/.claude/CLAUDE.md`, with
+  `~/.codex/AGENTS.md` linked to the canonical `~/AGENTS.md`
 - `check-agent-sync` enforces the allowed compatibility delta
 
 ### Shared LLM config
