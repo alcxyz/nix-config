@@ -40,3 +40,19 @@ This makes custom packages available as `pkgs.<name>` throughout all modules, in
 - Adding a new custom package to the config requires changes in two repos: add the derivation to nix-packages, then add the name to the overlay whitelist in `flake.nix`, then update `flake.lock`.
 - If a whitelisted package name does not exist in nix-packages for a given system, evaluation fails loudly at the overlay level.
 - Do not use `inputs.nix-packages.overlays.default` — only the filtered individual extraction is intentional.
+
+## September 2026 follow-through
+
+The audit found duplicate deployment implementations and reusable package code
+outside the intended package boundary. Implementation remains tracked in
+Forgejo:
+
+- [Consolidate the generic deployment implementation](https://git.alc.xyz/alcxyz/nix-packages/issues/322)
+- [Restore reusable package ownership](https://git.alc.xyz/alcxyz/nix-packages/issues/323)
+- [Validate candidate packages in the consumer context](https://git.alc.xyz/alcxyz/nix-config/issues/275)
+
+[ADR-0067](0067-explicit-consumer-and-platform-validation.md) proposes explicit
+platform and consumer checks. The current filtered implementation silently
+omits absent exported names, so the fail-loud consequence described above is
+not yet fully enforced; the supported-platform and consumer checks must make
+required-package failures explicit.
