@@ -9,6 +9,9 @@
   ...
 }: let
   cfg = config.services.forge-mirror-audit;
+  githubPrimaryRepositoriesFile = assert lib.assertMsg (cfg.githubPrimaryRepositories != null)
+  "services.forge-mirror-audit.githubPrimaryRepositories must be explicitly set from repository policy.";
+    pkgs.writeText "forge-mirror-github-primary-repos" (lib.concatStringsSep "\n" cfg.githubPrimaryRepositories + "\n");
 in {
   options.services.forge-mirror-audit = {
     enable = lib.mkEnableOption "forge-mirror Forgejo/GitHub drift audit";
@@ -30,6 +33,18 @@ in {
       type = lib.types.str;
       default = "http://git.local";
       description = "Base URL for the Forgejo API.";
+    };
+
+    githubPrimaryRepositories = lib.mkOption {
+      type = lib.types.nullOr (lib.types.listOf lib.types.str);
+      default = null;
+      description = ''
+        Repository names excluded from Forgejo-primary mirroring and drift
+        checks. Supply the same repository policy inventory used by interactive
+        forge-mirror commands. An explicit empty list is valid when no
+        repositories are excluded.
+      '';
+      example = ["public-app" "upstream-fork"];
     };
 
     credentials = {
@@ -127,6 +142,7 @@ in {
           export GITHUB_MIRROR_PAT="$(cat ${config.sops.secrets.forge_mirror_github_token.path})"
           export CODEBERG_MIRROR_PAT_FILE="${config.sops.secrets.forge_mirror_codeberg_token.path}"
           export FORGEJO_URL=${lib.escapeShellArg cfg.forgejoUrl}
+          export FORGE_MIRROR_GITHUB_PRIMARY_REPOS_FILE=${githubPrimaryRepositoriesFile}
           exec ${pkgs.forge-mirror}/bin/forge-mirror audit
         '';
 
