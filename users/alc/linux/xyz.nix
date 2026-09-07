@@ -986,7 +986,7 @@ in {
   services.dms.enable = true;
   services.dms.dankSession = {
     enable = true;
-    autoStart = false;
+    autoStart = true;
   };
   services.dms.autoDoNotDisturb = {
     enable = true;
@@ -1007,12 +1007,8 @@ in {
   services.dms.pluginSettings.dankAIUsage.enabled = true;
   services.dms.pluginSettings.dankSession = {
     enabled = true;
-    autoRestore = false;
-    # Manual QA is restricted to explicitly configured application rules.
-    captureUnconfigured = false;
-    captureTitles = false;
-    captureInterval = 15;
-    restoreTimeout = 20;
+    # Saving, restoration, frequency, and exclusions are user-owned in the UI.
+    # Do not reset them to QA defaults during Home Manager activation.
   };
   services.hyprlock = {
     enable = true;
