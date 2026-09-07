@@ -1,7 +1,8 @@
 # ADR-0063: Split replaceable bulk data from secure storage
 
-**Status:** Accepted, staged
+**Status:** Accepted, implemented
 **Date:** 2026-08-29
+**Amended:** 2026-09-07
 **Applies to:** `hosts/xyz`, `tank`, mergerfs, ZFS, Plex, qBittorrent, Stash, NFS
 
 ## Context
@@ -12,11 +13,12 @@ independent XFS filesystems. The remaining ZFS pool is a two-disk mirror, while
 the XFS branches prioritize usable capacity and independent file recovery over
 whole-tree redundancy.
 
-`tank/media` contains replaceable Plex and qBittorrent content. `tank/downloads`
-and `tank/games` no longer contain material data. Keeping those paths on the
-encrypted mirror spends redundant capacity on content that can be acquired
-again, while the much larger Stash tree already follows the bulk-storage
-policy.
+`tank/media` contains replaceable Plex and qBittorrent content, while
+`tank/downloads` no longer contains material data. At the original bulk
+cutover, `tank/games` was also empty and was therefore omitted from the new
+bulk hierarchy. Keeping the media and download paths on the encrypted mirror
+spends redundant capacity on content that can be acquired again, while the
+much larger Stash tree already follows the bulk-storage policy.
 
 qBittorrent records absolute save paths below both `/tank/media` and
 `/tank/stash`, and Plex serves `/tank/media/plex`. Changing those paths would
@@ -36,6 +38,11 @@ Copy the existing ZFS media and download trees into the mergerfs hierarchy
 while preserving their absolute paths, ownership, ACLs, extended attributes,
 timestamps, sparse files, and any intra-tree hard links. Remove the empty games
 path and its export rather than recreating it on bulk storage.
+
+The games decision was subsequently revisited: `secure/games` is now a live,
+populated dataset on the encrypted mirror and is mounted at `/games`. It is not
+part of the `/tank` bulk namespace or the retired bulk rollback set. Retain it
+when destroying the former `secure/media` and `secure/downloads` datasets.
 
 The mergerfs layer remains intentionally non-redundant and does not become a
 backup. Loss of one branch loses the files placed on that branch while leaving
@@ -64,10 +71,10 @@ XFS pair. The secure ZFS mirror remains owned by `xyz`.
 3. Verify the copy at content and metadata levels before changing mounts.
 4. Preserve the exact `/tank/media`, `/tank/downloads`, and `/tank/stash`
    paths across the cutover.
-5. Keep the former ZFS datasets unmounted, read-only, and available for a
-   bounded rollback window.
+5. Keep the former media and downloads ZFS datasets unmounted, read-only, and
+   available for a bounded rollback window.
 6. Recheck qBittorrent content and validate Plex, Stash, NFS, and ordinary file
-   access before destroying the former datasets.
+   access before destroying only the former media and downloads datasets.
 7. Authorize dataset destruction and the later pool rename separately.
 
 Detailed device identities, state evidence, copy commands, confirmation
@@ -101,6 +108,8 @@ changes, backup changes, and rollback changes into one fault domain.
 
 - `/tank` consistently means replaceable, capacity-oriented bulk data.
 - The secure mirror becomes smaller and semantically focused.
+- `secure/games` remains mirrored and encrypted at `/games`, outside the bulk
+  namespace.
 - qBittorrent and Plex retain their current absolute content paths.
 - Bulk-data loss remains possible after a single XFS branch failure and must be
   accepted for every directory placed there.
