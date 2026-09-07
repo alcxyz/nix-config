@@ -38,6 +38,9 @@ fi
 EOF
 
 chmod +x "$TMP/kubectl" "$TMP/ip"
+for fixture in "$TMP/kubectl" "$TMP/ip"; do
+  sed -i "1s|.*|#!$(command -v bash)|" "$fixture"
+done
 
 export KUBECTL_BIN="$TMP/kubectl"
 export IP_BIN="$TMP/ip"
@@ -49,7 +52,7 @@ export MOCK_ROUTE_INTERFACE=eno1
 export MOCK_ROUTE_SOURCE=192.168.1.16
 
 run_audit() {
-  "$AUDIT" \
+  bash "$AUDIT" \
     --node nex \
     --expected-node-ip 192.168.1.16 \
     --expected-interface eno1 \
