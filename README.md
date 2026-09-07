@@ -4,23 +4,22 @@ Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, serv
 
 ## Hosts
 
-| Host | System | Role |
-|------|--------|------|
-| xyz | x86_64-linux | Main workstation. Hyprland desktop, GPU passthrough, Docker services, ZFS pools |
-| nux | x86_64-linux | Server. Offloads builds to xyz; mac can orchestrate deploys while xyz is unavailable |
-| nex | x86_64-linux | NUC k3s server + stable workload host |
-| xev | x86_64-linux | k3s server + stable workload host with Longhorn storage and primary Forgejo runner capacity |
-| xps | x86_64-linux | Dell XPS workstation; Kubernetes participation deferred until wired networking is reliable |
-| rpi0 | aarch64-linux | Rock Pi 4. Primary host-native DNS/Pi-hole; kept outside k3s |
-| rpi1 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance and backup host-native DNS/Pi-hole |
-| rpi2 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
-| rpi3 | aarch64-linux | Raspberry Pi 3B+ direct-DRM Moonlight appliance |
-| mac | aarch64-darwin | MacBook. nix-darwin + Home Manager + bootstrapped aarch64 Linux builder |
+The host names, systems, and role identifiers below match
+[`inventory.nix`](inventory.nix). Role defaults are defined in its `roles` map.
 
-Planned hosts are documented before they are added to inventory:
-
-- family gaming laptop - lower-trust remotely supported desktop for a separate
-  family user, with Heroic Launcher and isolated Netbird access.
+| Host | System | Inventory role |
+|------|--------|----------------|
+| mac | aarch64-darwin | mac |
+| madsil | x86_64-linux | family-gaming |
+| nex | x86_64-linux | nuc |
+| nux | x86_64-linux | nuc |
+| rpi0 | aarch64-linux | embedded |
+| rpi1 | aarch64-linux | embedded |
+| rpi2 | aarch64-linux | embedded |
+| rpi3 | aarch64-linux | embedded |
+| xev | x86_64-linux | k8s-worker |
+| xps | x86_64-linux | laptop-workstation |
+| xyz | x86_64-linux | workstation |
 
 See [ADR-0044](docs/adr/0044-host-inventory-role-model-for-new-machines.md),
 [ADR-0045](docs/adr/0045-xev-and-xps-kubernetes-node-onboarding.md), and
@@ -52,12 +51,17 @@ only when another machine needs temporary access.
 
 ```
 inventory.nix                      # Canonical host facts: system, platform, role, k8s role
-flake.nix                          # Entry point — overlays, configs derived from inventory
+flake.nix                          # Inputs and flake-parts entry point
+flake/
+  core.nix                         # Inventory, supported systems, shared package instances
+  pkgs.nix                         # Package overlays and local package overrides
+  hosts/                           # NixOS, nix-darwin, and Home Manager output construction
+  per-system.nix                   # Development shell, packages, and checks
 justfile                           # Operator command surface for checks, rebuilds, deploys
 .pre-commit-config.yaml            # Local repository hygiene hooks
 scripts/checks/                    # Shell checks used by pre-commit and flake checks
 hosts/
-  {xyz,nux,nex,xev,xps,rpi0,rpi1,rpi2,rpi3}/
+  {xyz,nux,nex,xev,xps,madsil,rpi0,rpi1,rpi2,rpi3}/
     configuration.nix              # Host-specific NixOS config
     hardware-configuration.nix     # Generated hardware config
   mac/
@@ -94,10 +98,9 @@ modules/
       hyprland/                    # Hyprland + GTK theming
       foot/                        # Foot terminal
       rclone/cloud-sync.nix        # Google Drive + Dropbox sync
-      wofi/                        # App launcher
     services/
-      documents/                   # File organizer + Paperless ingest (cross-platform)
-      dms/                         # DankMaterialShell greeter
+      paperflow/                   # File organizer + Paperless ingest (cross-platform)
+      dms/                         # DankMaterialShell desktop shell
     secrets/
       ssh-keys.nix                 # SSH key deployment via sops
 users/alc/
@@ -112,6 +115,7 @@ users/alc/
   darwin/
     mac.nix                        # macOS-specific HM config
   configs/                         # Dotfiles symlinked into place
+users/madsil/                      # Family user Home Manager profile and dotfiles
 ```
 
 ## How it fits together
@@ -135,9 +139,9 @@ users/alc/linux/xyz.nix
 ```
 
 **Inventory** (`inventory.nix`) is the source of truth for host architecture,
-platform, machine role, package role, future workspace profile, and k8s role.
-`flake.nix`, NixOS modules, and Home Manager modules consume inventory data
-instead of carrying separate host-role maps.
+platform, machine role, package role, workspace profiles, and k8s role.
+The `flake/` output modules, NixOS modules, and Home Manager modules consume
+inventory data instead of carrying separate host-role maps.
 
 Inventory is also projected into a typed module namespace as `alc.host` for
 both NixOS and Home Manager. Modules can read host facts without recreating
@@ -155,8 +159,9 @@ config.alc.host.k8s.taints
 The projection is intentionally derived from `inventory.nix`; it is not a
 second source of truth.
 
-**Package sets** (`pkgsets.nix`) define role-based groups. Host files should use
-the package set selected by inventory instead of hard-coding the role:
+**Package sets** ([`modules/shared/pkgsets.nix`](modules/shared/pkgsets.nix))
+define role-based groups. Host files should use the package set selected by
+inventory instead of hard-coding the role:
 
 ```nix
 home.packages = pkgsets.home.${hostRole.homePackageSet};
@@ -180,20 +185,13 @@ reported and left untouched.
 
 | Repo | Purpose |
 |------|---------|
-| [nix-packages](https://github.com/alcxyz/nix-packages) | Custom Nix packages. Selectively imported via overlay in `flake.nix` |
-| [nix-secrets](https://github.com/alcxyz/nix-secrets) (private) | Private infrastructure material: SOPS data, runbooks, and private integration modules |
+| [nix-packages](https://git.alc.xyz/alcxyz/nix-packages) | Custom Nix packages. Selectively imported via `flake/pkgs.nix` |
+| [nix-secrets](https://git.alc.xyz/alcxyz/nix-secrets) (private) | Private infrastructure material: SOPS data, runbooks, and private integration modules |
 
-**nix-packages** is a catalog — packages are built per-platform and only the ones listed in the flake overlay are pulled into nix-config:
-
-```nix
-overlays = [
-  (_final: _prev:
-    let np = nix-packages.packages.${system};
-        wanted = [ "ndrop" "helium" "t3code" "claude-code" ... ];
-    in nixpkgs.lib.filterAttrs (n: _: builtins.elem n wanted) np
-  )
-];
-```
+**nix-packages** exports per-platform packages. The filtered overlay in
+[`flake/pkgs.nix`](flake/pkgs.nix) selects the packages consumed here, alongside
+explicit local overrides and additional package inputs. Role-based package
+selection belongs to [`modules/shared/pkgsets.nix`](modules/shared/pkgsets.nix).
 
 **nix-secrets** stores private infrastructure material consumed by this flake,
 including age-encrypted YAML files decrypted at build/activation time via
@@ -285,9 +283,10 @@ The flake also exposes repository checks, so `nix flake check --keep-going`
 remains the direct CI-style command. Its configuration evaluation check forces
 all exported NixOS systems, Home Manager activation packages, and Darwin
 systems, including aliases and non-native platforms. This validates their
-derivations without building complete host closures. The current formatting check is scoped to
-the files owned by the ADR-0043 implementation until the historical repository
-formatting baseline is normalized.
+derivations without building complete host closures.
+
+Formatter commands share the selection in `treefmt.toml`: all Nix files and
+explicitly listed shell paths. Historical Nix formatting has been normalized.
 
 ## Cluster access
 

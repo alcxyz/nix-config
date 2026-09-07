@@ -85,7 +85,7 @@ Kernel rollout should still be staged:
 Do not use a raw host reboot for schedulable k3s nodes during routine
 maintenance. The helper is responsible for cordon/drain, Longhorn-aware health
 checks, storage-detach gates, boot identity verification, workload settle
-checks, and uncordon. See ADR-0036 for the full node power lifecycle.
+checks, and uncordon. See [ADR-0068](0068-k8s-node-power-lifecycle.md) for the full node power lifecycle.
 
 ## Amendment: Linux 7.1 on `xyz`
 
