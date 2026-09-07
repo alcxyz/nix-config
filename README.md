@@ -56,7 +56,8 @@ flake/
   core.nix                         # Inventory, supported systems, shared package instances
   pkgs.nix                         # Package overlays and local package overrides
   hosts/                           # NixOS, nix-darwin, and Home Manager output construction
-  per-system.nix                   # Development shell, packages, and checks
+  per-system.nix                   # Development shell, packages, and check composition
+  checks/                          # Explicit check definitions and evaluation helpers
 justfile                           # Operator command surface for checks, rebuilds, deploys
 .pre-commit-config.yaml            # Local repository hygiene hooks
 scripts/checks/                    # Shell checks used by pre-commit and flake checks

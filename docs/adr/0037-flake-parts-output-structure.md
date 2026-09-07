@@ -34,7 +34,8 @@ flake-parts modules under `flake/`:
 - `flake/hosts/` exports NixOS, Darwin, and Home Manager configurations from
   `inventory.nix` through separate flake-parts modules and the `flake` option
 - `flake/per-system.nix` owns per-system exports such as dev shells and packages
-  through the flake-parts `perSystem` option
+  through the flake-parts `perSystem` option; its checks are explicitly imported
+  from `flake/checks/default.nix`, which owns check definitions and their source helper
 
 `inventory.nix` remains the single source of truth for host metadata. `flake-parts`
 does not replace inventory; it gives the flake a standard structure for exporting
@@ -65,7 +66,13 @@ Top-level `flake.nix` is smaller and mostly declarative.
 Repo-level flake data is now visible as typed flake-parts options under `alc`
 instead of being passed as loose `_module.args`.
 
-Future per-system outputs should be added in `flake/per-system.nix`.
+Future per-system output wiring belongs in `flake/per-system.nix`. Check
+definitions belong in `flake/checks/default.nix`, with specialized evaluation
+helpers alongside it. Dependencies are passed explicitly to this ordinary Nix
+function; it does not introduce another module loader.
+
+This extraction implements [issue #287](https://git.alc.xyz/alcxyz/nix-config/issues/287)
+and preserves the exported checks, package sets, and development shells.
 
 Future host output changes should be made under `flake/hosts/`, with host facts
 still added or changed in `inventory.nix`.
