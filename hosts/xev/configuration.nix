@@ -32,6 +32,18 @@
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   hardware.nvidia.enable = true;
 
+  # ADR-0062/0064 preparation only; bulk mounts and consumers are activated
+  # together with the separately reviewed physical ownership cutover.
+  boot.supportedFilesystems = ["xfs"];
+  environment.systemPackages = with pkgs; [
+    acl
+    attr
+    mergerfs
+    mergerfs-tools
+    psmisc
+    xfsprogs
+  ];
+
   # Randomly assigned ZFS host ID; it is stable and is not derived from a
   # hardware identifier. Merely enabling ZFS support does not import a pool.
   networking.hostId = "abe0d0f3";

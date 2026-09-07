@@ -49,6 +49,11 @@ the bulk-storage migration.
 
 ## Stages
 
+Stages 1 and 2 are complete: the renamed secure pool is live on `xyz`, the
+observation window has closed, and the retired media/downloads datasets have
+been destroyed. `secure/games` remains live at `/games`. The remaining work
+starts at stage 3 and is detailed in the amended ADR-0062.
+
 1. Complete the guarded `tank` to `secure` rename on `xyz`, including unlock,
    mount, NFS, monitoring, backup, and rollback validation.
 2. Observe the clean bulk/secure split while retaining the retired read-only
