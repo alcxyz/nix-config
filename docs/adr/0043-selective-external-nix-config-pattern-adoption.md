@@ -136,3 +136,18 @@ host metadata before broader host refactors.
 
 Explicit imports remain the default for host composition. This keeps security,
 storage, k3s, and remote-management behavior reviewable from each host file.
+
+## September 2026 follow-through
+
+The [repository audit milestone](https://git.alc.xyz/alcxyz/nix-config/milestone/283)
+tracks the remaining implementation work. The accepted direction above remains
+in force; these links do not imply completion.
+
+- [Complete configuration evaluation and PR coverage](https://git.alc.xyz/alcxyz/nix-config/issues/274)
+- [Extract large host and streaming modules](https://git.alc.xyz/alcxyz/nix-config/issues/279)
+- [Separate role composition from host hardware policy](https://git.alc.xyz/alcxyz/nix-config/issues/280)
+- [Unify formatting scope](https://git.alc.xyz/alcxyz/nix-config/issues/281)
+- [Reconcile documentation and obsolete configuration](https://git.alc.xyz/alcxyz/nix-config/issues/282)
+
+[ADR-0067](0067-explicit-consumer-and-platform-validation.md) proposes the
+producer/consumer validation contract for the new gate.
