@@ -21,6 +21,11 @@ in {
       touch "$out"
     '';
 
+  forge-mirror-audit-contract = assert import ./forge-mirror-audit-test.nix {inherit lib;};
+    pkgs.runCommand "forge-mirror-audit-contract" {} ''
+      touch "$out"
+    '';
+
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
   '';
