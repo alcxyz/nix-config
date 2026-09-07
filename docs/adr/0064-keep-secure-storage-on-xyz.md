@@ -2,6 +2,7 @@
 
 **Status:** Accepted, staged
 **Date:** 2026-08-31
+**Amended:** 2026-09-07
 **Applies to:** `hosts/xyz`, `hosts/xev`, secure ZFS storage, bulk storage, media services, Kubernetes backup recovery
 **Amends:** ADR-0052, ADR-0062, ADR-0063
 
@@ -25,6 +26,10 @@ by `xyz`. Rename the pool from its historical `tank` name to `secure` and move
 its live hierarchy from `/tank` to `/secure` as the remaining stage of
 ADR-0063. Preserve `/vault` as a convenience link to `/secure/vault`.
 
+Retain the subsequently restored `secure/games` dataset on `xyz`, mounted at
+`/games` for application compatibility. This explicit path is outside the
+`/tank` bulk namespace and does not become part of the XFS ownership unit.
+
 Move only the two independent XFS bulk branches and their mergerfs `/tank`
 namespace to `xev`. Move qBittorrent, Stash, and Plex beside that bulk storage
 in separate application-state stages. During any intermediate remote-service
@@ -46,8 +51,8 @@ the bulk-storage migration.
 
 1. Complete the guarded `tank` to `secure` rename on `xyz`, including unlock,
    mount, NFS, monitoring, backup, and rollback validation.
-2. Observe the clean `/tank` and `/secure` split while retaining the retired
-   read-only bulk datasets for the ADR-0063 rollback window.
+2. Observe the clean bulk/secure split while retaining the retired read-only
+   media and downloads datasets for the ADR-0063 rollback window.
 3. Prepare `xev` for only the XFS branches, mergerfs mount, NFS ownership, and
    bulk-storage health monitoring.
 4. Move the complete XFS bulk ownership unit with a bounded rollback to `xyz`.
