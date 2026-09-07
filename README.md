@@ -282,7 +282,10 @@ the Nix filesystem has less than 15% free, and only after validating every
 current profile closure. `just gc [host]` remains the explicit override.
 
 The flake also exposes repository checks, so `nix flake check --keep-going`
-remains the direct CI-style command. The current formatting check is scoped to
+remains the direct CI-style command. Its configuration evaluation check forces
+all exported NixOS systems, Home Manager activation packages, and Darwin
+systems, including aliases and non-native platforms. This validates their
+derivations without building complete host closures. The current formatting check is scoped to
 the files owned by the ADR-0043 implementation until the historical repository
 formatting baseline is normalized.
 

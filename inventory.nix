@@ -84,7 +84,7 @@
       system = "x86_64-linux";
       platform = "nixos";
       role = "workstation";
-      k8sRole = "agent";
+      k8sRole = null;
       configuration = ./hosts/xyz/configuration.nix;
       osIcon = "";
     };

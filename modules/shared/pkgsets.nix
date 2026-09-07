@@ -245,10 +245,10 @@ in rec {
         claude-code
         codex-cli
         codex-app-server
-        jean
         t3code
       ]
       ++ lib.optionals stdenv.hostPlatform.isLinux [
+        jean
         herdr
       ];
 

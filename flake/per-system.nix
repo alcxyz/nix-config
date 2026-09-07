@@ -95,6 +95,12 @@
     };
 
     checks = {
+      configuration-evaluation = (import ./checks/configurations.nix {inherit self pkgs;}).configuration-evaluation;
+      configuration-evaluation-contract = assert import ./checks/configurations-test.nix;
+        pkgs.runCommand "configuration-evaluation-contract" {} ''
+          touch "$out"
+        '';
+
       nix-format = mkRepoCheck "nix-format-check" [pkgs.alejandra] ''
         alejandra --check ${lib.escapeShellArgs formattedNixFiles}
       '';
@@ -129,12 +135,26 @@
         grep -F 'kept advancing while the lock was published' "$publisher"
       '';
 
+      check-claude-settings-merge = mkRepoCheck "check-claude-settings-merge" [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
+        shellcheck modules/home-manager/programs/ai/merge-settings.sh
+        bash scripts/checks/test-claude-settings-merge.sh
+      '';
+
+      check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
+        shellcheck modules/home-manager/workspace/workspace-sync.sh
+        bash scripts/checks/test-workspace-sync.sh
+      '';
+
       check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''
         bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
       '';
 
       check-k8s-node-reboot-network-audits = mkRepoCheck "check-k8s-node-reboot-network-audits" [pkgs.bash pkgs.jq] ''
         bash scripts/checks/test-k8s-node-reboot-network-audits.sh
+      '';
+
+      check-k8s-node-network-audit = mkRepoCheck "check-k8s-node-network-audit" [pkgs.bash pkgs.jq] ''
+        bash scripts/checks/test-k8s-node-network-audit.sh
       '';
 
       k8s-api-vip-source-routing-contract = let
