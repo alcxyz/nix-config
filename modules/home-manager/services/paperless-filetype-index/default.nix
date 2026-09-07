@@ -1,10 +1,12 @@
 # modules/home-manager/services/paperless-filetype-index/default.nix
-{ config, lib, pkgs, ... }:
-
-let
-  cfg = config.services.paperless-filetype-index;
-in
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  cfg = config.services.paperless-filetype-index;
+in {
   options.services.paperless-filetype-index = {
     enable = lib.mkEnableOption "Paperless filetype index builder";
 
@@ -46,7 +48,7 @@ in
         Persistent = true;
         Unit = "paperless-filetype-index.service";
       };
-      Install.WantedBy = [ "timers.target" ];
+      Install.WantedBy = ["timers.target"];
     };
   };
 }

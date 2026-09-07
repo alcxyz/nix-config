@@ -7,12 +7,9 @@
   inputs,
   lib,
   ...
-}:
-
-let
+}: let
   cfg = config.services.forge-mirror-audit;
-in
-{
+in {
   options.services.forge-mirror-audit = {
     enable = lib.mkEnableOption "forge-mirror Forgejo/GitHub drift audit";
 
@@ -110,8 +107,8 @@ in
 
     systemd.services.forge-mirror-audit = {
       description = "Audit Forgejo-first drift against GitHub mirrors";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
+      after = ["network-online.target"];
+      wants = ["network-online.target"];
 
       serviceConfig = {
         Type = "oneshot";
@@ -141,7 +138,7 @@ in
 
     systemd.timers.forge-mirror-audit = {
       description = "Timer for forge-mirror drift audit";
-      wantedBy = [ "timers.target" ];
+      wantedBy = ["timers.target"];
       timerConfig = {
         OnCalendar = cfg.schedule;
         Persistent = true;

@@ -2,9 +2,12 @@
 #
 # Shared Wayland compositor settings: cursor theme, GTK config, and
 # environment variables needed by both Hyprland and Niri sessions.
-{ config, lib, pkgs, ... }:
-
-let
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
   cfg = config.programs.wayland-common;
 in {
   options.programs.wayland-common = {
@@ -12,7 +15,6 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-
     home.pointerCursor = {
       gtk.enable = true;
       enable = true;
@@ -31,6 +33,5 @@ in {
     };
 
     home.sessionVariables.NIXOS_OZONE_WL = "1";
-
   };
 }

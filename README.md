@@ -234,10 +234,10 @@ just
 # Run the normal QA gate
 just check
 
-# Run targeted format and shell checks
+# Check all Nix files and the shell paths selected by treefmt.toml
 just fmt-check
 
-# Run local pre-commit hooks on staged files
+# Run local pre-commit hooks (formatting checks cover the whole repository)
 just pre-commit
 
 # Run repository hygiene checks

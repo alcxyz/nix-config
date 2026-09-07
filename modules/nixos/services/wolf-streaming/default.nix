@@ -95,7 +95,7 @@
   in
     pkgs.runCommand "wolf-${name}-image-context" {nativeBuildInputs = [pkgs.gnutar];} ''
       mkdir -p "$out"
-      cp ${./browser-image/Dockerfile.nix} "$out/Dockerfile"
+      cp ${./browser-image/Dockerfile.nix-store} "$out/Dockerfile"
       cp ${./browser-image/startup.sh} "$out/startup.sh"
       cp ${./browser-image/desktop-session.sh} "$out/desktop-session.sh"
       cp ${./browser-image/kdeconnect-session.sh} "$out/kdeconnect-session.sh"

@@ -8,12 +8,9 @@
   inputs,
   lib,
   ...
-}:
-
-let
+}: let
   cfg = config.services.forge-mirror-pull;
-in
-{
+in {
   options.services.forge-mirror-pull = {
     enable = lib.mkEnableOption "forge-mirror GitHub→Forgejo periodic pull sync";
 
@@ -105,8 +102,8 @@ in
 
     systemd.services.forge-mirror-pull = {
       description = "Fetch from GitHub and push to Forgejo (forge-mirror pull)";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
+      after = ["network-online.target"];
+      wants = ["network-online.target"];
 
       serviceConfig = {
         Type = "oneshot";
@@ -136,7 +133,7 @@ in
 
     systemd.timers.forge-mirror-pull = {
       description = "Timer for forge-mirror GitHub→Forgejo sync";
-      wantedBy = [ "timers.target" ];
+      wantedBy = ["timers.target"];
       timerConfig = {
         OnCalendar = cfg.schedule;
         Persistent = true;

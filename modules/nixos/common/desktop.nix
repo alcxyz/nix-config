@@ -8,8 +8,7 @@
   configDir,
   lib,
   ...
-}:
-let
+}: let
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -21,10 +20,9 @@ let
   hyprPluginPkgs = inputs.hyprland-plugins.packages.${pkgs.stdenv.hostPlatform.system};
   hyprPluginDir = pkgs.symlinkJoin {
     name = "hyprland-plugins";
-    paths = with hyprPluginPkgs; [ ];
+    paths = with hyprPluginPkgs; [];
   };
-in
-{
+in {
   # ==================== Users ====================
   users.users.${username} = {
     extraGroups = [
@@ -92,7 +90,7 @@ in
   boot.supportedFilesystems.ntfs = true;
 
   # ==================== Emulation (for aarch64 remote builds) ====================
-  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+  boot.binfmt.emulatedSystems = ["aarch64-linux"];
 
   # ==================== Hardware ====================
   hardware.nvidia.enable = true;
@@ -134,8 +132,8 @@ in
 
   systemd.services.gpu-display-guard = {
     description = "Verify the display compositor is pinned to the AMD iGPU";
-    requiredBy = [ "greetd.service" ];
-    before = [ "greetd.service" ];
+    requiredBy = ["greetd.service"];
+    before = ["greetd.service"];
     serviceConfig.Type = "oneshot";
     script = ''
       set -euo pipefail
@@ -180,16 +178,16 @@ in
   };
 
   /*
-    programs.dankMaterialShell.greeter = {
-      enable = true;
-      compositor.name = "hyprland";
-      configHome = "/home/${username}";
-      logs = {
-        save = true;
-        path = "/tmp/dms-greeter.log";
-      };
-      quickshell.package = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  programs.dankMaterialShell.greeter = {
+    enable = true;
+    compositor.name = "hyprland";
+    configHome = "/home/${username}";
+    logs = {
+      save = true;
+      path = "/tmp/dms-greeter.log";
     };
+    quickshell.package = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  };
   */
 
   programs.niri.enable = true;
@@ -212,8 +210,8 @@ in
 
   xdg.portal = {
     enable = true;
-    extraPortals = with pkgs; [ xdg-desktop-portal-gtk ];
-    config.common.default = [ "gtk" ];
+    extraPortals = with pkgs; [xdg-desktop-portal-gtk];
+    config.common.default = ["gtk"];
     config.hyprland.default = [
       "hyprland"
       "gtk"

@@ -99,6 +99,14 @@ Do not adopt:
 - impermanence as a default posture
 - a wholesale directory restructure
 
+## Formatting follow-up
+
+[Issue #281](https://git.alc.xyz/alcxyz/nix-config/issues/281) consolidates
+formatter selection in `treefmt.toml`. `just fmt`, `just fmt-check`, the
+pre-commit formatting hook, and the flake formatting checks consume that same
+configuration. All Nix files are covered; shell coverage remains explicitly
+listed. Historical formatting is normalized separately from behavior changes.
+
 ## Alternatives Considered
 
 **Copy the external structure directly** - rejected. It would replace explicit

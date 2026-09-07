@@ -1,7 +1,11 @@
-{ config, lib, pkgs, inputs, ... }:
-
-with lib;
-let
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
+with lib; let
   cfg = config.secrets.ssh;
   secretsFile = "${inputs.nix-secrets}/secrets.yaml";
 in {

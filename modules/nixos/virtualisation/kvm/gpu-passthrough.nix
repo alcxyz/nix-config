@@ -3,11 +3,14 @@
 # Dynamic GPU passthrough for a dedicated VM.
 # On VM start: stops GPU containers, unbinds nvidia, binds vfio-pci.
 # On VM stop:  unbinds vfio-pci, reloads nvidia, restarts containers.
-{ config, pkgs, lib, username, ... }:
-
-with lib;
-
-let
+{
+  config,
+  pkgs,
+  lib,
+  username,
+  ...
+}:
+with lib; let
   cfg = config.virtualisation.kvm.gpu-passthrough;
 
   qemuHook = pkgs.writeShellScript "gpu-passthrough-hook" ''
@@ -25,12 +28,14 @@ let
     stop_gpu_consumers() {
       log "stopping GPU consumer containers..."
       ${concatMapStringsSep "\n      " (service: ''
-        systemctl stop ${escapeShellArg service} || true'') cfg.gpuSystemdServices}
+      systemctl stop ${escapeShellArg service} || true'')
+    cfg.gpuSystemdServices}
 
       ${concatMapStringsSep "\n      " (stack: ''
-        if [ -d "${stack}" ]; then
-          ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" down --timeout 30 || true
-        fi'') cfg.gpuContainerStacks}
+      if [ -d "${stack}" ]; then
+        ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" down --timeout 30 || true
+      fi'')
+    cfg.gpuContainerStacks}
 
       # Wait for nvidia users to release
       local attempts=0
@@ -55,18 +60,20 @@ let
       modprobe vfio-pci
 
       ${concatMapStringsSep "\n      " (addr: ''
-        if [ -e /sys/bus/pci/devices/${addr}/driver ]; then
-          echo "${addr}" > /sys/bus/pci/devices/${addr}/driver/unbind 2>/dev/null || true
-        fi
-        echo "vfio-pci" > /sys/bus/pci/devices/${addr}/driver_override
-        echo "${addr}" > /sys/bus/pci/drivers/vfio-pci/bind 2>/dev/null || true'') cfg.gpuPciAddresses}
+      if [ -e /sys/bus/pci/devices/${addr}/driver ]; then
+        echo "${addr}" > /sys/bus/pci/devices/${addr}/driver/unbind 2>/dev/null || true
+      fi
+      echo "vfio-pci" > /sys/bus/pci/devices/${addr}/driver_override
+      echo "${addr}" > /sys/bus/pci/drivers/vfio-pci/bind 2>/dev/null || true'')
+    cfg.gpuPciAddresses}
     }
 
     unbind_vfio() {
       log "unbinding GPU from vfio-pci..."
       ${concatMapStringsSep "\n      " (addr: ''
-        echo "${addr}" > /sys/bus/pci/drivers/vfio-pci/unbind 2>/dev/null || true
-        echo "" > /sys/bus/pci/devices/${addr}/driver_override'') cfg.gpuPciAddresses}
+      echo "${addr}" > /sys/bus/pci/drivers/vfio-pci/unbind 2>/dev/null || true
+      echo "" > /sys/bus/pci/devices/${addr}/driver_override'')
+    cfg.gpuPciAddresses}
 
       log "rescanning PCI bus..."
       echo 1 > /sys/bus/pci/rescan
@@ -88,12 +95,14 @@ let
     start_gpu_consumers() {
       log "restarting GPU consumer containers..."
       ${concatMapStringsSep "\n      " (service: ''
-        systemctl start ${escapeShellArg service} || true'') cfg.gpuSystemdServices}
+      systemctl start ${escapeShellArg service} || true'')
+    cfg.gpuSystemdServices}
 
       ${concatMapStringsSep "\n      " (stack: ''
-        if [ -d "${stack}" ]; then
-          ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" up -d || true
-        fi'') cfg.gpuContainerStacks}
+      if [ -d "${stack}" ]; then
+        ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" up -d || true
+      fi'')
+    cfg.gpuContainerStacks}
     }
 
     case "$OPERATION/$SUB_OPERATION" in
@@ -113,9 +122,7 @@ let
         ;;
     esac
   '';
-
-in
-{
+in {
   options.virtualisation.kvm.gpu-passthrough = {
     enable = mkEnableOption "Dynamic GPU passthrough for a VM";
 
@@ -127,7 +134,7 @@ in
 
     gpuPciAddresses = mkOption {
       type = types.listOf types.str;
-      default = [ "0000:01:00.0" "0000:01:00.1" ];
+      default = ["0000:01:00.0" "0000:01:00.1"];
       description = "PCI bus addresses of the GPU (and audio) devices.";
     };
 
@@ -146,10 +153,10 @@ in
 
   config = mkIf cfg.enable {
     # IOMMU must be enabled for passthrough
-    boot.kernelParams = [ "amd_iommu=on" "iommu=pt" ];
+    boot.kernelParams = ["amd_iommu=on" "iommu=pt"];
 
     # vfio modules available (but idle — no IDs assigned at boot)
-    boot.kernelModules = [ "vfio" "vfio_iommu_type1" "vfio_pci" ];
+    boot.kernelModules = ["vfio" "vfio_iommu_type1" "vfio_pci"];
 
     boot.extraModprobeConfig = ''
       options kvm_amd nested=1
@@ -162,7 +169,7 @@ in
     };
 
     # Looking Glass shared memory + packages
-    environment.systemPackages = [ pkgs.looking-glass-client ];
+    environment.systemPackages = [pkgs.looking-glass-client];
 
     systemd.tmpfiles.rules = [
       "f /dev/shm/looking-glass 0660 ${username} kvm -"

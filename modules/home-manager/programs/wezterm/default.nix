@@ -11,13 +11,16 @@ with lib; let
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
   xonshPackage = pkgs.xonsh-with-direnv or pkgs.xonsh;
-  defaultShellProgram = {
-    bash = "${pkgs.bashInteractive}/bin/bash";
-    nu = "${pkgs.nushell}/bin/nu";
-    nushell = "${pkgs.nushell}/bin/nu";
-    xonsh = "${xonshPackage}/bin/xonsh";
-    zsh = "${pkgs.zsh}/bin/zsh";
-  }.${config.alc.shell.default};
+  defaultShellProgram =
+    {
+      bash = "${pkgs.bashInteractive}/bin/bash";
+      nu = "${pkgs.nushell}/bin/nu";
+      nushell = "${pkgs.nushell}/bin/nu";
+      xonsh = "${xonshPackage}/bin/xonsh";
+      zsh = "${pkgs.zsh}/bin/zsh";
+    }.${
+      config.alc.shell.default
+    };
 
   # Define a color scheme based on the nix-colors palette
   paletteColorScheme = {

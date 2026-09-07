@@ -1,31 +1,36 @@
 # modules/nixos/services/nfs/default.nix
-{ config, lib, pkgs, username, ... }:
-
-with lib;
-
-let
+{
+  config,
+  lib,
+  pkgs,
+  username,
+  ...
+}:
+with lib; let
   cfg = config.services.nfs.managed;
 
   # Build export lines — one per share per allowed client
-  exportLines = concatMapStringsSep "\n" (s:
-    let
-      exportOptions = concatStringsSep "," (
-        [
-          "rw"
-          "nohide"
-          "insecure"
-          "no_subtree_check"
-          "all_squash"
-          "anonuid=${toString s.anonuid}"
-          "anongid=${toString s.anongid}"
-        ]
-        ++ optional (s.fsid != null) "fsid=${toString s.fsid}"
-      );
-      clients = concatMapStringsSep " " (ip:
-        "${ip}(${exportOptions})"
-      ) (cfg.allowedClients ++ s.allowedClients);
-    in "${s.path}  ${clients}"
-  ) cfg.shares;
+  exportLines =
+    concatMapStringsSep "\n" (
+      s: let
+        exportOptions = concatStringsSep "," (
+          [
+            "rw"
+            "nohide"
+            "insecure"
+            "no_subtree_check"
+            "all_squash"
+            "anonuid=${toString s.anonuid}"
+            "anongid=${toString s.anongid}"
+          ]
+          ++ optional (s.fsid != null) "fsid=${toString s.fsid}"
+        );
+        clients = concatMapStringsSep " " (
+          ip: "${ip}(${exportOptions})"
+        ) (cfg.allowedClients ++ s.allowedClients);
+      in "${s.path}  ${clients}"
+    )
+    cfg.shares;
 
   explicitFsids = filter (fsid: fsid != null) (map (share: share.fsid) cfg.shares);
 
@@ -46,16 +51,16 @@ let
     <service-group>
       <name replace-wildcards="yes">%h NFS</name>
       ${concatMapStringsSep "\n    " (s: ''
-    <service>
-        <name replace-wildcards="yes">%h NFS ${s.path}</name>
-        <type>_nfs._tcp</type>
-        <port>2049</port>
-        <txt-record>path=${s.path}</txt-record>
-      </service>'') cfg.shares}
+      <service>
+          <name replace-wildcards="yes">%h NFS ${s.path}</name>
+          <type>_nfs._tcp</type>
+          <port>2049</port>
+          <txt-record>path=${s.path}</txt-record>
+        </service>'')
+    cfg.shares}
     </service-group>
   '';
-in
-{
+in {
   options.services.nfs.managed = {
     enable = mkEnableOption "NFS file sharing with Avahi discovery";
 
@@ -116,12 +121,16 @@ in
     };
 
     # Firewall — only allow NFS/RPC discovery from whitelisted clients.
-    networking.firewall.extraCommands = concatMapStringsSep "\n" (ip:
-      concatMapStringsSep "\n" (port: ''
-        iptables -A nixos-fw -p tcp --dport ${toString port} -s ${ip} -j nixos-fw-accept
-        iptables -A nixos-fw -p udp --dport ${toString port} -s ${ip} -j nixos-fw-accept
-      '') firewallPorts
-    ) allowedFirewallClients;
+    networking.firewall.extraCommands =
+      concatMapStringsSep "\n" (
+        ip:
+          concatMapStringsSep "\n" (port: ''
+            iptables -A nixos-fw -p tcp --dport ${toString port} -s ${ip} -j nixos-fw-accept
+            iptables -A nixos-fw -p udp --dport ${toString port} -s ${ip} -j nixos-fw-accept
+          '')
+          firewallPorts
+      )
+      allowedFirewallClients;
 
     # Avahi for mDNS/Bonjour discovery
     services.avahi = {
@@ -136,7 +145,7 @@ in
     };
 
     # Wait for storage mounts before serving their paths.
-    systemd.services.nfs-server.after = [ "zfs-mount.service" ];
+    systemd.services.nfs-server.after = ["zfs-mount.service"];
     systemd.services.nfs-server.unitConfig.RequiresMountsFor = map (share: share.path) cfg.shares;
   };
 }
