@@ -17,71 +17,6 @@
         ${command}
         touch "$out"
       '';
-
-    formattedNixFiles = [
-      "inventory.nix"
-      "flake/per-system.nix"
-      "flake/pkgs.nix"
-      "flake/hosts/lib.nix"
-      "hosts/madsil/configuration.nix"
-      "hosts/madsil/hardware-configuration.nix"
-      "hosts/mac/configuration.nix"
-      "hosts/nex/configuration.nix"
-      "hosts/nux/configuration.nix"
-      "hosts/rpi0/configuration.nix"
-      "hosts/rpi1/configuration.nix"
-      "hosts/rpi2/configuration.nix"
-      "hosts/rpi3/configuration.nix"
-      "hosts/xev/configuration.nix"
-      "hosts/xps/configuration.nix"
-      "hosts/xps/hardware-configuration.nix"
-      "hosts/xyz/configuration.nix"
-      "modules/home-manager/programs/stashdb-pop/default.nix"
-      "modules/home-manager/programs/moonlight-endpoints/default.nix"
-      "modules/home-manager/programs/ssh/default.nix"
-      "modules/home-manager/programs/umu-apps/default.nix"
-      "modules/nixos/common/default.nix"
-      "modules/nixos/common/distributed-build-client.nix"
-      "modules/nixos/common/pkgsets.nix"
-      "modules/nixos/common/server.nix"
-      "modules/nixos/profiles/nixbox-client/default.nix"
-      "modules/nixos/profiles/nixbox-direct-client/default.nix"
-      "modules/nixos/profiles/raspberry-pi-3-direct-client/default.nix"
-      "modules/home-manager/services/waynergy/default.nix"
-      "modules/home-manager/services/dms/default.nix"
-      "modules/nixos/common/ssh-keys.nix"
-      "modules/nixos/services/flatpak/default.nix"
-      "modules/nixos/services/heroic-sideload/default.nix"
-      "modules/nixos/services/k8s-api-vip/default.nix"
-      "modules/nixos/services/wolf-streaming/default.nix"
-      "modules/nixos/hardware/openzfs-7-1.nix"
-      "modules/nixos/virtualisation/k3s/default.nix"
-      "modules/nixos/virtualisation/longhorn-prereqs/default.nix"
-      "modules/shared/host-metadata.nix"
-      "modules/shared/pkgsets.nix"
-      "packages/k8s-node-reboot/default.nix"
-      "packages/nix-gc-maintenance/default.nix"
-      "packages/ffmpeg-v4l2-request/default.nix"
-      "packages/nix-deploy/default.nix"
-      "packages/nixbox-plymouth-theme/default.nix"
-      "packages/nixbox-session-splash/default.nix"
-      "users/alc/common.nix"
-      "users/alc/darwin/mac.nix"
-      "users/alc/linux/madsil.nix"
-      "users/alc/linux/common.nix"
-      "users/alc/linux/nex.nix"
-      "users/alc/linux/nux.nix"
-      "users/alc/linux/operator.nix"
-      "users/alc/linux/rpi0.nix"
-      "users/alc/linux/embedded.nix"
-      "users/alc/linux/rpi1.nix"
-      "users/alc/linux/rpi2.nix"
-      "users/alc/linux/rpi3.nix"
-      "users/alc/linux/xev.nix"
-      "users/alc/linux/xps.nix"
-      "users/alc/linux/xyz.nix"
-      "users/madsil/linux/madsil.nix"
-    ];
   in {
     devShells.default = pkgs.mkShell {
       nativeBuildInputs = with pkgs; [
@@ -101,16 +36,16 @@
           touch "$out"
         '';
 
-      nix-format = mkRepoCheck "nix-format-check" [pkgs.alejandra] ''
-        alejandra --check ${lib.escapeShellArgs formattedNixFiles}
+      nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
+        treefmt --ci --formatters nix
       '';
 
       check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
         shellcheck scripts/checks/*.sh scripts/ci/verify-ai-package-stack.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
       '';
 
-      check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.shfmt] ''
-        shfmt -d -i 2 -ci scripts/checks/*.sh scripts/ci/verify-ai-package-stack.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
+      check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.treefmt pkgs.shfmt] ''
+        treefmt --ci --formatters shell
       '';
 
       ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.gnugrep] ''

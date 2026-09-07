@@ -1,11 +1,11 @@
 repos:
   - repo: local
     hooks:
-      - id: alejandra
-        name: alejandra
-        entry: nix develop -c alejandra --check
+      - id: treefmt
+        name: treefmt
+        entry: nix develop -c treefmt --ci
         language: system
-        types_or: [nix]
+        pass_filenames: false
       - id: repository-hygiene
         name: repository hygiene
         entry: nix develop -c scripts/checks/forbid-submodules.sh

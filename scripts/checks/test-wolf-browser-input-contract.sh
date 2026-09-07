@@ -69,7 +69,7 @@ if grep -Fq 'test-xi2' "$POINTER_BRIDGE"; then
 fi
 if grep -R -E -q 'LD_PRELOAD|libkdeconnect-scroll-throttle' \
   "$DESKTOP_SESSION" "$SESSION" "$BROWSER_IMAGE/Dockerfile" \
-  "$BROWSER_IMAGE/Dockerfile.nix" "$WOLF_MODULE"; then
+  "$BROWSER_IMAGE/Dockerfile.nix-store" "$WOLF_MODULE"; then
   fail 'KDE Connect button interception was reintroduced'
 fi
 
@@ -79,7 +79,7 @@ grep -Fq '/opt/gow/kdeconnect-session.sh &' "$DESKTOP_SESSION" ||
   fail 'desktop session does not launch the input supervisor'
 grep -Fq 'GetConnectionUnixProcessID' "$SESSION" ||
   fail 'input supervisor does not verify the KDE Connect D-Bus owner PID'
-for dockerfile in "$BROWSER_IMAGE/Dockerfile" "$BROWSER_IMAGE/Dockerfile.nix"; do
+for dockerfile in "$BROWSER_IMAGE/Dockerfile" "$BROWSER_IMAGE/Dockerfile.nix-store"; do
   grep -Fq 'COPY --chmod=0755 kdeconnect-session.sh /opt/gow/kdeconnect-session.sh' "$dockerfile" ||
     fail "$(basename "$dockerfile") does not install the input supervisor"
 done
