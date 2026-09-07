@@ -53,6 +53,12 @@ k3s roles are semantic inventory values:
 The k3s module translates those semantic roles into implementation details and
 asserts that explicit host overrides do not contradict inventory intent.
 
+The NixOS configuration builder also asserts that actual service enablement
+agrees with inventory membership, including hosts that do not import the
+optional k3s module. A retired membership must be removed from inventory as
+well as the host configuration. This closes the drift reported in
+[#276](https://git.alc.xyz/alcxyz/nix-config/issues/276).
+
 ## Tracking Issues
 
 1. [#27](https://git.alc.xyz/alcxyz/nix-config/issues/27) Introduce host inventory as source of truth.

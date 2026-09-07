@@ -19,6 +19,14 @@ in {
             [
               inputs.nixpkgs.nixosModules.readOnlyPkgs
               {nixpkgs.pkgs = pkgsFor.${hostAttrs.system};}
+              ({config, ...}: {
+                assertions = [
+                  {
+                    assertion = config.services.k3s.enable == ((hostAttrs.k8sRole or null) != null);
+                    message = "${hostName}: k3s enablement must agree with inventory membership.";
+                  }
+                ];
+              })
               hostAttrs.configuration
               inputs.nix-secrets.nixosModules.beszelAgentDefaults
               inputs.nix-secrets.nixosModules.forgejoActionsRunnerDefaults
