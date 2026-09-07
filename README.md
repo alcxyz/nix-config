@@ -101,8 +101,6 @@ modules/
     services/
       paperflow/                   # File organizer + Paperless ingest (cross-platform)
       dms/                         # DankMaterialShell desktop shell
-    secrets/
-      ssh-keys.nix                 # SSH key deployment via sops
 users/alc/
   common.nix                       # Shared Home Manager config (all platforms)
   linux/
