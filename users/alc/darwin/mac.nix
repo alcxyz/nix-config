@@ -101,13 +101,6 @@ in {
     nxsw = "sudo /run/current-system/sw/bin/darwin-rebuild switch --flake .#mac";
   };
 
-  # Deploy SSH key pair for macOS
-  #secrets.ssh.keyPair = {
-  #  enable = true;
-  #  baseName = "id_ed25519";
-  #  forceRefresh = false;
-  #};
-
   programs.bash.profileExtra = ''
     if [ -e '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' ]; then
       . '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'

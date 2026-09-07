@@ -65,7 +65,6 @@ in
       "${configDir}/modules/home-manager/programs/ssh/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
       "${configDir}/modules/shared/host-metadata.nix"
-      #../../modules/home-manager/secrets/ssh-keys.nix
     ];
 
     # ==================== Home Manager Core Settings ====================

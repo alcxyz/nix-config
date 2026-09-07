@@ -17,10 +17,9 @@
   amdDisplayPciId = "1002:13C0";
   amdDisplayDrmDevice = "/dev/dri/amd-display-card";
 
-  hyprPluginPkgs = inputs.hyprland-plugins.packages.${pkgs.stdenv.hostPlatform.system};
   hyprPluginDir = pkgs.symlinkJoin {
     name = "hyprland-plugins";
-    paths = with hyprPluginPkgs; [];
+    paths = [];
   };
 in {
   # ==================== Users ====================
