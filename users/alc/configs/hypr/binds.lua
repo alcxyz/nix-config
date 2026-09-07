@@ -227,9 +227,10 @@ hl.bind("F9", hl.dsp.exec_cmd("dms ipc call audio decrement 3"), { locked = true
 hl.bind("F8", hl.dsp.exec_cmd("dms ipc call audio mute"), { locked = true })
 
 -- Screenshots and quick tools.
-hl.bind("ALT + SHIFT + code:12", hl.dsp.exec_cmd("dms screenshot full"))
-hl.bind("ALT + SHIFT + code:13", hl.dsp.exec_cmd("dms screenshot region"))
-hl.bind("ALT + SHIFT + code:14", hl.dsp.exec_cmd("dms screenshot window"))
+-- Keep screenshots away from Alt+Shift language switching and browser tabs.
+hl.bind("SUPER + P", hl.dsp.exec_cmd("dms screenshot region"), { description = "Screenshot region" })
+hl.bind("SUPER + SHIFT + P", hl.dsp.exec_cmd("dms screenshot full"), { description = "Screenshot full" })
+hl.bind("SUPER + CTRL + P", hl.dsp.exec_cmd("dms screenshot window"), { description = "Screenshot window" })
 hl.bind("SUPER + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
 hl.bind("ALT + SPACE", hl.dsp.exec_cmd("dropterm-toggle"))
 
