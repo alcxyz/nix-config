@@ -5,8 +5,7 @@
   pkgs,
   hostRole,
   ...
-}:
-let
+}: let
   cfg = config.programs.workspace;
   allRepos = inputs.nix-secrets.repoInventory.workspaceRepos;
   hasSelectedProfile = repo: builtins.any (profile: builtins.elem profile cfg.profiles) repo.profiles;
@@ -47,8 +46,7 @@ let
       exec bash ${./workspace-sync.sh} ${lib.escapeShellArg cfg.root} ${workspaceManifest} "$@"
     '';
   };
-in
-{
+in {
   options.programs.workspace = {
     enable = lib.mkEnableOption "declarative source workspace bootstrap";
 
@@ -97,9 +95,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ workspaceSync ];
+    home.packages = [workspaceSync];
 
-    home.activation.workspaceDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.workspaceDirs = lib.hm.dag.entryAfter ["writeBoundary"] ''
       mkdir -p "${cfg.root}"
       ${lib.concatMapStringsSep "\n" (dir: "mkdir -p \"${cfg.root}/${dir}\"") dirs}
     '';

@@ -1,14 +1,16 @@
 # modules/home-manager/services/paperflow/default.nix
-{ config, lib, pkgs, inputs, ... }:
-
-with lib;
-
-let
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
+with lib; let
   cfg = config.services.paperflow;
   isDarwin = pkgs.stdenv.isDarwin;
   paperflowPkg = inputs.paperflow.packages.${pkgs.stdenv.hostPlatform.system}.default;
-in
-{
+in {
   options.services.paperflow = {
     enable = mkEnableOption "Paperflow document organizer and Paperless ingestion";
 
@@ -19,7 +21,7 @@ in
     };
 
     ingest = mkOption {
-      type = types.enum [ "directory" "api" "none" ];
+      type = types.enum ["directory" "api" "none"];
       default = "none";
       description = "Ingestion method: directory, api, or none.";
     };
@@ -45,7 +47,7 @@ in
 
   config = mkIf cfg.enable (mkMerge [
     {
-      home.packages = [ paperflowPkg ];
+      home.packages = [paperflowPkg];
     }
 
     # ---- Linux (systemd) ----
@@ -53,28 +55,35 @@ in
       systemd.user.services.paperflow = {
         Unit = {
           Description = "Paperflow document organizer";
-          After = [ "network-online.target" ];
-          Wants = [ "network-online.target" ];
+          After = ["network-online.target"];
+          Wants = ["network-online.target"];
         };
         Service = {
           Type = "simple";
           ExecStart = builtins.concatStringsSep " " ([
-            "${paperflowPkg}/bin/paperflow"
-            "watch"
-            "--watch" cfg.watchDir
-            "--ingest" cfg.ingest
-          ] ++ optionals (cfg.ingest == "directory") [
-            "--ingest-dir" cfg.ingestDir
-          ] ++ optionals (cfg.ingest == "api") [
-            "--paperless-url" cfg.paperlessUrl
-            "--paperless-token-file" cfg.paperlessTokenFile
-          ]);
+              "${paperflowPkg}/bin/paperflow"
+              "watch"
+              "--watch"
+              cfg.watchDir
+              "--ingest"
+              cfg.ingest
+            ]
+            ++ optionals (cfg.ingest == "directory") [
+              "--ingest-dir"
+              cfg.ingestDir
+            ]
+            ++ optionals (cfg.ingest == "api") [
+              "--paperless-url"
+              cfg.paperlessUrl
+              "--paperless-token-file"
+              cfg.paperlessTokenFile
+            ]);
           Restart = "on-failure";
           RestartSec = "5s";
           StandardOutput = "journal";
           StandardError = "journal";
         };
-        Install.WantedBy = [ "default.target" ];
+        Install.WantedBy = ["default.target"];
       };
     })
 
@@ -83,15 +92,21 @@ in
       launchd.agents.paperflow = {
         enable = true;
         config = {
-          ProgramArguments = [
-            "${paperflowPkg}/bin/paperflow"
-            "watch"
-            "--watch" cfg.watchDir
-            "--ingest" cfg.ingest
-          ] ++ optionals (cfg.ingest == "api") [
-            "--paperless-url" cfg.paperlessUrl
-            "--paperless-token-file" cfg.paperlessTokenFile
-          ];
+          ProgramArguments =
+            [
+              "${paperflowPkg}/bin/paperflow"
+              "watch"
+              "--watch"
+              cfg.watchDir
+              "--ingest"
+              cfg.ingest
+            ]
+            ++ optionals (cfg.ingest == "api") [
+              "--paperless-url"
+              cfg.paperlessUrl
+              "--paperless-token-file"
+              cfg.paperlessTokenFile
+            ];
           RunAtLoad = true;
           KeepAlive = true;
           StandardOutPath = "${config.home.homeDirectory}/Library/Logs/paperflow.log";

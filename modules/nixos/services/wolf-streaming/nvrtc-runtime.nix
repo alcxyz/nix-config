@@ -1,6 +1,4 @@
-{
-  pkgs,
-}:
+{pkgs}:
 pkgs.runCommand "wolf-nvrtc-runtime" {} ''
   mkdir -p "$out/lib"
   cp ${pkgs.cudaPackages.cuda_nvrtc.src}/lib/libnvrtc.so.* "$out/lib/"

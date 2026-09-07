@@ -11,26 +11,26 @@
 #
 # All generated files live under XDG‑style paths, and the entire setup is
 # transparent to Git: you can still override any value in a repo’s local config.
-
-{ config, lib, pkgs, ... }:
-
-with lib;
-
-let
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+with lib; let
   cfg = config.programs.git.managed;
 
   # --- default values that make sense for one user -----------------------
 
-  defaultUserName  = "alcxyz";
+  defaultUserName = "alcxyz";
   defaultUserEmail = "me@alc.no";
 
   # Global signing key (SSH public key used for commit signatures).
   # This path will be written literally into gitconfig.
-  defaultSigningKey =
-    "${config.home.homeDirectory}/.ssh/id_ed25519.pub";
+  defaultSigningKey = "${config.home.homeDirectory}/.ssh/id_ed25519.pub";
 
   # Minimal but safe global alias set; empty by default.
-  defaultAliases = { };
+  defaultAliases = {};
 
   # Reasonable global defaults:
   #   • rebase when pulling
@@ -38,18 +38,17 @@ let
   #   • enable Git‑LFS filter
   #   • sign with SSH format by default
   defaultSettings = {
-    pull.rebase       = true;
+    pull.rebase = true;
     init.defaultBranch = "main";
     filter.lfs = {
-      process  = "git-lfs filter-process";
+      process = "git-lfs filter-process";
       required = true;
-      clean    = "git-lfs clean -- %f";
-      smudge   = "git-lfs smudge -- %f";
+      clean = "git-lfs clean -- %f";
+      smudge = "git-lfs smudge -- %f";
     };
     credential.helper = "!gh auth git-credential";
   };
-in
-{
+in {
   # ----------------------------------------------------------------------
   # Option definitions
   # ----------------------------------------------------------------------
@@ -100,7 +99,7 @@ in
     # Each value is itself an attribute set of plain Git settings.
     conditionalSigningConfigs = mkOption {
       type = types.attrsOf (types.attrsOf types.str);
-      default = { };
+      default = {};
       description = ''
         Conditional configurations using Git’s `includeIf` feature.
         Example:
@@ -122,7 +121,6 @@ in
   # ----------------------------------------------------------------------
 
   config = mkIf cfg.enable {
-
     # --- Generate include files for each conditional block ---------------
     #
     # Git’s includeIf mechanism points to separate files; we materialize
@@ -131,42 +129,51 @@ in
 
     home.file =
       lib.mapAttrs'
-        (condition: gitSettings:
-          let
-            # Transform a condition such as “gitdir:~/work/” into a safe
-            # file name “gitdir---work-”.
-            sanitized   =
-              builtins.replaceStrings [ "/" ":" "~" "." ] [ "-" "-" "" "-" ] condition;
-            filename    = "git-conditional-${sanitized}.inc";
-            targetPath  = "${config.xdg.configHome}/git/includes/${filename}";
+      (condition: gitSettings: let
+        # Transform a condition such as “gitdir:~/work/” into a safe
+        # file name “gitdir---work-”.
+        sanitized =
+          builtins.replaceStrings ["/" ":" "~" "."] ["-" "-" "" "-"] condition;
+        filename = "git-conditional-${sanitized}.inc";
+        targetPath = "${config.xdg.configHome}/git/includes/${filename}";
 
-            # Group dotted keys like "user.signingkey" into INI sections.
-            grouped =
-              lib.foldl'
-                (acc: { name, value }:
-                  let
-                    parts   = lib.splitString "." name;
-                    section = builtins.head parts;
-                    key     = builtins.concatStringsSep "." (builtins.tail parts);
-                  in acc // { ${section} =
-                       (acc.${section} or { }) // { ${key} = value; }; })
-                { }
-                (lib.mapAttrsToList (k: v: { name = k; value = v; }) gitSettings);
+        # Group dotted keys like "user.signingkey" into INI sections.
+        grouped =
+          lib.foldl'
+          (acc: {
+            name,
+            value,
+          }: let
+            parts = lib.splitString "." name;
+            section = builtins.head parts;
+            key = builtins.concatStringsSep "." (builtins.tail parts);
+          in
+            acc
+            // {
+              ${section} =
+                (acc.${section} or {}) // {${key} = value;};
+            })
+          {}
+          (lib.mapAttrsToList (k: v: {
+              name = k;
+              value = v;
+            })
+            gitSettings);
 
-            # Render the section map into a minimal INI text file.
-            iniText =
-              lib.concatStringsSep "\n"
-                (lib.mapAttrsToList
-                  (section: kvs:
-                    "[${section}]\n"
-                      + (lib.concatStringsSep "\n"
-                          (lib.mapAttrsToList (k: v: "  ${k} = ${v}") kvs)))
-                  grouped);
-          in {
-            name  = targetPath;
-            value = { text = iniText; };
-          })
-        cfg.conditionalSigningConfigs;
+        # Render the section map into a minimal INI text file.
+        iniText =
+          lib.concatStringsSep "\n"
+          (lib.mapAttrsToList
+            (section: kvs:
+              "[${section}]\n"
+              + (lib.concatStringsSep "\n"
+                (lib.mapAttrsToList (k: v: "  ${k} = ${v}") kvs)))
+            grouped);
+      in {
+        name = targetPath;
+        value = {text = iniText;};
+      })
+      cfg.conditionalSigningConfigs;
 
     # --- Build the global Git configuration itself ----------------------
 
@@ -185,26 +192,24 @@ in
         cfg.extraConfig
         // {
           # Identity and signing defaults.
-          user.name       = cfg.userName;
-          user.email      = cfg.userEmail;
-          alias           = cfg.aliases;
+          user.name = cfg.userName;
+          user.email = cfg.userEmail;
+          alias = cfg.aliases;
         }
         # Add includeIf rules that reference the files we generated above.
         // lib.mapAttrs'
-          (condition: _:
-            let
-              sanitized  =
-                builtins.replaceStrings [ "/" ":" "~" "." ] [ "-" "-" "" "-" ] condition;
-              filename   = "git-conditional-${sanitized}.inc";
-              includePath =
-                "${config.xdg.configHome}/git/includes/${filename}";
-            in {
-              name  = "includeIf.${condition}.path";
-              value = includePath;
-            })
-          cfg.conditionalSigningConfigs;
+        (condition: _: let
+          sanitized =
+            builtins.replaceStrings ["/" ":" "~" "."] ["-" "-" "" "-"] condition;
+          filename = "git-conditional-${sanitized}.inc";
+          includePath = "${config.xdg.configHome}/git/includes/${filename}";
+        in {
+          name = "includeIf.${condition}.path";
+          value = includePath;
+        })
+        cfg.conditionalSigningConfigs;
     };
-    
+
     programs.delta = {
       enable = true;
       enableGitIntegration = true;

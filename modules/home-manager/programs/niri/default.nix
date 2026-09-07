@@ -9,18 +9,14 @@
   username,
   configDir,
   ...
-}:
-
-let
+}: let
   cfg = config.programs.niri.managed;
-in
-{
+in {
   options.programs.niri.managed = {
     enable = lib.mkEnableOption "Manage Niri-related user files (config, scripts)";
   };
 
   config = lib.mkIf cfg.enable {
-
     # Shared wayland settings (cursor, GTK, ozone)
     programs.wayland-common.enable = true;
 
@@ -38,6 +34,5 @@ in
       source = ./scripts/scratch-toggle.sh;
       executable = true;
     };
-
   };
 }

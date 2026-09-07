@@ -1,14 +1,19 @@
 # nix-config/modules/nixos/hardware/amd.nix
-{ options, config, lib, pkgs, ... }:
-
-with lib;
-let cfg = config.hardware.amd; in
 {
+  options,
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+with lib; let
+  cfg = config.hardware.amd;
+in {
   options.hardware.amd.enable = mkEnableOption "AMD iGPU Support";
 
   config = mkIf cfg.enable {
-    boot.initrd.kernelModules = [ "amdgpu" ];
-    services.xserver.videoDrivers = [ "amdgpu" ];
+    boot.initrd.kernelModules = ["amdgpu"];
+    services.xserver.videoDrivers = ["amdgpu"];
 
     hardware.graphics = {
       enable = true;
@@ -17,7 +22,7 @@ let cfg = config.hardware.amd; in
         libva
         libva-utils
         rocmPackages.clr.icd
-        libva-vdpau-driver 
+        libva-vdpau-driver
         libvdpau-va-gl
       ];
     };

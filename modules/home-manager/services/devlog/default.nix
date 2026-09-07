@@ -1,10 +1,12 @@
 # modules/home-manager/services/devlog/default.nix
-{ config, lib, pkgs, ... }:
-
-let
-  cfg = config.services.devlog;
-in
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  cfg = config.services.devlog;
+in {
   options.services.devlog = {
     enable = lib.mkEnableOption "Daily devlog generator";
 
@@ -47,7 +49,7 @@ in
           StandardOutput = "journal";
           StandardError = "journal";
           Environment = [
-            "PATH=${lib.makeBinPath [ pkgs.git pkgs.gh pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.bash pkgs.openssh ]}"
+            "PATH=${lib.makeBinPath [pkgs.git pkgs.gh pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.bash pkgs.openssh]}"
             "HOME=${config.home.homeDirectory}"
             "SSH_AUTH_SOCK=%t/ssh-agent"
           ];
@@ -61,7 +63,7 @@ in
           Persistent = true;
           Unit = "devlog.service";
         };
-        Install.WantedBy = [ "timers.target" ];
+        Install.WantedBy = ["timers.target"];
       };
     }
 
@@ -74,7 +76,7 @@ in
           StandardOutput = "journal";
           StandardError = "journal";
           Environment = [
-            "PATH=${lib.makeBinPath [ pkgs.git pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.openssh ]}"
+            "PATH=${lib.makeBinPath [pkgs.git pkgs.claude-code pkgs.codex pkgs.forge-mirror pkgs.coreutils pkgs.openssh]}"
             "HOME=${config.home.homeDirectory}"
             "SSH_AUTH_SOCK=%t/ssh-agent"
           ];
@@ -88,7 +90,7 @@ in
           Persistent = true;
           Unit = "devlog-weekly.service";
         };
-        Install.WantedBy = [ "timers.target" ];
+        Install.WantedBy = ["timers.target"];
       };
     })
   ]);

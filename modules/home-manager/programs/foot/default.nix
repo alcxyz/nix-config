@@ -1,14 +1,16 @@
 # modules/home-manager/programs/foot/default.nix
-{ config, lib, pkgs, inputs, ... }:
-
-with lib;
-
-let
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
+with lib; let
   cfg = config.programs.foot;
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
-in
-{
+in {
   config = mkIf cfg.enable {
     programs.foot.settings = {
       "colors-dark" = {

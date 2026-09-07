@@ -1,7 +1,4 @@
-{
-  lib,
-  ...
-}: {
+{lib, ...}: {
   imports = [../../services/moonlight-client/default.nix];
 
   # Stability and interaction defaults shared by every Nixbox session.

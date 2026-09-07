@@ -5,10 +5,7 @@
   pkgs,
   ...
 }:
-
-with lib;
-
-let
+with lib; let
   cfg = config.programs.ai;
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
@@ -21,11 +18,10 @@ let
   );
   mergeClaudeSettings = pkgs.writeShellApplication {
     name = "merge-claude-settings";
-    runtimeInputs = [ pkgs.coreutils pkgs.jq ];
+    runtimeInputs = [pkgs.coreutils pkgs.jq];
     text = builtins.readFile ./merge-settings.sh;
   };
-in
-{
+in {
   options.programs.ai = {
     enable = mkEnableOption "Module for vibe coding stuff";
   };
@@ -42,10 +38,9 @@ in
     #   enable = true;
     # };
 
-    home.activation.claudeStatusline = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.claudeStatusline = lib.hm.dag.entryAfter ["writeBoundary"] ''
       run ${mergeClaudeSettings}/bin/merge-claude-settings \
         "${config.home.homeDirectory}/.claude/settings.json" "${claudeManagedSettings}"
     '';
   };
-
 }

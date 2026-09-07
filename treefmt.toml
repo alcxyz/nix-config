@@ -9,6 +9,8 @@ command = "shfmt"
 options = ["-w", "-i", "2", "-ci"]
 includes = [
   "scripts/checks/*.sh",
+  "modules/home-manager/programs/ai/merge-settings.sh",
+  "modules/home-manager/workspace/workspace-sync.sh",
   "scripts/ci/verify-ai-package-stack.sh",
   "scripts/ops/*.sh",
   "packages/nix-deploy/deploy",

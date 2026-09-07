@@ -4,19 +4,17 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.services.k8s-backup-s3;
   rustfsPackage =
     inputs.rustfs.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
-      (old: {
-        patches = (old.patches or [ ]) ++ [ ./rustfs-tier-free-version-recovery-switch.patch ];
-      });
+    (old: {
+      patches = (old.patches or []) ++ [./rustfs-tier-free-version-recovery-switch.patch];
+    });
   localEndpoint = "http://${cfg.apiAddress}";
   mirrorEnabled = cfg.mirrorSourceEndpoint != null;
   apiPort = lib.toInt (lib.last (lib.splitString ":" cfg.apiAddress));
-in
-{
+in {
   options.services.k8s-backup-s3 = {
     enable = lib.mkEnableOption "host-level RustFS S3 target for Kubernetes backups";
 
@@ -208,88 +206,87 @@ in
     users.groups.${cfg.serviceGroup}.gid = cfg.serviceGid;
 
     systemd.services.k8s-backup-s3-storage =
-      if cfg.storageMode == "zfs" then
-        {
-          description = "Prepare quota-limited ZFS dataset for k8s backups";
-          after = [
-            "zfs-auto-unlock.service"
-            "zfs-mount.service"
-          ];
-          requires = [
-            "zfs-auto-unlock.service"
-            "zfs-mount.service"
-          ];
-          before = [ "k8s-backup-rustfs.service" ];
-          requiredBy = [ "k8s-backup-rustfs.service" ];
-          path = [
-            pkgs.coreutils
-            pkgs.zfs
-          ];
-          serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = true;
-          };
-          script = ''
-            set -euo pipefail
-
-            if ! zfs list -H ${lib.escapeShellArg cfg.dataset} >/dev/null 2>&1; then
-              zfs create \
-                -o mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} \
-                -o quota=${lib.escapeShellArg cfg.quota} \
-                -o compression=zstd \
-                -o atime=off \
-                ${lib.escapeShellArg cfg.dataset}
-            else
-              zfs set mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} ${lib.escapeShellArg cfg.dataset}
-              zfs set quota=${lib.escapeShellArg cfg.quota} ${lib.escapeShellArg cfg.dataset}
-              zfs set compression=zstd ${lib.escapeShellArg cfg.dataset}
-              zfs set atime=off ${lib.escapeShellArg cfg.dataset}
-            fi
-
-            install -d -m 0750 \
-              -o ${lib.escapeShellArg cfg.serviceUser} \
-              -g ${lib.escapeShellArg cfg.serviceGroup} \
-              ${lib.escapeShellArg (toString cfg.dataDir)}
-          '';
-        }
-      else
-        {
-          description = "Validate the dedicated mounted filesystem for k8s backups";
-          after = [ cfg.storageUnit ];
-          requires = [ cfg.storageUnit ];
-          before = [ "k8s-backup-rustfs.service" ];
-          requiredBy = [ "k8s-backup-rustfs.service" ];
-          path = [
-            pkgs.coreutils
-            pkgs.findutils
-            pkgs.gnugrep
-            pkgs.util-linux
-          ];
-          serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = true;
-          };
-          script = ''
-            set -euo pipefail
-
-            data=${lib.escapeShellArg (toString cfg.dataDir)}
-            root_source="$(findmnt -n -o SOURCE -T /)"
-            backup_source="$(findmnt -n -o SOURCE -T "$data")"
-            if [ "$root_source" = "$backup_source" ]; then
-              echo "$data is on the root filesystem; refusing to start the backup target" >&2
-              exit 1
-            fi
-
-            install -d -m 0750 \
-              -o ${lib.escapeShellArg cfg.serviceUser} \
-              -g ${lib.escapeShellArg cfg.serviceGroup} \
-              "$data"
-            if find "$data" -mindepth 1 -maxdepth 1 ! -user ${lib.escapeShellArg cfg.serviceUser} -print -quit | grep -q .; then
-              echo "$data contains objects not owned by ${cfg.serviceUser}; refusing an unsafe partial ownership change" >&2
-              exit 1
-            fi
-          '';
+      if cfg.storageMode == "zfs"
+      then {
+        description = "Prepare quota-limited ZFS dataset for k8s backups";
+        after = [
+          "zfs-auto-unlock.service"
+          "zfs-mount.service"
+        ];
+        requires = [
+          "zfs-auto-unlock.service"
+          "zfs-mount.service"
+        ];
+        before = ["k8s-backup-rustfs.service"];
+        requiredBy = ["k8s-backup-rustfs.service"];
+        path = [
+          pkgs.coreutils
+          pkgs.zfs
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
         };
+        script = ''
+          set -euo pipefail
+
+          if ! zfs list -H ${lib.escapeShellArg cfg.dataset} >/dev/null 2>&1; then
+            zfs create \
+              -o mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} \
+              -o quota=${lib.escapeShellArg cfg.quota} \
+              -o compression=zstd \
+              -o atime=off \
+              ${lib.escapeShellArg cfg.dataset}
+          else
+            zfs set mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} ${lib.escapeShellArg cfg.dataset}
+            zfs set quota=${lib.escapeShellArg cfg.quota} ${lib.escapeShellArg cfg.dataset}
+            zfs set compression=zstd ${lib.escapeShellArg cfg.dataset}
+            zfs set atime=off ${lib.escapeShellArg cfg.dataset}
+          fi
+
+          install -d -m 0750 \
+            -o ${lib.escapeShellArg cfg.serviceUser} \
+            -g ${lib.escapeShellArg cfg.serviceGroup} \
+            ${lib.escapeShellArg (toString cfg.dataDir)}
+        '';
+      }
+      else {
+        description = "Validate the dedicated mounted filesystem for k8s backups";
+        after = [cfg.storageUnit];
+        requires = [cfg.storageUnit];
+        before = ["k8s-backup-rustfs.service"];
+        requiredBy = ["k8s-backup-rustfs.service"];
+        path = [
+          pkgs.coreutils
+          pkgs.findutils
+          pkgs.gnugrep
+          pkgs.util-linux
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        script = ''
+          set -euo pipefail
+
+          data=${lib.escapeShellArg (toString cfg.dataDir)}
+          root_source="$(findmnt -n -o SOURCE -T /)"
+          backup_source="$(findmnt -n -o SOURCE -T "$data")"
+          if [ "$root_source" = "$backup_source" ]; then
+            echo "$data is on the root filesystem; refusing to start the backup target" >&2
+            exit 1
+          fi
+
+          install -d -m 0750 \
+            -o ${lib.escapeShellArg cfg.serviceUser} \
+            -g ${lib.escapeShellArg cfg.serviceGroup} \
+            "$data"
+          if find "$data" -mindepth 1 -maxdepth 1 ! -user ${lib.escapeShellArg cfg.serviceUser} -print -quit | grep -q .; then
+            echo "$data contains objects not owned by ${cfg.serviceUser}; refusing an unsafe partial ownership change" >&2
+            exit 1
+          fi
+        '';
+      };
 
     systemd.services.k8s-backup-rustfs = {
       description = "RustFS backup target for Kubernetes";
@@ -299,8 +296,8 @@ in
         "network-online.target"
         "k8s-backup-s3-storage.service"
       ];
-      wants = [ "network-online.target" ];
-      requires = [ "k8s-backup-s3-storage.service" ];
+      wants = ["network-online.target"];
+      requires = ["k8s-backup-s3-storage.service"];
       serviceConfig = {
         Type = "simple";
         User = cfg.serviceUser;
@@ -310,23 +307,24 @@ in
           "rustfs_secret_key:${cfg.secretKeyFile}"
         ];
         ExecStart = "${rustfsPackage}/bin/rustfs server --address=${cfg.apiAddress} --console-enable --console-address=${cfg.consoleAddress} --access-key-file=%d/rustfs_access_key --secret-key-file=%d/rustfs_secret_key ${toString cfg.dataDir}";
-        Environment = [
-          "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency"
-          "RUSTFS_SCANNER_ENABLED=${lib.boolToString cfg.scannerEnabled}"
-          "RUSTFS_HEAL_ENABLED=${lib.boolToString cfg.healEnabled}"
-          "RUSTFS_TIER_FREE_VERSION_RECOVERY_ENABLED=${lib.boolToString cfg.tierFreeVersionRecoveryEnabled}"
-          "RUSTFS_CAPACITY_SCHEDULED_INTERVAL=${toString cfg.capacityScanIntervalSeconds}"
-        ]
-        ++ lib.optional (
-          cfg.runtimeWorkerThreads != null
-        ) "RUSTFS_RUNTIME_WORKER_THREADS=${toString cfg.runtimeWorkerThreads}";
+        Environment =
+          [
+            "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency"
+            "RUSTFS_SCANNER_ENABLED=${lib.boolToString cfg.scannerEnabled}"
+            "RUSTFS_HEAL_ENABLED=${lib.boolToString cfg.healEnabled}"
+            "RUSTFS_TIER_FREE_VERSION_RECOVERY_ENABLED=${lib.boolToString cfg.tierFreeVersionRecoveryEnabled}"
+            "RUSTFS_CAPACITY_SCHEDULED_INTERVAL=${toString cfg.capacityScanIntervalSeconds}"
+          ]
+          ++ lib.optional (
+            cfg.runtimeWorkerThreads != null
+          ) "RUSTFS_RUNTIME_WORKER_THREADS=${toString cfg.runtimeWorkerThreads}";
         Restart = "on-failure";
         RestartSec = "5s";
         NoNewPrivileges = true;
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = true;
-        ReadWritePaths = [ cfg.dataDir ];
+        ReadWritePaths = [cfg.dataDir];
         StateDirectory = "k8s-backup-rustfs";
       };
     };
@@ -337,8 +335,8 @@ in
         "network-online.target"
         "k8s-backup-rustfs.service"
       ];
-      wants = [ "network-online.target" ];
-      requires = [ "k8s-backup-rustfs.service" ];
+      wants = ["network-online.target"];
+      requires = ["k8s-backup-rustfs.service"];
       path = [
         pkgs.coreutils
         pkgs.getent
@@ -516,7 +514,7 @@ in
 
     systemd.timers.k8s-backup-s3-mirror = lib.mkIf mirrorEnabled {
       description = "Daily independent replica of Kubernetes backups";
-      wantedBy = [ "timers.target" ];
+      wantedBy = ["timers.target"];
       timerConfig = {
         OnCalendar = cfg.mirrorSchedule;
         Persistent = false;
@@ -524,6 +522,6 @@ in
       };
     };
 
-    networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [ apiPort ];
+    networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [apiPort];
   };
 }

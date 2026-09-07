@@ -142,7 +142,6 @@
         exec ${package}/bin/${executable} "$@"
       '';
     };
-
 in {
   options.programs.kubernetes.managed = {
     enable = lib.mkEnableOption "managed Kubernetes client wrappers";
@@ -218,9 +217,7 @@ in {
         default = true;
         description = "Install switcher and context helper wrappers that use the managed kubeconfig set.";
       };
-
     };
-
   };
 
   config = lib.mkIf cfg.enable {
