@@ -95,6 +95,12 @@
     };
 
     checks = {
+      configuration-evaluation = (import ./checks/configurations.nix {inherit self pkgs;}).configuration-evaluation;
+      configuration-evaluation-contract = assert import ./checks/configurations-test.nix;
+        pkgs.runCommand "configuration-evaluation-contract" {} ''
+          touch "$out"
+        '';
+
       nix-format = mkRepoCheck "nix-format-check" [pkgs.alejandra] ''
         alejandra --check ${lib.escapeShellArgs formattedNixFiles}
       '';
@@ -135,6 +141,10 @@
 
       check-k8s-node-reboot-network-audits = mkRepoCheck "check-k8s-node-reboot-network-audits" [pkgs.bash pkgs.jq] ''
         bash scripts/checks/test-k8s-node-reboot-network-audits.sh
+      '';
+
+      check-k8s-node-network-audit = mkRepoCheck "check-k8s-node-network-audit" [pkgs.bash pkgs.jq] ''
+        bash scripts/checks/test-k8s-node-network-audit.sh
       '';
 
       k8s-api-vip-source-routing-contract = let
