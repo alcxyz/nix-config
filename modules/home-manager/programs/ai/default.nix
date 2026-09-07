@@ -3,7 +3,6 @@
   config,
   lib,
   pkgs,
-  inputs,
   ...
 }:
 
@@ -20,6 +19,11 @@ let
       };
     }
   );
+  mergeClaudeSettings = pkgs.writeShellApplication {
+    name = "merge-claude-settings";
+    runtimeInputs = [ pkgs.coreutils pkgs.jq ];
+    text = builtins.readFile ./merge-settings.sh;
+  };
 in
 {
   options.programs.ai = {
@@ -39,19 +43,8 @@ in
     # };
 
     home.activation.claudeStatusline = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      settings_file="${config.home.homeDirectory}/.claude/settings.json"
-      settings_tmp="$settings_file.tmp"
-
-      mkdir -p "$(${pkgs.coreutils}/bin/dirname "$settings_file")"
-
-      if [ -e "$settings_file" ] && ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$settings_file" "${claudeManagedSettings}" > "$settings_tmp"; then
-        mv "$settings_tmp" "$settings_file"
-      else
-        cp "${claudeManagedSettings}" "$settings_file"
-        rm -f "$settings_tmp"
-      fi
-
-      chmod 600 "$settings_file"
+      run ${mergeClaudeSettings}/bin/merge-claude-settings \
+        "${config.home.homeDirectory}/.claude/settings.json" "${claudeManagedSettings}"
     '';
   };
 

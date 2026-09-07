@@ -135,6 +135,11 @@
         grep -F 'kept advancing while the lock was published' "$publisher"
       '';
 
+      check-claude-settings-merge = mkRepoCheck "check-claude-settings-merge" [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
+        shellcheck modules/home-manager/programs/ai/merge-settings.sh
+        bash scripts/checks/test-claude-settings-merge.sh
+      '';
+
       check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''
         bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
       '';
