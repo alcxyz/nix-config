@@ -980,7 +980,8 @@ in {
   services.dms.pluginSettings.dankSession = {
     enabled = true;
     autoRestore = false;
-    captureUnconfigured = true;
+    # Manual QA is restricted to explicitly configured application rules.
+    captureUnconfigured = false;
     captureTitles = false;
     captureInterval = 15;
     restoreTimeout = 20;
