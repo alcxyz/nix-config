@@ -177,12 +177,39 @@
     runtimeInputs = [
       pkgs.coreutils
       pkgs.gnugrep
+      pkgs.hyprland
+      pkgs.jq
       pkgs.socat
       pkgs.xrandr
     ];
     text = ''
       socket="''${XDG_RUNTIME_DIR:?}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
       repair_requested="''${XDG_RUNTIME_DIR:?}/hyprland-xwayland-primary-output.requested"
+      next_server_warning=0
+
+      check_output_server() {
+        local monitor_names output state connected=false
+        monitor_names="$(hyprctl monitors -j 2>/dev/null \
+          | jq -er '[.[].name] | select(length > 0) | .[]' 2>/dev/null)" || return 0
+
+        while read -r output state _; do
+          [[ "$state" == connected ]] || continue
+          connected=true
+          if grep -Fxq -- "$output" <<<"$monitor_names"; then
+            return 0
+          fi
+        done <<<"$current_outputs"
+
+        # A missing gaming output is normal during hot-unplug. Warn only
+        # when the X server has outputs but none match the live compositor.
+        if [[ "$connected" == true ]]; then
+          if ((SECONDS >= next_server_warning)); then
+            echo "XWayland primary-output repair skipped: X11 outputs do not match Hyprland; check for an X display/socket collision" >&2
+            next_server_warning=$((SECONDS + 300))
+          fi
+          return 1
+        fi
+      }
 
       set_primary() {
         stable_samples=0
@@ -207,6 +234,7 @@
 
       ensure_primary() {
         current_outputs="$(DISPLAY="''${DISPLAY:-:0}" xrandr --current 2>/dev/null || true)"
+        check_output_server || return 0
         if grep -q '^DP-1 connected primary ' <<<"$current_outputs"; then
           return 0
         fi
