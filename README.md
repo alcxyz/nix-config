@@ -10,15 +10,19 @@ stays the source interface; local input overrides select plugin development
 branches without changing the public bundle's release defaults. Widget files
 and their helpers use the same source revision.
 
-From this checkout, run `just qa-update` to refresh only those projects, inspect
+From this checkout, run `qaup` to refresh only those projects, inspect
 the lockfile changes, then use `nxsw` and/or `hmsw` for the relevant system or
 Home Manager configuration. Rebuild commands apply the lockfile; they do not
 fetch new branch heads automatically. Committing a lockfile records the exact
 combination under QA and keeps rollback reproducible.
 
+The `qaup` shell shortcut needs no flags or development shell. After first
+adding it to your configuration, run `hmsw` once and open a new terminal to load
+it. The existing `just qa-update` recipe remains available for development.
+
 Develop changes on feature branches, integrate them into `dev` for QA, and
 promote approved work to each project's `main` for official releases. Neither
-`qa-update` nor a rebuild promotes branches or creates releases. Uncommitted
+`qaup` nor a rebuild promotes branches or creates releases. Uncommitted
 source edits are not fetched from GitHub: publish them to `dev` first.
 
 Upstream dependencies, including DMS itself and nixpkgs, keep their existing

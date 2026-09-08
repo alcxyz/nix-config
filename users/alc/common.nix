@@ -84,8 +84,9 @@ in
       FLAKE = configDir;
     };
 
-    # Swtich aliases
+    # Update and switch aliases (run from the nix-config checkout).
     home.shellAliases = {
+      qaup = "bash scripts/update-inputs/update-maintained.sh";
       hmsw = "home-manager switch --flake .#alc-${hostName}";
     };
 

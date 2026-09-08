@@ -54,6 +54,14 @@ FORKED_RELEASE_INPUTS = {
 
 
 class MaintainedInputContracts(unittest.TestCase):
+    def test_qa_shortcut_calls_only_the_maintained_updater(self):
+        common = (ROOT / "users/alc/common.nix").read_text()
+        self.assertRegex(
+            common,
+            r'home\.shellAliases\s*=\s*\{\s*'
+            r'qaup = "bash scripts/update-inputs/update-maintained\.sh";',
+        )
+
     def test_flake_uses_explicit_dev_urls_and_danksession_follow(self):
         flake = (ROOT / "flake.nix").read_text()
         for name, url in DEV_URLS.items():
