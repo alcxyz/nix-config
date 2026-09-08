@@ -2,6 +2,31 @@
 
 Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, servers, and a Mac across three architectures.
 
+## Maintainer QA
+
+Paperflow, Grove, Canopy, DankSession, and the maintained DMS plugins use
+explicit `dev` inputs, pinned to exact commits in `flake.lock`. The DMS bundle
+stays the source interface; local input overrides select plugin development
+branches without changing the public bundle's release defaults. Widget files
+and their helpers use the same source revision.
+
+From this checkout, run `just qa-update` to refresh only those projects, inspect
+the lockfile changes, then use `nxsw` and/or `hmsw` for the relevant system or
+Home Manager configuration. Rebuild commands apply the lockfile; they do not
+fetch new branch heads automatically. Committing a lockfile records the exact
+combination under QA and keeps rollback reproducible.
+
+Develop changes on feature branches, integrate them into `dev` for QA, and
+promote approved work to each project's `main` for official releases. Neither
+`qa-update` nor a rebuild promotes branches or creates releases. Uncommitted
+source edits are not fetched from GitHub: publish them to `dev` first.
+
+Upstream dependencies, including DMS itself and nixpkgs, keep their existing
+pinning policies. WorldClock, DankCalculator, and DMS-Screenshot are upstream
+forks, not maintained projects; they retain the bundle's main pins and are not
+explicitly refreshed by the QA command. See
+[ADR-0069](docs/adr/0069-maintained-project-dev-qa.md).
+
 ## Hosts
 
 The host names, systems, and role identifiers below match

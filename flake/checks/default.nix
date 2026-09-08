@@ -38,6 +38,12 @@ in {
     treefmt --ci --formatters shell
   '';
 
+  maintained-dev-qa = mkRepoCheck "maintained-dev-qa" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.jq pkgs.shellcheck pkgs.shfmt] ''
+    shellcheck scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-dms-plugins.sh
+    shfmt -d -i 2 -ci scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-dms-plugins.sh
+    python3 scripts/checks/test-maintained-dev-qa.py
+  '';
+
   ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.gnugrep] ''
     verifier=scripts/ci/verify-ai-package-stack.sh
     publisher=scripts/forgejo/publish-nix-packages-lock.sh

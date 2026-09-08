@@ -80,7 +80,7 @@
     };
 
     paperflow = {
-      url = "github:alcxyz/paperflow";
+      url = "github:alcxyz/paperflow/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -115,11 +115,26 @@
     };
 
     canopy = {
-      url = "github:alcxyz/canopy";
+      url = "github:alcxyz/canopy/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    dms-plugins.url = "github:alcxyz/dms-plugins/main";
+    # Maintainer QA consumes integrated dev commits, still pinned by flake.lock.
+    # Override sources here so the public bundle can retain release defaults.
+    dms-plugins = {
+      url = "github:alcxyz/dms-plugins/dev";
+      inputs = {
+        quicksearch.url = "github:alcxyz/DankQuickSearch/dev";
+        vault.url = "github:alcxyz/DankVault/dev";
+        translate.url = "github:alcxyz/DankTranslate/dev";
+        spotify.url = "github:alcxyz/DankSpotify/dev";
+        dankcalendar.url = "github:alcxyz/DankCalendar/dev";
+        danksession.follows = "danksession";
+        diskusage.url = "github:alcxyz/DankDiskUsage/dev";
+        aiusage.url = "github:alcxyz/DankAIUsage/dev";
+        displaycontrol.url = "github:alcxyz/DankDisplayControl/dev";
+      };
+    };
 
     danksession = {
       url = "github:alcxyz/DankSession/dev";
