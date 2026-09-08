@@ -2,7 +2,7 @@
 
 **Status:** Accepted, amended by ADR-0064; preparation in progress
 **Date:** 2026-08-23
-**Amended:** 2026-09-07
+**Amended:** 2026-09-08
 **Applies to:** `hosts/xev`, `hosts/xyz`, XFS, mergerfs, NFS, Plex, qBittorrent, Stash
 **Amended by:** ADR-0064
 
@@ -79,6 +79,17 @@ decision after establishing the storage and application-state migration.
 Physical operations, service cutovers, and reboots remain separately scheduled
 maintenance actions. Hardware identities, commands, recovery procedures, and
 operational evidence belong in the private runbook.
+
+The ownership move is prepared as paired opt-in boot targets,
+`xyz-tank-on-xev` and `xev-tank-owner`. Ordinary host targets retain current
+ownership until the physical cutover is accepted. A private coordinator run
+from xyz builds and stages both targets without switching the running systems,
+preserves rollback closures, and separates shutdown from post-move verification.
+The operator moves the disks while both hosts are off. Kubernetes maintenance
+on xev follows ADR-0068; xyz is not a Kubernetes node. Media services remain on
+xyz behind mount and explicit resume guards during this intermediate phase.
+After acceptance, reconcile the ordinary host targets before routine rebuilds;
+the opt-in targets are not a permanent parallel configuration.
 
 ## Alternatives considered
 

@@ -15,6 +15,7 @@
       touch "$out"
     '';
 in {
+  tank-migration-contract = import ./tank-migration.nix {inherit self pkgs;};
   configuration-evaluation = (import ./configurations.nix {inherit self pkgs;}).configuration-evaluation;
   configuration-evaluation-contract = assert import ./configurations-test.nix;
     pkgs.runCommand "configuration-evaluation-contract" {} ''

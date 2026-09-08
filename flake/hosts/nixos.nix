@@ -38,5 +38,16 @@ in {
             inputs.nix-secrets.nixosModules.operatorLogin;
         }
     )
-    nixosHosts;
+    nixosHosts
+    // {
+      # Explicit boot targets for the separately scheduled bulk disk move.
+      # Ordinary xyz/xev outputs retain current ownership until finalization.
+      xyz-tank-on-xev = self.nixosConfigurations.xyz.extendModules {
+        specialArgs.tankMigrationBase = self.nixosConfigurations.xyz.config;
+        modules = ["${inputs.nix-secrets}/modules/nixos/xyz-tank-remote.nix"];
+      };
+      xev-tank-owner = self.nixosConfigurations.xev.extendModules {
+        modules = ["${inputs.nix-secrets}/modules/nixos/xev-tank-owner.nix"];
+      };
+    };
 }
