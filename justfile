@@ -107,3 +107,8 @@ workspace-status:
 [group("update")]
 update *INPUTS:
     nix flake update {{INPUTS}}
+
+# Refresh maintained dev projects only; inspect the lock diff before switching.
+[group("update")]
+qa-update:
+    bash scripts/update-inputs/update-maintained.sh

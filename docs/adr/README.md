@@ -73,6 +73,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0066](0066-direct-umu-launchers-with-heroic-qa-fallback.md) | Use direct UMU launchers with a Heroic QA fallback | Accepted | xyz, UMU, Proton, Battle.net, Heroic |
 | [ADR-0067](0067-explicit-consumer-and-platform-validation.md) | Explicit consumer and platform validation | Proposed | flake checks, Forgejo, package promotion |
 | [ADR-0068](0068-k8s-node-power-lifecycle.md) | Kubernetes node power lifecycle (formerly the duplicate ADR-0036) | Accepted | k3s, node lifecycle, maintenance helpers |
+| [ADR-0069](0069-maintained-project-dev-qa.md) | Maintained project development QA inputs | Accepted | flake inputs, DMS, release workflow |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

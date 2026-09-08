@@ -3,16 +3,16 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1788782976,
-        "narHash": "sha256-o/5i+nF2pEcj/Ywg4tt2QyDhafY/0iWyPZmbaCnKBko=",
+        "lastModified": 1788850312,
+        "narHash": "sha256-px7NlZYqd7dUMhgPgfic/t8aIpiO+4NuiWDM6TDPT9o=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "97d7c999e1482a9cd67fa3ce4e89284e34105f28",
+        "rev": "b3860acaa1a05ea62ed6a5c469b610bac227fefe",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "DankAIUsage",
         "type": "github"
       }
@@ -120,6 +120,7 @@
       },
       "original": {
         "owner": "alcxyz",
+        "ref": "dev",
         "repo": "canopy",
         "type": "github"
       }
@@ -158,7 +159,7 @@
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "DankCalendar",
         "type": "github"
       }
@@ -171,11 +172,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788784587,
-        "narHash": "sha256-N4UhDpZv8ABANsBRvdTGHya1VAkXix1GF4RjBLBtDuE=",
+        "lastModified": 1788788267,
+        "narHash": "sha256-mzFlFiTRyyA0Esfwr3rIteOi7lr+vjak7GJM2duqpuI=",
         "owner": "alcxyz",
         "repo": "DankSession",
-        "rev": "64542dffbc67e1cb59e053945981d90a61025dd6",
+        "rev": "685ab95a425a9334d310d00429ee833aba575b89",
         "type": "github"
       },
       "original": {
@@ -218,7 +219,7 @@
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "DankDiskUsage",
         "type": "github"
       }
@@ -245,6 +246,9 @@
         "aiusage": "aiusage",
         "calculator": "calculator",
         "dankcalendar": "dankcalendar",
+        "danksession": [
+          "danksession"
+        ],
         "diskusage": "diskusage",
         "displaycontrol": "displaycontrol",
         "firstparty": "firstparty",
@@ -256,16 +260,16 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1788783015,
-        "narHash": "sha256-XjBkqqDr+v6HBQyplb2Jvef9DNk0mgsaklpmEvfagXs=",
+        "lastModified": 1788788423,
+        "narHash": "sha256-WHNZQ+8Ti/+JJpog+/PJZarhPPlThf5HnB3rzVZUbiI=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "9004f36e74752fbe32560071df74869759a796c4",
+        "rev": "c9105559e963c5f38ff6baf55b2e6671b84aedcc",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "dms-plugins",
         "type": "github"
       }
@@ -1016,15 +1020,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1780573062,
-        "narHash": "sha256-NAbzMRnvfKkLRdT3YSco6SBU/bZTB7HYPwm8j2vFUII=",
+        "lastModified": 1781682348,
+        "narHash": "sha256-YlgRZopRhNQzwyM/z8fkEDQxaKUAcOKHY64kSRiU+JE=",
         "owner": "alcxyz",
         "repo": "paperflow",
-        "rev": "86efd8c018409e2e102848a79169e2b6ec74e120",
+        "rev": "143be0b2a394e5fa388158f0736c4ed2338c6b4a",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
+        "ref": "dev",
         "repo": "paperflow",
         "type": "github"
       }
@@ -1085,7 +1090,7 @@
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "DankQuickSearch",
         "type": "github"
       }
@@ -1252,7 +1257,7 @@
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "DankSpotify",
         "type": "github"
       }
@@ -1394,7 +1399,7 @@
       },
       "original": {
         "owner": "alcxyz",
-        "ref": "main",
+        "ref": "dev",
         "repo": "DankTranslate",
         "type": "github"
       }
@@ -1402,11 +1407,11 @@
     "vault": {
       "flake": false,
       "locked": {
-        "lastModified": 1780577035,
-        "narHash": "sha256-pAlNNYYRJQSI368j+1M7Vrbt6EL18hMiYWZk2AjNiH4=",
+        "lastModified": 1786880231,
+        "narHash": "sha256-NDXnhvSENpKwbEdhfbb7TJQ1TI8GUQwcoD0O2Bbc+Qg=",
         "owner": "alcxyz",
         "repo": "DankVault",
-        "rev": "7d8f8442591ce7db22b57e2dbde9e77edf640fdb",
+        "rev": "f83a7f90e3633cb385cf153a7bcc64f660207e55",
         "type": "github"
       },
       "original": {
