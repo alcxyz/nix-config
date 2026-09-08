@@ -128,9 +128,22 @@ in {
       '';
 
   umu-apps-contract = let
-    homeConfig = self.homeConfigurations.alc-xyz.config;
+    home = self.homeConfigurations.alc-xyz;
+    homeConfig = home.config;
+    umuConfig = homeConfig.programs.umuApps;
     umuServices = homeConfig.systemd.user.services;
     desktopEntries = homeConfig.xdg.desktopEntries;
+    # Inspect the complete production scripts without building their runtime dependencies.
+    renderedApplications =
+      lib.mapAttrs (
+        name: app:
+          import ../../modules/home-manager/programs/umu-apps/application.nix {
+            inherit app lib name;
+            cfg = umuConfig;
+            pkgs = home.pkgs;
+          }
+      )
+      umuConfig.apps;
     battleNetUnit = umuServices.umu-app-battle-net.Unit;
     profileUnit = umuServices.umu-app-heroes-profile.Unit;
     battleNetService = umuServices.umu-app-battle-net.Service;
@@ -141,6 +154,23 @@ in {
     profileRunner = builtins.head profileService.ExecStart;
     battleNetStarter = battleNetEntry.exec;
     profileStarter = profileEntry.exec;
+    battleNetRunnerText = renderedApplications.battle-net.runner.text;
+    profileRunnerText = renderedApplications.heroes-profile.runner.text;
+    battleNetStarterText = renderedApplications.battle-net.starter.text;
+    profileStarterText = renderedApplications.heroes-profile.starter.text;
+    # These fixtures contain script bytes for static inspection only. Strip their
+    # dependency context, never a path used to read or execute a runtime file.
+    scriptFixture = name: text:
+      pkgs.writeText name (builtins.unsafeDiscardStringContext text);
+    renderedScriptFixtures = [
+      (scriptFixture "umu-app-battle-net-run.sh" battleNetRunnerText)
+      (scriptFixture "umu-app-heroes-profile-run.sh" profileRunnerText)
+      (scriptFixture "umu-app-battle-net.sh" battleNetStarterText)
+      (scriptFixture "umu-app-heroes-profile.sh" profileStarterText)
+    ];
+    malformedScriptFixture = pkgs.writeText "umu-app-malformed.sh" ''
+      if true; then
+    '';
   in
     assert !(builtins.hasAttr "umu-app-battle-net-direct-qa" umuServices);
     assert !(builtins.hasAttr "umu-app-heroes-profile-direct-qa" umuServices);
@@ -152,24 +182,37 @@ in {
     assert profileEntry.name == "Heroes Profile";
     assert builtins.match ".+-battle-net.png" battleNetEntry.icon != null;
     assert builtins.match ".+-heroes-profile.png" profileEntry.icon != null;
-      pkgs.runCommand "umu-apps-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
-        grep -F 'export GAMEID=umu-default' ${battleNetRunner}
-        grep -F 'export PROTON_VERB=waitforexitandrun' ${battleNetRunner}
-        grep -F 'prefix_in_use' ${battleNetRunner}
-        grep -F '"''${1:-}" = "--check-only"' ${battleNetRunner}
-        grep -F 'GE-Proton10-4-steamcompattool' ${battleNetRunner}
-        grep -F 'export TZ=Europe/Oslo' ${battleNetRunner}
-        grep -F 'No managed window remains; restarting the stale service' ${battleNetStarter}
-        grep -F 'same_prefix_companion_active' ${battleNetStarter}
-        grep -F 'ActiveEnterTimestampMonotonic' ${battleNetStarter}
-        if grep -F 'No managed window remains; restarting the stale service' ${profileStarter}; then
-          echo "Companion launchers must not restart a shared prefix" >&2
+    assert battleNetRunner == lib.getExe renderedApplications.battle-net.runner;
+    assert profileRunner == lib.getExe renderedApplications.heroes-profile.runner;
+    assert battleNetStarter == lib.getExe renderedApplications.battle-net.starter;
+    assert profileStarter == lib.getExe renderedApplications.heroes-profile.starter;
+    assert lib.hasInfix "export GAMEID=umu-default" battleNetRunnerText;
+    assert lib.hasInfix "export PROTON_VERB=waitforexitandrun" battleNetRunnerText;
+    assert lib.hasInfix "prefix_in_use" battleNetRunnerText;
+    assert lib.hasInfix ''"''${1:-}" = "--check-only"'' battleNetRunnerText;
+    assert lib.hasInfix "GE-Proton10-4-steamcompattool" battleNetRunnerText;
+    assert lib.hasInfix "export TZ=Europe/Oslo" battleNetRunnerText;
+    assert lib.hasInfix "No managed window remains; restarting the stale service" battleNetStarterText;
+    assert lib.hasInfix "same_prefix_companion_active" battleNetStarterText;
+    assert lib.hasInfix "ActiveEnterTimestampMonotonic" battleNetStarterText;
+    assert !(lib.hasInfix "No managed window remains; restarting the stale service" profileStarterText);
+    assert lib.hasInfix "export PROTON_VERB=runinprefix" profileRunnerText;
+    assert lib.hasInfix "GE-Proton10-4-steamcompattool" profileRunnerText;
+    assert !(lib.hasInfix "gamemoderun" battleNetRunnerText);
+    assert !(lib.hasInfix "gamemoderun" profileRunnerText);
+      pkgs.runCommand "umu-apps-contract" {
+        nativeBuildInputs = [pkgs.bash pkgs.shellcheck];
+      } ''
+        for script in ${lib.escapeShellArgs renderedScriptFixtures}; do
+          bash -n "$script"
+          shellcheck --shell=bash "$script"
+        done
+        if bash -n ${malformedScriptFixture} >/dev/null 2>&1; then
+          echo "Bash syntax check accepted a malformed rendered launcher fixture" >&2
           exit 1
         fi
-        grep -F 'export PROTON_VERB=runinprefix' ${profileRunner}
-        grep -F 'GE-Proton10-4-steamcompattool' ${profileRunner}
-        if grep -F 'gamemoderun' ${battleNetRunner} ${profileRunner}; then
-          echo "Direct Battle.net launchers must not request unavailable GameMode" >&2
+        if shellcheck --shell=bash ${malformedScriptFixture} >/dev/null 2>&1; then
+          echo "ShellCheck accepted a malformed rendered launcher fixture" >&2
           exit 1
         fi
         touch "$out"
