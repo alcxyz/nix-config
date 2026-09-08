@@ -12,6 +12,7 @@ includes = [
   "modules/home-manager/programs/ai/merge-settings.sh",
   "modules/home-manager/workspace/workspace-sync.sh",
   "scripts/ci/*.sh",
+  "scripts/forgejo/publish-nix-packages-lock.sh",
   "scripts/ops/*.sh",
   "packages/nix-deploy/deploy",
   "modules/nixos/services/wolf-streaming/browser-image/*.sh",

@@ -12,6 +12,38 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ConfigurationCI(unittest.TestCase):
+    def test_publisher_authentication_is_repository_scoped_and_not_persisted(self):
+        publisher = (ROOT / "scripts/forgejo/publish-nix-packages-lock.sh").read_text()
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.run(["git", "init", "--quiet", directory], check=True)
+            subprocess.run(["git", "-C", directory, "remote", "add", "origin", "https://example.invalid/repository.git"], check=True)
+            assertion = Path(directory) / "assert_auth.py"
+            assertion.write_text('''import base64, os, subprocess
+assert os.environ["GIT_CONFIG_COUNT"] == "4"
+assert os.environ["GIT_CONFIG_KEY_2"] == "credential.https://git.alc.xyz.helper"
+expected = "AUTHORIZATION: basic " + base64.b64encode(b"fixture-owner:publication-fixture").decode()
+base = "https://git.alc.xyz/fixture-owner/fixture-repository.git"
+for url, allowed in [(base, True), (base + "/info/refs", True), (base + "-evil", False),
+                     ("https://git.alc.xyz/fixture-owner/private-input.git", False),
+                     ("https://git.alc.xyz/other-owner/fixture-repository.git", False)]:
+    result = subprocess.run(["git", "config", "--get-urlmatch", "http.extraheader", url], text=True, capture_output=True)
+    assert result.stdout.strip() == (expected if allowed else ""), url
+local = subprocess.run(["git", "config", "--local", "--get-regexp", r"http\\..*\\.extraheader"], capture_output=True)
+assert local.returncode == 1
+''')
+            setup = Path(directory) / "publisher-auth.sh"
+            setup.write_text(publisher.split("prepare_verified_lock() {", 1)[0] + '\npython3 assert_auth.py\n')
+            result = subprocess.run(
+                ["bash", str(ROOT / "scripts/ci/with-source-access.sh"), "bash", str(setup)],
+                cwd=directory,
+                env={**os.environ, "CI_SOURCE_READ_TOKEN": "synthetic-fixture", "CI_SOURCE_READ_USER": "fixture-user",
+                     "FORGEJO_TOKEN": "publication-fixture", "FORGEJO_URL": "https://git.alc.xyz",
+                     "FORGEJO_OWNER": "fixture-owner", "FORGEJO_REPO": "fixture-repository",
+                     "BASE_BRANCH": "dev", "REVISION": "fixture"},
+                text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_source_access_is_required_before_running_a_command(self):
         environment = {key: value for key, value in os.environ.items() if key != "CI_SOURCE_READ_TOKEN"}
         result = subprocess.run(

@@ -59,3 +59,4 @@ jobs:
         run: |
           bash scripts/ci/with-source-access.sh bash scripts/ci/check-configurations.sh
           git rev-parse HEAD
+          sha256sum flake.lock

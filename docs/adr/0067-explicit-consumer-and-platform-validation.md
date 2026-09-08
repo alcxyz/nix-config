@@ -75,7 +75,7 @@ Manager output even when ordinary flake schema checks would overlook it.
 Package promotion retains standalone producer validation and separately
 validates packages selected by the candidate consumer and its deployment
 outputs. Record the consumer source revision and lock digest together with the
-producer and dependency revisions, since an uncommitted candidate lock is not
+producer revision, since an uncommitted candidate lock is not
 identified by the source commit alone.
 
 Ordinary PR automation uses the `pull_request` event and validates the PR head,
