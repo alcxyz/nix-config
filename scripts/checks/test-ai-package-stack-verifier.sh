@@ -114,7 +114,13 @@ printf '%s\n' \
   /nix/store/source-codex-cli-0.153.4
 EOF
 
-chmod +x "${mock_bin}/git" "${mock_bin}/nix" "${mock_bin}/nix-store"
+# Generated executables need the active Bash path inside the Nix sandbox;
+# /usr/bin/env is not part of the declared build environment.
+for mock in "$mock_bin"/*; do
+  contents=$(<"$mock")
+  printf '#!%s\n%s\n' "$BASH" "${contents#*$'\n'}" >"$mock"
+  chmod +x "$mock"
+done
 
 assert_log_contains() {
   local expected=$1
