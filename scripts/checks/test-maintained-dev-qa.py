@@ -110,6 +110,8 @@ class ScriptHarness(unittest.TestCase):
         self.output = self.work / "github-output"
 
         fake_nix = self.bin / "nix"
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
         fake_nix.write_text(
             textwrap.dedent(
                 """\
@@ -137,7 +139,7 @@ class ScriptHarness(unittest.TestCase):
                     ;;
                 esac
                 """
-            )
+            ).replace("#!/usr/bin/env bash", f"#!{bash}", 1)
         )
         fake_nix.chmod(0o755)
         self.environment = {
