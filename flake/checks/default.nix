@@ -16,6 +16,7 @@
     '';
 in {
   tank-migration-contract = import ./tank-migration.nix {inherit self pkgs;};
+  tank-migration-coordinator = inputs.nix-secrets.checks.${pkgs.stdenv.hostPlatform.system}.migration-fixtures;
   configuration-evaluation = (import ./configurations.nix {inherit self pkgs;}).configuration-evaluation;
   configuration-evaluation-contract = assert import ./configurations-test.nix;
     pkgs.runCommand "configuration-evaluation-contract" {} ''

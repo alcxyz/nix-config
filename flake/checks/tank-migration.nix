@@ -12,7 +12,8 @@
     (target: original.fileSystems.${target}.fsType == "xfs")
     original.fileSystems."/tank".depends;
   secureUnit = "xyz-secure-zfs-children";
-  consumerNames = ["plex" "qbittorrent" "stash"];
+  consumerNames = ["plex" "qbittorrent" "stash" "torrent-shared-media-permissions" "torrent-shared-media-zfs-properties"];
+  ownerMount = lib.findFirst (mount: mount.where == "/tank") (throw "missing explicit tank mount") owner.systemd.mounts;
   guarded = name:
     builtins.elem "tank.mount" remote.systemd.services.${name}.bindsTo
     && remote.systemd.services.${name}.unitConfig ? ConditionPathExists;
@@ -25,8 +26,14 @@ in
   assert builtins.all (target: owner.fileSystems.${target}.device == original.fileSystems.${target}.device) bulkBranches;
   assert owner.fileSystems."/tank".device == original.fileSystems."/tank".device;
   assert owner.fileSystems."/tank".options == original.fileSystems."/tank".options;
+  assert builtins.length ownerMount.bindsTo == builtins.length bulkBranches;
+  assert builtins.all (unit: builtins.elem unit ownerMount.after) ownerMount.bindsTo;
+  assert builtins.elem "local-fs.target" ownerMount.wantedBy;
+  assert builtins.elem "tank.mount" owner.systemd.services.nfs-server.bindsTo;
   assert builtins.all guarded consumerNames;
   assert builtins.all (s: !(lib.hasPrefix "/tank" s.path)) remote.services.nfs.managed.shares;
+  assert builtins.all (s: builtins.elem s owner.services.nfs.managed.shares)
+  (builtins.filter (s: lib.hasPrefix "/tank/" s.path) original.services.nfs.managed.shares);
   assert remote.systemd.services.${secureUnit}.script == original.systemd.services.${secureUnit}.script;
   assert remote.systemd.services.xyz-games-dataset.serviceConfig.ExecStart == original.systemd.services.xyz-games-dataset.serviceConfig.ExecStart;
   assert remote.boot.zfs.extraPools == original.boot.zfs.extraPools;

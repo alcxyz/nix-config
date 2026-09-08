@@ -21,6 +21,10 @@
 
     checks = import ./checks {inherit self inputs pkgs;};
 
+    apps = lib.optionalAttrs (system == "x86_64-linux") {
+      tank-xev-migrate = inputs.nix-secrets.apps.${system}.tank-xev-migrate;
+    };
+
     packages =
       {
         k8s-node-reboot = pkgs.k8s-node-reboot;
@@ -38,6 +42,7 @@
         stashdb-pop = pkgs.stashdb-pop;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
+        tank-xev-migrate = inputs.nix-secrets.packages.${system}.tank-xev-migrate;
         # Cross-compiled U-Boot for Rock Pi 4 (RK3399).
         rpi0-uboot = pkgs.pkgsCross.aarch64-multiplatform.ubootRockPi4;
 
