@@ -1,0 +1,69 @@
+name: Validate configurations
+run-name: "Configuration checks (${{ forgejo.event_name }})"
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+jobs:
+  configurations:
+    name: Evaluate deployments and run native checks
+    runs-on: forgejo-docker-primary
+    timeout-minutes: 60
+    concurrency:
+      group: configurations-${{ forgejo.event.pull_request.number || forgejo.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Require a maintainer-owned candidate
+        env:
+          EVENT: ${{ forgejo.event_name }}
+          HEAD_REPOSITORY: ${{ forgejo.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ forgejo.repository }}
+          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
+          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
+        run: |
+          if [ "$EVENT" = pull_request ] && [ "$HEAD_REPOSITORY" != "$REPOSITORY" ]; then
+            echo 'Full configuration validation requires a reviewed maintainer-owned branch.' >&2
+            exit 1
+          fi
+          if [ -z "$CI_SOURCE_READ_USER" ] || [ -z "$CI_SOURCE_READ_TOKEN" ]; then
+            echo 'Configuration source access is not provisioned; validation cannot run.' >&2
+            exit 1
+          fi
+
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          github-server-url: https://git.alc.xyz
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+          persist-credentials: false
+
+      - name: Verify candidate revision
+        env:
+          EXPECTED_HEAD: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain)"
+
+      - name: Install runner prerequisites
+        run: |
+          apt-get update
+          apt-get install -y git python3 sudo udev
+
+      - uses: https://github.com/cachix/install-nix-action@v30
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Validate the checked-out candidate
+        env:
+          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
+          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
+        run: |
+          bash scripts/ci/with-source-access.sh bash scripts/ci/check-configurations.sh
+          git rev-parse HEAD
+          sha256sum flake.lock

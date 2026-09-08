@@ -31,7 +31,7 @@ in {
   '';
 
   check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-    shellcheck scripts/checks/*.sh scripts/ci/verify-ai-package-stack.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
+    shellcheck scripts/checks/*.sh scripts/ci/*.sh scripts/forgejo/publish-nix-packages-lock.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
   '';
 
   check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.treefmt pkgs.shfmt] ''
@@ -44,20 +44,16 @@ in {
     python3 scripts/checks/test-maintained-dev-qa.py
   '';
 
-  ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.gnugrep] ''
-    verifier=scripts/ci/verify-ai-package-stack.sh
+  configuration-ci-contract = mkRepoCheck "configuration-ci-contract" [pkgs.python3 pkgs.bash pkgs.git] ''
+    python3 scripts/checks/test-configuration-ci.py
+  '';
+
+  ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.git pkgs.gnugrep pkgs.python3 pkgs.ripgrep] ''
     publisher=scripts/forgejo/publish-nix-packages-lock.sh
     workflow=.forgejo/workflows/update-nix-packages.yml
 
     grep -F 'NIX_CI_EPHEMERAL_CONTAINER: "1"' "$workflow"
-    grep -F 'NIX_CI_EPHEMERAL_CONTAINER' "$verifier"
-    grep -F 't3code.pnpmDeps' "$verifier"
-    grep -F 't3code.resourceMonitor' "$verifier"
-    grep -F 't3_out=$(nix_build "''${flake_uri}#t3code" --no-link --print-out-paths)' "$verifier"
-    if grep -F 't3_out=$(nix build' "$verifier"; then
-      echo "AI package verifier bypasses the staged Nix build wrapper" >&2
-      exit 1
-    fi
+    bash scripts/checks/test-ai-package-stack-verifier.sh
 
     grep -F 'prepare_verified_lock' "$publisher"
     grep -F 'git switch --detach "$latest_head"' "$publisher"
