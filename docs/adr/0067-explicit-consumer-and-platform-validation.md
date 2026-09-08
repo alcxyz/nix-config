@@ -1,7 +1,8 @@
 # ADR-0067: Explicit consumer and platform validation
 
-**Status:** Proposed
+**Status:** Accepted; automation rollout pending
 **Date:** 2026-09-07
+**Accepted:** 2026-09-08
 **Applies to:** `flake/`, Forgejo checks, package input promotion, cross-repository validation
 
 ## Context
@@ -15,7 +16,7 @@ ADR-0007 retains reusable packages in a separate repository. ADR-0043 retains
 explicit composition and calls for useful local and CI checks. Those decisions
 need an explicit definition of what each validation layer proves.
 
-## Proposed decision
+## Decision
 
 Keep the existing repository and module boundaries, and validate both sides of
 the package/configuration integration:
@@ -40,7 +41,7 @@ the package/configuration integration:
    private repository. Public checks and documentation contain generic
    interfaces and redacted evidence only.
 
-This proposal does not change the existing Wolf input acceptance contract or
+This decision does not change the existing Wolf input acceptance contract or
 authorize deployments. Existing checks remain in place while missing coverage
 is added.
 
@@ -63,10 +64,35 @@ errors before activation. The complete evaluation matrix adds evaluation cost,
 and selected native builds still require suitable builders. Runtime acceptance
 remains explicit for changes that depend on input devices, storage, or services.
 
+## Execution contract
+
+Run all-system evaluation without builds, followed by native flake checks,
+against the exact candidate checkout and without updating its lock. The
+configuration-evaluation check forces every exported deployment, including
+Home Manager aliases; its synthetic regression test rejects a broken Home
+Manager output even when ordinary flake schema checks would overlook it.
+
+Package promotion retains standalone producer validation and separately
+validates packages selected by the candidate consumer and its deployment
+outputs. Record the consumer source revision and lock digest together with the
+producer and dependency revisions, since an uncommitted candidate lock is not
+identified by the source commit alone.
+
+Ordinary PR automation uses the `pull_request` event and validates the PR head,
+not an implicit merge reference. Contributions requiring maintainer staging
+must fail the full-validation prerequisite clearly. Private source-access
+provisioning and operational diagnostics belong in the private repository;
+public CI must not publish private evaluation diagnostics as artifacts or logs.
+Provisioning is a rollout prerequisite, separate from accepting this evaluation
+contract. See the [validation guide](../validation.md).
+
 ## Implementation tracking
 
-Forgejo issues and milestones own execution status. This ADR remains proposed
-until reviewed; it does not mark the following work complete.
+Forgejo issues and milestones own execution status. Acceptance of this contract does not mark the following implementation work
+complete. The configuration evaluation helper already covers all exported
+deployments. The ordinary PR workflow must pass on an exact candidate revision
+before its rollout is complete; unavailable source access is a failed
+prerequisite, never a skipped evaluation reported as success.
 
 - [Configuration evaluation and PR gate](https://git.alc.xyz/alcxyz/nix-config/issues/274)
 - [Consumer-context package promotion](https://git.alc.xyz/alcxyz/nix-config/issues/275)

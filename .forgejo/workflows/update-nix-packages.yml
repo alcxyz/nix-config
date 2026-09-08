@@ -28,6 +28,7 @@ jobs:
           fetch-depth: 0
           github-server-url: https://git.alc.xyz
           ref: dev
+          persist-credentials: false
 
       - name: Install runner prerequisites
         run: |
@@ -41,7 +42,10 @@ jobs:
 
       - name: Refresh and verify nix-packages
         id: update
-        run: scripts/update-inputs/update-nix-packages.sh
+        env:
+          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
+          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
+        run: bash scripts/ci/with-source-access.sh bash scripts/update-inputs/update-nix-packages.sh
 
       - name: Publish verified lock update
         if: steps.update.outputs.updated == 'true'
@@ -51,4 +55,6 @@ jobs:
           FORGEJO_OWNER: alcxyz
           FORGEJO_REPO: nix-config
           REVISION: ${{ steps.update.outputs.revision }}
-        run: scripts/forgejo/publish-nix-packages-lock.sh
+          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
+          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
+        run: bash scripts/ci/with-source-access.sh bash scripts/forgejo/publish-nix-packages-lock.sh

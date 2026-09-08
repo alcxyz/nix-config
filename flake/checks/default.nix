@@ -31,7 +31,7 @@ in {
   '';
 
   check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-    shellcheck scripts/checks/*.sh scripts/ci/verify-ai-package-stack.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
+    shellcheck scripts/checks/*.sh scripts/ci/*.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
   '';
 
   check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.treefmt pkgs.shfmt] ''
@@ -42,6 +42,10 @@ in {
     shellcheck scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-dms-plugins.sh
     shfmt -d -i 2 -ci scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-dms-plugins.sh
     python3 scripts/checks/test-maintained-dev-qa.py
+  '';
+
+  configuration-ci-contract = mkRepoCheck "configuration-ci-contract" [pkgs.python3 pkgs.bash pkgs.git] ''
+    python3 scripts/checks/test-configuration-ci.py
   '';
 
   ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.gnugrep] ''

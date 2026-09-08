@@ -11,7 +11,7 @@ includes = [
   "scripts/checks/*.sh",
   "modules/home-manager/programs/ai/merge-settings.sh",
   "modules/home-manager/workspace/workspace-sync.sh",
-  "scripts/ci/verify-ai-package-stack.sh",
+  "scripts/ci/*.sh",
   "scripts/ops/*.sh",
   "packages/nix-deploy/deploy",
   "modules/nixos/services/wolf-streaming/browser-image/*.sh",
