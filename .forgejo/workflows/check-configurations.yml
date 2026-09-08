@@ -23,9 +23,15 @@ jobs:
           EVENT: ${{ forgejo.event_name }}
           HEAD_REPOSITORY: ${{ forgejo.event.pull_request.head.repo.full_name }}
           REPOSITORY: ${{ forgejo.repository }}
+          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
+          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
         run: |
           if [ "$EVENT" = pull_request ] && [ "$HEAD_REPOSITORY" != "$REPOSITORY" ]; then
             echo 'Full configuration validation requires a reviewed maintainer-owned branch.' >&2
+            exit 1
+          fi
+          if [ -z "$CI_SOURCE_READ_USER" ] || [ -z "$CI_SOURCE_READ_TOKEN" ]; then
+            echo 'Configuration source access is not provisioned; validation cannot run.' >&2
             exit 1
           fi
 
@@ -45,7 +51,7 @@ jobs:
       - name: Install runner prerequisites
         run: |
           apt-get update
-          apt-get install -y git python3 sudo
+          apt-get install -y git python3 sudo udev
 
       - uses: https://github.com/cachix/install-nix-action@v30
         with:

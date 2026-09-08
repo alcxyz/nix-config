@@ -33,7 +33,7 @@ jobs:
       - name: Install runner prerequisites
         run: |
           apt-get update
-          apt-get install -y jq sudo
+          apt-get install -y jq sudo udev
 
       - uses: https://github.com/cachix/install-nix-action@v30
         with:
