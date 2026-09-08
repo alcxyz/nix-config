@@ -9,8 +9,8 @@
 The maintainer needs to exercise integrated development changes before making
 official releases. A consumer pinned to a release branch cannot provide that
 feedback, and changing the consumer's own Git branch does not select matching
-branches in its dependencies. Updating a source bundle alone also does not
-refresh independent overridden plugin inputs.
+branches in its dependencies. Updating a source bundle alone does not reliably
+refresh all independent overridden plugin inputs and can restore bundle pins.
 
 ## Decision
 
@@ -28,9 +28,11 @@ Make the aggregate DankSession input follow the existing top-level input, so
 there is one revision for its source and package. Continue building each other
 plugin helper from the same source used for its widget.
 
-`just qa-update` explicitly refreshes the maintained app and nested plugin
-inputs. The scheduled DMS updater refreshes the DMS subset even when the
-aggregate commit has not changed, then validates the resulting consumer.
+The `qaup` shell shortcut (also available as `just qa-update`) explicitly
+refreshes the maintained app and nested plugin inputs from this checkout,
+without requiring a development shell. The scheduled DMS updater refreshes
+the DMS subset even when the aggregate commit has not changed, then validates
+the resulting consumer.
 Rebuild and switch commands continue to use committed or reviewed lockfiles;
 they do not implicitly fetch branch heads. No source changes, branch promotion,
 release, or activation is an implicit side effect of the QA update command.
