@@ -9,6 +9,10 @@ and [0043](../../../../docs/adr/0043-selective-external-nix-config-pattern-adopt
 - `audio.nix` constructs the audio output, health recovery, and display-layout
   audio helpers. Its caller supplies configuration, packages, state-file paths,
   and the output-stability helper; it does not register services itself.
+- `browser-sessions.nix` constructs local, protected, and remote browser
+  launchers plus Moonlight stream startup and window supervision. Its caller
+  supplies the generated invocations, endpoint setup, and display helpers; it
+  does not register services itself.
 - `direct-drm.nix` constructs output and audio preparation, stream-host
   readiness, and the direct-DRM session wrappers. Its caller supplies the
   generated Moonlight invocations, endpoint setup helpers, and state paths; it
