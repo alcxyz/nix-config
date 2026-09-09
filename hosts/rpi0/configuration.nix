@@ -22,6 +22,7 @@
 in {
   imports = [
     ./hardware-configuration.nix
+    inputs.nix-secrets.nixosModules.rpi0Hardware
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/profiles/nixbox-client/default.nix"

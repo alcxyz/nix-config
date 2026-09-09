@@ -16,12 +16,10 @@
   boot.kernelModules = ["kvm-intel"];
 
   fileSystems."/" = {
-    device = "/dev/disk/by-uuid/62dbdc07-79ff-404f-8384-5091666a42bf";
     fsType = "ext4";
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-uuid/6B7C-EB88";
     fsType = "vfat";
     options = [
       "fmask=0077"

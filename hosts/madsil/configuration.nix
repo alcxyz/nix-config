@@ -14,6 +14,7 @@
 in {
   imports = [
     ./hardware-configuration.nix
+    inputs.nix-secrets.nixosModules.madsilHardware
     inputs.home-manager.nixosModules.home-manager
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/services/flatpak/default.nix"

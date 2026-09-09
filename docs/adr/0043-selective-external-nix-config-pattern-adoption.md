@@ -157,3 +157,8 @@ private boundary and leaves the shared desktop role independently reusable. The
 common audio, Bluetooth, and container review retains the accepted baseline in
 [ADR-0006](0006-four-tier-module-layering.md); larger host and streaming file
 decomposition remains tracked by #279.
+
+Named private host modules also supply filesystem device identities and the
+workstation network profile. Public hardware composition retains generic
+filesystem types and kernel settings; the consumer lock and complete deployment
+checks validate the private boundary together.

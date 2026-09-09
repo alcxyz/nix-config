@@ -338,6 +338,7 @@ in {
     "${configDir}/modules/nixos/common/desktop.nix"
     "${configDir}/modules/nixos/hardware/display-device-guard.nix"
     inputs.nix-secrets.nixosModules.xyzDisplay
+    inputs.nix-secrets.nixosModules.xyzNetworkIdentity
     inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
     inputs.nix-secrets.nixosModules.xyzStashMergerfs
@@ -745,30 +746,6 @@ in {
       "zfs-auto-unlock.service"
       "xyz-runtime-storage-policy.service"
     ];
-  };
-
-  # xyz provides host-level services on 192.168.1.10. UniFi owns that stable
-  # address through a DHCP reservation for the physical Ethernet adapter, so
-  # the host also receives the current gateway and resolver settings from the
-  # network instead of duplicating them here.
-  networking.networkmanager = {
-    settings.main.no-auto-default = "9c:6b:00:7e:74:65";
-    ensureProfiles.profiles.xyz-wired = {
-      connection = {
-        id = "xyz-wired";
-        uuid = "8e724127-a8d6-3154-a8a3-66a91da6c626";
-        type = "ethernet";
-        interface-name = "enp8s0";
-        autoconnect = true;
-        autoconnect-priority = 100;
-      };
-      ethernet.mac-address = "9c:6b:00:7e:74:65";
-      ipv4 = {
-        method = "auto";
-        ignore-auto-dns = false;
-      };
-      ipv6.method = "auto";
-    };
   };
 
   # ==================== Services ====================
