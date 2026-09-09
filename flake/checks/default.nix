@@ -107,6 +107,20 @@ in {
         touch "$out"
       '';
 
+  xyz-xwayland-primary-output-lifecycle-contract = let
+    unit = self.homeConfigurations.alc-xyz.config.xdg.configFile."systemd/user/hyprland-xwayland-primary-output.service".source;
+  in
+    pkgs.runCommand "xyz-xwayland-primary-output-lifecycle-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
+      grep -Fx 'After=wayland-wm@hyprland.desktop.service' ${unit}
+      grep -Fx 'BindsTo=wayland-wm@hyprland.desktop.service' ${unit}
+      grep -Fx 'WantedBy=wayland-wm@hyprland.desktop.service' ${unit}
+      if grep -Fq 'graphical-session.target' ${unit}; then
+        echo "XWayland primary-output watcher still follows the generic graphical session" >&2
+        exit 1
+      fi
+      touch "$out"
+    '';
+
   t3code-auto-update-contract = let
     t3Unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code.Unit;
     unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Unit;

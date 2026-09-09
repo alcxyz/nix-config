@@ -536,8 +536,8 @@ in {
   systemd.user.services.hyprland-xwayland-primary-output = {
     Unit = {
       Description = "Maintain the 49-inch display as XWayland primary";
-      PartOf = ["graphical-session.target"];
-      After = ["graphical-session.target"];
+      BindsTo = ["wayland-wm@hyprland.desktop.service"];
+      After = ["wayland-wm@hyprland.desktop.service"];
     };
     Service = {
       Type = "simple";
@@ -545,7 +545,7 @@ in {
       Restart = "on-failure";
       RestartSec = 1;
     };
-    Install.WantedBy = ["graphical-session.target"];
+    Install.WantedBy = ["wayland-wm@hyprland.desktop.service"];
   };
   systemd.user.services.hyprland-game-window-geometry-guard = {
     Unit = {
