@@ -12,7 +12,8 @@ by packages and browser options.
 `wolf-image/` contains coordinator image patches. `nvrtc-runtime.nix` packages
 its runtime libraries, while `worker-runtime.nix` supplies node-local worker
 assets. The Python helpers beside these modules reconcile application/profile
-state and manage cooperative sessions.
+state, manage cooperative sessions, update client presentation scale, and
+query the active session count used by pipeline recovery.
 
 Keep input mirroring, native button delivery, and process startup ordering as
 separate responsibilities. Run `just input` for browser input or lifecycle
