@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Applies to:** `flake.nix`
+**Applies to:** `flake/pkgs.nix`, `flake/per-system.nix`
 
 ## Context
 
@@ -12,7 +12,7 @@ Importing an entire external overlay risks shadowing or conflicting with nixpkgs
 
 ## Decision
 
-Custom packages live in a separate `nix-packages` flake (`github:alcxyz/nix-packages`). Rather than applying its overlay wholesale, only explicitly named packages are extracted into a local overlay:
+Custom packages live in the separate `nix-packages` flake, consumed from canonical Forgejo at `git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev`. GitHub is a mirror. Rather than applying its overlay wholesale, only explicitly named packages are extracted into a local overlay. The following illustrates that boundary; the current whitelist is implemented in `flake/pkgs.nix`:
 
 ```nix
 overlays = [
@@ -37,8 +37,8 @@ This makes custom packages available as `pkgs.<name>` throughout all modules, in
 ## Consequences
 
 - Custom package development is independent of this repo. nix-packages can be iterated and tested separately; this repo adopts updates by running `nix flake update nix-packages`.
-- Adding a new custom package to the config requires changes in two repos: add the derivation to nix-packages, then add the name to the overlay whitelist in `flake.nix`, then update `flake.lock`.
-- If a whitelisted package name does not exist in nix-packages for a given system, evaluation fails loudly at the overlay level.
+- Adding a new custom package to the config requires changes in two repos: add the derivation to nix-packages, then add the name to the overlay whitelist in `flake/pkgs.nix`, then update and verify `flake.lock`.
+- Required packages must exist on their supported systems. The current overlay selects the intersection of its whitelist and the producer's exports; it does not itself assert a required package matrix. Platform and consumer checks must make required-package failures explicit.
 - Do not use `inputs.nix-packages.overlays.default` — only the filtered individual extraction is intentional.
 
 ## September 2026 follow-through
@@ -52,10 +52,9 @@ Forgejo:
 - [Validate candidate packages in the consumer context](https://git.alc.xyz/alcxyz/nix-config/issues/275)
 
 [ADR-0067](0067-explicit-consumer-and-platform-validation.md) defines explicit
-platform and consumer checks. The current filtered implementation silently
-omits absent exported names, so the fail-loud consequence described above is
-not yet fully enforced; the supported-platform and consumer checks must make
-required-package failures explicit.
+platform and consumer checks. Those checks validate the actual selected packages
+and locked consumer; they do not turn the filtered overlay into a separate
+required-export validator.
 
 ### Package ownership inventory
 
