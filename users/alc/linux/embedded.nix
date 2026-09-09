@@ -11,9 +11,6 @@
   };
 in {
   imports = [
-    # Keep the shared private defaults evaluable without enabling the
-    # Kubernetes operator toolchain on these appliances.
-    "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
     "${configDir}/modules/shared/host-metadata.nix"
   ];
 

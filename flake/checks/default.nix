@@ -274,9 +274,40 @@ in {
     assert rpi1.services.moonlight-client.defaultSessionMode == "direct-browser";
     assert rpi1.systemd.services.greetd.serviceConfig.Restart == "always";
     assert rpi1.security.sudo.wheelNeedsPassword;
-    assert !(inputs.nix-secrets.nixosModules ? operatorLogin)
-    || rpi1.users.users.alc.hashedPasswordFile != null;
+    assert rpi1.users.users.alc.hashedPasswordFile != null;
       pkgs.runCommand "rpi3-direct-client-contract" {} ''
+        touch "$out"
+      '';
+
+  operator-home-composition-contract = let
+    inventory = import ../../inventory.nix;
+    homeManagerEnabled = hostAttrs: hostAttrs.homeManager or true;
+    isOperator = hostAttrs:
+      lib.elem "infra-admin" inventory.roles.${hostAttrs.role}.workspaceProfiles;
+    homeOutputNames = hostName: hostAttrs:
+      ["alc-${hostName}"]
+      ++ lib.optionals (hostAttrs.platform == "darwin")
+      (map (alias: "alc-${alias}") (hostAttrs.aliases or []));
+    namesFor = predicate:
+      lib.concatLists (
+        lib.mapAttrsToList homeOutputNames (
+          lib.filterAttrs (
+            hostName: hostAttrs: homeManagerEnabled hostAttrs && predicate hostName hostAttrs
+          )
+          inventory.hosts
+        )
+      );
+    operatorNames = namesFor (_: hostAttrs: isOperator hostAttrs);
+    nonOperatorNames = namesFor (_: hostAttrs: !isOperator hostAttrs);
+    operatorHomes = map (name: self.homeConfigurations.${name}) operatorNames;
+    nonOperatorHomes = map (name: self.homeConfigurations.${name}) nonOperatorNames;
+  in
+    assert lib.sort builtins.lessThan (operatorNames ++ nonOperatorNames)
+    == lib.sort builtins.lessThan (builtins.attrNames self.homeConfigurations);
+    assert lib.all (home: home.config.programs.bnBootstrap.bullet.enable) operatorHomes;
+    assert lib.all (home: home.config.programs.kubernetes.managed.enable) operatorHomes;
+    assert lib.all (home: !(home.options.programs ? bnBootstrap)) nonOperatorHomes;
+      pkgs.runCommand "operator-home-composition-contract" {} ''
         touch "$out"
       '';
 }

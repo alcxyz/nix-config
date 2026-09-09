@@ -6,9 +6,6 @@
   ...
 }: {
   imports = [
-    # Keep the option schema available for shared conditional defaults without
-    # enabling or installing the operator Kubernetes toolchain.
-    "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
     "${configDir}/modules/home-manager/profiles/nixbox-session/default.nix"
   ];
