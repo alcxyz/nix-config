@@ -23,7 +23,6 @@ in
               "helium"
               "ghostty"
               "kdash"
-              "jean"
               "t3code"
               "t3code-fork"
               "claude-code"

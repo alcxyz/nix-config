@@ -248,7 +248,6 @@ in rec {
         t3code
       ]
       ++ lib.optionals stdenv.hostPlatform.isLinux [
-        jean
         herdr
       ];
 

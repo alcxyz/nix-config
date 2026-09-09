@@ -257,7 +257,6 @@ in {
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
     "${configDir}/modules/home-manager/services/devlog/default.nix"
-    "${configDir}/modules/home-manager/services/jean/default.nix"
     "${configDir}/modules/home-manager/services/t3code/default.nix"
 
     inputs.hyprscratch.homeModules.default
