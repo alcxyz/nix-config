@@ -37,12 +37,13 @@ On macOS, Karabiner Elements handles keyboard remapping. Its config is generated
 
 On Linux, the existing `services.kanata` is extended to support multiple keyboard instances.
 
-On `xyz`, Kanata uses an explicit device-name allowlist containing only the
-Glove80 and Logitech K850 keyboard interfaces. Composite receiver interfaces,
-mice, media controls, and Sunshine's virtual passthrough devices bypass Kanata.
-This makes streamed input independent of Kanata's device discovery and fails
-safely when an unknown keyboard is connected: ordinary input remains available,
-but Kanata mappings require an intentional declarative allowlist update.
+On `xyz`, Kanata uses an explicit device-name allowlist supplied by the private
+host input-hardware policy. Only the selected physical keyboard interfaces are
+captured; composite receiver interfaces, mice, media controls, and Sunshine's
+virtual passthrough devices bypass Kanata. This makes streamed input independent
+of Kanata's device discovery and fails safely when an unknown keyboard is
+connected: ordinary input remains available, but Kanata mappings require an
+intentional declarative allowlist update.
 
 ## Alternatives Considered
 

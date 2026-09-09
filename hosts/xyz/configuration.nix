@@ -19,6 +19,7 @@
     "${configDir}/modules/nixos/common/desktop.nix"
     "${configDir}/modules/nixos/hardware/display-device-guard.nix"
     inputs.nix-secrets.nixosModules.xyzDisplay
+    inputs.nix-secrets.nixosModules.xyzInputHardwarePolicy
     inputs.nix-secrets.nixosModules.xyzNetworkIdentity
     inputs.nix-secrets.nixosModules.xyzStoragePolicy
     inputs.nix-secrets.nixosModules.xyzPrinter
@@ -41,18 +42,6 @@
     "${configDir}/modules/nixos/services/netbird/default.nix"
   ];
 
-  # Only the intentional physical keyboards pass through Kanata on xyz.
-  # Composite receivers, mice, media controls, and streaming virtual devices
-  # remain owned by their native consumers.
-  services.kanata.keyboards.main.extraDefCfg = ''
-    process-unmapped-keys yes
-    linux-dev-names-include (
-      "Glove80 Keyboard"
-      "Logitech K850"
-      "Corsair Corsair Gaming K65 LUX RGB Keyboard  Keyboard"
-    )
-  '';
-
   # ==================== Host-specific Settings ====================
 
   programs.hyprlock.enable = true;
@@ -68,10 +57,7 @@
   };
 
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
-  boot.kernelParams = ["usbcore.autosuspend=-1"];
   boot.extraModprobeConfig = ''
-    options btusb reset=1 enable_autosuspend=0
-    options mt7925e disable_aspm=1
     options zfs zfs_arc_max=17179869184
   '';
 
