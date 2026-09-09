@@ -10,6 +10,12 @@
   ...
 }: let
   cfg = config.services.forge-mirror-pull;
+  requiredScalar = name: value:
+    if value == null || value == ""
+    then throw "services.forge-mirror-pull.${name} must be set to a non-empty value."
+    else value;
+  forgejoUrl = requiredScalar "forgejoUrl" cfg.forgejoUrl;
+  forgejoUser = requiredScalar "forgejoUser" cfg.forgejoUser;
 in {
   options.services.forge-mirror-pull = {
     enable = lib.mkEnableOption "forge-mirror GitHub→Forgejo periodic pull sync";
@@ -28,15 +34,15 @@ in {
     };
 
     forgejoUrl = lib.mkOption {
-      type = lib.types.str;
-      default = "http://git.local";
-      description = "Base URL for the Forgejo API.";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Base URL for the Forgejo API. Required when the service is enabled.";
     };
 
     forgejoUser = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Forgejo account whose repositories receive mirrored updates.";
+      description = "Forgejo account whose repositories receive mirrored updates. Required when the service is enabled.";
     };
 
     credentials = {
@@ -121,10 +127,8 @@ in {
           }:$PATH"
           export FORGEJO_TOKEN_FILE="${config.sops.secrets.forge_mirror_forgejo_token.path}"
           export GITHUB_MIRROR_PAT_FILE="${config.sops.secrets.forge_mirror_github_token.path}"
-          export FORGEJO_URL=${lib.escapeShellArg cfg.forgejoUrl}
-          ${lib.optionalString (cfg.forgejoUser != null) ''
-            export FORGEJO_USER=${lib.escapeShellArg cfg.forgejoUser}
-          ''}
+          export FORGEJO_URL=${lib.escapeShellArg forgejoUrl}
+          export FORGEJO_USER=${lib.escapeShellArg forgejoUser}
           exec ${pkgs.forge-mirror}/bin/forge-mirror pull
         '';
 

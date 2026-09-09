@@ -10,17 +10,26 @@
 }: let
   cfg = config.services.forge-mirror-audit;
   repositoryPolicyFile = name: repositories: pkgs.writeText name (lib.concatStringsSep "\n" repositories);
-  githubPrimaryRepositoriesFile = assert lib.assertMsg (cfg.githubPrimaryRepositories != null)
-  "services.forge-mirror-audit.githubPrimaryRepositories must be explicitly set from repository policy.";
-    repositoryPolicyFile "forge-mirror-github-primary-repos" cfg.githubPrimaryRepositories;
+  requiredScalar = name: value:
+    if value == null || value == ""
+    then throw "services.forge-mirror-audit.${name} must be set to a non-empty value."
+    else value;
+  requiredRepositories = name: repositories:
+    if repositories == null
+    then throw "services.forge-mirror-audit.${name} must be explicitly set from repository policy."
+    else repositories;
+  forgejoUrl = requiredScalar "forgejoUrl" cfg.forgejoUrl;
+  forgejoUser = requiredScalar "forgejoUser" cfg.forgejoUser;
+  githubUser = requiredScalar "githubUser" cfg.githubUser;
+  githubPrimaryRepositoriesFile =
+    repositoryPolicyFile "forge-mirror-github-primary-repos"
+    (requiredRepositories "githubPrimaryRepositories" cfg.githubPrimaryRepositories);
   githubDeniedRepositoriesFile =
-    if cfg.githubDeniedRepositories == null
-    then null
-    else repositoryPolicyFile "forge-mirror-github-denied-repos" cfg.githubDeniedRepositories;
+    repositoryPolicyFile "forge-mirror-github-denied-repos"
+    (requiredRepositories "githubDeniedRepositories" cfg.githubDeniedRepositories);
   requiredPrivateRepositoriesFile =
-    if cfg.requiredPrivateRepositories == null
-    then null
-    else repositoryPolicyFile "forge-mirror-required-private-repos" cfg.requiredPrivateRepositories;
+    repositoryPolicyFile "forge-mirror-required-private-repos"
+    (requiredRepositories "requiredPrivateRepositories" cfg.requiredPrivateRepositories);
 in {
   options.services.forge-mirror-audit = {
     enable = lib.mkEnableOption "forge-mirror Forgejo/GitHub drift audit";
@@ -39,21 +48,21 @@ in {
     };
 
     forgejoUrl = lib.mkOption {
-      type = lib.types.str;
-      default = "http://git.local";
-      description = "Base URL for the Forgejo API.";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Base URL for the Forgejo API. Required when the service is enabled.";
     };
 
     forgejoUser = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Forgejo account whose repositories are audited.";
+      description = "Forgejo account whose repositories are audited. Required when the service is enabled.";
     };
 
     githubUser = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "GitHub account whose mirrors are audited.";
+      description = "GitHub account whose mirrors are audited. Required when the service is enabled.";
     };
 
     githubPrimaryRepositories = lib.mkOption {
@@ -62,8 +71,8 @@ in {
       description = ''
         Repository names excluded from Forgejo-primary mirroring and drift
         checks. Supply the same repository policy inventory used by interactive
-        forge-mirror commands. An explicit empty list is valid when no
-        repositories are excluded.
+        forge-mirror commands. Required when the service is enabled. An
+        explicit empty list is valid when no repositories are excluded.
       '';
       example = [
         "public-app"
@@ -75,8 +84,9 @@ in {
       type = lib.types.nullOr (lib.types.listOf lib.types.str);
       default = null;
       description = ''
-        Repository names that policy prohibits publishing to GitHub. An
-        explicit empty list is valid when no repositories are denied.
+        Repository names that policy prohibits publishing to GitHub. Required
+        when the service is enabled. An explicit empty list is valid when no
+        repositories are denied.
       '';
       example = ["internal-tool"];
     };
@@ -85,8 +95,9 @@ in {
       type = lib.types.nullOr (lib.types.listOf lib.types.str);
       default = null;
       description = ''
-        Repository names whose Forgejo visibility must remain private. An
-        explicit empty list is valid when no repositories require it.
+        Repository names whose Forgejo visibility must remain private.
+        Required when the service is enabled. An explicit empty list is valid
+        when no repositories require it.
       '';
       example = ["private-service"];
     };
@@ -173,20 +184,12 @@ in {
           }:$PATH"
           export FORGEJO_TOKEN_FILE="${config.sops.secrets.forge_mirror_forgejo_token.path}"
           export GITHUB_MIRROR_PAT_FILE="${config.sops.secrets.forge_mirror_github_token.path}"
-          export FORGEJO_URL=${lib.escapeShellArg cfg.forgejoUrl}
-          ${lib.optionalString (cfg.forgejoUser != null) ''
-            export FORGEJO_USER=${lib.escapeShellArg cfg.forgejoUser}
-          ''}
-          ${lib.optionalString (cfg.githubUser != null) ''
-            export GITHUB_USER=${lib.escapeShellArg cfg.githubUser}
-          ''}
+          export FORGEJO_URL=${lib.escapeShellArg forgejoUrl}
+          export FORGEJO_USER=${lib.escapeShellArg forgejoUser}
+          export GITHUB_USER=${lib.escapeShellArg githubUser}
           export FORGE_MIRROR_GITHUB_PRIMARY_REPOS_FILE=${githubPrimaryRepositoriesFile}
-          ${lib.optionalString (githubDeniedRepositoriesFile != null) ''
-            export FORGE_MIRROR_GITHUB_DENIED_REPOS_FILE=${githubDeniedRepositoriesFile}
-          ''}
-          ${lib.optionalString (requiredPrivateRepositoriesFile != null) ''
-            export FORGE_MIRROR_REQUIRED_PRIVATE_REPOS_FILE=${requiredPrivateRepositoriesFile}
-          ''}
+          export FORGE_MIRROR_GITHUB_DENIED_REPOS_FILE=${githubDeniedRepositoriesFile}
+          export FORGE_MIRROR_REQUIRED_PRIVATE_REPOS_FILE=${requiredPrivateRepositoriesFile}
           exec ${pkgs.forge-mirror}/bin/forge-mirror audit
         '';
 

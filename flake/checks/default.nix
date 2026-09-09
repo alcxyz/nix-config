@@ -343,12 +343,47 @@ in {
     nonOperatorNames = namesFor (_: hostAttrs: !isOperator hostAttrs);
     operatorHomes = map (name: self.homeConfigurations.${name}) operatorNames;
     nonOperatorHomes = map (name: self.homeConfigurations.${name}) nonOperatorNames;
+    forgeMirrorActivation = home: home.config.home.activation.forgejoPrimary;
+    forgeMirrorActivationDependencies = [
+      "linkGeneration"
+      "workspaceDirs"
+      "sops-nix"
+    ];
+    forgeMirrorSessionVariables = [
+      "FORGEJO_URL"
+      "FORGEJO_USER"
+      "FORGEJO_SSH_HOST"
+      "FORGE_MIRROR_SCAN_ROOTS_FILE"
+      "FORGE_MIRROR_GITHUB_PRIMARY_REPOS_FILE"
+      "FORGEJO_TOKEN_FILE"
+    ];
+    forgeMirrorActivationVariables = map (name: "${name}=") forgeMirrorSessionVariables;
   in
     assert lib.sort builtins.lessThan (operatorNames ++ nonOperatorNames)
     == lib.sort builtins.lessThan (builtins.attrNames self.homeConfigurations);
     assert lib.all (home: home.config.programs.bnBootstrap.bullet.enable) operatorHomes;
     assert lib.all (home: home.config.programs.kubernetes.managed.enable) operatorHomes;
+    assert lib.all (home: builtins.elem home.pkgs.forge-mirror home.config.home.packages) operatorHomes;
     assert lib.all (home: !(home.options.programs ? bnBootstrap)) nonOperatorHomes;
+    assert lib.all (home: !(home.config.home.activation ? forgejoPrimary)) nonOperatorHomes;
+    assert lib.all (home:
+      lib.all (name:
+        builtins.hasAttr name home.config.home.sessionVariables
+        && toString home.config.home.sessionVariables.${name} != "")
+      forgeMirrorSessionVariables)
+    operatorHomes;
+    assert lib.all (home:
+      lib.all (dependency: lib.elem dependency (forgeMirrorActivation home).after)
+      forgeMirrorActivationDependencies)
+    operatorHomes;
+    assert lib.all (home:
+      lib.all (variable: lib.hasInfix variable (forgeMirrorActivation home).data)
+      forgeMirrorActivationVariables)
+    operatorHomes;
+    assert lib.all (home: lib.hasInfix "/bin/forge-mirror primary" (forgeMirrorActivation home).data) operatorHomes;
+    assert lib.all (home: lib.hasInfix "could not update repository remotes; continuing" (forgeMirrorActivation home).data) operatorHomes;
+    assert lib.all (home: !(lib.hasInfix "FORGE_MIRROR_GITHUB_PRIMARY_REPOS=" (forgeMirrorActivation home).data)) operatorHomes;
+    assert lib.all (home: !(lib.hasInfix "2>/dev/null" (forgeMirrorActivation home).data)) operatorHomes;
       pkgs.runCommand "operator-home-composition-contract" {} ''
         touch "$out"
       '';

@@ -15,8 +15,28 @@
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
-  forgeMirrorGithubPrimaryRepos = lib.concatStringsSep "," inputs.nix-secrets.repoInventory.forgejoPrimaryExcludedRepoNames;
-  forgeMirrorGithubPrimaryReposFile = lib.concatStringsSep "\n" inputs.nix-secrets.repoInventory.forgejoPrimaryExcludedRepoNames + "\n";
+  forgeMirrorRequiredSessionVariables = [
+    "FORGEJO_URL"
+    "FORGEJO_USER"
+    "FORGEJO_SSH_HOST"
+    "FORGE_MIRROR_SCAN_ROOTS_FILE"
+    "FORGE_MIRROR_GITHUB_PRIMARY_REPOS_FILE"
+  ];
+  forgeMirrorEnvironment =
+    if
+      lib.all (
+        name:
+          builtins.hasAttr name config.home.sessionVariables
+          && toString config.home.sessionVariables.${name} != ""
+      )
+      forgeMirrorRequiredSessionVariables
+    then config.home.sessionVariables
+    else throw "forgejoPrimary requires the private forge-mirror operator policy module.";
+  forgeMirrorCommandEnvironment = lib.escapeShellArgs (
+    map (name: "${name}=${forgeMirrorEnvironment.${name}}") forgeMirrorRequiredSessionVariables
+    ++ lib.optional (forgeMirrorEnvironment ? FORGEJO_TOKEN_FILE)
+    "FORGEJO_TOKEN_FILE=${forgeMirrorEnvironment.FORGEJO_TOKEN_FILE}"
+  );
   hostSopsFile = (
     assert builtins.pathExists "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"; "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml"
   );
@@ -101,8 +121,6 @@ in
     # ==================== Symlinked configs (live editing, all hosts) ====================
     xdg.configFile."television".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/television";
-
-    xdg.configFile."forge-mirror/github-primary-repos".text = forgeMirrorGithubPrimaryReposFile;
 
     xdg.configFile."llm/config.toml".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/llm/config.toml";
@@ -207,11 +225,16 @@ in
     );
 
     # Configure Forgejo as the local primary remote for repos that exist on
-    # Forgejo. Runs on every home-manager switch; skips silently when offline.
-    home.activation.forgejoPrimary = lib.hm.dag.entryAfter ["writeBoundary"] ''
-      if command -v forge-mirror >/dev/null 2>&1; then
-        export FORGE_MIRROR_GITHUB_PRIMARY_REPOS="${forgeMirrorGithubPrimaryRepos}"
-        forge-mirror primary 2>/dev/null || true
-      fi
-    '';
+    # Forgejo. Runs on every home-manager switch and remains non-blocking when
+    # the remote is unavailable.
+    home.activation.forgejoPrimary =
+      lib.hm.dag.entryAfter [
+        "linkGeneration"
+        "workspaceDirs"
+        "sops-nix"
+      ] ''
+        if ! ${pkgs.coreutils}/bin/env ${forgeMirrorCommandEnvironment} ${lib.getExe pkgs.forge-mirror} primary; then
+          echo "forge-mirror primary could not update repository remotes; continuing" >&2
+        fi
+      '';
   }
