@@ -125,6 +125,14 @@ in {
 
   t3code-auto-update-contract = let
     home = self.homeConfigurations.alc-xyz;
+    upstreamHome = home.extendModules {
+      modules = [
+        {
+          services.t3code.channel = lib.mkForce "upstream";
+          services.t3code.package = lib.mkForce home.config.services.t3code.package;
+        }
+      ];
+    };
     forkHome = home.extendModules {
       modules = [
         {
@@ -139,7 +147,7 @@ in {
     service = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Service;
     timer = self.homeConfigurations.alc-xyz.config.systemd.user.timers.t3code-auto-update.Timer;
     updater = builtins.head service.ExecStart;
-    guard = lib.removePrefix "run " self.homeConfigurations.alc-xyz.config.home.activation.t3codeRestartGuard.data;
+    guard = lib.removePrefix "run " upstreamHome.config.home.activation.t3codeRestartGuard.data;
     applyManagedUnit = self.homeConfigurations.alc-xyz.config.home.activation.t3codeApplyManagedUnit.data;
     forkGuard = lib.removePrefix "run " forkHome.config.home.activation.t3codeRestartGuard.data;
   in

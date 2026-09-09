@@ -7,8 +7,10 @@ services.t3code.channel = "upstream"; # or "fork"
 ```
 
 `upstream` selects `pkgs.t3code`; `fork` selects `pkgs.t3code-fork`.
-Both come from the pinned `nix-packages` input and share its build recipe.
-The fork package carries the reviewed patches and its own source pin.
+Both come from the pinned `nix-packages` input and share its nightly source
+revision and build recipe. The fork adds the reviewed patches. The overnight
+package scan validates both variants before promoting a new nightly; a failed
+build or patch conflict leaves the previous promoted revision in place.
 An explicit `services.t3code.package` override still takes precedence.
 
 The consumer lock must first be updated to a promoted `nix-packages` revision
