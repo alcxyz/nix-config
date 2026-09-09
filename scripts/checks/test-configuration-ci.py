@@ -4,6 +4,7 @@
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 
@@ -122,6 +123,32 @@ assert local.returncode == 1
                 )
                 self.assertEqual(result.stdout, expected)
                 self.assertEqual(result.stderr, "")
+
+    def test_selected_phase_preserves_failure_and_does_not_run_the_other_phase(self):
+        for phase, expected in [
+            ("all-systems", "flake check --all-systems --no-build --no-update-lock-file"),
+            ("native", "flake check --keep-going --no-update-lock-file"),
+        ]:
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                calls = Path(directory) / "calls"
+                mock = Path(directory) / "nix"
+                mock.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nexit 19\n')
+                mock.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", str(ROOT / "scripts/ci/check-configurations.sh"), phase],
+                    env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"], "CALLS": str(calls)},
+                    capture_output=True,
+                )
+                self.assertEqual(result.returncode, 19)
+                self.assertEqual(calls.read_text().splitlines(), [expected])
+
+    def test_unknown_phase_is_rejected_before_validation(self):
+        result = subprocess.run(
+            [shutil.which("bash"), str(ROOT / "scripts/ci/check-configurations.sh"), "unknown"],
+            env={**os.environ, "PATH": "/nonexistent"},
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 2)
 
 
 if __name__ == "__main__":
