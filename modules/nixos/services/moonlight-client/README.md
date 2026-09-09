@@ -19,12 +19,22 @@ and [0043](../../../../docs/adr/0043-selective-external-nix-config-pattern-adopt
   does not register services itself.
 - `endpoints.nix` constructs endpoint policy, readiness lists, profile setup,
   and selector pairing from explicit caller-supplied values.
+- `input.nix` constructs couch controls, controller and direct-mode input
+  daemons, and KDE Connect and pointer integration. Its caller supplies the
+  composed session controls, mode flags, and packages; it does not register
+  services itself.
 - `layout.nix` constructs software mirroring, adaptive output layout, workspace
   routing, and the display layout controls. Its caller supplies configuration,
   packages, state-file paths, derived mirror settings, and the audio output
   helper; it does not register services itself.
-- `default.nix` composes those helpers with the remaining session, browser, and
-  input implementation, and owns NixOS service registration.
+- `session-control.nix` constructs DMS launch and control helpers, output
+  stability checks, splash and power actions, and session mode switching. Its
+  caller supplies configuration, state paths, and the display and audio
+  helpers; it does not register services itself.
+- `session-artifacts.nix` constructs desktop entries, the Hyprland session
+  configuration, and the session dispatcher and package. Its caller supplies
+  the composed helper commands; it does not register services itself.
+- `default.nix` composes those helpers and owns NixOS service registration.
 
 These boundaries preserve generated commands, defaults, and service lifecycle.
 Further decomposition is tracked in [issue #279](https://git.alc.xyz/alcxyz/nix-config/issues/279).
