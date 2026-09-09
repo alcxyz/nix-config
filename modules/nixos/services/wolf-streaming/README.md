@@ -3,7 +3,8 @@
 `default.nix` composes the images, application definitions, reconciliation
 helpers, and host services. `options.nix` declares the public module interface;
 its image defaults and shared input defaults are supplied explicitly by the
-composition module.
+composition module. `images.nix` owns pinned sources, patches, image tags, and
+browser build contexts, parameterized by packages and browser options.
 
 `browser-image/` contains the browser image and desktop/input helpers.
 `wolf-image/` contains coordinator image patches. `nvrtc-runtime.nix` packages
