@@ -66,6 +66,13 @@ contract test therefore belong in `nix-packages`; this repository selects the
 external package and retains the NixOS, Darwin, package-set, and operator-command
 configuration that consumes it.
 
+`k8s-node-reboot` and its network-path audit are reusable operator tooling for
+clusters that use the documented Longhorn and CloudNativePG safety contract.
+Their executable sources and mocked safety tests belong together in
+`nix-packages`. This repository retains the package selection, operator
+commands, k3s service assembly, and ADR-0068 policy; moving identical helper
+behavior does not replace runtime cluster qualification.
+
 The remaining local package and patch ownership is intentional or needs
 independent qualification:
 
@@ -75,8 +82,9 @@ independent qualification:
 | `packages/nixbox-*` | Remain with the branded boot and session configuration they implement. |
 | DMS, Quickshell, RustFS, Wolf, and GStreamer patches under `modules/` | Remain with the module options, service assembly, and version-specific behavior they modify. |
 | Hyprland, Moonlight, and Waynergy patches | Remain with their consumer overrides until each patched package has independent platform and input-path qualification. |
-| `packages/k8s-node-reboot` | A reusable extraction candidate, but its Longhorn and CloudNativePG safety contract and tests must move together and runtime cluster qualification remains separate. |
 | `packages/ffmpeg-v4l2-request` and `packages/moonlight-rpi3` | Reusable extraction candidates after native ARM builds and target hardware decode/display qualification. |
+
+ARM media extraction is tracked in [nix-packages #334](https://git.alc.xyz/alcxyz/nix-packages/issues/334).
 
 Package movement preserves the advertised platform set. Producer evaluation and
 native builds are followed by checks against the actual consumer lock before

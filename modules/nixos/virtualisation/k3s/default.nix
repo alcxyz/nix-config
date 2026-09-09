@@ -30,7 +30,7 @@ with lib; let
       pkgs.iproute2
       pkgs.k3s
     ];
-    text = builtins.readFile ../../../../scripts/ops/k8s-node-network-audit.sh;
+    text = builtins.readFile pkgs.k8s-node-reboot.networkAuditScript;
   };
 in {
   # Define the NixOS options for this module
