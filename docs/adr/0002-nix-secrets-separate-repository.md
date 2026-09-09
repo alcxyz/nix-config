@@ -26,6 +26,11 @@ The public repo may reference stable private module and path outputs, but should
 not duplicate private runbook details, secret metadata beyond what is required
 for declarative wiring, or sensitive operational assumptions.
 
+Public service and Home Manager modules may define generic interfaces for
+provider endpoints, account names, and repository-policy files. Personal
+defaults and repository classifications are supplied by private modules rather
+than duplicated in public host or user configuration.
+
 ## Alternatives Considered
 
 - **Inline secrets directory in this repo** - rejected. It would prevent sharing

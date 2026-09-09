@@ -59,20 +59,45 @@
     githubDeniedRepositories = ["blocked"];
     requiredPrivateRepositories = ["internal"];
   };
-  auditEmpty = evaluateAudit {
-    forgejoUser = "";
-    githubUser = "";
+  auditEmptyPolicies = evaluateAudit {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    githubUser = "github-account";
     githubPrimaryRepositories = [];
     githubDeniedRepositories = [];
     requiredPrivateRepositories = [];
   };
-  auditMissingOptional = evaluateAudit {githubPrimaryRepositories = [];};
-  auditMissingRequired = evaluateAudit {
+  auditMissingPolicy = evaluateAudit {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    githubUser = "github-account";
     githubPrimaryRepositories = [];
+    requiredPrivateRepositories = [];
+  };
+  auditEmptyScalar = evaluateAudit {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "";
+    githubUser = "github-account";
+    githubPrimaryRepositories = [];
+    githubDeniedRepositories = [];
+    requiredPrivateRepositories = [];
+  };
+  auditMissingRequired = evaluateAudit {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    githubUser = "github-account";
+    githubPrimaryRepositories = [];
+    githubDeniedRepositories = [];
+    requiredPrivateRepositories = [];
     credentials = {};
   };
   auditLegacyCredential = evaluateAudit {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    githubUser = "github-account";
     githubPrimaryRepositories = [];
+    githubDeniedRepositories = [];
+    requiredPrivateRepositories = [];
     credentials =
       credentials
       // {
@@ -84,10 +109,19 @@
     forgejoUrl = "https://forge.example";
     forgejoUser = "forgejo-account";
   };
-  pullEmpty = evaluatePull {forgejoUser = "";};
-  pullMissingOptional = evaluatePull {};
-  pullMissingRequired = evaluatePull {credentials = {};};
+  pullEmptyScalar = evaluatePull {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "";
+  };
+  pullMissingScalar = evaluatePull {forgejoUrl = "https://forge.example";};
+  pullMissingCredentials = evaluatePull {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    credentials = {};
+  };
   pullLegacyCredential = evaluatePull {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
     credentials =
       credentials
       // {
@@ -111,22 +145,18 @@ in
   assert lib.hasInfix "GITHUB_MIRROR_PAT_FILE=\"/credentials/github\"" (auditExec auditPopulated);
   assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (auditExec auditPopulated));
   assert lib.hasInfix "exec /forge-mirror/bin/forge-mirror audit" (auditExec auditPopulated);
-  assert lib.hasInfix "export FORGEJO_USER=''" (auditExec auditEmpty);
-  assert lib.hasInfix "export GITHUB_USER=''" (auditExec auditEmpty);
   assert lib.hasInfix
   "FORGE_MIRROR_GITHUB_PRIMARY_REPOS_FILE=/policy/forge-mirror-github-primary-repos-0"
-  (auditExec auditEmpty);
+  (auditExec auditEmptyPolicies);
   assert lib.hasInfix
   "FORGE_MIRROR_GITHUB_DENIED_REPOS_FILE=/policy/forge-mirror-github-denied-repos-0"
-  (auditExec auditEmpty);
+  (auditExec auditEmptyPolicies);
   assert lib.hasInfix
   "FORGE_MIRROR_REQUIRED_PRIVATE_REPOS_FILE=/policy/forge-mirror-required-private-repos-0"
-  (auditExec auditEmpty);
-  assert !(lib.hasInfix "FORGEJO_USER=" (auditExec auditMissingOptional));
-  assert !(lib.hasInfix "GITHUB_USER=" (auditExec auditMissingOptional));
-  assert !(lib.hasInfix "FORGE_MIRROR_GITHUB_DENIED_REPOS_FILE=" (auditExec auditMissingOptional));
-  assert !(lib.hasInfix "FORGE_MIRROR_REQUIRED_PRIVATE_REPOS_FILE=" (auditExec auditMissingOptional));
+  (auditExec auditEmptyPolicies);
   assert !(builtins.tryEval (auditExec (evaluateAudit {}))).success;
+  assert !(builtins.tryEval (auditExec auditMissingPolicy)).success;
+  assert !(builtins.tryEval (auditExec auditEmptyScalar)).success;
   assert !(assertionsPass auditMissingRequired);
   assert assertionsPass auditLegacyCredential;
   assert !(auditLegacyCredential.config.sops.secrets ? forge_mirror_codeberg_token);
@@ -137,11 +167,10 @@ in
   assert lib.hasInfix "GITHUB_MIRROR_PAT_FILE=\"/credentials/github\"" (pullExec pullPopulated);
   assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (pullExec pullPopulated));
   assert lib.hasInfix "exec /forge-mirror/bin/forge-mirror pull" (pullExec pullPopulated);
-  assert lib.hasInfix "export FORGEJO_USER=''" (pullExec pullEmpty);
-  assert !(lib.hasInfix "FORGEJO_USER=" (pullExec pullMissingOptional));
   assert !(lib.hasInfix "GITHUB_USER=" (pullExec pullPopulated));
-  assert lib.hasInfix "http://git.local" (pullExec pullMissingOptional);
-  assert !(assertionsPass pullMissingRequired);
+  assert !(builtins.tryEval (pullExec pullEmptyScalar)).success;
+  assert !(builtins.tryEval (pullExec pullMissingScalar)).success;
+  assert !(assertionsPass pullMissingCredentials);
   assert assertionsPass pullLegacyCredential;
   assert !(pullLegacyCredential.config.sops.secrets ? forge_mirror_codeberg_token);
   assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (pullExec pullLegacyCredential)); true
