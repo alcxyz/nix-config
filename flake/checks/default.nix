@@ -44,6 +44,10 @@ in {
     python3 scripts/checks/test-maintained-dev-qa.py
   '';
 
+  nix-deploy-contract = mkRepoCheck "nix-deploy-contract" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused] ''
+    python3 scripts/checks/test-nix-deploy.py packages/nix-deploy/deploy
+  '';
+
   configuration-ci-contract = mkRepoCheck "configuration-ci-contract" [pkgs.python3 pkgs.bash pkgs.git] ''
     python3 scripts/checks/test-configuration-ci.py
   '';
