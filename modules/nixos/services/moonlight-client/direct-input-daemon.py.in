@@ -1,0 +1,315 @@
+import os
+import select
+import socket
+import subprocess
+import time
+
+from evdev import InputDevice, UInput, ecodes, list_devices
+
+
+MODE_FILE = @modeStateFile@
+CONTROLLER_NAME = @controllerDeviceName@
+CONTROLLER_HOLD_SECONDS = @controllerHoldSeconds@
+DEVICE_REFRESH_SECONDS = 1.0
+INACTIVE_MODE_SLEEP_SECONDS = 0.5
+KDECONNECT_DIRECT_INPUT = @kdeConnectDirectInput@
+KDECONNECT_SOCKET_PATH = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
+    "kdeconnect-hypr-pointer.sock",
+)
+IGNORED_KEYBOARD_NAMES = ("kde connect", "moonlight", "uinput", "virtual", "waynergy")
+KDECONNECT_BUTTONS = {
+    1: ecodes.BTN_LEFT,
+    2: ecodes.BTN_MIDDLE,
+    3: ecodes.BTN_RIGHT,
+    8: ecodes.BTN_SIDE,
+    9: ecodes.BTN_EXTRA,
+}
+KDECONNECT_SCROLL = {
+    4: (ecodes.REL_WHEEL, 1),
+    5: (ecodes.REL_WHEEL, -1),
+    6: (ecodes.REL_HWHEEL, -1),
+    7: (ecodes.REL_HWHEEL, 1),
+}
+KDECONNECT_UINPUT_CAPABILITIES = {
+    ecodes.EV_KEY: list(range(1, ecodes.KEY_MAX + 1)),
+    ecodes.EV_REL: [
+        ecodes.REL_X,
+        ecodes.REL_Y,
+        ecodes.REL_WHEEL,
+        ecodes.REL_HWHEEL,
+    ],
+}
+COMMANDS = {
+@directBrowserCommand@@directStreamCommand@@directPrivateCommand@}
+
+
+def current_mode():
+    try:
+        with open(MODE_FILE, encoding="utf-8") as mode_file:
+            return mode_file.read().strip().split(":", 1)[0]
+    except OSError:
+        return ""
+
+
+def open_kdeconnect_input():
+    if not KDECONNECT_DIRECT_INPUT:
+        return None, None
+    try:
+        os.unlink(KDECONNECT_SOCKET_PATH)
+    except FileNotFoundError:
+        pass
+    input_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        input_socket.bind(KDECONNECT_SOCKET_PATH)
+        os.chmod(KDECONNECT_SOCKET_PATH, 0o600)
+        input_socket.setblocking(False)
+        virtual_input = UInput(
+            KDECONNECT_UINPUT_CAPABILITIES,
+            name="Nixbox KDE Connect Direct Input",
+        )
+    except Exception:
+        input_socket.close()
+        try:
+            os.unlink(KDECONNECT_SOCKET_PATH)
+        except FileNotFoundError:
+            pass
+        raise
+    print("Listening for direct KDE Connect input", flush=True)
+    return input_socket, virtual_input
+
+
+def close_kdeconnect_input(input_socket, virtual_input):
+    if input_socket is None and virtual_input is None:
+        return
+    if input_socket is not None:
+        input_socket.close()
+    if virtual_input is not None:
+        virtual_input.close()
+    try:
+        os.unlink(KDECONNECT_SOCKET_PATH)
+    except FileNotFoundError:
+        pass
+
+
+def inject_kdeconnect_message(virtual_input, message):
+    try:
+        kind, first, second = message.decode().split()
+        first = int(first)
+        second = int(second)
+    except (UnicodeDecodeError, ValueError):
+        return
+
+    if kind == "K":
+        # Xorg's standard evdev keycodes are Linux input codes plus eight.
+        code = first - 8
+        if 0 < code <= ecodes.KEY_MAX:
+            virtual_input.write(ecodes.EV_KEY, code, int(bool(second)))
+            virtual_input.syn()
+    elif kind == "B":
+        if first in KDECONNECT_SCROLL:
+            if second:
+                code, value = KDECONNECT_SCROLL[first]
+                virtual_input.write(ecodes.EV_REL, code, value)
+                virtual_input.syn()
+        elif first in KDECONNECT_BUTTONS:
+            virtual_input.write(
+                ecodes.EV_KEY,
+                KDECONNECT_BUTTONS[first],
+                int(bool(second)),
+            )
+            virtual_input.syn()
+    elif kind == "M" and (first or second):
+        if first:
+            virtual_input.write(ecodes.EV_REL, ecodes.REL_X, first)
+        if second:
+            virtual_input.write(ecodes.EV_REL, ecodes.REL_Y, second)
+        virtual_input.syn()
+
+
+def close_devices(devices):
+    for state in devices.values():
+        state["device"].close()
+    devices.clear()
+
+
+def classify_device(device):
+    capabilities = device.capabilities()
+    keys = set(capabilities.get(ecodes.EV_KEY, []))
+
+    if device.name == CONTROLLER_NAME and ecodes.BTN_MODE in keys:
+        return "controller"
+
+    name = device.name.lower()
+    if any(fragment in name for fragment in IGNORED_KEYBOARD_NAMES):
+        return None
+    has_meta = ecodes.KEY_LEFTMETA in keys or ecodes.KEY_RIGHTMETA in keys
+    if has_meta and ecodes.KEY_R in keys and ecodes.KEY_M in keys:
+        return "keyboard"
+    return None
+
+
+def refresh_devices(devices):
+    available_paths = set(list_devices())
+    for path in list(devices):
+        if path not in available_paths:
+            devices.pop(path)["device"].close()
+
+    for path in sorted(available_paths - set(devices)):
+        try:
+            device = InputDevice(path)
+            role = classify_device(device)
+            if role is None:
+                device.close()
+                continue
+            devices[path] = {
+                "device": device,
+                "role": role,
+                "pressed": set(),
+                "hat_up": False,
+                "candidate": None,
+                "candidate_since": None,
+                "latched": False,
+            }
+            print(f"Listening to {role} input from {device.name}", flush=True)
+        except (OSError, PermissionError):
+            continue
+
+
+def keyboard_action(state):
+    pressed = state["pressed"]
+    meta = ecodes.KEY_LEFTMETA in pressed or ecodes.KEY_RIGHTMETA in pressed
+    shift = ecodes.KEY_LEFTSHIFT in pressed or ecodes.KEY_RIGHTSHIFT in pressed
+    if not meta:
+        return None
+@directPrivateKeyboardAction@@directBrowserKeyboardAction@@directStreamKeyboardAction@    return None
+
+
+def controller_action(state):
+    pressed = state["pressed"]
+@directPrivateControllerAction@@directBrowserControllerAction@@directStreamControllerAction@    return None
+
+
+def requested_action(state):
+    if state["role"] == "keyboard":
+        return keyboard_action(state)
+    return controller_action(state)
+
+
+def run_action(action):
+    print(f"Requesting {action}", flush=True)
+    subprocess.Popen(
+        COMMANDS[action],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+devices = {}
+next_refresh = 0.0
+kdeconnect_socket = None
+kdeconnect_uinput = None
+
+while True:
+    if not current_mode().startswith("direct-"):
+        close_devices(devices)
+        close_kdeconnect_input(kdeconnect_socket, kdeconnect_uinput)
+        kdeconnect_socket = None
+        kdeconnect_uinput = None
+        next_refresh = 0.0
+        time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
+        continue
+
+    if KDECONNECT_DIRECT_INPUT and kdeconnect_socket is None:
+        try:
+            kdeconnect_socket, kdeconnect_uinput = open_kdeconnect_input()
+        except (OSError, PermissionError) as error:
+            print(f"Waiting for KDE Connect direct input: {error}", flush=True)
+            time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
+            continue
+
+    now = time.monotonic()
+    if now >= next_refresh:
+        refresh_devices(devices)
+        next_refresh = now + DEVICE_REFRESH_SECONDS
+
+    readers = [state["device"].fd for state in devices.values()]
+    if kdeconnect_socket is not None:
+        readers.append(kdeconnect_socket)
+    if not readers:
+        time.sleep(INACTIVE_MODE_SLEEP_SECONDS)
+        continue
+
+    try:
+        readable, _, _ = select.select(
+            readers,
+            [],
+            [],
+            0.1,
+        )
+    except (OSError, ValueError):
+        close_devices(devices)
+        close_kdeconnect_input(kdeconnect_socket, kdeconnect_uinput)
+        kdeconnect_socket = None
+        kdeconnect_uinput = None
+        next_refresh = 0.0
+        continue
+
+    if kdeconnect_socket is not None and kdeconnect_socket in readable:
+        while True:
+            try:
+                message = kdeconnect_socket.recv(96)
+            except BlockingIOError:
+                break
+            try:
+                inject_kdeconnect_message(kdeconnect_uinput, message)
+            except OSError:
+                close_kdeconnect_input(kdeconnect_socket, kdeconnect_uinput)
+                kdeconnect_socket = None
+                kdeconnect_uinput = None
+                break
+
+    readable_fds = {
+        item if isinstance(item, int) else item.fileno()
+        for item in readable
+    }
+    for path, state in list(devices.items()):
+        if state["device"].fd not in readable_fds:
+            continue
+        try:
+            for event in state["device"].read():
+                if event.type == ecodes.EV_KEY:
+                    if event.value:
+                        state["pressed"].add(event.code)
+                    else:
+                        state["pressed"].discard(event.code)
+                elif (
+                    state["role"] == "controller"
+                    and event.type == ecodes.EV_ABS
+                    and event.code == ecodes.ABS_HAT0Y
+                ):
+                    state["hat_up"] = event.value < 0
+        except (OSError, ValueError):
+            devices.pop(path)["device"].close()
+            continue
+
+    now = time.monotonic()
+    for state in devices.values():
+        action = requested_action(state)
+        if action is None:
+            state["candidate"] = None
+            state["candidate_since"] = None
+            state["latched"] = False
+            continue
+        if state["latched"]:
+            continue
+        if state["candidate"] != action:
+            state["candidate"] = action
+            state["candidate_since"] = now
+            continue
+        hold_seconds = 0.0 if state["role"] == "keyboard" else CONTROLLER_HOLD_SECONDS
+        if now - state["candidate_since"] >= hold_seconds:
+            run_action(action)
+            state["latched"] = True

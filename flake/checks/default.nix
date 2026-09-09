@@ -247,6 +247,22 @@ in {
       bash scripts/checks/test-wolf-browser-input-contract.sh
     '';
 
+  moonlight-input-source-syntax =
+    mkRepoCheck "moonlight-input-source-syntax" [
+      pkgs.libx11
+      pkgs.libxcb
+      pkgs.libxi
+      pkgs.libxtst
+      pkgs.pkg-config
+      pkgs.python3
+      pkgs.stdenv.cc
+    ] ''
+      python3 scripts/checks/test-moonlight-input-sources.py
+      "$CC" -fsyntax-only -Wall -Wextra -Werror \
+        $(pkg-config --cflags x11 xcb xi xtst) \
+        modules/nixos/services/moonlight-client/kdeconnect-pointer-shim.c
+    '';
+
   report-assets =
     mkRepoCheck "report-assets-check"
     [
