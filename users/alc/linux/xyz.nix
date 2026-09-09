@@ -630,6 +630,7 @@ in {
 
   services.t3code = {
     enable = true;
+    channel = "upstream"; # Select "fork" for the pinned local patches.
     port = 3773;
     autoUpdate = {
       packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";

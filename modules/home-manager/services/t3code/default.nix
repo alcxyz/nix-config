@@ -13,6 +13,7 @@ with lib; let
   cfg = config.services.t3code;
   managedVersion = getVersion cfg.package;
   managedVersionState = "${cfg.baseDir}/userdata/managed-t3code-version";
+  managedChannelState = "${cfg.baseDir}/userdata/managed-t3code-channel";
   restartMarker = "${cfg.baseDir}/userdata/managed-t3code-restart-required";
   promotionFlakeDefault =
     if cfg.autoUpdate.promotionFlakeUri == null
@@ -33,6 +34,8 @@ with lib; let
     ];
     text = ''
       managed_version=${escapeShellArg managedVersion}
+      managed_channel=${escapeShellArg cfg.channel}
+      channel_state="''${T3CODE_CHANNEL_STATE:-${managedChannelState}}"
       version_state="''${T3CODE_VERSION_STATE:-${managedVersionState}}"
       restart_marker="''${T3CODE_RESTART_MARKER:-${restartMarker}}"
       cgroup_file="''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}"
@@ -65,7 +68,18 @@ with lib; let
         fi
       fi
 
-      if [[ -n "$accepted_version" ]] && version_is_older "$managed_version" "$accepted_version"; then
+      accepted_channel=upstream
+      if [[ -r "$channel_state" ]]; then
+        read -r accepted_channel < "$channel_state" || true
+      fi
+      if [[ "$accepted_channel" != upstream && "$accepted_channel" != fork ]]; then
+        echo "Invalid managed T3 Code channel state at $channel_state." >&2
+        exit 76
+      fi
+
+      # Selecting another channel is an intentional package change. Versions
+      # from independent release lines cannot be ordered as ordinary updates.
+      if [[ "$accepted_channel" == "$managed_channel" && -n "$accepted_version" ]] && version_is_older "$managed_version" "$accepted_version"; then
         if [[ "''${T3CODE_ALLOW_DOWNGRADE:-0}" != "1" ]]; then
           echo "Refusing to downgrade managed T3 Code from $accepted_version to $managed_version." >&2
           echo "Promote the newer nix-packages revision into flake.lock, or set T3CODE_ALLOW_DOWNGRADE=1 for an intentional rollback." >&2
@@ -188,10 +202,19 @@ in {
   options.services.t3code = {
     enable = mkEnableOption "t3code headless server";
 
+    channel = mkOption {
+      type = types.enum ["upstream" "fork"];
+      default = "upstream";
+      description = "Package channel for the existing service. Changing channels preserves its address and state directory.";
+    };
+
     package = mkOption {
       type = types.package;
-      default = pkgs.t3code;
-      defaultText = literalExpression "pkgs.t3code";
+      default =
+        if cfg.channel == "fork"
+        then pkgs.t3code-fork
+        else pkgs.t3code;
+      defaultText = literalExpression ''if config.services.t3code.channel == "fork" then pkgs.t3code-fork else pkgs.t3code'';
       description = "T3 Code package to run and protect from unintended downgrades.";
     };
 
@@ -330,6 +353,11 @@ in {
         printf '%s\n' ${escapeShellArg managedVersion} > "$tmp"
         chmod 0644 "$tmp"
         run mv -f "$tmp" "$version_state"
+        channel_state=${escapeShellArg managedChannelState}
+        channel_tmp=$(mktemp "''${channel_state}.XXXXXX")
+        printf '%s\n' ${escapeShellArg cfg.channel} > "$channel_tmp"
+        chmod 0644 "$channel_tmp"
+        run mv -f "$channel_tmp" "$channel_state"
       '';
 
     systemd.user.services.t3code-auto-update = mkIf cfg.autoUpdate.enable {
