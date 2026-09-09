@@ -282,6 +282,7 @@
           chmod -R u+w "$out/share/quickshell/dms"
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-use-live-hyprland-provider.patch}
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
+          patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-credential-consent-details.patch}
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-configurable-external-idle-inhibitors.patch}
           substituteInPlace "$out/share/quickshell/dms/Services/IdleService.qml" \
             --subst-var-by respectExternalInhibitors ${lib.boolToString cfg.idleLock.respectExternalInhibitors}
