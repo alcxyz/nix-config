@@ -35,21 +35,38 @@ in {
   '';
 
   check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
-    shellcheck scripts/checks/*.sh scripts/ci/*.sh scripts/forgejo/publish-nix-packages-lock.sh scripts/ops/*.sh packages/nix-deploy/deploy modules/nixos/services/wolf-streaming/browser-image/*.sh
+    shellcheck scripts/checks/*.sh scripts/ci/*.sh scripts/forgejo/publish-nix-packages-lock.sh scripts/ops/*.sh modules/nixos/services/wolf-streaming/browser-image/*.sh
   '';
 
   check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.treefmt pkgs.shfmt] ''
     treefmt --ci --formatters shell
   '';
 
+  nix-deploy-inventory-contract = let
+    config = pkgs.nix-deploy.deployConfig;
+    expectedHosts = builtins.attrNames (import ../../inventory.nix).hosts;
+  in
+    pkgs.runCommand "nix-deploy-inventory-contract" {
+      nativeBuildInputs = [pkgs.jq pkgs.gnugrep];
+    } ''
+      jq -e --argjson hosts ${lib.escapeShellArg (builtins.toJSON expectedHosts)} \
+        '.knownHosts == $hosts' ${config} >/dev/null
+      # Help validates the actual generated inventory without deployment work.
+      ${pkgs.nix-deploy}/bin/deploy --help >help.txt 2>error.txt && exit 1
+      test ! -s error.txt
+      grep -Fq 'Known hosts:' help.txt
+      NIX_DEPLOY_CONFIG=/missing-inventory ${pkgs.nix-deploy}/bin/deploy --help >help.txt 2>error.txt && exit 1
+      grep -Fq 'cannot read inventory' error.txt
+      NIX_DEPLOY_CONFIG=/missing-inventory ${pkgs.nix-deploy}/bin/deploy --config ${config} --help >help.txt 2>error.txt && exit 1
+      test ! -s error.txt
+      grep -Fq 'Known hosts:' help.txt
+      touch "$out"
+    '';
+
   maintained-dev-qa = mkRepoCheck "maintained-dev-qa" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.jq pkgs.shellcheck pkgs.shfmt] ''
     shellcheck scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-dms-plugins.sh
     shfmt -d -i 2 -ci scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-dms-plugins.sh
     python3 scripts/checks/test-maintained-dev-qa.py
-  '';
-
-  nix-deploy-contract = mkRepoCheck "nix-deploy-contract" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused] ''
-    python3 scripts/checks/test-nix-deploy.py packages/nix-deploy/deploy
   '';
 
   configuration-ci-contract = mkRepoCheck "configuration-ci-contract" [pkgs.python3 pkgs.bash pkgs.git] ''
