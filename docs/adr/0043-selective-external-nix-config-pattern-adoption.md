@@ -162,3 +162,18 @@ Named private host modules also supply filesystem device identities and the
 workstation network profile. Public hardware composition retains generic
 filesystem types and kernel settings; the consumer lock and complete deployment
 checks validate the private boundary together.
+
+Private modules are consumed through named `nix-secrets` flake outputs. The
+minimum interface required here includes `nixosModules.nixboxClientPrivate`,
+`nixosModules.operatorLogin`, `homeManagerModules.linuxOperator`, and
+`homeManagerModules.darwinOperator`.
+Optional bootstrap tooling is imported only by the explicit Linux and Darwin
+operator compositions, so appliance and family profiles do not carry unused
+operator option schemas.
+
+The old `operatorLogin` availability guard is removed: private revisions that
+lack it also predate the now-required client export. Guards inside the private
+operator modules remain intentional: they allow the shared private defaults to
+compose with public profiles that do not import every optional service module.
+Required named interfaces above are unguarded and fail during evaluation when
+absent.

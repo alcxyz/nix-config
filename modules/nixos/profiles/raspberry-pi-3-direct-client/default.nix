@@ -50,7 +50,7 @@
 in {
   imports = [
     "${inputs.nixos-hardware}/raspberry-pi/common/default.nix"
-    "${inputs.nix-secrets}/modules/nixos/nixbox-client-private.nix"
+    inputs.nix-secrets.nixosModules.nixboxClientPrivate
     ../nixbox-direct-client/default.nix
   ];
 

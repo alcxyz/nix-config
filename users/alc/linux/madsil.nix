@@ -4,10 +4,6 @@
   configDir,
   ...
 }: {
-  imports = [
-    "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
-  ];
-
   home.username = "alc";
   home.homeDirectory = "/home/alc";
   home.stateVersion = "24.11";
