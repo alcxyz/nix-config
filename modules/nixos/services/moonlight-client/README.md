@@ -22,7 +22,8 @@ and [0043](../../../../docs/adr/0043-selective-external-nix-config-pattern-adopt
 - `input.nix` constructs couch controls, controller and direct-mode input
   daemons, and KDE Connect and pointer integration. Its caller supplies the
   composed session controls, mode flags, and packages; it does not register
-  services itself.
+  services itself. The Python daemon templates and KDE Connect C shim live in
+  adjacent language source files and receive their generated values explicitly.
 - `layout.nix` constructs software mirroring, adaptive output layout, workspace
   routing, and the display layout controls. Its caller supplies configuration,
   packages, state-file paths, derived mirror settings, and the audio output
