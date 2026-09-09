@@ -14,7 +14,7 @@ Configuration is organised into four tiers, composed via explicit `imports` in e
 
 **Tier 1 — Common base** (`modules/nixos/common/default.nix`): Applied to every host. Nix daemon settings, binary caches, SSH authorized keys, user/group definitions, core services (openssh, pipewire, bluetooth), sops-nix bootstrap, fonts, locale, keyboard, bootloader.
 
-**Tier 2 — Role** (`modules/nixos/common/{desktop,server}.nix`): Applied by host function. `desktop.nix` adds Hyprland, display manager, GPU support, Docker with CDI, kanata, and desktop packages. `server.nix` adds server packages and server defaults. Optional capabilities such as distributed-build client credentials live in separate explicit modules.
+**Tier 2 — Role** (`modules/nixos/common/{desktop,server}.nix`): Applied by host function. `desktop.nix` adds Hyprland, the display manager, Docker defaults, kanata, and desktop packages. GPU driver selection, display identity, and GPU container policy are supplied by explicit host hardware/private modules. `server.nix` adds server packages and server defaults. Optional capabilities such as distributed-build client credentials live in separate explicit modules.
 
 **Tier 3 — Service and hardware modules** (`modules/nixos/{services,hardware,virtualisation}/`): Opt-in, imported only by hosts that need them. Each module is self-contained — it defines its own sops secrets, systemd services, and package requirements. Examples: `nvidia.nix`, `amd.nix`, `zfs-autounlock`, `kvm/gpu-passthrough`.
 
@@ -34,3 +34,19 @@ Home Manager mirrors this: `users/alc/common.nix` → `users/alc/linux/common.ni
 - Service modules are independently composable — they make no assumptions about which other modules are present.
 - The full config of any host requires following imports across tiers; it is not visible from a single file.
 - When adding configuration: all-host values → `common/default.nix`; role values → appropriate role module; service/hardware → new or existing service module; host-specific → `hosts/{name}/configuration.nix`. Never add per-host values to shared modules.
+
+## September 2026 role review
+
+[Issue #280](https://git.alc.xyz/alcxyz/nix-config/issues/280) separates the shared
+desktop role from its current consumer's display identity. The public opt-in
+`hardware.displayDeviceGuard` interface owns alias creation and verification;
+private host policy supplies hardware values, driver selection, and GPU runtime
+settings. Existing host imports remain explicit.
+
+The common-policy review evaluated all ten exported NixOS configurations.
+PipeWire and Bluetooth remain the accepted common baseline across workstation,
+server, family-gaming, and embedded roles. Docker remains enabled on the six
+non-embedded hosts and explicitly disabled on the four embedded hosts. Those
+existing choices are retained: moving display policy does not establish a reason
+to remove common audio, Bluetooth, or container capabilities. Any later narrowing
+needs a capability-specific review of consumers and runtime requirements.
