@@ -316,38 +316,17 @@ derivations without building complete host closures.
 Formatter commands share the selection in `treefmt.toml`: all Nix files and
 explicitly listed shell paths. Historical Nix formatting has been normalized.
 
-## Cluster access
+## Kubernetes client access
 
-`nix-config` wires Kubernetes access through SOPS-managed kubeconfig secrets,
-local kubeconfigs, and Home Manager command wrappers:
+The generic Home Manager Kubernetes module installs client wrappers that set a
+composed `KUBECONFIG` for each command while preserving a caller-supplied value.
+The composition supports a writable current-context file, a configured primary
+kubeconfig, and optional additional kubeconfigs that are included when
+readable. This avoids requiring a global credential environment for shells,
+GUI sessions, and unrelated subprocesses.
 
-- The decrypted kubeconfig lives at `/home/alc/.config/sops-nix/secrets/k3s_kubeconfig` on Linux.
-- [modules/home-manager/programs/kubernetes/default.nix](modules/home-manager/programs/kubernetes/default.nix) installs wrappers for `kubectl`, `flux`, `helm`, `k9s`, `kdash`, and selected Kubernetes-aware tools.
-- Each wrapper sets a merged `KUBECONFIG` only for that command when it is not already set.
-- The merged config starts with a writable current-context file, then the SOPS-managed kubeconfig, then any configured local kubeconfig files that exist.
-- Operator machines can import private flake modules such as `bn-bootstrap` to
-  append additional kubeconfig files and install engagement-specific tooling.
-- Linux and macOS operator profiles also include the optional, separately generated
-  `~/.kube/local-bullet-platform-lab-config` and
-  `~/.kube/local-funhouse-lab-config` files. Their context names use a
-  `local-` prefix to distinguish disposable labs from real clusters; absent
-  files are ignored.
-
-This means plain shells, agent subprocesses, and GUI-launched commands do not
-need to inherit a global `KUBECONFIG`, and local/script-created contexts can
-coexist with the default nux cluster context.
-
-```bash
-kubectl config get-contexts
-kc minikube
-kns kube-system
-flux get sources git -A
-flux get kustomizations -A
-```
-
-To verify a Flux-applied app change end-to-end:
-
-```bash
-kubectl -n <namespace> get configmap <name> -o yaml
-kubectl -n <namespace> rollout status deploy/<name>
-```
+See [ADR-0031](docs/adr/0031-kubernetes-client-wrappers.md) for the public
+interface and command behavior. Private operator modules provide concrete
+credential locations, contexts, and engagement-specific integrations; their
+operational checks and recovery procedures live in the private `nix-secrets`
+Kubernetes runbooks.
