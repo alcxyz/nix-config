@@ -23,7 +23,6 @@
     inputs.nix-secrets.nixosModules.xyzNetworkIdentity
     inputs.nix-secrets.nixosModules.xyzStoragePolicy
     inputs.nix-secrets.nixosModules.xyzPrinter
-    inputs.nix-secrets.nixosModules.xyzJeanIngress
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
     "${configDir}/modules/nixos/hardware/nvidia.nix"
