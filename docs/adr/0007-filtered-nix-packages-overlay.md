@@ -51,8 +51,34 @@ Forgejo:
 - [Restore reusable package ownership](https://git.alc.xyz/alcxyz/nix-packages/issues/323)
 - [Validate candidate packages in the consumer context](https://git.alc.xyz/alcxyz/nix-config/issues/275)
 
-[ADR-0067](0067-explicit-consumer-and-platform-validation.md) proposes explicit
+[ADR-0067](0067-explicit-consumer-and-platform-validation.md) defines explicit
 platform and consumer checks. The current filtered implementation silently
 omits absent exported names, so the fail-loud consequence described above is
 not yet fully enforced; the supported-platform and consumer checks must make
 required-package failures explicit.
+
+### Package ownership inventory
+
+`nix-gc-maintenance` is generic Unix tooling: its user, home directory,
+profile roots, command paths, and remote target are supplied by arguments or
+environment variables, and it contains no host inventory. Its executable and
+contract test therefore belong in `nix-packages`; this repository selects the
+external package and retains the NixOS, Darwin, package-set, and operator-command
+configuration that consumes it.
+
+The remaining local package and patch ownership is intentional or needs
+independent qualification:
+
+| Source | Ownership |
+|--------|-----------|
+| `packages/nix-deploy` | Remains here under ADR-0009 until a generic runtime inventory interface and compatibility contract are decided. |
+| `packages/nixbox-*` | Remain with the branded boot and session configuration they implement. |
+| DMS, Quickshell, RustFS, Wolf, and GStreamer patches under `modules/` | Remain with the module options, service assembly, and version-specific behavior they modify. |
+| Hyprland, Moonlight, and Waynergy patches | Remain with their consumer overrides until each patched package has independent platform and input-path qualification. |
+| `packages/k8s-node-reboot` | A reusable extraction candidate, but its Longhorn and CloudNativePG safety contract and tests must move together and runtime cluster qualification remains separate. |
+| `packages/ffmpeg-v4l2-request` and `packages/moonlight-rpi3` | Reusable extraction candidates after native ARM builds and target hardware decode/display qualification. |
+
+Package movement preserves the advertised platform set. Producer evaluation and
+native builds are followed by checks against the actual consumer lock before
+that lock is promoted. Runtime qualification remains explicit for cluster,
+display, hardware decode, and input behavior.

@@ -34,6 +34,7 @@ in
               "zen-browser"
               "nix-deploy"
               "k8s-node-reboot"
+              "nix-gc-maintenance"
               "xonsh-with-direnv"
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
@@ -62,7 +63,6 @@ in
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
               k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
-              nix-gc-maintenance = _prev.callPackage ../packages/nix-gc-maintenance {};
               reportcraft = inputs.reportcraft.packages.${system}.default;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
