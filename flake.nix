@@ -148,6 +148,7 @@
       imports = [
         ./flake/core.nix
         ./flake/hosts
+        ./flake/modules.nix
         ./flake/per-system.nix
       ];
     };

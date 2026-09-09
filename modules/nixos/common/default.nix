@@ -42,6 +42,7 @@ in {
     ../../shared/host-metadata.nix
     ../../shared/shell.nix
     ./distributed-build-client.nix
+    ../security/credential-consent/default.nix
     ../services/snapshot-restic-home/default.nix
     ../services/storage-health-monitor/default.nix
   ];
