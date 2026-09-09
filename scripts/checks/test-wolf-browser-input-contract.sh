@@ -7,6 +7,7 @@ SESSION="$BROWSER_IMAGE/kdeconnect-session.sh"
 DESKTOP_SESSION="$BROWSER_IMAGE/desktop-session.sh"
 POINTER_BRIDGE="$BROWSER_IMAGE/kde-pointer-bridge.py"
 WOLF_MODULE="$ROOT/modules/nixos/services/wolf-streaming/default.nix"
+WOLF_IMAGES="$ROOT/modules/nixos/services/wolf-streaming/images.nix"
 TMP=$(mktemp -d)
 SUPERVISOR_PID=""
 
@@ -69,7 +70,7 @@ if grep -Fq 'test-xi2' "$POINTER_BRIDGE"; then
 fi
 if grep -R -E -q 'LD_PRELOAD|libkdeconnect-scroll-throttle' \
   "$DESKTOP_SESSION" "$SESSION" "$BROWSER_IMAGE/Dockerfile" \
-  "$BROWSER_IMAGE/Dockerfile.nix-store" "$WOLF_MODULE"; then
+  "$BROWSER_IMAGE/Dockerfile.nix-store" "$WOLF_MODULE" "$WOLF_IMAGES"; then
   fail 'KDE Connect button interception was reintroduced'
 fi
 
