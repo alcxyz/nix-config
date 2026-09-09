@@ -25,6 +25,7 @@ in
               "kdash"
               "jean"
               "t3code"
+              "t3code-fork"
               "claude-code"
               "codex-app-server"
               "codex-cli"

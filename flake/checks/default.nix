@@ -122,6 +122,16 @@ in {
     '';
 
   t3code-auto-update-contract = let
+    home = self.homeConfigurations.alc-xyz;
+    forkHome = home.extendModules {
+      modules = [
+        {
+          services.t3code.channel = lib.mkForce "fork";
+          # Exercise channel behavior independently of the producer lock.
+          services.t3code.package = lib.mkForce home.config.services.t3code.package;
+        }
+      ];
+    };
     t3Unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code.Unit;
     unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Unit;
     service = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Service;
@@ -129,14 +139,18 @@ in {
     updater = builtins.head service.ExecStart;
     guard = lib.removePrefix "run " self.homeConfigurations.alc-xyz.config.home.activation.t3codeRestartGuard.data;
     applyManagedUnit = self.homeConfigurations.alc-xyz.config.home.activation.t3codeApplyManagedUnit.data;
+    forkGuard = lib.removePrefix "run " forkHome.config.home.activation.t3codeRestartGuard.data;
   in
+    assert forkHome.config.services.t3code.baseDir == home.config.services.t3code.baseDir;
+    assert forkHome.config.systemd.user.services.t3code.Service.ExecStart == home.config.systemd.user.services.t3code.Service.ExecStart;
     assert t3Unit.X-RestartIfChanged == false;
     assert unit.X-RestartIfChanged == false;
     assert service.Restart == "on-failure";
     assert service.RestartForceExitStatus == "75";
     assert service.RestartPreventExitStatus == "76";
     assert timer.OnCalendar == "*-*-* 09:30:00";
-      pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
+      pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep pkgs.python3];} ''
+        python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)} ${lib.escapeShellArg (lib.removeSuffix "\n" forkGuard)}
         grep -F "promotion_flake_default='git+https://git.alc.xyz/alcxyz/nix-config.git?ref=dev'" ${updater}
         grep -F 'promotion_flake="''${T3CODE_PROMOTION_FLAKE:-$promotion_flake_default}"' ${updater}
         if grep -F ":-'git+" ${updater}; then
