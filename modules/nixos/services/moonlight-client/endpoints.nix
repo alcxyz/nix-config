@@ -49,16 +49,16 @@
     '';
   };
   mkMoonlightEndpointSetup = name: profileDirectory: reconcileStream: reconcileBrowser: selector: let
+    browserReconciliationEnabled =
+      reconcileBrowser
+      && (
+        if selector
+        then browserSelectorEndpointPolicyEnabled
+        else browserStreamEndpointPolicyEnabled
+      );
     reconciliationEnabled =
       (reconcileStream && streamEndpointPolicyEnabled)
-      || (
-        reconcileBrowser
-        && (
-          if selector
-          then browserSelectorEndpointPolicyEnabled
-          else browserStreamEndpointPolicyEnabled
-        )
-      );
+      || browserReconciliationEnabled;
   in
     pkgs.writeShellApplication {
       name = "moonlight-endpoint-setup-${name}";
@@ -78,7 +78,7 @@
             ${lib.escapeShellArg cfg.streamLocalAddress} \
             ${lib.escapeShellArg cfg.streamRemoteAddress}
         ''}
-        ${lib.optionalString (reconcileBrowser && browserStreamEndpointPolicyEnabled) ''
+        ${lib.optionalString browserReconciliationEnabled ''
           ${lib.getExe reconcileMoonlightEndpoints} \
             "$config_file" \
             ${lib.escapeShellArg (
