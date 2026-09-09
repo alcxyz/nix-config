@@ -27,17 +27,14 @@
   boot.extraModulePackages = [];
 
   fileSystems."/" = {
-    device = "xpool/root";
     fsType = "zfs";
   };
 
   fileSystems."/home" = {
-    device = "xpool/home";
     fsType = "zfs";
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-label/xyz-boot";
     fsType = "vfat";
     options = [
       "fmask=0077"
@@ -50,7 +47,6 @@
   # still possible to use this option, but it's recommended to use it in conjunction
   # with explicit per-interface declarations with `networking.interfaces.<interface>.useDHCP`.
   networking.useDHCP = lib.mkDefault true;
-  networking.hostId = "4e7ded69";
   # networking.interfaces.enp6s0.useDHCP = lib.mkDefault true;
   # networking.interfaces.enp7s0.useDHCP = lib.mkDefault true;
 
