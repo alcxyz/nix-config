@@ -336,6 +336,8 @@ in {
     # Bring in consolidated layers
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/desktop.nix"
+    "${configDir}/modules/nixos/hardware/display-device-guard.nix"
+    inputs.nix-secrets.nixosModules.xyzDisplay
     inputs.nix-secrets.nixosModules.zfsAutoUnlock
     inputs.nix-secrets.nixosModules.xyzStorageBootstrap
     inputs.nix-secrets.nixosModules.xyzStashMergerfs

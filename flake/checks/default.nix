@@ -26,6 +26,8 @@ in {
       touch "$out"
     '';
 
+  display-device-guard-contract = import ./display-device-guard.nix {inherit lib pkgs;};
+
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
   '';

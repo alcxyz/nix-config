@@ -151,3 +151,9 @@ in force; these links do not imply completion.
 
 [ADR-0067](0067-explicit-consumer-and-platform-validation.md) defines the
 producer/consumer validation contract used by the public gates.
+
+The #280 display-policy extraction supplies host-specific hardware through the
+private boundary and leaves the shared desktop role independently reusable. The
+common audio, Bluetooth, and container review retains the accepted baseline in
+[ADR-0006](0006-four-tier-module-layering.md); larger host and streaming file
+decomposition remains tracked by #279.
