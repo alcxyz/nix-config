@@ -9,8 +9,14 @@ and [0043](../../../../docs/adr/0043-selective-external-nix-config-pattern-adopt
 - `audio.nix` constructs the audio output, health recovery, and display-layout
   audio helpers. Its caller supplies configuration, packages, state-file paths,
   and the output-stability helper; it does not register services itself.
-- `default.nix` composes those helpers with the remaining session, display,
-  browser, and input implementation, and owns NixOS service registration.
+- `endpoints.nix` constructs endpoint policy, readiness lists, profile setup,
+  and selector pairing from explicit caller-supplied values.
+- `layout.nix` constructs software mirroring, adaptive output layout, workspace
+  routing, and the display layout controls. Its caller supplies configuration,
+  packages, state-file paths, derived mirror settings, and the audio output
+  helper; it does not register services itself.
+- `default.nix` composes those helpers with the remaining session, browser, and
+  input implementation, and owns NixOS service registration.
 
 These boundaries preserve generated commands, defaults, and service lifecycle.
 Further decomposition is tracked in [issue #279](https://git.alc.xyz/alcxyz/nix-config/issues/279).
