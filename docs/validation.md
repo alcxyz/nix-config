@@ -25,7 +25,9 @@ the updater can publish success. A package version string or a source-text
 match is insufficient: the consumer can override dependency inputs.
 
 [ADR-0067](adr/0067-explicit-consumer-and-platform-validation.md) defines the
-contract. [Issue #274](https://git.alc.xyz/alcxyz/nix-config/issues/274) tracks
-ordinary PR rollout; [issue #275](https://git.alc.xyz/alcxyz/nix-config/issues/275)
-tracks consumer validation. Until the full workflow has passed with its
-provisioned prerequisites, ordinary PR automation remains incomplete.
+contract. [Issue #274](https://git.alc.xyz/alcxyz/nix-config/issues/274) records
+the completed ordinary PR rollout; [issue #275](https://git.alc.xyz/alcxyz/nix-config/issues/275)
+records the changed-lock consumer verification and publication rollout,
+including [run 50](https://git.alc.xyz/alcxyz/nix-config/actions/runs/50/jobs/0).
+All declared platforms are evaluated, while foreign-platform check builds,
+runtime qualification, and private synthetic integration remain separate.

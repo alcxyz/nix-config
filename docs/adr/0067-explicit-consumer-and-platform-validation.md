@@ -1,6 +1,6 @@
 # ADR-0067: Explicit consumer and platform validation
 
-**Status:** Accepted; automation rollout pending
+**Status:** Accepted; public automation implemented
 **Date:** 2026-09-07
 **Accepted:** 2026-09-08
 **Applies to:** `flake/`, Forgejo checks, package input promotion, cross-repository validation
@@ -88,11 +88,16 @@ contract. See the [validation guide](../validation.md).
 
 ## Implementation tracking
 
-Forgejo issues and milestones own execution status. Acceptance of this contract does not mark the following implementation work
-complete. The configuration evaluation helper already covers all exported
-deployments. The ordinary PR workflow must pass on an exact candidate revision
-before its rollout is complete; unavailable source access is a failed
-prerequisite, never a skipped evaluation reported as success.
+Forgejo issues and milestones own broader work. The configuration evaluation
+and ordinary PR gate have passed at an exact candidate revision. The
+[changed-lock updater run](https://git.alc.xyz/alcxyz/nix-config/actions/runs/50/jobs/0)
+validated the standalone producer, actual consumer-selected packages, and every
+exported deployment before publishing the verified lock update. This completes
+the public automation rollout described by this ADR. It does not establish
+runtime qualification, foreign-platform builds, or private integration
+coverage.
+
+Implementation records and broader audit tracking:
 
 - [Configuration evaluation and PR gate](https://git.alc.xyz/alcxyz/nix-config/issues/274)
 - [Consumer-context package promotion](https://git.alc.xyz/alcxyz/nix-config/issues/275)

@@ -149,5 +149,5 @@ in force; these links do not imply completion.
 - [Unify formatting scope](https://git.alc.xyz/alcxyz/nix-config/issues/281)
 - [Reconcile documentation and obsolete configuration](https://git.alc.xyz/alcxyz/nix-config/issues/282)
 
-[ADR-0067](0067-explicit-consumer-and-platform-validation.md) proposes the
-producer/consumer validation contract for the new gate.
+[ADR-0067](0067-explicit-consumer-and-platform-validation.md) defines the
+producer/consumer validation contract used by the public gates.
