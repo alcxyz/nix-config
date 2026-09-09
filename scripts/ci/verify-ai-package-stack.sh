@@ -189,7 +189,13 @@ if ! consumer_packages_json=$(
         builtins.concatMap (
           homeName: let
             home = homes.${homeName};
-            expectedDrv = home.pkgs.${packageName}.drvPath;
+            service = home.config.services.t3code or {};
+            selectedPackages =
+              if packageName == "t3code" && (service.enable or false)
+              then [ service.package ]
+              else builtins.filter (
+                selected: selected.drvPath == home.pkgs.${packageName}.drvPath
+              ) home.config.home.packages;
           in
             builtins.map
             (selected: {
@@ -200,10 +206,7 @@ if ! consumer_packages_json=$(
                 then [ selected.pnpmDeps.drvPath selected.resourceMonitor.drvPath ]
                 else [];
             })
-            (builtins.filter (
-                selected: selected.drvPath == expectedDrv
-              )
-              home.config.home.packages)
+            selectedPackages
         )
         nativeHomeNames;
     in

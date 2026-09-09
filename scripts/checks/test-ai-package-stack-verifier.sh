@@ -68,6 +68,7 @@ if [[ "$1" == "eval" ]]; then
     *"#codex-app-server.version"*) printf '0.153.4' ;;
     *"#t3code.version"*) printf '0.0.38' ;;
     *"#homeConfigurations"*)
+      t3_package=${MOCK_T3_PACKAGE:-t3code}
       codex_cli='[{"homeName":"alc-first","drvPath":"/nix/store/consumer-codex-cli.drv","stagedDrvPaths":[]}]'
       if [[ "${MOCK_MISSING_PACKAGE:-}" == "codex-cli" ]]; then
         codex_cli='[]'
@@ -79,7 +80,7 @@ if [[ "$1" == "eval" ]]; then
         ],
         \"codex-cli\": ${codex_cli},
         \"codex-app-server\": [{\"homeName\":\"alc-first\",\"drvPath\":\"/nix/store/consumer-codex-app-server.drv\",\"stagedDrvPaths\":[]}],
-        \"t3code\": [{\"homeName\":\"alc-first\",\"drvPath\":\"/nix/store/consumer-t3code.drv\",\"stagedDrvPaths\":[\"/nix/store/consumer-t3code-pnpm-deps.drv\",\"/nix/store/consumer-t3code-resource-monitor.drv\"]}]
+        \"t3code\": [{\"homeName\":\"alc-first\",\"drvPath\":\"/nix/store/consumer-${t3_package}.drv\",\"stagedDrvPaths\":[\"/nix/store/consumer-${t3_package}-pnpm-deps.drv\",\"/nix/store/consumer-${t3_package}-resource-monitor.drv\"]}]
       }"
       ;;
     *)
@@ -223,5 +224,21 @@ rg --fixed-strings --quiet "nix-config:       ${consumer_rev} (/nix/store/consum
 lock_sha256=$(sha256sum "${candidate_dir}/flake.lock" | awk '{print $1}')
 rg --fixed-strings --quiet "consumer lock:    sha256:${lock_sha256}" "${test_root}/success.out"
 rg --fixed-strings --quiet "nix-packages:     ${locked_rev}" "${test_root}/success.out"
+
+# Consumer services can select the patched fork without selecting pkgs.t3code.
+: >"$mock_log"
+if ! run_verifier "${candidate_dir}/flake.lock" MOCK_T3_PACKAGE=t3code-fork >"${test_root}/fork.out" 2>&1; then
+  cat "${test_root}/fork.out" >&2
+  echo "Verifier rejected a consumer selecting only the T3 Code fork" >&2
+  exit 1
+fi
+for package in claude-code codex-cli codex-app-server t3code-fork; do
+  assert_log_contains "nix build --no-update-lock-file /nix/store/consumer-${package}.drv^* --no-link"
+done
+assert_log_contains 'nix build --no-update-lock-file /nix/store/consumer-t3code-fork-pnpm-deps.drv^* --no-link'
+assert_log_contains 'nix build --no-update-lock-file /nix/store/consumer-t3code-fork-resource-monitor.drv^* --no-link'
+assert_log_excludes 'nix build --no-update-lock-file /nix/store/consumer-t3code.drv^* --no-link'
+assert_log_excludes 'nix build --no-update-lock-file /nix/store/consumer-t3code-pnpm-deps.drv^* --no-link'
+assert_log_excludes 'nix build --no-update-lock-file /nix/store/consumer-t3code-resource-monitor.drv^* --no-link'
 
 echo "AI package stack verifier contract tests passed"

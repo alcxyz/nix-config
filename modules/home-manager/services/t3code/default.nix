@@ -337,7 +337,7 @@ in {
             errorEcho "Refusing to restart T3 Code from inside its own service cgroup."
             exit 75
           fi
-          run systemctl --user restart t3code.service
+          run ${pkgs.systemd}/bin/systemctl --user restart t3code.service
           run rm -f "$restart_marker"
         fi
       ''
