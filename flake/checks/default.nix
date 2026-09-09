@@ -99,10 +99,6 @@ in {
         touch "$out"
       '';
 
-  check-nix-gc-maintenance = mkRepoCheck "check-nix-gc-maintenance" [pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gawk pkgs.gnugrep] ''
-    bash scripts/checks/test-nix-gc-maintenance.sh
-  '';
-
   t3code-auto-update-contract = let
     t3Unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code.Unit;
     unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Unit;

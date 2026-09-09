@@ -32,7 +32,7 @@ k8s-node-reboot HOST:
 
 [group("ops")]
 gc HOST="":
-    if [ -n "{{HOST}}" ]; then scripts/ops/nix-gc-maintenance.sh "{{HOST}}"; else scripts/ops/nix-gc-maintenance.sh; fi
+    if [ -n "{{HOST}}" ]; then nix run .#nix-gc-maintenance -- "{{HOST}}"; else nix run .#nix-gc-maintenance --; fi
 
 [group("ops")]
 k8s-node-preflight HOST:
