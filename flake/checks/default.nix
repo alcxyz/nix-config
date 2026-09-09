@@ -36,6 +36,7 @@ in {
 
   check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
     shellcheck scripts/checks/*.sh scripts/ci/*.sh scripts/forgejo/publish-nix-packages-lock.sh scripts/ops/*.sh modules/nixos/services/wolf-streaming/browser-image/*.sh
+    shellcheck --shell=bash hosts/xyz/xyz-*.sh
   '';
 
   check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.treefmt pkgs.shfmt] ''
