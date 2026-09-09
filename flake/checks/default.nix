@@ -78,18 +78,6 @@ in {
     bash scripts/checks/test-workspace-sync.sh
   '';
 
-  check-k8s-node-reboot-workload-phases = mkRepoCheck "check-k8s-node-reboot-workload-phases" [pkgs.bash pkgs.jq] ''
-    bash scripts/checks/test-k8s-node-reboot-workload-phases.sh
-  '';
-
-  check-k8s-node-reboot-network-audits = mkRepoCheck "check-k8s-node-reboot-network-audits" [pkgs.bash pkgs.jq] ''
-    bash scripts/checks/test-k8s-node-reboot-network-audits.sh
-  '';
-
-  check-k8s-node-network-audit = mkRepoCheck "check-k8s-node-network-audit" [pkgs.bash pkgs.jq] ''
-    bash scripts/checks/test-k8s-node-network-audit.sh
-  '';
-
   k8s-api-vip-source-routing-contract = let
     instance = self.nixosConfigurations.xev.config.services.keepalived.vrrpInstances.k8s_api;
   in

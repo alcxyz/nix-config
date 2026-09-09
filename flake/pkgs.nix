@@ -62,7 +62,6 @@ in
             }
             // {
               nix-deploy = _prev.callPackage ../packages/nix-deploy {};
-              k8s-node-reboot = _prev.callPackage ../packages/k8s-node-reboot {};
               reportcraft = inputs.reportcraft.packages.${system}.default;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
