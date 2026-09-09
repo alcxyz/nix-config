@@ -27,6 +27,18 @@ in {
       description = "User to run the service as.";
     };
 
+    forgejoUrl = lib.mkOption {
+      type = lib.types.str;
+      default = "http://git.local";
+      description = "Base URL for the Forgejo API.";
+    };
+
+    forgejoUser = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Forgejo account whose repositories receive mirrored updates.";
+    };
+
     credentials = {
       sopsFile = lib.mkOption {
         type = lib.types.nullOr (
@@ -54,7 +66,7 @@ in {
       codebergKey = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Sops key for the Codeberg token.";
+        description = "Deprecated compatibility option; pull does not consume a Codeberg token.";
       };
     };
   };
@@ -73,10 +85,6 @@ in {
         assertion = cfg.credentials.githubKey != null;
         message = "services.forge-mirror-pull.credentials.githubKey must be set privately.";
       }
-      {
-        assertion = cfg.credentials.codebergKey != null;
-        message = "services.forge-mirror-pull.credentials.codebergKey must be set privately.";
-      }
     ];
 
     sops.secrets.forge_mirror_forgejo_token = {
@@ -89,13 +97,6 @@ in {
     sops.secrets.forge_mirror_github_token = {
       sopsFile = cfg.credentials.sopsFile;
       key = cfg.credentials.githubKey;
-      owner = cfg.user;
-      mode = "0400";
-    };
-
-    sops.secrets.forge_mirror_codeberg_token = {
-      sopsFile = cfg.credentials.sopsFile;
-      key = cfg.credentials.codebergKey;
       owner = cfg.user;
       mode = "0400";
     };
@@ -119,9 +120,11 @@ in {
             ]
           }:$PATH"
           export FORGEJO_TOKEN_FILE="${config.sops.secrets.forge_mirror_forgejo_token.path}"
-          export GITHUB_MIRROR_PAT="$(cat ${config.sops.secrets.forge_mirror_github_token.path})"
-          export CODEBERG_MIRROR_PAT_FILE="${config.sops.secrets.forge_mirror_codeberg_token.path}"
-          export FORGEJO_URL="http://git.local"
+          export GITHUB_MIRROR_PAT_FILE="${config.sops.secrets.forge_mirror_github_token.path}"
+          export FORGEJO_URL=${lib.escapeShellArg cfg.forgejoUrl}
+          ${lib.optionalString (cfg.forgejoUser != null) ''
+            export FORGEJO_USER=${lib.escapeShellArg cfg.forgejoUser}
+          ''}
           exec ${pkgs.forge-mirror}/bin/forge-mirror pull
         '';
 
