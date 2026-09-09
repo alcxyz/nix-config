@@ -24,7 +24,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0017](0017-k3s-cluster-topology.md) | k3s cluster topology for home infrastructure | Accepted, amended | infrastructure, hosts |
 | [ADR-0018](0018-flux-gitops.md) | Flux as the GitOps operator for k3s | Accepted | k3s, infrastructure |
 | [ADR-0019](0019-forge-mirror-pull-systemd-timer.md) | Periodic Forgejo/GitHub drift audit via systemd timer | Accepted | services, forge-mirror |
-| [ADR-0020](0020-sops-secrets-in-flux.md) | SOPS decryption for k8s secrets via Flux (dedicated age keypair) | Accepted | k3s, secrets, Flux |
+| [ADR-0020](0020-sops-secrets-in-flux.md) | SOPS decryption for Kubernetes secrets via Flux | Accepted, redacted | Kubernetes, secrets, Flux |
 | [ADR-0021](0021-rustfs-s3-object-storage.md) | RustFS as S3-compatible object storage | Accepted | k3s, infrastructure |
 | [ADR-0022](0022-universal-agent-instructions.md) | Universal agent instructions via AGENTS.md | Accepted | nix-secrets, home-manager |
 | [ADR-0023](0023-k8s-namespace-strategy.md) | Domain-based Kubernetes namespace strategy | Accepted | k3s, gitops |
