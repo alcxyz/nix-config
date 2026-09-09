@@ -50,3 +50,11 @@ non-embedded hosts and explicitly disabled on the four embedded hosts. Those
 existing choices are retained: moving display policy does not establish a reason
 to remove common audio, Bluetooth, or container capabilities. Any later narrowing
 needs a capability-specific review of consumers and runtime requirements.
+
+The xyz storage tier is split into the explicit host-local
+`hosts/xyz/storage.nix` module. Generic ZFS package coupling, storage helper
+assembly, filesystem declarations, and systemd ordering remain public. A typed
+`xyz.storage.policy` option supplies the host values required to render those
+mechanisms; the named private storage module owns the values and sensitive
+standard-option assignments. This keeps the tier-4 import visible without
+publishing host storage topology or operational policy.

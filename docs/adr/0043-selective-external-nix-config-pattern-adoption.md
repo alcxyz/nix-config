@@ -82,7 +82,7 @@ Implemented in `feat/adr-0043-0046-implementation`:
 
 Still pending:
 
-- splitting oversized host-local files such as `hosts/xyz/configuration.nix`
+- further host-local splits after the xyz storage responsibility was extracted
 - install or recovery outputs for hosts that need them
 - any disko adoption for new hosts or reinstalls
 - broader migration of modules from loose `specialArgs` reads to `alc.host`
@@ -177,3 +177,10 @@ operator modules remain intentional: they allow the shared private defaults to
 compose with public profiles that do not import every optional service module.
 Required named interfaces above are unguarded and fail during evaluation when
 absent.
+
+The xyz storage split follows the same pattern. `hosts/xyz/storage.nix` owns
+the generic host-local assembly and declares required typed policy fields
+without public defaults. The private `xyzStoragePolicy` flake output composes
+the existing unlock/bootstrap and mergerfs modules, supplies those fields, and
+owns sensitive storage, backup, and export policy. The public host keeps one
+explicit import for each side of that boundary.
