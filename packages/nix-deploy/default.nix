@@ -1,89 +1,90 @@
 {
   lib,
-  stdenv,
+  nixDeploy,
+  writeShellScriptBin,
+  writeText,
 }: let
   inventory = import ../../inventory.nix;
 
   hostNames = builtins.attrNames inventory.hosts;
   nixosHostNames = lib.filter (host: inventory.hosts.${host}.platform == "nixos") hostNames;
   homeManagerHostNames = lib.filter (host: inventory.hosts.${host}.homeManager or true) hostNames;
-
   deployableInAll = host: inventory.hosts.${host}.deployAll or true;
 
   deployAllHostNames =
     lib.optional (builtins.elem "xyz" nixosHostNames && deployableInAll "xyz") "xyz"
     ++ lib.filter (host: host != "xyz" && deployableInAll host) nixosHostNames;
 
-  remoteHostNames = lib.filter (host: host != "xyz") nixosHostNames;
-
-  aliases =
-    lib.concatMap (
+  aliases = builtins.listToAttrs (lib.concatMap (
       host:
         map (alias: {
-          inherit alias host;
+          name = alias;
+          value = host;
         }) (inventory.hosts.${host}.aliases or [])
     )
-    hostNames;
+    hostNames);
 
-  sshHostEntries = lib.filter (entry: entry.target != entry.host) (
+  sshHosts = builtins.listToAttrs (lib.filter (entry: entry.value != entry.name) (
     map (host: {
-      inherit host;
-      target = inventory.hosts.${host}.sshHostname or host;
+      name = host;
+      value = inventory.hosts.${host}.sshHostname or host;
     })
     hostNames
-  );
-  systemSshUserEntries = lib.filter (entry: entry.user != "root") (
+  ));
+
+  systemSshUsers = builtins.listToAttrs (lib.filter (entry: entry.value != "root") (
     map (host: {
-      inherit host;
-      user = inventory.hosts.${host}.systemSshUser or "root";
+      name = host;
+      value = inventory.hosts.${host}.systemSshUser or "root";
     })
     nixosHostNames
-  );
-  remoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
-  systemActivationEntries = lib.filter (entry: entry.action != "switch") (
+  ));
+
+  systemActivationModes = builtins.listToAttrs (lib.filter (entry: entry.value != "switch") (
     map (host: {
-      inherit host;
-      action = inventory.hosts.${host}.systemActivationMode or "switch";
+      name = host;
+      value = inventory.hosts.${host}.systemActivationMode or "switch";
     })
     nixosHostNames
-  );
+  ));
 
-  bashArray = name: values: ''
-    ${name}=(${lib.concatMapStringsSep " " lib.escapeShellArg values})
-  '';
-
-  bashAssoc = name: entries: keyAttr: valueAttr: ''
-    declare -A ${name}=(${lib.concatMapStringsSep " " (entry: "[${lib.escapeShellArg entry.${keyAttr}}]=${lib.escapeShellArg entry.${valueAttr}}") entries})
-  '';
-
-  deployHostData =
-    bashArray "KNOWN_HOSTS" hostNames
-    + bashArray "HOME_MANAGER_HOSTS" homeManagerHostNames
-    + bashArray "REMOTE_HOSTS" remoteHostNames
-    + bashArray "DEPLOY_ALL_HOSTS" deployAllHostNames
-    + bashAssoc "HOST_ALIASES" aliases "alias" "host"
-    + bashAssoc "SSH_HOSTS" sshHostEntries "host" "target"
-    + bashAssoc "SYSTEM_SSH_USERS" systemSshUserEntries "host" "user"
-    + bashArray "SYSTEM_REMOTE_SUDO_HOSTS" remoteSudoHosts
-    + bashAssoc "SYSTEM_ACTIVATION_MODES" systemActivationEntries "host" "action";
-in
-  stdenv.mkDerivation {
-    pname = "nix-deploy";
-    version = "0.1.2";
-
-    src = ./.;
-
-    dontBuild = true;
-
-    installPhase = ''
-      install -Dm755 deploy $out/bin/deploy
-      substituteInPlace $out/bin/deploy \
-        --replace-fail '@deployHostData@' ${lib.escapeShellArg deployHostData}
-    '';
-
-    meta = with lib; {
-      description = "Unified NixOS/darwin + home-manager deploy tool with explicit local orchestration support";
-      mainProgram = "deploy";
-      platforms = platforms.unix;
+  config = {
+    schemaVersion = 1;
+    operatorHost = "xyz";
+    homeManagerUser = "alc";
+    homeOutputPrefix = "alc-";
+    knownHosts = hostNames;
+    homeManagerHosts = homeManagerHostNames;
+    remoteHosts = lib.filter (host: host != "xyz") nixosHostNames;
+    deployAllHosts = deployAllHostNames;
+    inherit aliases sshHosts systemSshUsers systemActivationModes;
+    systemRemoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
+    hostColors = {
+      xyz = "137;180;250";
+      nux = "166;227;161";
+      nex = "249;226;175";
+      xev = "148;226;213";
+      xps = "245;194;231";
+      rpi0 = "235;160;172";
+      mac = "203;166;247";
     };
-  }
+  };
+
+  configFile = writeText "nix-deploy-inventory-v1.json" (builtins.toJSON config);
+  wrapper = writeShellScriptBin "deploy" ''
+    exec ${nixDeploy}/bin/deploy --config "''${NIX_DEPLOY_CONFIG:-${configFile}}" "$@"
+  '';
+in
+  wrapper.overrideAttrs (_: {
+    pname = "nix-deploy-configured";
+    version = "0.2.0";
+    passthru = {
+      deployConfig = configFile;
+      unconfiguredPackage = nixDeploy;
+    };
+    meta =
+      nixDeploy.meta
+      // {
+        description = "nix-deploy configured from the nix-config public inventory";
+      };
+  })

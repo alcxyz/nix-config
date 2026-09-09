@@ -78,7 +78,7 @@ independent qualification:
 
 | Source | Ownership |
 |--------|-----------|
-| `packages/nix-deploy` | Remains here under ADR-0009 until a generic runtime inventory interface and compatibility contract are decided. |
+| `packages/nix-deploy` | Generates the consumer inventory and a thin wrapper under ADR-0009. The canonical executable, versioned runtime interface, and command tests live in `nix-packages`; this repository tests its generated inventory and wrapper precedence. |
 | `packages/nixbox-*` | Remain with the branded boot and session configuration they implement. |
 | DMS, Quickshell, RustFS, Wolf, and GStreamer patches under `modules/` | Remain with the module options, service assembly, and version-specific behavior they modify. |
 | Hyprland, Moonlight, and Waynergy patches | Remain with their consumer overrides until each patched package has independent platform and input-path qualification. |

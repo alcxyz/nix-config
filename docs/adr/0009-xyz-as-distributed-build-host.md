@@ -1,6 +1,6 @@
 # ADR-0009: xev, xyz, and mac distributed build posture
 
-**Status:** Accepted (amended 2026-05-14: xev primary builder; xyz fallback builder)
+**Status:** Accepted (amended 2026-05-14: xev primary builder; 2026-09-09: external deploy inventory)
 **Date:** 2026-04-18
 **Applies to:** `hosts/xev/configuration.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`, `modules/nixos/common/distributed-build-client.nix`, `modules/nixos/common/server.nix`, `packages/nix-deploy`
 
@@ -82,11 +82,13 @@ reserved IP addresses as `sshHostname` values instead of relying on local name
 resolution, because deployment is also a recovery path when DNS-like services
 may be degraded.
 
-`nix-deploy` remains packaged inside `nix-config` while it is coupled to the
-public host inventory and flake output names. Moving it back to `nix-packages`
-would split the generic executable from the repository-specific host data it
-needs to generate its runtime host map. Reconsider moving it only if the tool is
-made generic enough to consume an external inventory interface at runtime.
+The canonical `nix-deploy` executable is packaged in `nix-packages` and consumes
+its host data through the versioned JSON interface recorded by that repository.
+This repository derives the JSON document from `inventory.nix` and wraps the
+generic package with that document as its default configuration. The generated
+data preserves the existing host sets, aliases, SSH settings, activation modes,
+Home Manager naming, and display colors without placing personal defaults in
+the reusable package.
 
 mac enables nix-darwin's stock Linux builder as a bootstrapping step. This
 creates a `linux-builder` build machine for `aarch64-linux`, which lets mac
@@ -126,8 +128,8 @@ operator and `xev`/`xyz` as Linux builders.
 - Unavailable hosts no longer force every ordinary fleet deploy to fail before
   useful reachable targets are updated. Strict fleet deploys can opt back into
   failure with `--fail-unreachable`.
-- The local `nix-deploy` wrapper is intentionally owned by this repo for now,
-  because its behavior is generated from `inventory.nix`.
+- This repository owns only the generated deploy inventory and its thin wrapper;
+  reusable command behavior and its black-box tests live in `nix-packages`.
 - The build SSH key is declaratively deployed from each server host's SOPS file.
   Fresh installs still need enough SOPS bootstrap material to decrypt host
   secrets, but the build key itself is no longer a manual root dotfile.

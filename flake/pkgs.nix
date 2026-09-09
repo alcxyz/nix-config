@@ -61,7 +61,9 @@ in
               stashdb-pop = stashdb-pop.default;
             }
             // {
-              nix-deploy = _prev.callPackage ../packages/nix-deploy {};
+              nix-deploy = _prev.callPackage ../packages/nix-deploy {
+                nixDeploy = np.nix-deploy;
+              };
               reportcraft = inputs.reportcraft.packages.${system}.default;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
