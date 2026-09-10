@@ -78,9 +78,12 @@
   services.forgejo-actions-runner = {
     enable = true;
     name = "nex";
-    capacity = 2;
+    capacity = 1;
     labels = [
+      "forgejo-docker-primary:docker://node:20-bookworm"
       "forgejo-docker-secondary:docker://node:20-bookworm"
+      "ubuntu-latest:docker://node:20-bookworm"
+      "docker:docker://node:20-bookworm"
       "nex:docker://node:20-bookworm"
     ];
   };

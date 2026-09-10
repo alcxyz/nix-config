@@ -133,7 +133,10 @@ in {
     name = "nux";
     capacity = 1;
     labels = [
+      "forgejo-docker-primary:docker://node:20-bookworm"
       "forgejo-docker-secondary:docker://node:20-bookworm"
+      "ubuntu-latest:docker://node:20-bookworm"
+      "docker:docker://node:20-bookworm"
       "nux:docker://node:20-bookworm"
     ];
   };

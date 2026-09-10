@@ -32,6 +32,27 @@ in {
 
   credential-consent-contract = import ./credential-consent.nix {inherit lib pkgs;};
 
+  forgejo-runner-pool-contract = let
+    runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) {
+      inherit
+        (self.nixosConfigurations)
+        nex
+        nux
+        xev
+        xyz
+        ;
+    };
+    hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:" label) runner.labels;
+  in
+    assert runners.xyz.capacity == 2;
+    assert lib.all (runner: runner.capacity == 1) [runners.xev runners.nux runners.nex];
+    assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
+    assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
+    assert lib.all (hasLabel "docker") (lib.attrValues runners);
+      pkgs.runCommand "forgejo-runner-pool-contract" {} ''
+        touch "$out"
+      '';
+
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
   '';
