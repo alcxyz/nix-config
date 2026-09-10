@@ -32,6 +32,8 @@ if [[ $1 == show ]]; then
   cat "$FIXTURE/actual"; exit
 fi
 [[ $# == 2 && $2 == forgejobuilds.slice ]]
+[[ ${SYSTEMD_BUS_TIMEOUT:-} =~ ^[1-9][0-9]*s$ ]]
+[[ ${SYSTEMD_BUS_TIMEOUT%s} -le $TRANSITION_TIMEOUT_SECONDS ]]
 printf '%s\\n' "$1" >> "$FIXTURE/actions"
 attempt=$(wc -l < "$FIXTURE/actions")
 if [[ $1 == "$FAIL_ACTION" && $attempt -le $FAIL_COUNT ]]; then

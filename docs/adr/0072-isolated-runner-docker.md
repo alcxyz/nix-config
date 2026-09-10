@@ -1,6 +1,6 @@
 # ADR-0072: Isolate runner Docker execution in a bounded rootless service
 
-- Status: Proposed; disposable-VM qualification, host canary pending; disabled by default
+- Status: Accepted; xyz rollout in progress; other hosts opt in after qualification
 - Date: 2026-09-10
 - Area: Forgejo runners, Docker, systemd
 
@@ -10,7 +10,7 @@ Runner-applied container options and labels do not reach Docker and BuildKit
 workers created through a mounted daemon socket. Limits must cover daemon-side
 execution as well as outer job containers, without changing application Docker.
 
-## Decision proposed
+## Decision
 
 Use a dedicated rootless Docker daemon in a delegated systemd service below the
 existing aggregate build slice. Its daemon and worker descendants inherit the
@@ -29,7 +29,7 @@ well as new runner dispatch. Recovery must explicitly restore daemon/runner
 service after a controller failure; it must not silently resume interrupted jobs.
 
 All runner clients, mounted sockets and cache maintenance use the dedicated
-endpoint. The default remains unchanged until runtime qualification passes.
+endpoint. The module stays disabled by default; enable each host after runtime qualification.
 
 The system service owns the aggregate boundary. Rootless Docker may report no
 per-container cgroup support without a user service manager; those individual
@@ -92,8 +92,8 @@ routing error. Daemon mode obtains its mounted path from `container.docker_host`
 The corrected test checks both the actual mount source and API access.
 
 [Docker documents](https://docs.docker.com/engine/security/rootless/tips/)
-system-wide rootless services as unsupported. Keep the experimental status until
-the bounded backing-filesystem canary and real hosted workflows pass. The fixture
+system-wide rootless services as unsupported. Deployment therefore requires the
+bounded backing-filesystem canary and real hosted workflows to pass per host. The fixture
 preserves host-Docker manual pauses; it does not establish per-container pause
 support inside the rootless daemon without per-container cgroups.
 
@@ -104,7 +104,9 @@ manual pauses; and unaffected application Docker. Keep migration and recovery
 procedures in the private operational repository.
 
 Freeze and thaw transitions use a separate 120-second deadline while metadata
-queries retain a short deadline. Kernel-backed storage synchronization can make
+queries retain a short deadline. The systemctl D-Bus method timeout uses the
+remaining transition budget too, so its shorter default cannot cut a valid
+transition short. Kernel-backed storage synchronization can make
 a valid freezer transition take longer than a routine control query. Ownership
 remains pending until systemd reports that the transition completed, so a real
 timeout still fails closed for operator reconciliation.

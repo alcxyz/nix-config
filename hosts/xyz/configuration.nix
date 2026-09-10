@@ -181,9 +181,10 @@
   services.forgejo-actions-runner = {
     enable = true;
     ioPressureGuard.enable = true;
+    isolatedDocker.enable = true;
     name = "xyz";
     capacity = 2;
-    # Bound all Forgejo-created containers together while allowing two jobs to
+    # Bound the runner daemon and all nested workers while allowing two jobs to
     # share the budget. Low weights make builds yield to desktop and game work.
     resourcePolicy.enable = true;
     labels = [

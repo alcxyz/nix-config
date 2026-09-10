@@ -28,7 +28,7 @@ transition() {
   deadline=$((SECONDS + transition_timeout_seconds))
 
   while ((remaining = deadline - SECONDS, remaining > 0)); do
-    if timeout --foreground "${remaining}s" "$systemctl_bin" "$action" "$@"; then
+    if SYSTEMD_BUS_TIMEOUT="${remaining}s" timeout --foreground "${remaining}s" "$systemctl_bin" "$action" "$@"; then
       return 0
     fi
     [[ $action == freeze ]] || return 1
