@@ -112,6 +112,40 @@ in {
         touch "$out"
       '';
 
+  forgejo-runner-io-pressure-guard-contract = let
+    hostNames = [
+      "nex"
+      "nux"
+      "xev"
+      "xyz"
+    ];
+    hostConfigs = map (name: self.nixosConfigurations.${name}.config) hostNames;
+    guards = map (host: host.systemd.services.forgejo-runner-io-pressure-guard) hostConfigs;
+    guardStart = (builtins.head guards).serviceConfig.ExecStart;
+    runners = map (host: host.systemd.services.forgejo-actions-runner) hostConfigs;
+    runnerStarts = map (host: lib.removeSuffix " " host.systemd.services.forgejo-actions-runner.serviceConfig.ExecStart) hostConfigs;
+    guardSource = ../../modules/nixos/services/forgejo-actions-runner/io-pressure-guard.sh;
+    guardTest = ./test-forgejo-runner-io-pressure-guard.sh;
+  in
+    assert lib.all (guard: guard.wantedBy == ["multi-user.target"]) guards;
+    assert lib.all (guard: lib.hasPrefix "io.alc.forgejo-runner=" guard.environment.RUNNER_CONTAINER_LABEL) guards;
+    assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") guards;
+    assert lib.all (guard: guard.environment.LOW_SAMPLES_REQUIRED == "13") guards;
+    assert lib.all (runner: builtins.elem "forgejo-runner-io-pressure-guard.service" runner.requires) runners;
+    assert lib.all (runner: runner.bindsTo == ["forgejo-runner-io-pressure-guard.service"]) runners;
+      pkgs.runCommand "forgejo-runner-io-pressure-guard-contract" {
+        nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.ripgrep pkgs.shellcheck];
+      } ''
+        shellcheck ${guardSource} ${guardTest}
+        bash ${guardTest} ${guardStart}
+        ${lib.concatMapStringsSep "\n" (runnerStart: ''
+            runner_config="$(${pkgs.gawk}/bin/awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStart})"
+              grep -Fq -- '--label=io.alc.forgejo-runner=' "$runner_config"
+          '')
+          runnerStarts}
+        touch "$out"
+      '';
+
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
   '';

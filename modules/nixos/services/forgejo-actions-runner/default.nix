@@ -14,6 +14,7 @@
   envFile = "${runtimeDir}/${cfg.name}.env";
   labelsFile = "${stateDir}/.labels";
   nameFile = "${stateDir}/.runner-name";
+  pressureGuardLabel = "io.alc.forgejo-runner=${cfg.name}";
 
   secretName = key: "forgejo_runner_${key}";
   secretPath = key: "/run/secrets/${secretName key}";
@@ -22,7 +23,9 @@
 
   allEnvNames = lib.unique ((lib.attrNames cfg.jobEnv) ++ (lib.attrNames cfg.secretEnv));
   containerRuntimeOptions = lib.concatStringsSep " " (
-    (map (name: "-e ${name}") allEnvNames) ++ cfg.containerOptions
+    (map (name: "-e ${name}") allEnvNames)
+    ++ cfg.containerOptions
+    ++ lib.optional cfg.ioPressureGuard.enable "--label=${pressureGuardLabel}"
   );
 
   runnerConfig = settingsFormat.generate "forgejo-runner-config.yaml" {
@@ -144,6 +147,17 @@
       docker builder prune "''${prune_args[@]}"
     '';
   };
+  ioPressureGuard = pkgs.writeShellApplication {
+    name = "forgejo-runner-io-pressure-guard";
+    runtimeInputs = with pkgs; [
+      coreutils
+      docker
+      gawk
+      systemd
+      util-linux
+    ];
+    text = builtins.readFile ./io-pressure-guard.sh;
+  };
 in {
   options.services.forgejo-actions-runner = {
     enable = lib.mkEnableOption "native Forgejo Actions runner";
@@ -240,6 +254,46 @@ in {
         type = lib.types.str;
         default = "50%";
         description = "Aggregate hard memory limit for runner containers.";
+      };
+    };
+
+    ioPressureGuard = {
+      enable = lib.mkEnableOption "host I/O pressure guard for owned runner containers";
+
+      highPercent = lib.mkOption {
+        type = lib.types.ints.between 1 99;
+        default = 20;
+        description = "Full I/O PSI avg10 percentage that starts the high-pressure timer.";
+      };
+
+      lowPercent = lib.mkOption {
+        type = lib.types.ints.between 0 98;
+        default = 5;
+        description = "Full I/O PSI avg10 percentage that starts the recovery timer.";
+      };
+
+      highDurationSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 20;
+        description = "Sustained high-pressure duration before owned containers are paused.";
+      };
+
+      lowDurationSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 60;
+        description = "Sustained low-pressure duration before the owned container batch is resumed.";
+      };
+
+      sampleSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 5;
+        description = "Interval between I/O PSI samples.";
+      };
+
+      dockerTimeoutSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 3;
+        description = "Deadline for each Docker API operation.";
       };
     };
 
@@ -349,6 +403,18 @@ in {
         assertion = cfg.cachePressure.criticalPercent > cfg.cachePressure.triggerPercent;
         message = "services.forgejo-actions-runner.cachePressure.criticalPercent must exceed triggerPercent.";
       }
+      {
+        assertion = cfg.ioPressureGuard.lowPercent < cfg.ioPressureGuard.highPercent;
+        message = "services.forgejo-actions-runner.ioPressureGuard.lowPercent must be below highPercent.";
+      }
+      {
+        assertion = lib.mod cfg.ioPressureGuard.highDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
+        message = "services.forgejo-actions-runner.ioPressureGuard.highDurationSeconds must be divisible by sampleSeconds.";
+      }
+      {
+        assertion = lib.mod cfg.ioPressureGuard.lowDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
+        message = "services.forgejo-actions-runner.ioPressureGuard.lowDurationSeconds must be divisible by sampleSeconds.";
+      }
     ];
 
     users.groups.forgejo-runner = {};
@@ -418,6 +484,32 @@ in {
       };
     };
 
+    systemd.services.forgejo-runner-io-pressure-guard = lib.mkIf cfg.ioPressureGuard.enable {
+      description = "Pause owned Forgejo runner containers under sustained I/O pressure";
+      after = ["docker.service"];
+      requires = ["docker.service"];
+      wantedBy = ["multi-user.target"];
+      environment = {
+        RUNNER_CONTAINER_LABEL = pressureGuardLabel;
+        HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
+        LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
+        HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+        LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+        SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
+        DOCKER_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.dockerTimeoutSeconds;
+      };
+      serviceConfig = {
+        Type = "notify";
+        NotifyAccess = "all";
+        ExecStart = lib.getExe ioPressureGuard;
+        Restart = "always";
+        RestartSec = "2s";
+        RuntimeDirectory = "forgejo-runner-pressure";
+        RuntimeDirectoryMode = "0700";
+        RuntimeDirectoryPreserve = "yes";
+      };
+    };
+
     sops.secrets = lib.listToAttrs (
       map (key: {
         name = secretName key;
@@ -448,12 +540,15 @@ in {
           "network-online.target"
           "docker.service"
         ]
-        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"];
+        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"]
+        ++ lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
       requires =
         [
           "docker.service"
         ]
-        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"];
+        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"]
+        ++ lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
+      bindsTo = lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
       wantedBy = ["multi-user.target"];
       path = [cfg.package] ++ cfg.extraPackages;
       environment = {

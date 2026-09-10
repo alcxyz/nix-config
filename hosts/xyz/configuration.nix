@@ -175,6 +175,7 @@
 
   services.forgejo-actions-runner = {
     enable = true;
+    ioPressureGuard.enable = true;
     name = "xyz";
     capacity = 2;
     # Bound all Forgejo-created containers together while allowing two jobs to

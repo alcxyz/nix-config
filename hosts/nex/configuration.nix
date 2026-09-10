@@ -77,6 +77,7 @@
 
   services.forgejo-actions-runner = {
     enable = true;
+    ioPressureGuard.enable = true;
     name = "nex";
     capacity = 1;
     labels = [

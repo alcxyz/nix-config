@@ -96,6 +96,20 @@ The default runner pool is represented with labels:
   pressure, only cache unused for the configured grace period is eligible for
   removal; under critical pressure, all unused cache may be reclaimed. Running
   containers, images needed by containers, and volumes are outside this policy.
+- Runner hosts enable a system I/O pressure guard. It labels containers created
+  by the runner and pauses those containers after full I/O PSI remains at or
+  above 20% for 20 seconds. It resumes the complete guard-owned container batch
+  only after PSI remains at or below 5% for 60 seconds, keeping a job and its
+  runner-created step and service containers together.
+- The guard records a container as owned only after a successful pause and
+  resumes only recorded containers. A crash between the Docker pause and the
+  ownership record deliberately leaves that container paused for operator
+  review rather than risking the resume of a container paused for another
+  reason. Ambiguous pause or resume ownership remains degraded until an operator
+  resolves it.
+- Runner startup requires a healthy pressure guard. A hard guard failure stops
+  the bound runner service so it cannot admit unprotected work; this can
+  interrupt job orchestration and requires operator recovery.
 
 ## Alternatives Considered
 
@@ -139,6 +153,13 @@ limit across the containers Forgejo Runner creates.
 - The policy does not yet provide a hard ZFS I/O guarantee or contain nested
   Docker work. Those boundaries require daemon- or storage-level enforcement
   rather than more limits on the runner service process.
+- I/O PSI is a host-wide congestion signal, not attribution of pressure to the
+  runner. The guard is an emergency circuit breaker scoped to labeled runner
+  containers; it does not guarantee an I/O rate, and workflow wall-clock
+  timeouts continue while a container is paused.
+- Containers started through a job's mounted Docker socket do not automatically
+  inherit the runner label and remain outside the pressure guard. Workflows that
+  use nested Docker must bound their own resource use.
 - Nix-heavy workflows remain Docker-backed. Their verification scripts isolate
   build stages and may clean Nix's fake build home only after positively
   identifying an explicitly opted-in ephemeral job container.

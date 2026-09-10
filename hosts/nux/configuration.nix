@@ -130,6 +130,7 @@ in {
 
   services.forgejo-actions-runner = {
     enable = true;
+    ioPressureGuard.enable = true;
     name = "nux";
     capacity = 1;
     labels = [
