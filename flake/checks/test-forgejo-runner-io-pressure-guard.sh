@@ -69,6 +69,9 @@ SH
 cat >"$work/bin/systemd-notify" <<'SH'
 #!/usr/bin/env bash
 printf 'notify %s\n' "$*" >>"$CALL_LOG"
+if [[ " $* " == *" --ready "* && -n ${INJECT_UNCERTAIN_ID:-} ]]; then
+  : >"$STATE_DIR/uncertain/$INJECT_UNCERTAIN_ID"
+fi
 SH
 sed -i "1c #!$(command -v bash)" "$work/bin/docker" "$work/bin/logger" "$work/bin/systemd-notify"
 chmod +x "$work/bin/"*
@@ -294,3 +297,19 @@ if run_guard "$state" "$state/pressure" 3 env; then
 fi
 [[ $(cat "$state/containers/121212121212") == running ]]
 grep -Eq 'guard state could not be persisted|guard state is not a regular file' "$work/calls"
+
+# Recovery state introduced after startup must replace the normal status even
+# when pressure stays low. It never authorizes resuming the ambiguous pause.
+state=$work/runtime-recovery-state
+new_state "$state"
+printf paused >"$state/containers/343434343434"
+printf '%s\n' 4 4 >"$state/pressure"
+run_guard "$state" "$state/pressure" 2 env INJECT_UNCERTAIN_ID=343434343434
+[[ -e $state/guard/guarded ]]
+[[ -e $state/guard/uncertain/343434343434 ]]
+[[ $(cat "$state/containers/343434343434") == paused ]]
+grep -q 'notify --status=degraded: runner pause ownership requires recovery' "$work/calls"
+if rg -q '^unpause ' "$work/calls"; then
+  echo "guard resumed a runtime pause with ambiguous ownership" >&2
+  exit 1
+fi

@@ -261,6 +261,12 @@ have_pressure=1
 
 while ((max_iterations == 0 || iterations < max_iterations)); do
   iterations=$((iterations + 1))
+  # Recovery records can change while the guard is running. Keep the same
+  # fail-closed invariant as startup instead of leaving a healthy status stale.
+  if has_recovery_state && [[ ! -e $state_dir/guarded ]]; then
+    enter_guarded
+    degraded "runner pause ownership requires recovery"
+  fi
   if ((have_pressure)); then
     have_pressure=0
   elif ! pressure=$(read_pressure); then
