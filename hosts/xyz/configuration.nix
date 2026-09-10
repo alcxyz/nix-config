@@ -21,6 +21,7 @@
     inputs.nix-secrets.nixosModules.xyzDisplay
     inputs.nix-secrets.nixosModules.xyzInputHardwarePolicy
     inputs.nix-secrets.nixosModules.xyzNetworkIdentity
+    inputs.nix-secrets.nixosModules.xyzNixSigningPolicy
     inputs.nix-secrets.nixosModules.xyzStoragePolicy
     inputs.nix-secrets.nixosModules.xyzPrinter
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
@@ -103,8 +104,6 @@
     '';
   };
 
-  # ---- Nix Settings ----
-  nix.settings.secret-key-files = ["/etc/nix/signing-key"];
   # Allow this host to build for remote machines via SSH
   nix.settings.allowed-uris = [
     "ssh-ng://*"
