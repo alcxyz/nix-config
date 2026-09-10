@@ -145,6 +145,7 @@ in {
           runnerStarts}
         touch "$out"
       '';
+  container-netns-contract = import ./container-netns.nix {inherit self lib pkgs;};
 
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
