@@ -449,6 +449,19 @@ in {
     rpi1 = self.nixosConfigurations.rpi1.config;
     rpi2 = self.nixosConfigurations.rpi2.config;
     rpi3 = self.nixosConfigurations.rpi3.config;
+    directClients = [rpi1 rpi2 rpi3];
+    hasPackage = name: client:
+      lib.any (package: lib.getName package == name) client.environment.systemPackages;
+    hasSudoCommand = name: client:
+      lib.any (rule:
+        lib.any (entry: lib.hasSuffix "/bin/${name}" entry.command) rule.commands)
+      client.security.sudo.extraRules;
+    hasSteamLifecycle = client:
+      lib.all (name: hasPackage name client && hasSudoCommand name client) [
+        "steam-start"
+        "steam-stop"
+        "steam-wake"
+      ];
   in
     assert rpi1.services.nixbox-direct-client.streamFps == 30;
     assert rpi2.services.nixbox-direct-client.streamFps == 60;
@@ -457,6 +470,10 @@ in {
     assert rpi2.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
     assert rpi3.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
     assert rpi1.services.moonlight-client.defaultSessionMode == "direct-browser";
+    assert lib.all hasSteamLifecycle directClients;
+    assert lib.all
+    (client: lib.hasInfix "/bin/steam-start" client.services.moonlight-client.streamHostStartCommand)
+    directClients;
     assert rpi1.systemd.services.greetd.serviceConfig.Restart == "always";
     assert rpi1.security.sudo.wheelNeedsPassword;
     assert rpi1.users.users.alc.hashedPasswordFile != null;

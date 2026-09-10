@@ -34,19 +34,25 @@
       ${pkgs.raspberrypifw}/share/raspberrypi/boot/overlays/vc4-kms-v3d.dtbo \
       "$firmwareRoot/overlays/"
   '';
-  steamWake = pkgs.writeShellApplication {
-    name = "steam-wake";
-    runtimeInputs = [pkgs.openssh];
-    text = ''
-      exec ssh \
-        -T \
-        -i /etc/ssh/ssh_host_ed25519_key \
-        -o IdentitiesOnly=yes \
-        -o BatchMode=yes \
-        -o ConnectTimeout=5 \
-        root@xyz
-    '';
-  };
+  mkSteamCommand = name: action:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [pkgs.openssh];
+      text = ''
+        exec ssh \
+          -T \
+          -i /etc/ssh/ssh_host_ed25519_key \
+          -o IdentitiesOnly=yes \
+          -o BatchMode=yes \
+          -o ConnectTimeout=5 \
+          root@xyz \
+          ${lib.escapeShellArg action}
+      '';
+    };
+  steamStart = mkSteamCommand "steam-start" "start";
+  steamStop = mkSteamCommand "steam-stop" "stop";
+  # Keep the old name available while callers migrate to steam-start.
+  steamWake = mkSteamCommand "steam-wake" "wake";
 in {
   imports = [
     "${inputs.nixos-hardware}/raspberry-pi/common/default.nix"
@@ -114,6 +120,12 @@ in {
     MOONLIGHT_DRM_USE_QT_MASTER_FD = "1";
   };
 
+  environment.systemPackages = [
+    steamStart
+    steamStop
+    steamWake
+  ];
+
   services.nixbox-direct-client = {
     enable = true;
     user = username;
@@ -121,13 +133,21 @@ in {
     enableKdeConnect = false;
   };
 
-  # The appliance user may request exactly one privileged action: authenticate
-  # with this machine's SSH host identity to xyz. The corresponding key on xyz
-  # is forced to the SteamHeadless wake command and cannot open a shell.
+  # The appliance user may authenticate with this machine's SSH host identity
+  # only to start or stop SteamHeadless on xyz. The corresponding key is bound
+  # to a forced dispatcher and cannot open a shell.
   security.sudo.extraRules = [
     {
       users = [username];
       commands = [
+        {
+          command = "${steamStart}/bin/steam-start";
+          options = ["NOPASSWD"];
+        }
+        {
+          command = "${steamStop}/bin/steam-stop";
+          options = ["NOPASSWD"];
+        }
         {
           command = "${steamWake}/bin/steam-wake";
           options = ["NOPASSWD"];
@@ -150,7 +170,7 @@ in {
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
     streamHostStartCommand = ''
-      /run/wrappers/bin/sudo -- ${steamWake}/bin/steam-wake
+      /run/wrappers/bin/sudo -- ${steamStart}/bin/steam-start
     '';
     streamReadinessHost = "xyz";
 
