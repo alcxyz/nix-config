@@ -166,6 +166,10 @@ in {
     treefmt --ci --formatters shell
   '';
 
+  xyz-runtime-storage-policy-contract = mkRepoCheck "xyz-runtime-storage-policy-contract" [pkgs.bash pkgs.coreutils pkgs.ripgrep pkgs.gnused] ''
+    bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
+  '';
+
   nix-deploy-inventory-contract = let
     config = pkgs.nix-deploy.deployConfig;
     expectedHosts = builtins.attrNames (import ../../inventory.nix).hosts;

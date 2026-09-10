@@ -29,8 +29,11 @@ class DevelopmentCI(unittest.TestCase):
         ).strip()
 
         files = {
+            "hosts/xyz/xyz-runtime-storage-policy.sh": ROOT / "hosts/xyz/xyz-runtime-storage-policy.sh",
             "scripts/ci/check-development.sh": ROOT / "scripts/ci/check-development.sh",
             "scripts/checks/forbid-submodules.sh": ROOT / "scripts/checks/forbid-submodules.sh",
+            "scripts/checks/test-xyz-runtime-storage-policy.sh": ROOT
+            / "scripts/checks/test-xyz-runtime-storage-policy.sh",
         }
         for destination, source in files.items():
             path = self.repository / destination
@@ -123,6 +126,7 @@ class DevelopmentCI(unittest.TestCase):
         self.assertEqual(workflow.count(full), 3)
         self.assertNotIn("  push:\n", workflow)
         self.assertIn("BASE_SHA: ${{ forgejo.event.pull_request.base.sha }}", workflow)
+        self.assertIn('"github:NixOS/nixpkgs/$revision#ripgrep"', workflow)
         self.assertIn('check-development.sh "$BASE_SHA"', workflow)
 
 

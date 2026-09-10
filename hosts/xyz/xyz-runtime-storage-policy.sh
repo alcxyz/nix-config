@@ -30,12 +30,16 @@ if [ -n "$forgejo_docker_dataset" ]; then
     echo "required runtime dataset '$forgejo_docker_dataset' is missing" >&2
     exit 1
   fi
+  forgejo_docker_mountpoint="$(zfs get -H -o value mountpoint "$forgejo_docker_dataset")"
+  if [ "$forgejo_docker_mountpoint" != legacy ]; then
+    echo "runtime dataset '$forgejo_docker_dataset' has mountpoint '$forgejo_docker_mountpoint', expected 'legacy'" >&2
+    exit 1
+  fi
   zfs set \
     compression=zstd \
     atime=off \
     xattr=sa \
     acltype=posixacl \
-    mountpoint=legacy \
     quota="$forgejo_docker_quota" \
     "$forgejo_docker_dataset"
 fi

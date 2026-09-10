@@ -24,3 +24,4 @@ shellcheck --shell=bash hosts/xyz/xyz-*.sh
 
 python3 scripts/checks/test-configuration-ci.py
 python3 scripts/checks/test-development-ci.py
+bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
