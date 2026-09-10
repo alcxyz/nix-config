@@ -34,9 +34,7 @@ else let
   legacy = evaluate false;
   runner = host.services.forgejo-actions-runner;
   services = host.systemd.services;
-  daemonConfig = builtins.fromJSON (
-    builtins.readFile (lib.last (lib.splitString "=" services.forgejo-runner-docker.serviceConfig.ExecStart))
-  );
+  daemonConfig = lib.last (lib.splitString "=" services.forgejo-runner-docker.serviceConfig.ExecStart);
   guard = services.forgejo-runner-io-pressure-guard.serviceConfig.ExecStart;
   guardSource = ../../modules/nixos/services/forgejo-actions-runner/aggregate-pressure-guard.sh;
   tests = ./test-forgejo-runner-aggregate-pressure.py;
@@ -51,8 +49,6 @@ in
   assert services.forgejo-runner-docker.serviceConfig.Slice == "forgejobuilds.slice";
   assert services.forgejo-runner-docker.serviceConfig.Delegate;
   assert services.forgejo-runner-docker.serviceConfig.OOMPolicy == "continue";
-  assert daemonConfig."storage-driver" == "overlay2";
-  assert daemonConfig."data-root" == "/var/lib/forgejo-docker/overlay2";
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.bindsTo;
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.after;
   assert builtins.elem "forgejo-runner-resource-policy.service" services.forgejo-runner-io-pressure-guard.requires;
@@ -68,8 +64,12 @@ in
   assert legacy.services.forgejo-actions-runner.dockerHost == "unix:///var/run/docker.sock";
   assert legacy.users.users.forgejo-runner.extraGroups == ["docker"];
     pkgs.runCommand "forgejo-runner-isolated-docker-contract" {
-      nativeBuildInputs = [pkgs.bash pkgs.python3 pkgs.shellcheck];
+      inherit daemonConfig;
+      nativeBuildInputs = [pkgs.bash pkgs.jq pkgs.python3 pkgs.shellcheck];
     } ''
+      jq --exit-status \
+        '.["storage-driver"] == "overlay2" and .["data-root"] == "/var/lib/forgejo-docker/overlay2"' \
+        "$daemonConfig" >/dev/null
       shellcheck ${guardSource}
       python3 ${tests} ${guard}
       touch "$out"

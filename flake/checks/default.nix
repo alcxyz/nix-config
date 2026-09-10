@@ -61,7 +61,14 @@ in {
     runner = xyz.services.forgejo-actions-runner;
     runnerUnit = xyz.systemd.services.forgejo-actions-runner;
     policyUnit = xyz.systemd.services.forgejo-runner-resource-policy;
+    daemonUnit = xyz.systemd.services.forgejo-runner-docker;
     buildSlice = xyz.systemd.slices.forgejobuilds.sliceConfig;
+    serverConfigs = [
+      self.nixosConfigurations.xev.config
+      self.nixosConfigurations.nux.config
+      self.nixosConfigurations.nex.config
+    ];
+    serverRunners = map (host: host.services.forgejo-actions-runner) serverConfigs;
     mockGetconf = pkgs.writeShellScript "mock-getconf" ''
       test "''${1:-}" = _NPROCESSORS_ONLN
       printf '%s\n' "''${MOCK_PROCESSORS:?}"
@@ -71,22 +78,23 @@ in {
     '';
   in
     assert runner.resourcePolicy.enable;
-    assert builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions;
-    assert lib.all (serverRunner: !serverRunner.resourcePolicy.enable) [
-      self.nixosConfigurations.xev.config.services.forgejo-actions-runner
-      self.nixosConfigurations.nux.config.services.forgejo-actions-runner
-      self.nixosConfigurations.nex.config.services.forgejo-actions-runner
-    ];
+    assert runner.isolatedDocker.enable;
+    assert !(builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions);
+    assert daemonUnit.serviceConfig.Slice == "forgejobuilds.slice";
+    assert lib.all (serverRunner: !serverRunner.resourcePolicy.enable && !serverRunner.isolatedDocker.enable) serverRunners;
+    assert lib.all (serverRunner: serverRunner.dockerHost == "unix:///var/run/docker.sock") serverRunners;
+    assert lib.all (host: builtins.elem "docker.service" host.systemd.services.forgejo-actions-runner.requires) serverConfigs;
+    assert lib.all (host: host.users.users.forgejo-runner.extraGroups == ["docker"]) serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
     assert buildSlice.MemoryHigh == "40%";
     assert buildSlice.MemoryMax == "50%";
-    assert builtins.elem "native.cgroupdriver=systemd" xyz.virtualisation.docker.daemon.settings."exec-opts";
+    assert !(xyz.virtualisation.docker.daemon.settings ? "exec-opts");
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.after;
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.requires;
     assert builtins.elem "forgejobuilds.slice" policyUnit.after;
     assert builtins.elem "forgejobuilds.slice" policyUnit.requires;
-    assert builtins.elem "forgejo-actions-runner.service" policyUnit.partOf;
+    assert policyUnit.partOf == [];
       pkgs.runCommand "forgejo-runner-resource-policy-contract" {} ''
         for fixture in "4 200" "5 250" "32 1600"; do
           set -- $fixture
@@ -121,18 +129,29 @@ in {
       "xev"
       "xyz"
     ];
-    hostConfigs = map (name: self.nixosConfigurations.${name}.config) hostNames;
-    guards = map (host: host.systemd.services.forgejo-runner-io-pressure-guard) hostConfigs;
-    guardStart = (builtins.head guards).serviceConfig.ExecStart;
-    runners = map (host: host.systemd.services.forgejo-actions-runner) hostConfigs;
-    runnerStarts = map (host: lib.removeSuffix " " host.systemd.services.forgejo-actions-runner.serviceConfig.ExecStart) hostConfigs;
+    hostConfigs = lib.genAttrs hostNames (name: self.nixosConfigurations.${name}.config);
+    legacyConfigs = map (name: hostConfigs.${name}) [
+      "nex"
+      "nux"
+      "xev"
+    ];
+    legacyGuards = map (host: host.systemd.services.forgejo-runner-io-pressure-guard) legacyConfigs;
+    xyzGuard = hostConfigs.xyz.systemd.services.forgejo-runner-io-pressure-guard;
+    guardStart = (builtins.head legacyGuards).serviceConfig.ExecStart;
+    runners = map (name: hostConfigs.${name}.systemd.services.forgejo-actions-runner) hostNames;
+    legacyRunnerStarts = map (host: lib.removeSuffix " " host.systemd.services.forgejo-actions-runner.serviceConfig.ExecStart) legacyConfigs;
     guardSource = ../../modules/nixos/services/forgejo-actions-runner/io-pressure-guard.sh;
     guardTest = ./test-forgejo-runner-io-pressure-guard.sh;
   in
-    assert lib.all (guard: guard.wantedBy == ["multi-user.target"]) guards;
-    assert lib.all (guard: lib.hasPrefix "io.alc.forgejo-runner=" guard.environment.RUNNER_CONTAINER_LABEL) guards;
-    assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") guards;
-    assert lib.all (guard: guard.environment.LOW_SAMPLES_REQUIRED == "13") guards;
+    assert lib.all (guard: guard.wantedBy == ["multi-user.target"]) legacyGuards;
+    assert lib.all (guard: lib.hasPrefix "io.alc.forgejo-runner=" guard.environment.RUNNER_CONTAINER_LABEL) legacyGuards;
+    assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") legacyGuards;
+    assert lib.all (guard: guard.environment.LOW_SAMPLES_REQUIRED == "13") legacyGuards;
+    assert xyzGuard.wantedBy == [];
+    assert !(xyzGuard.environment ? RUNNER_CONTAINER_LABEL);
+    assert xyzGuard.environment.HIGH_SAMPLES_REQUIRED == "5";
+    assert xyzGuard.environment.LOW_SAMPLES_REQUIRED == "13";
+    assert xyzGuard.environment.TRANSITION_TIMEOUT_SECONDS == "120";
     assert lib.all (runner: builtins.elem "forgejo-runner-io-pressure-guard.service" runner.requires) runners;
     assert lib.all (runner: runner.bindsTo == ["forgejo-runner-io-pressure-guard.service"]) runners;
       pkgs.runCommand "forgejo-runner-io-pressure-guard-contract" {
@@ -144,9 +163,25 @@ in {
             runner_config="$(${pkgs.gawk}/bin/awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStart})"
               grep -Fq -- '--label=io.alc.forgejo-runner=' "$runner_config"
           '')
-          runnerStarts}
+          legacyRunnerStarts}
         touch "$out"
       '';
+  forgejo-runner-registration-contract = let
+    source = ../../modules/nixos/services/forgejo-actions-runner/register-from-file.sh;
+    test = ./test-forgejo-runner-registration.sh;
+    helper = pkgs.writeShellApplication {
+      name = "forgejo-runner-register-from-file-test";
+      runtimeInputs = [pkgs.coreutils];
+      text = builtins.readFile source;
+    };
+  in
+    pkgs.runCommand "forgejo-runner-registration-contract" {
+      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.shellcheck];
+    } ''
+      shellcheck ${source} ${test}
+      bash ${test} ${lib.getExe helper}
+      touch "$out"
+    '';
   container-netns-contract = import ./container-netns.nix {inherit self lib pkgs;};
 
   game-window-geometry-contract = mkRepoCheck "game-window-geometry-contract" [pkgs.bash pkgs.jq pkgs.gawk pkgs.gnused] ''

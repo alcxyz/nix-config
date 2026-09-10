@@ -164,6 +164,11 @@
     ];
     text = builtins.readFile ./io-pressure-guard.sh;
   };
+  registerFromFile = pkgs.writeShellApplication {
+    name = "forgejo-runner-register-from-file";
+    runtimeInputs = [pkgs.coreutils];
+    text = builtins.readFile ./register-from-file.sh;
+  };
 in {
   imports = [./isolated-docker.nix];
 
@@ -600,22 +605,16 @@ in {
         ${secretEnvScript}
         mv "$env_tmp" ${lib.escapeShellArg envFile}
 
-        labels_wanted=${lib.escapeShellArg labelsWanted}
-        labels_current="$(cat ${lib.escapeShellArg labelsFile} 2>/dev/null || true)"
-        name_current="$(cat ${lib.escapeShellArg nameFile} 2>/dev/null || true)"
-
-        if [ ! -f .runner ] || [ "$labels_current" != "$labels_wanted" ] || [ "$name_current" != ${lib.escapeShellArg cfg.name} ]; then
-          rm -f .runner
-          token="$(tr -d '\n' < ${lib.escapeShellArg (secretPath "runner_token")})"
-          forgejo-runner register \
-            --instance ${lib.escapeShellArg cfg.url} \
-            --token "$token" \
-            --name ${lib.escapeShellArg cfg.name} \
-            --labels "$labels_wanted" \
-            --no-interactive
-          printf '%s\n' "$labels_wanted" > ${lib.escapeShellArg labelsFile}
-          printf '%s\n' ${lib.escapeShellArg cfg.name} > ${lib.escapeShellArg nameFile}
-        fi
+        ${lib.getExe registerFromFile} \
+          ${lib.getExe cfg.package} \
+          ${runnerConfig} \
+          ${lib.escapeShellArg "${stateDir}/.runner"} \
+          ${lib.escapeShellArg labelsFile} \
+          ${lib.escapeShellArg nameFile} \
+          ${lib.escapeShellArg cfg.url} \
+          ${lib.escapeShellArg cfg.name} \
+          ${lib.escapeShellArg labelsWanted} \
+          < ${lib.escapeShellArg (secretPath "runner_token")}
       '';
       script = ''
         exec forgejo-runner daemon --config ${runnerConfig}
