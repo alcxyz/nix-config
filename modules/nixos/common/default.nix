@@ -45,6 +45,7 @@ in {
     ../security/credential-consent/default.nix
     ../services/snapshot-restic-home/default.nix
     ../services/storage-health-monitor/default.nix
+    ../virtualisation/container-netns/default.nix
   ];
 
   # ==================== Nix Configuration ====================
