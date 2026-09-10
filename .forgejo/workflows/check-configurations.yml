@@ -5,13 +5,11 @@ on:
   pull_request:
     branches: [dev, main]
     types: [opened, synchronize, reopened]
-  push:
-    branches: [dev, main]
   workflow_dispatch:
 
 jobs:
   configurations:
-    name: Evaluate deployments and run native checks
+    name: Validate candidate
     runs-on: forgejo-docker-primary
     timeout-minutes: 60
     concurrency:
@@ -23,13 +21,18 @@ jobs:
           EVENT: ${{ forgejo.event_name }}
           HEAD_REPOSITORY: ${{ forgejo.event.pull_request.head.repo.full_name }}
           REPOSITORY: ${{ forgejo.repository }}
+        run: |
+          if [ "$EVENT" = pull_request ] && [ "$HEAD_REPOSITORY" != "$REPOSITORY" ]; then
+            echo 'Validation requires a reviewed maintainer-owned branch.' >&2
+            exit 1
+          fi
+
+      - name: Require full-validation source access
+        if: forgejo.event_name != 'pull_request' || forgejo.event.pull_request.base.ref != 'dev'
+        env:
           CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
           CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
         run: |
-          if [ "$EVENT" = pull_request ] && [ "$HEAD_REPOSITORY" != "$REPOSITORY" ]; then
-            echo 'Full configuration validation requires a reviewed maintainer-owned branch.' >&2
-            exit 1
-          fi
           if [ -z "$CI_SOURCE_READ_USER" ] || [ -z "$CI_SOURCE_READ_TOKEN" ]; then
             echo 'Configuration source access is not provisioned; validation cannot run.' >&2
             exit 1
@@ -40,6 +43,7 @@ jobs:
           github-server-url: https://git.alc.xyz
           ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Verify candidate revision
         env:
@@ -59,7 +63,33 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      - name: Run lightweight development checks
+        if: forgejo.event_name == 'pull_request' && forgejo.event.pull_request.base.ref == 'dev'
+        env:
+          BASE_SHA: ${{ forgejo.event.pull_request.base.sha }}
+        run: |
+          # Read only the public toolchain pin; do not evaluate this flake or fetch
+          # its private inputs to check formatting and credential-free tests.
+          revision=$(python3 - <<'PYTHON'
+          import json
+          import re
+          with open("flake.lock") as source:
+              locked = json.load(source)["nodes"]["nixpkgs"]["locked"]
+          assert locked["type"] == "github"
+          assert (locked["owner"], locked["repo"]) == ("NixOS", "nixpkgs")
+          assert re.fullmatch(r"[0-9a-f]{40}", locked["rev"])
+          print(locked["rev"])
+          PYTHON
+          )
+          nix shell --no-update-lock-file \
+            "github:NixOS/nixpkgs/$revision#treefmt" \
+            "github:NixOS/nixpkgs/$revision#alejandra" \
+            "github:NixOS/nixpkgs/$revision#shfmt" \
+            "github:NixOS/nixpkgs/$revision#shellcheck" \
+            -c bash scripts/ci/check-development.sh "$BASE_SHA"
+
       - name: Evaluate all systems
+        if: forgejo.event_name != 'pull_request' || forgejo.event.pull_request.base.ref != 'dev'
         env:
           CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
           CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
@@ -67,6 +97,7 @@ jobs:
           bash scripts/ci/with-source-access.sh bash scripts/ci/check-configurations.sh all-systems
 
       - name: Build and run native checks
+        if: forgejo.event_name != 'pull_request' || forgejo.event.pull_request.base.ref != 'dev'
         env:
           CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
           CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}

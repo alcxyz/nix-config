@@ -6,11 +6,24 @@ exported NixOS, Home Manager and Darwin deployment, then builds native checks.
 It refuses lock updates. The two phases do not deploy hosts or prove runtime
 behavior, and foreign-platform check builds remain separate.
 
-The Forgejo configuration workflow checks the exact PR head for `dev` and
-`main`, and also runs after pushes to those branches. A missing prerequisite
-fails the job. A contribution from a fork must first be reviewed and staged on
-a maintainer-owned branch for full configuration validation. The workflow does
-not use `pull_request_target` to execute proposed code.
+PRs into `dev` run formatting, shell lint, repository hygiene and focused
+credential-free CI tests. They do not evaluate deployments or fetch private
+flake inputs. This lightweight gate applies to all development changes,
+including shared modules and input updates; local validation carries the
+integration work during iteration.
+
+Develop on `xyz` and validate the affected configurations and behavior before
+merging. Record the commands and results in the PR. For shared composition or
+input changes, run the full local configuration check above and the relevant
+consumer/package checks. Runtime-sensitive changes retain their acceptance
+contracts, including `just input` for Wolf browser input changes.
+
+PRs into `main` and manual workflow runs perform full all-system evaluation and
+native checks against the exact candidate revision. A missing prerequisite
+fails full validation. Both gates require a reviewed maintainer-owned
+branch; the workflow does not use `pull_request_target` to execute proposed
+code. There is no duplicate workflow on pushes after a merge. Automated input
+updaters retain their existing producer/consumer checks before publication.
 
 Full evaluation requires authorized access to the locked inputs. Source-access
 provisioning and private diagnostic procedures are owned by the private
