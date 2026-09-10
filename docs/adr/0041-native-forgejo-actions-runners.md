@@ -103,10 +103,11 @@ The default runner pool is represented with labels:
   runner-created step and service containers together.
 - The guard records a container as owned only after a successful pause and
   resumes only recorded containers. A crash between the Docker pause and the
-  ownership record deliberately leaves that container paused for operator
-  review rather than risking the resume of a container paused for another
-  reason. Ambiguous pause or resume ownership remains degraded until an operator
-  resolves it.
+  ownership record, or a failed pause request whose effect cannot be proven,
+  deliberately leaves that container under uncertain ownership for operator
+  review. Docker reporting the container as unpaused is not sufficient proof
+  after a failed request. Ambiguous pause or resume ownership remains degraded
+  until an operator resolves it.
 - Runner startup requires a healthy pressure guard. A hard guard failure stops
   the bound runner service so it cannot admit unprotected work; this can
   interrupt job orchestration and requires operator recovery.

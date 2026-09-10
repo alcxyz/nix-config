@@ -83,14 +83,14 @@ reconcile_pending() {
     [[ -e $marker ]] || return 0
     container=${marker##*/}
     if state=$(inspect_paused "$container"); then
+      if ! mv "$marker" "$uncertain_dir/$container"; then
+        degraded "pending pause ownership could not be preserved"
+        return 1
+      fi
       if [[ $state == true ]]; then
-        if ! mv "$marker" "$uncertain_dir/$container"; then
-          degraded "pending pause ownership could not be preserved"
-          return 1
-        fi
         degraded "a pause completed before ownership was recorded; operator recovery is required"
       else
-        rm -f "$marker"
+        degraded "a failed pause has ambiguous ownership; operator recovery is required"
       fi
       continue
     fi

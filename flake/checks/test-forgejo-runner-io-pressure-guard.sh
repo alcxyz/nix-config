@@ -220,7 +220,9 @@ run_guard "$state" "$state/low" 4 env INSPECT_FAIL_ID=dddddddddddd
 grep -q 'could not inspect an owned paused container' "$work/calls"
 
 # A failed pause never creates ownership, but retains pending intent until its
-# outcome can be positively reconciled.
+# outcome can be positively reconciled. Docker reporting the container as
+# running after restart does not prove that the failed pause had no effect, so
+# the guard preserves the attempt as uncertain instead of retrying it.
 state=$work/pause-failure
 new_state "$state"
 printf running >"$state/containers/eeeeeeeeeeee"
@@ -229,6 +231,17 @@ run_guard "$state" "$state/high" 3 env PAUSE_FAIL_ID=eeeeeeeeeeee
 [[ ! -e $state/guard/paused/eeeeeeeeeeee ]]
 [[ -e $state/guard/pending/eeeeeeeeeeee ]]
 [[ $(cat "$state/containers/eeeeeeeeeeee") == running ]]
+printf '%s\n' 4 >"$state/low"
+run_guard "$state" "$state/low" 1 env
+[[ ! -e $state/guard/pending/eeeeeeeeeeee ]]
+[[ -e $state/guard/uncertain/eeeeeeeeeeee ]]
+[[ -e $state/guard/guarded ]]
+[[ $(cat "$state/containers/eeeeeeeeeeee") == running ]]
+if rg -q '^pause eeeeeeeeeeee$|^unpause eeeeeeeeeeee$' "$work/calls"; then
+  echo "guard mutated a container after a failed pause became ambiguous" >&2
+  exit 1
+fi
+grep -q 'failed pause has ambiguous ownership' "$work/calls"
 
 # Runtime malformed PSI fails closed by entering guarded state and pausing work.
 state=$work/malformed-runtime
