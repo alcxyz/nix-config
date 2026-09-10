@@ -306,6 +306,12 @@ in {
         default = 3;
         description = "Deadline for each Docker API operation.";
       };
+
+      transitionTimeoutSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 120;
+        description = "Deadline for aggregate freeze and thaw transitions.";
+      };
     };
 
     secretsFile = lib.mkOption {

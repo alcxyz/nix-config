@@ -34,6 +34,9 @@ else let
   legacy = evaluate false;
   runner = host.services.forgejo-actions-runner;
   services = host.systemd.services;
+  daemonConfig = builtins.fromJSON (
+    builtins.readFile (lib.last (lib.splitString "=" services.forgejo-runner-docker.serviceConfig.ExecStart))
+  );
   guard = services.forgejo-runner-io-pressure-guard.serviceConfig.ExecStart;
   guardSource = ../../modules/nixos/services/forgejo-actions-runner/aggregate-pressure-guard.sh;
   tests = ./test-forgejo-runner-aggregate-pressure.py;
@@ -48,6 +51,8 @@ in
   assert services.forgejo-runner-docker.serviceConfig.Slice == "forgejobuilds.slice";
   assert services.forgejo-runner-docker.serviceConfig.Delegate;
   assert services.forgejo-runner-docker.serviceConfig.OOMPolicy == "continue";
+  assert daemonConfig."storage-driver" == "overlay2";
+  assert daemonConfig."data-root" == "/var/lib/forgejo-docker/overlay2";
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.bindsTo;
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.after;
   assert builtins.elem "forgejo-runner-resource-policy.service" services.forgejo-runner-io-pressure-guard.requires;
@@ -56,6 +61,7 @@ in
   assert services.forgejo-runner-resource-policy.partOf == [];
   assert services.forgejo-runner-docker.serviceConfig.User == "forgejo-builder";
   assert !(services.forgejo-runner-io-pressure-guard.serviceConfig ? Slice);
+  assert services.forgejo-runner-io-pressure-guard.environment.TRANSITION_TIMEOUT_SECONDS == "120";
   assert services.forgejo-runner-cache-pressure-prune.environment.DOCKER_HOST == runner.dockerHost;
   assert services.forgejo-runner-cache-prune.environment.DOCKER_HOST == runner.dockerHost;
   assert !(builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions);

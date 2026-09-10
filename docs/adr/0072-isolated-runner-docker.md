@@ -35,8 +35,15 @@ The system service owns the aggregate boundary. Rootless Docker may report no
 per-container cgroup support without a user service manager; those individual
 limits are not the contract. Qualification must prove ancestor limits remain
 effective for ordinary builds and buildx workers, including cgroup overrides.
-Use a dedicated unprivileged account and fuse-overlayfs for the initial
-candidate; do not silently fall back to host Docker on incompatibility.
+Use a dedicated unprivileged account and the kernel overlay driver; do not
+silently fall back to host Docker on incompatibility. A userspace FUSE storage
+provider inside the frozen aggregate can stop before a client blocked on that
+provider reaches the frozen state, so it is incompatible with this aggregate
+freeze contract.
+
+Keep the kernel-overlay data root separate from an earlier FUSE candidate. The
+old candidate remains disposable rollback data under the same bounded dataset;
+do not reinterpret or migrate its storage-driver-specific state.
 
 ## Alternatives
 
@@ -95,6 +102,15 @@ runtime canary must demonstrate job, step, service, Docker build and buildx
 containment; pressure-induced loss of worker progress; owned recovery; preserved
 manual pauses; and unaffected application Docker. Keep migration and recovery
 procedures in the private operational repository.
+
+Freeze and thaw transitions use a separate 120-second deadline while metadata
+queries retain a short deadline. Kernel-backed storage synchronization can make
+a valid freezer transition take longer than a routine control query. Ownership
+remains pending until systemd reports that the transition completed, so a real
+timeout still fails closed for operator reconciliation.
+If systemd aborts a freeze while new work is attaching, retry only when the
+aggregate is unequivocally running and only within the original transition
+deadline. Any other state keeps the pending ownership record and fails closed.
 
 A cold daemon needs additional storage and pulls. I/O weight and cgroup freezing
 do not guarantee immediate relief from already queued buffered writes, nor do

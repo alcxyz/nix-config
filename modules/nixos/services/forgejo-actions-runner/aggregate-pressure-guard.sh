@@ -12,6 +12,7 @@ low_threshold=${LOW_THRESHOLD_HUNDREDTHS:-500}
 high_required=${HIGH_SAMPLES_REQUIRED:-5}
 low_required=${LOW_SAMPLES_REQUIRED:-13}
 max_iterations=${MAX_ITERATIONS:-0}
+transition_timeout_seconds=${TRANSITION_TIMEOUT_SECONDS:-120}
 unit=forgejobuilds.slice
 
 fail() {
@@ -19,8 +20,34 @@ fail() {
   "$notify_bin" --status="degraded: $1" || true
   exit 1
 }
-control() { timeout --foreground 5s "$systemctl_bin" "$@"; }
-freezer_state() { control show --property=FreezerState --value "$unit"; }
+metadata() { timeout --foreground 5s "$systemctl_bin" "$@"; }
+transition() {
+  local action=$1
+  local actual deadline metadata_timeout remaining
+  shift
+  deadline=$((SECONDS + transition_timeout_seconds))
+
+  while ((remaining = deadline - SECONDS, remaining > 0)); do
+    if timeout --foreground "${remaining}s" "$systemctl_bin" "$action" "$@"; then
+      return 0
+    fi
+    [[ $action == freeze ]] || return 1
+
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || return 1
+    metadata_timeout=5
+    ((remaining < metadata_timeout)) && metadata_timeout=$remaining
+    actual=$(timeout --foreground "${metadata_timeout}s" "$systemctl_bin" \
+      show --property=FreezerState --value "$unit") || return 1
+    [[ $actual == running ]] || return 1
+
+    remaining=$((deadline - SECONDS))
+    ((remaining > 1)) || return 1
+    sleep 1
+  done
+  return 1
+}
+freezer_state() { metadata show --property=FreezerState --value "$unit"; }
 
 mkdir -p "$state_dir"
 chmod 0700 "$state_dir"
@@ -53,7 +80,7 @@ freeze_owned() {
   fi
   [[ $actual == running ]] || fail "aggregate freeze is not owned by this guard"
   : > "$state_dir/pending"
-  control freeze "$unit" || fail "aggregate freeze failed; ownership requires recovery"
+  transition freeze "$unit" || fail "aggregate freeze failed; ownership requires recovery"
   [[ $(freezer_state) == frozen ]] || fail "aggregate did not freeze; ownership requires recovery"
   : > "$state_dir/owned"
   rm "$state_dir/pending"
@@ -63,7 +90,7 @@ thaw_owned() {
   [[ -e $state_dir/owned ]] || fail "aggregate thaw lacks ownership"
   [[ $(freezer_state) == frozen ]] || fail "owned aggregate state changed externally"
   : > "$state_dir/pending"
-  control thaw "$unit" || fail "aggregate thaw failed; ownership requires recovery"
+  transition thaw "$unit" || fail "aggregate thaw failed; ownership requires recovery"
   [[ $(freezer_state) == running ]] || fail "aggregate did not thaw; ownership requires recovery"
   rm "$state_dir/owned" "$state_dir/pending"
 }

@@ -10,11 +10,11 @@
   runtimeDir = "/run/forgejo-docker";
   daemonConfig = (pkgs.formats.json {}).generate "forgejo-docker.json" {
     hosts = ["unix://${runtimeDir}/docker.sock"];
-    "data-root" = "${stateDir}/data";
+    "data-root" = "${stateDir}/overlay2";
     "exec-root" = "${runtimeDir}/exec";
     pidfile = "${runtimeDir}/docker.pid";
     group = "root"; # Root inside the user namespace maps to the service's group.
-    "storage-driver" = "fuse-overlayfs";
+    "storage-driver" = "overlay2";
     "exec-opts" = ["native.cgroupdriver=cgroupfs"];
   };
   guard = pkgs.writeShellApplication {
@@ -41,7 +41,6 @@ in {
       resourcePolicy.enable = lib.mkDefault true;
       ioPressureGuard.enable = lib.mkDefault true;
     };
-    boot.kernelModules = ["fuse"];
     users.users.forgejo-builder = {
       isSystemUser = true;
       group = "forgejo-runner";
@@ -54,7 +53,7 @@ in {
       bindsTo = ["forgejo-runner-io-pressure-guard.service"];
       after = ["network-online.target" "forgejo-runner-resource-policy.service" "forgejo-runner-io-pressure-guard.service"];
       wants = ["network-online.target"];
-      path = ["/run/wrappers" pkgs.fuse-overlayfs pkgs.fuse3];
+      path = ["/run/wrappers"];
       environment = {
         HOME = stateDir;
         XDG_RUNTIME_DIR = runtimeDir;
@@ -96,6 +95,7 @@ in {
         HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
         LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
         SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
+        TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.transitionTimeoutSeconds;
       };
       serviceConfig = {
         Type = "notify";

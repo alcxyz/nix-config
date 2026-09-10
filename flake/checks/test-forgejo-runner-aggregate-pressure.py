@@ -13,7 +13,8 @@ GUARD = Path(sys.argv.pop(1)).resolve()
 
 class GuardTests(unittest.TestCase):
     def run_guard(self, values, initial='running', owned=False, pending=False,
-                  fail_action=''):
+                  fail_action='', fail_count='0', fail_state='', action_delay='0',
+                  transition_timeout='120'):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -32,7 +33,12 @@ if [[ $1 == show ]]; then
 fi
 [[ $# == 2 && $2 == forgejobuilds.slice ]]
 printf '%s\\n' "$1" >> "$FIXTURE/actions"
-[[ $1 != "$FAIL_ACTION" ]] || exit 1
+attempt=$(wc -l < "$FIXTURE/actions")
+if [[ $1 == "$FAIL_ACTION" && $attempt -le $FAIL_COUNT ]]; then
+  [[ -z $FAIL_STATE ]] || printf '%s' "$FAIL_STATE" > "$FIXTURE/actual"
+  exit 1
+fi
+if [[ $1 == freeze && $ACTION_DELAY != 0 ]]; then sleep "$ACTION_DELAY"; fi
 case "$1" in
   freeze) printf frozen > "$FIXTURE/actual" ;;
   thaw) printf running > "$FIXTURE/actual" ;;
@@ -46,7 +52,9 @@ esac
                    'PRESSURE_VALUES_FILE': str(root / 'pressure'),
                    'SAMPLE_SECONDS': '0', 'HIGH_SAMPLES_REQUIRED': '2',
                    'LOW_SAMPLES_REQUIRED': '2', 'MAX_ITERATIONS': str(len(values)),
-                   'FAIL_ACTION': fail_action}
+                   'FAIL_ACTION': fail_action, 'FAIL_COUNT': fail_count,
+                   'FAIL_STATE': fail_state, 'ACTION_DELAY': action_delay,
+                   'TRANSITION_TIMEOUT_SECONDS': transition_timeout}
             result = subprocess.run(['bash', str(GUARD)], env=env, capture_output=True)
             actions = (root / 'actions').read_text().splitlines() if (root / 'actions').exists() else []
             return result.returncode, actions, (state / 'owned').exists(), (state / 'pending').exists()
@@ -67,10 +75,29 @@ esac
         self.assertEqual(self.run_guard([0, 0], initial='frozen', pending=True), (1, [], False, True))
 
     def test_failed_freeze_retains_pending(self):
-        self.assertEqual(self.run_guard([2500, 2500], fail_action='freeze'), (1, ['freeze'], False, True))
+        self.assertEqual(self.run_guard([2500, 2500], fail_action='freeze', fail_count='1',
+                                        fail_state='freezing'), (1, ['freeze'], False, True))
+
+    def test_aborted_freeze_retries_within_original_deadline(self):
+        self.assertEqual(self.run_guard([2500, 2500], fail_action='freeze', fail_count='1'),
+                         (0, ['freeze', 'freeze'], True, False))
+
+    def test_freeze_retry_exhausts_original_deadline(self):
+        result, actions, owned, pending = self.run_guard(
+            [2500, 2500], fail_action='freeze', fail_count='99', transition_timeout='2')
+        self.assertEqual(result, 1)
+        self.assertGreaterEqual(len(actions), 1)
+        self.assertTrue(all(action == 'freeze' for action in actions))
+        self.assertFalse(owned)
+        self.assertTrue(pending)
+
+    def test_freeze_can_exceed_metadata_timeout(self):
+        self.assertEqual(self.run_guard([2500, 2500], action_delay='6', transition_timeout='10'),
+                         (0, ['freeze'], True, False))
 
     def test_failed_thaw_retains_ownership(self):
-        self.assertEqual(self.run_guard([0, 0], initial='frozen', owned=True, fail_action='thaw'),
+        self.assertEqual(self.run_guard([0, 0], initial='frozen', owned=True, fail_action='thaw',
+                                        fail_count='1'),
                          (1, ['thaw'], True, True))
 
     def test_external_thaw_requires_recovery(self):
