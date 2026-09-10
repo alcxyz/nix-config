@@ -42,8 +42,9 @@ in {
         xyz
         ;
     };
-    hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:" label) runner.labels;
+    hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:docker://" label) runner.labels;
   in
+    assert lib.all (runner: runner.enable) (lib.attrValues runners);
     assert runners.xyz.capacity == 2;
     assert lib.all (runner: runner.capacity == 1) [runners.xev runners.nux runners.nex];
     assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
