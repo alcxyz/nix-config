@@ -25,6 +25,8 @@
     // {
       restoreMonitor = "DP-1";
       snapFullHeight = true;
+      workspace = 8;
+      centerOnRecovery = true;
     })
   gamingWindowMatchers;
   protonGe10_4 =

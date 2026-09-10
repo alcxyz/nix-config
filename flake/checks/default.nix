@@ -147,6 +147,10 @@ in {
       '';
   container-netns-contract = import ./container-netns.nix {inherit self lib pkgs;};
 
+  game-window-geometry-contract = mkRepoCheck "game-window-geometry-contract" [pkgs.bash pkgs.jq pkgs.gawk pkgs.gnused] ''
+    bash scripts/checks/test-game-window-geometry-guard.sh
+  '';
+
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
   '';

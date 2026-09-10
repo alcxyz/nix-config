@@ -25,8 +25,11 @@ Retain only five independent compatibility measures:
 1. Keep the 49-inch gaming output selected as XWayland's primary output, with
    an event-driven repair when the output layout changes.
 2. Use an event-scoped geometry guard for explicitly matched games. For a short
-   window after session or output events, move a matching game back to the
-   gaming output and recenter it only when its geometry is outside that output.
+   ten-second window after session/output events or a newly identified game
+   window, center a matching floating game on the gaming output only while
+   its dedicated workspace is on that output. Preserve window size. Ignore
+   repeated title notifications for an already identified window and leave
+   games moved to another workspace alone.
 3. Route exact Battle.net and Heroes windows silently to the unpinned gaming
    workspace 8. This rule changes no geometry, focus, fullscreen, or pointer
    state and does not bind the workspace to an output.
@@ -66,7 +69,9 @@ introduced one layer at a time.
 - Normal focus, workspace switching, fullscreen toggling, and pointer behavior
   remain under Hyprland and the game rather than a stack of game rules.
 - Recovery is limited to the display/session transition where stale geometry
-  is expected.
+  is expected and the initial game-window identification. Launching a game
+  long after wake must not miss recovery merely because the launcher stayed
+  open. Workspace routing alone cannot repair stale client coordinates.
 - The game matcher list is the shared, declarative extension point for geometry
   recovery and notification suppression.
 - The XWayland primary-output repair remains host- and output-layout-specific.

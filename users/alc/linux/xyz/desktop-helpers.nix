@@ -249,6 +249,7 @@
           monitor_id="$(jq -r '.monitor' <<<"$client_json")"
           restore_monitor="$(jq -r '._guardRestoreMonitor' <<<"$client_json")"
           snap_full_height="$(jq -r '._guardSnapFullHeight' <<<"$client_json")"
+          center_on_recovery="$(jq -r '._guardCenterOnRecovery' <<<"$client_json")"
           monitor_json="$(
             if [[ "$restore_monitor" == null ]]; then
               jq -ce --argjson id "$monitor_id" \
@@ -261,6 +262,8 @@
             fi
           )"
           [[ -n "$monitor_json" ]] || continue
+          # Never move a window across outputs behind its workspace's back.
+          [[ "$(jq -r '.id' <<<"$monitor_json")" == "$monitor_id" ]] || continue
 
           read -r x y width height < <(
             jq -r '[.at[0], .at[1], .size[0], .size[1]] | @tsv' \
@@ -279,7 +282,12 @@
           fi
 
           repair_description=""
-          if [[ "$snap_full_height" == true ]] && ((
+          if [[ "$center_on_recovery" == true ]]; then
+            target_x=$((monitor_x + ((monitor_width - width) / 2)))
+            target_y=$((monitor_y + ((monitor_height - height) / 2)))
+            ((x != target_x || y != target_y)) || continue
+            repair_description="Centered watched window after lifecycle event"
+          elif [[ "$snap_full_height" == true ]] && ((
             height == monitor_height
             && y != monitor_y
             && y >= monitor_y - tolerance
@@ -334,6 +342,7 @@
             )] | first) as $policy |
             select(
               $policy != null
+              and (($policy.workspace == null) or (.workspace.id == $policy.workspace))
               and .mapped == true
               and .hidden == false
               and .floating == true
@@ -341,13 +350,15 @@
             ) |
             . + {
               _guardRestoreMonitor: ($policy.restoreMonitor // null),
-              _guardSnapFullHeight: ($policy.snapFullHeight // false)
+              _guardSnapFullHeight: ($policy.snapFullHeight // false),
+              _guardCenterOnRecovery: ($policy.centerOnRecovery // false)
             }
           ' <<<"$clients_json"
         )
       }
 
       watch_geometry_events() {
+        declare -A identified=()
         while true; do
           while IFS= read -r event; do
             case "$event" in
@@ -355,6 +366,26 @@
                 | monitorremoved\>\>* | monitorremovedv2\>\>* \
                 | dpms\>\>*)
                 : >"$repair_requested"
+                ;;
+              openwindow\>\>* | windowtitle\>\>* | windowtitlev2\>\>*)
+                address="''${event#*>>}"
+                address="0x''${address%%,*}"
+                # Titles can change repeatedly in a match. Arm once per
+                # matching window lifetime, not on every title notification.
+                if [[ -z "''${identified[$address]:-}" ]] && hyprctl clients -j | jq -e \
+                  --arg address "$address" --argjson policies "$policies" '
+                    any(.[]; . as $w | .address == $address and
+                      any($policies[]; . as $p |
+                        ($w.class | test($p.classRegex)) and
+                        ($w.title | test($p.titleRegex))))
+                  ' >/dev/null; then
+                  identified[$address]=1
+                  : >"$repair_requested"
+                fi
+                ;;
+              closewindow\>\>*)
+                address="0x''${event#*>>}"
+                unset 'identified[$address]'
                 ;;
             esac
           done < <(socat -U - UNIX-CONNECT:"$socket" 2>/dev/null)
@@ -375,7 +406,7 @@
       while true; do
         if [[ -e "$repair_requested" ]]; then
           rm -f "$repair_requested"
-          active_until=$((SECONDS + 90))
+          active_until=$((SECONDS + 10))
         fi
         if ((SECONDS <= active_until)); then
           repair_geometry
