@@ -172,8 +172,12 @@
 
   services.forgejo-actions-runner = {
     enable = true;
+    ioPressureGuard.enable = true;
     name = "xev";
-    capacity = 4;
+    # Keep CI admission serial on a host that also serves the Kubernetes
+    # control plane and storage. Other eligible runners can consume queued
+    # work without allowing one poller to admit a local build burst.
+    capacity = 1;
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"
