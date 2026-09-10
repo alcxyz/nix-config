@@ -14,5 +14,6 @@ includes = [
   "scripts/ci/*.sh",
   "scripts/forgejo/publish-nix-packages-lock.sh",
   "scripts/ops/*.sh",
+  "modules/nixos/services/storage-health-monitor/*.sh",
   "modules/nixos/services/wolf-streaming/browser-image/*.sh",
 ]

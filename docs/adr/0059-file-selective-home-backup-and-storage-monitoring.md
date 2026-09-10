@@ -1,6 +1,6 @@
 # ADR-0059: File-selective home backup and host storage monitoring
 
-**Status:** Accepted, amended 2026-08-12
+**Status:** Accepted, amended 2026-09-10
 
 **Date:** 2026-08-11
 
@@ -53,6 +53,22 @@ agent credentials remain in the private configuration boundary.
 The cross-repository alert ownership and reconciler policy is recorded in
 GitOps ADR-048.
 
+Recent-success monitoring records a successful unit result in root-owned
+durable state. An `ExecStopPost` recorder advances the unit's marker only when
+systemd reports `SERVICE_RESULT=success`, `EXIT_CODE=exited`, and
+`EXIT_STATUS=0`; canceled, signaled, stopped, or otherwise failed runs retain
+the previous marker. Monitored units must be root-run oneshots without
+`RemainAfterExit`, so the recorder runs when the successful operation finishes
+rather than during a later stop or reboot. Marker replacement is atomic, and
+the monitor rejects malformed or future timestamps. This evidence survives
+reboot, unlike systemd's monotonic completion timestamp.
+
+Missing durable state remains a failure except for the existing pending-first-
+timer allowance. A successful completion from the current boot may serve as a
+fallback when the marker is missing, which avoids discarding evidence during
+the initial rollout. Activation does not seed markers or infer success from an
+older journal entry.
+
 ## Consequences
 
 - Valuable home files retain versioned, encrypted, snapshot-consistent local
@@ -86,3 +102,15 @@ would impose layout and mount complexity primarily to serve the backup tool.
 
 Rejected. A temporary ZFS snapshot gives Restic a consistent view while keeping
 the file-selective repository and restore model.
+
+### Use systemd completion timestamps without durable state
+
+Rejected. Monotonic timestamps and the manager's unit result state do not
+preserve backup freshness evidence across a host reboot.
+
+### Record success with `OnSuccess=`
+
+Rejected. The follow-up unit runs asynchronously, and success activation does
+not provide the same strict main-process exit tuple. A gated `ExecStopPost`
+recorder can distinguish completed success from cancellation, signal exit, and
+post-start failure before advancing durable evidence.

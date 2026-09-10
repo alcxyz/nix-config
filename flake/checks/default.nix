@@ -205,6 +205,19 @@ in {
     bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
   '';
 
+  storage-health-monitor-contract = let
+    host = self.nixosConfigurations.xyz.config;
+    monitored = host.services.storage-health-monitor.units;
+    recent = builtins.filter (unit: unit.mode == "recent-success") monitored;
+    serviceFor = unit: host.systemd.services.${lib.removeSuffix ".service" unit.name};
+  in
+    assert lib.all (unit: builtins.length (serviceFor unit).serviceConfig.ExecStopPost == 1) recent;
+      mkRepoCheck "storage-health-monitor-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.gnugrep] ''
+        bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.sh \
+          modules/nixos/services/storage-health-monitor/record-success.sh \
+          modules/nixos/services/storage-health-monitor/check-recent-success.sh
+      '';
+
   nix-deploy-inventory-contract = let
     config = pkgs.nix-deploy.deployConfig;
     expectedHosts = builtins.attrNames (import ../../inventory.nix).hosts;

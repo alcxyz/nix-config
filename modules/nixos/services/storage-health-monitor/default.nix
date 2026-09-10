@@ -85,6 +85,23 @@
         ${lib.boolToString unit.allowPendingFirstTimer}
     '')
     cfg.units;
+  recentSuccessUnits = builtins.filter (unit: unit.mode == "recent-success") cfg.units;
+  successStateDirectory = "/var/lib/storage-health-monitor/success";
+  successMarker = unit: "${successStateDirectory}/${builtins.hashString "sha256" unit.name}";
+  successRecorder = pkgs.writeShellApplication {
+    name = "storage-health-record-success";
+    runtimeInputs = [pkgs.coreutils];
+    text = builtins.readFile ./record-success.sh;
+  };
+  recentSuccessChecker = pkgs.writeShellApplication {
+    name = "storage-health-check-recent-success";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.systemd
+    ];
+    text = builtins.readFile ./check-recent-success.sh;
+  };
   monitorScript = pkgs.writeShellApplication {
     name = "storage-health-monitor";
     runtimeInputs = [
@@ -185,28 +202,11 @@
           return
         fi
 
-        result="$(systemctl show "$unit" -p Result --value 2>/dev/null || true)"
-        status="$(systemctl show "$unit" -p ExecMainStatus --value 2>/dev/null || true)"
-        finished="$(systemctl show "$unit" -p InactiveEnterTimestampMonotonic --value 2>/dev/null || echo 0)"
-        if [ "$result" != success ] || [ "$status" != 0 ]; then
-          record_issue "$unit: last result is ''${result:-unknown} with status ''${status:-unknown}"
-          return
-        fi
-        if ! [[ "$finished" =~ ^[0-9]+$ ]] || [ "$finished" -eq 0 ]; then
-          timer="''${unit%.service}.timer"
-          last_trigger="$(systemctl show "$timer" -p LastTriggerUSec --value 2>/dev/null || true)"
-          if [ "$allow_pending_first_timer" = true ] \
-            && [ "$(systemctl is-active "$timer" 2>/dev/null || true)" = active ] \
-            && [ -z "$last_trigger" ]; then
-            return
-          fi
-          record_issue "$unit: no successful completion timestamp"
-          return
-        fi
-        now="$(awk '{printf "%.0f", $1 * 1000000}' /proc/uptime)"
-        age=$(((now - finished) / 1000000))
-        if [ "$age" -gt "$maximum_age" ]; then
-          record_issue "$unit: last successful completion is $age seconds old"
+        marker=${successStateDirectory}/$(printf '%s' "$unit" | sha256sum | cut -d ' ' -f 1)
+        if ! issue="$(${lib.getExe recentSuccessChecker} \
+          "$unit" "$maximum_age" "$allow_pending_first_timer" \
+          "$marker" /proc/uptime)"; then
+          record_issue "''${issue:-$unit: recent-success check failed without a reason}"
         fi
       }
 
@@ -249,14 +249,46 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    systemd.services.storage-health-monitor = {
-      description = "Check storage capacity, health, and backup freshness";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = lib.getExe monitorScript;
-        UMask = "0077";
-      };
-    };
+    assertions = [
+      {
+        assertion = lib.all (unit: let
+          serviceConfig = config.systemd.services.${lib.removeSuffix ".service" unit.name}.serviceConfig;
+        in
+          (serviceConfig.User or "root")
+          == "root"
+          && !(serviceConfig.DynamicUser or false)
+          && (serviceConfig.Type or "") == "oneshot"
+          && !(serviceConfig.RemainAfterExit or false))
+        recentSuccessUnits;
+        message = "storage-health-monitor recent-success units must be root-run oneshot services that become inactive after completion";
+      }
+    ];
+
+    systemd.tmpfiles.rules = [
+      "d /var/lib/storage-health-monitor 0700 root root - -"
+      "d ${successStateDirectory} 0700 root root - -"
+    ];
+
+    systemd.services = lib.mkMerge (
+      [
+        {
+          storage-health-monitor = {
+            description = "Check storage capacity, health, and backup freshness";
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = lib.getExe monitorScript;
+              UMask = "0077";
+            };
+          };
+        }
+      ]
+      ++ map (unit: {
+        ${lib.removeSuffix ".service" unit.name}.serviceConfig.ExecStopPost = lib.mkAfter [
+          "${lib.getExe successRecorder} ${lib.escapeShellArg (successMarker unit)}"
+        ];
+      })
+      recentSuccessUnits
+    );
     systemd.timers.storage-health-monitor = {
       description = "Frequent storage and backup health checks";
       wantedBy = ["timers.target"];

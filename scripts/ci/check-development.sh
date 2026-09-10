@@ -19,9 +19,13 @@ shellcheck \
   scripts/ci/*.sh \
   scripts/forgejo/publish-nix-packages-lock.sh \
   scripts/ops/*.sh \
+  modules/nixos/services/storage-health-monitor/*.sh \
   modules/nixos/services/wolf-streaming/browser-image/*.sh
 shellcheck --shell=bash hosts/xyz/xyz-*.sh
 
 python3 scripts/checks/test-configuration-ci.py
 python3 scripts/checks/test-development-ci.py
 bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
+bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.sh \
+  modules/nixos/services/storage-health-monitor/record-success.sh \
+  modules/nixos/services/storage-health-monitor/check-recent-success.sh
