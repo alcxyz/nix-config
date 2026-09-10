@@ -76,6 +76,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0069](0069-maintained-project-dev-qa.md) | Maintained project development QA inputs | Accepted | flake inputs, DMS, release workflow |
 | [ADR-0070](0070-action-bound-credential-consent.md) | Action-bound credential consent | Accepted | Polkit, DMS, credential brokers |
 | [ADR-0071](0071-shared-container-network-namespace-mount.md) | Establish the shared container network namespace mount before runtimes | Accepted | containers, k3s, systemd |
+| [ADR-0072](0072-isolated-runner-docker.md) | Isolate runner Docker execution in a bounded rootless service | Proposed, runtime qualification pending | Forgejo runners, Docker, systemd |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

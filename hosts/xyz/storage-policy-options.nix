@@ -7,6 +7,16 @@
           datasets = {
             docker = lib.mkOption {type = lib.types.str;};
             steam-headless = lib.mkOption {type = lib.types.str;};
+            forgejo-docker = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Optional dedicated Forgejo build-daemon runtime dataset.";
+            };
+          };
+          forgejoDockerQuota = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Optional quota for the dedicated Forgejo build-daemon runtime dataset.";
           };
           retiredK3sDataset = lib.mkOption {type = lib.types.str;};
         };

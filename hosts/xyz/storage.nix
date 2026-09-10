@@ -17,6 +17,19 @@
   );
   runtimePool = cfg.runtime.pool;
   runtimeDatasets = cfg.runtime.datasets;
+  isolatedDockerEnabled = config.services.forgejo-actions-runner.isolatedDocker.enable;
+  forgejoDockerConfigured =
+    runtimeDatasets.forgejo-docker != null && cfg.runtime.forgejoDockerQuota != null;
+  forgejoDockerStorageEnabled = isolatedDockerEnabled && forgejoDockerConfigured;
+  forgejoDockerDataset =
+    if forgejoDockerStorageEnabled
+    then runtimeDatasets.forgejo-docker
+    else "";
+  forgejoDockerQuota =
+    if forgejoDockerStorageEnabled
+    then cfg.runtime.forgejoDockerQuota
+    else "";
+  forgejoDockerMountUnit = "var-lib-forgejo\\x2ddocker.mount";
   retiredK3sRuntimeDataset = cfg.runtime.retiredK3sDataset;
   appStateDatasets = cfg.appState.datasets;
   appStateBackupPool = cfg.localBackup.pool;
@@ -39,6 +52,8 @@
       "@runtime_pool@"
       "@docker_dataset@"
       "@steam_headless_dataset@"
+      "@forgejo_docker_dataset@"
+      "@forgejo_docker_quota@"
       "@retired_k3s_dataset@"
     ]
     [
@@ -46,6 +61,8 @@
       (lib.escapeShellArg runtimePool)
       (lib.escapeShellArg runtimeDatasets.docker)
       (lib.escapeShellArg runtimeDatasets.steam-headless)
+      (lib.escapeShellArg forgejoDockerDataset)
+      (lib.escapeShellArg forgejoDockerQuota)
       (lib.escapeShellArg retiredK3sRuntimeDataset)
     ]
     (builtins.unsafeDiscardStringContext (builtins.readFile ./xyz-runtime-storage-policy.sh))
@@ -113,6 +130,15 @@ in {
   imports = [./storage-policy-options.nix];
 
   config = {
+    assertions = [
+      {
+        assertion =
+          !isolatedDockerEnabled
+          || forgejoDockerConfigured;
+        message = "Isolated runner Docker on xyz requires a dedicated runtime dataset and quota.";
+      }
+    ];
+
     # See docs/adr/0035-host-kernel-policy.md: the matching OpenZFS module has
     # been compiled against this kernel before any separate activation step.
     boot.kernelPackages = zfsKernelPackages;
@@ -171,6 +197,11 @@ in {
       fsType = "zfs";
       options = ["nofail"];
     };
+    fileSystems."/var/lib/forgejo-docker" = lib.mkIf forgejoDockerStorageEnabled {
+      device = forgejoDockerDataset;
+      fsType = "zfs";
+      options = ["nofail"];
+    };
     fileSystems."/var/lib/steam-headless" = {
       device = runtimeDatasets.steam-headless;
       fsType = "zfs";
@@ -179,20 +210,26 @@ in {
 
     systemd.services.xyz-runtime-storage-policy = {
       description = "Enforce and verify xyz runtime storage policy";
-      after = [
-        "zfs-mount.service"
-        "var-lib-docker.mount"
-        "var-lib-steam\\x2dheadless.mount"
-      ];
-      requires = [
-        "zfs-mount.service"
-        "var-lib-docker.mount"
-        "var-lib-steam\\x2dheadless.mount"
-      ];
-      before = [
-        "docker.service"
-        "xyz-appstate-backup.service"
-      ];
+      after =
+        [
+          "zfs-mount.service"
+          "var-lib-docker.mount"
+          "var-lib-steam\\x2dheadless.mount"
+        ]
+        ++ lib.optional forgejoDockerStorageEnabled forgejoDockerMountUnit;
+      requires =
+        [
+          "zfs-mount.service"
+          "var-lib-docker.mount"
+          "var-lib-steam\\x2dheadless.mount"
+        ]
+        ++ lib.optional forgejoDockerStorageEnabled forgejoDockerMountUnit;
+      before =
+        [
+          "docker.service"
+          "xyz-appstate-backup.service"
+        ]
+        ++ lib.optional forgejoDockerStorageEnabled "forgejo-runner-docker.service";
       wantedBy = ["multi-user.target"];
       serviceConfig = {
         Type = "oneshot";
@@ -270,6 +307,22 @@ in {
         "xyz-runtime-storage-policy.service"
       ];
     };
+
+    systemd.services.forgejo-runner-docker = lib.mkIf forgejoDockerStorageEnabled {
+      after = [
+        "zfs-mount.service"
+        "zfs-import.target"
+        "zfs-auto-unlock.service"
+        "xyz-runtime-storage-policy.service"
+      ];
+      requires = [
+        "zfs-mount.service"
+        "zfs-auto-unlock.service"
+        "xyz-runtime-storage-policy.service"
+      ];
+    };
+    services.forgejo-actions-runner.cachePressure.mountPoint =
+      lib.mkIf forgejoDockerStorageEnabled "/var/lib/forgejo-docker";
 
     systemd.services.calibre-web = {
       requires = [

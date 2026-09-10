@@ -32,6 +32,8 @@ in {
 
   credential-consent-contract = import ./credential-consent.nix {inherit lib pkgs;};
 
+  forgejo-runner-isolated-docker-contract = import ./forgejo-isolated-docker.nix {inherit lib pkgs;};
+
   forgejo-runner-pool-contract = let
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) {
       inherit

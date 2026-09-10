@@ -33,6 +33,7 @@ in {
             inputs.nix-secrets.nixosModules.storageBackupPolicy
             inputs.sops-nix.nixosModules.sops
             inputs.nix-secrets.nixosModules.operatorLogin
+            (inputs.nixpkgs.lib.attrByPath ["nixosModules" "containerRuntimeDefaults"] {} inputs.nix-secrets)
           ];
         }
     )

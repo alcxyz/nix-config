@@ -7,6 +7,12 @@
 }: let
   cfg = config.services.forgejo-actions-runner;
   resourcePolicyCfg = cfg.resourcePolicy;
+  isolated = cfg.isolatedDocker.enable;
+  dockerService =
+    if isolated
+    then "forgejo-runner-docker.service"
+    else "docker.service";
+  dockerSocket = lib.removePrefix "unix://" cfg.dockerHost;
 
   settingsFormat = pkgs.formats.yaml {};
   stateDir = "/var/lib/forgejo/runner";
@@ -44,7 +50,7 @@
       privileged = false;
       options = containerRuntimeOptions;
       workdir_parent = null;
-      valid_volumes = ["/var/run/docker.sock"];
+      valid_volumes = [dockerSocket];
       docker_host = cfg.dockerHost;
       force_pull = false;
     };
@@ -159,6 +165,8 @@
     text = builtins.readFile ./io-pressure-guard.sh;
   };
 in {
+  imports = [./isolated-docker.nix];
+
   options.services.forgejo-actions-runner = {
     enable = lib.mkEnableOption "native Forgejo Actions runner";
 
@@ -202,7 +210,10 @@ in {
 
     dockerHost = lib.mkOption {
       type = lib.types.str;
-      default = "unix:///var/run/docker.sock";
+      default =
+        if isolated
+        then "unix:///run/forgejo-docker/docker.sock"
+        else "unix:///var/run/docker.sock";
     };
 
     containerOptions = lib.mkOption {
@@ -382,7 +393,7 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    services.forgejo-actions-runner.containerOptions = lib.mkIf resourcePolicyCfg.enable (lib.mkBefore [
+    services.forgejo-actions-runner.containerOptions = lib.mkIf (resourcePolicyCfg.enable && !isolated) (lib.mkBefore [
       "--cgroup-parent=forgejobuilds.slice"
     ]);
 
@@ -392,7 +403,7 @@ in {
         message = "services.forgejo-actions-runner.labels must not be empty.";
       }
       {
-        assertion = config.virtualisation.docker.enable;
+        assertion = isolated || config.virtualisation.docker.enable;
         message = "services.forgejo-actions-runner requires Docker for docker:// labels.";
       }
       {
@@ -421,13 +432,13 @@ in {
     users.users.forgejo-runner = {
       isSystemUser = true;
       group = "forgejo-runner";
-      extraGroups = ["docker"];
+      extraGroups = lib.optional (!isolated) "docker";
     };
 
     # Runner jobs leave build cache and pulled images in the host Docker
     # daemon. Keep one week for repeat builds, then reclaim only unused data.
     # Volumes are deliberately excluded from this generic policy.
-    virtualisation.docker.autoPrune = {
+    virtualisation.docker.autoPrune = lib.mkIf (!isolated) {
       enable = lib.mkDefault true;
       dates = lib.mkDefault "weekly";
       randomizedDelaySec = lib.mkDefault "6h";
@@ -436,14 +447,15 @@ in {
         "--filter=until=168h"
       ];
     };
-    virtualisation.docker.daemon.settings."exec-opts" = lib.mkIf resourcePolicyCfg.enable [
+    virtualisation.docker.daemon.settings."exec-opts" = lib.mkIf (resourcePolicyCfg.enable && !isolated) [
       "native.cgroupdriver=systemd"
     ];
 
     systemd.services.forgejo-runner-cache-pressure-prune = lib.mkIf cfg.cachePressure.enable {
       description = "Prune Forgejo runner build cache under disk pressure";
-      after = ["docker.service"];
-      requires = ["docker.service"];
+      environment.DOCKER_HOST = cfg.dockerHost;
+      after = [dockerService];
+      requires = [dockerService];
       serviceConfig = {
         Type = "oneshot";
         ExecStart = lib.getExe cachePressurePrune;
@@ -465,7 +477,7 @@ in {
       requires = ["forgejobuilds.slice"];
       after = ["forgejobuilds.slice"];
       before = ["forgejo-actions-runner.service"];
-      partOf = ["forgejo-actions-runner.service"];
+      partOf = lib.optional (!isolated) "forgejo-actions-runner.service";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -484,12 +496,13 @@ in {
       };
     };
 
-    systemd.services.forgejo-runner-io-pressure-guard = lib.mkIf cfg.ioPressureGuard.enable {
+    systemd.services.forgejo-runner-io-pressure-guard = lib.mkIf (cfg.ioPressureGuard.enable && !isolated) {
       description = "Pause owned Forgejo runner containers under sustained I/O pressure";
-      after = ["docker.service"];
-      requires = ["docker.service"];
+      after = [dockerService];
+      requires = [dockerService];
       wantedBy = ["multi-user.target"];
       environment = {
+        DOCKER_HOST = cfg.dockerHost;
         RUNNER_CONTAINER_LABEL = pressureGuardLabel;
         HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
         LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
@@ -538,13 +551,13 @@ in {
       after =
         [
           "network-online.target"
-          "docker.service"
+          dockerService
         ]
         ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"]
         ++ lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
       requires =
         [
-          "docker.service"
+          dockerService
         ]
         ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"]
         ++ lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
@@ -558,7 +571,7 @@ in {
       serviceConfig = {
         User = "forgejo-runner";
         Group = "forgejo-runner";
-        SupplementaryGroups = ["docker"];
+        SupplementaryGroups = lib.optional (!isolated) "docker";
         WorkingDirectory = stateDir;
         RuntimeDirectory = "forgejo-runner";
         RuntimeDirectoryMode = "0750";
@@ -570,7 +583,7 @@ in {
       preStart = ''
         set -euo pipefail
 
-        test -S /var/run/docker.sock
+        test -S ${lib.escapeShellArg dockerSocket}
         docker version --format '{{.Server.Version}}' >/dev/null
         ${secretChecksScript}
 

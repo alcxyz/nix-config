@@ -1,6 +1,6 @@
 # ADR-0058: Dedicated xyz runtime storage
 
-**Status:** Accepted, amended by ADR-0061
+**Status:** Accepted, amended by ADR-0061 and on 2026-09-10
 
 **Date:** 2026-07-30
 
@@ -26,19 +26,22 @@ container storage on `xyz`.
 Create separate datasets for:
 
 - Docker runtime data;
+- dedicated Forgejo build-daemon runtime data when that daemon is enabled;
 - k3s agent runtime data; and
 - Steam-headless application state.
 
 Mount the datasets at their existing service-native `/var/lib` paths. Apply
-independent quotas so Docker or k3s growth cannot consume all available space,
-and reserve a bounded amount of capacity for Steam-headless.
-Keep game installations on the existing game-library storage.
+independent quotas so one container runtime cannot consume all available space,
+and reserve a bounded amount of capacity for Steam-headless. Dedicated Docker
+daemons do not share image, cache or volume stores. Keep game installations on
+the existing game-library storage.
 
-Treat Docker, k3s, and Steam-headless directories as rebuildable runtime data.
-Do not include them in routine application-state backups. Temporary snapshots
-remain appropriate for a sensitive migration, but are removed after that move
-is validated rather than retained as an ongoing backup chain. This amendment
-supersedes the earlier classification of Steam-headless as durable app state.
+Treat Docker, Forgejo build-daemon, k3s, and Steam-headless directories as
+rebuildable runtime data. Do not include them in routine application-state
+backups. Temporary snapshots remain appropriate for a sensitive migration, but
+are removed after that move is validated rather than retained as an ongoing
+backup chain. This amendment supersedes the earlier classification of
+Steam-headless as durable app state.
 
 Keep Longhorn replica scheduling disabled on `xyz`. The new pool is not a
 Longhorn disk and does not change the node's opportunistic lifecycle.
@@ -61,13 +64,13 @@ backup requirement; do not describe the local replica as satisfying it.
 
 ## Consequences
 
-- Docker and Steam-headless growth no longer consumes workstation root
-  pool capacity.
+- Docker, Forgejo build-daemon and Steam-headless growth no longer consumes
+  workstation root pool capacity.
 - The retired k3s runtime dataset is neither mounted nor backed up.
 - Workloads keep their established paths and need no path-specific changes.
 - Quotas bound each runtime workload independently.
-- Failure of the runtime SSD removes rebuildable Docker, k3s, and Steam-headless
-  state; all three are recreated from declarative configuration.
+- Failure of the runtime SSD removes rebuildable Docker, Forgejo build-daemon,
+  k3s and Steam-headless state; each is recreated from declarative configuration.
 - The single-device pool is not redundant. Rebuildable runtime state is
   intentionally accepted as disposable if that device fails.
 - Restarting `xyz` does not create Longhorn replica rebuild work.
