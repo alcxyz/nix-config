@@ -32,6 +32,8 @@ in {
 
   credential-consent-contract = import ./credential-consent.nix {inherit lib pkgs;};
 
+  container-netns-contract = import ./container-netns.nix {inherit self lib pkgs;};
+
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
   '';

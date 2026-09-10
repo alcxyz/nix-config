@@ -1,0 +1,4 @@
+41 1 0:41 / /run rw,nosuid,nodev shared:1 - tmpfs tmpfs rw
+100 41 0:41 /netns /run/netns rw,nosuid,nodev shared:100 - tmpfs tmpfs rw
+101 100 0:4 net:[1001] /run/netns/cni-healthy rw shared:101 - nsfs nsfs rw
+102 101 0:4 net:[1002] /run/netns/cni-healthy/nested rw shared:102 - nsfs nsfs rw
