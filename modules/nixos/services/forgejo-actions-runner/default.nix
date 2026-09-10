@@ -6,6 +6,7 @@
   ...
 }: let
   cfg = config.services.forgejo-actions-runner;
+  resourcePolicyCfg = cfg.resourcePolicy;
 
   settingsFormat = pkgs.formats.yaml {};
   stateDir = "/var/lib/forgejo/runner";
@@ -71,6 +72,36 @@
   );
 
   labelsWanted = lib.concatStringsSep "," cfg.labels;
+
+  resourcePolicyApply = pkgs.writeShellApplication {
+    name = "forgejo-runner-resource-policy-apply";
+    runtimeInputs = [
+      pkgs.glibc.bin
+      pkgs.systemd
+    ];
+    text = ''
+      set -euo pipefail
+
+      getconf_command="''${FORGEJO_RUNNER_GETCONF:-getconf}"
+      systemctl_command="''${FORGEJO_RUNNER_SYSTEMCTL:-systemctl}"
+      online_processors="$("$getconf_command" _NPROCESSORS_ONLN)"
+
+      case "$online_processors" in
+        "" | *[!0-9]*)
+          echo "getconf returned an invalid online processor count: $online_processors" >&2
+          exit 1
+          ;;
+      esac
+      if ((online_processors < 1)); then
+        echo "getconf returned no online processors" >&2
+        exit 1
+      fi
+
+      quota_percent=$((online_processors * ${toString resourcePolicyCfg.cpuQuotaPercent}))
+      exec "$systemctl_command" set-property --runtime forgejobuilds.slice \
+        "CPUQuota=''${quota_percent}%"
+    '';
+  };
 
   cachePressurePrune = pkgs.writeShellApplication {
     name = "forgejo-runner-cache-pressure-prune";
@@ -165,10 +196,51 @@ in {
       default = [];
       example = ["--cpu-shares=512"];
       description = ''
-        Additional Docker run options applied to every job container. Prefer
-        scheduling weights over hard CPU quotas when the runner should use
-        otherwise-idle capacity but yield under contention.
+        Additional Docker run options applied to every job, step, and service
+        container created by Forgejo Runner. Containers created through the
+        mounted Docker socket do not inherit these options.
       '';
+    };
+
+    resourcePolicy = {
+      enable = lib.mkEnableOption "aggregate resource controls for Forgejo-created containers";
+
+      cpuQuotaPercent = lib.mkOption {
+        type = lib.types.ints.between 1 100;
+        default = 50;
+        description = ''
+          Maximum aggregate CPU use as a percentage of the host's online
+          logical processors. The systemd CPUQuota value is calculated when
+          the runner starts so host processor counts stay out of configuration.
+        '';
+      };
+
+      cpuWeight = lib.mkOption {
+        type = lib.types.ints.between 1 10000;
+        default = 10;
+        description = "CPU scheduling weight used when the host is contended.";
+      };
+
+      ioWeight = lib.mkOption {
+        type = lib.types.ints.between 1 10000;
+        default = 10;
+        description = ''
+          Best-effort I/O scheduling weight. Buffered writeback requires
+          filesystem cgroup-writeback support, which ZFS does not provide.
+        '';
+      };
+
+      memoryHigh = lib.mkOption {
+        type = lib.types.str;
+        default = "40%";
+        description = "Aggregate memory throttling threshold for runner containers.";
+      };
+
+      memoryMax = lib.mkOption {
+        type = lib.types.str;
+        default = "50%";
+        description = "Aggregate hard memory limit for runner containers.";
+      };
     };
 
     secretsFile = lib.mkOption {
@@ -256,6 +328,10 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    services.forgejo-actions-runner.containerOptions = lib.mkIf resourcePolicyCfg.enable (lib.mkBefore [
+      "--cgroup-parent=forgejobuilds.slice"
+    ]);
+
     assertions = [
       {
         assertion = cfg.labels != [];
@@ -294,6 +370,9 @@ in {
         "--filter=until=168h"
       ];
     };
+    virtualisation.docker.daemon.settings."exec-opts" = lib.mkIf resourcePolicyCfg.enable [
+      "native.cgroupdriver=systemd"
+    ];
 
     systemd.services.forgejo-runner-cache-pressure-prune = lib.mkIf cfg.cachePressure.enable {
       description = "Prune Forgejo runner build cache under disk pressure";
@@ -302,6 +381,29 @@ in {
       serviceConfig = {
         Type = "oneshot";
         ExecStart = lib.getExe cachePressurePrune;
+      };
+    };
+
+    systemd.slices.forgejobuilds = lib.mkIf resourcePolicyCfg.enable {
+      description = "Aggregate Forgejo Actions build resources";
+      sliceConfig = {
+        CPUWeight = resourcePolicyCfg.cpuWeight;
+        IOWeight = resourcePolicyCfg.ioWeight;
+        MemoryHigh = resourcePolicyCfg.memoryHigh;
+        MemoryMax = resourcePolicyCfg.memoryMax;
+      };
+    };
+
+    systemd.services.forgejo-runner-resource-policy = lib.mkIf resourcePolicyCfg.enable {
+      description = "Apply host-relative Forgejo runner resource limits";
+      requires = ["forgejobuilds.slice"];
+      after = ["forgejobuilds.slice"];
+      before = ["forgejo-actions-runner.service"];
+      partOf = ["forgejo-actions-runner.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = lib.getExe resourcePolicyApply;
       };
     };
 
@@ -341,13 +443,17 @@ in {
     systemd.services.forgejo-actions-runner = {
       description = "Forgejo Actions Runner (${cfg.name})";
       wants = ["network-online.target"];
-      after = [
-        "network-online.target"
-        "docker.service"
-      ];
-      requires = [
-        "docker.service"
-      ];
+      after =
+        [
+          "network-online.target"
+          "docker.service"
+        ]
+        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"];
+      requires =
+        [
+          "docker.service"
+        ]
+        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"];
       wantedBy = ["multi-user.target"];
       path = [cfg.package] ++ cfg.extraPackages;
       environment = {

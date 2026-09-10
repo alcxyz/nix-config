@@ -1,6 +1,6 @@
 # ADR-0041: Native Forgejo Actions runners
 
-**Status:** Implemented (amended 2026-09-10: shared routine runner pool)
+**Status:** Implemented (amended 2026-09-10: shared routine runner pool and workstation resource policy)
 **Date:** 2026-05-07
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -72,6 +72,26 @@ The default runner pool is represented with labels:
   placement guarantee. Shared labels make all four hosts eligible, while the
   per-host caps prevent one server-worker from accepting a concurrent build
   burst.
+- `xyz` places every job, step, and service container created by Forgejo Runner
+  in one top-level systemd slice. The slice has an aggregate CPU ceiling equal
+  to 50% of the host's online logical processors, a lower CPU scheduling weight
+  under contention, a 40% memory throttling threshold, and a 50% hard memory
+  limit. Its I/O weight is best effort. Docker uses the systemd cgroup driver so
+  the configured parent name resolves to that slice.
+- Calculate the CPU quota from the online processor count when the service
+  starts. A systemd quota of `50%` means half of one processor, rather than half
+  of the machine, so a fixed literal would implement the wrong limit.
+- Keep workstation protection contention-aware without a game-process watcher.
+  The build slice may use its bounded CPU budget while the machine is idle and
+  its low CPU and I/O weights make it yield when interactive work competes.
+- Resource controls on Forgejo-created containers do not cover containers or
+  BuildKit workers started through the mounted Docker socket. Workflows that do
+  this need an isolated CI Docker daemon or equivalent daemon-side enforcement
+  before they can rely on the aggregate policy.
+- Linux cgroup writeback does not support buffered ZFS writeback. The I/O weight
+  therefore cannot guarantee protection from ZFS-backed write saturation; keep
+  this limitation visible and qualify a stronger pressure or storage boundary
+  separately.
 - Build cache is preserved while the host filesystem is healthy. Under moderate
   pressure, only cache unused for the configured grace period is eligible for
   removal; under critical pressure, all unused cache may be reclaimed. Running
@@ -89,6 +109,16 @@ but still requires Docker socket mounts and Kubernetes runner lifecycle.
 **Run all jobs directly on the host** — rejected for normal CI because it removes
 clean per-job environments. Host-level jobs should be explicit exceptions.
 
+**Detect individual games and pause the runner** — rejected for the initial
+workstation policy. It couples build admission to compositor- and game-specific
+state, while aggregate CPU and memory limits plus low contention weights protect
+interactive work regardless of which foreground application creates pressure.
+
+**Set CPU and memory limits on each container independently** — rejected because
+two admitted jobs, their service containers, and their step containers could
+multiply the intended host budget. A shared parent slice enforces one aggregate
+limit across the containers Forgejo Runner creates.
+
 ## Consequences
 
 - Runner implementation lives in `nix-config`.
@@ -103,6 +133,12 @@ clean per-job environments. Host-level jobs should be explicit exceptions.
 - Each Kubernetes server-worker contributes one routine-pool slot. This spreads
   eligible work without allowing concurrent runner jobs to amplify local
   resource contention on a cluster member.
+- `xyz` contributes two slots within one aggregate resource budget. Builds can
+  consume up to half the workstation's CPU and memory, while memory reclaim and
+  scheduling weights favor interactive workloads under contention.
+- The policy does not yet provide a hard ZFS I/O guarantee or contain nested
+  Docker work. Those boundaries require daemon- or storage-level enforcement
+  rather than more limits on the runner service process.
 - Nix-heavy workflows remain Docker-backed. Their verification scripts isolate
   build stages and may clean Nix's fake build home only after positively
   identifying an explicitly opted-in ephemeral job container.

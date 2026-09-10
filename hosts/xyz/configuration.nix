@@ -177,9 +177,9 @@
     enable = true;
     name = "xyz";
     capacity = 2;
-    # Let builds use idle CPU, but give each job half the default Docker CPU
-    # scheduling weight so interactive work wins when the host is busy.
-    containerOptions = ["--cpu-shares=512"];
+    # Bound all Forgejo-created containers together while allowing two jobs to
+    # share the budget. Low weights make builds yield to desktop and game work.
+    resourcePolicy.enable = true;
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"

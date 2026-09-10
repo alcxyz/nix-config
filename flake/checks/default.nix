@@ -54,6 +54,64 @@ in {
         touch "$out"
       '';
 
+  forgejo-runner-resource-policy-contract = let
+    xyz = self.nixosConfigurations.xyz.config;
+    runner = xyz.services.forgejo-actions-runner;
+    runnerUnit = xyz.systemd.services.forgejo-actions-runner;
+    policyUnit = xyz.systemd.services.forgejo-runner-resource-policy;
+    buildSlice = xyz.systemd.slices.forgejobuilds.sliceConfig;
+    mockGetconf = pkgs.writeShellScript "mock-getconf" ''
+      test "''${1:-}" = _NPROCESSORS_ONLN
+      printf '%s\n' "''${MOCK_PROCESSORS:?}"
+    '';
+    mockSystemctl = pkgs.writeShellScript "mock-systemctl" ''
+      printf '%s\n' "$*" > "''${FORGEJO_RUNNER_TEST_OUTPUT:?}"
+    '';
+  in
+    assert runner.resourcePolicy.enable;
+    assert builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions;
+    assert lib.all (serverRunner: !serverRunner.resourcePolicy.enable) [
+      self.nixosConfigurations.xev.config.services.forgejo-actions-runner
+      self.nixosConfigurations.nux.config.services.forgejo-actions-runner
+      self.nixosConfigurations.nex.config.services.forgejo-actions-runner
+    ];
+    assert buildSlice.CPUWeight == 10;
+    assert buildSlice.IOWeight == 10;
+    assert buildSlice.MemoryHigh == "40%";
+    assert buildSlice.MemoryMax == "50%";
+    assert builtins.elem "native.cgroupdriver=systemd" xyz.virtualisation.docker.daemon.settings."exec-opts";
+    assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.after;
+    assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.requires;
+    assert builtins.elem "forgejobuilds.slice" policyUnit.after;
+    assert builtins.elem "forgejobuilds.slice" policyUnit.requires;
+    assert builtins.elem "forgejo-actions-runner.service" policyUnit.partOf;
+      pkgs.runCommand "forgejo-runner-resource-policy-contract" {} ''
+        for fixture in "4 200" "5 250" "32 1600"; do
+          set -- $fixture
+          output="$TMPDIR/systemctl-$1"
+          MOCK_PROCESSORS="$1" \
+            FORGEJO_RUNNER_GETCONF=${mockGetconf} \
+            FORGEJO_RUNNER_SYSTEMCTL=${mockSystemctl} \
+            FORGEJO_RUNNER_TEST_OUTPUT="$output" \
+            ${policyUnit.serviceConfig.ExecStart}
+          test "$(cat "$output")" = "set-property --runtime forgejobuilds.slice CPUQuota=$2%"
+        done
+
+        for invalid_count in 0 invalid; do
+          output="$TMPDIR/invalid-systemctl-$invalid_count"
+          if MOCK_PROCESSORS="$invalid_count" \
+            FORGEJO_RUNNER_GETCONF=${mockGetconf} \
+            FORGEJO_RUNNER_SYSTEMCTL=${mockSystemctl} \
+            FORGEJO_RUNNER_TEST_OUTPUT="$output" \
+            ${policyUnit.serviceConfig.ExecStart}; then
+            echo "resource policy accepted invalid processor count: $invalid_count" >&2
+            exit 1
+          fi
+          test ! -e "$output"
+        done
+        touch "$out"
+      '';
+
   nix-format = mkRepoCheck "nix-format-check" [pkgs.treefmt pkgs.alejandra] ''
     treefmt --ci --formatters nix
   '';
