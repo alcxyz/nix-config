@@ -46,6 +46,12 @@ in
       fi
       grep -Fq '/run/netns is not a shared mount' unshared.err
 
+      if bash "$audit_source" "$fixtures/ancestor-peer.mountinfo" >ancestor-peer.out 2>ancestor-peer.err; then
+        echo "audit accepted /run/netns in its ancestor's propagation peer group" >&2
+        exit 1
+      fi
+      grep -Fq 'shares a propagation peer group with ancestor /run' ancestor-peer.err
+
       grep -Fq 'container-netns-audit' ${lib.escapeShellArg audit.serviceConfig.ExecStart}
       touch "$out"
     ''

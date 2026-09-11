@@ -32,5 +32,9 @@ done
 if ! mountpoint --quiet /run/netns; then
   mount --rbind /run/netns /run/netns
 fi
+# A self-bind below a shared /run initially joins the ancestor's peer group.
+# Detach the complete bind tree before making it shared so future namespace
+# mounts propagate within /run/netns without also appearing below /run.
+mount --make-rprivate /run/netns
 mount --make-rshared /run/netns
 container-netns-audit

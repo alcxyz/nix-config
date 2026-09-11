@@ -22,7 +22,13 @@ printf '%s\n' \
   'command_name=${0##*/}' \
   'printf "%s %s\n" "$command_name" "$*" >>"$CALL_LOG"' \
   'case "$command_name" in' \
-  '  container-netns-audit) exit "${AUDIT_STATUS:-0}" ;;' \
+  '  container-netns-audit)' \
+  '    audit_count=$(awk '\''$1 == "container-netns-audit" { count++ } END { print count + 0 }'\'' "$CALL_LOG")' \
+  '    if [[ $audit_count -eq 1 ]]; then' \
+  '      exit "${AUDIT_FIRST_STATUS:-${AUDIT_STATUS:-0}}"' \
+  '    fi' \
+  '    exit "${AUDIT_FINAL_STATUS:-${AUDIT_STATUS:-0}}"' \
+  '    ;;' \
   '  systemctl)' \
   '    if [[ ${1:-} == is-system-running ]]; then' \
   '      printf "%s\n" "${SYSTEM_STATE:-running}"' \
@@ -33,7 +39,8 @@ printf '%s\n' \
   '    fi' \
   '    exit 1' \
   '    ;;' \
-  '  install | flock | mountpoint | mount) exit 0 ;;' \
+  '  mountpoint) exit "${MOUNTPOINT_STATUS:-0}" ;;' \
+  '  install | flock | mount) exit 0 ;;' \
   'esac' \
   'exit 1' >>"$mock_bin/mock-command"
 chmod +x "$mock_bin/mock-command"
@@ -41,6 +48,25 @@ chmod +x "$mock_bin/mock-command"
 for command in container-netns-audit systemctl install flock mountpoint mount; do
   ln -s mock-command "$mock_bin/$command"
 done
+
+test_netns=$work_dir/netns
+test_prepare=$work_dir/prepare-test-path.sh
+mkdir -p "$test_netns"
+sed "s#/run/netns#$test_netns#g" "$prepare_script" >"$test_prepare"
+
+: >"$call_log"
+CALL_LOG=$call_log AUDIT_FIRST_STATUS=1 AUDIT_FINAL_STATUS=0 \
+  MOUNTPOINT_STATUS=1 SYSTEM_STATE=starting \
+  PATH="$mock_bin:$PATH" bash "$test_prepare"
+grep -Fxq "mount --rbind $test_netns $test_netns" "$call_log"
+grep -Fxq "mount --make-rprivate $test_netns" "$call_log"
+grep -Fxq "mount --make-rshared $test_netns" "$call_log"
+private_line=$(grep -nFx "mount --make-rprivate $test_netns" "$call_log" | cut -d: -f1)
+shared_line=$(grep -nFx "mount --make-rshared $test_netns" "$call_log" | cut -d: -f1)
+if ((private_line >= shared_line)); then
+  echo "preparation did not detach /run/netns before making it shared" >&2
+  exit 1
+fi
 
 assert_no_mutation() {
   if grep -Eq '^(install|flock|mountpoint|mount) ' "$call_log"; then

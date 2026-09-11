@@ -1,0 +1,2 @@
+41 39 0:27 / /run rw,nosuid,nodev shared:2 - tmpfs tmpfs rw
+100 41 0:27 /netns /run/netns rw,nosuid,nodev shared:2 - tmpfs tmpfs rw
