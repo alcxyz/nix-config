@@ -24,6 +24,9 @@
   secretName = key: "forgejo_runner_${key}";
   secretPath = key: "/run/secrets/${secretName key}";
 
+  jobTimeout = "3600s";
+  serviceStopTimeout = "3660s";
+
   secretKeys = lib.unique (["runner_token"] ++ lib.attrValues cfg.secretEnv);
 
   allEnvNames = lib.unique ((lib.attrNames cfg.jobEnv) ++ (lib.attrNames cfg.secretEnv));
@@ -40,7 +43,8 @@
       capacity = cfg.capacity;
       labels = cfg.labels;
       env_file = envFile;
-      timeout = "3600s";
+      timeout = jobTimeout;
+      shutdown_timeout = jobTimeout;
       insecure = false;
       fetch_timeout = "5s";
       fetch_interval = "2s";
@@ -589,6 +593,7 @@ in {
         Restart = "on-failure";
         RestartSec = "5s";
         TimeoutStartSec = "90s";
+        TimeoutStopSec = serviceStopTimeout;
         NoNewPrivileges = true;
       };
       preStart = ''

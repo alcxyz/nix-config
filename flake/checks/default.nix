@@ -35,7 +35,7 @@ in {
   forgejo-runner-isolated-docker-contract = import ./forgejo-isolated-docker.nix {inherit lib pkgs;};
 
   forgejo-runner-pool-contract = let
-    runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) {
+    runnerHosts = {
       inherit
         (self.nixosConfigurations)
         nex
@@ -44,6 +44,9 @@ in {
         xyz
         ;
     };
+    runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
+    runnerUnits = lib.mapAttrs (_: host: host.config.systemd.services.forgejo-actions-runner) runnerHosts;
+    runnerStarts = map (unit: lib.removeSuffix " " unit.serviceConfig.ExecStart) (lib.attrValues runnerUnits);
     hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:docker://" label) runner.labels;
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
@@ -52,7 +55,16 @@ in {
     assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
     assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
     assert lib.all (hasLabel "docker") (lib.attrValues runners);
-      pkgs.runCommand "forgejo-runner-pool-contract" {} ''
+    assert lib.all (unit: unit.serviceConfig.TimeoutStopSec == "3660s") (lib.attrValues runnerUnits);
+      pkgs.runCommand "forgejo-runner-pool-contract" {
+        nativeBuildInputs = [pkgs.gawk pkgs.gnugrep];
+      } ''
+        ${lib.concatMapStringsSep "\n" (runnerStart: ''
+            runner_config="$(awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStart})"
+            grep -Fxq '  timeout: 3600s' "$runner_config"
+            grep -Fxq '  shutdown_timeout: 3600s' "$runner_config"
+          '')
+          runnerStarts}
         touch "$out"
       '';
 

@@ -1,6 +1,6 @@
 # ADR-0041: Native Forgejo Actions runners
 
-**Status:** Implemented (amended 2026-09-10: shared routine runner pool and workstation resource policy)
+**Status:** Implemented (amended 2026-09-11: shared runner lifecycle and resource policy)
 **Date:** 2026-05-07
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -68,6 +68,9 @@ The default runner pool is represented with labels:
 - Runner admission is explicit in per-host capacity. The three Kubernetes
   server-workers each admit one job at a time; `xyz` admits two and retains a
   lower CPU scheduling weight for interactive use.
+- Runner shutdown stops polling before it waits up to the normal job timeout
+  for admitted work to finish. The systemd stop timeout includes a small margin
+  so routine host maintenance does not cancel in-progress CI work.
 - Forgejo runners pull work independently and provide no strict round-robin
   placement guarantee. Shared labels make all four hosts eligible, while the
   per-host caps prevent one server-worker from accepting a concurrent build
