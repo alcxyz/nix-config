@@ -129,8 +129,9 @@ while IFS= read -r product; do
       --arg image "$image" \
       --arg tag "$release_tag" \
       --arg digest "$digest" \
+      --arg imageId "$image_id" \
       --arg reference "${release_ref}@${digest}" \
-      '{name: $name, image: $image, tag: $tag, digest: $digest, reference: $reference}' \
+      '{name: $name, image: $image, tag: $tag, digest: $digest, imageId: $imageId, reference: $reference}' \
       >>"$result_lines"
   else
     jq -cn \

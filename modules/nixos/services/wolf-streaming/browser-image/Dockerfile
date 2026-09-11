@@ -13,8 +13,17 @@ ENV LC_ALL=C.UTF-8
 RUN --mount=type=bind,source=browser.deb,target=/tmp/browser.deb,readonly \
     set -eu; \
     dpkg-deb --extract /tmp/browser.deb /; \
-    apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    test -r /etc/ssl/certs/ca-certificates.crt; \
+    sed -i \
+      -e 's|http://archive.ubuntu.com/ubuntu/|https://no.archive.ubuntu.com/ubuntu/|g' \
+      -e 's|http://security.ubuntu.com/ubuntu/|https://security.ubuntu.com/ubuntu/|g' \
+      /etc/apt/sources.list.d/ubuntu.sources; \
+    grep -Fq 'URIs: https://no.archive.ubuntu.com/ubuntu/' /etc/apt/sources.list.d/ubuntu.sources; \
+    grep -Fq 'URIs: https://security.ubuntu.com/ubuntu/' /etc/apt/sources.list.d/ubuntu.sources; \
+    apt_options='-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30'; \
+    timeout --signal=TERM --kill-after=15s 600s apt-get ${apt_options} update; \
+    DEBIAN_FRONTEND=noninteractive timeout --signal=TERM --kill-after=15s 600s \
+      apt-get ${apt_options} install -y --no-install-recommends \
       fonts-noto-color-emoji \
       fonts-noto-core \
       xinput \

@@ -7,15 +7,24 @@ FROM ${BUILD_IMAGE} AS wolf-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
+RUN set -eu; \
+    test -r /etc/ssl/certs/ca-certificates.crt; \
+    sed -i \
+      -e 's|http://archive.ubuntu.com/ubuntu/|https://no.archive.ubuntu.com/ubuntu/|g' \
+      -e 's|http://security.ubuntu.com/ubuntu/|https://security.ubuntu.com/ubuntu/|g' \
+      /etc/apt/sources.list.d/ubuntu.sources; \
+    grep -Fq 'URIs: https://no.archive.ubuntu.com/ubuntu/' /etc/apt/sources.list.d/ubuntu.sources; \
+    grep -Fq 'URIs: https://security.ubuntu.com/ubuntu/' /etc/apt/sources.list.d/ubuntu.sources; \
+    apt_options='-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30'; \
+    timeout --signal=TERM --kill-after=15s 600s apt-get ${apt_options} update; \
+    timeout --signal=TERM --kill-after=15s 600s apt-get ${apt_options} install -y --no-install-recommends \
       build-essential ca-certificates ccache clang cmake git meson ninja-build pkg-config \
       libboost-container-dev libboost-filesystem-dev libboost-json-dev \
       libboost-locale-dev libboost-log-dev libboost-stacktrace-dev libboost-thread-dev \
       libcurl4-openssl-dev libdrm-dev libegl-dev libevdev-dev libgbm-dev \
       libgles-dev libglib2.0-dev libinput-dev libopengl-dev libpci-dev \
       libpulse-dev libssl-dev libudev-dev libunwind-dev \
-      libwayland-dev libwayland-server0 libxkbcommon-dev && \
+      libwayland-dev libwayland-server0 libxkbcommon-dev; \
     rm -rf /var/lib/apt/lists/*
 
 COPY . /wolf/

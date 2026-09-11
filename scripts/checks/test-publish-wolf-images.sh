@@ -79,6 +79,7 @@ jq -e '
   and .complete == true
   and .channel == "main"
   and (.products | length == 2)
+  and .products[0].imageId == "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   and .products[0].reference == "registry.example/owner/wolf:main-20260911t120000z-0123456789ab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   and .products[1].reference == "registry.example/owner/wolf-helium:main-20260911t120000z-0123456789ab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 ' "$test_root/published.json" >/dev/null
