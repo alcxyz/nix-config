@@ -1,16 +1,14 @@
 {
   lib,
-  pkgs,
-  wolfPatchedImage,
-  heliumImageTag,
   kdeConnectInputDefaults,
-}: {
+}: let
+  registryImage = lib.types.strMatching "git[.]alc[.]xyz/alcxyz/[a-z0-9][a-z0-9._/-]*:(main|dev|editorial-dev)-[0-9]{8}[tT][0-9]{6}[zZ]-[0-9a-f]+@sha256:[0-9a-f]{64}";
+in {
   enable = lib.mkEnableOption "Wolf Moonlight application streaming";
 
   image = lib.mkOption {
-    type = lib.types.str;
-    default = wolfPatchedImage;
-    description = "Pinned amd64 Wolf container image.";
+    type = registryImage;
+    description = "Forgejo channel tag and digest for the amd64 Wolf container image.";
   };
 
   stateDirectory = lib.mkOption {
@@ -128,7 +126,7 @@
   };
 
   browserImages = {
-    enable = lib.mkEnableOption "locally built Wolf browser application images";
+    enable = lib.mkEnableOption "registry-backed Wolf browser application images";
 
     keyboardLayouts = lib.mkOption {
       type = lib.types.nonEmptyListOf (
@@ -212,9 +210,8 @@
         };
       };
       image = lib.mkOption {
-        type = lib.types.str;
-        default = "nixbox/wolf-helium:${heliumImageTag}";
-        description = "Local Docker image name used by the Helium Wolf application.";
+        type = registryImage;
+        description = "Immutable registry image reference used by the Helium Wolf application.";
       };
     };
 
@@ -226,36 +223,32 @@
         description = "Publish Brave directly in the Moonlight application list; leave disabled for protected profiles.";
       };
       image = lib.mkOption {
-        type = lib.types.str;
-        default = "nixbox/wolf-brave:${pkgs.brave.version}";
-        description = "Local Docker image name used by the Brave Wolf application.";
+        type = registryImage;
+        description = "Immutable registry image reference used by the Brave Wolf application.";
       };
     };
 
     chromium = {
       enable = lib.mkEnableOption "the Chromium Wolf application image";
       image = lib.mkOption {
-        type = lib.types.str;
-        default = "nixbox/wolf-chromium:${pkgs.chromium.version}";
-        description = "Local Docker image name used by the protected Chromium application.";
+        type = registryImage;
+        description = "Immutable registry image reference used by the protected Chromium application.";
       };
     };
 
     firefox = {
       enable = lib.mkEnableOption "the Firefox Wolf application image";
       image = lib.mkOption {
-        type = lib.types.str;
-        default = "nixbox/wolf-firefox:${pkgs.firefox.version}";
-        description = "Local Docker image name used by the protected Firefox application.";
+        type = registryImage;
+        description = "Immutable registry image reference used by the protected Firefox application.";
       };
     };
 
     zen = {
       enable = lib.mkEnableOption "the Zen Wolf application image";
       image = lib.mkOption {
-        type = lib.types.str;
-        default = "nixbox/wolf-zen:${pkgs.zen-browser.version}";
-        description = "Local Docker image name used by the protected Zen application.";
+        type = registryImage;
+        description = "Immutable registry image reference used by the protected Zen application.";
       };
     };
   };

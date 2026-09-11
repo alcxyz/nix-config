@@ -49,6 +49,7 @@
   networking.hostId = "abe0d0f3";
   services.wolf-streaming = {
     enable = true;
+    image = "git.alc.xyz/alcxyz/wolf:dev-20260911t113536z-71617994ca93@sha256:88e3004e58b17c27f152914eec0d48a0650bb60c63c238846ebd01e27d47e43f";
     publicCoordinator = "external";
     publicRuntimeDirectory = "/run/nixbox-public-browser-worker/runtime";
     sessionIdleTimeoutSeconds = 30 * 60;
@@ -62,15 +63,20 @@
       enable = true;
       helium = {
         enable = true;
+        image = "git.alc.xyz/alcxyz/wolf-helium:dev-20260911t113411z-71617994ca93@sha256:c7fac96c3a43a79cbce720585f95227a14457da65ffa26666153ca0e3bff5f89";
         publish = true;
         cooperativeDefault = true;
         pi3Compatibility = true;
         kdeConnect.enable = true;
       };
-      brave.enable = true;
-      chromium.enable = true;
-      firefox.enable = true;
-      zen.enable = true;
+      brave = {
+        enable = true;
+        image = "git.alc.xyz/alcxyz/wolf-brave:dev-20260911t113232z-71617994ca93@sha256:3f061998f9ad7081c6ad4fa474706b6469559dee9c410d2309763d7a1a454aa1";
+      };
+      zen = {
+        enable = true;
+        image = "git.alc.xyz/alcxyz/wolf-zen:dev-20260911t114225z-71617994ca93@sha256:f6ec8f973452de031883fdf1c69f7e50c255aea2ddb092f6a2ba6252d83ace10";
+      };
     };
   };
 

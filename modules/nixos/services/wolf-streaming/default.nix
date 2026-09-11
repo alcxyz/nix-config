@@ -21,17 +21,10 @@
   imageAssembly = import ./images.nix {
     inherit lib pkgs browserCfg;
   };
-  inherit
-    (imageAssembly)
-    wolfBaseImage
-    wolfPatchedImage
-    wolfBuildContext
-    browserBaseImage
-    wolfUiImage
-    browserImageBuildContextLabel
-    heliumImageTag
-    browserImages
-    ;
+  inherit (imageAssembly) wolfUiImage;
+  browserImages = map (name: browserCfg.${name}) (
+    lib.filter (name: browserCfg.${name}.enable) ["helium" "brave" "chromium" "firefox" "zen"]
+  );
   publicRunnerNames = lib.optionals browserCfg.helium.enable [
     "WolfHelium"
     "WolfHeliumCoop"
@@ -99,47 +92,13 @@
       }
     '';
   };
-  buildBrowserImages = pkgs.writeShellApplication {
-    name = "build-wolf-browser-images";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.docker
-    ];
-    text = ''
-      set -euo pipefail
-
-      docker image inspect ${lib.escapeShellArg browserBaseImage} >/dev/null 2>&1 \
-        || docker pull ${lib.escapeShellArg browserBaseImage}
-
-      docker image inspect ${lib.escapeShellArg wolfUiImage} >/dev/null 2>&1 \
-        || docker pull ${lib.escapeShellArg wolfUiImage}
-
-      ${lib.concatMapStringsSep "\n" (image: ''
-          if [ "$(docker image inspect --format '{{ index .Config.Labels "${browserImageBuildContextLabel}" }}' ${lib.escapeShellArg image.image} 2>/dev/null || true)" = ${lib.escapeShellArg image.context} ]; then
-            echo "Reusing ${lib.escapeShellArg image.image}; its Nix build context is current"
-          else
-            docker build \
-              --pull=false \
-              --build-arg BASE_APP_IMAGE=${lib.escapeShellArg browserBaseImage} \
-              --build-arg BROWSER_EXECUTABLE=${lib.escapeShellArg image.executable} \
-              --build-arg BROWSER_FAMILY=${lib.escapeShellArg image.family} \
-              --build-arg DESKTOP_PACKAGES=${lib.escapeShellArg (lib.concatStringsSep " " image.desktopPackages)} \
-              --build-arg IMAGE_SOURCE=${lib.escapeShellArg image.source} \
-              --build-arg IMAGE_VERSION=${lib.escapeShellArg image.version} \
-              --label ${lib.escapeShellArg "${browserImageBuildContextLabel}=${image.context}"} \
-              --tag ${lib.escapeShellArg image.image} \
-              ${lib.escapeShellArg image.context}
-          fi
-          # Kubernetes deliberately treats this hardware-bound host as the
-          # source of truth for browser package versions.  Keep a stable local
-          # alias so GitOps does not duplicate the Nix package version and
-          # become stale after a host update or Docker prune.
-          docker tag \
-            ${lib.escapeShellArg image.image} \
-            ${lib.escapeShellArg "nixbox/wolf-${image.name}:current"}
-        '')
-        browserImages}
-    '';
+  pullRuntimeImages = pkgs.writeShellApplication {
+    name = "pull-wolf-runtime-images";
+    runtimeInputs = [pkgs.docker];
+    text = lib.concatMapStringsSep "\n" (image: ''
+      docker image inspect ${lib.escapeShellArg image} >/dev/null 2>&1 \
+        || docker pull ${lib.escapeShellArg image}
+    '') ([cfg.image] ++ lib.optional browserCfg.enable wolfUiImage ++ map (image: image.image) browserImages);
   };
   readPythonSource = name: source:
     pkgs.writeText name (
@@ -322,26 +281,6 @@
       exit 1
     '';
   };
-  buildPatchedWolfImage = pkgs.writeShellApplication {
-    name = "build-patched-wolf-image";
-    runtimeInputs = [pkgs.docker];
-    text = ''
-      set -euo pipefail
-
-      if docker image inspect ${lib.escapeShellArg wolfPatchedImage} >/dev/null 2>&1; then
-        exit 0
-      fi
-
-      docker image inspect ${lib.escapeShellArg wolfBaseImage} >/dev/null 2>&1 \
-        || docker pull ${lib.escapeShellArg wolfBaseImage}
-
-      docker build \
-        --pull=false \
-        --build-arg RUNTIME_IMAGE=${lib.escapeShellArg wolfBaseImage} \
-        --tag ${lib.escapeShellArg wolfPatchedImage} \
-        ${lib.escapeShellArg wolfBuildContext}
-    '';
-  };
   # GStreamer's CUDA conversion elements load NVRTC dynamically. The
   # upstream Wolf image deliberately does not bundle it, while NixOS' NVIDIA
   # CDI specification only injects driver libraries. Copy the runtime pieces
@@ -362,7 +301,7 @@ in {
   ];
 
   options.services.wolf-streaming = import ./options.nix {
-    inherit lib pkgs wolfPatchedImage heliumImageTag kdeConnectInputDefaults;
+    inherit lib kdeConnectInputDefaults;
   };
 
   config = lib.mkIf cfg.enable {
@@ -689,81 +628,41 @@ in {
       '';
     };
 
-    systemd.services.wolf-patched-image = lib.mkIf (cfg.image == wolfPatchedImage) {
-      description = "Build the pinned Wolf image with AltGr modifier tracking";
-      after = ["docker.service"];
-      before =
-        lib.optional hostPublicCoordinator "docker-wolf.service"
-        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
+    # Preload the configured artifacts without retaining image build inputs.
+    # External supervisors also pull their declared references on reconciliation.
+    systemd.services.wolf-runtime-images = {
+      description = "Pull pinned Wolf runtime images";
+      after = ["docker.service" "network-online.target"];
+      wants = ["network-online.target"];
       requires = ["docker.service"];
-      # Pull the image build into coordinator startup without coupling their
-      # lifetimes. A changed oneshot may be restarted during activation, but
-      # that must not stop already-running public or protected coordinators.
-      wantedBy =
-        lib.optional hostPublicCoordinator "docker-wolf.service"
-        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service"
-        ++ lib.optional (!hostPublicCoordinator) "multi-user.target";
+      before = lib.optional hostPublicCoordinator "docker-wolf.service" ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
+      wantedBy = lib.optional hostPublicCoordinator "docker-wolf.service" ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service" ++ lib.optional (!hostPublicCoordinator) "multi-user.target";
+      unitConfig.StartLimitIntervalSec = 0;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = lib.getExe buildPatchedWolfImage;
+        Restart = "on-failure";
+        RestartSec = "60s";
+        TimeoutStartSec = "15min";
+        ExecStart = lib.getExe pullRuntimeImages;
       };
     };
 
-    systemd.services.wolf-browser-images = lib.mkIf browserCfg.enable {
-      description = "Build local Wolf browser application images";
-      restartIfChanged = false;
-      after = ["docker.service"];
-      before =
-        lib.optional hostPublicCoordinator "docker-wolf.service"
-        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service";
+    systemd.services.docker-prune = lib.mkIf config.virtualisation.docker.autoPrune.enable {
+      unitConfig.OnSuccess = lib.mkAfter ["wolf-runtime-images-after-prune.service"];
+    };
+    systemd.services.wolf-runtime-images-after-prune = lib.mkIf config.virtualisation.docker.autoPrune.enable {
+      description = "Restore pinned Wolf images after Docker pruning";
+      after = ["docker-prune.service" "network-online.target"];
+      wants = ["network-online.target"];
       requires = ["docker.service"];
-      # Browser image refreshes are startup prerequisites, not runtime
-      # dependencies of either coordinator.
-      wantedBy =
-        lib.optional hostPublicCoordinator "docker-wolf.service"
-        ++ lib.optional isolatedProtectedBackend "docker-wolf-protected.service"
-        ++ lib.optional (!hostPublicCoordinator) "multi-user.target";
+      unitConfig.StartLimitIntervalSec = 0;
       serviceConfig = {
         Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = lib.getExe buildBrowserImages;
-      };
-    };
-
-    # Docker's age-based prune can remove locally built Wolf and browser images
-    # because their reproducible creation timestamps are older than the most
-    # recent host-side build. Reconcile the complete qualified worker image set
-    # after a successful prune instead of leaving Kubernetes without a healthy
-    # failover target until the next host activation.
-    systemd.services.docker-prune = lib.mkIf (browserCfg.enable && config.virtualisation.docker.autoPrune.enable) {
-      unitConfig.OnSuccess = lib.mkAfter (
-        lib.optional (cfg.image == wolfPatchedImage) "wolf-patched-image-after-docker-prune.service"
-        ++ ["wolf-browser-images-after-docker-prune.service"]
-      );
-    };
-
-    systemd.services.wolf-patched-image-after-docker-prune = lib.mkIf (cfg.image == wolfPatchedImage && browserCfg.enable && config.virtualisation.docker.autoPrune.enable) {
-      description = "Reconcile the patched Wolf image after Docker pruning";
-      after = ["docker-prune.service"];
-      requires = ["docker.service"];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = lib.getExe buildPatchedWolfImage;
-      };
-    };
-
-    systemd.services.wolf-browser-images-after-docker-prune = lib.mkIf (browserCfg.enable && config.virtualisation.docker.autoPrune.enable) {
-      description = "Reconcile local Wolf browser images after Docker pruning";
-      after =
-        ["docker-prune.service"]
-        ++ lib.optional (cfg.image == wolfPatchedImage) "wolf-patched-image-after-docker-prune.service";
-      requires =
-        ["docker.service"]
-        ++ lib.optional (cfg.image == wolfPatchedImage) "wolf-patched-image-after-docker-prune.service";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = lib.getExe buildBrowserImages;
+        Restart = "on-failure";
+        RestartSec = "60s";
+        TimeoutStartSec = "15min";
+        ExecStart = lib.getExe pullRuntimeImages;
       };
     };
 

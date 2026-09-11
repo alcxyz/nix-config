@@ -1,12 +1,13 @@
 # Wolf streaming module
 
 `default.nix` composes the application catalog, images, runtime helpers, and
-host services. `options.nix` declares the public module interface; its image
-defaults and shared input defaults are supplied explicitly by the composition
-module. `apps.nix` owns public and protected application definitions,
+host services. `options.nix` requires explicit digest-pinned registry images;
+shared input defaults are supplied by the composition module. `apps.nix` owns public and protected application definitions,
 generated catalogs, and their reconciliation commands. `images.nix` owns
 pinned sources, patches, image tags, and browser build contexts, parameterized
-by packages and browser options.
+by packages and browser options. `image-products.nix` exports these contexts
+for CI publishing. Runtime services never build images: native coordinators
+preload their configured references, and external supervisors own their pulls.
 
 `browser-image/` contains the browser image and desktop/input helpers.
 `wolf-image/` contains coordinator image patches. `nvrtc-runtime.nix` packages
