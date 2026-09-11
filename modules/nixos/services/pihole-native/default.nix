@@ -33,6 +33,7 @@
     export FTLCONF_dns_upstreams="${cfg.upstream}"
     export FTLCONF_dns_rateLimit_count="${toString cfg.rateLimitCount}"
     export FTLCONF_dns_rateLimit_interval="${toString cfg.rateLimitInterval}"
+    export FTLCONF_misc_dnsmasq_lines=${lib.escapeShellArg (lib.concatMapStringsSep ";" (domain: "local=/${domain}/") cfg.localDomains)}
     export FTLCONF_misc_readOnly="false"
     export FTLCONF_webserver_domain="${cfg.hostName}"
     export FTLCONF_webserver_port="${toString cfg.webPort}o"
@@ -95,6 +96,12 @@ in {
       description = "Pi-hole upstream resolver.";
     };
 
+    localDomains = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "DNS domains Pi-hole answers locally without forwarding other record types upstream.";
+    };
+
     rateLimitCount = lib.mkOption {
       type = lib.types.addCheck lib.types.int (value: value >= 0);
       default = 1000;
@@ -149,6 +156,10 @@ in {
           (cfg.rateLimitCount == 0 && cfg.rateLimitInterval == 0)
           || (cfg.rateLimitCount > 0 && cfg.rateLimitInterval > 0);
         message = "services.pihole-native rateLimitCount and rateLimitInterval must either both be 0 or both be positive.";
+      }
+      {
+        assertion = lib.all (domain: domain != "" && !(lib.hasInfix "/" domain) && !(lib.hasInfix ";" domain) && !(lib.hasInfix "\n" domain)) cfg.localDomains;
+        message = "services.pihole-native.localDomains entries must be non-empty DNS names without '/', ';', or newlines.";
       }
     ];
 
