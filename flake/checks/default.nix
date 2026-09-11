@@ -28,6 +28,8 @@ in {
 
   display-device-guard-contract = import ./display-device-guard.nix {inherit lib pkgs;};
 
+  nsswitch-hosts-contract = import ./nsswitch-hosts.nix {inherit inputs lib pkgs;};
+
   moonlight-endpoint-setup-contract = import ./moonlight-endpoints.nix {inherit lib pkgs;};
 
   credential-consent-contract = import ./credential-consent.nix {inherit lib pkgs;};
