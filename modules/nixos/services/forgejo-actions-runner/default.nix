@@ -450,17 +450,25 @@ in {
       extraGroups = lib.optional (!isolated) "docker";
     };
 
-    # Runner jobs leave build cache and pulled images in the host Docker
-    # daemon. Keep one week for repeat builds, then reclaim only unused data.
-    # Volumes are deliberately excluded from this generic policy.
-    virtualisation.docker.autoPrune = lib.mkIf (!isolated) {
-      enable = lib.mkDefault true;
-      dates = lib.mkDefault "weekly";
-      randomizedDelaySec = lib.mkDefault "6h";
-      flags = lib.mkDefault [
-        "--all"
-        "--filter=until=168h"
-      ];
+    # A shared host daemon may also own application and rollback images. Keep
+    # one week of runner build cache and leave image lifecycle to its consumer.
+    systemd.services.forgejo-runner-cache-prune = lib.mkIf (!isolated) {
+      description = "Prune old unused Forgejo runner build cache";
+      environment.DOCKER_HOST = cfg.dockerHost;
+      after = [dockerService];
+      requires = [dockerService];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.docker}/bin/docker builder prune --all --force --filter=until=168h --reserved-space ${lib.escapeShellArg cfg.cachePressure.reservedCacheSpace}";
+      };
+    };
+    systemd.timers.forgejo-runner-cache-prune = lib.mkIf (!isolated) {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnCalendar = "weekly";
+        RandomizedDelaySec = "6h";
+        Persistent = true;
+      };
     };
     virtualisation.docker.daemon.settings."exec-opts" = lib.mkIf (resourcePolicyCfg.enable && !isolated) [
       "native.cgroupdriver=systemd"

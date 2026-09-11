@@ -170,8 +170,11 @@ limit across the containers Forgejo Runner creates.
 - Runner hosts check filesystem pressure frequently instead of relying only on a
   fixed cleanup schedule. The default policy starts age-filtered build-cache
   pruning at 70% used, permits all unused cache to be pruned at 80% used, aims
-  for 40% free, and retains at least 10 GB of BuildKit cache. The existing
-  weekly age-based Docker cleanup remains responsible for old unused images.
+  for 40% free, and retains at least 10 GB of BuildKit cache. Weekly cleanup on
+  a shared host daemon removes only old unused build cache and retains the same
+  cache floor; application and rollback images remain owned by their consumers.
+  A dedicated CI daemon may also remove old unused images because its entire
+  image store is disposable runner state.
 
 ## Work Items
 

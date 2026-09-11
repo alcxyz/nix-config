@@ -63,6 +63,12 @@ in
   assert !(builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions);
   assert legacy.services.forgejo-actions-runner.dockerHost == "unix:///var/run/docker.sock";
   assert legacy.users.users.forgejo-runner.extraGroups == ["docker"];
+  assert !legacy.virtualisation.docker.autoPrune.enable;
+  assert legacy.systemd.services.forgejo-runner-cache-prune.environment.DOCKER_HOST == "unix:///var/run/docker.sock";
+  assert lib.hasInfix "docker builder prune" legacy.systemd.services.forgejo-runner-cache-prune.serviceConfig.ExecStart;
+  assert lib.hasInfix "--filter=until=168h" legacy.systemd.services.forgejo-runner-cache-prune.serviceConfig.ExecStart;
+  assert lib.hasInfix "--reserved-space 10GB" legacy.systemd.services.forgejo-runner-cache-prune.serviceConfig.ExecStart;
+  assert !(lib.hasInfix "docker system prune" legacy.systemd.services.forgejo-runner-cache-prune.serviceConfig.ExecStart);
     pkgs.runCommand "forgejo-runner-isolated-docker-contract" {
       inherit daemonConfig;
       nativeBuildInputs = [pkgs.bash pkgs.jq pkgs.python3 pkgs.shellcheck];
