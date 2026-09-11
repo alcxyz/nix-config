@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 ARG BASE_APP_IMAGE=ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14
 
 FROM ${BASE_APP_IMAGE}
@@ -8,11 +9,9 @@ ARG BROWSER_FAMILY
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-COPY browser-store.tar /tmp/browser-store.tar
-
-RUN set -eu; \
+RUN --mount=type=bind,source=browser-store.tar,target=/tmp/browser-store.tar,readonly \
+    set -eu; \
     tar --extract --file=/tmp/browser-store.tar --directory=/; \
-    rm -f /tmp/browser-store.tar; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       fonts-noto-color-emoji \

@@ -87,6 +87,7 @@ jobs:
             "github:NixOS/nixpkgs/$revision#shfmt" \
             "github:NixOS/nixpkgs/$revision#shellcheck" \
             "github:NixOS/nixpkgs/$revision#ripgrep" \
+            "github:NixOS/nixpkgs/$revision#jq" \
             -c bash scripts/ci/check-development.sh "$BASE_SHA"
 
       - name: Evaluate all systems

@@ -7,6 +7,15 @@
 **Applies to:** `hosts/xyz`, k3s topology, Kubernetes browser placement,
 Longhorn system workloads
 
+**Artifact ownership amendment (migration pending):** GitOps ADR-052 and
+[nix-config issue #372](https://git.alc.xyz/alcxyz/nix-config/issues/372)
+supersede only the node-local image build and mutable `:current` alias ownership
+recorded below. Nix continues to own the exact browser inputs, build contexts,
+and runtime behavior, while trusted Forgejo CI publishes immutable registry
+artifacts for hosts and GitOps to consume. The existing local images remain the
+runtime baseline until those artifacts are published, deployed, and accepted;
+the worker, storage, input, and placement decisions in this ADR remain active.
+
 ## Context
 
 `xyz` joined k3s as a tainted, agent-only GPU worker so the public and private

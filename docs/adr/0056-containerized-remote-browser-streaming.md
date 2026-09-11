@@ -8,6 +8,15 @@
 while retaining the independent public and protected identities established
 here.
 
+**Artifact ownership amendment (migration pending):** GitOps ADR-052 and
+[nix-config issue #372](https://git.alc.xyz/alcxyz/nix-config/issues/372)
+supersede only this decision's node-local image build and mutable `:current`
+alias ownership. Nix continues to own the exact browser inputs, build contexts,
+and runtime behavior, while trusted Forgejo CI publishes immutable registry
+artifacts for hosts and GitOps to consume. The existing local images remain the
+runtime baseline until those artifacts are published, deployed, and accepted;
+all state, input, coordinator, and placement decisions below remain active.
+
 ## Context
 
 The XPS couch session needs both a general browser and a private browser profile

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 ARG BASE_APP_IMAGE=ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14
 
 FROM ${BASE_APP_IMAGE}
@@ -9,11 +10,9 @@ ARG DESKTOP_PACKAGES
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-COPY browser.deb /tmp/browser.deb
-
-RUN set -eu; \
+RUN --mount=type=bind,source=browser.deb,target=/tmp/browser.deb,readonly \
+    set -eu; \
     dpkg-deb --extract /tmp/browser.deb /; \
-    rm -f /tmp/browser.deb; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       fonts-noto-color-emoji \

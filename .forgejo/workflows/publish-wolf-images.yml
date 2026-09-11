@@ -1,0 +1,129 @@
+name: Publish Wolf images
+run-name: "Wolf image build (${{ forgejo.event_name }})"
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - ".forgejo/workflows/publish-wolf-images.yml"
+      - "flake.lock"
+      - "flake/per-system.nix"
+      - "modules/nixos/services/wolf-streaming/browser-image/**"
+      - "modules/nixos/services/wolf-streaming/image-products.nix"
+      - "modules/nixos/services/wolf-streaming/images.nix"
+      - "modules/nixos/services/wolf-streaming/wolf-image/**"
+      - "scripts/ci/publish-wolf-images.sh"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish after building the images
+        required: true
+        default: false
+        type: boolean
+      channel:
+        description: Channel recorded by a non-publishing branch build
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - main
+
+jobs:
+  build:
+    name: Build exact Nix-owned contexts
+    runs-on: forgejo-docker-secondary
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - product: wolf
+            package: wolf-image-product
+          - product: helium
+            package: wolf-helium-image-product
+          - product: brave
+            package: wolf-brave-image-product
+          - product: zen
+            package: wolf-zen-image-product
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          github-server-url: https://git.alc.xyz
+          ref: ${{ forgejo.sha }}
+          persist-credentials: false
+
+      - name: Select and validate the release channel
+        env:
+          DISPATCH_CHANNEL: ${{ inputs.channel }}
+          PUBLISH: ${{ forgejo.event_name == 'push' || inputs.publish == true }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ] || [ "$PUBLISH" = true ]; then
+            case "$GITHUB_REF_NAME" in
+              dev | main) channel="$GITHUB_REF_NAME" ;;
+              *)
+                echo 'Publishing Wolf images is restricted to dev and main.' >&2
+                exit 1
+                ;;
+            esac
+          else
+            channel="$DISPATCH_CHANNEL"
+          fi
+          case "$channel" in
+            dev | main) ;;
+            *) exit 1 ;;
+          esac
+          printf 'WOLF_CHANNEL=%s\n' "$channel" >>"$GITHUB_ENV"
+
+      - name: Install build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y docker.io git jq python3 sudo udev
+
+      - uses: https://github.com/cachix/install-nix-action@v30
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build the deployed image contexts
+        env:
+          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
+          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
+        run: |
+          bash scripts/ci/with-source-access.sh \
+            nix build --no-update-lock-file --out-link wolf-image-product \
+            .#${{ matrix.package }}
+
+      - name: Log in to the Forgejo registry
+        if: forgejo.event_name == 'push' || inputs.publish == true
+        run: |
+          : "${FORGEJO_REGISTRY_USER:?missing FORGEJO_REGISTRY_USER}"
+          : "${FORGEJO_REGISTRY_TOKEN:?missing FORGEJO_REGISTRY_TOKEN}"
+          printf '%s' "$FORGEJO_REGISTRY_TOKEN" \
+            | docker login git.alc.xyz -u "$FORGEJO_REGISTRY_USER" --password-stdin
+
+      - name: Build and optionally publish images
+        env:
+          PUBLISH: ${{ forgejo.event_name == 'push' || inputs.publish == true }}
+        run: |
+          set -euo pipefail
+          publish_flag=()
+          if [ "$PUBLISH" = true ]; then
+            publish_flag=(--push)
+          fi
+          scripts/ci/publish-wolf-images.sh \
+            "${publish_flag[@]}" \
+            wolf-image-product/manifest.json \
+            "$WOLF_CHANNEL" \
+            "$GITHUB_SHA" \
+            "published-wolf-${{ matrix.product }}.json"
+          jq . "published-wolf-${{ matrix.product }}.json"
+
+      - uses: https://data.forgejo.org/actions/upload-artifact@v3
+        if: always()
+        with:
+          name: wolf-image-reference-${{ matrix.product }}
+          path: published-wolf-${{ matrix.product }}.json
+          if-no-files-found: error

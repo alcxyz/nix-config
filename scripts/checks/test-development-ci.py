@@ -50,10 +50,11 @@ class DevelopmentCI(unittest.TestCase):
             "modules/nixos/services/wolf-streaming/browser-image/fixture.sh",
             "hosts/xyz/xyz-fixture.sh",
             "scripts/checks/test-configuration-ci.py",
+            "scripts/checks/test-publish-wolf-images.sh",
         ]:
             destination = self.repository / path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text("fixture\n")
+            destination.write_text(":\n" if path.endswith("test-publish-wolf-images.sh") else "fixture\n")
 
         self.bin = self.repository / "bin"
         self.bin.mkdir()

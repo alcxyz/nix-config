@@ -38,6 +38,47 @@
         stashdb-pop = pkgs.stashdb-pop;
       }
       // lib.optionalAttrs (system == "x86_64-linux") {
+        # CI publishes these exact Nix-owned Docker build contexts. The smaller
+        # deployed set avoids rebuilding dormant comparative-test browsers on
+        # every release while the complete export keeps those public options
+        # available for explicit qualification.
+        wolf-deployed-image-products = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = [
+            "wolf"
+            "helium"
+            "brave"
+            "zen"
+          ];
+        };
+        wolf-all-image-products = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+        };
+        wolf-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = ["wolf"];
+        };
+        wolf-helium-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = ["helium"];
+        };
+        wolf-brave-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = ["brave"];
+        };
+        wolf-chromium-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = ["chromium"];
+        };
+        wolf-firefox-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = ["firefox"];
+        };
+        wolf-zen-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = ["zen"];
+        };
+
         # Cross-compiled U-Boot for Rock Pi 4 (RK3399).
         rpi0-uboot = pkgs.pkgsCross.aarch64-multiplatform.ubootRockPi4;
 

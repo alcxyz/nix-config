@@ -93,7 +93,7 @@
         --verbatim-files-from \
         --files-from=${closure}/store-paths
     '';
-  browserImages = lib.filter (image: image.enable) [
+  allBrowserImages = [
     {
       enable = browserCfg.helium.enable;
       name = "helium";
@@ -165,6 +165,7 @@
       };
     }
   ];
+  browserImages = lib.filter (image: image.enable) allBrowserImages;
 in {
   inherit
     wolfBaseImage
@@ -174,6 +175,7 @@ in {
     wolfUiImage
     browserImageBuildContextLabel
     heliumImageTag
+    allBrowserImages
     browserImages
     ;
 }

@@ -252,6 +252,10 @@ in {
     treefmt --ci --formatters shell
   '';
 
+  wolf-image-publisher-contract = mkRepoCheck "wolf-image-publisher-contract" [pkgs.bash pkgs.coreutils pkgs.jq pkgs.ripgrep pkgs.gnused] ''
+    bash scripts/checks/test-publish-wolf-images.sh
+  '';
+
   xyz-runtime-storage-policy-contract = mkRepoCheck "xyz-runtime-storage-policy-contract" [pkgs.bash pkgs.coreutils pkgs.ripgrep pkgs.gnused] ''
     bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
   '';
