@@ -57,7 +57,7 @@ jobs:
       - name: Select and validate the release channel
         env:
           DISPATCH_CHANNEL: ${{ inputs.channel }}
-          PUBLISH: ${{ forgejo.event_name == 'push' || inputs.publish == true }}
+          PUBLISH: ${{ forgejo.event_name == 'push' || github.event.inputs.publish == 'true' }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ] || [ "$PUBLISH" = true ]; then
             case "$GITHUB_REF_NAME" in
@@ -97,7 +97,7 @@ jobs:
             .#${{ matrix.package }}
 
       - name: Log in to the Forgejo registry
-        if: forgejo.event_name == 'push' || inputs.publish == true
+        if: forgejo.event_name == 'push' || github.event.inputs.publish == 'true'
         run: |
           : "${FORGEJO_REGISTRY_USER:?missing FORGEJO_REGISTRY_USER}"
           : "${FORGEJO_REGISTRY_TOKEN:?missing FORGEJO_REGISTRY_TOKEN}"
@@ -106,7 +106,7 @@ jobs:
 
       - name: Build and optionally publish images
         env:
-          PUBLISH: ${{ forgejo.event_name == 'push' || inputs.publish == true }}
+          PUBLISH: ${{ forgejo.event_name == 'push' || github.event.inputs.publish == 'true' }}
         run: |
           set -euo pipefail
           publish_flag=()
