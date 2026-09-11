@@ -78,6 +78,8 @@
   services.forgejo-actions-runner = {
     enable = true;
     ioPressureGuard.enable = true;
+    isolatedDocker.enable = true;
+    resourcePolicy.enable = true;
     name = "nex";
     capacity = 1;
     labels = [

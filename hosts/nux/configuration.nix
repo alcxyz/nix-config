@@ -131,6 +131,8 @@ in {
   services.forgejo-actions-runner = {
     enable = true;
     ioPressureGuard.enable = true;
+    isolatedDocker.enable = true;
+    resourcePolicy.enable = true;
     name = "nux";
     capacity = 1;
     labels = [

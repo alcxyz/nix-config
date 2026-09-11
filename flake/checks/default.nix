@@ -77,12 +77,13 @@ in {
     policyUnit = xyz.systemd.services.forgejo-runner-resource-policy;
     daemonUnit = xyz.systemd.services.forgejo-runner-docker;
     buildSlice = xyz.systemd.slices.forgejobuilds.sliceConfig;
-    serverConfigs = [
-      self.nixosConfigurations.xev.config
+    isolatedServerConfigs = [
       self.nixosConfigurations.nux.config
       self.nixosConfigurations.nex.config
     ];
-    serverRunners = map (host: host.services.forgejo-actions-runner) serverConfigs;
+    isolatedServerRunners = map (host: host.services.forgejo-actions-runner) isolatedServerConfigs;
+    xev = self.nixosConfigurations.xev.config;
+    xevRunner = xev.services.forgejo-actions-runner;
     mockGetconf = pkgs.writeShellScript "mock-getconf" ''
       test "''${1:-}" = _NPROCESSORS_ONLN
       printf '%s\n' "''${MOCK_PROCESSORS:?}"
@@ -95,10 +96,15 @@ in {
     assert runner.isolatedDocker.enable;
     assert !(builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions);
     assert daemonUnit.serviceConfig.Slice == "forgejobuilds.slice";
-    assert lib.all (serverRunner: !serverRunner.resourcePolicy.enable && !serverRunner.isolatedDocker.enable) serverRunners;
-    assert lib.all (serverRunner: serverRunner.dockerHost == "unix:///var/run/docker.sock") serverRunners;
-    assert lib.all (host: builtins.elem "docker.service" host.systemd.services.forgejo-actions-runner.requires) serverConfigs;
-    assert lib.all (host: host.users.users.forgejo-runner.extraGroups == ["docker"]) serverConfigs;
+    assert lib.all (serverRunner: serverRunner.resourcePolicy.enable && serverRunner.isolatedDocker.enable) isolatedServerRunners;
+    assert lib.all (serverRunner: serverRunner.dockerHost == "unix:///run/forgejo-docker/docker.sock") isolatedServerRunners;
+    assert lib.all (host: builtins.elem "forgejo-runner-docker.service" host.systemd.services.forgejo-actions-runner.requires) isolatedServerConfigs;
+    assert lib.all (host: !(builtins.elem "docker.service" host.systemd.services.forgejo-actions-runner.requires)) isolatedServerConfigs;
+    assert lib.all (host: host.users.users.forgejo-runner.extraGroups == []) isolatedServerConfigs;
+    assert !xevRunner.resourcePolicy.enable && !xevRunner.isolatedDocker.enable;
+    assert xevRunner.dockerHost == "unix:///var/run/docker.sock";
+    assert builtins.elem "docker.service" xev.systemd.services.forgejo-actions-runner.requires;
+    assert xev.users.users.forgejo-runner.extraGroups == ["docker"];
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
     assert buildSlice.MemoryHigh == "40%";
@@ -144,28 +150,60 @@ in {
       "xyz"
     ];
     hostConfigs = lib.genAttrs hostNames (name: self.nixosConfigurations.${name}.config);
-    legacyConfigs = map (name: hostConfigs.${name}) [
+    isolatedHostNames = [
       "nex"
       "nux"
-      "xev"
+      "xyz"
     ];
-    legacyGuards = map (host: host.systemd.services.forgejo-runner-io-pressure-guard) legacyConfigs;
-    xyzGuard = hostConfigs.xyz.systemd.services.forgejo-runner-io-pressure-guard;
-    guardStart = (builtins.head legacyGuards).serviceConfig.ExecStart;
+    isolatedGuards = map (name: hostConfigs.${name}.systemd.services.forgejo-runner-io-pressure-guard) isolatedHostNames;
+    xevGuard = hostConfigs.xev.systemd.services.forgejo-runner-io-pressure-guard;
+    legacyConfig =
+      (import "${pkgs.path}/nixos/lib/eval-config.nix" {
+        # This fixture evaluates a NixOS service even when the surrounding
+        # flake check is instantiated for a non-Linux system.
+        system = "x86_64-linux";
+        specialArgs.inputs = {};
+        modules = [
+          ../../modules/nixos/services/forgejo-actions-runner
+          ({lib, ...}: {
+            options.sops.secrets = lib.mkOption {
+              type = lib.types.attrs;
+              default = {};
+            };
+            config = {
+              system.stateVersion = "25.11";
+              virtualisation.docker.enable = true;
+              services.forgejo-actions-runner = {
+                enable = true;
+                ioPressureGuard.enable = true;
+                labels = ["test:docker://example.invalid/test:latest"];
+                secretsFile = pkgs.writeText "dummy-runner-secrets.yaml" "dummy: encrypted-fixture";
+              };
+            };
+          })
+        ];
+      }).config;
+    legacyGuard = legacyConfig.systemd.services.forgejo-runner-io-pressure-guard;
+    guardStart = legacyGuard.serviceConfig.ExecStart;
     runners = map (name: hostConfigs.${name}.systemd.services.forgejo-actions-runner) hostNames;
-    legacyRunnerStarts = map (host: lib.removeSuffix " " host.systemd.services.forgejo-actions-runner.serviceConfig.ExecStart) legacyConfigs;
+    legacyRunnerStart = lib.removeSuffix " " legacyConfig.systemd.services.forgejo-actions-runner.serviceConfig.ExecStart;
+    xevRunnerStart = lib.removeSuffix " " hostConfigs.xev.systemd.services.forgejo-actions-runner.serviceConfig.ExecStart;
     guardSource = ../../modules/nixos/services/forgejo-actions-runner/io-pressure-guard.sh;
     guardTest = ./test-forgejo-runner-io-pressure-guard.sh;
   in
-    assert lib.all (guard: guard.wantedBy == ["multi-user.target"]) legacyGuards;
-    assert lib.all (guard: lib.hasPrefix "io.alc.forgejo-runner=" guard.environment.RUNNER_CONTAINER_LABEL) legacyGuards;
-    assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") legacyGuards;
-    assert lib.all (guard: guard.environment.LOW_SAMPLES_REQUIRED == "13") legacyGuards;
-    assert xyzGuard.wantedBy == [];
-    assert !(xyzGuard.environment ? RUNNER_CONTAINER_LABEL);
-    assert xyzGuard.environment.HIGH_SAMPLES_REQUIRED == "5";
-    assert xyzGuard.environment.LOW_SAMPLES_REQUIRED == "13";
-    assert xyzGuard.environment.TRANSITION_TIMEOUT_SECONDS == "120";
+    assert legacyGuard.wantedBy == ["multi-user.target"];
+    assert lib.hasPrefix "io.alc.forgejo-runner=" legacyGuard.environment.RUNNER_CONTAINER_LABEL;
+    assert legacyGuard.environment.HIGH_SAMPLES_REQUIRED == "5";
+    assert legacyGuard.environment.LOW_SAMPLES_REQUIRED == "13";
+    assert xevGuard.wantedBy == ["multi-user.target"];
+    assert lib.hasPrefix "io.alc.forgejo-runner=" xevGuard.environment.RUNNER_CONTAINER_LABEL;
+    assert xevGuard.environment.HIGH_SAMPLES_REQUIRED == "5";
+    assert xevGuard.environment.LOW_SAMPLES_REQUIRED == "13";
+    assert lib.all (guard: guard.wantedBy == []) isolatedGuards;
+    assert lib.all (guard: !(guard.environment ? RUNNER_CONTAINER_LABEL)) isolatedGuards;
+    assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") isolatedGuards;
+    assert lib.all (guard: guard.environment.LOW_SAMPLES_REQUIRED == "13") isolatedGuards;
+    assert lib.all (guard: guard.environment.TRANSITION_TIMEOUT_SECONDS == "120") isolatedGuards;
     assert lib.all (runner: builtins.elem "forgejo-runner-io-pressure-guard.service" runner.requires) runners;
     assert lib.all (runner: runner.bindsTo == ["forgejo-runner-io-pressure-guard.service"]) runners;
       pkgs.runCommand "forgejo-runner-io-pressure-guard-contract" {
@@ -173,11 +211,10 @@ in {
       } ''
         shellcheck ${guardSource} ${guardTest}
         bash ${guardTest} ${guardStart}
-        ${lib.concatMapStringsSep "\n" (runnerStart: ''
-            runner_config="$(${pkgs.gawk}/bin/awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStart})"
-              grep -Fq -- '--label=io.alc.forgejo-runner=' "$runner_config"
-          '')
-          legacyRunnerStarts}
+        runner_config="$(${pkgs.gawk}/bin/awk '/--config/ { print $NF }' ${lib.escapeShellArg legacyRunnerStart})"
+        grep -Fq -- '--label=io.alc.forgejo-runner=' "$runner_config"
+        xev_runner_config="$(${pkgs.gawk}/bin/awk '/--config/ { print $NF }' ${lib.escapeShellArg xevRunnerStart})"
+        grep -Fq -- '--label=io.alc.forgejo-runner=' "$xev_runner_config"
         touch "$out"
       '';
   forgejo-runner-registration-contract = let
