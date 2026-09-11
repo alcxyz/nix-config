@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 8 ]; then
-  echo "usage: $0 RUNNER CONFIG RUNNER_FILE LABELS_FILE NAME_FILE INSTANCE NAME LABELS" >&2
+if [ "$#" -ne 7 ]; then
+  echo "usage: $0 RUNNER CONFIG RUNNER_FILE NAME_FILE INSTANCE NAME LABELS" >&2
   exit 2
 fi
 
 runner_command=$1
 config_file=$2
 runner_file=$3
-labels_file=$4
-name_file=$5
-instance=$6
-name=$7
-labels=$8
+name_file=$4
+instance=$5
+name=$6
+labels=$7
 
 for value in "$instance" "$name" "$labels"; do
   if [ -z "$value" ]; then
@@ -28,10 +27,10 @@ for value in "$instance" "$name" "$labels"; do
   esac
 done
 
-labels_current="$(cat "$labels_file" 2>/dev/null || true)"
 name_current="$(cat "$name_file" 2>/dev/null || true)"
 
-if [ -f "$runner_file" ] && [ "$labels_current" = "$labels" ] && [ "$name_current" = "$name" ]; then
+# The daemon declares configured labels on startup; changing them keeps identity.
+if [ -f "$runner_file" ] && [ "$name_current" = "$name" ]; then
   exit 0
 fi
 
@@ -42,5 +41,4 @@ rm -f "$runner_file"
   printf '\n%s\n%s\n' "$name" "$labels"
 } | "$runner_command" register --config "$config_file"
 
-printf '%s\n' "$labels" > "$labels_file"
 printf '%s\n' "$name" > "$name_file"

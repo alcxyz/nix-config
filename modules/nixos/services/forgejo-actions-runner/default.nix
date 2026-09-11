@@ -18,7 +18,6 @@
   stateDir = "/var/lib/forgejo/runner";
   runtimeDir = "/run/forgejo-runner";
   envFile = "${runtimeDir}/${cfg.name}.env";
-  labelsFile = "${stateDir}/.labels";
   nameFile = "${stateDir}/.runner-name";
   pressureGuardLabel = "io.alc.forgejo-runner=${cfg.name}";
 
@@ -39,6 +38,7 @@
     runner = {
       file = ".runner";
       capacity = cfg.capacity;
+      labels = cfg.labels;
       env_file = envFile;
       timeout = "3600s";
       insecure = false;
@@ -609,7 +609,6 @@ in {
           ${lib.getExe cfg.package} \
           ${runnerConfig} \
           ${lib.escapeShellArg "${stateDir}/.runner"} \
-          ${lib.escapeShellArg labelsFile} \
           ${lib.escapeShellArg nameFile} \
           ${lib.escapeShellArg cfg.url} \
           ${lib.escapeShellArg cfg.name} \

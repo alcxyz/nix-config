@@ -11,7 +11,6 @@ name=fixture-runner
 labels=fixture:docker://fixture,other:host
 config=$tmp/config.yaml
 runner_file=$tmp/.runner
-labels_file=$tmp/.labels
 name_file=$tmp/.runner-name
 args_file=$tmp/args
 stdin_file=$tmp/stdin
@@ -41,7 +40,7 @@ chmod +x "$tmp/mock-runner"
 
 (
   cd "$tmp"
-  run_helper "$tmp/mock-runner" "$config" "$runner_file" "$labels_file" "$name_file" \
+  run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
     "$instance" "$name" "$labels" < "$tmp/token"
 )
 
@@ -53,15 +52,21 @@ if grep -Fq -- "$token" "$args_file" || grep -Fxq -- '--token' "$args_file"; the
   echo 'registration token leaked through runner arguments' >&2
   exit 1
 fi
-test "$(cat "$labels_file")" = "$labels"
 test "$(cat "$name_file")" = "$name"
 
 rm -f "$called_file"
-run_helper "$tmp/mock-runner" "$config" "$runner_file" "$labels_file" "$name_file" \
+run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
   "$instance" "$name" "$labels" < "$tmp/token"
 test ! -e "$called_file"
 
-printf '%s\n' old-label > "$labels_file"
+# Label-only updates must preserve the existing registration, even without a
+# registration credential available to the helper.
+printf 'existing-registration\n' > "$runner_file"
+run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
+  "$instance" "$name" "canary:docker://fixture" < /dev/null
+test ! -e "$called_file"
+test "$(cat "$runner_file")" = existing-registration
+
 printf '%s\n' old-name > "$name_file"
 cat > "$tmp/failing-runner" <<EOF
 #!$bash_path
@@ -71,7 +76,7 @@ EOF
 chmod +x "$tmp/failing-runner"
 
 set +e
-run_helper "$tmp/failing-runner" "$config" "$runner_file" "$labels_file" "$name_file" \
+run_helper "$tmp/failing-runner" "$config" "$runner_file" "$name_file" \
   "$instance" "$name" "$labels" < "$tmp/token"
 status=$?
 set -e
@@ -79,27 +84,24 @@ if [ "$status" -ne 23 ]; then
   echo "registration helper returned $status instead of runner status 23" >&2
   exit 1
 fi
-test "$(cat "$labels_file")" = old-label
 test "$(cat "$name_file")" = old-name
 
 touch "$runner_file"
 rm -f "$called_file"
-if run_helper "$tmp/mock-runner" "$config" "$runner_file" "$labels_file" "$name_file" \
+if run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
   "$instance" $'invalid\nname' "$labels" < "$tmp/token"; then
   echo 'registration helper accepted a multiline setting' >&2
   exit 1
 fi
 test -e "$runner_file"
 test ! -e "$called_file"
-test "$(cat "$labels_file")" = old-label
 test "$(cat "$name_file")" = old-name
 
-if run_helper "$tmp/mock-runner" "$config" "$runner_file" "$labels_file" "$name_file" \
+if run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
   "$instance" "$name" "" < "$tmp/token"; then
   echo 'registration helper accepted an empty setting' >&2
   exit 1
 fi
 test -e "$runner_file"
 test ! -e "$called_file"
-test "$(cat "$labels_file")" = old-label
 test "$(cat "$name_file")" = old-name
