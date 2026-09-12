@@ -179,6 +179,8 @@
   services.forgejo-actions-runner = {
     enable = true;
     ioPressureGuard.enable = true;
+    isolatedDocker.enable = true;
+    resourcePolicy.enable = true;
     name = "xev";
     # Keep CI admission serial on a host that also serves the Kubernetes
     # control plane and storage. Other eligible runners can consume queued
