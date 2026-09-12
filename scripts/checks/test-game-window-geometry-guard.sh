@@ -53,20 +53,20 @@ monitor_query_succeeds=true
 
 hyprctl() {
   case "$1 ${2:-}" in
-  'monitors -j')
-    [[ "$monitor_query_succeeds" == true ]] || return 1
-    printf '%s\n' "$monitors_json"
-    ;;
-  'clients -j') printf '%s\n' "$clients_json" ;;
-  'dispatch movewindowpixel')
-    printf '%s\n' "$3" >>"$dispatch_log"
-    printf 'ok\n'
-    ;;
-  'eval '*)
-    printf '%s\n' "$2" >>"$dispatch_log"
-    printf 'ok\n'
-    ;;
-  *) fail "unexpected hyprctl call: $*" ;;
+    'monitors -j')
+      [[ "$monitor_query_succeeds" == true ]] || return 1
+      printf '%s\n' "$monitors_json"
+      ;;
+    'clients -j') printf '%s\n' "$clients_json" ;;
+    'dispatch movewindowpixel')
+      printf '%s\n' "$3" >>"$dispatch_log"
+      printf 'ok\n'
+      ;;
+    'eval '*)
+      printf '%s\n' "$2" >>"$dispatch_log"
+      printf 'ok\n'
+      ;;
+    *) fail "unexpected hyprctl call: $*" ;;
   esac
 }
 

@@ -174,7 +174,10 @@
     text = builtins.readFile ./register-from-file.sh;
   };
 in {
-  imports = [./isolated-docker.nix];
+  imports = [
+    ./isolated-docker.nix
+    ../storage-health-monitor/default.nix
+  ];
 
   options.services.forgejo-actions-runner = {
     enable = lib.mkEnableOption "native Forgejo Actions runner";
@@ -313,7 +316,13 @@ in {
       dockerTimeoutSeconds = lib.mkOption {
         type = lib.types.ints.positive;
         default = 3;
-        description = "Deadline for each Docker API operation.";
+        description = "Deadline for read-only Docker API operations.";
+      };
+
+      dockerTransitionTimeoutSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 15;
+        description = "Deadline for Docker pause and unpause operations.";
       };
 
       transitionTimeoutSeconds = lib.mkOption {
@@ -533,6 +542,7 @@ in {
         LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
         SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
         DOCKER_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.dockerTimeoutSeconds;
+        DOCKER_TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.dockerTransitionTimeoutSeconds;
       };
       serviceConfig = {
         Type = "notify";
@@ -545,6 +555,13 @@ in {
         RuntimeDirectoryPreserve = "yes";
       };
     };
+
+    services.storage-health-monitor.units = lib.mkIf (cfg.ioPressureGuard.enable && config.services.storage-health-monitor.enable) [
+      {
+        name = "forgejo-runner-io-pressure-guard.service";
+        mode = "active-not-degraded";
+      }
+    ];
 
     sops.secrets = lib.listToAttrs (
       map (key: {

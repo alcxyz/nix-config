@@ -43,6 +43,7 @@
         mode = lib.mkOption {
           type = lib.types.enum [
             "active"
+            "active-not-degraded"
             "recent-success"
           ];
         };
@@ -92,6 +93,11 @@
     name = "storage-health-record-success";
     runtimeInputs = [pkgs.coreutils];
     text = builtins.readFile ./record-success.sh;
+  };
+  activeUnitChecker = pkgs.writeShellApplication {
+    name = "storage-health-check-active-unit";
+    runtimeInputs = [pkgs.systemd];
+    text = builtins.readFile ./check-active-unit.sh;
   };
   recentSuccessChecker = pkgs.writeShellApplication {
     name = "storage-health-check-recent-success";
@@ -195,9 +201,9 @@
         maximum_age="$3"
         allow_pending_first_timer="$4"
 
-        if [ "$mode" = active ]; then
-          if [ "$(systemctl is-active "$unit" 2>/dev/null || true)" != active ]; then
-            record_issue "$unit: required service is not active"
+        if [ "$mode" = active ] || [ "$mode" = active-not-degraded ]; then
+          if ! issue="$(${lib.getExe activeUnitChecker} "$unit" "$mode")"; then
+            record_issue "''${issue:-$unit: active-unit check failed without a reason}"
           fi
           return
         fi

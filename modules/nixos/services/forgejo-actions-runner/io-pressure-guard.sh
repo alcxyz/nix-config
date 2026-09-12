@@ -14,6 +14,7 @@ high_samples_required=${HIGH_SAMPLES_REQUIRED:-5}
 low_samples_required=${LOW_SAMPLES_REQUIRED:-13}
 sample_seconds=${SAMPLE_SECONDS:-5}
 docker_timeout_seconds=${DOCKER_TIMEOUT_SECONDS:-3}
+docker_transition_timeout_seconds=${DOCKER_TRANSITION_TIMEOUT_SECONDS:-15}
 max_iterations=${MAX_ITERATIONS:-0}
 docker_bin=${DOCKER_BIN:-docker}
 logger_bin=${LOGGER_BIN:-logger}
@@ -25,7 +26,8 @@ degraded() {
   log "degraded: $1"
   set_status "degraded: $1"
 }
-docker_command() { timeout --foreground "${docker_timeout_seconds}s" "$docker_bin" "$@"; }
+docker_query() { timeout --foreground "${docker_timeout_seconds}s" "$docker_bin" "$@"; }
+docker_transition() { timeout --foreground "${docker_transition_timeout_seconds}s" "$docker_bin" "$@"; }
 
 enter_guarded() {
   if ! : >"$state_dir/guarded"; then
@@ -68,12 +70,12 @@ read_pressure() {
 
 list_owned() {
   local status=${1:-running}
-  docker_command ps --filter "label=$label" --filter "status=$status" --format '{{.ID}}'
+  docker_query ps --filter "label=$label" --filter "status=$status" --format '{{.ID}}'
 }
-inspect_paused() { docker_command inspect --format '{{.State.Paused}}' "$1" 2>/dev/null; }
+inspect_paused() { docker_query inspect --format '{{.State.Paused}}' "$1" 2>/dev/null; }
 container_exists() {
   local matches
-  if ! matches=$(docker_command ps --all --no-trunc --quiet --filter "id=$1"); then return 2; fi
+  if ! matches=$(docker_query ps --all --no-trunc --quiet --filter "id=$1"); then return 2; fi
   [[ -n $matches ]]
 }
 directory_has_entries() {
@@ -127,7 +129,7 @@ pause_running_owned() {
     pending=$pending_dir/$container
     [[ -e $uncertain_dir/$container ]] && continue
     if [[ -e $marker ]]; then
-      if ! docker_command pause "$container" >/dev/null; then
+      if ! docker_transition pause "$container" >/dev/null; then
         degraded "Docker API failed while re-pausing an owned runner container"
       fi
       continue
@@ -136,7 +138,7 @@ pause_running_owned() {
       degraded "pause intent could not be recorded"
       continue
     fi
-    if docker_command pause "$container" >/dev/null; then
+    if docker_transition pause "$container" >/dev/null; then
       if [[ ${TEST_EXIT_AFTER_PAUSE:-0} == 1 ]]; then exit 99; fi
       if : >"$marker"; then
         rm -f "$pending"
@@ -203,7 +205,7 @@ resume_owned_batch() {
     degraded "batch resume intent could not be recorded"
     return 2
   fi
-  if docker_command unpause "${containers[@]}" >/dev/null; then
+  if docker_transition unpause "${containers[@]}" >/dev/null; then
     if [[ ${TEST_EXIT_AFTER_UNPAUSE:-0} == 1 ]]; then exit 98; fi
     for container in "${containers[@]}"; do rm -f "$paused_dir/$container"; done
     rm -f "$state_dir/resume-intent"
@@ -214,7 +216,7 @@ resume_owned_batch() {
   rollback_ok=1
   for container in "${containers[@]}"; do
     if state=$(inspect_paused "$container"); then
-      if [[ $state != true ]] && ! docker_command pause "$container" >/dev/null; then
+      if [[ $state != true ]] && ! docker_transition pause "$container" >/dev/null; then
         degraded "Docker API failed while restoring a runner container pause"
         rollback_ok=0
       fi

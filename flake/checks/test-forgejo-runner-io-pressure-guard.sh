@@ -37,7 +37,13 @@ case $command in
     for id in "$@"; do
       printf 'pause %s\n' "$id" >>"$CALL_LOG"
       [[ $id != ${PAUSE_FAIL_ID:-} ]] || exit 1
-      printf paused >"$CONTAINER_STATE/$id"
+      if [[ ${PAUSE_APPLY_BEFORE_DELAY:-0} == 1 ]]; then
+        printf paused >"$CONTAINER_STATE/$id"
+      fi
+      [[ -z ${PAUSE_DELAY_SECONDS:-} ]] || sleep "$PAUSE_DELAY_SECONDS"
+      if [[ ${PAUSE_APPLY_BEFORE_DELAY:-0} != 1 ]]; then
+        printf paused >"$CONTAINER_STATE/$id"
+      fi
     done
     ;;
   unpause)
@@ -89,6 +95,7 @@ run_guard() {
     LOW_SAMPLES_REQUIRED=3 \
     SAMPLE_SECONDS=0 \
     DOCKER_TIMEOUT_SECONDS=1 \
+    DOCKER_TRANSITION_TIMEOUT_SECONDS=2 \
     DOCKER_BIN="$work/bin/docker" \
     LOGGER_BIN="$work/bin/logger" \
     SYSTEMD_NOTIFY_BIN="$work/bin/systemd-notify" \
@@ -120,6 +127,18 @@ if rg -q 'bbbbbbbbbbbb' "$work/calls"; then
   echo "guard touched a container outside its exact runner label" >&2
   exit 1
 fi
+[[ ! -e $state/guard/guarded ]]
+
+# Docker state changes have a longer bounded deadline than read-only queries.
+# A slow successful pause remains owned and can recover normally.
+state=$work/slow-pause
+new_state "$state"
+printf running >"$state/containers/cacacacacaca"
+printf '%s\n' 25 25 25 4 4 4 >"$state/pressure"
+run_guard "$state" "$state/pressure" 6 env PAUSE_DELAY_SECONDS=1.2
+[[ $(cat "$state/containers/cacacacacaca") == running ]]
+grep -Fxq 'pause cacacacacaca' "$work/calls"
+grep -Fxq 'unpause cacacacacaca' "$work/calls"
 [[ ! -e $state/guard/guarded ]]
 
 # A crash after pause but before ownership commit leaves pending intent. Restart
@@ -245,6 +264,25 @@ if rg -q '^pause eeeeeeeeeeee$|^unpause eeeeeeeeeeee$' "$work/calls"; then
   exit 1
 fi
 grep -q 'failed pause has ambiguous ownership' "$work/calls"
+
+# A transition that takes effect but does not respond before the longer
+# deadline still fails closed and never claims or resumes uncertain ownership.
+state=$work/pause-timeout
+new_state "$state"
+printf running >"$state/containers/edededededed"
+printf '%s\n' 25 25 25 >"$state/high"
+run_guard "$state" "$state/high" 3 env PAUSE_APPLY_BEFORE_DELAY=1 PAUSE_DELAY_SECONDS=3
+[[ ! -e $state/guard/paused/edededededed ]]
+[[ -e $state/guard/pending/edededededed ]]
+[[ $(cat "$state/containers/edededededed") == paused ]]
+printf '%s\n' 4 >"$state/low"
+run_guard "$state" "$state/low" 1 env
+[[ -e $state/guard/uncertain/edededededed ]]
+[[ -e $state/guard/guarded ]]
+if rg -q '^unpause edededededed$' "$work/calls"; then
+  echo "guard resumed a timed-out pause with ambiguous ownership" >&2
+  exit 1
+fi
 
 # Runtime malformed PSI fails closed by entering guarded state and pausing work.
 state=$work/malformed-runtime

@@ -195,10 +195,13 @@ in {
     assert lib.hasPrefix "io.alc.forgejo-runner=" legacyGuard.environment.RUNNER_CONTAINER_LABEL;
     assert legacyGuard.environment.HIGH_SAMPLES_REQUIRED == "5";
     assert legacyGuard.environment.LOW_SAMPLES_REQUIRED == "13";
+    assert legacyGuard.environment.DOCKER_TIMEOUT_SECONDS == "3";
+    assert legacyGuard.environment.DOCKER_TRANSITION_TIMEOUT_SECONDS == "15";
     assert xevGuard.wantedBy == ["multi-user.target"];
     assert lib.hasPrefix "io.alc.forgejo-runner=" xevGuard.environment.RUNNER_CONTAINER_LABEL;
     assert xevGuard.environment.HIGH_SAMPLES_REQUIRED == "5";
     assert xevGuard.environment.LOW_SAMPLES_REQUIRED == "13";
+    assert xevGuard.environment.DOCKER_TRANSITION_TIMEOUT_SECONDS == "15";
     assert lib.all (guard: guard.wantedBy == []) isolatedGuards;
     assert lib.all (guard: !(guard.environment ? RUNNER_CONTAINER_LABEL)) isolatedGuards;
     assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") isolatedGuards;
@@ -264,13 +267,24 @@ in {
     host = self.nixosConfigurations.xyz.config;
     monitored = host.services.storage-health-monitor.units;
     recent = builtins.filter (unit: unit.mode == "recent-success") monitored;
+    pressureGuards = builtins.filter (unit: unit.name == "forgejo-runner-io-pressure-guard.service") monitored;
     serviceFor = unit: host.systemd.services.${lib.removeSuffix ".service" unit.name};
   in
     assert lib.all (unit: builtins.length (serviceFor unit).serviceConfig.ExecStopPost == 1) recent;
+    assert pressureGuards
+    == [
+      {
+        name = "forgejo-runner-io-pressure-guard.service";
+        mode = "active-not-degraded";
+        maximumAgeSeconds = 129600;
+        allowPendingFirstTimer = false;
+      }
+    ];
       mkRepoCheck "storage-health-monitor-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.gnugrep] ''
         bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.sh \
           modules/nixos/services/storage-health-monitor/record-success.sh \
-          modules/nixos/services/storage-health-monitor/check-recent-success.sh
+          modules/nixos/services/storage-health-monitor/check-recent-success.sh \
+          modules/nixos/services/storage-health-monitor/check-active-unit.sh
       '';
 
   nix-deploy-inventory-contract = let

@@ -29,4 +29,5 @@ bash scripts/checks/test-publish-wolf-images.sh
 bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
 bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.sh \
   modules/nixos/services/storage-health-monitor/record-success.sh \
-  modules/nixos/services/storage-health-monitor/check-recent-success.sh
+  modules/nixos/services/storage-health-monitor/check-recent-success.sh \
+  modules/nixos/services/storage-health-monitor/check-active-unit.sh

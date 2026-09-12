@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (($# != 2)); then
-  echo 'usage: test-storage-health-monitor RECORD_SUCCESS CHECK_RECENT_SUCCESS' >&2
+if (($# != 3)); then
+  echo 'usage: test-storage-health-monitor RECORD_SUCCESS CHECK_RECENT_SUCCESS CHECK_ACTIVE_UNIT' >&2
   exit 2
 fi
 
 record_success=$1
 check_recent_success=$2
+check_active_unit=$3
 sandbox=$(mktemp -d)
 trap 'rm -rf -- "$sandbox"' EXIT
 state=$sandbox/state
@@ -91,7 +92,9 @@ set -euo pipefail
 if [[ ${FIXTURE_SYSTEMCTL_FAIL:-false} == true ]]; then
   exit 96
 fi
-if [[ $1 == show ]]; then
+if [[ $1 == is-active ]]; then
+  printf '%s\n' "${FIXTURE_ACTIVE_STATE:-active}"
+elif [[ $1 == show ]]; then
   property=$4
   if [[ $property == LastTriggerUSec &&
     ${FIXTURE_LAST_TRIGGER_FAIL:-false} == true ]]; then
@@ -104,6 +107,7 @@ if [[ $1 == show ]]; then
     InactiveEnterTimestampMonotonic) printf '%s\n' "${FIXTURE_FINISHED:-0}" ;;
     LastTriggerUSec) printf '%s\n' "${FIXTURE_LAST_TRIGGER:-}" ;;
     ActiveState) printf '%s\n' "${FIXTURE_TIMER_STATE:-inactive}" ;;
+    StatusText) printf '%s\n' "${FIXTURE_STATUS_TEXT-monitoring}" ;;
     *) exit 97 ;;
   esac
 else
@@ -118,6 +122,40 @@ printf '%s\n' "${FIXTURE_NOW:?}"
 EOF
 chmod +x "$sandbox/systemctl" "$sandbox/date"
 printf '200.00 0.00\n' >"$sandbox/uptime"
+
+STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
+  "$BASH" "$check_active_unit" fixture.service active
+STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
+  "$BASH" "$check_active_unit" fixture.service active-not-degraded
+if output=$(FIXTURE_ACTIVE_STATE=inactive STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
+  "$BASH" "$check_active_unit" fixture.service active-not-degraded); then
+  echo 'inactive service passed active health check' >&2
+  exit 1
+fi
+grep -Fqx 'fixture.service: required service is not active' <<<"$output"
+if output=$(FIXTURE_STATUS_TEXT='degraded: operator recovery required' \
+  STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
+  "$BASH" "$check_active_unit" fixture.service active-not-degraded); then
+  echo 'degraded service passed status health check' >&2
+  exit 1
+fi
+grep -Fqx 'fixture.service: degraded: operator recovery required' <<<"$output"
+if output=$(FIXTURE_STATUS_TEXT='' STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
+  "$BASH" "$check_active_unit" fixture.service active-not-degraded); then
+  echo 'empty service status passed status health check' >&2
+  exit 1
+fi
+grep -Fqx 'fixture.service: service status is empty or malformed' <<<"$output"
+if output=$(FIXTURE_STATUS_TEXT=$'monitoring\nunexpected' \
+  STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
+  "$BASH" "$check_active_unit" fixture.service active-not-degraded); then
+  echo 'multi-line service status passed status health check' >&2
+  exit 1
+fi
+grep -Fqx 'fixture.service: service status is empty or malformed' <<<"$output"
+FIXTURE_STATUS_TEXT='degraded: informational only' \
+  STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
+  "$BASH" "$check_active_unit" fixture.service active
 
 check_fixture() {
   FIXTURE_RESULT=${FIXTURE_RESULT:-success} \

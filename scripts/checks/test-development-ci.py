@@ -35,7 +35,12 @@ class DevelopmentCI(unittest.TestCase):
             "scripts/checks/test-xyz-runtime-storage-policy.sh": ROOT
             / "scripts/checks/test-xyz-runtime-storage-policy.sh",
         }
-        for name in ["record-success.sh", "check-recent-success.sh", "test-storage-health-monitor.sh"]:
+        for name in [
+            "record-success.sh",
+            "check-recent-success.sh",
+            "check-active-unit.sh",
+            "test-storage-health-monitor.sh",
+        ]:
             path = f"modules/nixos/services/storage-health-monitor/{name}"
             files[path] = ROOT / path
         for destination, source in files.items():
