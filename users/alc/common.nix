@@ -233,7 +233,7 @@ in
         "workspaceDirs"
         "sops-nix"
       ] ''
-        if ! ${pkgs.coreutils}/bin/env ${forgeMirrorCommandEnvironment} ${lib.getExe pkgs.forge-mirror} primary; then
+        if ! ${pkgs.coreutils}/bin/env PATH="${lib.makeBinPath [pkgs.git]}:$PATH" ${forgeMirrorCommandEnvironment} ${lib.getExe pkgs.forge-mirror} primary; then
           echo "forge-mirror primary could not update repository remotes; continuing" >&2
         fi
       '';
