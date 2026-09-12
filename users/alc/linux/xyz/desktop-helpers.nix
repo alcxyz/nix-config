@@ -236,6 +236,7 @@
       policies=${lib.escapeShellArg (builtins.toJSON gameWindowGeometryPolicies)}
       socket="''${XDG_RUNTIME_DIR:?}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
       repair_requested="''${XDG_RUNTIME_DIR:?}/hyprland-game-window-geometry-guard.requested"
+      display_requested="$repair_requested.display"
       tolerance=16
       provider="$(hyprctl status -j | jq -r '.configProvider // empty')"
 
@@ -250,6 +251,9 @@
           restore_monitor="$(jq -r '._guardRestoreMonitor' <<<"$client_json")"
           snap_full_height="$(jq -r '._guardSnapFullHeight' <<<"$client_json")"
           center_on_recovery="$(jq -r '._guardCenterOnRecovery' <<<"$client_json")"
+          # The longer wake window repairs containment/edge drift only. It
+          # must not repeatedly center intentional in-monitor positioning.
+          [[ "''${1:-launch}" != display ]] || center_on_recovery=false
           monitor_json="$(
             if [[ "$restore_monitor" == null ]]; then
               jq -ce --argjson id "$monitor_id" \
@@ -365,7 +369,7 @@
               monitoradded\>\>* | monitoraddedv2\>\>* \
                 | monitorremoved\>\>* | monitorremovedv2\>\>* \
                 | dpms\>\>*)
-                : >"$repair_requested"
+                : >"$display_requested"
                 ;;
               openwindow\>\>* | windowtitle\>\>* | windowtitlev2\>\>*)
                 address="''${event#*>>}"
@@ -393,27 +397,59 @@
         done
       }
 
+      update_recovery_deadlines() {
+        local snapshot signature display_event=false
+        if [[ -e "$display_requested" ]]; then
+          rm -f "$display_requested"
+          display_event=true
+        fi
+        # Hyprland can change dpmsStatus without emitting a socket event.
+        # Sample output state, not game geometry, while otherwise idle.
+        # Failed queries are unknown state: never turn them into fake wakes.
+        if snapshot="$(hyprctl monitors -j 2>/dev/null)" && signature="$(
+          jq -ce --argjson policies "$policies" '
+            if type != "array" then error("invalid monitor snapshot") else
+              [.[] | . as $m | select(any($policies[];
+                .restoreMonitor == null or .restoreMonitor == $m.name)) |
+                select(.dpmsStatus == true) |
+                {name, id, x, y, width, height, scale}] | sort_by(.name)
+            end
+          ' <<<"$snapshot" 2>/dev/null
+        )"; then
+          if [[ "$signature" != '[]' ]] && {
+            [[ "$signature" != "$last_display_signature" ]] || [[ "$display_event" == true ]]
+          }; then
+            display_until=$((SECONDS + 90))
+            echo "Output available or changed; armed 90-second geometry recovery"
+          fi
+          last_display_signature="$signature"
+        fi
+        if [[ -e "$repair_requested" ]]; then
+          rm -f "$repair_requested"
+          launch_until=$((SECONDS + 10))
+        fi
+      }
+
       watch_geometry_events &
       watcher_pid=$!
-      trap 'kill "$watcher_pid" 2>/dev/null || true; rm -f "$repair_requested"' EXIT
+      trap 'kill "$watcher_pid" 2>/dev/null || true; rm -f "$repair_requested" "$display_requested"' EXIT
       trap 'exit 0' HUP INT TERM
 
       # Repair a stale window after service/session startup, then stay active
       # briefly after relevant events so delayed XWayland geometry updates are
       # caught without continuously policing intentional window placement.
       : >"$repair_requested"
-      active_until=0
+      launch_until=0
+      display_until=0
+      last_display_signature=""
       while true; do
-        if [[ -e "$repair_requested" ]]; then
-          rm -f "$repair_requested"
-          active_until=$((SECONDS + 10))
+        update_recovery_deadlines
+        if ((SECONDS <= launch_until)); then
+          repair_geometry launch
+        elif ((SECONDS <= display_until)); then
+          repair_geometry display
         fi
-        if ((SECONDS <= active_until)); then
-          repair_geometry
-          sleep 1
-        else
-          sleep 1
-        fi
+        sleep 1
       done
     '';
   };

@@ -24,12 +24,15 @@ Retain only five independent compatibility measures:
 
 1. Keep the 49-inch gaming output selected as XWayland's primary output, with
    an event-driven repair when the output layout changes.
-2. Use an event-scoped geometry guard for explicitly matched games. For a short
-   ten-second window after session/output events or a newly identified game
-   window, center a matching floating game on the gaming output only while
-   its dedicated workspace is on that output. Preserve window size. Ignore
-   repeated title notifications for an already identified window and leave
-   games moved to another workspace alone.
+2. Use an event-scoped geometry guard for explicitly matched games. Center a
+   newly identified game for ten seconds. Independently sample the gaming
+   output's availability and geometry once per second, since display power
+   transitions need not emit socket events. When the output returns or its
+   geometry changes, arm a separate 90-second containment/vertical-edge repair
+   window. Do not repeatedly center an already-contained window during this
+   longer window. Apply repairs only while the game's dedicated workspace is
+   on the gaming output. Preserve size, ignore repeated title notifications
+   for an already identified window, and leave other workspaces alone.
 3. Route exact Battle.net and Heroes windows silently to the unpinned gaming
    workspace 8. This rule changes no geometry, focus, fullscreen, or pointer
    state and does not bind the workspace to an output.
@@ -72,6 +75,9 @@ introduced one layer at a time.
   is expected and the initial game-window identification. Launching a game
   long after wake must not miss recovery merely because the launcher stayed
   open. Workspace routing alone cannot repair stale client coordinates.
+- Output-state sampling is continuous, but window correction is not. Failed
+  monitor queries are unknown state, not synthetic disconnect/reconnect events.
+  A launch event cannot shorten an active display-recovery deadline.
 - The game matcher list is the shared, declarative extension point for geometry
   recovery and notification suppression.
 - The XWayland primary-output repair remains host- and output-layout-specific.

@@ -30,11 +30,13 @@ extract_function() {
 
 extract_function repair_geometry >"$TMP/repair-geometry.sh"
 extract_function watch_geometry_events >"$TMP/watch-geometry-events.sh"
+extract_function update_recovery_deadlines >"$TMP/update-recovery-deadlines.sh"
 # shellcheck disable=SC2016 # Match the literal production variable reference.
 sed -i 's/: >"$repair_requested"/arm_repair/' "$TMP/watch-geometry-events.sh"
 
 [[ -s "$TMP/repair-geometry.sh" ]] || fail 'could not extract repair_geometry'
 [[ -s "$TMP/watch-geometry-events.sh" ]] || fail 'could not extract watch_geometry_events'
+[[ -s "$TMP/update-recovery-deadlines.sh" ]] || fail 'could not extract update_recovery_deadlines'
 
 # The policy and client names are intentionally synthetic. The geometry mirrors
 # the stacked-output failure that this guard is meant to contain.
@@ -47,20 +49,24 @@ provider=legacy
 monitors_json='[{"id":1,"name":"DP-1","x":0,"y":1456,"width":5120,"height":1440,"dpmsStatus":true},{"id":2,"name":"DP-2","x":0,"y":0,"width":2560,"height":1440,"dpmsStatus":true}]'
 clients_json='[]'
 dispatch_log="$TMP/dispatch.log"
+monitor_query_succeeds=true
 
 hyprctl() {
   case "$1 ${2:-}" in
-    'monitors -j') printf '%s\n' "$monitors_json" ;;
-    'clients -j') printf '%s\n' "$clients_json" ;;
-    'dispatch movewindowpixel')
-      printf '%s\n' "$3" >>"$dispatch_log"
-      printf 'ok\n'
-      ;;
-    'eval '*)
-      printf '%s\n' "$2" >>"$dispatch_log"
-      printf 'ok\n'
-      ;;
-    *) fail "unexpected hyprctl call: $*" ;;
+  'monitors -j')
+    [[ "$monitor_query_succeeds" == true ]] || return 1
+    printf '%s\n' "$monitors_json"
+    ;;
+  'clients -j') printf '%s\n' "$clients_json" ;;
+  'dispatch movewindowpixel')
+    printf '%s\n' "$3" >>"$dispatch_log"
+    printf 'ok\n'
+    ;;
+  'eval '*)
+    printf '%s\n' "$2" >>"$dispatch_log"
+    printf 'ok\n'
+    ;;
+  *) fail "unexpected hyprctl call: $*" ;;
   esac
 }
 
@@ -123,6 +129,73 @@ assert_no_move 'output with DPMS disabled' 1678 1454 8 true 0
 monitors_json=$(jq 'map(if .name == "DP-1" then .dpmsStatus = true else . end)' <<<"$monitors_json")
 assert_no_move 'workspace on another output' 1678 1454 8 true 0 2
 
+# Display recovery preserves intentional horizontal placement. It only repairs
+# the small vertical drift seen after DPMS, and leaves contained placement alone.
+: >"$dispatch_log"
+clients_json=$(client 1678 1454 8 true 0)
+repair_geometry display >/dev/null
+[[ "$(<"$dispatch_log")" == 'exact 1678 1456,address:0xabc' ]] ||
+  fail "display recovery did not preserve horizontal placement: '$(<"$dispatch_log")'"
+
+: >"$dispatch_log"
+clients_json=$(client 1200 1456 8 true 0)
+repair_geometry display >/dev/null
+[[ ! -s "$dispatch_log" ]] ||
+  fail "display recovery moved fully contained placement: '$(<"$dispatch_log")'"
+
+# Launch recovery retains the lifecycle contract and centers the same placement.
+assert_move 'launch recovery centers contained off-center placement' \
+  'exact 840 1456,address:0xabc' 1200 1456 8 true 0
+
+# Exercise deadline updates without relying on wall-clock sleeps. A transition
+# from no watched output to an available one must arm recovery even when no
+# compositor event was emitted and considerable time has passed.
+# shellcheck disable=SC2034 # Used by the sourced production function.
+display_requested="$TMP/display-requested"
+# shellcheck disable=SC2034 # Used by the sourced production function.
+repair_requested="$TMP/repair-requested"
+# shellcheck source=/dev/null
+source "$TMP/update-recovery-deadlines.sh"
+
+display_until=0
+launch_until=0
+last_display_signature=''
+monitors_on=$monitors_json
+monitors_json=$(jq 'map(if .name == "DP-1" then .dpmsStatus = false else . end)' <<<"$monitors_on")
+SECONDS=5
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 0 && "$last_display_signature" == '[]' ]] ||
+  fail 'absent watched monitor armed display recovery'
+
+monitors_json=$monitors_on
+SECONDS=500
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 590 ]] ||
+  fail "off-to-on transition without event armed until $display_until; expected 590"
+
+SECONDS=510
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 590 ]] ||
+  fail "unchanged available monitor extended deadline to $display_until"
+
+monitor_query_succeeds=false
+last_signature=$last_display_signature
+display_until=0
+SECONDS=600
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 0 && "$last_display_signature" == "$last_signature" ]] ||
+  fail 'failed monitor query fabricated a wake or replaced the last known state'
+monitor_query_succeeds=true
+
+display_until=700
+: >"$repair_requested"
+SECONDS=650
+update_recovery_deadlines >/dev/null
+[[ "$launch_until" == 660 ]] ||
+  fail "launch marker armed until $launch_until; expected 660"
+[[ "$display_until" == 700 ]] ||
+  fail "launch marker shortened display deadline to $display_until"
+
 # Exercise event identification separately. A matching window may arm the guard
 # once, repeated title events must not re-arm it, and closing it resets its
 # lifetime so a later open can arm the guard again.
@@ -149,7 +222,6 @@ EOF
 chmod +x "$TMP/bin/socat"
 sed -i "1s|.*|#!$(command -v bash)|" "$TMP/bin/socat"
 
-repair_requested="$TMP/repair-requested"
 # shellcheck disable=SC2034 # Used by the sourced production function.
 socket="$TMP/mock.sock"
 clients_json=$(client 840 1456 8 true 0 | jq '.[0].address = "0x222"')
