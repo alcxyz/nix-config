@@ -38,10 +38,10 @@ nix-secrets/shared/
 
 ```nix
 home.file."AGENTS.md".source = mkOutOfStoreSymlink
-  "${homeDirectory}/nix/nix-secrets/shared/AGENTS.md";
+  "${homeDirectory}/src/infra/nix-secrets/shared/AGENTS.md";
 
 home.file.".claude/CLAUDE.md".source = mkOutOfStoreSymlink
-  "${homeDirectory}/nix/nix-secrets/shared/claude/CLAUDE.md";
+  "${homeDirectory}/src/infra/nix-secrets/shared/claude/CLAUDE.md";
 ```
 
 ### Sync rules
