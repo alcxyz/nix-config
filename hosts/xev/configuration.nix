@@ -182,10 +182,9 @@
     isolatedDocker.enable = true;
     resourcePolicy.enable = true;
     name = "xev";
-    # Keep CI admission serial on a host that also serves the Kubernetes
-    # control plane and storage. Other eligible runners can consume queued
-    # work without allowing one poller to admit a local build burst.
-    capacity = 1;
+    # Let independent jobs share the existing aggregate resource budget; the
+    # host-wide CPU, memory, and I/O limits remain unchanged.
+    capacity = 2;
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"

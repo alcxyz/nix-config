@@ -81,7 +81,7 @@
     isolatedDocker.enable = true;
     resourcePolicy.enable = true;
     name = "nex";
-    capacity = 1;
+    capacity = 2;
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "forgejo-docker-secondary:docker://node:20-bookworm"
