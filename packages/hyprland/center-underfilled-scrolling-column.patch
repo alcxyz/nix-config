@@ -41,7 +41,7 @@ diff --git a/src/layout/algorithm/tiled/scrolling/ScrollTapeController.cpp b/src
      if (index < m_strips.size())
          m_strips.erase(m_strips.begin() + index);
  }
-@@ -229,11 +234,11 @@ double CScrollTapeController::calculateCameraOffset(const CBox& usableArea, bool
+@@ -229,12 +234,12 @@ double CScrollTapeController::calculateCameraOffset(const CBox& usableArea, bool
          return m_offset;
  
      // if the content fits in viewport, center it
