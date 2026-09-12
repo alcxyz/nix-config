@@ -94,7 +94,7 @@ run_guard() {
     SYSTEMD_NOTIFY_BIN="$work/bin/systemd-notify" \
     MAX_ITERATIONS="$iterations" \
     PATH="$work/bin:$PATH" \
-    "$@" bash "$guard"
+    "$@" "$guard"
 }
 
 new_state() {

@@ -76,6 +76,13 @@ container_exists() {
   if ! matches=$(docker_command ps --all --no-trunc --quiet --filter "id=$1"); then return 2; fi
   [[ -n $matches ]]
 }
+directory_has_entries() {
+  local marker
+  for marker in "$1"/*; do
+    [[ -e $marker ]] && return 0
+  done
+  return 1
+}
 
 reconcile_pending() {
   local marker container state exists_status
@@ -168,7 +175,7 @@ resume_owned_batch() {
   abandon_ambiguous_resume || abandon_status=$?
   ((abandon_status == 0)) || return 2
   reconcile_pending || return 2
-  if compgen -G "$uncertain_dir/*" >/dev/null; then
+  if directory_has_entries "$uncertain_dir"; then
     degraded "paused runner containers with uncertain ownership require operator recovery"
     return 2
   fi
@@ -226,9 +233,9 @@ resume_owned_batch() {
 
 has_recovery_state() {
   [[ -e $state_dir/resume-intent ]] ||
-    compgen -G "$paused_dir/*" >/dev/null ||
-    compgen -G "$pending_dir/*" >/dev/null ||
-    compgen -G "$uncertain_dir/*" >/dev/null
+    directory_has_entries "$paused_dir" ||
+    directory_has_entries "$pending_dir" ||
+    directory_has_entries "$uncertain_dir"
 }
 
 if [[ -n ${PRESSURE_VALUES_FILE:-} ]]; then exec 8<"$PRESSURE_VALUES_FILE"; fi
