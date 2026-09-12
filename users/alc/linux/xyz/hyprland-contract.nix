@@ -165,11 +165,13 @@
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true" hostLegacyConfig
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true" hostLegacyConfig
         && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true" hostLegacyConfig
+        && lib.hasInfix "windowrule = border_size 0, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true" hostLegacyConfig
+        && builtins.match ".*name = \"heroes-gaming-workspace\",[^}]*}[^}]*border_size = 0,[^}]*}.*" hostLuaConfig != null
         && !lib.hasInfix ''suppress_event = "fullscreen"'' hostLuaConfig
         && !lib.hasInfix ''sync_fullscreen'' hostLuaConfig
         && !lib.hasInfix ''size = "3440 1440"'' hostLuaConfig
         && !lib.hasInfix ''move = "840 1456"'' hostLuaConfig;
-      message = "Steam, Battle.net, its Wine desktop helper, and Heroes may use only static workspace routing; geometry, focus, fullscreen, and pointer repairs must remain event-scoped.";
+      message = "Game rules must retain workspace routing and Heroes-only border removal; geometry, focus, fullscreen, and pointer repairs must remain event-scoped.";
     }
   ];
 }

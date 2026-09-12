@@ -146,6 +146,7 @@ in {
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true
       windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
+      windowrule = border_size 0, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
     extraLuaConfig = ''
@@ -229,6 +230,9 @@ in {
           xwayland = true,
         },
         workspace = "8 silent",
+        -- A monitor-height game plus decorations exceeds the work area.
+        -- Floating workspace moves otherwise clamp it upward by the border.
+        border_size = 0,
       })
 
       hl.bind("CTRL + SHIFT + R", hl.dsp.exec_cmd("moonlight-wolf-ui-lan"))

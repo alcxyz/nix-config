@@ -20,7 +20,7 @@ the output-transition geometry failure remained reproducible.
 
 ## Decision
 
-Retain only five independent compatibility measures:
+Retain the following independent compatibility measures:
 
 1. Keep the 49-inch gaming output selected as XWayland's primary output, with
    an event-driven repair when the output layout changes.
@@ -40,11 +40,18 @@ Retain only five independent compatibility measures:
    list is running.
 5. Give the Heroic Flatpak an explicit host timezone while it remains an
    available launcher.
+6. Disable the compositor border only for the exact XWayland Heroes window,
+   on any workspace. The floating layout fits decoration bounds into the
+   work area on workspace moves; a monitor-height client plus a border is
+   oversized and is shifted upward by the bottom border width. A controlled
+   border-disabled workspace-move test preserved the client position and size.
+   Prefer this decoration-only rule to post-move recentering, workspace
+   pinning, or a compositor-wide border change. Keep display recovery separate.
 
 The geometry guard must not change focus, workspace, floating/fullscreen state,
 or pointer confinement. It must not continuously enforce window placement. The
 only static Heroes of the Storm or Battle.net rules are the exact workspace-8
-routes above.
+routes and the Heroes-only border removal above.
 
 Each measure has one responsibility and must be removable without changing the
 others. New game-specific repairs require a reproduced failure and should be
