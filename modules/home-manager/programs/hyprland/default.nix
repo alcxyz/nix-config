@@ -430,7 +430,7 @@ in {
         [Desktop Entry]
         Name=Hyprland
         Comment=An intelligent dynamic tiling Wayland compositor
-        Exec=${pkgs.coreutils}/bin/env HYPRLAND_CONFIG_DIR=${luaConfigDir} ${pkgs.hyprland}/bin/start-hyprland -- --config ${luaConfigDir}/hyprland.lua
+        Exec=${pkgs.coreutils}/bin/env HYPRLAND_CONFIG_DIR=${luaConfigDir} ${pkgs.hyprland}/bin/start-hyprland --path ${pkgs.hyprland}/bin/Hyprland -- --config ${luaConfigDir}/hyprland.lua
         Type=Application
         DesktopNames=Hyprland
         Keywords=tiling;wayland;compositor;
