@@ -120,6 +120,9 @@ in
 
     # Update and switch aliases (run from the nix-config checkout).
     home.shellAliases = {
+      dms-update = "bash scripts/update-inputs/update-maintained.sh --dms-only";
+      apps-update = "bash scripts/update-inputs/update-maintained.sh";
+      # Compatibility with the former QA-specific name.
       qaup = "bash scripts/update-inputs/update-maintained.sh";
       hmsw = "home-manager switch --flake .#alc-${hostName}";
     };

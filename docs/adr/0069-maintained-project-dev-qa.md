@@ -28,9 +28,12 @@ Make the aggregate DankSession input follow the existing top-level input, so
 there is one revision for its source and package. Continue building each other
 plugin helper from the same source used for its widget.
 
-The `qaup` shell shortcut (also available as `just qa-update`) explicitly
+The `apps-update` shell shortcut (also available as `just apps-update`) explicitly
 refreshes the maintained app and nested plugin inputs from this checkout,
-without requiring a development shell. The scheduled DMS updater refreshes
+without requiring a development shell. `dms-update` (or `just dms-update`)
+refreshes only the DMS subset. These names describe their scope for both QA and
+released updates; `qaup` and `just qa-update` remain compatibility names for
+the full update. The scheduled DMS updater refreshes
 the DMS subset even when the aggregate commit has not changed, then validates
 the resulting consumer.
 Rebuild and switch commands continue to use committed or reviewed lockfiles;

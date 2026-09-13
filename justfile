@@ -110,5 +110,14 @@ update *INPUTS:
 
 # Refresh maintained dev projects only; inspect the lock diff before switching.
 [group("update")]
-qa-update:
+apps-update:
     bash scripts/update-inputs/update-maintained.sh
+
+# Refresh only the DMS bundle and maintained plugin inputs.
+[group("update")]
+dms-update:
+    bash scripts/update-inputs/update-maintained.sh --dms-only
+
+# Compatibility with the former QA-specific name.
+[group("update")]
+qa-update: apps-update
