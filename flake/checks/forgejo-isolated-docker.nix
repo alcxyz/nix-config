@@ -5,6 +5,10 @@
 if !pkgs.stdenv.isLinux
 then pkgs.runCommand "forgejo-runner-isolated-docker-linux-only" {} ''touch "$out";''
 else let
+  dummyOrphanMonitor = pkgs.writeShellApplication {
+    name = "forgejo-runner-orphan-check";
+    text = "exit 0";
+  };
   evaluate = isolated:
     (import "${pkgs.path}/nixos/lib/eval-config.nix" {
       system = pkgs.stdenv.hostPlatform.system;
@@ -25,6 +29,12 @@ else let
               secretsFile = pkgs.writeText "dummy-runner-secrets.yaml" "dummy: encrypted-fixture";
               isolatedDocker.enable = isolated;
               cachePressure.enable = true;
+              orphanMonitor = lib.mkIf isolated {
+                enable = true;
+                package = dummyOrphanMonitor;
+                tokenFile = "/run/dummy-orphan-api-token";
+                repositories = ["example/fixture"];
+              };
             };
           };
         })
@@ -34,6 +44,7 @@ else let
   legacy = evaluate false;
   runner = host.services.forgejo-actions-runner;
   services = host.systemd.services;
+  orphanMonitor = services.forgejo-runner-orphan-check.serviceConfig;
   daemonConfig = lib.last (lib.splitString "=" services.forgejo-runner-docker.serviceConfig.ExecStart);
   guard = services.forgejo-runner-io-pressure-guard.serviceConfig.ExecStart;
   guardSource = ../../modules/nixos/services/forgejo-actions-runner/aggregate-pressure-guard.sh;
@@ -44,6 +55,15 @@ in
   assert host.users.users.forgejo-builder.autoSubUidGidRange;
   assert host.users.users.forgejo-runner.extraGroups == [];
   assert services.forgejo-actions-runner.serviceConfig.SupplementaryGroups == [];
+  assert orphanMonitor.DynamicUser;
+  assert orphanMonitor.User == "forgejo-orphan-monitor";
+  assert !(orphanMonitor ? Group);
+  assert orphanMonitor.SupplementaryGroups == ["forgejo-runner"];
+  assert orphanMonitor.LoadCredential == ["api-token:/run/dummy-orphan-api-token"];
+  assert orphanMonitor.ProtectProc == "invisible";
+  assert orphanMonitor.ProcSubset == "pid";
+  assert orphanMonitor.PrivateMounts;
+  assert orphanMonitor.KeyringMode == "private";
   assert builtins.elem "forgejo-runner-docker.service" services.forgejo-actions-runner.requires;
   assert !(builtins.elem "docker.service" services.forgejo-actions-runner.requires);
   assert services.forgejo-runner-docker.serviceConfig.Slice == "forgejobuilds.slice";

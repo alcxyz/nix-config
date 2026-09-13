@@ -36,6 +36,8 @@ in {
 
   forgejo-runner-isolated-docker-contract = import ./forgejo-isolated-docker.nix {inherit lib pkgs;};
 
+  forgejo-orphan-monitor-credential-isolation = import ./forgejo-orphan-monitor-vm.nix {inherit pkgs;};
+
   forgejo-runner-pool-contract = let
     runnerHosts = {
       inherit

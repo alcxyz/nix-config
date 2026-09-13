@@ -17,7 +17,7 @@
   '';
 in {
   options.services.forgejo-actions-runner.orphanMonitor = {
-    enable = lib.mkEnableOption "read-only completed-task container monitoring";
+    enable = lib.mkEnableOption "completed-task container monitoring through the Docker CLI";
     package = lib.mkOption {
       type = lib.types.package;
       description = "Package providing forgejo-runner-orphan-check.";
@@ -51,8 +51,9 @@ in {
       path = [pkgs.docker];
       serviceConfig = {
         Type = "oneshot";
-        User = "forgejo-runner";
-        Group = "forgejo-runner";
+        DynamicUser = true;
+        User = "forgejo-orphan-monitor";
+        SupplementaryGroups = ["forgejo-runner"];
         ExecStart = check;
         LoadCredential = ["api-token:${cfg.tokenFile}"];
         TimeoutStartSec = "4min";
@@ -62,7 +63,11 @@ in {
         NoNewPrivileges = true;
         ProtectSystem = "strict";
         ProtectHome = true;
+        ProtectProc = "invisible";
+        ProcSubset = "pid";
         PrivateTmp = true;
+        PrivateMounts = true;
+        KeyringMode = "private";
         UMask = "0077";
       };
     };
