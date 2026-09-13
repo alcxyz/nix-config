@@ -46,8 +46,8 @@ Adopt:
    generate normal SSH match blocks for managed hosts. Keep special entries,
    Cloudflare fallback behavior, and one-off external machines explicit.
 5. **File-based public key catalogs.** Move hardcoded public SSH keys out of
-   shared NixOS modules into files grouped by purpose, then import those files
-   into login, mobile, operator, and distributed-build key lists.
+   shared NixOS modules into a private catalog grouped by purpose. The private
+   SSH policy supplies concrete account membership through standard NixOS options.
 6. **Host-local file splitting for large hosts.** Split oversized host configs,
    especially `xyz`, into local files such as `storage.nix`, `services.nix`,
    `virtualisation.nix`, `networking.nix`, and `users.nix`.
@@ -72,8 +72,8 @@ Implemented in `feat/adr-0043-0046-implementation`:
   destroyed symlink detection, and shellcheck
 - inventory-generated SSH client match blocks for managed hosts, while keeping
   special Cloudflare, Git, and external entries explicit
-- behavior-preserving public SSH key catalog in
-  `modules/nixos/common/ssh-keys.nix`
+- behavior-preserving SSH key catalog and access assignments owned by the
+  private `sshAccessPolicy` module (ADR-0032)
 - shared package-set and host-metadata ownership under `modules/shared/`
 - an explicit Linux operator Home Manager layer for infrastructure secrets,
   Kubernetes credentials, and Forgejo/Grove automation

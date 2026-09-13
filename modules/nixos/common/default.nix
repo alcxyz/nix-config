@@ -16,10 +16,6 @@
     inherit pkgs inputs;
   };
 
-  sshKeys = import ./ssh-keys.nix;
-  humanLoginKeys = sshKeys.groups.humanLogin sshKeys.keys;
-  mobileAppKeys = sshKeys.groups.mobileApps sshKeys.keys;
-  distributedBuildClientKeys = sshKeys.groups.distributedBuildClients sshKeys.keys;
   userHome = "/home/${username}";
   manageUserSshSecrets = !(hostInventory.skipManagedUserSshSecrets or false);
   shellPackages = {
@@ -39,6 +35,7 @@
 in {
   # ==================== Imports ====================
   imports = [
+    inputs.nix-secrets.nixosModules.sshAccessPolicy
     ../../shared/host-metadata.nix
     ../../shared/shell.nix
     ./distributed-build-client.nix
@@ -51,37 +48,6 @@ in {
 
   # ==================== Nix Configuration ====================
   programs.zsh.enable = config.alc.shell.enableZsh;
-
-  programs.ssh.knownHosts = {
-    xyz = {
-      hostNames = [
-        "xyz"
-        "192.168.1.10"
-      ];
-      publicKey = sshKeys.keys.xyz_host_ed25519;
-    };
-    nux = {
-      hostNames = [
-        "nux"
-        "192.168.1.15"
-      ];
-      publicKey = sshKeys.keys.nux_host_ed25519;
-    };
-    xev = {
-      hostNames = [
-        "xev"
-        "192.168.1.13"
-      ];
-      publicKey = sshKeys.keys.xev_host_ed25519;
-    };
-    nex = {
-      hostNames = [
-        "nex"
-        "192.168.1.16"
-      ];
-      publicKey = sshKeys.keys.nex_host_ed25519;
-    };
-  };
 
   nix = {
     settings = {
@@ -166,18 +132,10 @@ in {
           "pcscd"
           "docker"
         ];
-
-        openssh.authorizedKeys.keys =
-          [
-          ]
-          ++ humanLoginKeys ++ mobileAppKeys;
       };
 
       root = {
         shell = pkgs.bashInteractive;
-        openssh.authorizedKeys.keys =
-          humanLoginKeys
-          ++ lib.optionals (builtins.elem hostName ["xev" "xyz"]) distributedBuildClientKeys;
       };
     };
   };

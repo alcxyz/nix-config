@@ -12,7 +12,7 @@ This repo manages four hosts across three architectures with significant shared 
 
 Configuration is organised into four tiers, composed via explicit `imports` in each host's `configuration.nix`:
 
-**Tier 1 — Common base** (`modules/nixos/common/default.nix`): Applied to every host. Nix daemon settings, binary caches, SSH authorized keys, user/group definitions, core services (openssh, pipewire, bluetooth), sops-nix bootstrap, fonts, locale, keyboard, bootloader.
+**Tier 1 — Common base** (`modules/nixos/common/default.nix`): Applied to every host. Nix daemon settings, binary caches, private SSH policy integration, user/group definitions, core services (openssh, pipewire, bluetooth), sops-nix bootstrap, fonts, locale, keyboard, bootloader.
 
 **Tier 2 — Role** (`modules/nixos/common/{desktop,server}.nix`): Applied by host function. `desktop.nix` adds Hyprland, the display manager, Docker defaults, kanata, and desktop packages. GPU driver selection, display identity, and GPU container policy are supplied by explicit host hardware/private modules. `server.nix` adds server packages and server defaults. Optional capabilities such as distributed-build client credentials live in separate explicit modules.
 

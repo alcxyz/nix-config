@@ -1,127 +1,47 @@
 # ADR-0032: SSH Key Ownership and Deployment
 
-**Status:** Accepted
+**Status:** Accepted, redacted
 **Date:** 2026-05-03
-**Applies to:** `modules/nixos/common/default.nix`, `modules/nixos/common/distributed-build-client.nix`, `users/alc/common.nix`, `nix-secrets`
+**Applies to:** common NixOS configuration, Home Manager, private SSH policy
 
 ## Context
 
-SSH keys in this setup serve several different purposes:
-
-- inbound login authorization for `alc` and `root`
-- per-host private identity for the `alc` user
-- operator SSH identities for publishing and deploy workflows
-- distributed-build authentication from server hosts to `xyz`
-
-These were previously easy to conflate. Some root host keys were authorized
-broadly while trying to make remote builds work, and unmanaged
-`~/.ssh/authorized_keys` files contained duplicate entries already declared by
-NixOS.
-
-The system needs to support rebuilding machines from the flake, including
-`nux`, `rpi0`, and future server hosts that should build on `xyz`, without
-spreading root keys or operator private keys more broadly than needed.
+Inbound login authorization, host-local identities, operator credentials and
+distributed-build authentication have different owners and lifecycles. Keeping
+them separate avoids accidental expansion of access when adding a consumer.
 
 ## Decision
 
-Inbound SSH authorization is NixOS-managed system policy. It belongs in:
+Inbound SSH authorization is NixOS-managed system policy through
+`users.users.<name>.openssh.authorizedKeys`. Home Manager does not own the normal
+inbound authorization file.
 
-```nix
-users.users.<name>.openssh.authorizedKeys.keys
-```
+The private `sshAccessPolicy` module owns the concrete public-key catalog,
+known-host mappings and account authorization assignments. The public common
+module imports that policy and retains generic system configuration. The
+extraction preserves the existing generated access policy; it does not grant or
+revoke access.
 
-The user-level `~/.ssh/authorized_keys` file is not managed by Home Manager and
-should not be used for normal declarative access. Existing unmanaged files may
-temporarily remain only for extra local entries while they are migrated into
-NixOS.
-
-On NixOS, `alc` user private keys are system sops-nix managed from per-host
-SOPS files. They are intentionally deployed by the system activation, not Home
-Manager, so a first remote deploy installs the user SSH identity before Home
-Manager needs it for user-level SOPS decryption:
-
-```text
-nix-secrets/hosts/<host>/secrets.yaml
-  ssh_id_ed25519
-  ssh_id_ed25519.pub
-```
-
-NixOS deploys those to:
-
-```text
-~/.ssh/id_ed25519
-~/.ssh/id_ed25519.pub
-```
-
-On Linux, Home Manager uses `~/.ssh/id_ed25519` as a SOPS SSH identity for
-user/operator secrets after the system layer has installed it. On Darwin, the
-existing user-level Home Manager path remains in use.
-
-Operator SSH identities are stored separately from host-local identities:
-
-```text
-nix-secrets/operators/ssh_keys.yaml
-```
-
-These are deployed only to hosts that need operator workflows, currently `xyz`.
-
-Distributed-build keys are purpose-specific root-owned keys. Server hosts store
-their build-client key in their own host SOPS file as:
-
-```text
-ssh_buildhost_xyz
-ssh_buildhost_xyz.pub
-```
-
-`modules/nixos/common/distributed-build-client.nix` deploys these to:
-
-```text
-/root/.ssh/id_buildhost_xyz
-/root/.ssh/id_buildhost_xyz.pub
-```
-
-`xyz` authorizes only the matching build public keys for `root@xyz`. Generic
-`root@host` keys are not used as distributed-build credentials.
+Host-local identities, operator identities and dedicated build-client identities
+retain separate lifecycles. System-managed identities needed before user
+activation remain a system responsibility. Private storage locations, membership,
+rotation order and deployment procedures are documented in `nix-secrets`.
 
 ## Alternatives Considered
 
-Manage `~/.ssh/authorized_keys` with Home Manager:
-
-Rejected. Inbound SSH authorization is host/system access policy. It should be
-present after a NixOS system rebuild even if Home Manager has not run yet.
-
-Reuse normal root SSH keys for distributed builds:
-
-Rejected. Build authentication is a distinct purpose and should have dedicated
-keys with narrowly scoped authorization.
-
-Put operator SSH keys in host-specific SOPS files:
-
-Rejected for general operator identities. Host files are appropriate for
-machine-local identity; operator keys have a separate lifecycle and should be
-auditable as operator credentials. Deployment remains host-scoped from
-`nix-config`.
+- **Manage inbound authorization through Home Manager:** rejected because
+  system access must not depend on a later user activation.
+- **Reuse general host identities for unrelated build or operator workflows:**
+  rejected because separate purposes need independently reviewable access.
+- **Keep concrete access assignments in the public common module:** rejected
+  under the private-material boundary; standard NixOS interfaces remain public.
 
 ## Consequences
 
-Adding a new server host that should build on `xyz` requires:
+SSH policy remains declarative and available during system activation. Changes
+to private key membership or host mappings require review in the private owner.
+Source extraction must compare generated known-host and account authorization
+outputs across all configured NixOS hosts before adoption.
 
-1. Generate/import a dedicated build key into `nix-secrets/hosts/<host>/secrets.yaml`.
-2. Add the public key to `xyzDistributedBuildClientKeys` in `modules/nixos/common/default.nix`.
-3. Ensure the host enables `alc.distributedBuildClient`.
-4. Rebuild the new host before tightening or relying on `xyz` authorization.
-
-Rebuild ordering matters when rotating build keys:
-
-1. Rebuild build-client hosts first so their new private keys are deployed.
-2. Rebuild `xyz` so `root@xyz` authorizes the new public keys.
-
-The model reduces blast radius:
-
-- mobile app keys authorize only `alc`
-- human admin keys authorize `alc` and `root`
-- distributed-build keys authorize only `root@xyz`
-- operator private keys are deployed only to operator hosts
-
-Unmanaged `~/.ssh/authorized_keys` files should be empty or absent once their
-remaining extra public keys have been migrated into NixOS.
+Current-tree redaction does not remove earlier published versions. Historical
+source and tracker review remain separately tracked in the private audit.
