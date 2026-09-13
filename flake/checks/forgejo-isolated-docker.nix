@@ -49,6 +49,7 @@ in
   assert services.forgejo-runner-docker.serviceConfig.Slice == "forgejobuilds.slice";
   assert services.forgejo-runner-docker.serviceConfig.Delegate;
   assert services.forgejo-runner-docker.serviceConfig.OOMPolicy == "continue";
+  assert services.forgejo-runner-docker.serviceConfig.LimitNOFILE == "infinity";
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.bindsTo;
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.after;
   assert builtins.elem "forgejo-runner-resource-policy.service" services.forgejo-runner-io-pressure-guard.requires;
@@ -74,7 +75,9 @@ in
       nativeBuildInputs = [pkgs.bash pkgs.jq pkgs.python3 pkgs.shellcheck];
     } ''
       jq --exit-status \
-        '.["storage-driver"] == "overlay2" and .["data-root"] == "/var/lib/forgejo-docker/overlay2"' \
+        '.["storage-driver"] == "overlay2"
+          and .["data-root"] == "/var/lib/forgejo-docker/overlay2"
+          and .["default-ulimits"].nofile == {"Hard": 65536, "Name": "nofile", "Soft": 65536}' \
         "$daemonConfig" >/dev/null
       shellcheck ${guardSource}
       python3 ${tests} ${guard}

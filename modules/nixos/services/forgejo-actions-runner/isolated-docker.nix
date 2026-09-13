@@ -16,6 +16,11 @@
     group = "root"; # Root inside the user namespace maps to the service's group.
     "storage-driver" = "overlay2";
     "exec-opts" = ["native.cgroupdriver=cgroupfs"];
+    "default-ulimits".nofile = {
+      Name = "nofile";
+      Soft = 65536;
+      Hard = 65536;
+    };
   };
   guard = pkgs.writeShellApplication {
     name = "forgejo-runner-aggregate-pressure-guard";
