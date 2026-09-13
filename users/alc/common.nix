@@ -98,10 +98,24 @@ in
     colorscheme.name = "catppuccin-mocha";
 
     # ==================== User Environment ====================
+    # Keep interface language English while using Norwegian dates for this
+    # account only. Empty LC_ALL lets individual locale categories take effect,
+    # including in sessions that inherited the old all-English override.
+    home.language.time = lib.mkIf (accountUsername == username) "nb_NO.UTF-8";
+
     home.sessionVariables = {
       DIRENV_LOG_FORMAT = "";
       CGO_ENABLED = "1";
       FLAKE = configDir;
+      LC_ALL = lib.mkIf (accountUsername == username) (lib.mkForce "");
+      LOCALE_ARCHIVE =
+        lib.mkIf (accountUsername == username && pkgs.stdenv.isLinux)
+        "${pkgs.glibcLocales}/lib/locale/locale-archive";
+    };
+
+    programs.nushell.environmentVariables = lib.mkIf (accountUsername == username) {
+      LC_ALL = lib.mkForce "";
+      LC_TIME = config.home.language.time;
     };
 
     # Update and switch aliases (run from the nix-config checkout).
