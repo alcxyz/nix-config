@@ -83,7 +83,7 @@ in {
         # A descendant OOM kill must not make systemd stop the whole service.
         # Kernel victim selection still applies within the shared memory budget.
         OOMPolicy = "continue";
-        LimitNOFILE = "infinity";
+        LimitNOFILE = 1048576;
         LimitNPROC = "infinity";
         LimitCORE = 0;
       };

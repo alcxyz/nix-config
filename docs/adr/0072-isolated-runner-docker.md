@@ -30,10 +30,10 @@ service after a controller failure; it must not silently resume interrupted jobs
 
 All runner clients, mounted sockets and cache maintenance use the dedicated
 endpoint. The module stays disabled by default; enable each host after runtime qualification.
-The daemon gives containers a finite default open-file limit, while its own
-service limit remains unbounded. This keeps inherited host limits from making
-portable descriptor cleanup paths unreasonably expensive inside jobs and nested
-build workers.
+The daemon gives containers a 65,536 default open-file limit and has a separate
+1,048,576 service limit. Docker's embedded build executor can inherit the daemon
+limit instead of the container default. These bounds keep inherited host limits
+from making portable descriptor cleanup paths unreasonably expensive.
 
 The system service owns the aggregate boundary. Rootless Docker may report no
 per-container cgroup support without a user service manager; those individual

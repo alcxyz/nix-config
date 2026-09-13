@@ -49,7 +49,7 @@ in
   assert services.forgejo-runner-docker.serviceConfig.Slice == "forgejobuilds.slice";
   assert services.forgejo-runner-docker.serviceConfig.Delegate;
   assert services.forgejo-runner-docker.serviceConfig.OOMPolicy == "continue";
-  assert services.forgejo-runner-docker.serviceConfig.LimitNOFILE == "infinity";
+  assert services.forgejo-runner-docker.serviceConfig.LimitNOFILE == 1048576;
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.bindsTo;
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.after;
   assert builtins.elem "forgejo-runner-resource-policy.service" services.forgejo-runner-io-pressure-guard.requires;
