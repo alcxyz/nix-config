@@ -99,14 +99,15 @@ streaming has a separate purpose and acceptance contract even where clients over
 
 1. Use the extracted modules as the foundation for subsequent changes; keep
    direct-launch qualification in #267 separate from new game installation.
-2. Select one additional game with supplied installation media to establish a
-   repeatable installation and launch pattern alongside the Totem Quest example.
+2. Let concrete launcher or game requirements determine the next change. Steam,
+   Heroic, and Battle.net already manage their games; a custom installer is an
+   optional response to a specific need, not the required next step.
 3. Review shared needs across workstation, family-gaming, and streaming clients
    before introducing a common gaming profile.
 4. **RetroDECK last.** Its proper reconfiguration is deferred. Inventory its
    mutable state and decide emulator settings, controller mappings, library
    references, and save integration only when that work is explicitly started.
 
-The next-game backlog is tracked in [#396](https://git.alc.xyz/alcxyz/nix-config/issues/396).
-Game selection and installation details remain unresolved. RetroDECK
+Future gaming needs are tracked in [#396](https://git.alc.xyz/alcxyz/nix-config/issues/396).
+No additional game or custom installation requirement has been selected. RetroDECK
 reconfiguration and deployment remain subsequent work.
