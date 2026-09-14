@@ -57,6 +57,12 @@ See [ADR-0044](docs/adr/0044-host-inventory-role-model-for-new-machines.md),
 [ADR-0045](docs/adr/0045-xev-and-xps-kubernetes-node-onboarding.md), and
 [ADR-0046](docs/adr/0046-remotely-managed-family-gaming-laptop.md).
 
+### Gaming
+
+See the [gaming configuration map](docs/gaming/README.md) for local launchers,
+RetroDECK, Steam streaming, installation tooling, repository ownership, and
+remaining configuration gaps.
+
 ### XPS media center
 
 XPS also provides a controller-first couch session for browsing, Moonlight,
