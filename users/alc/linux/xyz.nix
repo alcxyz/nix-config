@@ -14,12 +14,7 @@
   kdeConnectScrollThrottle =
     pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-scroll-throttle"
     {};
-  gamingWindowMatchers = [
-    {
-      classRegex = "^steam_app_default$";
-      titleRegex = "^Heroes of the Storm$";
-    }
-  ];
+  gamingWindowMatchers = gamingDesktop.windowMatchers;
   gameWindowGeometryPolicies = map (matcher:
     matcher
     // {
@@ -29,34 +24,8 @@
       centerOnRecovery = true;
     })
   gamingWindowMatchers;
-  protonGe10_4 =
-    (pkgs.proton-ge-bin.overrideAttrs (finalAttrs: _: {
-      version = "GE-Proton10-4";
-      src = pkgs.fetchzip {
-        url = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${finalAttrs.version}/${finalAttrs.version}.tar.gz";
-        hash = "sha256-Si/CQ2PINfhmsC+uW3iFBUoSczZdkqwCZ8FAFuipu68=";
-      };
-    })).steamcompattool;
-  battleNetPrefix = "/ext4/games/Heroic/Prefixes/default/Battle.net";
-  battleNetEnvironment = {
-    DRI_PRIME = "1";
-    DXVK_CONFIG = "dxgi.maxFrameRate = 120";
-    DXVK_FRAME_RATE = "120";
-    TZ = "Europe/Oslo";
-    # Avoid the pinned Proton's Bluetooth-driver loop; host input uses separate drivers.
-    WINEDLLOVERRIDES = "winebth.sys=";
-    __GLX_VENDOR_LIBRARY_NAME = "nvidia";
-    __NV_PRIME_RENDER_OFFLOAD = "1";
-  };
-  battleNetIcon = pkgs.fetchurl {
-    name = "battle-net.png";
-    url = "https://lutris.net/games/icon/battlenet.png";
-    hash = "sha256-Otx9a99ZJx++nqBj/5ljwALoFFoxRPXao3zFaZpGyao=";
-  };
-  heroesProfileIcon = pkgs.fetchurl {
-    name = "heroes-profile.png";
-    url = "https://raw.githubusercontent.com/Heroes-Profile/HeroesProfile.Uploader/f73fa675d197875237a8973c2f2a899b293b6f09/Heroesprofile.Uploader.Windows/Resources/heroesprofilelogo.png";
-    hash = "sha256-T1XhH5DmAAFvFJhD3qbwaqXIvHczbt77Wi7kPZuuo+0=";
+  gamingDesktop = import ./xyz/gaming/desktop.nix {
+    inherit lib xwaylandPrimaryOutput gameWindowGeometryGuard;
   };
   desktopHelpers = import ./xyz/desktop-helpers.nix {
     inherit config lib pkgs gameWindowGeometryPolicies;
@@ -90,6 +59,8 @@ in {
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
     "${configDir}/modules/home-manager/services/devlog/default.nix"
+    ./xyz/gaming
+    gamingDesktop.module
     ./xyz/t3code.nix
 
     inputs.hyprscratch.homeModules.default
@@ -144,11 +115,7 @@ in {
       monitor = DP-1, 5120x1440@120, 0x1456, 1
       monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
       windowrule = opacity 1.0 override 1.0 override 1.0 override, match:workspace name:special:special
-      windowrule = workspace 7 silent, match:class ^steam$, match:xwayland true
-      windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true
-      windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true
-      windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
-      windowrule = border_size 0, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
+      ${gamingDesktop.legacyRules}
       bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
     '';
     extraLuaConfig = ''
@@ -194,48 +161,7 @@ in {
         scrolling_width = 0.5,
       })
 
-      -- Launcher ecosystems use separate unpinned workspaces, not fixed
-      -- outputs. Route only the Steam client; games remain opt-in by exact
-      -- identity. Geometry, focus, fullscreen, and pointer behavior remain
-      -- outside static rules.
-      hl.window_rule({
-        name = "steam-client-workspace",
-        match = {
-          class = "^steam$",
-          xwayland = true,
-        },
-        workspace = "7 silent",
-      })
-      hl.window_rule({
-        name = "battle-net-gaming-workspace",
-        match = {
-          class = "^steam_app_default$",
-          title = "^Battle[.]net$",
-          xwayland = true,
-        },
-        workspace = "8 silent",
-      })
-      hl.window_rule({
-        name = "wine-desktop-gaming-workspace",
-        match = {
-          class = "^steam_app_default$",
-          title = "^$",
-          xwayland = true,
-        },
-        workspace = "8 silent",
-      })
-      hl.window_rule({
-        name = "heroes-gaming-workspace",
-        match = {
-          class = "^steam_app_default$",
-          title = "^Heroes of the Storm$",
-          xwayland = true,
-        },
-        workspace = "8 silent",
-        -- A monitor-height game plus decorations exceeds the work area.
-        -- Floating workspace moves otherwise clamp it upward by the border.
-        border_size = 0,
-      })
+      ${gamingDesktop.luaRules}
 
       hl.bind("CTRL + SHIFT + R", hl.dsp.exec_cmd("moonlight-wolf-ui-lan"))
     '';
@@ -249,40 +175,6 @@ in {
       enable = true;
       videoCodec = "H.264";
       bitrateKbps = 60000;
-    };
-  };
-  programs.umuApps = {
-    enable = true;
-    apps = {
-      battle-net = {
-        displayName = "Battle.net";
-        comment = "Launch Battle.net directly through UMU";
-        icon = toString battleNetIcon;
-        prefix = battleNetPrefix;
-        executable = "${battleNetPrefix}/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net.exe";
-        protonPackage = protonGe10_4;
-        environment = battleNetEnvironment;
-        staleRecoveryWindowMatchers = [
-          {
-            classRegex = "^steam_app_default$";
-            titleRegex = "^Battle[.]net$";
-          }
-          {
-            classRegex = "^steam_app_default$";
-            titleRegex = "^Heroes of the Storm$";
-          }
-        ];
-      };
-      heroes-profile = {
-        displayName = "Heroes Profile";
-        comment = "Launch the Heroes Profile uploader in the Battle.net compatibility prefix";
-        icon = toString heroesProfileIcon;
-        prefix = battleNetPrefix;
-        executable = "${battleNetPrefix}/pfx/drive_c/users/steamuser/AppData/Local/Heroesprofile/Heroesprofile.Uploader.exe";
-        protonPackage = protonGe10_4;
-        role = "companion";
-        environment = battleNetEnvironment;
-      };
     };
   };
 
@@ -316,10 +208,6 @@ in {
     enable = true;
     autoStart = true;
   };
-  services.dms.autoDoNotDisturb = {
-    enable = true;
-    windowMatchers = gamingWindowMatchers;
-  };
   services.dms.settings = {
     audioVisualizerEnabled = false;
     scrollTitleEnabled = false;
@@ -342,34 +230,6 @@ in {
     enable = true;
     turnOffDisplaysOnLock = true;
     displayOffDelay = 360;
-  };
-  systemd.user.services.hyprland-xwayland-primary-output = {
-    Unit = {
-      Description = "Maintain the 49-inch display as XWayland primary";
-      BindsTo = ["wayland-wm@hyprland.desktop.service"];
-      After = ["wayland-wm@hyprland.desktop.service"];
-    };
-    Service = {
-      Type = "simple";
-      ExecStart = lib.getExe xwaylandPrimaryOutput;
-      Restart = "on-failure";
-      RestartSec = 1;
-    };
-    Install.WantedBy = ["wayland-wm@hyprland.desktop.service"];
-  };
-  systemd.user.services.hyprland-game-window-geometry-guard = {
-    Unit = {
-      Description = "Repair off-monitor game windows after output changes";
-      BindsTo = ["wayland-wm@hyprland.desktop.service"];
-      After = ["wayland-wm@hyprland.desktop.service"];
-    };
-    Service = {
-      Type = "simple";
-      ExecStart = lib.getExe gameWindowGeometryGuard;
-      Restart = "on-failure";
-      RestartSec = 1;
-    };
-    Install.WantedBy = ["wayland-wm@hyprland.desktop.service"];
   };
   services.waynergy = {
     enable = true;
