@@ -43,6 +43,8 @@
     DXVK_CONFIG = "dxgi.maxFrameRate = 120";
     DXVK_FRAME_RATE = "120";
     TZ = "Europe/Oslo";
+    # Avoid the pinned Proton's Bluetooth-driver loop; host input uses separate drivers.
+    WINEDLLOVERRIDES = "winebth.sys=";
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
     __NV_PRIME_RENDER_OFFLOAD = "1";
   };

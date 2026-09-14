@@ -79,6 +79,11 @@ remaining applications. Prefix cleanup or relocation is outside this decision.
   primary path may run at a time.
 - The pinned Proton release becomes a declarative dependency that must be
   updated explicitly after the launcher path is stable.
+- The direct Battle.net launchers disable Wine's Bluetooth driver (`winebth.sys`) to
+  avoid a sustained idle-CPU loop with the pinned runtime. Apply this override
+  to both the primary and companion launchers. Windows Bluetooth API support is
+  unavailable; host-managed input remains on the separate Wine input path.
+  Revisit this workaround when qualifying a newer Proton release.
 - GameMode is not requested by these launchers while the host has no GameMode
   daemon; an ineffective preload only adds startup errors.
 - Heroic continues to consume space and maintenance attention during the
