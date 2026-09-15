@@ -33,7 +33,7 @@
     };
 
     bn-bootstrap = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
