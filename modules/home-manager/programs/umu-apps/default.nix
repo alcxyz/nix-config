@@ -94,6 +94,12 @@
         description = "Additional environment shared by applications using this prefix.";
       };
 
+      networkAccess = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Allow networking. When false, isolate the entire UMU runtime in a new user/network namespace; cached runtime files are required. Only primary applications are supported offline.";
+      };
+
       useGameMode = lib.mkOption {
         type = lib.types.bool;
         default = false;
@@ -146,6 +152,7 @@
           && app.gameId == first.gameId
           && app.store == first.store
           && app.environment == first.environment
+          && app.networkAccess == first.networkAccess
       )
       apps
   ) (lib.attrValues prefixContracts);
@@ -171,6 +178,10 @@ in {
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = lib.all (app: app.networkAccess || app.role == "primary") (lib.attrValues cfg.apps);
+        message = "Offline UMU applications must be primary applications; companion namespace sharing is unsupported";
+      }
       {
         assertion = pkgs.stdenv.hostPlatform.isLinux;
         message = "programs.umuApps is supported only on Linux";

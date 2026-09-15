@@ -56,6 +56,15 @@ The pilot must:
 Heroic remains an explicit fallback until a separate decision resolves its
 remaining applications. Prefix cleanup or relocation is outside this decision.
 
+For standalone games explicitly requested to run offline, the module supports
+per-application `networkAccess = false`. It starts the entire UMU runtime in a
+new user/network namespace while retaining the user's UID. This fails closed
+and requires cached runtime files. Companion applications in these isolated
+prefixes are unsupported. Networking remains enabled by default, preserving
+Battle.net and Heroes of the Storm access. A global Heroic restriction was
+rejected because it would affect unrelated games; Heroic fallback launches
+remain outside the direct launcher's network policy.
+
 ## Alternatives Considered
 
 - **Keep Heroic as the only launcher** — Viable, but retains a mutable

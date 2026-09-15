@@ -102,7 +102,10 @@
     # The startup decision is complete. Do not make the lifetime of the
     # application itself exclude same-prefix companion launches.
     flock -u 9
-    exec ${runCommand} "$executable" ${lib.escapeShellArgs app.arguments}
+    ${lib.optionalString (!app.networkAccess) ''
+      export UMU_RUNTIME_UPDATE=0
+    ''}
+    exec ${lib.optionalString (!app.networkAccess) "${pkgs.util-linux}/bin/unshare --user --map-current-user --net -- "}${runCommand} "$executable" ${lib.escapeShellArgs app.arguments}
   '';
 
   runner = pkgs.writeShellApplication {

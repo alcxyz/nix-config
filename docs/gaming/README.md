@@ -30,7 +30,8 @@ remain centralized in [pkgsets.nix](../../modules/shared/pkgsets.nix), following
 | Direct Battle.net and Heroes Profile | [Battle.net launchers](../../users/alc/linux/xyz/gaming/battle-net.nix), [UMU module](../../modules/home-manager/programs/umu-apps/default.nix), [runner implementation](../../modules/home-manager/programs/umu-apps/application.nix) | Declarative Proton selection, launch environment, shared prefix, and service lifecycle exist. User confirmed Heroes of the Storm gameplay/input during the current compatibility work; broader qualification remains open. |
 | Heroic fallback | [xyz gaming](../../hosts/xyz/gaming.nix), [Heroic sideload module](../../modules/nixos/services/heroic-sideload/default.nix) | Existing Battle.net installation is registered with `manageGameConfig = false`; its per-game settings remain mutable. Both a package-catalog entry and Flatpak declarations exist. Their future disposition is unresolved. |
 | Totem Quest | [xyz gaming](../../hosts/xyz/gaming.nix), [madsil host](../../hosts/madsil/configuration.nix) | Both declare a source ZIP and Heroic entry. Installation and gameplay were not revalidated by this mapping. This is an existing example for future installation work. |
-| Additional games | No concrete titles or installer inputs supplied yet | Future backlog: identify each title, source media, installation method, runtime, writable data, and acceptance criteria before implementing it. |
+| Spider-Man Remastered | [Game module](../../users/alc/linux/xyz/gaming/spider-man.nix), [candidate notes](spider-man.md) | Reuses the working Heroic installation with pinned Proton. User accepted save loading, gameplay/input/audio, quit, and relaunch through the direct entry. Steam controller integration remains unverified. |
+| Further standalone games | No further titles selected yet | Try one or two more concrete games before deciding whether a shared workflow needs additional tooling. |
 | RetroDECK | [xyz host](../../hosts/xyz/configuration.nix) | Flatpak is declared. No dedicated emulator/controller/library/save configuration was found in the searched host, user, module, or documentation sources. Deferred until last; reconfiguration has not been tackled. Current mutable state was not inspected. |
 
 The Heroic sideload module can copy a supplied directory or extract a ZIP, merge
@@ -84,7 +85,8 @@ streaming has a separate purpose and acceptance contract even where clients over
 - [Host gaming module](../../hosts/xyz/gaming.nix): Steam, SteamHeadless host
   integration, and Heroic sideload definitions.
 - [User gaming entry point](../../users/alc/linux/xyz/gaming/default.nix): direct
-  application modules, currently Battle.net and its companion launcher.
+  application modules for Battle.net, its companion, Spider-Man Remastered,
+  Spider-Man 2, and Cyberpunk 2077.
 - [Gaming desktop fragments](../../users/alc/linux/xyz/gaming/desktop.nix): game
   matchers, window rules, notification suppression, and game recovery services.
   The parent composes the rule fragments in their original order and supplies
@@ -109,5 +111,7 @@ streaming has a separate purpose and acceptance contract even where clients over
    references, and save integration only when that work is explicitly started.
 
 Future gaming needs are tracked in [#396](https://git.alc.xyz/alcxyz/nix-config/issues/396).
-No additional game or custom installation requirement has been selected. RetroDECK
-reconfiguration and deployment remain subsequent work.
+The standalone entries use per-game network isolation. Cyberpunk additionally
+loads its bundled ICU libraries. See [standalone launcher notes](standalone.md)
+for qualification and scope. Further titles and any reusable installation
+workflow remain open decisions. RetroDECK remains last.

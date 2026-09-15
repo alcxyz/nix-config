@@ -434,16 +434,28 @@ in {
     # dependency context, never a path used to read or execute a runtime file.
     scriptFixture = name: text:
       pkgs.writeText name (builtins.unsafeDiscardStringContext text);
-    renderedScriptFixtures = [
-      (scriptFixture "umu-app-battle-net-run.sh" battleNetRunnerText)
-      (scriptFixture "umu-app-heroes-profile-run.sh" profileRunnerText)
-      (scriptFixture "umu-app-battle-net.sh" battleNetStarterText)
-      (scriptFixture "umu-app-heroes-profile.sh" profileStarterText)
-    ];
+    renderedScriptFixtures = lib.concatLists (lib.mapAttrsToList (name: application: [
+        (scriptFixture "umu-app-${name}-run.sh" application.runner.text)
+        (scriptFixture "umu-app-${name}.sh" application.starter.text)
+      ])
+      renderedApplications);
     malformedScriptFixture = pkgs.writeText "umu-app-malformed.sh" ''
       if true; then
     '';
   in
+    assert umuConfig.apps.battle-net.networkAccess;
+    assert umuConfig.apps.heroes-profile.networkAccess;
+    assert !(lib.hasInfix "--net --" battleNetRunnerText);
+    assert !(lib.hasInfix "--net --" profileRunnerText);
+    assert !umuConfig.apps.spider-man.networkAccess;
+    assert !umuConfig.apps.spider-man-couch.networkAccess;
+    assert !umuConfig.apps.spider-man-2.networkAccess;
+    assert !umuConfig.apps.cyberpunk-2077.networkAccess;
+    assert umuConfig.apps.cyberpunk-2077.environment.WINEDLLOVERRIDES == "icuuc,icuin=n";
+    assert lib.hasInfix "--user --map-current-user --net --" renderedApplications.spider-man-2.runner.text;
+    assert lib.hasInfix "--user --map-current-user --net --" renderedApplications.cyberpunk-2077.runner.text;
+    assert lib.hasInfix "--user --map-current-user --net --" renderedApplications.spider-man.runner.text;
+    assert lib.hasInfix "--user --map-current-user --net --" renderedApplications.spider-man-couch.runner.text;
     assert !(builtins.hasAttr "umu-app-battle-net-direct-qa" umuServices);
     assert !(builtins.hasAttr "umu-app-heroes-profile-direct-qa" umuServices);
     assert battleNetUnit.X-SwitchMethod == "keep-old";
