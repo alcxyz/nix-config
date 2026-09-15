@@ -65,6 +65,15 @@ Battle.net and Heroes of the Storm access. A global Heroic restriction was
 rejected because it would affect unrelated games; Heroic fallback launches
 remain outside the direct launcher's network policy.
 
+For standalone games added to Steam, `steamLauncher = true` exposes a stable
+foreground wrapper under `~/.local/bin/umu-app-<name>-steam`. It executes the
+same guarded UMU runner directly, so Steam retains the game process tree and
+can track its lifetime. Desktop entries continue using user services. This is
+an explicit exception to the desktop service lifecycle, not a replacement for
+Battle.net or its companion. Steam must treat the wrapper as a native command;
+UMU supplies Proton and preserves Steam's game identity. Steam Stop, controller,
+and overlay behavior require runtime acceptance independently.
+
 ## Alternatives Considered
 
 - **Keep Heroic as the only launcher** — Viable, but retains a mutable

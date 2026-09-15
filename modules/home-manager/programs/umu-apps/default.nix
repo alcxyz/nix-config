@@ -100,6 +100,12 @@
         description = "Allow networking. When false, isolate the entire UMU runtime in a new user/network namespace; cached runtime files are required. Only primary applications are supported offline.";
       };
 
+      steamLauncher = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Expose a foreground launcher for a native non-Steam shortcut. Steam must not force another compatibility tool on this launcher.";
+      };
+
       useGameMode = lib.mkOption {
         type = lib.types.bool;
         default = false;
@@ -179,6 +185,10 @@ in {
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        assertion = lib.all (app: !app.steamLauncher || app.role == "primary") (lib.attrValues cfg.apps);
+        message = "Steam foreground launchers require a primary UMU application";
+      }
+      {
         assertion = lib.all (app: app.networkAccess || app.role == "primary") (lib.attrValues cfg.apps);
         message = "Offline UMU applications must be primary applications; companion namespace sharing is unsupported";
       }
@@ -209,6 +219,12 @@ in {
     ];
 
     home.packages = map (application: application.starter) (lib.attrValues applications);
+
+    # Stable targets for non-Steam shortcuts, independent of store hashes.
+    home.file = lib.mapAttrs' (name: application:
+      lib.nameValuePair ".local/bin/umu-app-${name}-steam" {
+        source = lib.getExe application.steamStarter;
+      }) (lib.filterAttrs (_: application: application.app.steamLauncher) applications);
 
     xdg.desktopEntries = lib.mapAttrs' (
       name: application:

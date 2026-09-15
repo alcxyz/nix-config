@@ -12,6 +12,7 @@
     executable = "${prefix}/drive_c/games/Marvel's Spider-Man Remastered/Spider-Man.exe";
     protonPackage = protonGe11_3;
     networkAccess = false;
+    steamLauncher = true;
     environment.PROTON_USE_XALIA = "0";
   };
 in {

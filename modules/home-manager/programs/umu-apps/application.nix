@@ -202,6 +202,16 @@
     ];
     text = starterText;
   };
+
+  # Steam must remain the parent of the game runtime to track its lifetime.
+  # Reuse the same prefix guard and compatibility/network settings, without
+  # detaching into the desktop launcher's systemd service.
+  steamStarter = pkgs.writeShellApplication {
+    name = "umu-app-${name}-steam";
+    text = ''
+      exec ${lib.getExe runner} "$@"
+    '';
+  };
 in {
-  inherit app runner starter unitName;
+  inherit app runner starter steamStarter unitName;
 }

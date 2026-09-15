@@ -437,6 +437,7 @@ in {
     renderedScriptFixtures = lib.concatLists (lib.mapAttrsToList (name: application: [
         (scriptFixture "umu-app-${name}-run.sh" application.runner.text)
         (scriptFixture "umu-app-${name}.sh" application.starter.text)
+        (scriptFixture "umu-app-${name}-steam.sh" application.steamStarter.text)
       ])
       renderedApplications);
     malformedScriptFixture = pkgs.writeText "umu-app-malformed.sh" ''
@@ -451,6 +452,9 @@ in {
     assert !umuConfig.apps.spider-man-couch.networkAccess;
     assert !umuConfig.apps.spider-man-2.networkAccess;
     assert !umuConfig.apps.cyberpunk-2077.networkAccess;
+    assert lib.all (application:
+      lib.hasInfix (builtins.unsafeDiscardStringContext "exec ${lib.getExe application.runner}") application.steamStarter.text
+      && !(lib.hasInfix "systemctl" application.steamStarter.text)) (lib.attrValues renderedApplications);
     assert umuConfig.apps.cyberpunk-2077.environment.WINEDLLOVERRIDES == "icuuc,icuin=n";
     assert lib.hasInfix "--user --map-current-user --net --" renderedApplications.spider-man-2.runner.text;
     assert lib.hasInfix "--user --map-current-user --net --" renderedApplications.cyberpunk-2077.runner.text;

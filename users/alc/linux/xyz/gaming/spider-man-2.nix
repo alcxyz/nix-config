@@ -15,6 +15,7 @@ in {
     protonPackage = import ./proton-ge-11-3.nix {inherit pkgs;};
     gameId = "0";
     networkAccess = false;
+    steamLauncher = true;
     environment = {
       PROTON_USE_XALIA = "0";
     };

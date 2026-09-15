@@ -37,3 +37,18 @@ libraries do not provide. This override is scoped to Cyberpunk only.
 The declarative entries describe launching installed games, not distributing
 or installing game data. More games can inform a future installation workflow;
 these examples do not establish universal installer requirements.
+
+## Steam shortcuts
+
+Use `~/.local/bin/umu-app-<name>-steam` as the non-Steam shortcut target for
+`spider-man`, `spider-man-couch`, `spider-man-2`, or `cyberpunk-2077`. These
+foreground wrappers share the desktop runner's offline policy and fixes, but
+do not detach into a user service. Do not force Steam compatibility on them:
+UMU already supplies Proton. Desktop application-menu entries continue using
+services. Close one launch path before using the other; prefix conflicts are
+refused instead of opening a second primary process.
+
+Existing shortcut IDs and artwork can be retained when updating their target.
+Steam must be fully closed before editing its shortcut file. Test Running state,
+normal quit, Steam Stop, and relaunch. Controller input and overlay behavior
+remain separate checks; process tracking alone does not prove them.

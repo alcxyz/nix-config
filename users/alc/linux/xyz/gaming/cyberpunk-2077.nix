@@ -15,6 +15,7 @@ in {
     protonPackage = import ./proton-ge-11-3.nix {inherit pkgs;};
     gameId = "0";
     networkAccess = false;
+    steamLauncher = true;
     environment = {
       PROTON_USE_XALIA = "0";
       # Use the bundled ICU 65 exports instead of Wine built-ins.
