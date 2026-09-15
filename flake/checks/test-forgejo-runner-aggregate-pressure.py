@@ -58,11 +58,29 @@ esac
                    'FAIL_STATE': fail_state, 'ACTION_DELAY': action_delay,
                    'TRANSITION_TIMEOUT_SECONDS': transition_timeout}
             result = subprocess.run(['bash', str(GUARD)], env=env, capture_output=True)
+            self.events = result.stdout.decode().splitlines()
             actions = (root / 'actions').read_text().splitlines() if (root / 'actions').exists() else []
             return result.returncode, actions, (state / 'owned').exists(), (state / 'pending').exists()
 
     def test_hysteresis_freezes_and_thaws_aggregate(self):
         self.assertEqual(self.run_guard([2500, 2500, 1000, 0, 0]), (0, ['freeze', 'thaw'], False, False))
+
+    def test_transition_events_are_ordered_and_include_duration(self):
+        self.run_guard([2500, 2500, 1000, 0, 0])
+        self.assertEqual([line.split()[0] for line in self.events],
+                         ['event=freeze_requested', 'event=frozen',
+                          'event=thaw_requested', 'event=thawed'])
+        self.assertIn('sampled_full_avg10_hundredths=2500', self.events[0])
+        self.assertRegex(self.events[-1], r'transition_seconds=\d+ frozen_seconds=\d+$')
+
+    def test_restart_does_not_invent_frozen_duration(self):
+        self.run_guard([0, 0], initial='frozen', owned=True)
+        self.assertIn('frozen_seconds=unknown', self.events[-1])
+
+    def test_failed_transition_does_not_report_completion(self):
+        self.run_guard([2500, 2500], fail_action='freeze', fail_count='1',
+                       fail_state='freezing')
+        self.assertEqual([line.split()[0] for line in self.events], ['event=freeze_requested'])
 
     def test_short_pressure_does_not_freeze(self):
         self.assertEqual(self.run_guard([2500, 0, 0]), (0, [], False, False))

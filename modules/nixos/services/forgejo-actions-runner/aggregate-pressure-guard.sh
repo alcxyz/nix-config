@@ -14,6 +14,15 @@ low_required=${LOW_SAMPLES_REQUIRED:-13}
 max_iterations=${MAX_ITERATIONS:-0}
 transition_timeout_seconds=${TRANSITION_TIMEOUT_SECONDS:-120}
 unit=forgejobuilds.slice
+frozen_since=""
+
+# Diagnostic output must never change freeze ownership or recovery behavior.
+report_transition() {
+  local event=$1 details=${2:-} sampled_pressure=${pressure:-unknown}
+  [[ $sampled_pressure =~ ^[0-9]+$ ]] || sampled_pressure=unknown
+  printf 'event=%s unit=%s sampled_full_avg10_hundredths=%s %s\n' \
+    "$event" "$unit" "$sampled_pressure" "$details" || true
+}
 
 fail() {
   "$logger_bin" -t forgejo-runner-aggregate-pressure -- "$1"
@@ -72,7 +81,7 @@ read_pressure() {
 }
 
 freeze_owned() {
-  local actual
+  local actual started
   actual=$(freezer_state) || fail "cannot inspect build aggregate"
   if [[ -e $state_dir/owned ]]; then
     [[ $actual == frozen ]] || fail "owned aggregate was thawed externally"
@@ -80,19 +89,29 @@ freeze_owned() {
   fi
   [[ $actual == running ]] || fail "aggregate freeze is not owned by this guard"
   : > "$state_dir/pending"
+  started=$SECONDS
+  report_transition freeze_requested
   transition freeze "$unit" || fail "aggregate freeze failed; ownership requires recovery"
   [[ $(freezer_state) == frozen ]] || fail "aggregate did not freeze; ownership requires recovery"
   : > "$state_dir/owned"
   rm "$state_dir/pending"
+  frozen_since=$SECONDS
+  report_transition frozen "transition_seconds=$((SECONDS - started))"
 }
 
 thaw_owned() {
+  local started duration=unknown
   [[ -e $state_dir/owned ]] || fail "aggregate thaw lacks ownership"
   [[ $(freezer_state) == frozen ]] || fail "owned aggregate state changed externally"
   : > "$state_dir/pending"
+  started=$SECONDS
+  report_transition thaw_requested
   transition thaw "$unit" || fail "aggregate thaw failed; ownership requires recovery"
   [[ $(freezer_state) == running ]] || fail "aggregate did not thaw; ownership requires recovery"
   rm "$state_dir/owned" "$state_dir/pending"
+  if [[ -n $frozen_since ]]; then duration=$((SECONDS - frozen_since)); fi
+  report_transition thawed "transition_seconds=$((SECONDS - started)) frozen_seconds=$duration"
+  frozen_since=""
 }
 
 actual=$(freezer_state) || fail "cannot inspect build aggregate at startup"
