@@ -62,6 +62,7 @@ in {
     ./xyz/gaming
     gamingDesktop.module
     ./xyz/t3code.nix
+    ./xyz/nautilus.nix
 
     inputs.hyprscratch.homeModules.default
   ];
