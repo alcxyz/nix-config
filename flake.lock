@@ -74,11 +74,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789469202,
-        "narHash": "sha256-zjSN5nd30M6cnEufDL0vHgm6q3IeeFeo5/h69RZXgsM=",
+        "lastModified": 1789470961,
+        "narHash": "sha256-DxyKKMKrVqZKLiZQgPZg2k+QBZteCHrNSv9oeiRbW/I=",
         "ref": "dev",
-        "rev": "689b82e245257fcec5078e45eb525ff3d5b832dd",
-        "revCount": 15,
+        "rev": "8884662cfe2fdad7007c11653230c9603f245870",
+        "revCount": 17,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       },
@@ -91,17 +91,17 @@
     "bullet-platform": {
       "flake": false,
       "locked": {
-        "lastModified": 1789469188,
-        "narHash": "sha256-aRZWRoo1kbYedgxz8HAbU7XvEpgNbJlMDf45ZFnfqwA=",
+        "lastModified": 1789470903,
+        "narHash": "sha256-Bw2qA7/D5xMvnpv5cr7VvZyCKfzPe5EMy6l+HONuajE=",
         "ref": "explore/bullet-cli",
-        "rev": "73d1f1811eedfb467ff134d0953dda2a029e0b62",
-        "revCount": 2770,
+        "rev": "36e9c08ed2f701c40bd71bdfb69c6fd0b5253486",
+        "revCount": 2771,
         "type": "git",
         "url": "https://github.com/bn-apps/bullet-platform.git"
       },
       "original": {
         "ref": "explore/bullet-cli",
-        "rev": "73d1f1811eedfb467ff134d0953dda2a029e0b62",
+        "rev": "36e9c08ed2f701c40bd71bdfb69c6fd0b5253486",
         "type": "git",
         "url": "https://github.com/bn-apps/bullet-platform.git"
       }
@@ -937,11 +937,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789466553,
-        "narHash": "sha256-/+5cBsE8NrK+aSwAnCyOGx6V1QTaEi5Q8fTuv3WoWTo=",
+        "lastModified": 1789470921,
+        "narHash": "sha256-rr5pQCisNfI9cM+86zMA2wqhdM1yBilzog0reZRGrHw=",
         "ref": "dev",
-        "rev": "2eafc27fca8776a6c7ecbdaeca0416c5d5c713c4",
-        "revCount": 511,
+        "rev": "1e9c21c967827d9d11c6ac24b2527c9309f0e2d2",
+        "revCount": 512,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
