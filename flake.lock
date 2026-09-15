@@ -74,11 +74,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789481374,
-        "narHash": "sha256-wlnf96Ho4wEj1fXLEVYsi3ecshvN0V9lrP+DDIuw6tE=",
+        "lastModified": 1789483382,
+        "narHash": "sha256-tsoEJ/byy7s00zUkmOxjngZC8gpmNN4AwH2v/j6D+ms=",
         "ref": "dev",
-        "rev": "016bec592777499f69f3a09d449317bfaa117d0a",
-        "revCount": 22,
+        "rev": "0be15949064a3f5d79035d58b6b0514152e1b95a",
+        "revCount": 23,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       },
@@ -91,17 +91,17 @@
     "bullet-platform": {
       "flake": false,
       "locked": {
-        "lastModified": 1789481354,
-        "narHash": "sha256-va9u4elq/nS4YXp84OpWME2d0lffYk0byd1qboL82fE=",
+        "lastModified": 1789483346,
+        "narHash": "sha256-duiaIciHRCAWZnzrlrKuffEvRVobVEm0Qa0Y3GhTpSM=",
         "ref": "explore/bullet-cli",
-        "rev": "f9b0c4ecf05407ba5a936e817dccba58618e0758",
-        "revCount": 2780,
+        "rev": "fc5dc71f0b7c5db83c8ba7346788e3e565bfea20",
+        "revCount": 2781,
         "type": "git",
         "url": "https://github.com/bn-apps/bullet-platform.git"
       },
       "original": {
         "ref": "explore/bullet-cli",
-        "rev": "f9b0c4ecf05407ba5a936e817dccba58618e0758",
+        "rev": "fc5dc71f0b7c5db83c8ba7346788e3e565bfea20",
         "type": "git",
         "url": "https://github.com/bn-apps/bullet-platform.git"
       }
