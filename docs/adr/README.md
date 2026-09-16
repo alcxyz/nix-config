@@ -7,7 +7,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0000](0000-adr-template.md) | Template | Accepted / Superseded / Deprecated | — |
 | [ADR-0001](0001-nixos-unstable-channel.md) | Use nixos-unstable as the primary nixpkgs channel | Accepted | `flake.nix` |
 | [ADR-0002](0002-nix-secrets-separate-repository.md) | Keep private infrastructure material outside nix-config | Accepted, amended | `flake.nix`, private material |
-| [ADR-0003](0003-sops-nix-age-ssh-host-key-secrets.md) | Use sops-nix with age decryption via SSH host key | Accepted | secrets, common |
+| [ADR-0003](0003-sops-nix-age-ssh-host-key-secrets.md) | Runtime secret deployment with sops-nix | Accepted, redacted | secrets, common |
 | [ADR-0004](0004-zfs-autounlock-age-yubikey.md) | Private encrypted pool unlock boundary | Accepted, redacted | encrypted storage, private runbooks |
 | [ADR-0005](0005-gpu-passthrough-dynamic-bind.md) | GPU passthrough via dynamic driver bind/unbind | Accepted | xyz, virtualisation |
 | [ADR-0006](0006-four-tier-module-layering.md) | Four-tier module layering | Accepted | `modules/`, `hosts/` |

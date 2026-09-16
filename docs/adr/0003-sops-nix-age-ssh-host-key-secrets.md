@@ -1,40 +1,44 @@
-# ADR-0003: Use sops-nix with age decryption via SSH host key
+# ADR-0003: Runtime secret deployment with sops-nix
 
-**Status:** Accepted
+**Status:** Accepted, redacted
 **Date:** 2026-04-18
-**Applies to:** `modules/nixos/common/default.nix`, `flake.nix`
+**Applies to:** common NixOS and Home Manager configuration, private identity policy
 
 ## Context
 
-NixOS systems need a mechanism to decrypt secrets at activation time, ensuring plaintext values never enter the Nix store. A decryption identity is also needed — something the machine possesses at boot without manual intervention.
-
-Several tools exist for runtime secret decryption (agenix, sops-nix, ragenix). For the identity, options include a dedicated age key (requires provisioning), the machine's SSH host key (auto-generated on first boot), or a hardware key (requires physical presence).
-
-sops supports structured YAML with multiple recipients per file, partial file decryption, and secret templating — capabilities useful when a single secrets file contains values for different services.
+System and user services need structured encrypted configuration deployed at
+activation time without placing plaintext values in the Nix store. Identity
+availability must match the system and user activation lifecycles.
 
 ## Decision
 
-Use `sops-nix` for runtime secret decryption, with the machine's SSH host ed25519 key as the age identity:
+Use `sops-nix` for runtime secret deployment with age identities derived from
+system SSH host keys on NixOS. Encrypted source ownership,
+decryption identity configuration and SSH identity projections live in the
+private `sshIdentityPolicy` modules for NixOS and Home Manager. Public common
+modules import these named interfaces.
 
-```nix
-sops = {
-  defaultSopsFile = "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
-  age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
-};
-```
-
-Each host's SSH host public key is used as the age recipient when encrypting secrets in nix-secrets. sops-nix decrypts at activation and places secrets at module-defined paths with correct ownership and permissions.
+System-managed identities remain available independently of Home Manager
+activation. Linux and Darwin retain their existing platform-specific identity
+lifecycles. Private operational documentation owns provisioning, recipient
+management and recovery procedures.
 
 ## Alternatives Considered
 
-- **agenix / ragenix** — Considered. Simpler tooling, but secrets are single-recipient per file and lack sops's structured YAML capabilities (key access control per secret, templating). sops-nix's richer feature set was preferred for a multi-host, multi-service setup.
-- **Dedicated age key per host** — Rejected. Requires provisioning and securely storing a separate key file on each machine. The SSH host key already exists on every NixOS machine from first boot with no extra steps.
-- **YubiKey age identity for sops** — Rejected for sops decryption specifically. Requires physical hardware present at every activation, including automated rebuilds. YubiKey identity is reserved for ZFS unlock where physical presence is acceptable (see ADR-0004).
-- **vault-agent** — Rejected. Requires running and maintaining a Vault server; far more operational overhead than warranted for a personal multi-host setup.
+- **Single-file secret deployment tools:** simpler, but structured YAML and
+  templating better fit the existing multi-service configuration.
+- **A separate online secret service:** adds operational dependencies beyond
+  the current requirements.
+- **One identity lifecycle for every platform:** would obscure differences
+  between system and user activation.
 
 ## Consequences
 
-- No separate key to provision on fresh installs — the SSH host key is generated automatically on first boot and immediately usable as an age identity.
-- If a host's SSH host key is rotated or regenerated (e.g. full reinstall without preserving `/etc/ssh`), all secrets encrypted to that host must be re-encrypted with the new key in nix-secrets before the next deployment.
-- sops YAML files support multiple recipients, so any secret can be encrypted to several host keys simultaneously, enabling shared secrets across hosts without duplication.
-- The YubiKey age identity is intentionally separate from sops — do not add `age.yubikey*` paths to `age.sshKeyPaths`. That identity is used only for ZFS unlock (ADR-0004).
+Plaintext secret material remains outside source evaluation and the Nix store.
+Source extraction must preserve encrypted source contents, projection metadata
+and activation dependencies. Evaluation does not prove secret validity or
+runtime activation; those remain separate checks.
+
+The original operational record is preserved in the private SSH access-policy
+runbook. Current-tree redaction does not erase earlier published versions;
+historical review remains in the private audit.
