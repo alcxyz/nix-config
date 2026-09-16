@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -56,10 +57,15 @@ FORKED_RELEASE_INPUTS = {
 class MaintainedInputContracts(unittest.TestCase):
     def test_qa_shortcut_calls_only_the_maintained_updater(self):
         common = (ROOT / "users/alc/common.nix").read_text()
-        self.assertRegex(
+        aliases = re.search(
+            r"(?ms)^\s*home\.shellAliases\s*=\s*\{(?P<body>.*?)^\s*\};\s*$",
             common,
-            r'home\.shellAliases\s*=\s*\{\s*'
-            r'qaup = "bash scripts/update-inputs/update-maintained\.sh";',
+        )
+        self.assertIsNotNone(aliases)
+        assert aliases is not None
+        self.assertRegex(
+            aliases.group("body"),
+            r'(?m)^\s*qaup\s*=\s*"bash scripts/update-inputs/update-maintained\.sh";\s*$',
         )
 
     def test_flake_uses_explicit_dev_urls_and_danksession_follow(self):

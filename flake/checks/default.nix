@@ -34,6 +34,14 @@ in {
 
   credential-consent-contract = import ./credential-consent.nix {inherit lib pkgs;};
 
+  k8s-backup-s3-interface-contract =
+    if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+    then import ./k8s-backup-s3.nix {inherit inputs pkgs;}
+    else
+      pkgs.runCommand "k8s-backup-s3-interface-contract-unsupported" {} ''
+        touch "$out"
+      '';
+
   forgejo-runner-isolated-docker-contract = import ./forgejo-isolated-docker.nix {inherit lib pkgs;};
 
   forgejo-orphan-monitor-credential-isolation = import ./forgejo-orphan-monitor-vm.nix {inherit pkgs;};

@@ -14,6 +14,18 @@
   localEndpoint = "http://${cfg.apiAddress}";
   mirrorEnabled = cfg.mirrorSourceEndpoint != null;
   apiPort = lib.toInt (lib.last (lib.splitString ":" cfg.apiAddress));
+  zfsDataset =
+    if cfg.dataset == null
+    then ""
+    else cfg.dataset;
+  zfsQuota =
+    if cfg.quota == null
+    then ""
+    else cfg.quota;
+  mirrorSchedule =
+    if cfg.mirrorSchedule == null
+    then ""
+    else cfg.mirrorSchedule;
 in {
   options.services.k8s-backup-s3 = {
     enable = lib.mkEnableOption "host-level RustFS S3 target for Kubernetes backups";
@@ -23,7 +35,6 @@ in {
         "zfs"
         "mounted-filesystem"
       ];
-      default = "zfs";
       description = "Whether the object directory is prepared as ZFS or lives on an existing dedicated mount.";
     };
 
@@ -34,32 +45,29 @@ in {
     };
 
     dataset = lib.mkOption {
-      type = lib.types.str;
-      default = "tank/k8s-backups";
-      description = "ZFS dataset used for backup object storage.";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "ZFS dataset used for backup object storage; required in ZFS mode.";
     };
 
     dataDir = lib.mkOption {
       type = lib.types.path;
-      default = "/tank/k8s-backups/rustfs";
       description = "RustFS object data directory.";
     };
 
     quota = lib.mkOption {
-      type = lib.types.str;
-      default = "1T";
-      description = "ZFS quota for the backup dataset.";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "ZFS quota for the backup dataset; required in ZFS mode.";
     };
 
     apiAddress = lib.mkOption {
       type = lib.types.str;
-      default = "192.168.1.10:9100";
       description = "LAN address for the S3 API.";
     };
 
     consoleAddress = lib.mkOption {
       type = lib.types.str;
-      default = "127.0.0.1:9101";
       description = "Loopback-only RustFS console address.";
     };
 
@@ -87,13 +95,11 @@ in {
 
     serviceUid = lib.mkOption {
       type = lib.types.int;
-      default = 10001;
       description = "Stable numeric UID for the RustFS service user.";
     };
 
     serviceGid = lib.mkOption {
       type = lib.types.int;
-      default = 10001;
       description = "Stable numeric GID for the RustFS service group.";
     };
 
@@ -104,9 +110,9 @@ in {
     };
 
     mirrorSchedule = lib.mkOption {
-      type = lib.types.str;
-      default = "*-*-* 06:10:00";
-      description = "Calendar schedule for mirroring the authoritative target.";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Calendar schedule for mirroring the authoritative target; required when mirroring is enabled.";
     };
 
     mirrorMaxWorkers = lib.mkOption {
@@ -187,8 +193,20 @@ in {
         message = "services.k8s-backup-s3.storageUnit is required for mounted-filesystem storage.";
       }
       {
+        assertion = cfg.storageMode != "zfs" || cfg.dataset != null;
+        message = "services.k8s-backup-s3.dataset is required for ZFS storage.";
+      }
+      {
+        assertion = cfg.storageMode != "zfs" || cfg.quota != null;
+        message = "services.k8s-backup-s3.quota is required for ZFS storage.";
+      }
+      {
         assertion = cfg.mirrorSourceEndpoint == null || cfg.mirrorSourceEndpoint != localEndpoint;
         message = "The Kubernetes backup source and local S3 endpoints must differ.";
+      }
+      {
+        assertion = cfg.mirrorSourceEndpoint == null || cfg.mirrorSchedule != null;
+        message = "services.k8s-backup-s3.mirrorSchedule is required when mirroring is enabled.";
       }
     ];
 
@@ -230,18 +248,18 @@ in {
         script = ''
           set -euo pipefail
 
-          if ! zfs list -H ${lib.escapeShellArg cfg.dataset} >/dev/null 2>&1; then
+          if ! zfs list -H ${lib.escapeShellArg zfsDataset} >/dev/null 2>&1; then
             zfs create \
               -o mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} \
-              -o quota=${lib.escapeShellArg cfg.quota} \
+              -o quota=${lib.escapeShellArg zfsQuota} \
               -o compression=zstd \
               -o atime=off \
-              ${lib.escapeShellArg cfg.dataset}
+              ${lib.escapeShellArg zfsDataset}
           else
-            zfs set mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} ${lib.escapeShellArg cfg.dataset}
-            zfs set quota=${lib.escapeShellArg cfg.quota} ${lib.escapeShellArg cfg.dataset}
-            zfs set compression=zstd ${lib.escapeShellArg cfg.dataset}
-            zfs set atime=off ${lib.escapeShellArg cfg.dataset}
+            zfs set mountpoint=${lib.escapeShellArg (toString cfg.dataDir)} ${lib.escapeShellArg zfsDataset}
+            zfs set quota=${lib.escapeShellArg zfsQuota} ${lib.escapeShellArg zfsDataset}
+            zfs set compression=zstd ${lib.escapeShellArg zfsDataset}
+            zfs set atime=off ${lib.escapeShellArg zfsDataset}
           fi
 
           install -d -m 0750 \
@@ -516,7 +534,7 @@ in {
       description = "Daily independent replica of Kubernetes backups";
       wantedBy = ["timers.target"];
       timerConfig = {
-        OnCalendar = cfg.mirrorSchedule;
+        OnCalendar = mirrorSchedule;
         Persistent = false;
         RandomizedDelaySec = "0";
       };

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-SOURCE="$ROOT/users/alc/linux/xyz/desktop-helpers.nix"
+SOURCE="$ROOT/users/alc/linux/xyz/desktop-scripts/game-window-geometry-guard.sh"
 TMP=$(mktemp -d)
 
 cleanup() {
@@ -18,14 +18,13 @@ fail() {
 extract_function() {
   local name=$1
 
-  awk -v start="      $name() {" '
+  awk -v start="$name() {" '
     $0 == start { copying = 1 }
     copying {
-      sub(/^      /, "")
       print
     }
     copying && $0 == "}" { exit }
-  ' "$SOURCE" | sed "s/''\${/\${/g"
+  ' "$SOURCE"
 }
 
 extract_function repair_geometry >"$TMP/repair-geometry.sh"
