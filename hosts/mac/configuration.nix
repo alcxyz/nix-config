@@ -288,10 +288,10 @@ in {
     variables = {EDITOR = "nvim";};
   };
 
-  # Homebrew is used for macOS tools that are not available in nixpkgs.
+  # Homebrew supplies macOS tools and native integrations such as Podman's VM.
   homebrew = {
     enable = true;
-    brews = [];
+    brews = ["podman"];
   };
 
   # ============================================================================
