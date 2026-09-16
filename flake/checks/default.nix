@@ -247,6 +247,9 @@ in {
   check-scripts-shellcheck = mkRepoCheck "check-scripts-shellcheck" [pkgs.shellcheck] ''
     shellcheck scripts/checks/*.sh scripts/ci/*.sh scripts/forgejo/publish-nix-packages-lock.sh scripts/ops/*.sh modules/nixos/services/wolf-streaming/browser-image/*.sh
     shellcheck --shell=bash hosts/xyz/xyz-*.sh
+    # The display fragment receives target_spec and leaves external_seen for its caller.
+    shellcheck --shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh
+    shellcheck --shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh
   '';
 
   check-scripts-format = mkRepoCheck "check-scripts-format" [pkgs.treefmt pkgs.shfmt] ''

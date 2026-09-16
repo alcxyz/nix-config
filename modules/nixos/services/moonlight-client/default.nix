@@ -506,48 +506,24 @@
 
   displayModeSetup = pkgs.writeShellApplication {
     name = "moonlight-display-mode";
+    # external_seen is consumed only by the optional fallback below.
+    excludeShellChecks = lib.optional (cfg.fallbackOutputMode == null) "SC2034";
     runtimeInputs = [
       pkgs.hyprland
       pkgs.jq
     ];
-    text = ''
-      target_spec=${lib.escapeShellArg cfg.outputMode}
-      target_dimensions="''${target_spec%@*}"
-      target_refresh="''${target_spec##*@}"
-      target_width="''${target_dimensions%x*}"
-      target_height="''${target_dimensions#*x}"
-      external_seen=0
-
-      if [[ "$target_width" =~ ^[0-9]+$ ]] \
-        && [[ "$target_height" =~ ^[0-9]+$ ]] \
-        && [[ "$target_refresh" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-        for ((attempt = 0; attempt < 20; attempt++)); do
-          monitors="$(hyprctl -j monitors 2>/dev/null || true)"
-          if jq -e 'any(.[]; .name != "eDP-1" and .name != "LVDS-1")' \
-            <<<"$monitors" >/dev/null; then
-            external_seen=1
-          fi
-
-          if jq -e \
-              --argjson width "$target_width" \
-              --argjson height "$target_height" \
-              --argjson refresh "$target_refresh" \
-              'any(.[]; .name != "eDP-1" and .name != "LVDS-1"
-                and .width == $width and .height == $height
-                and ((.refreshRate - $refresh) | fabs) < 1.0)' \
-              <<<"$monitors" >/dev/null; then
-            exit 0
-          fi
-          sleep 0.25
-        done
-      fi
-
-      ${lib.optionalString (cfg.fallbackOutputMode != null) ''
+    text =
+      ''
+        target_spec=${lib.escapeShellArg cfg.outputMode}
+      ''
+      + builtins.readFile ./display-mode.sh
+      + "\n"
+      + lib.optionalString (cfg.fallbackOutputMode != null) ''
         if [ "$external_seen" -eq 1 ]; then
           hyprctl keyword monitor ${lib.escapeShellArg ", ${cfg.fallbackOutputMode}, auto, ${toString cfg.outputScale}"}
         fi
-      ''}
-    '';
+      ''
+      + "\n";
   };
 
   hdmiAudioSetup = pkgs.writeShellApplication {
@@ -557,25 +533,7 @@
       pkgs.pulseaudio
       pkgs.systemd
     ];
-    text = ''
-      systemctl --user start pipewire.service wireplumber.service pipewire-pulse.socket \
-        >/dev/null 2>&1 || true
-
-      for ((attempt = 0; attempt < 20; attempt++)); do
-        while read -r card; do
-          pactl set-card-profile "$card" output:hdmi-stereo >/dev/null 2>&1 || true
-        done < <(pactl list short cards 2>/dev/null | awk '{ print $2 }')
-
-        sink="$(pactl list short sinks 2>/dev/null | awk '$2 ~ /hdmi/ { print $2; exit }')"
-        if [ -n "$sink" ]; then
-          pactl set-default-sink "$sink"
-          exit 0
-        fi
-        sleep 0.5
-      done
-
-      exit 1
-    '';
+    text = builtins.readFile ./hdmi-audio.sh;
   };
 
   browserSessionHelpers = import ./browser-sessions.nix {
