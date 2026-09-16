@@ -25,6 +25,12 @@ shellcheck --shell=bash hosts/xyz/xyz-*.sh
 # The display fragment receives target_spec and leaves external_seen for its caller.
 shellcheck --shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh
 shellcheck --shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh
+shellcheck --shell=bash users/alc/linux/xyz/desktop-scripts/{mail-workspace,close-active-window,xwayland-primary-output,dropterm-toggle}.sh
+# Check the guard with its Nix-supplied policy binding; do not execute it.
+{
+  printf '%s\n' 'policies=[]'
+  cat users/alc/linux/xyz/desktop-scripts/game-window-geometry-guard.sh
+} | shellcheck --shell=bash -
 
 python3 scripts/checks/test-configuration-ci.py
 python3 scripts/checks/test-development-ci.py

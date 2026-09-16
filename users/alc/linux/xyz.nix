@@ -110,15 +110,6 @@ in {
     # though they are used as mice inside a windowed Moonlight stream.
     remotePointerInactiveTimeout = 8;
     remotePointerHideOnTouch = false;
-    # Keep the already-running hyprlang session complete during the one-time
-    # Lua migration. Future sessions start from extraLuaConfig below.
-    extraConfig = ''
-      monitor = DP-1, 5120x1440@120, 0x1456, 1
-      monitor = HDMI-A-1, modeline 241.50 2560 2608 2640 2720 1440 1443 1448 1481 +hsync -vsync, 1280x0, 1
-      windowrule = opacity 1.0 override 1.0 override 1.0 override, match:workspace name:special:special
-      ${gamingDesktop.legacyRules}
-      bind = CTRL SHIFT, R, exec, moonlight-wolf-ui-lan
-    '';
     extraLuaConfig = ''
       -- The secondary panel is physically 4K even though it runs at 1440p in
       -- this layout. Its useful scrolling widths start at half the output.

@@ -54,6 +54,7 @@ class DevelopmentCI(unittest.TestCase):
             "scripts/ops/fixture.sh",
             "modules/nixos/services/wolf-streaming/browser-image/fixture.sh",
             "hosts/xyz/xyz-fixture.sh",
+            "users/alc/linux/xyz/desktop-scripts/game-window-geometry-guard.sh",
             "scripts/checks/test-configuration-ci.py",
             "scripts/checks/test-publish-wolf-images.sh",
         ]:
@@ -96,7 +97,7 @@ class DevelopmentCI(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls.read_text().splitlines()
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
-        self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 4)
+        self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 6)
         self.assertEqual(sum(call.startswith("python3:") for call in calls), 4)
         self.assertIn("shellcheck:--shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh", calls)
         self.assertIn("shellcheck:--shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh", calls)

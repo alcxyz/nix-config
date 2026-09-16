@@ -3,8 +3,9 @@
 `../xyz.nix` selects imports, host policy, programs, and user services.
 `desktop-helpers.nix` constructs the mail workspace, window close, primary
 output, game geometry, and drop-down terminal helpers with explicit package
-and geometry-policy inputs. Their service registration remains in the parent
-host module.
+and geometry-policy inputs. Shell bodies live in adjacent `desktop-scripts/`
+files; Nix binds the geometry policy before the guard body. Their service
+registration remains in the parent host module.
 
 `t3code.nix` owns the workstation's T3 service policy, web launcher, command
 aliases, and desktop entry.

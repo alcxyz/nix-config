@@ -6,50 +6,36 @@
   mailWorkspaceScript,
 }: {
   assertions = let
-    legacyBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.conf";
-    legacyConfig = builtins.readFile "${configDir}/users/alc/configs/hypr/hyprland.conf";
-    legacyDwindleBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-dwindle.conf";
     luaBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds.lua";
     luaDwindleBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-dwindle.lua";
     luaConfig = builtins.readFile "${configDir}/users/alc/configs/hypr/hyprland.lua";
     luaScrollingBinds = builtins.readFile "${configDir}/users/alc/configs/hypr/binds-scrolling.lua";
-    hostLegacyConfig = config.programs.hyprland.managed.extraConfig;
     hostLuaConfig = config.programs.hyprland.managed.extraLuaConfig;
   in [
     {
       assertion =
         lib.hasInfix ''hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:" }))'' luaBinds
-        && !lib.hasInfix ''hl.bind("SUPER + SHIFT + escape", hl.dsp.exit())'' luaBinds
-        && lib.hasInfix "bind = SUPER SHIFT, ESCAPE, movetoworkspace, special" legacyBinds
-        && !lib.hasInfix "bind = SUPER SHIFT, escape, exit" legacyBinds;
+        && !lib.hasInfix ''hl.bind("SUPER + SHIFT + escape", hl.dsp.exit())'' luaBinds;
       message = "Super+Shift+Escape must follow a window to the special workspace and must never exit the session.";
     }
     {
-      assertion =
-        lib.hasInfix ''hl.bind("SUPER + SHIFT + Q", hl.dsp.exec_cmd(lock .. " --display-off-immediately"))'' luaBinds
-        && lib.hasInfix "bind = SUPER SHIFT, Q, exec, $lock --display-off-immediately" legacyBinds;
-      message = "Super+Shift+Q must lock with immediate display power-off in both Hyprland configs.";
+      assertion = lib.hasInfix ''hl.bind("SUPER + SHIFT + Q", hl.dsp.exec_cmd(lock .. " --display-off-immediately"))'' luaBinds;
+      message = "Super+Shift+Q must lock with immediate display power-off.";
     }
     {
-      assertion =
-        lib.hasInfix ''hl.bind("XF86ScreenSaver", hl.dsp.exec_cmd(lock))'' luaBinds
-        && lib.hasInfix "bind = , XF86ScreenSaver, exec, $lock" legacyBinds;
-      message = "The screen-saver key must use the normal lock-screen path in both Hyprland configs.";
+      assertion = lib.hasInfix ''hl.bind("XF86ScreenSaver", hl.dsp.exec_cmd(lock))'' luaBinds;
+      message = "The screen-saver key must use the normal lock-screen path.";
     }
     {
       assertion =
         lib.hasInfix ''hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))'' luaBinds
-        && lib.hasInfix "bind = SUPER, T, exec, hyprland-mail-workspace" legacyBinds
         && lib.hasInfix ''workspace=9'' mailWorkspaceScript
         && lib.hasInfix ''.class == "thunderbird" or .initialClass == "thunderbird"'' mailWorkspaceScript
         && lib.hasInfix ''hl.dsp.exec_cmd(\"thunderbird\", { workspace = \"$workspace silent\" })'' mailWorkspaceScript
         && lib.hasInfix ''hyprctl dispatch exec "[workspace $workspace silent] thunderbird"'' mailWorkspaceScript
         && !lib.hasInfix ''t3code-desktop'' luaBinds
-        && !lib.hasInfix ''t3code-desktop'' legacyBinds
         && !lib.hasInfix ''SUPER + M", hl.dsp.exec_cmd("hyprland-mail-workspace")'' luaBinds
-        && !lib.hasInfix ''SUPER, M, exec, hyprland-mail-workspace'' legacyBinds
-        && lib.hasInfix ''SUPER + M", hl.dsp.layout("focus")'' luaDwindleBinds
-        && lib.hasInfix ''SUPER, M, layoutmsg, focus'' legacyDwindleBinds;
+        && lib.hasInfix ''SUPER + M", hl.dsp.layout("focus")'' luaDwindleBinds;
       message = "Super+T must normalize Thunderbird onto its unpinned workspace 9 without displacing layout bindings or launching T3 Code.";
     }
     {
@@ -61,12 +47,6 @@
         && lib.hasInfix ''hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notifications open"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + O", hl.dsp.exec_cmd("dms ipc call hypr toggleOverview"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))'' luaBinds
-        && lib.hasInfix ''bind = SUPER, V, exec, $helium --profile-directory="Profile 2"'' legacyBinds
-        && lib.hasInfix ''bind = SUPER, X, exec, $helium --profile-directory="Profile 1" --remote-debugging-port=9222'' legacyBinds
-        && lib.hasInfix ''bind = SUPER, Z, exec, $brave --profile-directory="Profile 1" --remote-debugging-port=9223'' legacyBinds
-        && lib.hasInfix "bind = SUPER SHIFT, N, exec, dms ipc call notifications open" legacyBinds
-        && lib.hasInfix "bind = SUPER, O, exec, dms ipc call hypr toggleOverview" legacyBinds
-        && lib.hasInfix "bind = SUPER, N, exec, dms ipc call notepad toggle" legacyBinds
         && !lib.hasInfix ''hl.bind("SUPER + ALT + V",'' luaBinds
         && !lib.hasInfix ''hl.bind("SUPER + ALT + X",'' luaBinds
         && !lib.hasInfix ''hl.bind("SUPER + ALT + Z",'' luaBinds;
@@ -77,21 +57,13 @@
         lib.hasInfix ''hl.bind("SUPER + E", hl.dsp.focus({ workspace = 7 }))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + SHIFT + E", hl.dsp.window.move({ workspace = 7 }))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + ALT + E", hl.dsp.window.move({ workspace = 7, follow = false }))'' luaBinds
-        && lib.hasInfix "bind = SUPER, E, workspace, 7" legacyBinds
-        && lib.hasInfix "bind = SUPER SHIFT, E, movetoworkspace, 7" legacyBinds
-        && lib.hasInfix "bind = SUPER ALT, E, movetoworkspacesilent, 7" legacyBinds
         && lib.hasInfix ''hl.bind("SUPER + G", hl.dsp.focus({ workspace = 8 }))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + SHIFT + G", hl.dsp.window.move({ workspace = 8 }))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + ALT + G", hl.dsp.window.move({ workspace = 8, follow = false }))'' luaBinds
-        && lib.hasInfix "bind = SUPER, G, workspace, 8" legacyBinds
-        && lib.hasInfix "bind = SUPER SHIFT, G, movetoworkspace, 8" legacyBinds
-        && lib.hasInfix "bind = SUPER ALT, G, movetoworkspacesilent, 8" legacyBinds
         && lib.hasInfix ''workspace = "7"'' luaConfig
         && lib.hasInfix ''default_name = "steam"'' luaConfig
         && lib.hasInfix ''workspace = "8"'' luaConfig
-        && lib.hasInfix ''default_name = "battle-net"'' luaConfig
-        && lib.hasInfix "workspace = 7, defaultName:steam" legacyConfig
-        && lib.hasInfix "workspace = 8, defaultName:battle-net" legacyConfig;
+        && lib.hasInfix ''default_name = "battle-net"'' luaConfig;
       message = "The unpinned Steam and Battle.net workspaces and their complete letter-based workspace shortcuts must remain declarative.";
     }
     {
@@ -99,13 +71,11 @@
         lib.hasInfix ''window.class == "steam_app_default"'' luaBinds
         && lib.hasInfix ''window.title == "Battle.net"'' luaBinds
         && lib.hasInfix ''hl.dsp.exec_cmd("hyprland-close-active-window")'' luaBinds
-        && lib.hasInfix "bind = SUPER, W, exec, hyprland-close-active-window" legacyBinds
         && lib.hasInfix ''[[ "$active_class" == steam_app_default && "$active_title" == Battle.net ]]'' closeActiveWindowScript
         && lib.hasInfix ''[[ "$cgroup" == */umu-app-battle-net.service ]]'' closeActiveWindowScript
         && lib.hasInfix ''.title == "Heroes of the Storm"'' closeActiveWindowScript
         && lib.hasInfix ''exec hyprctl dispatch killactive'' closeActiveWindowScript
-        && !lib.hasInfix ''hl.bind("SUPER + W", hl.dsp.window.close())'' luaBinds
-        && !lib.hasInfix "bind = SUPER, W, killactive," legacyBinds;
+        && !lib.hasInfix ''hl.bind("SUPER + W", hl.dsp.window.close())'' luaBinds;
       message = "Super+W must preserve normal window closing unless the focused window is exactly Battle.net.";
     }
     {
@@ -127,11 +97,10 @@
         && lib.hasInfix ''name = "shared-special-workspace-opaque"'' hostLuaConfig
         && lib.hasInfix ''match = { workspace = "name:special:special" }'' hostLuaConfig
         && lib.hasInfix ''opacity = "1.0 override 1.0 override 1.0 override"'' hostLuaConfig
-        && lib.hasInfix "windowrule = opacity 1.0 override 1.0 override 1.0 override, match:workspace name:special:special" hostLegacyConfig
         && lib.hasInfix ''name = "moonlight-native-half-width"'' hostLuaConfig
         && lib.hasInfix ''class = "^com.moonlight_stream.Moonlight$"'' hostLuaConfig
         && lib.hasInfix ''scrolling_width = 0.5'' hostLuaConfig;
-      message = "The shared special workspace must retain exact geometry and fully opaque windows in both Hyprland configs.";
+      message = "The shared special workspace must retain exact geometry and fully opaque windows.";
     }
     {
       assertion =
@@ -152,7 +121,6 @@
     {
       assertion =
         lib.all (hyprConfig: !lib.hasInfix "Heroes of the Storm" hyprConfig) [
-          legacyBinds
           luaBinds
           luaConfig
         ]
@@ -161,11 +129,6 @@
         && lib.hasInfix ''name = "wine-desktop-gaming-workspace"'' hostLuaConfig
         && lib.hasInfix ''name = "heroes-gaming-workspace"'' hostLuaConfig
         && lib.hasInfix ''workspace = "8 silent"'' hostLuaConfig
-        && lib.hasInfix "windowrule = workspace 7 silent, match:class ^steam$, match:xwayland true" hostLegacyConfig
-        && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true" hostLegacyConfig
-        && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true" hostLegacyConfig
-        && lib.hasInfix "windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true" hostLegacyConfig
-        && lib.hasInfix "windowrule = border_size 0, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true" hostLegacyConfig
         && builtins.match ".*name = \"heroes-gaming-workspace\",[^}]*}[^}]*border_size = 0,[^}]*}.*" hostLuaConfig != null
         && !lib.hasInfix ''suppress_event = "fullscreen"'' hostLuaConfig
         && !lib.hasInfix ''sync_fullscreen'' hostLuaConfig

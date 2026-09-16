@@ -184,3 +184,23 @@ without public defaults. The private `xyzStoragePolicy` flake output composes
 the existing unlock/bootstrap and mergerfs modules, supplies those fields, and
 owns sensitive storage, backup, and export policy. The public host keeps one
 explicit import for each side of that boundary.
+
+## September 2026 Hyprland source disposition
+
+The `alc` workstation profile uses the immutable Lua configuration. Retire its
+unused Hyprlang files, host fragment and legacy-only parity conditions while
+retaining the Lua behavior assertions and helper-script contracts. Keeping an
+unconsumed second configuration requires duplicate edits without validating the
+configuration that the declared session actually uses.
+
+This is a profile-specific retirement, not removal of shared legacy support.
+The `madsil` profile still consumes its own Hyprlang source through the existing
+module. Removing the shared option, activation path or legacy key helper would
+break that consumer and requires a separate migration. The shared live-migration
+mechanism remains available for profiles that retain both source formats; it is
+not a rollback contract for the retired `alc` files.
+
+Keep desktop helper composition and policy binding in the workstation module,
+with ordinary shell bodies in adjacent sources. A future language replacement
+is evaluated separately in issue #412. Source cleanup neither activates a
+compositor configuration nor substitutes for runtime qualification.

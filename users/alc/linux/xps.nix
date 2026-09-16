@@ -49,8 +49,8 @@ in {
     inputLayouts = "no,us";
     inputOptions = "grp:alt_shift_toggle";
     laptopDisplayAutoSwitch.enable = true;
-    # Hyprland 0.55 and DMS use the Lua configuration on XPS. DMS deliberately
-    # archives legacy .conf files when both formats exist.
+    # DMS owns the Hyprland configuration on XPS and archives legacy .conf
+    # files when both formats exist.
     manageLegacyConfig = false;
   };
   programs.niri.managed.enable = true;

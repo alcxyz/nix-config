@@ -12,13 +12,6 @@
   ];
 in {
   windowMatchers = gamingWindowMatchers;
-  legacyRules = lib.removeSuffix "\n" ''
-    windowrule = workspace 7 silent, match:class ^steam$, match:xwayland true
-    windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Battle[.]net$, match:xwayland true
-    windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^$, match:xwayland true
-    windowrule = workspace 8 silent, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
-    windowrule = border_size 0, match:class ^steam_app_default$, match:title ^Heroes of the Storm$, match:xwayland true
-  '';
   luaRules = lib.removeSuffix "\n" ''
     -- Launcher ecosystems use separate unpinned workspaces, not fixed
     -- outputs. Route only the Steam client; games remain opt-in by exact
