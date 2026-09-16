@@ -217,24 +217,16 @@
   directDrmStreamEnabled = cfg.enableDirectDrmStream && directStreamEnabled;
   directDrmBrowserEnabled = cfg.enableDirectDrmBrowserStreams && browserStreamEnabled;
   persistentDirectDrmBrowserDefault = cfg.defaultSessionMode == "direct-browser";
-  compositorSessionCondition = pkgs.writeShellScript "nixbox-compositor-session-condition" ''
-    mode="$(
-      tr -d '[:space:]' \
-        < ${lib.escapeShellArg modeStateFile} \
-        2>/dev/null \
-        || true
-    )"
-    case "''${mode%%:*}" in
-      couch${
-      lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
-    }${lib.optionalString cfg.enableMergedProfile " | merged"})
-        exit 0
-        ;;
-      *)
-        exit 1
-        ;;
-    esac
-  '';
+  compositorSessionCondition = pkgs.writeShellScript "nixbox-compositor-session-condition" (
+    lib.replaceStrings
+    ["@modeStateFile@" "@desktopMode@" "@mergedMode@"]
+    [
+      (lib.escapeShellArg modeStateFile)
+      (lib.optionalString (cfg.desktopSessionCommand != null) " | desktop")
+      (lib.optionalString cfg.enableMergedProfile " | merged")
+    ]
+    (builtins.readFile ./compositor-session-condition.sh.in)
+  );
   sessionModeSwitchEnabled =
     cfg.autoLoginUser
     != null
@@ -286,16 +278,16 @@
         pkgs.writeShellApplication {
           name = "moonlight-${name}";
           runtimeInputs = [pkgs.coreutils];
-          text = ''
-            install -d -m 0700 \
-              ${lib.escapeShellArg "${profileDirectory}/config"} \
-              ${lib.escapeShellArg "${profileDirectory}/cache"} \
-              ${lib.escapeShellArg "${profileDirectory}/data"}
-            export XDG_CONFIG_HOME=${lib.escapeShellArg "${profileDirectory}/config"}
-            export XDG_CACHE_HOME=${lib.escapeShellArg "${profileDirectory}/cache"}
-            export XDG_DATA_HOME=${lib.escapeShellArg "${profileDirectory}/data"}
-            exec ${lib.getExe moonlightPackage} "$@"
-          '';
+          text =
+            lib.replaceStrings
+            ["@configDirectory@" "@cacheDirectory@" "@dataDirectory@" "@moonlightExecutable@"]
+            [
+              (lib.escapeShellArg "${profileDirectory}/config")
+              (lib.escapeShellArg "${profileDirectory}/cache")
+              (lib.escapeShellArg "${profileDirectory}/data")
+              (lib.getExe moonlightPackage)
+            ]
+            (builtins.readFile ./moonlight-profile.sh.in);
         }
       );
   defaultMoonlightExecutable = mkMoonlightExecutable "default" null;
@@ -426,54 +418,25 @@
         configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
         printf '%s\n' "''${configured_layouts%%,*}"
       ''
-      else ''
-        configured_layouts=${lib.escapeShellArg cfg.keyboardLayouts}
-        fallback_layout="''${configured_layouts%%,*}"
-        active_keymap=""
-
-        # Give hot-plugged USB receivers a brief chance to appear at graphical
-        # login. Hyprland's "main" keyboard can remain the internal laptop
-        # device even while an external keyboard is the one being used.
-        for attempt in $(seq 1 20); do
-          devices="$(hyprctl -j devices 2>/dev/null || true)"
-          if printf '%s' "$devices" \
-            | jq -e 'type == "object" and (.keyboards | type == "array")' \
-              >/dev/null 2>&1; then
-            while IFS= read -r keyboard_name; do
-              keyboard_name="$(printf '%s' "$keyboard_name" | tr '[:upper:]' '[:lower:]')"
-              case "$keyboard_name" in
-                ${lib.concatStringsSep "\n              " (
-          lib.flatten (
-            lib.mapAttrsToList (
-              layout: matches:
-                map (
-                  match: "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
-                )
-                matches
+      else
+        lib.replaceStrings
+        ["@configuredLayouts@" "@deviceLayoutCases@"]
+        [
+          (lib.escapeShellArg cfg.keyboardLayouts)
+          (lib.concatStringsSep "\n              " (
+            lib.flatten (
+              lib.mapAttrsToList (
+                layout: matches:
+                  map (
+                    match: "*${lib.escapeShellArg (lib.toLower match)}*) printf '%s\\n' ${lib.escapeShellArg layout}; exit 0 ;;"
+                  )
+                  matches
+              )
+              cfg.keyboardLayoutDeviceOverrides
             )
-            cfg.keyboardLayoutDeviceOverrides
-          )
-        )}
-              esac
-            done < <(printf '%s' "$devices" | jq -r '.keyboards[].name')
-
-            active_keymap="$(
-              printf '%s' "$devices" \
-                | jq -r 'first(.keyboards[] | select(.main)).active_keymap // empty'
-            )"
-            if [ "$attempt" -ge 8 ] && [ -n "$active_keymap" ]; then
-              break
-            fi
-          fi
-          sleep 0.25
-        done
-
-        case "$active_keymap" in
-          *Norwegian*) printf '%s\n' no ;;
-          *"English (US)"*) printf '%s\n' us ;;
-          *) printf '%s\n' "$fallback_layout" ;;
-        esac
-      '';
+          ))
+        ]
+        (builtins.readFile ./active-keyboard-layout.sh.in);
   };
 
   directDrmHelpers = import ./direct-drm.nix {

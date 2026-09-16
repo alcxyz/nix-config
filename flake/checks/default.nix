@@ -552,6 +552,10 @@ in {
       bash scripts/checks/test-wolf-browser-input-contract.sh
     '';
 
+  moonlight-shell-source-syntax = mkRepoCheck "moonlight-shell-source-syntax" [pkgs.python3 pkgs.bash pkgs.shellcheck] ''
+    python3 scripts/checks/check-moonlight-shell-templates.py
+  '';
+
   moonlight-input-source-syntax =
     mkRepoCheck "moonlight-input-source-syntax" [
       pkgs.libx11

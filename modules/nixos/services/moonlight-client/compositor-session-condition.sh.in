@@ -1,0 +1,14 @@
+mode="$(
+  tr -d '[:space:]' \
+    < @modeStateFile@ \
+    2>/dev/null \
+    || true
+)"
+case "${mode%%:*}" in
+  couch@desktopMode@@mergedMode@)
+    exit 0
+    ;;
+  *)
+    exit 1
+    ;;
+esac

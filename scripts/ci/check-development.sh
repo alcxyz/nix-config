@@ -28,6 +28,7 @@ shellcheck --shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh
 
 python3 scripts/checks/test-configuration-ci.py
 python3 scripts/checks/test-development-ci.py
+python3 scripts/checks/check-moonlight-shell-templates.py
 bash scripts/checks/test-publish-wolf-images.sh
 bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
 bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.sh \

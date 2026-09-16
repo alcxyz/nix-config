@@ -1,0 +1,35 @@
+configured_layouts=@configuredLayouts@
+fallback_layout="${configured_layouts%%,*}"
+active_keymap=""
+
+# Give hot-plugged USB receivers a brief chance to appear at graphical
+# login. Hyprland's "main" keyboard can remain the internal laptop
+# device even while an external keyboard is the one being used.
+for attempt in $(seq 1 20); do
+  devices="$(hyprctl -j devices 2>/dev/null || true)"
+  if printf '%s' "$devices" \
+    | jq -e 'type == "object" and (.keyboards | type == "array")' \
+      >/dev/null 2>&1; then
+    while IFS= read -r keyboard_name; do
+      keyboard_name="$(printf '%s' "$keyboard_name" | tr '[:upper:]' '[:lower:]')"
+      case "$keyboard_name" in
+        @deviceLayoutCases@
+      esac
+    done < <(printf '%s' "$devices" | jq -r '.keyboards[].name')
+
+    active_keymap="$(
+      printf '%s' "$devices" \
+        | jq -r 'first(.keyboards[] | select(.main)).active_keymap // empty'
+    )"
+    if [ "$attempt" -ge 8 ] && [ -n "$active_keymap" ]; then
+      break
+    fi
+  fi
+  sleep 0.25
+done
+
+case "$active_keymap" in
+  *Norwegian*) printf '%s\n' no ;;
+  *"English (US)"*) printf '%s\n' us ;;
+  *) printf '%s\n' "$fallback_layout" ;;
+esac
