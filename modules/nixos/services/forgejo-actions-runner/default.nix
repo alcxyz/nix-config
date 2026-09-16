@@ -331,6 +331,22 @@ in {
         default = 120;
         description = "Deadline for aggregate freeze and thaw transitions.";
       };
+
+      admissionControl = {
+        enable = lib.mkEnableOption "pressure-based admission draining for an isolated runner";
+
+        severePercent = lib.mkOption {
+          type = lib.types.ints.between 2 100;
+          default = 60;
+          description = "Full I/O PSI avg10 percentage that freezes the aggregate after admissions are drained.";
+        };
+
+        severeDurationSeconds = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 30;
+          description = "Sustained severe-pressure duration before the aggregate is frozen.";
+        };
+      };
     };
 
     secretsFile = lib.mkOption {
@@ -450,6 +466,22 @@ in {
       {
         assertion = lib.mod cfg.ioPressureGuard.lowDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
         message = "services.forgejo-actions-runner.ioPressureGuard.lowDurationSeconds must be divisible by sampleSeconds.";
+      }
+      {
+        assertion = !cfg.ioPressureGuard.admissionControl.enable || isolated;
+        message = "Pressure-based runner admission control requires isolated Docker.";
+      }
+      {
+        assertion =
+          !cfg.ioPressureGuard.admissionControl.enable
+          || cfg.ioPressureGuard.admissionControl.severePercent > cfg.ioPressureGuard.highPercent;
+        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.severePercent must exceed highPercent.";
+      }
+      {
+        assertion =
+          !cfg.ioPressureGuard.admissionControl.enable
+          || lib.mod cfg.ioPressureGuard.admissionControl.severeDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
+        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.severeDurationSeconds must be divisible by sampleSeconds.";
       }
     ];
 

@@ -1,6 +1,6 @@
 # ADR-0072: Isolate runner Docker execution in a bounded rootless service
 
-- Status: Accepted; xyz rollout in progress; other hosts opt in after qualification
+- Status: Accepted; amended 2026-09-16; per-host rollout requires qualification
 - Date: 2026-09-10
 - Area: Forgejo runners, Docker, systemd
 
@@ -18,10 +18,32 @@ slice's CPU/memory budget. The runner connects only to that daemon and loses its
 host Docker group membership. The daemon owns separate runtime state, images,
 volumes and build cache. User-namespace networking leaves host Docker separate.
 
-The pressure controller stays outside the build slice and freezes the complete
-aggregate under sustained pressure. It thaws only a freeze it owns; uncertain
-operations fail closed for reconciliation. A slice thaw does not issue Docker
-unpause calls, so individually paused containers remain paused.
+The pressure controller stays outside the build slice and, by default, freezes
+the complete aggregate under sustained pressure. It thaws only a freeze it
+owns; uncertain operations fail closed for reconciliation. A slice thaw does
+not issue Docker unpause calls, so individually paused containers remain
+paused.
+
+Isolated runners may separately opt into pressure-based admission draining.
+Moderate sustained pressure requests a non-blocking stop of only the runner
+service: Forgejo Runner stops polling, then waits for already admitted jobs up
+to its normal job timeout while the dedicated Docker daemon and workers remain
+available. Sustained severe pressure still freezes the complete aggregate.
+Recovery thaws an owned freeze before it restarts a runner it previously
+drained, and only after pressure stays low and the runner is fully inactive.
+The graceful service stop signals the runner's main process first and retains
+the existing service timeout as the eventual whole-cgroup termination boundary.
+
+Drain and resume ownership is persistent and transition intent is recorded
+before systemd is called. A restarted guard continues an owned drain without a
+second stop request. Ownership is bound to the runner execution generation; a
+changed generation is disowned and fails closed. Ambiguous transitions fail
+closed, and inactive, disabled, masked, or failed runners that the guard did not
+safely claim are never started. Admission draining is disabled by default and
+is valid only with isolated Docker, because shared-daemon runners do not provide
+the same worker-lifecycle boundary. Manual lifecycle intervention during an
+owned drain must disable or mask the runner before stopping it so automatic
+recovery cannot undo the intervention.
 
 Start the guard after the resource slice and before the daemon. The daemon binds
 to guard health, so losing the controller stops existing worker descendants as

@@ -77,6 +77,7 @@ in {
     runnerUnit = xyz.systemd.services.forgejo-actions-runner;
     policyUnit = xyz.systemd.services.forgejo-runner-resource-policy;
     daemonUnit = xyz.systemd.services.forgejo-runner-docker;
+    pressureGuardUnit = xyz.systemd.services.forgejo-runner-io-pressure-guard;
     buildSlice = xyz.systemd.slices.forgejobuilds.sliceConfig;
     serverConfigs = [
       self.nixosConfigurations.xev.config
@@ -96,11 +97,26 @@ in {
     assert runner.isolatedDocker.enable;
     assert !(builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions);
     assert daemonUnit.serviceConfig.Slice == "forgejobuilds.slice";
+    assert runner.ioPressureGuard.highPercent == 20;
+    assert runner.ioPressureGuard.highDurationSeconds == 20;
+    assert runner.ioPressureGuard.lowPercent == 5;
+    assert runner.ioPressureGuard.lowDurationSeconds == 60;
+    assert runner.ioPressureGuard.admissionControl.enable;
+    assert runner.ioPressureGuard.admissionControl.severePercent == 60;
+    assert runner.ioPressureGuard.admissionControl.severeDurationSeconds == 30;
+    assert pressureGuardUnit.environment.ADMISSION_CONTROL_ENABLED == "1";
+    assert pressureGuardUnit.environment.HIGH_SAMPLES_REQUIRED == "5";
+    assert pressureGuardUnit.environment.LOW_SAMPLES_REQUIRED == "13";
+    assert pressureGuardUnit.environment.SEVERE_SAMPLES_REQUIRED == "7";
+    assert runnerUnit.serviceConfig.KillMode == "mixed";
     assert lib.all (serverRunner: serverRunner.resourcePolicy.enable && serverRunner.isolatedDocker.enable) serverRunners;
+    assert lib.all (serverRunner: !serverRunner.ioPressureGuard.admissionControl.enable) serverRunners;
     assert lib.all (serverRunner: serverRunner.dockerHost == "unix:///run/forgejo-docker/docker.sock") serverRunners;
     assert lib.all (host: builtins.elem "forgejo-runner-docker.service" host.systemd.services.forgejo-actions-runner.requires) serverConfigs;
     assert lib.all (host: !(builtins.elem "docker.service" host.systemd.services.forgejo-actions-runner.requires)) serverConfigs;
     assert lib.all (host: host.users.users.forgejo-runner.extraGroups == []) serverConfigs;
+    assert lib.all (host: !(host.systemd.services.forgejo-actions-runner.serviceConfig ? KillMode)) serverConfigs;
+    assert lib.all (host: host.systemd.services.forgejo-runner-io-pressure-guard.environment.ADMISSION_CONTROL_ENABLED == "0") serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
     assert buildSlice.MemoryHigh == "40%";

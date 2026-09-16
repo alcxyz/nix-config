@@ -78,6 +78,8 @@ in
   assert services.forgejo-runner-resource-policy.partOf == [];
   assert services.forgejo-runner-docker.serviceConfig.User == "forgejo-builder";
   assert !(services.forgejo-runner-io-pressure-guard.serviceConfig ? Slice);
+  assert services.forgejo-runner-io-pressure-guard.environment.ADMISSION_CONTROL_ENABLED == "0";
+  assert !(services.forgejo-actions-runner.serviceConfig ? KillMode);
   assert services.forgejo-runner-io-pressure-guard.environment.TRANSITION_TIMEOUT_SECONDS == "120";
   assert services.forgejo-runner-cache-pressure-prune.environment.DOCKER_HOST == runner.dockerHost;
   assert services.forgejo-runner-cache-prune.environment.DOCKER_HOST == runner.dockerHost;

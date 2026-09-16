@@ -95,10 +95,16 @@ in {
       requires = ["forgejo-runner-resource-policy.service"];
       after = ["forgejo-runner-resource-policy.service"];
       environment = {
+        ADMISSION_CONTROL_ENABLED =
+          if cfg.ioPressureGuard.admissionControl.enable
+          then "1"
+          else "0";
         HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
         LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
         HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
         LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+        SEVERE_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.admissionControl.severePercent * 100);
+        SEVERE_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.admissionControl.severeDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
         SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
         TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.transitionTimeoutSeconds;
       };
@@ -113,6 +119,8 @@ in {
         RestartSec = "5s";
       };
     };
+    systemd.services.forgejo-actions-runner.serviceConfig.KillMode =
+      lib.mkIf cfg.ioPressureGuard.admissionControl.enable "mixed";
     systemd.services.forgejo-runner-cache-pressure-prune = lib.mkIf cfg.cachePressure.enable {
       after = ["forgejo-runner-io-pressure-guard.service"];
       requires = ["forgejo-runner-io-pressure-guard.service"];

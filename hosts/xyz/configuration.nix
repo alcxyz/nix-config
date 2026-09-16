@@ -165,7 +165,20 @@
 
   services.forgejo-actions-runner = {
     enable = true;
-    ioPressureGuard.enable = true;
+    ioPressureGuard = {
+      enable = true;
+      highPercent = 20;
+      highDurationSeconds = 20;
+      lowPercent = 5;
+      lowDurationSeconds = 60;
+      # Trial admission drain: stop polling at moderate pressure, reserving the
+      # aggregate freeze for sustained severe pressure.
+      admissionControl = {
+        enable = true;
+        severePercent = 60;
+        severeDurationSeconds = 30;
+      };
+    };
     isolatedDocker.enable = true;
     name = "xyz";
     capacity = 2;
