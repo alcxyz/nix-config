@@ -7,82 +7,71 @@
 
 ## Context
 
-Application workloads run in a multi-server k3s cluster. DNS must remain usable
-when Kubernetes is unavailable, while the UniFi Network Application now ships
-with and runs on the network gateway. Host-managed UniFi active/passive service
-plans are retired by ADR-0060.
+Application workloads need a small highly available k3s control plane. Network
+services required to reach or diagnose the cluster must remain usable when the
+cluster is unavailable. Interactive workstations also have a different restart,
+maintenance, and load profile from stable servers.
+
+Detailed node inventory, addressing, bootstrap, migration, and recovery
+procedures are private in accordance with
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
 ## Decision
 
-Keep the network-critical control surfaces outside k3s:
+Run a three-member embedded-etcd control plane on stable machines that also
+serve ordinary workloads. Keep interactive workstations outside the steady-state
+cluster. Keep network-critical resolver and gateway control surfaces outside
+k3s so their availability does not depend on cluster health.
 
-### Host-native services
+GitOps may manage selected desired state for an independently hosted network
+service, but Kubernetes does not own that service's runtime lifecycle.
 
-- Pi-hole and Unbound run as a two-host native NixOS resolver pair outside k3s.
-- The gateway console owns the UniFi Network Application runtime.
-- GitOps may manage selected UniFi desired state, but no general-purpose host
-  runs an active or standby controller.
+[ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) records the control-plane
+member replacement, [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md)
+records the network-service ownership decision, and
+[ADR-0061](0061-retire-xyz-k3s-agent.md) records the retirement of the
+workstation agent.
 
-These services should not depend on the current cluster for availability.
+## Acceptance Contract
 
-### Cluster topology: current target
-
-Run the steady-state three-server embedded-etcd topology on the more capable
-stable machines:
-
-| Node class | Role | Scheduling |
-|------------|------|------------|
-| stable servers | `server + worker` | normal workloads and control plane |
-| workstations | no k3s role | host-native workloads only |
-| resolver hosts | no k3s role | native DNS only |
-
-The cluster keeps a three-server control plane and one-server failure tolerance.
-The resolver pair remains intentionally outside k3s so LAN DNS does not depend
-on cluster health.
-
-## Migration order
-
-The cluster migration and network-service separation are complete. ADR-0051
-records the control-plane transition. ADR-0060 records the later controller and
-resolver cutover.
+Topology changes must preserve control-plane quorum and independently available
+name resolution. Admit a replacement server only after it is healthy and
+participating in consensus; remove the replaced member through the supported
+membership workflow. Verify cluster API availability, workload scheduling, and
+external network services before declaring the transition complete.
 
 ## Alternatives considered
 
-### Move `Pi-hole` into k3s now
+### Move the resolver service into k3s
 
-Rejected. DNS is more critical than the cluster itself and should stay independent
-while the control plane is still maturing.
+Rejected. Name resolution is needed when the cluster is unavailable and must
+remain in a separate failure domain.
 
-### Run UniFi on a general-purpose host or in k3s
+### Run the network controller on a general-purpose cluster or workstation host
 
-Superseded. The gateway console now owns the application lifecycle, removing
-the need for a separate controller runtime.
+Superseded by [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md). The
+network gateway owns that application's lifecycle.
 
-### Keep `rpi0` out of k3s
+### Retain a constrained server as a control-plane member
 
-Originally rejected before `nex` existed. Superseded by ADR-0051 after `xev`
-became available as a stronger replacement server.
+Superseded by [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md). A stable server
+with greater resource headroom is a better control-plane dependency.
 
-### Count `xyz` as part of the cluster
+### Count an interactive workstation as part of the cluster
 
-Rejected. `xyz` is a workstation and may reboot, suspend, or be busy. Its former
-agent-only browser fallback role was retired by ADR-0061 after the operational
-coupling outweighed the availability benefit.
+Rejected by [ADR-0061](0061-retire-xyz-k3s-agent.md). Its restart, load, and
+maintenance profile creates more operational coupling than its fallback
+capacity justifies.
 
-### Make nex only a worker
+### Add worker capacity without completing the intended control plane
 
-Rejected. The whole point of the future `nex` addition is to complete the
-3-server control plane, not just add more worker capacity.
+Rejected. The additional stable machine was selected to complete the
+odd-member control-plane design, rather than only add worker capacity.
 
 ## Consequences
 
-- **Better now:** control-plane quorum runs on `xev`, `nux`, and `nex`
-- **Still limited:** three embedded-etcd members tolerate one server failure,
-  not two
-- **Safer networking:** DNS and the gateway control plane remain independent of
-  cluster health
-- **Mixed-role reality:** the homelab remains hybrid for a while:
-  - k3s for most apps
-  - native resolvers and the gateway console outside the cluster
-- **Operational clarity:** the topology is now staged explicitly instead of pretending
-  the original “everything still in Docker” context still applies
+- The embedded-etcd control plane tolerates the loss of one server.
+- Resolver and gateway services remain available independently of cluster
+  health.
+- Stable machines carry both control-plane and workload responsibilities.
+- Interactive workstation maintenance does not affect Kubernetes membership.

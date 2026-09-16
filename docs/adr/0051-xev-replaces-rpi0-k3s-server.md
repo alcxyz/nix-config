@@ -2,61 +2,58 @@
 
 **Status:** Accepted (amended by ADR-0060)
 **Date:** 2026-05-31
-**Applies to:** `inventory.nix`, `hosts/xev`, `hosts/rpi0`, `hosts/nux`, `hosts/nex`, `modules/nixos/services/k8s-api-vip`, k3s control-plane topology
+**Applies to:** k3s control-plane membership and independent network services
 
 ## Context
 
-The k3s control plane reached a three-server embedded-etcd shape with `nux`,
-`nex`, and `rpi0`. `rpi0` was useful as an early control-plane-only member, but
-it is an embedded ARM board with a small root filesystem. Running NixOS, k3s
-server state, etcd snapshots, and host-native DNS on that root
-disk creates recurring storage pressure.
+One early control-plane member combined the cluster server role with independent
+network services on a resource-constrained host. Sustaining the operating
+system, consensus state, and routine cluster maintenance there created avoidable
+capacity and recovery pressure. A more capable stable machine was already
+qualified for normal cluster workloads.
 
-`xev` is now installed, stable, Longhorn-eligible, and already carries normal
-cluster workloads as a stable k3s agent. It has substantially more CPU, memory,
-and storage headroom than `rpi0`.
+Concrete membership, addressing, bootstrap, snapshot, removal, and recovery
+procedures are private in accordance with
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
 ## Decision
 
-Move the steady-state k3s server set from:
+Replace the resource-constrained k3s server with `xev` in the steady-state
+embedded-etcd control plane. `xev` carries both server and worker roles. The
+replaced host leaves Kubernetes and continues only its independent host-native
+network-service role.
 
-- `nux`
-- `nex`
-- `rpi0`
+The change preserves an odd-member control plane and one-server failure
+tolerance. [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md) later
+established the final ownership of the independent resolver and gateway
+services; those services remain outside Kubernetes.
 
-to:
+## Acceptance Contract
 
-- `xev`
-- `nux`
-- `nex`
+Before removing the old member, verify consensus health, create and verify a
+current recovery point, admit the replacement, and confirm that it participates
+in consensus. Remove the old member through the supported cluster workflow.
+Then verify node readiness, API availability through the stable endpoint,
+control-plane failure tolerance, independent network services, and affected
+host service health.
 
-`xev` becomes a `server-worker` node and participates in the host-managed
-Kubernetes API VIP. `rpi0` leaves k3s and no longer participates in embedded
-etcd or keepalived for the Kubernetes API.
+## Alternatives considered
 
-`rpi0` remains a host-native DNS/Pi-hole node. ADR-0060 later established the
-second independent resolver and moved UniFi lifecycle ownership to the gateway
-console. DNS stays outside Kubernetes so name resolution does not depend on
-cluster health.
+### Keep the constrained host in the control plane
 
-## Rollout Order
+Rejected because recurring capacity pressure and its independent network role
+make it a poor steady-state consensus dependency.
 
-1. Verify all current etcd endpoints are healthy.
-2. Take an on-demand etcd snapshot.
-3. Promote `xev` from k3s agent to k3s server-worker and verify it joins etcd.
-4. Drain `rpi0` and remove its etcd membership.
-5. Deploy the final NixOS topology: VIP peers are `xev`, `nux`, and `nex`;
-   `rpi0` has k3s disabled.
-6. Verify node readiness, etcd health, Kubernetes API VIP failover posture,
-   host services on `rpi0`, and failed-unit state on affected hosts.
+### Keep xev as a worker only
+
+Rejected because worker capacity alone would not replace the constrained
+control-plane member or preserve the intended quorum shape.
 
 ## Consequences
 
-The control plane keeps three embedded-etcd members and the same one-server
-failure tolerance, but moves quorum off the most constrained host.
-
-`rpi0` no longer stores k3s server state or scheduled etcd snapshots, reducing
-root filesystem pressure and recovery complexity.
-
-`xev` now carries both normal workloads and control-plane quorum, so it should
-be treated as a stable server dependency rather than only worker capacity.
+- The cluster retains the same control-plane size and one-server failure
+  tolerance on stable machines.
+- The replaced host no longer carries consensus state or cluster maintenance
+  load.
+- `xev` becomes a stable control-plane dependency as well as a workload host.
+- Network-critical services remain independent of Kubernetes availability.

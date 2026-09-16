@@ -4,92 +4,87 @@
 
 **Date:** 2026-08-26
 
-**Applies to:** `hosts/xyz`, k3s topology, Kubernetes browser placement,
-Longhorn system workloads
+**Applies to:** `hosts/xyz`, k3s worker topology, protected browser placement,
+and cluster storage workloads
 
-**Artifact ownership amendment (migration pending):** GitOps ADR-052 and
+**Artifact ownership amendment:** GitOps ADR-052 and
 [nix-config issue #372](https://git.alc.xyz/alcxyz/nix-config/issues/372)
-supersede only the node-local image build and mutable `:current` alias ownership
-recorded below. Nix continues to own the exact browser inputs, build contexts,
-and runtime behavior, while trusted Forgejo CI publishes immutable registry
-artifacts for hosts and GitOps to consume. The existing local images remain the
-runtime baseline until those artifacts are published, deployed, and accepted;
-the worker, storage, input, and placement decisions in this ADR remain active.
+supersede the original node-local image build and mutable alias ownership.
+Issue #372 records completed registry adoption through the producer and consumer
+changes, including [PR #377](https://git.alc.xyz/alcxyz/nix-config/pulls/377).
+Nix owns browser inputs, build contexts and runtime behavior; trusted Forgejo CI
+publishes immutable registry artifacts for hosts and GitOps to consume. The
+worker, storage, input and placement decisions here remain active. That recorded
+acceptance did not include end-to-end Moonlight streaming qualification.
 
 ## Context
 
-`xyz` joined k3s as a tainted, agent-only GPU worker so the public and private
-Wolf browser singletons could fall back from `xev`. It never joined the control
-plane and never stored Longhorn replicas.
+`xyz` joined k3s as a tainted, agent-only GPU worker to provide fallback
+capacity for protected browser workloads. It did not participate in the control
+plane or hold persistent cluster-storage replicas.
 
-The fallback nevertheless required a complete k3s, Longhorn, GPU-device-plugin,
-load-balancer-speaker, worker-qualification, and browser-runtime surface on an
-interactive workstation. Longhorn recurring backup and filesystem-trim jobs
-also deliberately tolerated the workstation taint and could execute there.
-The resulting coupling and background activity outweighed the value of browser
-availability during an `xev` outage.
+Maintaining that fallback nevertheless required the full worker, storage-client,
+GPU, networking, qualification, and browser runtime surface on an interactive
+workstation. The operational coupling and background activity outweighed the
+availability benefit.
+
+Detailed node labels, runtime mounts, image aliases, storage paths, backup
+topology, and removal or recovery procedures are private in accordance with
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
 ## Decision
 
-Retire `xyz` from the k3s cluster and run both Kubernetes-managed Wolf browser
-singletons only on `xev`.
+Retire `xyz` from k3s. Run the protected browser workloads on one explicitly
+qualified stable GPU worker, accepting that worker as a single availability
+boundary. Remove workstation eligibility from cluster system workloads and
+remove the placement automation that existed only to support fallback to
+`xyz`.
 
-Remove the xyz k3s agent, Longhorn attachment-node prerequisites, Kubernetes
-NVIDIA runtime, browser-worker preparation, and k3s runtime mount from the
-active host configuration. Keep the former ZFS runtime dataset unmounted as a
-passive rollback artifact until ordinary storage housekeeping removes it; do
-not back it up.
+Keep Nix as the source of truth for browser inputs, build contexts, and runtime
+behavior. Under the artifact-ownership amendment above, trusted CI publishes
+immutable images and hosts and GitOps consume them.
 
-Remove the browser placement controller and worker qualification DaemonSet.
-Select both browser workloads and the parked browser pilot through the
-`nixbox.alc.xyz/protected-browser-worker=true` capability label, which is
-assigned only to `xev`. This is an intentional single-worker boundary rather
-than a promise of fallback mobility. Remove the xyz taint tolerations and node
-eligibility from Longhorn, MetalLB, and the NVIDIA device plugin so cluster
-infrastructure and recurring jobs remain on the three stable servers.
+Host-native backup responsibilities remain independent of Kubernetes
+membership. Their concrete storage and recovery design belongs in the private
+operational record.
 
-Nix remains the source of truth for the node-local browser package versions.
-Build each versioned image and maintain a `nixbox/wolf-<browser>:current` local
-alias for Kubernetes. GitOps validates the image provenance contract but does
-not duplicate fast-moving Nix package versions. This prevents an ordinary host
-update or post-prune image reconciliation from leaving Kubernetes pointed at a
-version that no longer exists on the only qualified worker.
+## Acceptance Contract
 
-The host-native Kubernetes backup mirror and its ZFS-to-local-backup chain on
-`xyz` remain unchanged. They do not require cluster membership.
+Before completing retirement, verify that no control-plane membership,
+persistent cluster replicas, or required system workloads depend on `xyz`.
+Confirm protected browsers start and retain their expected input and persistence
+behavior on the qualified worker, and confirm cluster system workloads remain
+eligible on stable nodes. Retire passive rollback artifacts through ordinary storage housekeeping.
+
+Artifact-ownership acceptance requires immutable images to be
+published by trusted CI, consumed by the host and GitOps definitions, deployed,
+and checked against the declared browser contract. Issue #372 records the
+completed checks and the separate streaming-qualification limitation.
 
 ## Consequences
 
-- The steady-state cluster consists only of the three server/worker nodes
-  `xev`, `nux`, and `nex`.
-- Workstation restarts and interactive load no longer affect Kubernetes.
-- Kubernetes and Longhorn system jobs can no longer execute on `xyz`.
-- Loss or maintenance of `xev` makes both browser services unavailable until
-  it returns or a new qualified GPU worker is deliberately introduced.
-- Updating a browser package on `xev` atomically advances its local `:current`
-  alias; Kubernetes does not require a matching version-only manifest change.
-- Browser state remains protected by Longhorn replicas and off-volume backups;
-  this decision reduces availability, not data durability.
-- Backup volume, retention, and destination load are unchanged. Only xyz's
-  participation as a Kubernetes execution node is removed.
+- Interactive workstation restarts and load no longer affect Kubernetes.
+- Cluster workloads can no longer execute on `xyz`.
+- Loss or maintenance of the sole qualified GPU worker interrupts the protected
+  browser services until it returns or another worker is deliberately qualified.
+- Browser persistence and host-native backups remain separate from worker
+  membership.
+- Artifact distribution follows the registry contract; its recorded acceptance
+  does not imply new end-to-end streaming qualification.
 
 ## Alternatives considered
 
-### Keep xyz and remove only the Longhorn recurring-job toleration
+### Keep xyz and remove only background storage jobs
 
-Rejected. It would stop backup jobs from landing on the workstation but retain
-the rest of the agent, Longhorn, GPU, placement, and qualification machinery
-for a fallback that is not operationally important.
+Rejected. This would retain most worker, GPU, networking, placement, and
+qualification machinery for a fallback that is not operationally important.
 
 ### Keep xyz cordoned as a cold fallback
 
-Rejected. A cold cluster member still carries stale-node lifecycle and runtime
-maintenance costs, while uncordoning and qualification would remain a manual
-recovery procedure. A future fallback should be introduced as an explicitly
-supported worker.
+Rejected. A cold member still creates stale-node and runtime maintenance work.
+A future fallback should be introduced as an explicitly supported worker.
 
 ### Retain automatic browser failover
 
-Rejected for the current topology. The browsers are useful but do not justify
-making the daily workstation part of the cluster failure and maintenance
-domain.
+Rejected for the current topology. Browser availability does not justify making
+an interactive workstation part of the cluster failure and maintenance domain.

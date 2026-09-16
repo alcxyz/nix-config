@@ -3,87 +3,78 @@
 **Status:** Accepted, staged
 **Date:** 2026-08-31
 **Amended:** 2026-09-07
-**Applies to:** `hosts/xyz`, `hosts/xev`, secure ZFS storage, bulk storage, media services, Kubernetes backup recovery
+**Applies to:** secure storage, replaceable bulk storage, dependent services,
+and Kubernetes backup recovery
 **Amends:** ADR-0052, ADR-0062, ADR-0063
 
 ## Context
 
-ADR-0062 originally coupled the eventual move of the two-branch XFS bulk
-filesystem with moving the encrypted ZFS mirror to `xev`. ADR-0063 has since
-separated those storage policies: `/tank` is replaceable bulk data, while the
-remaining mirrored ZFS data is valuable or recovery-oriented.
+[ADR-0062](0062-xev-tank-storage-and-media-service-migration.md) originally
+coupled relocation of replaceable bulk storage with relocation of encrypted,
+recovery-oriented storage. [ADR-0063](0063-split-replaceable-bulk-and-secure-storage.md)
+separated those storage policies. Services that consume bulk data do not
+require ownership of the secure storage, and moving both at once would expand
+the cutover and weaken the separation between authoritative backups and their
+independent replica.
 
-The media services need the bulk filesystem but do not need the secure mirror.
-Moving the secure mirror would introduce a new TPM-bound unattended-unlock
-design on `xev`, expand the physical cutover, and move the Kubernetes backup
-replica onto the same host as its authoritative source. None of those changes
-is required to make bulk storage and media services independent of `xyz`.
+Detailed device inventory, dataset and mount names, encryption and unlock
+design, exports, schedules, migration commands, rollback, and recovery
+procedures are private in accordance with
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
 ## Decision
 
-Keep the encrypted ZFS mirror owned, imported, unlocked, monitored, and served
-by `xyz`. Rename the pool from its historical `tank` name to `secure` and move
-its live hierarchy from `/tank` to `/secure` as the remaining stage of
-ADR-0063. Preserve `/vault` as a convenience link to `/secure/vault`.
+Keep encrypted, mirrored, recovery-oriented storage owned by `xyz`. Move only
+replaceable bulk-storage ownership to `xev`, followed by services whose data
+plane depends on that storage. Treat secure storage and bulk storage as separate
+ownership and migration units.
 
-Retain the subsequently restored `secure/games` dataset on `xyz`, mounted at
-`/games` for application compatibility. This explicit path is outside the
-`/tank` bulk namespace and does not become part of the XFS ownership unit.
+Keep the Kubernetes backup replica on `xyz`, in a different host failure domain
+from the authoritative target governed by
+[ADR-0052](0052-xev-primary-k8s-backup-target.md). The secure-storage host is not
+part of the bulk-storage ownership unit and is not a prerequisite for the bulk
+move.
 
-Move only the two independent XFS bulk branches and their mergerfs `/tank`
-namespace to `xev`. Move qBittorrent, Stash, and Plex beside that bulk storage
-in separate application-state stages. During any intermediate remote-service
-stage, consumers must require the real NFS mount and fail rather than write to
-a local placeholder.
+Any future secure-storage move requires a separate decision covering unattended
+availability, recovery authorization, failure-domain separation, import
+ownership, validation, and rollback. It must not be inferred from the bulk
+migration.
 
-The `xyz` dataset `secure/k8s-backups` remains the independent pull replica and
-recovery endpoint for the authoritative Kubernetes backup target on `xev`.
-The secure mirror must not be counted as part of the `xev` storage ownership
-unit or as a prerequisite for the bulk move.
+## Staging and Acceptance Contract
 
-Do not provision a production secure-pool TPM credential on `xev` in this
-migration. A future proposal may move `secure`, but it must independently
-revisit unattended unlock, recovery authorization, failure-domain separation,
-import ownership, and rollback. That future decision must not be inferred from
-the bulk-storage migration.
+The secure/bulk policy split and secure-storage ownership decision are complete.
+The remaining bulk-storage and dependent-service migration stays staged under
+[ADR-0062](0062-xev-tank-storage-and-media-service-migration.md).
 
-## Stages
+Before moving bulk ownership, verify the destination storage independently and
+define a bounded rollback point. During an intermediate remote-service stage,
+consumers must require the intended remote storage and fail safely when it is
+unavailable, rather than write to an unintended local path. Move dependent
+services separately, verifying data integrity, service behavior, monitoring,
+and rollback after each stage. Preserve the independently recoverable backup
+copy throughout the migration.
 
-Stages 1 and 2 are complete: the renamed secure pool is live on `xyz`, the
-observation window has closed, and the retired media/downloads datasets have
-been destroyed. `secure/games` remains live at `/games`. The remaining work
-starts at stage 3 and is detailed in the amended ADR-0062.
+## Alternatives considered
 
-1. Complete the guarded `tank` to `secure` rename on `xyz`, including unlock,
-   mount, NFS, monitoring, backup, and rollback validation.
-2. Observe the clean bulk/secure split while retaining the retired read-only
-   media and downloads datasets for the ADR-0063 rollback window.
-3. Prepare `xev` for only the XFS branches, mergerfs mount, NFS ownership, and
-   bulk-storage health monitoring.
-4. Move the complete XFS bulk ownership unit with a bounded rollback to `xyz`.
-5. Move qBittorrent, Stash, and Plex one at a time with independent
-   application-state rollback points.
+### Move secure and bulk storage together
+
+Rejected. The services need the bulk data plane, while a secure-storage move
+would add unrelated availability, recovery, and failure-domain changes.
+
+### Place the backup replica with its authoritative target
+
+Rejected because the replica must remain in an independent host failure domain.
+
+### Treat a future secure-storage move as part of this migration
+
+Rejected. Such a move requires its own architecture and recovery review.
 
 ## Consequences
 
-- `/tank` has one meaning: replaceable bulk capacity.
-- `/secure` has one meaning: encrypted, mirrored, recovery-oriented storage on
-  `xyz`.
-- The immediate `xev` migration no longer depends on OpenZFS import ownership,
-  TPM enrollment, or secure-pool recovery provisioning.
-- The Kubernetes backup replica remains in a separate host failure domain from
-  its authoritative `xev` target.
-- Secure storage remains unavailable during `xyz` maintenance; this is an
-  accepted trade-off for the narrower migration.
-- Clients may use `xev` for bulk exports and `xyz` for secure exports.
-- A later secure-pool move remains possible but becomes a new, separately
-  approved migration.
-
-## Tracking
-
-- Forgejo milestone: **XEV tank storage and media migration**
-- Issue #259 tracks the guarded `tank` to `secure` rename on `xyz`.
-- Issues #233 and #236 are narrowed to XFS/mergerfs preparation and ownership.
-- Issues #237 and #238 retain the qBittorrent, Stash, and Plex moves.
-- Issue #239 closes only bulk and media ownership; `xyz` retains `secure`.
-- Issues #234 and #235 are no longer prerequisites for this migration.
+- Replaceable bulk capacity and secure recovery-oriented storage have distinct
+  owners and lifecycle decisions.
+- The bulk migration does not depend on moving secure storage.
+- The Kubernetes backup replica remains separate from its authoritative target.
+- Secure storage remains unavailable during maintenance of its owning host.
+- A later secure-storage move remains possible through a separately approved
+  decision.
