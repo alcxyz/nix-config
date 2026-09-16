@@ -127,159 +127,20 @@
       pkgs.coreutils
       pkgs.docker
     ];
-    text = ''
-      presentation_scale=1.0
-      coordinator=wolf
-      runtime_directory=${lib.escapeShellArg publicRuntimeDirectory}
-      while [ "$#" -gt 0 ]; do
-        case "$1" in
-          --presentation-scale)
-            [ -n "''${2:-}" ] || {
-              echo "wolf-stream-layout: --presentation-scale requires a value" >&2
-              exit 2
-            }
-            presentation_scale="$2"
-            shift 2
-            ;;
-          --coordinator)
-            [ -n "''${2:-}" ] || {
-              echo "wolf-stream-layout: --coordinator requires a container name" >&2
-              exit 2
-            }
-            coordinator="$2"
-            shift 2
-            ;;
-          --runtime-directory)
-            [ -n "''${2:-}" ] || {
-              echo "wolf-stream-layout: --runtime-directory requires a path" >&2
-              exit 2
-            }
-            runtime_directory="$2"
-            shift 2
-            ;;
-          *) break ;;
-        esac
-      done
-      case "$presentation_scale" in
-        1 | 1.0 | 1.00 | 1.000 | 1.0000 | 1.00000 | 1.000000)
-          presentation_scale=1.0
-          cursor_size=24
-          ;;
-        1.5 | 1.50 | 1.500 | 1.5000 | 1.50000 | 1.500000)
-          presentation_scale=1.5
-          cursor_size=36
-          ;;
-        *)
-          echo "wolf-stream-layout: unsupported presentation scale: $presentation_scale" >&2
-          exit 2
-          ;;
-      esac
-
-      layout="''${1:-}"
-      shift || true
-      runners=("$@")
-      case "$layout" in
-        ${lib.concatImapStringsSep "\n        " (
-          index: layout: "${layout}) layout_index=${toString (index - 1)} ;;"
-        )
-        browserCfg.keyboardLayouts}
-        *)
-          echo "usage: wolf-stream-layout [--presentation-scale {1.0|1.5}] [--coordinator NAME] [--runtime-directory PATH] {${lib.concatStringsSep "|" browserCfg.keyboardLayouts}} RUNNER [RUNNER ...]" >&2
-          exit 2
-          ;;
-      esac
-      if [ "''${#runners[@]}" -eq 0 ]; then
-        echo "wolf-stream-layout requires at least one runner" >&2
-        exit 2
-      fi
-
-      # Wolf UI may wait for a person to enter the protected profile PIN.
-      # Keep this detached launch helper alive long enough for that normal
-      # interaction without delaying Moonlight itself.
-      for ((attempt = 0; attempt < 1200; attempt++)); do
-        for runner in "''${runners[@]}"; do
-          container="$(
-            docker ps \
-              --filter "name=^/''${runner}_" \
-              --format '{{.Names}}' \
-              | head -n1
-          )"
-          if [ -n "$container" ] \
-            && docker exec \
-              -u ${toString cfg.defaultRunUid} \
-              "$container" \
-              sh -c '
-                if [ -e /tmp/nixbox-browser-presentation/ready ]; then
-                  printf "%s\n" "$1" > /tmp/nixbox-browser-presentation/requested-scale
-                fi
-              ' sh "$presentation_scale" \
-                >/dev/null 2>&1 \
-            && docker exec \
-              -u ${toString cfg.defaultRunUid} \
-              -e "SWAYSOCK=$runtime_directory/sway.socket" \
-              "$container" \
-              swaymsg input type:keyboard xkb_switch_layout "$layout_index" \
-                >/dev/null 2>&1; then
-            # WOLF_SESSION_ID is the paired-client ID. Persist this client's
-            # presentation class so a future fresh runner starts at the right
-            # scale; the startup handshake above also handles this first run.
-            client_id="$(
-              docker exec "$container" printenv WOLF_SESSION_ID 2>/dev/null \
-                || true
-            )"
-            if [ -n "$client_id" ]; then
-              docker exec -i "$coordinator" python3 - "$client_id" "$presentation_scale" \
-                < ${wolfSetClientPresentationScale} \
-                >/dev/null 2>&1 || true
-            fi
-            docker exec \
-              -u ${toString cfg.defaultRunUid} \
-              -e "SWAYSOCK=$runtime_directory/sway.socket" \
-              "$container" \
-              swaymsg seat seat0 xcursor_theme Adwaita "$cursor_size" \
-                >/dev/null 2>&1 || true
-            # The in-runner KDE pointer bridge owns remote cursor visibility
-            # and needs the remote cursor to outlive phone motion long enough
-            # for a click. Do not replace its eight-second policy with the
-            # near-immediate TV-client timeout merely because the joining
-            # Moonlight client uses 1.5x presentation scaling.
-            if docker exec "$container" sh -c \
-              '[ -n "''${NIXBOX_KDECONNECT_EXECUTABLE:-}" ]' \
-                >/dev/null 2>&1; then
-              docker exec \
-                -u ${toString cfg.defaultRunUid} \
-                -e "SWAYSOCK=$runtime_directory/sway.socket" \
-                "$container" \
-                swaymsg seat seat0 hide_cursor 8000 \
-                  >/dev/null 2>&1 || true
-            # Other TV-oriented Nixbox clients render a responsive cursor
-            # locally in Moonlight. Hide Wolf's remote cursor after activity
-            # so absolute virtual pointers cannot leave a stale click-position
-            # cursor in the stream. Desktop clients retain the remote cursor.
-            elif [ "$presentation_scale" = 1.5 ]; then
-              docker exec \
-                -u ${toString cfg.defaultRunUid} \
-                -e "SWAYSOCK=$runtime_directory/sway.socket" \
-                "$container" \
-                swaymsg seat seat0 hide_cursor 1 \
-                  >/dev/null 2>&1 || true
-            else
-              docker exec \
-                -u ${toString cfg.defaultRunUid} \
-                -e "SWAYSOCK=$runtime_directory/sway.socket" \
-                "$container" \
-                swaymsg seat seat0 hide_cursor 0 \
-                  >/dev/null 2>&1 || true
-            fi
-            exit 0
-          fi
-        done
-        sleep 0.25
-      done
-
-      echo "none of the streamed runners exposed a keyboard in time: ''${runners[*]}" >&2
-      exit 1
-    '';
+    text =
+      lib.replaceStrings
+      ["@runtimeDirectory@" "@layoutCases@" "@layoutChoices@" "@runUid@" "@presentationHelper@"]
+      [
+        (lib.escapeShellArg publicRuntimeDirectory)
+        (lib.concatImapStringsSep "\n        " (
+            index: layout: "${layout}) layout_index=${toString (index - 1)} ;;"
+          )
+          browserCfg.keyboardLayouts)
+        (lib.concatStringsSep "|" browserCfg.keyboardLayouts)
+        (toString cfg.defaultRunUid)
+        (toString wolfSetClientPresentationScale)
+      ]
+      (builtins.readFile ./stream-layout.sh.in);
   };
   # GStreamer's CUDA conversion elements load NVRTC dynamically. The
   # upstream Wolf image deliberately does not bundle it, while NixOS' NVIDIA

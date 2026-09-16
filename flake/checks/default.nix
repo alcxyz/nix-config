@@ -572,6 +572,10 @@ in {
         modules/nixos/services/moonlight-client/kdeconnect-pointer-shim.c
     '';
 
+  wolf-shell-source-syntax = mkRepoCheck "wolf-shell-source-syntax" [pkgs.python3 pkgs.bash pkgs.shellcheck] ''
+    python3 scripts/checks/check-wolf-shell-templates.py
+  '';
+
   wolf-python-source-syntax = mkRepoCheck "wolf-python-source-syntax" [pkgs.python3] ''
     PYTHONPYCACHEPREFIX="$TMPDIR/pycache" python3 -m py_compile modules/nixos/services/wolf-streaming/*.py
   '';

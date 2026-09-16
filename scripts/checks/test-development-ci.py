@@ -97,10 +97,11 @@ class DevelopmentCI(unittest.TestCase):
         calls = self.calls.read_text().splitlines()
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
         self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 4)
-        self.assertEqual(sum(call.startswith("python3:") for call in calls), 3)
+        self.assertEqual(sum(call.startswith("python3:") for call in calls), 4)
         self.assertIn("shellcheck:--shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh", calls)
         self.assertIn("shellcheck:--shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh", calls)
         self.assertIn("python3:scripts/checks/check-moonlight-shell-templates.py", calls)
+        self.assertIn("python3:scripts/checks/check-wolf-shell-templates.py", calls)
         self.assertFalse(any(call.startswith("nix:") for call in calls))
 
     def test_tool_failure_stops_later_checks(self):
