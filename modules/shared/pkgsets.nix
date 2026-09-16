@@ -134,6 +134,7 @@ in rec {
 
       # Archives & media (CLI use of ffmpeg, etc.)
       unzip
+      unrar
       p7zip
       #unrar
       #rar
