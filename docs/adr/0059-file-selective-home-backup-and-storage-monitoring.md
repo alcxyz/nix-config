@@ -8,109 +8,83 @@
 
 ## Context
 
-The initial local `/home` protection copied the entire ZFS dataset with
-snapshot replication. That was a useful migration safety net, but it retained
-large rebuildable trees together with valuable user data and made file-level
-exclusions impractical. It also consumed backup-pool capacity without an
-explicit repository limit.
-
-Capacity and job success were visible during manual inspection but were not
-checked consistently across the workstation, backup server, and Kubernetes
-nodes. A successful service start alone is insufficient evidence that scheduled
-backup and mirror jobs remain current.
+Whole-dataset home replication retained large rebuildable trees together with
+valuable user files and could not express file-level exclusions. It also lacked
+a clear repository capacity boundary. Manual inspection did not provide durable
+evidence that scheduled backup and storage jobs continued to succeed.
 
 ## Decision
 
-Replace routine whole-dataset `/home` replication with an encrypted Restic
-repository on the local backup pool. Each run creates a temporary ZFS snapshot,
-bind-mounts the selected home directory read-only at a stable path, backs up that
-consistent view, and destroys the temporary snapshot after Restic finishes.
+Use an encrypted Restic repository for file-selective protection of valuable
+home data. Read from a temporary, read-only ZFS snapshot so each run sees a
+consistent view, then remove that snapshot after the backup completes.
 
-Exclude rebuildable and high-churn user data by default, including caches,
-downloads, trash, game installations, compatibility-layer runtimes, editor
-package caches, and language package stores. These exclusions are explicit and
-reviewable in host configuration. Keep seven daily, four weekly, and six
-monthly snapshots. Prune and check the repository weekly, perform a full data
-read monthly, and constrain repository growth with a dataset quota.
+Exclude reviewed classes of rebuildable and high-churn data by default. Apply a
+retention policy, repository maintenance, integrity checks, restore tests, and a
+capacity limit. Concrete paths, exclusion patterns, schedules, retention values,
+repository credentials, and storage identifiers belong in private
+configuration.
 
-Retain the former whole-dataset replica until the new repository has completed
-an initial backup, a full-data integrity check, a restore test, and a second
-incremental backup. Remove the former replica only after all four gates pass.
+Retain a previous backup representation only through a bounded transition. It
+may be removed after the replacement has completed an initial backup, integrity
+verification, restore test, and a later incremental backup.
 
-Run a host-level monitor on storage-bearing systems. It checks expected mounts
-or ZFS pools, read/write state, absolute free-space floors, required storage
-services, and recent success of host backup and mirror units. Results are sent
-to the existing private Healthchecks endpoint. The corresponding dead-man
-checks use a 30-minute period and 15-minute grace for the 15-minute host timer.
+Run host-level storage monitoring on systems that own storage. Check the
+availability and writability of expected storage, free-space floors, required
+services, and recent success of backup or mirror jobs. Send results to the
+existing private Healthchecks endpoint. Beszel owns percentage-based capacity
+history and sustained resource alerts; host checks retain ZFS-specific
+correctness checks that generic metrics cannot prove. Alert endpoints and
+host-specific thresholds remain private.
 
-Beszel owns percentage-based filesystem and pool-capacity history and sustained
-resource alerts. Host agents report the root filesystem and explicitly selected
-additional filesystems. The host-level monitor retains ZFS-specific correctness
-checks because generic disk metrics do not prove pool availability, health, or
-writability. Endpoint values, repository credentials, host-specific paths, and
-agent credentials remain in the private configuration boundary.
+Record successful scheduled work in root-owned durable state only after the
+operation exits successfully. Failed, canceled, or signaled runs do not advance
+the marker. Replace markers atomically, reject malformed or future timestamps,
+and allow only a bounded first-run exception. Activation must not invent prior
+success. This preserves freshness evidence across reboot.
 
 The cross-repository alert ownership and reconciler policy is recorded in
-GitOps ADR-048.
+GitOps ADR-048. Private backup and monitoring detail follows
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
-Recent-success monitoring records a successful unit result in root-owned
-durable state. An `ExecStopPost` recorder advances the unit's marker only when
-systemd reports `SERVICE_RESULT=success`, `EXIT_CODE=exited`, and
-`EXIT_STATUS=0`; canceled, signaled, stopped, or otherwise failed runs retain
-the previous marker. Monitored units must be root-run oneshots without
-`RemainAfterExit`, so the recorder runs when the successful operation finishes
-rather than during a later stop or reboot. Marker replacement is atomic, and
-the monitor rejects malformed or future timestamps. This evidence survives
-reboot, unlike systemd's monotonic completion timestamp.
+## Acceptance contract
 
-Missing durable state remains a failure except for the existing pending-first-
-timer allowance. A successful completion from the current boot may serve as a
-fallback when the marker is missing, which avoids discarding evidence during
-the initial rollout. Activation does not seed markers or infer success from an
-older journal entry.
+- The selected source must be read from a consistent, read-only ZFS snapshot.
+- Exclusion and retention policy changes require review.
+- Repository integrity and a representative restore must pass before retiring
+  the prior backup representation.
+- Monitoring must detect unavailable or read-only storage, capacity breaches,
+  inactive required services, and stale jobs without treating activation or a
+  reboot as success.
+- A local backup must not be described as whole-host or site-loss protection.
 
 ## Consequences
 
-- Valuable home files retain versioned, encrypted, snapshot-consistent local
+- Valuable home files receive versioned, encrypted, snapshot-consistent local
   protection without copying rebuildable bulk data.
-- Individual files can be restored without recreating a ZFS dataset layout.
-- Repository maintenance can reclaim unreferenced data, unlike snapshot-only
-  replication chains.
-- The local backup still does not protect against whole-host or site loss.
-- Exclusion changes require review because an overly broad pattern can remove
-  valuable data from future snapshots.
-- Beszel provides capacity history and percentage alerts, while mount failures,
-  unhealthy pools, absolute free-space breaches, inactive storage services,
-  and stale host backup jobs continue to produce Healthchecks alerts.
-- A stopped host timer or unreachable host is detected within approximately 45
-  minutes rather than inheriting Healthchecks' one-day auto-provisioning period.
+- Individual files can be restored without recreating a filesystem layout.
+- Repository maintenance can reclaim unreferenced data.
+- Exclusion mistakes can omit valuable data and therefore need review.
+- Storage correctness and job freshness remain distinct from generic capacity
+  telemetry.
 
 ## Alternatives considered
 
-### Continue whole-dataset ZFS replication
+### Continue whole-dataset replication
 
-Rejected for routine `/home` protection. It preserves useful ZFS semantics but
-cannot express the desired file-level boundary without reorganizing the home
-directory into many datasets.
+Rejected because it cannot express the intended file-level boundary without a
+more complex home layout.
 
-### Split `/home` into more ZFS datasets
+### Split the home into more datasets
 
-Rejected for now. Dataset boundaries would improve selective replication but
-would impose layout and mount complexity primarily to serve the backup tool.
+Rejected because it adds layout and mount complexity primarily for the backup
+tool.
 
 ### Back up live files directly
 
-Rejected. A temporary ZFS snapshot gives Restic a consistent view while keeping
-the file-selective repository and restore model.
+Rejected because a read-only ZFS snapshot gives Restic a consistent view.
 
-### Use systemd completion timestamps without durable state
+### Infer recent success from transient service state
 
-Rejected. Monotonic timestamps and the manager's unit result state do not
-preserve backup freshness evidence across a host reboot.
-
-### Record success with `OnSuccess=`
-
-Rejected. The follow-up unit runs asynchronously, and success activation does
-not provide the same strict main-process exit tuple. A gated `ExecStopPost`
-recorder can distinguish completed success from cancellation, signal exit, and
-post-start failure before advancing durable evidence.
+Rejected because service-manager timestamps and results do not preserve
+freshness evidence across reboot and may confuse startup with completed work.

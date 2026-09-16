@@ -4,64 +4,61 @@
 
 **Date:** 2026-05-18
 
-**Applies to:** `xyz`, ZFS app state, local host backups, media services
+**Applies to:** `xyz`, durable application state, local host backups
 
 ## Context
 
-`xyz` runs a mix of NixOS-native services, Docker-adjacent workloads, media
-tools, game tooling, and rebuildable desktop/runtime state. Before this
-decision, important service state lived directly under broad `/var/lib`
-directories, while some older services also left root-level compatibility
-mountpoints and stale application state behind.
-
-That made host backups too coarse. A full `/var` backup includes a large amount
-of rebuildable runtime state, while omitting `/var/lib` entirely risks losing
-small but important application databases and config.
+The host runs services whose small databases and configuration are durable, as
+well as container, desktop, and package state that can be rebuilt. Backing up a
+broad system directory treats these different recovery classes alike and either
+copies too much transient data or risks omitting important application state.
 
 ## Decision
 
-Treat selected service state as a dedicated ZFS appstate boundary on `xpool`.
-The appstate datasets are mounted at the service-native paths under `/var/lib`
-so applications do not need private path conventions.
+Give selected durable service state its own ZFS appstate boundary while
+retaining the paths expected by each service. Keep rebuildable runtime data and
+replaceable bulk content outside that boundary unless a later decision promotes
+them.
 
-The selected appstate set currently includes:
+Replicate the appstate subtree with ZFS to encrypted local backup storage on a
+schedule. Apply the same local replication boundary to the host-level
+Kubernetes backup target. This copy provides fast host-local recovery and does
+not replace off-host protection. Home-directory protection follows the
+file-selective model in
+[ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md).
 
-- Calibre library state
-- Calibre-Web state
-- Plex application state
-- qBittorrent state
-- Stash application state
+Public configuration owns the typed storage and service interfaces. Concrete
+datasets, service selections, schedules, encryption policy, and recovery
+procedures belong in the private infrastructure repository under
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
-Replicate the appstate subtree to a local encrypted backup pool with a systemd
-timer. Also replicate the host-level Kubernetes backup object-store dataset into
-the same local backup pool. The initial full-dataset home replica is replaced by
-the file-selective design in [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md).
-The backup target is host-local and intended as a fast local recovery copy, not
-as a replacement for off-host backups.
+## Acceptance contract
 
-The backup pool and the main data pool should both keep a manual passphrase
-fallback while also supporting the private age/YubiKey auto-unlock mechanism.
-The public repository records only the dataset and service wiring. Key
-envelopes, unlock material, and recovery procedure details belong in the
-private `nix-secrets` flake.
+- Selected durable service state must remain within the ZFS appstate boundary.
+- Backup jobs must fail closed when their encrypted destination is unavailable.
+- Service behavior and restore assumptions must be validated before obsolete
+  pre-migration copies are removed.
+- Rebuildable runtime and replaceable bulk data must remain excluded unless
+  their recovery classification changes through review.
 
 ## Consequences
 
-- Backups can target the appstate subtree instead of all of `/var`.
-- The Kubernetes backup target has a local ZFS replication copy outside `tank`.
-- `/home` uses the narrower, file-selective backup boundary defined by ADR-0059.
-- Services retain normal `/var/lib/...` paths, avoiding bespoke application
-  config paths for common state.
-- Rebuildable runtime state such as Flatpak caches, Docker runtime state,
-  Kubernetes runtime directories, and package/build caches remain outside the
-  appstate backup boundary unless explicitly promoted later.
-- Local backup jobs fail closed if the backup pool is not imported, unlocked, or
-  encrypted.
-- Key and recovery procedures are intentionally documented privately.
+- ZFS replication covers durable application state without copying a broad
+  runtime tree.
+- Services retain their normal paths rather than adopting a backup-specific
+  layout.
+- Local backup storage remains in the same host failure domain.
+- Private configuration is the source of truth for the concrete inventory and
+  recovery procedure.
 
-## Follow-Ups
+## Alternatives considered
 
-- Remove old pre-migration `/var/lib` copies only after service behavior and
-  backup restore assumptions have been validated.
-- Keep media libraries and game installs out of the appstate backup by default;
-  treat them as bulk data with separate retention and recovery decisions.
+### Back up the complete system state tree
+
+Rejected because it mixes durable service state with large rebuildable runtime
+data and makes recovery scope unclear.
+
+### Exclude all service state from host backups
+
+Rejected because small application databases and configuration may not be
+reconstructible from declarative configuration alone.

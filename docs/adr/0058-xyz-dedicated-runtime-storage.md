@@ -4,108 +4,75 @@
 
 **Date:** 2026-07-30
 
-**Applies to:** `xyz`, Docker, retired k3s runtime, Steam-headless, ZFS, backups
+**Applies to:** `xyz`, container runtime and game-session state, backups
 
 ## Context
 
-`xyz` has rebuildable container runtime data and Steam-headless state on
-the encrypted system pool. Growth in those paths competes with the workstation
-root and home datasets. The host also has a separate SSD available for this
-work, while game installations already have their own storage boundary.
+Rebuildable container and game-session state was competing with workstation
+root and home capacity. These paths have different recovery and growth behavior
+from durable application state and game installations.
 
-At the time of this decision, `xyz` was an opportunistic Kubernetes GPU worker.
-Moving runtime data could not
-turn it into a Longhorn replica-storage node or make normal workstation
-restarts depend on storage reconstruction.
+At adoption time the workstation was also an opportunistic Kubernetes worker.
+Moving runtime data could not make it a durable cluster-storage node or make
+ordinary workstation maintenance depend on replica reconstruction.
 
 ## Decision
 
-Use a dedicated, single-device, natively encrypted ZFS pool for node-local
-container storage on `xyz`.
+Use a dedicated, natively encrypted, single-device ZFS pool for node-local
+runtime data. Separate major runtime classes into datasets and apply independent
+quotas so growth in one class cannot exhaust the others. Retain service-native
+paths and keep game installations on their separate bulk-storage boundary.
 
-Create separate datasets for:
+Classify container, build-daemon, and game-session state as rebuildable. Do not
+include it in routine application-state backups. Temporary migration protection
+may be retained only through a bounded validation window.
 
-- Docker runtime data;
-- dedicated Forgejo build-daemon runtime data when that daemon is enabled;
-- k3s agent runtime data; and
-- Steam-headless application state.
+Keep durable cluster-replica scheduling disabled on the workstation. ADR-0061
+later retired its Kubernetes worker role; the retired agent state is no longer
+active and remains outside routine backups pending ordinary storage
+housekeeping.
 
-Mount the datasets at their existing service-native `/var/lib` paths. Apply
-independent quotas so one container runtime cannot consume all available space,
-and reserve a bounded amount of capacity for Steam-headless. Dedicated Docker
-daemons do not share image, cache or volume stores. Keep game installations on
-the existing game-library storage.
+Concrete devices, datasets, quotas, encryption policy, and migration or
+recovery procedures belong in the private infrastructure repository under
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
-Treat Docker, Forgejo build-daemon, k3s, and Steam-headless directories as
-rebuildable runtime data. Do not include them in routine application-state
-backups. Temporary snapshots remain appropriate for a sensitive migration, but
-are removed after that move is validated rather than retained as an ongoing
-backup chain. This amendment supersedes the earlier classification of
-Steam-headless as durable app state.
+## Acceptance contract
 
-Keep Longhorn replica scheduling disabled on `xyz`. The new pool is not a
-Longhorn disk and does not change the node's opportunistic lifecycle.
-
-ADR-0061 later retires the k3s agent entirely. Remove the k3s dataset from the
-active mount and runtime policy while retaining the underlying dataset as an
-unmounted, non-backed-up rollback artifact until routine storage housekeeping.
-Docker and Steam-headless continue to use their dedicated datasets.
-
-Before migration, take fresh source snapshots and complete the existing
-appstate backup. Preserve the former source datasets as a bounded rollback
-point until the new mounts, services, backup replication, and a restore check
-have passed. Detailed device identities, encryption-key handling, migration
-commands, and recovery steps remain in the private runbook established by
-[ADR-0048](0048-xyz-small-nvme-retirement.md).
-
-The local backup protects against loss of the new runtime SSD but remains on
-the same host. Whole-host and site-loss protection is a separate off-host
-backup requirement; do not describe the local replica as satisfying it.
+- Quotas must prevent one runtime class from consuming all shared device
+  capacity.
+- Migration must preserve source snapshots and a bounded rollback point until
+  the new mounts, services, backup replication, and a restore check pass.
+- The storage must not become a durable cluster-replica location.
 
 ## Consequences
 
-- Docker, Forgejo build-daemon and Steam-headless growth no longer consumes
-  workstation root pool capacity.
-- The retired k3s runtime dataset is neither mounted nor backed up.
-- Workloads keep their established paths and need no path-specific changes.
-- Quotas bound each runtime workload independently.
-- Failure of the runtime SSD removes rebuildable Docker, Forgejo build-daemon,
-  k3s and Steam-headless state; each is recreated from declarative configuration.
-- The single-device pool is not redundant. Rebuildable runtime state is
-  intentionally accepted as disposable if that device fails.
-- Restarting `xyz` does not create Longhorn replica rebuild work.
-- Pool unlock material and operational recovery procedures remain private.
+- Rebuildable runtime growth no longer consumes workstation root capacity.
+- Workloads keep their established paths.
+- Failure of the single runtime device can discard its contents; services are
+  recreated from declarative configuration.
+- Routine workstation maintenance does not trigger cluster replica rebuilds.
+- Any host-local migration or backup copy remains in the same host failure
+  domain and does not satisfy off-host recovery.
 
 ## Alternatives considered
 
-### Put all data on the game-library filesystem
+### Put runtime data on bulk game storage
 
-Rejected. Game installations are bulk, replaceable data with a different
-capacity and recovery policy from container runtime and application state.
+Rejected because game installations and mutable runtime state have different
+capacity and recovery policies.
 
-### Add the SSD as a Longhorn disk
+### Add the device as durable cluster storage
 
-Rejected. It would make an interactive workstation part of the durable replica
-set and work against its restart and maintenance requirements.
+Rejected because an interactive workstation is not an appropriate steady-state
+replica failure domain.
 
-### Use one shared filesystem without dataset quotas
+### Use one unbounded filesystem
 
-Rejected. A runaway image cache or agent runtime could consume the capacity
-allocated to Steam-headless.
+Rejected because one runtime cache could consume the capacity needed by other
+services.
 
-### Back up Docker and k3s runtime directories
+### Back up all runtime directories
 
-Rejected. Images, containers, and agent runtime state are recreated from
-declarative configuration. Backing them up would add large, inconsistent
-copies without improving durable-state recovery.
-
-## Tracking
-
-- Forgejo milestone: **XYZ dedicated runtime storage**
-- Issue #191: runtime and Steam-headless migration
-- Issue #192: protected-browser image catalog and regression qualification
-- Issue #193: original off-host recovery follow-up (superseded for
-  Steam-headless by this amendment)
-
-The public issues contain only non-sensitive acceptance criteria; the private
-runbook contains host-specific execution and rollback details.
+Rejected because rebuildable images, containers, caches, and agent state add
+large, potentially inconsistent copies without improving durable-state
+recovery.

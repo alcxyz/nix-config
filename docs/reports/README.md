@@ -18,6 +18,10 @@ campaign with `reportcraft new`, then replace the masthead, verdict, result rows
 evidence, defects, method, limits, and actions. The generated report belongs
 beside its evidence and has no `nix-config` coupling.
 
+The July 2026 remote-browser report is now a historical pointer. Its detailed
+operational evidence is retained privately; it is not current runtime
+qualification.
+
 ## Create a report
 
 ```sh

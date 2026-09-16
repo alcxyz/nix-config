@@ -3,117 +3,105 @@
 **Status:** Accepted, amended by ADR-0064; preparation in progress
 **Date:** 2026-08-23
 **Amended:** 2026-09-07
-**Applies to:** `hosts/xev`, `hosts/xyz`, XFS, mergerfs, NFS, Plex, qBittorrent, Stash
+**Applies to:** `xev`, `xyz`, replaceable bulk storage and dependent media services
 **Amended by:** ADR-0064
 
 ## Context
 
-ADR-0063 has completed the storage split on `xyz`: `/tank` is a mergerfs
-namespace over two independent XFS branches. The retired ZFS media and
-downloads copies have been destroyed after observation. The encrypted
-`secure` pool remains on `xyz`, including the restored games dataset at
-`/games`, vault, keystore, and Kubernetes backup replica.
+ADR-0063 separated replaceable bulk data from encrypted, recovery-oriented
+storage. The replaceable bulk data and its high-I/O services still depend on an
+interactive workstation. Moving ownership and dependent services to an
+always-on server reduces that availability coupling and avoids sustained remote
+I/O between the services and their data.
 
-`xev` is the always-on server and already runs Kubernetes, backup, build, and
-browser workloads. Its direct link to `xyz` negotiates at 2.5 GbE. Moving bulk
-storage and its services together avoids sending scans and torrent rechecks
-over that link and removes their dependence on workstation availability.
+The original decision also proposed moving secure storage. ADR-0064 superseded
+that part and keeps secure storage in a separate ownership and failure domain.
 
-The original version also proposed moving encrypted storage and qualifying
-an unattended unlock design. ADR-0064 superseded that part of the plan.
-This amendment presents only the remaining bulk migration; the historical
-proposal is retained in Git history.
+Concrete device inventory, storage identifiers, exports, endpoints, service
+state locations, and operational procedures are private under
+[nix-secrets ADR-0003](https://git.alc.xyz/alcxyz/nix-secrets/src/branch/dev/docs/adr/0003-public-nix-config-redaction.md).
 
 ## Decision
 
-Move the complete two-branch XFS ownership unit and mergerfs `/tank` to `xev`.
-Preserve `/tank/media`, `/tank/downloads`, and `/tank/stash`, including file
-metadata, shared-group permissions, branch placement, and the reviewed
-mergerfs policy. Do not reformat or relabel disks as an incidental step.
+Move the complete two-branch XFS ownership unit and its mergerfs view to `xev`
+without changing its data classification or treating the move as a reformat.
+Preserve stable application-visible content paths, branch placement, the
+reviewed mergerfs policy, and filesystem metadata needed by consumers.
 
-Keep `secure`, `/games`, `/vault`, Calibre, Calibre-Web, and the independent
-Kubernetes backup replica on `xyz`. No secure-pool import or unlock changes
-are prerequisites for this move. Previously discussed TPM and firmware work
-is not a bulk-migration gate unless a concrete hardware compatibility issue
-requires firmware maintenance separately.
+Keep secure, recovery-oriented storage and its independent backup role on
+`xyz`, as required by [ADR-0064](0064-keep-secure-storage-on-xyz.md). A secure
+storage move or unlock-policy change is outside this migration.
 
-Prepare packages and filesystem support first, with no bulk mounts, exports,
-or media services activated on `xev`. Define and review the source retirement
-and destination activation configurations together before the physical move.
-Both XFS branch mounts must be required before mergerfs starts. Consumers
-must check the real storage mount and remain stopped if it is unavailable.
+Prepare filesystem support, fail-closed mounts, and monitoring before activation.
+Review source retirement and destination activation together. Only one host may
+own the storage at a time, and consumers must remain stopped when the intended
+storage is unavailable.
 
-Move qBittorrent, Stash, and Plex to host-native services on `xev`, one at a
-time, with independent application-state backups and rollback points. During
-any interval when the disks are on `xev` and services remain on `xyz`, provide
-explicit NFS client mounts and fail-closed consumer dependencies before
-resuming those services. Account for NFS clients changing export ownership,
-service endpoints, user/group IDs, and application-state storage on `xev`.
+Move dependent media services separately after storage ownership, with an
+independent application-state backup, validation, and rollback point for each
+stage. Any temporary remote-service stage must require the intended remote
+storage through explicit NFS mounts and must not fall back to an empty local
+directory.
 
-Qualify Plex hardware transcoding alongside existing Kubernetes GPU workloads.
-If coexistence is unacceptable, track Kubernetes placement as a separate
-decision after establishing the storage and application-state migration.
+Hardware-accelerated media behavior must be qualified alongside existing GPU
+workloads. If coexistence is unacceptable, a separate placement decision is
+required.
 
 ## Remaining stages and gates
 
-1. **Prepare xev (#233).** Build the current system with XFS and mergerfs tools.
-   Prepare inactive destination mounts and health monitoring. Qualify physical
-   attachment capacity, disk health, and storage/controller suitability.
-   Activate and verify the preparation through the Kubernetes maintenance
-   workflow; a successful build alone does not qualify the running host.
-2. **Move bulk ownership (#236).** Record branch inventories and application
-   state backups. Stop all writers and exports, unmount both branches cleanly,
-   and move the complete pair. Ensure only one host can mount them. Validate
-   destination mounts, metadata, NFS, and the intermediate client configuration
-   before resuming consumers. Retain a bounded physical return plan to `xyz`.
-3. **Move qBittorrent and Stash (#237).** Back up and transfer each application's
-   state independently, preserve content paths, and verify seeding, download
-   behavior, catalog access, permissions, and clients.
-4. **Move Plex (#238).** Preserve its database and metadata, validate playback
-   and transcoding, and qualify GPU coexistence.
-5. **Qualify and retire old ownership (#239).** Test reboot recovery, missing
-   branch/mount behavior, application-state restore, and client reconnection.
-   After observation, remove superseded xyz bulk/service configuration and
-   explicitly authorized application-state rollback copies.
+1. **Prepare the destination
+   ([#233](https://git.alc.xyz/alcxyz/nix-config/issues/233)).** Qualify storage
+   attachment, health, controller suitability, inactive mounts, and monitoring
+   on the running host. A successful build alone is insufficient.
+2. **Move bulk ownership
+   ([#236](https://git.alc.xyz/alcxyz/nix-config/issues/236)).** Quiesce all
+   writers, transfer the complete ownership unit, prove single-host ownership,
+   and validate storage and any temporary client path before resuming consumers.
+3. **Move the first dependent services
+   ([#237](https://git.alc.xyz/alcxyz/nix-config/issues/237)).** Transfer and
+   validate each service state independently while preserving content paths and
+   permissions.
+4. **Move the hardware-accelerated service
+   ([#238](https://git.alc.xyz/alcxyz/nix-config/issues/238)).** Validate service
+   state, playback, acceleration, and coexistence with other GPU workloads.
+5. **Qualify and retire old ownership
+   ([#239](https://git.alc.xyz/alcxyz/nix-config/issues/239)).** Test restart,
+   missing-storage, restore, and client-reconnection behavior before removing
+   superseded configuration or rollback copies.
 
-Physical operations, service cutovers, and reboots remain separately scheduled
-maintenance actions. Hardware identities, commands, recovery procedures, and
-operational evidence belong in the private runbook.
+These hardware and runtime gates remain pending. This ADR does not authorize or
+record their completion, and configuration preparation does not activate the
+move.
 
 ## Alternatives considered
 
-### Keep bulk storage and media services on xyz
+### Keep bulk storage and its services on xyz
 
-Retains workstation maintenance as a shared-storage outage; not selected.
+Rejected because workstation maintenance would remain a shared-storage outage.
 
-### Move the disks but keep services permanently on xyz
+### Move storage while keeping services permanently remote
 
-Useful as a short transition, but adds network dependence and limits heavy
-storage operations to the link. Not the target state.
+Rejected as the target state because it retains network dependence for heavy
+storage work.
 
-### Copy to replacement disks already attached to xev
+### Copy onto replacement hardware
 
-Offers an easier physical rollback, but requires an additional complete set
-of disks. Revisit if a capacity refresh is approved before migration.
+Deferred. It offers a simpler physical rollback but requires a separate capacity
+purchase and refresh decision.
 
-### Move secure storage or put Plex in Kubernetes at the same time
+### Move secure storage or change service orchestration at the same time
 
-Deferred under ADR-0064. Each introduces independent recovery, ownership, or
-scheduling decisions that are not required for the bulk move.
+Rejected for this migration. Each adds independent availability, recovery, or
+scheduling decisions.
 
 ## Consequences
 
-- `xev` becomes the sole bulk-storage and media-service owner.
-- The XFS pair remains non-redundant replaceable storage; mergerfs is no backup.
-- `xyz` remains the secure-storage owner and independent backup failure domain.
-- Stable content paths reduce application migration work, but endpoints and
-  host dependencies still require explicit updates.
-- xev capacity and recovery qualification must include its existing workloads.
-
-## Tracking
-
-Forgejo milestone: **XEV tank storage and media migration**.
-Remaining issues: **#233, #236, #237, #238, #239**.
-The secure rename (#259) and ADR-0063 observation/retired-dataset cleanup are
-complete. The former secure-move prerequisites (#234 and #235) are superseded
-for this migration by ADR-0064.
+- `xev` becomes the owner of replaceable bulk storage and its dependent media
+  services after the pending gates pass.
+- The XFS/mergerfs bulk layer remains non-redundant and is not a backup.
+- `xyz` remains the secure-storage owner and an independent backup failure
+  domain.
+- Stable consumer paths reduce application migration work, while endpoints and
+  host dependencies still require deliberate updates.
+- Destination capacity, hardware, and recovery behavior must be qualified with
+  its existing workloads before activation.
