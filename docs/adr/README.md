@@ -13,7 +13,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0006](0006-four-tier-module-layering.md) | Four-tier module layering | Accepted | `modules/`, `hosts/` |
 | [ADR-0007](0007-filtered-nix-packages-overlay.md) | Custom packages in a separate repo with filtered overlay | Accepted | `flake.nix`, packages |
 | [ADR-0008](0008-pkgsets-centralised-package-management.md) | Centralised package sets via pkgsets.nix | Accepted, amended | `modules/shared/` |
-| [ADR-0009](0009-xyz-as-distributed-build-host.md) | xyz and mac distributed build posture | Accepted, amended | distributed builds |
+| [ADR-0009](0009-xyz-as-distributed-build-host.md) | Distributed build roles and explicit client opt-in | Accepted, redacted | distributed builds |
 | [ADR-0010](0010-amd-igpu-forced-primary-display-nvidia-workaround.md) | Force AMD iGPU as primary display device on dual-GPU workstation | Accepted | xyz, desktop |
 | [ADR-0011](0011-unified-keyboard-remapping-kanata.md) | Unified keyboard remapping via kanata across all hosts and keyboards | Accepted, amended | kanata, desktop, mac |
 | [ADR-0012](0012-remote-dev-headless-wayland-over-vm.md) | Remote development via headless Wayland session instead of a VM | Accepted | nux, remote-dev |

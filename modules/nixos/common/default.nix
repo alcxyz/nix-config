@@ -38,7 +38,7 @@ in {
     inputs.nix-secrets.nixosModules.sshAccessPolicy
     ../../shared/host-metadata.nix
     ../../shared/shell.nix
-    ./distributed-build-client.nix
+    inputs.nix-secrets.nixosModules.distributedBuildClientPolicy
     ./nsswitch.nix
     ../security/credential-consent/default.nix
     ../services/snapshot-restic-home/default.nix

@@ -112,7 +112,6 @@ modules/
   nixos/
     common/
       default.nix                  # Shared across all NixOS hosts
-      distributed-build-client.nix # Optional distributed builds through xyz
       ssh-keys.nix                 # Public SSH key catalog grouped by purpose
       desktop.nix                  # Workstation layer (xyz)
       server.nix                   # Headless system package and X server defaults
