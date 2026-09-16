@@ -68,22 +68,42 @@
     },
     "bn-bootstrap": {
       "inputs": {
+        "bullet-platform": "bullet-platform",
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1788935427,
-        "narHash": "sha256-0q5TjIgnvYOJwB4mHQlhjf4dO1iQAdXWEhr3d9472Ck=",
-        "ref": "refs/heads/dev",
-        "rev": "242fb9001b51242d4015d6bb02d2d2cc9cb1df4f",
-        "revCount": 11,
+        "lastModified": 1789483382,
+        "narHash": "sha256-tsoEJ/byy7s00zUkmOxjngZC8gpmNN4AwH2v/j6D+ms=",
+        "ref": "dev",
+        "rev": "0be15949064a3f5d79035d58b6b0514152e1b95a",
+        "revCount": 23,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       },
       "original": {
+        "ref": "dev",
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
+      }
+    },
+    "bullet-platform": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789483346,
+        "narHash": "sha256-duiaIciHRCAWZnzrlrKuffEvRVobVEm0Qa0Y3GhTpSM=",
+        "ref": "explore/bullet-cli",
+        "rev": "fc5dc71f0b7c5db83c8ba7346788e3e565bfea20",
+        "revCount": 2781,
+        "type": "git",
+        "url": "https://github.com/bn-apps/bullet-platform.git"
+      },
+      "original": {
+        "ref": "explore/bullet-cli",
+        "rev": "fc5dc71f0b7c5db83c8ba7346788e3e565bfea20",
+        "type": "git",
+        "url": "https://github.com/bn-apps/bullet-platform.git"
       }
     },
     "calculator": {
@@ -917,11 +937,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789319841,
-        "narHash": "sha256-FaKcdZn5unWbfMQKBWW68Y+Ia1v89J8GYqskY7o5Ofk=",
+        "lastModified": 1789470921,
+        "narHash": "sha256-rr5pQCisNfI9cM+86zMA2wqhdM1yBilzog0reZRGrHw=",
         "ref": "dev",
-        "rev": "b89f00d31371ba1638c06f9657b31f1536558440",
-        "revCount": 509,
+        "rev": "1e9c21c967827d9d11c6ac24b2527c9309f0e2d2",
+        "revCount": 512,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
