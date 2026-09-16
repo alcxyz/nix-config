@@ -1,6 +1,7 @@
 # modules/home-manager/programs/ssh/default.nix
 {
   config,
+  inputs,
   lib,
   pkgs,
   inventory ? {},
@@ -8,20 +9,6 @@
   ...
 }: let
   inherit (lib) mkIf mkMerge optionalAttrs;
-  getent = "${pkgs.getent}/bin/getent";
-  grep = "${pkgs.gnugrep}/bin/grep";
-  resolveGitSshHost =
-    if pkgs.stdenv.isDarwin
-    then ''/usr/bin/dscacheutil -q host -a name "$1"''
-    else ''${getent} ahostsv4 "$1"'';
-  gitSshCloudflareFallbackMatch = pkgs.writeShellScript "git-ssh-cloudflare-fallback-match" ''
-    if ${resolveGitSshHost} | ${grep} -Fqw 192.168.1.240; then
-      exit 1
-    else
-      exit 0
-    fi
-  '';
-
   managedHosts = inventory.hosts or {};
   mkManagedHostBlock = name: hostAttrs: let
     aliases = hostAttrs.aliases or [];
@@ -36,6 +23,8 @@
   };
   managedHostSettings = lib.attrsets.mergeAttrsList (lib.mapAttrsToList mkManagedHostBlock managedHosts);
 in {
+  imports = [inputs.nix-secrets.homeManagerModules.sshClientPolicy];
+
   config = mkIf config.programs.ssh.enable (mkMerge [
     {
       programs.ssh = {
@@ -68,29 +57,6 @@ in {
             "github" = {
               HostName = "github.com";
               User = "git";
-            };
-
-            "git-ssh.alc.xyz" = {
-              User = "git";
-            };
-
-            "git.local" = {
-              User = "git";
-              HostKeyAlias = "git-ssh.alc.xyz";
-            };
-
-            "git-ssh.alc.xyz-cloudflare-fallback" = {
-              header = ''Match originalhost git-ssh.alc.xyz exec "${gitSshCloudflareFallbackMatch} %h"'';
-              ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
-            };
-
-            "nux-ssh.alc.xyz" = {
-              ProxyCommand = "${pkgs.cloudflared}/bin/cloudflared access ssh --hostname %h";
-            };
-
-            "vps" = {
-              HostName = "46.202.150.96";
-              User = "root";
             };
           };
       };
