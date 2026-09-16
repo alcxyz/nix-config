@@ -214,6 +214,14 @@
   };
 
   # ==================== Virtualisation ====================
+  virtualisation.podman = {
+    enable = true;
+    # Docker retains its CLI and socket; invoke Podman explicitly.
+    dockerCompat = false;
+    dockerSocket.enable = false;
+    defaultNetwork.settings.dns_enabled = true;
+  };
+
   virtualisation.kvm.managed.enable = false;
   virtualisation.kvm.gpu-passthrough = {
     enable = false;
