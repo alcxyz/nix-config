@@ -22,6 +22,10 @@ module imports that policy and retains generic system configuration. The
 extraction preserves the existing generated access policy; it does not grant or
 revoke access.
 
+The private NixOS and Home Manager `sshIdentityPolicy` exports own host-local
+and operator identity projections and their platform-specific activation
+integration. The common modules import these policies directly.
+
 Host-local identities, operator identities and dedicated build-client identities
 retain separate lifecycles. System-managed identities needed before user
 activation remain a system responsibility. Private storage locations, membership,

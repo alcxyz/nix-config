@@ -7,7 +7,6 @@
   accountUsername,
   accountHomeDirectory,
   hostName,
-  hostInventory,
   configDir,
   lib,
   ...
@@ -16,8 +15,6 @@
     inherit pkgs inputs;
   };
 
-  userHome = "/home/${username}";
-  manageUserSshSecrets = !(hostInventory.skipManagedUserSshSecrets or false);
   shellPackages = {
     bash = pkgs.bashInteractive;
     nu = pkgs.nushell;
@@ -35,6 +32,7 @@
 in {
   # ==================== Imports ====================
   imports = [
+    inputs.nix-secrets.nixosModules.sshIdentityPolicy
     inputs.nix-secrets.nixosModules.sshAccessPolicy
     ../../shared/host-metadata.nix
     ../../shared/shell.nix
@@ -221,34 +219,8 @@ in {
     })
   ];
 
-  # ==================== sops/secrets ====================
-  sops = {
-    defaultSopsFile = "${inputs.nix-secrets}/hosts/${hostName}/secrets.yaml";
-    age.sshKeyPaths = ["/etc/ssh/ssh_host_ed25519_key"];
-    secrets = lib.optionalAttrs manageUserSshSecrets {
-      "${username}_ssh_private_key" = {
-        key = "ssh_id_ed25519";
-        path = "${userHome}/.ssh/id_ed25519";
-        owner = username;
-        group = "users";
-        mode = "0600";
-      };
-      "${username}_ssh_public_key" = {
-        key = "ssh_id_ed25519.pub";
-        path = "${userHome}/.ssh/id_ed25519.pub";
-        owner = username;
-        group = "users";
-        mode = "0644";
-      };
-    };
-    #secrets = {
-    #  from_shared= { sopsFile = "${inputs.nix-secrets.secrets.files.shared.${hostName}}"; };
-    #  from_host = { sopsFile = "${inputs.nix-secrets.secrets.files.hosts.${hostName}}"; };
-    #};
-  };
-
   systemd.tmpfiles.rules = [
-    "d ${userHome}/.ssh 0700 ${username} users - -"
+    "d /home/${username}/.ssh 0700 ${username} users - -"
   ];
 
   # ==================== SSH ====================
