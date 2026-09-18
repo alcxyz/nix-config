@@ -3,10 +3,10 @@ run-name: "nix-packages lock refresh (${{ forgejo.event_name }})"
 
 on:
   schedule:
-    # Poll after the package merge window. The update script refuses promotion
+    # Poll hourly after the package merge sweep. The update script refuses promotion
     # while any package update PR remains open, so concurrent validation cannot
     # produce a partially advanced lock.
-    - cron: "TZ=Europe/Oslo 0 6-9 * * *"
+    - cron: "TZ=Europe/Oslo 0 * * * *"
   workflow_dispatch:
 
 jobs:
