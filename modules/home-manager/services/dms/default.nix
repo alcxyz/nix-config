@@ -240,7 +240,14 @@
   };
   dankaiusagePkg = pkgs.callPackage "${plugins.aiusage}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.aiusage}/plugin.json")).version;
+    revision = plugins.aiusage.rev or (plugins.aiusage.dirtyRev or null);
   };
+  # Older pinned revisions package only the helper. Keep those usable until the
+  # QA input advances to a revision that stages the matching plugin as well.
+  dankaiusagePluginSrc =
+    if builtins.pathExists "${plugins.aiusage}/scripts/package.py"
+    then dankaiusagePkg + "/share/dms-plugins/DankAIUsage"
+    else plugins.aiusage;
   danksessionPkg = inputs.danksession.packages.${pkgs.stdenv.hostPlatform.system}.danksession;
   quickshellBasePkg = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
   quickshellUnwrappedPkg = quickshellBasePkg.unwrapped.overrideAttrs (old: {
@@ -707,7 +714,7 @@ in {
         };
         DankAIUsage = {
           enable = !compact;
-          src = plugins.aiusage;
+          src = dankaiusagePluginSrc;
         };
         DankDisplayControl = {
           enable = !compact;
