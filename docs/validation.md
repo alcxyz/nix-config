@@ -18,24 +18,24 @@ input changes, run the full local configuration check above and the relevant
 consumer/package checks. Runtime-sensitive changes retain their acceptance
 contracts, including `just input` for Wolf browser input changes.
 
-PRs into `main` and manual workflow runs perform full all-system evaluation and
-native checks against the exact candidate revision. A missing prerequisite
-fails full validation. Both gates require a reviewed maintainer-owned
-branch; the workflow does not use `pull_request_target` to execute proposed
-code. There is no duplicate workflow on pushes after a merge. Automated input
-updaters retain their existing producer/consumer checks before publication.
+PRs into `main` and manual workflow runs accept only the exact trusted `dev`
+head and require its successful `ci/local-configurations` commit status. A
+scheduled local operator job issues that receipt only after the all-system and
+native configuration checks pass. An absent, failed, or older receipt fails the
+hosted gate. The workflow does not use `pull_request_target` or send an
+untrusted pull-request head to the credential-bearing local job.
 
-Full evaluation requires authorized access to the locked inputs. Source-access
-provisioning and private diagnostic procedures are owned by the private
-repository. The public workflow reports pass/fail and the tested source
-revision; detailed output is not published because evaluation can contain
-private configuration. Reproduce a failure at that exact revision in the
-authorized development environment.
+Full evaluation requires authorized access to the locked inputs. The trusted
+local environment uses its ordinary source access; private scheduling,
+credential wiring, diagnostics, and handover procedures are owned by the
+private repository. Public hosted CI reads only the exact status receipt.
 
 For package input promotion, `scripts/ci/verify-ai-package-stack.sh flake.lock`
 validates the standalone producer and the candidate consumer separately before
-the updater can publish success. A package version string or a source-text
-match is insufficient: the consumer can override dependency inputs.
+the local promoter can publish success. It also rechecks the package update
+queue, producer head, and consumer base immediately before its compare-and-swap
+push. A package version string or a source-text match is insufficient: the
+consumer can override dependency inputs.
 
 [ADR-0067](adr/0067-explicit-consumer-and-platform-validation.md) defines the
 contract. [Issue #274](https://git.alc.xyz/alcxyz/nix-config/issues/274) records

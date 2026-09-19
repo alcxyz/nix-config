@@ -1,6 +1,6 @@
 # ADR-0067: Explicit consumer and platform validation
 
-**Status:** Accepted; public automation implemented, development gate amended 2026-09-10
+**Status:** Accepted; local promotion placement amended 2026-09-19
 **Date:** 2026-09-07
 **Accepted:** 2026-09-08
 **Applies to:** `flake/`, Forgejo checks, package input promotion, cross-repository validation
@@ -134,3 +134,28 @@ Implementation records and broader audit tracking:
 - [Supported package/platform exports](https://git.alc.xyz/alcxyz/nix-packages/issues/321)
 - [Configuration audit milestone](https://git.alc.xyz/alcxyz/nix-config/milestone/283)
 - [Package audit milestone](https://git.alc.xyz/alcxyz/nix-packages/milestone/284)
+
+## Trusted local promotion amendment — 2026-09-19
+
+Full consumer validation and package lock publication run on a scheduled,
+trusted local operator host. This placement can use the operator's ordinary
+source access without projecting that access into hosted CI. The local job
+fetches only the committed `dev` heads, never pull-request heads. It validates
+the package repository's standalone outputs, the candidate consumer's
+deployment evaluation and selected packages, and the complete configuration
+gate before publishing an exact commit status receipt.
+
+Lock publication remains fail closed. It starts only when no package update
+branch is open, records the exact producer and consumer base, and repeats the
+queue, producer-head, and consumer-base checks after validation immediately
+before its single non-forced fast-forward push. The committed tree must equal the
+validated tree. A race defers publication to a fresh run rather than reusing an
+older result. An open package queue does not prevent validation of the current
+committed configuration head for an unrelated main promotion.
+
+Hosted package update PRs and their producer checks remain unchanged. Hosted
+configuration PRs into `dev` retain the lightweight gate. A `dev`-to-`main`
+promotion now requires the successful `ci/local-configurations` receipt on its
+exact head; an absent, failed, or stale receipt fails the hosted gate. The local
+job does not activate a Home Manager generation or restart services. Existing
+idle-aware consumers remain responsible for later activation.

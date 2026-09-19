@@ -27,14 +27,13 @@ jobs:
             exit 1
           fi
 
-      - name: Require full-validation source access
+      - name: Require the trusted development head for promotion
         if: forgejo.event_name != 'pull_request' || forgejo.event.pull_request.base.ref != 'dev'
         env:
-          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
-          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
+          CANDIDATE_BRANCH: ${{ forgejo.event.pull_request.head.ref || forgejo.ref_name }}
         run: |
-          if [ -z "$CI_SOURCE_READ_USER" ] || [ -z "$CI_SOURCE_READ_TOKEN" ]; then
-            echo 'Configuration source access is not provisioned; validation cannot run.' >&2
+          if [ "$CANDIDATE_BRANCH" != dev ]; then
+            echo 'Full validation receipts are issued only for the trusted dev branch.' >&2
             exit 1
           fi
 
@@ -58,6 +57,7 @@ jobs:
           apt-get install -y git python3 sudo udev
 
       - uses: https://github.com/cachix/install-nix-action@v30
+        if: forgejo.event_name == 'pull_request' && forgejo.event.pull_request.base.ref == 'dev'
         with:
           install_url: https://releases.nixos.org/nix/nix-2.35.1/install
           extra_nix_config: |
@@ -90,20 +90,12 @@ jobs:
             "github:NixOS/nixpkgs/$revision#jq" \
             -c bash scripts/ci/check-development.sh "$BASE_SHA"
 
-      - name: Evaluate all systems
+      - name: Require exact trusted local validation
         if: forgejo.event_name != 'pull_request' || forgejo.event.pull_request.base.ref != 'dev'
-        env:
-          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
-          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
         run: |
-          bash scripts/ci/with-source-access.sh bash scripts/ci/check-configurations.sh all-systems
-
-      - name: Build and run native checks
-        if: forgejo.event_name != 'pull_request' || forgejo.event.pull_request.base.ref != 'dev'
-        env:
-          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
-          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
-        run: |
-          bash scripts/ci/with-source-access.sh bash scripts/ci/check-configurations.sh native
-          git rev-parse HEAD
-          sha256sum flake.lock
+          python3 scripts/forgejo/commit-status.py require \
+            --url "${{ forgejo.server_url }}" \
+            --owner "${{ forgejo.repository_owner }}" \
+            --repo "${{ forgejo.event.repository.name }}" \
+            --sha "${{ forgejo.event.pull_request.head.sha || forgejo.sha }}" \
+            --context ci/local-configurations

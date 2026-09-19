@@ -48,8 +48,6 @@ in {
     autoUpdate = {
       packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";
       promotionFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-config.git?ref=dev";
-      calendar = lib.mkForce "*-*-* 09:30:00";
-      randomizedDelaySec = lib.mkForce "0";
     };
   };
 }

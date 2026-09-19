@@ -65,6 +65,10 @@ for publish_attempt in 1 2 3; do
     exit 0
   fi
 
+  # The verifier may run for hours. Do not publish its result if the producer
+  # advanced or a package update entered the merge queue during that build.
+  scripts/ci/check-package-promotion-readiness.sh "$REVISION"
+
   git add flake.lock
   git commit -m "chore(nix-packages): update lock to ${REVISION:0:12}"
   if git push origin "HEAD:refs/heads/${BASE_BRANCH}"; then

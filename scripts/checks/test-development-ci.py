@@ -98,7 +98,7 @@ class DevelopmentCI(unittest.TestCase):
         calls = self.calls.read_text().splitlines()
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
         self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 6)
-        self.assertEqual(sum(call.startswith("python3:") for call in calls), 4)
+        self.assertEqual(sum(call.startswith("python3:") for call in calls), 6)
         self.assertIn("shellcheck:--shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh", calls)
         self.assertIn("shellcheck:--shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh", calls)
         self.assertIn("python3:scripts/checks/check-moonlight-shell-templates.py", calls)
@@ -132,16 +132,19 @@ class DevelopmentCI(unittest.TestCase):
         development = "forgejo.event_name == 'pull_request' && forgejo.event.pull_request.base.ref == 'dev'"
         full = "forgejo.event_name != 'pull_request' || forgejo.event.pull_request.base.ref != 'dev'"
         ownership_gate = workflow.split("- name: Require a maintainer-owned candidate", 1)[1].split(
-            "- name: Require full-validation source access", 1
+            "- name: Require the trusted development head for promotion", 1
         )[0]
         self.assertNotIn("if:", ownership_gate)
         self.assertIn('HEAD_REPOSITORY: ${{ forgejo.event.pull_request.head.repo.full_name }}', ownership_gate)
-        self.assertEqual(workflow.count(development), 1)
-        self.assertEqual(workflow.count(full), 3)
+        self.assertEqual(workflow.count(development), 2)
+        self.assertEqual(workflow.count(full), 2)
         self.assertNotIn("  push:\n", workflow)
         self.assertIn("BASE_SHA: ${{ forgejo.event.pull_request.base.sha }}", workflow)
         self.assertIn('"github:NixOS/nixpkgs/$revision#ripgrep"', workflow)
         self.assertIn('check-development.sh "$BASE_SHA"', workflow)
+        self.assertIn("CANDIDATE_BRANCH: ${{ forgejo.event.pull_request.head.ref || forgejo.ref_name }}", workflow)
+        self.assertIn("scripts/forgejo/commit-status.py require", workflow)
+        self.assertNotIn("CI_SOURCE_READ_TOKEN", workflow)
 
 
 if __name__ == "__main__":

@@ -329,15 +329,14 @@ in {
     python3 scripts/checks/test-maintained-dev-qa.py
   '';
 
-  configuration-ci-contract = mkRepoCheck "configuration-ci-contract" [pkgs.python3 pkgs.bash pkgs.git] ''
+  configuration-ci-contract = mkRepoCheck "configuration-ci-contract" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gawk pkgs.git pkgs.jq pkgs.util-linux] ''
     python3 scripts/checks/test-configuration-ci.py
+    python3 scripts/checks/test-commit-status.py
+    python3 scripts/checks/test-local-package-promotion.py
   '';
 
   ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.git pkgs.gnugrep pkgs.python3 pkgs.ripgrep] ''
     publisher=scripts/forgejo/publish-nix-packages-lock.sh
-    workflow=.forgejo/workflows/update-nix-packages.yml
-
-    grep -F 'NIX_CI_EPHEMERAL_CONTAINER: "1"' "$workflow"
     bash scripts/checks/test-ai-package-stack-verifier.sh
 
     grep -F 'prepare_verified_lock' "$publisher"
@@ -415,7 +414,7 @@ in {
     assert service.Restart == "on-failure";
     assert service.RestartForceExitStatus == "75";
     assert service.RestartPreventExitStatus == "76";
-    assert timer.OnCalendar == "*-*-* 09:30:00";
+    assert timer.Persistent;
       pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep pkgs.python3];} ''
         python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)} ${lib.escapeShellArg (lib.removeSuffix "\n" forkGuard)}
         grep -F "promotion_flake_default='git+https://git.alc.xyz/alcxyz/nix-config.git?ref=dev'" ${updater}
