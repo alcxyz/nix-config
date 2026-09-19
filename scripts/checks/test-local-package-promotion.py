@@ -54,8 +54,7 @@ if [[ ${ADVANCE_PACKAGES:-0} == 1 ]]; then
 fi
 """,
         )
-        self.write_executable(
-            scripts / "ci/check-configurations.sh",
+        (scripts / "ci/check-configurations.sh").write_text(
             """#!/usr/bin/env bash
 set -eu
 echo "config:${1:-all}" >> "$CALLS"
@@ -188,6 +187,7 @@ else:
         ).strip()
 
     def test_changed_lock_is_verified_once_and_receipted_after_exact_push(self):
+        self.assertFalse(os.access(self.config_work / "scripts/ci/check-configurations.sh", os.X_OK))
         result = self.run_promoter()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls.read_text().splitlines(), ["verify", "config:all"])

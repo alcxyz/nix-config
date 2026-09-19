@@ -8,6 +8,7 @@
   promoter = pkgs.writeShellApplication {
     name = "nix-package-promotion";
     runtimeInputs = with pkgs; [
+      bash
       coreutils
       curl
       forge-mirror

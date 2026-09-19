@@ -99,7 +99,7 @@ validate_current_head() {
   fi
 
   status "$base_revision" pending "Trusted local full validation is running"
-  if (cd "$checkout" && scripts/ci/check-configurations.sh); then
+  if (cd "$checkout" && bash scripts/ci/check-configurations.sh); then
     if [[ $(git -C "$checkout" rev-parse HEAD) != "$base_revision" ]] ||
       [[ -n $(git -C "$checkout" status --porcelain) ]]; then
       echo "Configuration validation changed the exact candidate tree." >&2
@@ -150,7 +150,7 @@ fi
 (
   cd "$checkout"
   scripts/ci/verify-ai-package-stack.sh flake.lock
-  scripts/ci/check-configurations.sh
+  bash scripts/ci/check-configurations.sh
 )
 
 if [[ $(git -C "$checkout" status --porcelain) != " M flake.lock" ]]; then
