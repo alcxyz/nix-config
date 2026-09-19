@@ -234,10 +234,25 @@
     chmod 0644 "$settings_file"
   '';
   plugins = inputs.dms-plugins.srcs;
+  # New owned-plugin revisions ship a stamped package. Retain compatibility
+  # with older pins; upstream forks continue to use their original sources.
+  packagedPluginSource = source:
+    if builtins.pathExists "${source}/packaging.json"
+    then let
+      metadata = builtins.fromJSON (builtins.readFile "${source}/packaging.json");
+      package = pkgs.callPackage "${source}/default.nix" {
+        revision = source.rev or (source.dirtyRev or null);
+      };
+    in
+      package + "/share/dms-plugins/${metadata.pluginDirectory}"
+    else source;
   dsearchPkg = inputs.dsearch.packages.${pkgs.stdenv.hostPlatform.system}.dsearch;
-  dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" {
-    version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
-  };
+  dankcalendarPkg = pkgs.callPackage "${plugins.dankcalendar}/default.nix" ({
+      version = (builtins.fromJSON (builtins.readFile "${plugins.dankcalendar}/plugin.json")).version;
+    }
+    // lib.optionalAttrs (builtins.pathExists "${plugins.dankcalendar}/packaging.json") {
+      revision = plugins.dankcalendar.rev or (plugins.dankcalendar.dirtyRev or null);
+    });
   dankaiusagePkg = pkgs.callPackage "${plugins.aiusage}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.aiusage}/plugin.json")).version;
     revision = plugins.aiusage.rev or (plugins.aiusage.dirtyRev or null);
@@ -686,31 +701,37 @@ in {
         };
         DankQuickSearch = {
           enable = !compact;
-          src = plugins.quicksearch;
+          src = packagedPluginSource plugins.quicksearch;
         };
         DankVault = {
           enable = !compact;
-          src = plugins.vault;
+          src = packagedPluginSource plugins.vault;
         };
         DankTranslate = {
           enable = !compact;
-          src = plugins.translate;
+          src = packagedPluginSource plugins.translate;
         };
         DankSpotify = {
           enable = !compact;
-          src = plugins.spotify;
+          src = packagedPluginSource plugins.spotify;
         };
         DankCalendar = {
           enable = !compact;
-          src = plugins.dankcalendar;
+          src =
+            if builtins.pathExists "${plugins.dankcalendar}/packaging.json"
+            then dankcalendarPkg + "/share/dms-plugins/DankCalendar"
+            else plugins.dankcalendar;
         };
         DankSession = {
           enable = !compact && cfg.dankSession.enable;
-          src = inputs.danksession;
+          src =
+            if builtins.pathExists "${inputs.danksession}/packaging.json"
+            then danksessionPkg + "/share/dms-plugins/DankSession"
+            else inputs.danksession;
         };
         DankDiskUsage = {
           enable = !compact;
-          src = plugins.diskusage;
+          src = packagedPluginSource plugins.diskusage;
         };
         DankAIUsage = {
           enable = !compact;
@@ -718,7 +739,7 @@ in {
         };
         DankDisplayControl = {
           enable = !compact;
-          src = plugins.displaycontrol;
+          src = packagedPluginSource plugins.displaycontrol;
         };
         # First-party plugins (AvengeMedia/dms-plugins monorepo)
         DankActions = {
