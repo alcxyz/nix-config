@@ -42,6 +42,22 @@ in {
         touch "$out"
       '';
 
+  torrent-policy-interface-contract =
+    if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+    then import ./torrent-policy.nix {inherit inputs pkgs;}
+    else
+      pkgs.runCommand "torrent-policy-interface-contract-unsupported" {} ''
+        touch "$out"
+      '';
+
+  k8s-api-vip-policy-contract =
+    if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+    then import ./k8s-api-vip-policy.nix {inherit inputs pkgs;}
+    else
+      pkgs.runCommand "k8s-api-vip-policy-contract-unsupported" {} ''
+        touch "$out"
+      '';
+
   forgejo-runner-isolated-docker-contract = import ./forgejo-isolated-docker.nix {inherit lib pkgs;};
 
   forgejo-orphan-monitor-credential-isolation = import ./forgejo-orphan-monitor-vm.nix {inherit pkgs;};

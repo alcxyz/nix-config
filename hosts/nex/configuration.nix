@@ -12,6 +12,7 @@
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
+    inputs.nix-secrets.nixosModules.k8sApiVipPolicy
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
@@ -60,17 +61,6 @@
       "k8s-api.local"
       "192.168.1.250"
     ];
-  };
-
-  services.k8s-api-vip = {
-    enable = true;
-    interface = "eno1";
-    sourceIp = "192.168.1.16";
-    peers = [
-      "192.168.1.13"
-      "192.168.1.15"
-    ];
-    priority = 100;
   };
 
   services.netbird.managed.enable = true;

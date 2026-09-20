@@ -14,6 +14,7 @@
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
+    inputs.nix-secrets.nixosModules.k8sApiVipPolicy
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
@@ -163,17 +164,6 @@
   networking.hosts = {
     "192.168.1.13" = ["xev"];
     "192.168.1.250" = ["k8s-api.local"];
-  };
-
-  services.k8s-api-vip = {
-    enable = true;
-    interface = "enp10s0";
-    sourceIp = "192.168.1.13";
-    peers = [
-      "192.168.1.15"
-      "192.168.1.16"
-    ];
-    priority = 120;
   };
 
   services.forgejo-actions-runner = {

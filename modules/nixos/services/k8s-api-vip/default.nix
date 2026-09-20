@@ -29,19 +29,16 @@ in {
 
     vip = mkOption {
       type = types.str;
-      default = "192.168.1.250";
       description = "Floating LAN IP address for Kubernetes API clients.";
     };
 
     prefixLength = mkOption {
       type = types.ints.between 1 32;
-      default = 24;
       description = "CIDR prefix length for the floating VIP.";
     };
 
     virtualRouterId = mkOption {
       type = types.ints.between 1 255;
-      default = 43;
       description = "VRRP router ID for the Kubernetes API VIP.";
     };
 

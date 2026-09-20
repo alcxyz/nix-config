@@ -14,16 +14,7 @@
   qbConfigStateDir = "${qbConfigDir}/profile";
   qbWebUiPort = 8080;
   qbTorrentingPort = 51413;
-  qbWebUiTrustedClients = [
-    "10.42.0.0/16"
-    "192.168.1.10"
-    "192.168.1.13"
-    "192.168.1.15"
-    "192.168.1.16"
-    "192.168.1.23"
-    "192.168.1.24"
-    "192.168.1.250"
-  ];
+  qbWebUiTrustedClients = cfg.webUiTrustedClients;
   qbWebUiTrustedClientsCsv = lib.concatStringsSep "," qbWebUiTrustedClients;
   qbWebUiFirewallRules =
     lib.concatMapStringsSep "\n" (ip: ''
@@ -94,6 +85,11 @@
 in {
   options.services.torrent = {
     enable = lib.mkEnableOption "Torrent infrastructure (users and shared media directories)";
+
+    webUiTrustedClients = lib.mkOption {
+      type = lib.types.nonEmptyListOf lib.types.str;
+      description = "Non-empty list of IP addresses and CIDR ranges allowed to access the qBittorrent web UI.";
+    };
 
     zfsDatasets = lib.mkOption {
       type = lib.types.listOf lib.types.str;
