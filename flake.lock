@@ -69,23 +69,25 @@
     "bivrost": {
       "flake": false,
       "locked": {
-        "lastModified": 1789873609,
-        "narHash": "sha256-23NzcTHsc7ctYQHcfk0YnG/qzWf0LIHvS9/Z63xdbmA=",
+        "lastModified": 1789901339,
+        "narHash": "sha256-hgkyxrPZ6PMQeJGZ73Lp2U3sqWkRNZFwTfCyrNyZrxw=",
         "owner": "alcxyz",
         "repo": "bivrost",
-        "rev": "baf49266721a41f4a740e86b3aaf3ed0e04c7a24",
+        "rev": "23260d0e4dd9e5636ab3bb48e69c6009d90bd986",
         "type": "github"
       },
       "original": {
         "owner": "alcxyz",
+        "ref": "main",
         "repo": "bivrost",
-        "rev": "baf49266721a41f4a740e86b3aaf3ed0e04c7a24",
         "type": "github"
       }
     },
     "bn-bootstrap": {
       "inputs": {
-        "bivrost": "bivrost",
+        "bivrost": [
+          "bivrost"
+        ],
         "bullet-platform": "bullet-platform",
         "nixpkgs": [
           "nixpkgs"
@@ -1193,6 +1195,7 @@
     },
     "root": {
       "inputs": {
+        "bivrost": "bivrost",
         "bn-bootstrap": "bn-bootstrap",
         "canopy": "canopy",
         "dankMaterialShell": "dankMaterialShell",

@@ -8,7 +8,9 @@ Paperflow, Grove, Canopy, DankSession, and the maintained DMS plugins use
 explicit `dev` inputs, pinned to exact commits in `flake.lock`. The DMS bundle
 stays the source interface; local input overrides select plugin development
 branches without changing the public bundle's release defaults. Widget files
-and their helpers use the same source revision.
+and their helpers use the same source revision. Bivrost tracks its canonical
+`main` branch through a separate source input consumed by the existing package
+integration; its exact revision is also recorded in the lockfile.
 
 From this checkout, run `apps-update` to refresh all those projects, or
 `dms-update` for only the DMS bundle and maintained plugins. Inspect
@@ -26,7 +28,8 @@ updating all maintained projects.
 Develop changes on feature branches, integrate them into `dev` for QA, and
 promote approved work to each project's `main` for official releases. Neither
 update command nor a rebuild promotes branches or creates releases. Uncommitted
-source edits are not fetched from GitHub: publish them to `dev` first.
+source edits are not fetched from GitHub: publish them to the configured branch
+first (`main` for Bivrost, `dev` for the projects listed above).
 
 Upstream dependencies, including DMS itself and nixpkgs, keep their existing
 pinning policies. WorldClock, DankCalculator, and DMS-Screenshot are upstream

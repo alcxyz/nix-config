@@ -22,6 +22,12 @@ Keep `dev` current with released fixes: after promotion, fast-forward it to the
 resulting main commit when possible, or integrate main without rewriting dev
 history. A development branch must not silently lose released fixes.
 
+Bivrost follows its canonical GitHub `main` branch as a non-flake source input.
+The existing package integration follows that input, separating source updates
+from packaging updates without changing its defaults for other consumers.
+`apps-update` refreshes Bivrost alongside the maintained apps; `dms-update` does
+not. The source revision remains locked, and activation remains explicit.
+
 Retain ADR-0015's aggregate source interface. Set persistent nested overrides
 in nix-config rather than changing the public aggregate's release defaults.
 Make the aggregate DankSession input follow the existing top-level input, so

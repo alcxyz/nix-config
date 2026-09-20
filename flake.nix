@@ -32,9 +32,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    bivrost = {
+      url = "github:alcxyz/bivrost/main";
+      flake = false;
+    };
+
     bn-bootstrap = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.bivrost.follows = "bivrost";
     };
 
     # color schemes, small extras
