@@ -66,19 +66,37 @@
         "type": "github"
       }
     },
+    "bivrost": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789873609,
+        "narHash": "sha256-23NzcTHsc7ctYQHcfk0YnG/qzWf0LIHvS9/Z63xdbmA=",
+        "owner": "alcxyz",
+        "repo": "bivrost",
+        "rev": "baf49266721a41f4a740e86b3aaf3ed0e04c7a24",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alcxyz",
+        "repo": "bivrost",
+        "rev": "baf49266721a41f4a740e86b3aaf3ed0e04c7a24",
+        "type": "github"
+      }
+    },
     "bn-bootstrap": {
       "inputs": {
+        "bivrost": "bivrost",
         "bullet-platform": "bullet-platform",
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1789596184,
-        "narHash": "sha256-wV7KxAD93wFNsBHJzZPMaaS9it3DnZIHRiqK+yXBhnI=",
+        "lastModified": 1789899262,
+        "narHash": "sha256-3a7BNwtsmgFfjK3d95yX+Q241YBewq3s40aUzmqXQbk=",
         "ref": "dev",
-        "rev": "81ed3dc68e1cc154c8429426221e7477fab3d30a",
-        "revCount": 33,
+        "rev": "3a73660e6116e1bcc2cefb48eac46467897fc10f",
+        "revCount": 36,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       },
@@ -937,11 +955,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789782274,
-        "narHash": "sha256-U5nsLPk8WODhLexkJHyc2+d2ynLfFmSgRNMxKntX0FI=",
+        "lastModified": 1789898764,
+        "narHash": "sha256-vER4zmFY0T9Uu17h8iO2tUxIe8BxKleVgLluAAWAZvg=",
         "ref": "dev",
-        "rev": "56376b6e06c72a57aff1974b44d4c55f9e53f193",
-        "revCount": 528,
+        "rev": "67552361ad9f9270421a120ec0c1aa31db29f682",
+        "revCount": 530,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
