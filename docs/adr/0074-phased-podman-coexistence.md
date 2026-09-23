@@ -52,6 +52,21 @@ compatibility with every development project. The canary also does not establish
 worker containment, stress behavior, host reboot behavior, production-stack
 compatibility or streaming acceptance. Those remain separate milestone gates.
 
+The separate, opt-in `flake/checks/forgejo-podman-paths-vm.nix` fixture exercises a
+synthetic Forgejo local executor against a rootless Podman API beside Docker. Run
+it with the repository root flake's actual `inputs.nixpkgs` source, for example:
+
+```sh
+nixpkgs_path=$(nix eval --impure --raw --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath')
+nix-build --no-out-link --option max-jobs 1 --option cores 2 --expr "let pkgs = import $nixpkgs_path {}; in import ./flake/checks/forgejo-podman-paths-vm.nix { inherit pkgs; }"
+```
+
+The tested Docker buildx container driver needs a cgroup parent within the
+delegated Podman service, `default-load=true` for ordinary tagged `docker build`
+output, and `BUILDX_BUILDER` to select that builder for `docker build`. This VM
+does not qualify hosted workflows, registry pushes, or a production runner
+module. It remains outside standard flake checks.
+
 Host evidence and recovery procedures belong in the private operational
 repository. Deployment manifests remain owned by GitOps; public host interfaces
 and generic qualification checks remain here.
