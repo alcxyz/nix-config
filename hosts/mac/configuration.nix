@@ -119,6 +119,15 @@ in {
     linux-builder = {
       enable = true;
       speedFactor = 3;
+      # PAW builds arm64 workspace images here: T3 and provider runtimes
+      # plus a ~1.7 GB image compression, which the 1 CPU / 3 GB default
+      # cannot do in reasonable time. The host has 12 cores and 36 GB.
+      maxJobs = 4;
+      config = {
+        virtualisation.cores = 6;
+        virtualisation.memorySize = 12288;
+        virtualisation.diskSize = 60 * 1024;
+      };
     };
 
     gc = {
