@@ -2,6 +2,8 @@
   protonGe10_4 =
     (pkgs.proton-ge-bin.overrideAttrs (finalAttrs: _: {
       version = "GE-Proton10-4";
+      # This release predates architecture suffixes in compatibilitytool.vdf.
+      toolName = finalAttrs.version;
       src = pkgs.fetchzip {
         url = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${finalAttrs.version}/${finalAttrs.version}.tar.gz";
         hash = "sha256-Si/CQ2PINfhmsC+uW3iFBUoSczZdkqwCZ8FAFuipu68=";

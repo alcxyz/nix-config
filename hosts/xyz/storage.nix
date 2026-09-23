@@ -6,15 +6,7 @@
   ...
 }: let
   cfg = config.xyz.storage.policy;
-  zfsPackage = pkgs.openzfs_7_1;
-  zfsKernelPackages = pkgs.linuxPackages_latest.extend (
-    _final: kernelPackages: {
-      openzfs_7_1 = zfsPackage.override {
-        configFile = "kernel";
-        kernel = kernelPackages.kernel;
-      };
-    }
-  );
+  zfsPackage = pkgs.zfs_2_4;
   runtimePool = cfg.runtime.pool;
   runtimeDatasets = cfg.runtime.datasets;
   isolatedDockerEnabled = config.services.forgejo-actions-runner.isolatedDocker.enable;
@@ -139,9 +131,9 @@ in {
       }
     ];
 
-    # See docs/adr/0035-host-kernel-policy.md: the matching OpenZFS module has
-    # been compiled against this kernel before any separate activation step.
-    boot.kernelPackages = zfsKernelPackages;
+    # ADR-0035: use matching stable ZFS tools and kernel modules. Nixpkgs'
+    # compatibility check must pass before a newer kernel can be built.
+    boot.kernelPackages = pkgs.linuxPackages_latest;
     boot.zfs.package = zfsPackage;
 
     # ==================== ZFS ====================

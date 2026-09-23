@@ -318,7 +318,7 @@ in rec {
         bitwarden-cli
         bitwarden-desktop
         pinentry-gnome3
-        texlive.combined.scheme-full
+        texliveFull
 
         jrnl
         pear-desktop

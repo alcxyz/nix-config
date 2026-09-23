@@ -19,7 +19,7 @@
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
-    "${configDir}/modules/nixos/hardware/openzfs-7-1.nix"
+    "${configDir}/modules/nixos/hardware/zfs-latest-kernel.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/nvidia-runtime.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"

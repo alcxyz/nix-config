@@ -1,8 +1,8 @@
 # ADR-0035: Host kernel policy
 
 **Status:** Accepted
-**Date:** 2026-05-05 (amended 2026-08-13)
-**Applies to:** `hosts/nux`, `hosts/nex`, `hosts/xyz`, `hosts/rpi0`, kernel selection
+**Date:** 2026-05-05 (amended 2026-08-13, 2026-09-23)
+**Applies to:** `hosts/nux`, `hosts/nex`, `hosts/xyz`, `hosts/xev`, `hosts/rpi0`, kernel selection
 
 ## Context
 
@@ -68,9 +68,9 @@ The flake lock remains the version boundary.
 
 ## Consequences
 
-`nux` and `nex` will track newer kernels than `xyz` under the same nixpkgs lock.
-This is intentional because the NUCs are simpler server hosts and are the stable
-k3s control-plane/workload machines.
+The original policy allowed `nux` and `nex` to track newer kernels than `xyz`.
+With the amendments below, `xyz` and `xev` also track the latest kernel, subject
+to the selected ZFS release's compatibility checks.
 
 Kernel rollout should still be staged:
 
@@ -114,3 +114,25 @@ Future OpenZFS or kernel updates must keep the source revision, declared kernel
 compatibility range, userspace tools, and kernel module aligned. Once a stable
 OpenZFS release supports the selected kernel, replace the development pin with
 that release after the same build validation.
+
+## Amendment: stable OpenZFS with Linux 7.2
+
+The updated nixpkgs lock selects Linux 7.2.7 for `linuxPackages_latest` and
+removes the end-of-life Linux 7.1 package. The custom OpenZFS snapshot supports
+only through Linux 7.1, so retaining it now fails the kernel compatibility check.
+
+[OpenZFS 2.4.4](https://github.com/openzfs/zfs/releases/tag/zfs-2.4.4) supports
+Linux 4.18 through 7.2 and is already packaged as `pkgs.zfs_2_4` in this lock.
+Use that stable package for userspace and its matching `zfs_2_4` module in
+`pkgs.linuxPackages_latest`. Apply the same pairing to the shared ZFS kernel
+module used by `xev`, and stop applying the custom `openzfs-7-1` overlay.
+
+Prefer the packaged stable release over maintaining another development-source
+pin or downgrading the kernel. Keep nixpkgs' compatibility checks enabled so a
+future unsupported kernel fails evaluation. The old custom package remains in
+`nix-packages` for consumers that still need it.
+
+Validate the userspace and kernel-module outputs and the complete `xyz` system
+closure before activation. Moving from a development snapshot to a stable branch
+also requires checking active pool features against the target release before
+rollout. Activation, reboot, and pool feature changes remain separate operations.
