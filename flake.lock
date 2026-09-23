@@ -1121,11 +1121,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790140998,
-        "narHash": "sha256-cUnUgr2MrDfvxIDy+SrwmcII9Fsr0HtYSaju6L6bBWQ=",
+        "lastModified": 1790145528,
+        "narHash": "sha256-yb+bcnf3e28WxdcHjgLmLSbA4nhDk1XYyJhs/GyQsp8=",
         "owner": "alcxyz",
         "repo": "paw",
-        "rev": "5a02e3e6a0720428ebd1a7ff090c85355daabd95",
+        "rev": "29d32831075384270d7067f765a46c6b165482da",
         "type": "github"
       },
       "original": {
