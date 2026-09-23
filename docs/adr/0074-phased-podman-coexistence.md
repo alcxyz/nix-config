@@ -42,9 +42,15 @@ resources and retains the shared downloaded base image. It is not an automatic
 flake check and does not start or reconfigure production services.
 
 This canary checks build/run, mounts, volume persistence, cgroup settings,
-networking, restart and a simple Compose service. It does not establish worker
-containment, stress behavior, host reboot behavior, production-stack compatibility
-or streaming acceptance. Those remain separate milestone gates.
+networking, restart and a synthetic two-service Compose stack. The stack checks
+service-name DNS, health-gated `depends_on` startup and named-volume persistence
+across `down`/`up`; a separate Compose bind check verifies read/write access and
+host ownership with an explicit user mapping. Its `userns_mode: keep-id` setting
+is Podman-specific fixture configuration, not evidence that unchanged project
+Compose files are portable. This representative fixture does not establish
+compatibility with every development project. The canary also does not establish
+worker containment, stress behavior, host reboot behavior, production-stack
+compatibility or streaming acceptance. Those remain separate milestone gates.
 
 Host evidence and recovery procedures belong in the private operational
 repository. Deployment manifests remain owned by GitOps; public host interfaces
