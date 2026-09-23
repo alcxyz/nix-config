@@ -539,6 +539,7 @@ in {
 
     systemd.services.forgejo-runner-resource-policy = lib.mkIf resourcePolicyCfg.enable {
       description = "Apply host-relative Forgejo runner resource limits";
+      restartIfChanged = !isolated;
       requires = ["forgejobuilds.slice"];
       after = ["forgejobuilds.slice"];
       before = ["forgejo-actions-runner.service"];
@@ -606,7 +607,9 @@ in {
           owner = "forgejo-runner";
           group = "forgejo-runner";
           mode = "0400";
-          restartUnits = ["forgejo-actions-runner.service"];
+          # The isolated runner may be intentionally drained by the pressure
+          # guard. Apply rotated credentials at its next planned start.
+          restartUnits = lib.optional (!isolated) "forgejo-actions-runner.service";
         };
       })
       secretKeys

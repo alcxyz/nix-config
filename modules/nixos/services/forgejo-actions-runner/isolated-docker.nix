@@ -27,6 +27,34 @@
     runtimeInputs = with pkgs; [coreutils gawk systemd util-linux];
     text = builtins.readFile ./aggregate-pressure-guard.sh;
   };
+  lifecycleStop = pkgs.writeShellApplication {
+    name = "forgejo-runner-aggregate-lifecycle-stop";
+    runtimeInputs = with pkgs; [bash coreutils gawk systemd util-linux];
+    text = builtins.readFile ./aggregate-lifecycle-stop.sh;
+  };
+  lifecycleReady = pkgs.writeShellApplication {
+    name = "forgejo-runner-aggregate-lifecycle-ready";
+    runtimeInputs = with pkgs; [coreutils systemd];
+    text = ''
+      deadline=$((SECONDS + 60))
+      while ((remaining = deadline - SECONDS, remaining > 0)); do
+        attempt_timeout=5
+        ((remaining < attempt_timeout)) && attempt_timeout=$remaining
+        if timeout --foreground "''${attempt_timeout}s" systemctl is-active --quiet \
+          forgejo-runner-aggregate-lifecycle.service; then
+          exit 0
+        fi
+        sleep 1
+      done
+      echo "dedicated aggregate lifecycle did not become active" >&2
+      exit 1
+    '';
+  };
+  runnerStartGate = pkgs.writeShellApplication {
+    name = "forgejo-runner-start-gate";
+    runtimeInputs = with pkgs; [coreutils systemd util-linux];
+    text = builtins.readFile ./runner-start-gate.sh;
+  };
 in {
   options.services.forgejo-actions-runner.isolatedDocker.enable =
     lib.mkEnableOption "experimental dedicated rootless CI Docker daemon (requires qualification before activation)";
@@ -54,9 +82,12 @@ in {
     };
     systemd.services.forgejo-runner-docker = {
       description = "Dedicated rootless Forgejo build daemon";
-      requires = ["forgejo-runner-resource-policy.service" "forgejo-runner-io-pressure-guard.service"];
+      # The lifecycle service starts after the daemon so its stop runs first.
+      # No consumer may use the socket until that service is armed.
+      requires = ["forgejo-runner-resource-policy.service" "forgejo-runner-io-pressure-guard.service" "forgejo-runner-aggregate-lifecycle.service"];
       bindsTo = ["forgejo-runner-io-pressure-guard.service"];
       after = ["network-online.target" "forgejo-runner-resource-policy.service" "forgejo-runner-io-pressure-guard.service"];
+      restartIfChanged = false;
       wants = ["network-online.target"];
       path = ["/run/wrappers"];
       environment = {
@@ -75,8 +106,7 @@ in {
         Slice = "forgejobuilds.slice";
         Delegate = true;
         NotifyAccess = "all";
-        Restart = "on-failure";
-        RestartSec = "5s";
+        Restart = "no";
         TimeoutStartSec = "120s";
         TimeoutStopSec = "90s";
         KillMode = "mixed";
@@ -88,12 +118,26 @@ in {
         LimitCORE = 0;
       };
     };
+    systemd.services.forgejo-runner-aggregate-lifecycle = {
+      description = "Teardown boundary for the dedicated CI aggregate";
+      bindsTo = ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"];
+      after = ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"];
+      restartIfChanged = false;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.coreutils}/bin/true";
+        ExecStop = lib.getExe lifecycleStop;
+        TimeoutStopSec = "300s";
+      };
+    };
     systemd.services.forgejo-runner-io-pressure-guard = {
       description = "Freeze the dedicated CI build aggregate under I/O pressure";
       # Watch the slice before admitting daemon workers. Losing the guard stops
       # the daemon and its descendants, including jobs not owned by the runner.
       requires = ["forgejo-runner-resource-policy.service"];
       after = ["forgejo-runner-resource-policy.service"];
+      restartIfChanged = false;
       environment = {
         ADMISSION_CONTROL_ENABLED =
           if cfg.ioPressureGuard.admissionControl.enable
@@ -115,23 +159,31 @@ in {
         RuntimeDirectory = "forgejo-runner-aggregate-pressure";
         RuntimeDirectoryMode = "0700";
         RuntimeDirectoryPreserve = "yes";
-        Restart = "on-failure";
-        RestartSec = "5s";
+        Restart = "no";
       };
     };
     systemd.services.forgejo-actions-runner.serviceConfig.KillMode =
       lib.mkIf cfg.ioPressureGuard.admissionControl.enable "mixed";
+    systemd.services.forgejo-actions-runner = {
+      requires = ["forgejo-runner-aggregate-lifecycle.service"];
+      restartIfChanged = false;
+      # The state directory is root-only; only this fixed condition command
+      # runs as root. A skipped start must not trigger Restart=on-failure.
+      serviceConfig.ExecCondition = "+${lib.getExe runnerStartGate}";
+      serviceConfig.ExecStartPre = lib.mkBefore [(lib.getExe lifecycleReady)];
+    };
     systemd.services.forgejo-runner-cache-pressure-prune = lib.mkIf cfg.cachePressure.enable {
-      after = ["forgejo-runner-io-pressure-guard.service"];
-      requires = ["forgejo-runner-io-pressure-guard.service"];
+      requires = ["forgejo-runner-aggregate-lifecycle.service"];
+      serviceConfig.ExecStartPre = lib.mkBefore [(lib.getExe lifecycleReady)];
     };
     systemd.services.forgejo-runner-cache-prune = {
       description = "Prune unused dedicated CI Docker cache and images";
-      after = ["forgejo-runner-io-pressure-guard.service"];
-      requires = ["forgejo-runner-io-pressure-guard.service"];
+      after = ["forgejo-runner-docker.service"];
+      requires = ["forgejo-runner-aggregate-lifecycle.service"];
       environment.DOCKER_HOST = cfg.dockerHost;
       serviceConfig = {
         Type = "oneshot";
+        ExecStartPre = lib.mkBefore [(lib.getExe lifecycleReady)];
         ExecStart = "${pkgs.docker}/bin/docker system prune --force --all --filter=until=168h";
       };
     };

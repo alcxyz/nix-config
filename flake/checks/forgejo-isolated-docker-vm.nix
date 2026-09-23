@@ -76,14 +76,35 @@ in
           labels = ["fixture:docker://example.invalid/unused:local"];
           secretsFile = pkgs.writeText "unused-dummy-secrets" "dummy";
           isolatedDocker.enable = true;
+          ioPressureGuard.admissionControl.enable = true;
         };
-        # Never register or connect to Forgejo. Test only the generic daemon.
-        systemd.services.forgejo-actions-runner.wantedBy = lib.mkForce [];
+        # Never register or connect to Forgejo. Keep the production target
+        # relationship so a configuration switch sees an enabled runner under
+        # an active multi-user.target.
+        systemd.services.fixture-pressure-init = {
+          description = "Initialize disposable pressure input before the guard";
+          serviceConfig.Type = "oneshot";
+          script = ''
+            printf 'full avg10=99.00 avg60=99.00 avg300=99.00 total=0\n' > /run/fixture-pressure
+          '';
+        };
+        systemd.services.forgejo-runner-io-pressure-guard.requires = ["fixture-pressure-init.service"];
+        systemd.services.forgejo-runner-io-pressure-guard.after = ["fixture-pressure-init.service"];
+        systemd.services.forgejo-actions-runner.preStart = lib.mkForce "";
+        systemd.services.forgejo-actions-runner.script = lib.mkForce ''
+          if test -e /run/fixture-runner-block-stop; then
+            trap '${pkgs.docker}/bin/docker -H unix:///run/forgejo-docker/docker.sock wait shutdown-worker > /dev/null' TERM
+            while :; do sleep 1; done
+          fi
+          exec ${pkgs.coreutils}/bin/sleep infinity
+        '';
+        specialisation.changed.configuration.systemd.services.forgejo-actions-runner.environment.FIXTURE_GENERATION = "changed";
         systemd.services.forgejo-runner-io-pressure-guard.environment = {
           PRESSURE_FILE = "/run/fixture-pressure";
           SAMPLE_SECONDS = lib.mkForce "1";
           HIGH_SAMPLES_REQUIRED = lib.mkForce "2";
           LOW_SAMPLES_REQUIRED = lib.mkForce "2";
+          SEVERE_SAMPLES_REQUIRED = lib.mkForce "2";
         };
         environment.systemPackages = [pkgs.docker pkgs.procps];
       };
@@ -92,11 +113,17 @@ in
       start_all()
       machine.wait_for_unit("multi-user.target")
       machine.succeed("test $(sysctl -n vm.panic_on_oom) = 0")
-      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0\\n' > /run/fixture-pressure")
+      machine.succeed("systemctl is-active multi-user.target")
+      machine.succeed("test $(systemctl is-enabled forgejo-actions-runner.service) = enabled")
       machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)
       machine.wait_for_unit("forgejo-runner-docker.service")
       machine.succeed("test $(systemctl show forgejo-runner-docker.service -p OOMPolicy --value) = continue")
       machine.succeed("systemctl is-active forgejo-runner-io-pressure-guard.service")
+      machine.succeed("systemctl is-active forgejo-runner-aggregate-lifecycle.service")
+      machine.succeed("systemctl show forgejo-runner-aggregate-lifecycle.service -p After --value | ${pkgs.gnugrep}/bin/grep -q forgejo-runner-docker.service")
+      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
+      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0\\n' > /run/fixture-pressure")
+      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = running")
       docker = "docker -H unix:///run/forgejo-docker/docker.sock"
       machine.succeed(f"{docker} info")
       machine.succeed(f"su -s /bin/sh forgejo-runner -c '{docker} version'")
@@ -185,9 +212,81 @@ in
       machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=1\\n' > /run/fixture-pressure")
       machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = running")
       machine.succeed("systemctl kill --signal=KILL --kill-whom=all forgejo-runner-io-pressure-guard.service")
-      machine.wait_until_succeeds("test $(systemctl show forgejo-runner-docker.service -p ActiveState --value) = inactive", timeout=120)
+      machine.wait_until_succeeds("! systemctl is-active --quiet forgejo-runner-docker.service", timeout=120)
       machine.fail(f"test -e /proc/{pid}")
       machine.fail(f"test -e /proc/{build_pid}")
       machine.succeed("systemctl is-active docker.service")
+
+      # Guard loss while the aggregate is frozen must kill all descendants
+      # before an owned thaw permits the daemon's stop transaction to finish.
+      machine.succeed("rm /run/forgejo-runner-aggregate-pressure/teardown-required")
+      machine.succeed("systemctl reset-failed forgejo-runner-io-pressure-guard.service forgejo-runner-docker.service forgejo-runner-aggregate-lifecycle.service")
+      machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)
+      machine.succeed(f"{docker} run -d --name frozen-loss runner-fixture:local")
+      frozen_pid = machine.succeed(f"{docker} inspect --format '{{{{.State.Pid}}}}' frozen-loss").strip()
+      machine.succeed("printf 'full avg10=99.00 avg60=99.00 avg300=99.00 total=2\\n' > /run/fixture-pressure")
+      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/owned")
+      machine.succeed("touch /run/forgejo-runner-aggregate-pressure/drain-disowned")
+      machine.succeed("systemctl kill --signal=KILL --kill-whom=all forgejo-runner-io-pressure-guard.service")
+      machine.wait_until_succeeds("! systemctl is-active --quiet forgejo-runner-docker.service", timeout=150)
+      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = running", timeout=150)
+      machine.fail(f"test -e /proc/{frozen_pid}")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/teardown-required")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/drain-disowned")
+      machine.fail("test -e /run/forgejo-runner-aggregate-pressure/owned")
+      machine.succeed("systemctl is-active docker.service")
+
+      # A manually frozen aggregate has no ownership marker. Teardown still
+      # kills its workers, but it must leave the manual freezer state intact.
+      machine.succeed("rm /run/forgejo-runner-aggregate-pressure/teardown-required")
+      machine.succeed("rm /run/forgejo-runner-aggregate-pressure/drain-disowned")
+      machine.succeed("systemctl reset-failed forgejo-runner-io-pressure-guard.service forgejo-runner-docker.service forgejo-runner-aggregate-lifecycle.service")
+      machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)
+      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=3\\n' > /run/fixture-pressure")
+      machine.succeed(f"{docker} run -d --name manual-freeze runner-fixture:local")
+      manual_pid = machine.succeed(f"{docker} inspect --format '{{{{.State.Pid}}}}' manual-freeze").strip()
+      machine.succeed("systemctl freeze forgejobuilds.slice")
+      machine.fail("test -e /run/forgejo-runner-aggregate-pressure/owned")
+      machine.succeed("systemctl kill --signal=KILL --kill-whom=all forgejo-runner-io-pressure-guard.service")
+      machine.wait_until_succeeds("! systemctl is-active --quiet forgejo-runner-docker.service", timeout=150)
+      machine.succeed("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
+      machine.fail(f"test -e /proc/{manual_pid}")
+      machine.succeed("systemctl thaw forgejobuilds.slice")
+
+      # A real NixOS configuration switch changes the runner unit while it is
+      # intentionally inactive under an owned admission drain. It must not
+      # create a new execution generation or clear the drain marker.
+      machine.succeed("rm /run/forgejo-runner-aggregate-pressure/teardown-required")
+      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=4\\n' > /run/fixture-pressure")
+      machine.succeed("systemctl reset-failed forgejo-runner-io-pressure-guard.service forgejo-runner-docker.service forgejo-runner-aggregate-lifecycle.service")
+      machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)
+      machine.succeed("systemctl start forgejo-actions-runner.service")
+      machine.succeed("systemctl is-active multi-user.target")
+      machine.succeed("test $(systemctl is-enabled forgejo-actions-runner.service) = enabled")
+      machine.succeed("printf 'full avg10=30.00 avg60=30.00 avg300=30.00 total=4\\n' > /run/fixture-pressure")
+      machine.wait_until_succeeds("test -e /run/forgejo-runner-aggregate-pressure/drain-owned")
+      machine.wait_until_succeeds("test $(systemctl show forgejo-actions-runner.service -p ActiveState --value) = inactive")
+      machine.succeed("test -x /run/current-system/specialisation/changed/bin/switch-to-configuration")
+      machine.succeed("/run/current-system/specialisation/changed/bin/switch-to-configuration switch", timeout=180)
+      machine.succeed("test $(systemctl show forgejo-actions-runner.service -p ActiveState --value) = inactive")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/drain-owned")
+      machine.succeed("sleep 3")
+      machine.succeed("test $(systemctl show forgejo-actions-runner.service -p ActiveState --value) = inactive")
+      machine.succeed("test $(systemctl show forgejo-actions-runner.service -p NRestarts --value) = 0")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/drain-owned")
+      machine.fail("test -e /run/forgejo-runner-aggregate-pressure/drain-disowned")
+      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=5\\n' > /run/fixture-pressure")
+      machine.wait_until_succeeds("systemctl is-active forgejo-actions-runner.service")
+
+      # The runner waits for a worker after SIGTERM. A frozen worker cannot
+      # finish that job, so shutdown must bypass the normal long job timeout.
+      machine.succeed(f"{docker} run -d --name shutdown-worker runner-fixture:local")
+      machine.succeed("touch /run/fixture-runner-block-stop")
+      machine.succeed("systemctl restart forgejo-actions-runner.service")
+      machine.succeed("printf 'full avg10=99.00 avg60=99.00 avg300=99.00 total=6\\n' > /run/fixture-pressure")
+      machine.wait_until_succeeds("test $(systemctl show forgejo-actions-runner.service -p ActiveState --value) = deactivating")
+      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
+      machine.shutdown()
     '';
   }

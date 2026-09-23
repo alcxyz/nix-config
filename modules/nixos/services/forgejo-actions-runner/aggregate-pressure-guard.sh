@@ -18,7 +18,9 @@ max_iterations=${MAX_ITERATIONS:-0}
 transition_timeout_seconds=${TRANSITION_TIMEOUT_SECONDS:-120}
 unit=forgejobuilds.slice
 runner_unit=forgejo-actions-runner.service
+lifecycle_unit=forgejo-runner-aggregate-lifecycle.service
 frozen_since=""
+locked_metadata_deadline=0
 
 # Diagnostic output must never change freeze ownership or recovery behavior.
 report_transition() {
@@ -33,7 +35,40 @@ fail() {
   "$notify_bin" --status="degraded: $1" || true
   exit 1
 }
-metadata() { timeout --foreground 5s "$systemctl_bin" "$@"; }
+metadata() {
+  local output deadline remaining attempt_timeout
+  if [[ $1 != show ]]; then
+    timeout --foreground 5s "$systemctl_bin" "$@"
+    return
+  fi
+  # daemon-reload briefly blocks read-only D-Bus queries during a NixOS
+  # switch. Keep existing ownership intact across that bounded interval;
+  # never retry a start or stop request whose result could be ambiguous.
+  deadline=$((SECONDS + 45))
+  if ((locked_metadata_deadline > 0 && locked_metadata_deadline < deadline)); then
+    deadline=$locked_metadata_deadline
+  fi
+  while :; do
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || return 1
+    attempt_timeout=10
+    ((remaining < attempt_timeout)) && attempt_timeout=$remaining
+    if output=$(timeout --foreground "${attempt_timeout}s" "$systemctl_bin" "$@"); then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    ((SECONDS < deadline)) || return 1
+    sleep 1
+  done
+}
+lock_lifecycle() {
+  flock -x 9
+  locked_metadata_deadline=$((SECONDS + 45))
+}
+unlock_lifecycle() {
+  locked_metadata_deadline=0
+  flock -u 9
+}
 transition() {
   local action=$1
   local actual deadline metadata_timeout remaining
@@ -64,13 +99,14 @@ freezer_state() { metadata show --property=FreezerState --value "$unit"; }
 runner_property() {
   metadata show --property="$1" --value "$runner_unit"
 }
-
 mkdir -p "$state_dir"
 chmod 0700 "$state_dir"
 [[ ! -e $state_dir/pending ]] || fail "ambiguous freeze operation requires operator recovery"
 [[ ! -e $state_dir/drain-pending ]] || fail "ambiguous admission drain requires operator recovery"
 [[ ! -e $state_dir/resume-pending ]] || fail "ambiguous admission resume requires operator recovery"
 [[ ! -e $state_dir/drain-disowned ]] || fail "disowned admission drain requires operator recovery"
+[[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown requires operator recovery"
+exec 9>"$state_dir/lifecycle.lock"
 
 case "$admission_control" in
   0 | 1) ;;
@@ -100,9 +136,18 @@ read_pressure() {
 
 freeze_owned() {
   local actual started
+  lock_lifecycle
+  [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
+  # During boot, the daemon starts before the external lifecycle service.
+  # Consumers require that service, so defer freezing until teardown is armed.
+  if [[ $(metadata is-active "$lifecycle_unit" 2>/dev/null || true) != active ]]; then
+    unlock_lifecycle
+    return 0
+  fi
   actual=$(freezer_state) || fail "cannot inspect build aggregate"
   if [[ -e $state_dir/owned ]]; then
     [[ $actual == frozen ]] || fail "owned aggregate was thawed externally"
+    unlock_lifecycle
     return
   fi
   [[ $actual == running ]] || fail "aggregate freeze is not owned by this guard"
@@ -110,32 +155,40 @@ freeze_owned() {
   started=$SECONDS
   report_transition freeze_requested
   transition freeze "$unit" || fail "aggregate freeze failed; ownership requires recovery"
+  locked_metadata_deadline=$((SECONDS + 45))
   [[ $(freezer_state) == frozen ]] || fail "aggregate did not freeze; ownership requires recovery"
   : > "$state_dir/owned"
   rm "$state_dir/pending"
   frozen_since=$SECONDS
   report_transition frozen "transition_seconds=$((SECONDS - started))"
+  unlock_lifecycle
 }
 
 thaw_owned() {
   local started duration=unknown
+  lock_lifecycle
+  [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
   [[ -e $state_dir/owned ]] || fail "aggregate thaw lacks ownership"
   [[ $(freezer_state) == frozen ]] || fail "owned aggregate state changed externally"
   : > "$state_dir/pending"
   started=$SECONDS
   report_transition thaw_requested
   transition thaw "$unit" || fail "aggregate thaw failed; ownership requires recovery"
+  locked_metadata_deadline=$((SECONDS + 45))
   [[ $(freezer_state) == running ]] || fail "aggregate did not thaw; ownership requires recovery"
   rm "$state_dir/owned" "$state_dir/pending"
   if [[ -n $frozen_since ]]; then duration=$((SECONDS - frozen_since)); fi
   report_transition thawed "transition_seconds=$((SECONDS - started)) frozen_seconds=$duration"
   frozen_since=""
+  unlock_lifecycle
 }
 
 request_admission_drain() {
   local active generation load_state unit_file_state result
   [[ $admission_control == 1 ]] || return 0
   [[ ! -e $state_dir/drain-owned ]] || return 0
+  lock_lifecycle
+  [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
 
   load_state=$(runner_property LoadState) || fail "cannot inspect runner load state"
   unit_file_state=$(runner_property UnitFileState) || fail "cannot inspect runner enablement"
@@ -146,9 +199,10 @@ request_admission_drain() {
   # Only a healthy, enabled runner that is currently polling can be claimed.
   # An inactive, failed, disabled, or masked service may have been stopped by
   # an operator and must never be restarted by this guard.
-  [[ $load_state == loaded ]] || return 0
-  [[ $unit_file_state == enabled || $unit_file_state == enabled-runtime ]] || return 0
-  [[ $active == active && $result == success ]] || return 0
+  if [[ $load_state != loaded || ($unit_file_state != enabled && $unit_file_state != enabled-runtime) || $active != active || $result != success ]]; then
+    unlock_lifecycle
+    return 0
+  fi
   [[ $generation =~ ^[1-9][0-9]*$ ]] || fail "active runner has no valid execution generation"
 
   printf '%s\n' "$generation" > "$state_dir/drain-pending"
@@ -158,8 +212,10 @@ request_admission_drain() {
     fail "runner admission drain failed; ownership requires recovery"
   fi
   mv "$state_dir/drain-pending" "$state_dir/drain-owned"
+  locked_metadata_deadline=$((SECONDS + 45))
   active=$(runner_property ActiveState) || fail "cannot inspect draining runner state"
   report_transition admission_draining "runner_unit=$runner_unit active_state=$active"
+  unlock_lifecycle
 }
 
 validate_drain_ownership() {
@@ -190,6 +246,8 @@ validate_drain_ownership() {
 resume_admissions() {
   local active load_state unit_file_state result
   [[ $admission_control == 1 && -e $state_dir/drain-owned ]] || return 0
+  lock_lifecycle
+  [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
 
   load_state=$(runner_property LoadState) || fail "cannot inspect runner load state"
   unit_file_state=$(runner_property UnitFileState) || fail "cannot inspect runner enablement"
@@ -198,13 +256,17 @@ resume_admissions() {
 
   # A graceful stop can remain deactivating for the rest of the admitted job's
   # timeout. Keep waiting without sending another stop or start request.
-  [[ $active == inactive ]] || return 0
-  if [[ $load_state != loaded || ($unit_file_state != enabled && $unit_file_state != enabled-runtime) || $result != success ]]; then
+  if [[ $active != inactive ]]; then unlock_lifecycle; return 0; fi
+  # ExecCondition may have skipped a configuration-switch start while this
+  # owned drain was in force. That benign result still permits guard recovery.
+  if [[ $load_state != loaded || ($unit_file_state != enabled && $unit_file_state != enabled-runtime) ||
+        ($result != success && $result != exec-condition) ]]; then
     if [[ ! -e $state_dir/resume-blocked-reported ]]; then
       report_transition admission_resume_blocked \
         "runner_unit=$runner_unit active_state=$active load_state=$load_state unit_file_state=$unit_file_state result=$result"
       : > "$state_dir/resume-blocked-reported"
     fi
+    unlock_lifecycle
     return 0
   fi
 
@@ -216,6 +278,7 @@ resume_admissions() {
   fi
   rm "$state_dir/resume-pending"
   report_transition admission_start_queued "runner_unit=$runner_unit"
+  unlock_lifecycle
 }
 
 actual=$(freezer_state) || fail "cannot inspect build aggregate at startup"
@@ -234,6 +297,7 @@ low=0
 iteration=0
 while ((max_iterations == 0 || iteration < max_iterations)); do
   iteration=$((iteration + 1))
+  [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
   validate_drain_ownership
   if ((pressure >= high_threshold)); then
     high=$((high + 1))

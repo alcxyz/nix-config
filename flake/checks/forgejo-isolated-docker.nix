@@ -48,6 +48,10 @@ else let
   daemonConfig = lib.last (lib.splitString "=" services.forgejo-runner-docker.serviceConfig.ExecStart);
   guard = services.forgejo-runner-io-pressure-guard.serviceConfig.ExecStart;
   guardSource = ../../modules/nixos/services/forgejo-actions-runner/aggregate-pressure-guard.sh;
+  lifecycleStop = services.forgejo-runner-aggregate-lifecycle.serviceConfig.ExecStop;
+  lifecycleStopSource = ../../modules/nixos/services/forgejo-actions-runner/aggregate-lifecycle-stop.sh;
+  runnerStartGate = lib.removePrefix "+" services.forgejo-actions-runner.serviceConfig.ExecCondition;
+  runnerStartGateSource = ../../modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh;
   tests = ./test-forgejo-runner-aggregate-pressure.py;
 in
   assert runner.dockerHost == "unix:///run/forgejo-docker/docker.sock";
@@ -71,6 +75,25 @@ in
   assert services.forgejo-runner-docker.serviceConfig.OOMPolicy == "continue";
   assert services.forgejo-runner-docker.serviceConfig.LimitNOFILE == 1048576;
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.bindsTo;
+  assert builtins.elem "forgejo-runner-aggregate-lifecycle.service" services.forgejo-runner-docker.requires;
+  assert builtins.elem "forgejo-runner-docker.service" services.forgejo-runner-aggregate-lifecycle.after;
+  assert builtins.elem "forgejo-runner-docker.service" services.forgejo-runner-aggregate-lifecycle.bindsTo;
+  assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-aggregate-lifecycle.bindsTo;
+  assert builtins.elem "forgejo-runner-aggregate-lifecycle.service" services.forgejo-actions-runner.requires;
+  assert builtins.elem "forgejo-runner-aggregate-lifecycle.service" services.forgejo-runner-cache-prune.requires;
+  assert !(builtins.elem "forgejo-runner-aggregate-lifecycle.service" services.forgejo-actions-runner.after);
+  assert !(builtins.elem "forgejo-runner-aggregate-lifecycle.service" services.forgejo-runner-cache-prune.after);
+  assert lib.hasInfix "aggregate-lifecycle-ready" (toString (lib.head services.forgejo-actions-runner.serviceConfig.ExecStartPre));
+  assert lib.hasPrefix "+" services.forgejo-actions-runner.serviceConfig.ExecCondition;
+  assert lib.hasInfix "aggregate-lifecycle-ready" (toString (lib.head services.forgejo-runner-cache-prune.serviceConfig.ExecStartPre));
+  assert !(services.forgejo-runner-aggregate-lifecycle.serviceConfig ? Slice);
+  assert !services.forgejo-runner-docker.restartIfChanged;
+  assert !services.forgejo-runner-aggregate-lifecycle.restartIfChanged;
+  assert !services.forgejo-runner-io-pressure-guard.restartIfChanged;
+  assert !services.forgejo-actions-runner.restartIfChanged;
+  assert !services.forgejo-runner-resource-policy.restartIfChanged;
+  assert services.forgejo-runner-docker.serviceConfig.Restart == "no";
+  assert services.forgejo-runner-io-pressure-guard.serviceConfig.Restart == "no";
   assert builtins.elem "forgejo-runner-io-pressure-guard.service" services.forgejo-runner-docker.after;
   assert builtins.elem "forgejo-runner-resource-policy.service" services.forgejo-runner-io-pressure-guard.requires;
   assert !(builtins.elem "forgejo-runner-docker.service" services.forgejo-runner-io-pressure-guard.requires);
@@ -102,6 +125,8 @@ in
           and .["default-ulimits"].nofile == {"Hard": 65536, "Name": "nofile", "Soft": 65536}' \
         "$daemonConfig" >/dev/null
       shellcheck ${guardSource}
-      python3 ${tests} ${guard}
+      shellcheck ${lifecycleStopSource}
+      shellcheck ${runnerStartGateSource}
+      python3 ${tests} ${guard} ${lifecycleStop} ${runnerStartGate}
       touch "$out"
     ''
