@@ -202,8 +202,6 @@ in rec {
     # macOS-only CLI additions
     mac = with pkgs; [
       mas
-      # Standalone local PAW instance on the Mac (arm64 Minikube profile).
-      minikube
     ];
 
     /*
