@@ -14,11 +14,6 @@
     inherit pkgs inputs;
   };
   networkName = hostInventory.darwinNetworkName or "mac";
-  netbirdHostname = "mac";
-  netbirdClient = pkgs.writeShellScriptBin "netbird" ''
-    export NB_HOSTNAME="''${NB_HOSTNAME:-${netbirdHostname}}"
-    exec ${pkgs.netbird}/bin/netbird "$@"
-  '';
   macSshOn = pkgs.writeShellScriptBin "mac-ssh-on" ''
     set -euo pipefail
 
@@ -242,28 +237,6 @@ in {
 
   services.openssh.enable = true;
 
-  # ============================================================================
-  # Netbird — mesh VPN client
-  # ============================================================================
-  launchd.daemons.netbird = {
-    serviceConfig = {
-      ProgramArguments = [
-        "${netbirdClient}/bin/netbird"
-        "service"
-        "run"
-      ];
-      RunAtLoad = true;
-      KeepAlive = true;
-      StandardOutPath = "/var/log/netbird.log";
-      StandardErrorPath = "/var/log/netbird.log";
-      EnvironmentVariables = {
-        NB_CONFIG = "/var/lib/netbird/config.json";
-        NB_HOSTNAME = netbirdHostname;
-        NB_LOG_FILE = "console";
-      };
-    };
-  };
-
   # Keyboard remapping: Karabiner Elements (brew cask), config managed
   # declaratively via home-manager — see ADR-0011.
 
@@ -287,7 +260,6 @@ in {
       pkgsets.system.mac
       ++ [
         macSshOn
-        netbirdClient
       ];
     shells = with pkgs; [
       bash
@@ -301,7 +273,8 @@ in {
   # Homebrew supplies macOS tools and native integrations such as Podman's VM.
   homebrew = {
     enable = true;
-    brews = ["libfido2" "openssh" "podman" "synergy-core"];
+    taps = ["netbirdio/tap"];
+    brews = ["libfido2" "netbirdio/tap/netbird" "openssh" "podman" "synergy-core"];
     casks = [
       "audacity"
       "balenaetcher"
@@ -312,7 +285,10 @@ in {
       "karabiner-elements"
       "keyman"
       "ledger-wallet"
+      "microsoft-teams"
       "moonlight"
+      # The native cask also owns NetBird's launchd service installation.
+      "netbirdio/tap/netbird-ui"
       "obs"
       "obsidian"
       "omniwm"
