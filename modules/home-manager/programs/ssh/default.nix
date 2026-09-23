@@ -49,7 +49,7 @@ in {
                 ServerAliveCountMax = 3;
                 HashKnownHosts = true;
               }
-              // optionalAttrs pkgs.stdenv.isDarwin {
+              // optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
                 # macOS keychain integration
                 #UseKeychain = "yes";
               };
@@ -86,7 +86,7 @@ in {
     # User-level ssh-agent only on Linux; macOS uses its own agent. This is
     # defined directly instead of services.ssh-agent because that module also
     # injects Nushell init code that assumes XDG_RUNTIME_DIR always exists.
-    (mkIf pkgs.stdenv.isLinux {
+    (mkIf pkgs.stdenv.hostPlatform.isLinux {
       systemd.user.services.ssh-agent = {
         Install.WantedBy = ["default.target"];
         Unit = {

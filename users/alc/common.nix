@@ -75,7 +75,7 @@ in
       FLAKE = configDir;
       LC_ALL = lib.mkIf (accountUsername == username) (lib.mkForce "");
       LOCALE_ARCHIVE =
-        lib.mkIf (accountUsername == username && pkgs.stdenv.isLinux)
+        lib.mkIf (accountUsername == username && pkgs.stdenv.hostPlatform.isLinux)
         "${pkgs.glibcLocales}/lib/locale/locale-archive";
     };
 

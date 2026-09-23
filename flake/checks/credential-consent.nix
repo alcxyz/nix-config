@@ -2,7 +2,7 @@
   lib,
   pkgs,
 }:
-if !pkgs.stdenv.isLinux
+if !pkgs.stdenv.hostPlatform.isLinux
 then
   pkgs.runCommand "credential-consent-linux-only" {} ''
     touch "$out"

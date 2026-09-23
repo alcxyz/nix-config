@@ -28,7 +28,7 @@
         nix-deploy = pkgs.nix-deploy;
         reportcraft = pkgs.reportcraft;
       }
-      // lib.optionalAttrs pkgs.stdenv.isLinux {
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
         ffmpeg-v4l2-request = pkgs.ffmpeg-v4l2-request;
         moonlight-v4l2-request = pkgs.moonlight-v4l2-request;
         nixbox-plymouth-theme = pkgs.nixbox-plymouth-theme;

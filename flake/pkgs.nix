@@ -98,7 +98,7 @@ in
               makeModulesClosure = args:
                 _prev.makeModulesClosure (args // {allowMissing = true;});
             }
-            // lib.optionalAttrs _prev.stdenv.isLinux {
+            // lib.optionalAttrs _prev.stdenv.hostPlatform.isLinux {
               hyprland = _prev.hyprland.overrideAttrs (old: {
                 patches =
                   (old.patches or [])

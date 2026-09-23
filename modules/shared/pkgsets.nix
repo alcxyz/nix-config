@@ -317,7 +317,7 @@ in rec {
         rbw
         bitwarden-cli
         bitwarden-desktop
-        pinentry-gtk2
+        pinentry-gnome3
         texlive.combined.scheme-full
 
         jrnl

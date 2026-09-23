@@ -2,7 +2,7 @@
   lib,
   pkgs,
 }:
-if !pkgs.stdenv.isLinux
+if !pkgs.stdenv.hostPlatform.isLinux
 then pkgs.runCommand "forgejo-runner-isolated-docker-linux-only" {} ''touch "$out";''
 else let
   dummyOrphanMonitor = pkgs.writeShellApplication {

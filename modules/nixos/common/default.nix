@@ -99,7 +99,7 @@ in {
 
   # ==================== Boot Configuration ====================
   boot.loader =
-    if pkgs.stdenv.isAarch64
+    if pkgs.stdenv.hostPlatform.isAarch64
     then {
       systemd-boot.enable = false;
       generic-extlinux-compatible.enable = true;

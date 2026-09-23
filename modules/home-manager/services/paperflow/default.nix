@@ -8,7 +8,7 @@
 }:
 with lib; let
   cfg = config.services.paperflow;
-  isDarwin = pkgs.stdenv.isDarwin;
+  isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
   paperflowPkg = inputs.paperflow.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in {
   options.services.paperflow = {
