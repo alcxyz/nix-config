@@ -15,6 +15,7 @@
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     inputs.nix-secrets.nixosModules.k8sApiVipPolicy
+    inputs.nix-secrets.nixosModules.openbaoClusterPolicy
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
@@ -28,6 +29,8 @@
     inputs.nix-secrets.nixosModules.xevPrinter
     inputs.nix-secrets.nixosModules.xevPrivate
   ];
+
+  alc.private.openbaoClusterPolicy.enable = true;
 
   boot.initrd.systemd.enable = true;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
