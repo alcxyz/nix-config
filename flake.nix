@@ -120,6 +120,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    paw = {
+      url = "github:alcxyz/paw/dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     canopy = {
       url = "github:alcxyz/canopy/dev";
       inputs.nixpkgs.follows = "nixpkgs";

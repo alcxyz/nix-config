@@ -5,5 +5,7 @@
   programs.kubernetes.managed.extraKubeconfigs = [
     "${config.home.homeDirectory}/.kube/local-bullet-platform-lab-config"
     "${config.home.homeDirectory}/.kube/local-funhouse-lab-config"
+    # Minikube writes its profiles (for example the PAW QA cluster) here.
+    "${config.home.homeDirectory}/.kube/config"
   ];
 }

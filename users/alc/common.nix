@@ -99,6 +99,7 @@ in
       ++ [
         inputs.grove.packages.${pkgs.stdenv.hostPlatform.system}.default
         inputs.canopy.packages.${pkgs.stdenv.hostPlatform.system}.default
+        inputs.paw.packages.${pkgs.stdenv.hostPlatform.system}.paw
       ];
 
     # ==================== Symlinked configs (live editing, all hosts) ====================
@@ -134,6 +135,9 @@ in
     programs.ssh.enable = true;
 
     programs.git.managed.enable = true;
+    # PAW workspaces are reached as Git remotes through the ext:: transport
+    # (paw workspace repository remote), which Git disables unless allowed.
+    programs.git.settings.protocol.ext.allow = "user";
     programs.workspace.enable = true;
 
     # Forgejo credential helper — moved to linux/common.nix and darwin/mac.nix
