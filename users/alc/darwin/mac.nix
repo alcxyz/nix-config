@@ -133,6 +133,8 @@ in {
     extraConfig = {
       core = {
         editor = "nvim";
+        # Use the platform SSH client for native macOS app integration.
+        sshCommand = "/usr/bin/ssh";
       };
       gpg.format = "ssh";
     };
