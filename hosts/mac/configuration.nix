@@ -280,6 +280,7 @@ in {
       "balenaetcher"
       "brave-browser"
       "codexbar"
+      "docker-desktop"
       "ghostty"
       "iterm2"
       "karabiner-elements"
