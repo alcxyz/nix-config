@@ -29,6 +29,14 @@ in {
   home.packages = pkgsets.home.${hostRole.homePackageSet};
 
   programs.wezterm.enable = true;
+  # Home Manager owns configuration; Homebrew owns the signed application.
+  programs.wezterm.package = pkgs.runCommand "wezterm-native" {} ''
+    mkdir -p "$out/bin" "$out/etc/profile.d"
+    for executable in wezterm wezterm-gui wezterm-mux-server strip-ansi-escapes; do
+      ln -s "/Applications/WezTerm.app/Contents/MacOS/$executable" "$out/bin/$executable"
+    done
+    ln -s /Applications/WezTerm.app/Contents/Resources/wezterm.sh "$out/etc/profile.d/wezterm.sh"
+  '';
   programs.karabiner.managed.enable = true;
   programs.atuin.daemon.enable = false;
   programs.moonlightEndpoints.launchers = [

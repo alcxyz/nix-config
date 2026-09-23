@@ -301,7 +301,36 @@ in {
   # Homebrew supplies macOS tools and native integrations such as Podman's VM.
   homebrew = {
     enable = true;
-    brews = ["podman"];
+    brews = ["podman" "synergy-core"];
+    casks = [
+      "audacity"
+      "balenaetcher"
+      "brave-browser"
+      "codexbar"
+      "ghostty"
+      "iterm2"
+      "karabiner-elements"
+      "keyman"
+      "ledger-wallet"
+      "moonlight"
+      "obs"
+      "obsidian"
+      "omniwm"
+      "openlens"
+      "raycast"
+      "t3-code@nightly"
+      "thunderbird"
+      "upscayl"
+      "wezterm"
+      "wispr-flow"
+      "zen"
+    ];
+    onActivation = {
+      autoUpdate = true;
+      upgrade = true;
+      # Preserve apps managed outside this declaration during migration.
+      cleanup = "none";
+    };
   };
 
   # ============================================================================

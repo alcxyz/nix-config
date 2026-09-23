@@ -3,7 +3,7 @@ import Cocoa
 let bundleID = "com.github.wez.wezterm"
 
 guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
-    NSWorkspace.shared.open(URL(fileURLWithPath: "/Users/alc/Applications/Home Manager Apps/WezTerm.app"))
+    NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/WezTerm.app"))
     exit(0)
 }
 

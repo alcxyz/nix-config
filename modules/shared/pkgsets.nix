@@ -246,9 +246,9 @@ in rec {
         claude-code
         codex-cli
         codex-app-server
-        t3code
       ]
       ++ lib.optionals stdenv.hostPlatform.isLinux [
+        t3code
         herdr
       ];
 
@@ -266,16 +266,15 @@ in rec {
     We split into:
     - desktopCommon      (intended for both Linux + mac where supported)
     - desktopLinuxOnly   (Linux-specific or very Linux-centric)
-    - desktopMacOnly     (mac-specific, currently empty placeholder)
+    - desktopMacOnly     (mac-specific exceptions to native app packaging)
     -------------------------------------------------------------------
     */
 
-    # Common desktop apps you might want on both Linux and macOS
+    # Cross-platform desktop apps packaged through Nix on Linux.
     desktopCommon = with pkgs; [
       obsidian
       thunderbird
       brave
-      # Add more truly cross‑platform desktop apps here later
     ];
 
     # Linux-only (or strongly Linux-oriented) desktop apps
@@ -294,15 +293,12 @@ in rec {
       nautilus
     ];
 
-    # macOS-only desktop apps
-    desktopMacOnly = with pkgs; [
-      ghostty
-      raycast
-    ];
+    # macOS GUI bundles are declared as Homebrew casks (ADR-0073).
+    desktopMacOnly = [];
 
     # Convenience combined sets
     desktopLinux = desktopCommon ++ desktopLinuxOnly;
-    desktopMac = desktopCommon ++ desktopMacOnly;
+    desktopMac = desktopMacOnly;
 
     # Linux desktop/user utilities (Wayland/X11 helpers etc.)
     linuxExtras = with pkgs; [
