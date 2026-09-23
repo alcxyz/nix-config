@@ -301,7 +301,7 @@ in {
   # Homebrew supplies macOS tools and native integrations such as Podman's VM.
   homebrew = {
     enable = true;
-    brews = ["podman" "synergy-core"];
+    brews = ["libfido2" "openssh" "podman" "synergy-core"];
     casks = [
       "audacity"
       "balenaetcher"
