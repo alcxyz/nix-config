@@ -287,6 +287,57 @@ in
       machine.succeed("printf 'full avg10=99.00 avg60=99.00 avg300=99.00 total=6\\n' > /run/fixture-pressure")
       machine.wait_until_succeeds("test $(systemctl show forgejo-actions-runner.service -p ActiveState --value) = deactivating")
       machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
+      owned_shutdown_log_start = len(machine.full_console_log)
       machine.shutdown()
+      owned_shutdown_log = machine.full_console_log[owned_shutdown_log_start:]
+      assert any("forgejobuilds.slice: Unit now thawed." in line for line in owned_shutdown_log)
+      assert any("forgejo-runner-aggregate-lifecycle.service: Deactivated successfully." in line for line in owned_shutdown_log)
+      assert not any("aggregate lifecycle:" in line for line in owned_shutdown_log)
+      assert not any("Cannot stop frozen unit" in line for line in owned_shutdown_log)
+
+      # A second boot exercises a manual freezer during full poweroff. The
+      # guard must not claim or thaw it; teardown still needs to be bounded.
+      machine.start()
+      machine.wait_for_unit("multi-user.target")
+      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=7\\n' > /run/fixture-pressure")
+      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = running")
+      machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)
+      machine.succeed("systemctl is-active forgejo-runner-aggregate-lifecycle.service")
+      machine.succeed("systemctl freeze forgejobuilds.slice")
+      machine.fail("test -e /run/forgejo-runner-aggregate-pressure/owned")
+      manual_shutdown_log_start = len(machine.full_console_log)
+      assert machine.shell is not None
+      machine.shell.send(b"poweroff\n")
+      assert machine.process is not None
+      machine.process.wait(timeout=120)
+      machine.wait_for_shutdown()
+      manual_shutdown_log = machine.full_console_log[manual_shutdown_log_start:]
+      assert not any("forgejobuilds.slice: Unit now thawed." in line for line in manual_shutdown_log)
+      assert any("forgejo-runner-aggregate-lifecycle.service: Deactivated successfully." in line for line in manual_shutdown_log)
+      assert not any("aggregate lifecycle:" in line for line in manual_shutdown_log)
+      assert not any("Cannot stop frozen unit" in line for line in manual_shutdown_log)
+
+      # An interrupted owned freezer transition is ambiguous. Preserve both
+      # markers and the freezer state while still allowing bounded shutdown.
+      machine.start()
+      machine.wait_for_unit("multi-user.target")
+      machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)
+      machine.succeed("systemctl is-active forgejo-runner-aggregate-lifecycle.service")
+      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
+      machine.wait_until_succeeds("test -e /run/forgejo-runner-aggregate-pressure/owned")
+      machine.succeed("touch /run/forgejo-runner-aggregate-pressure/pending")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/owned")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/pending")
+      ambiguous_shutdown_log_start = len(machine.full_console_log)
+      assert machine.shell is not None
+      machine.shell.send(b"poweroff\n")
+      assert machine.process is not None
+      machine.process.wait(timeout=120)
+      machine.wait_for_shutdown()
+      ambiguous_shutdown_log = machine.full_console_log[ambiguous_shutdown_log_start:]
+      assert not any("forgejobuilds.slice: Unit now thawed." in line for line in ambiguous_shutdown_log)
+      assert any("forgejo-runner-aggregate-lifecycle.service: Deactivated successfully." in line for line in ambiguous_shutdown_log)
+      assert not any("aggregate lifecycle:" in line for line in ambiguous_shutdown_log)
+      assert not any("Cannot stop frozen unit" in line for line in ambiguous_shutdown_log)
     '';
   }

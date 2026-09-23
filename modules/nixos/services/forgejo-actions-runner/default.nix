@@ -529,6 +529,10 @@ in {
 
     systemd.slices.forgejobuilds = lib.mkIf resourcePolicyCfg.enable {
       description = "Aggregate Forgejo Actions build resources";
+      # The external lifecycle service must thaw an owned freezer before the
+      # aggregate gets a stop job. systemd's implicit shutdown stop job would
+      # reject ThawUnit even after every descendant has exited.
+      unitConfig = lib.mkIf isolated {DefaultDependencies = false;};
       sliceConfig = {
         CPUWeight = resourcePolicyCfg.cpuWeight;
         IOWeight = resourcePolicyCfg.ioWeight;

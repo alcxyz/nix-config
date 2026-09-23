@@ -65,6 +65,13 @@ Consumers do not order their stop before lifecycle teardown: a runner waiting
 for a frozen worker can otherwise delay shutdown for its full job timeout.
 After aggregate workers are gone, destructive teardown terminates any runner
 still waiting for those jobs.
+For the isolated aggregate, the slice omits systemd's default shutdown stop
+dependency. Otherwise shutdown queues the slice's stop job before lifecycle
+teardown runs, and systemd rejects an owned thaw with a pending-job error even
+after all workers have exited. The lifecycle service retains its normal
+shutdown ordering and still kills and verifies aggregate descendants before an
+owned thaw. The empty slice remains for final system teardown rather than
+being stopped through a conflicting freezer job.
 
 Guard and daemon failures do not auto-restart. Configuration switches do not
 restart the isolated runner, daemon, guard, lifecycle service or resource-policy
@@ -137,13 +144,16 @@ Host Docker remains responsive during the freeze. It uses a locally built
 dummy image and never registers a runner. Run it explicitly with:
 
 ```sh
-nix-build --no-out-link --expr 'let pkgs = import <nixpkgs> {}; in import ./flake/checks/forgejo-isolated-docker-vm.nix { inherit pkgs; }'
+nix-build --no-out-link --impure --max-jobs 1 --cores 2 \
+  --expr 'let pkgs = import (builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath {}; in import ./flake/checks/forgejo-isolated-docker-vm.nix { inherit pkgs; }'
 ```
 
 The fixture also exercises guard loss while workers are frozen, preservation of
 a manual freeze, a configuration switch with an intentionally drained runner
 wanted by an active target, and shutdown with a runner waiting on a frozen
-worker. A complete shutdown with an ambiguous manual freeze remains unqualified.
+worker. Separate shutdown boots verify that a manual freeze and an owned
+freeze with a pending transition marker are not thawed, while lifecycle
+teardown completes without a frozen-unit stop error.
 
 The positive fixture `flake/checks/forgejo-isolated-docker-paths-vm.nix` uses the
 real local Forgejo executor without registration or external image pulls. It
