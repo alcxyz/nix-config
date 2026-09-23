@@ -123,10 +123,11 @@ in {
       # plus a ~1.7 GB image compression, which the 1 CPU / 3 GB default
       # cannot do in reasonable time. The host has 12 cores and 36 GB.
       maxJobs = 4;
-      config = {
+      config = {lib, ...}: {
         virtualisation.cores = 6;
         virtualisation.memorySize = 12288;
-        virtualisation.diskSize = 60 * 1024;
+        # The nix-builder profile pins its own disk size without a priority.
+        virtualisation.diskSize = lib.mkForce (60 * 1024);
       };
     };
 
