@@ -124,9 +124,9 @@ in {
       # cannot do in reasonable time. The host has 12 cores and 36 GB.
       maxJobs = 4;
       config = {lib, ...}: {
-        virtualisation.cores = 6;
-        virtualisation.memorySize = 12288;
-        # The nix-builder profile pins its own disk size without a priority.
+        # The nix-builder profile pins these without a priority.
+        virtualisation.cores = lib.mkForce 6;
+        virtualisation.memorySize = lib.mkForce 12288;
         virtualisation.diskSize = lib.mkForce (60 * 1024);
       };
     };
