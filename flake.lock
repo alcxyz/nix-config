@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1790228195,
-        "narHash": "sha256-fYMxk2hOhAi1lRj/Iy4lQOZcA0h7z+LvgRwiVmqP7fM=",
+        "lastModified": 1790229638,
+        "narHash": "sha256-52deLUJc47UtOTipkRdOZ1Y1rl/wvDz9pJ2Kz5kbSp0=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "5c7a1bde5646286c5c15bcf30ac6eaf068980379",
+        "rev": "86d7ac1267c6277dcf5390b6e28ab26ee023fbb0",
         "type": "github"
       },
       "original": {
@@ -300,11 +300,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1790228998,
-        "narHash": "sha256-nWNB2Z77IAjtK4Las4NEn5iHfRIm1OMPLxDknLGZVI0=",
+        "lastModified": 1790229644,
+        "narHash": "sha256-XBOIUI26KG4j1mXp24EXLVtvvqU3cMkj7Q7A/vkGvHg=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "1ed1db13001314d8f7b696a55d8d62f3e0f659ac",
+        "rev": "4e63089947837eefd3352ce6b3b9351fbcb3b284",
         "type": "github"
       },
       "original": {
