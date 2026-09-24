@@ -24,6 +24,7 @@
     inputs.nix-secrets.nixosModules.xyzNetworkIdentity
     inputs.nix-secrets.nixosModules.xyzNixSigningPolicy
     inputs.nix-secrets.nixosModules.xyzStoragePolicy
+    inputs.nix-secrets.nixosModules.openbaoBackupPolicy
     inputs.nix-secrets.nixosModules.xyzPrinter
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
