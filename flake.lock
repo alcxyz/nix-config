@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1789920219,
-        "narHash": "sha256-nyMQFmi9D5WmbBjHF4vojNGL/y2VpMG5cpTiv3VLRcw=",
+        "lastModified": 1790228195,
+        "narHash": "sha256-fYMxk2hOhAi1lRj/Iy4lQOZcA0h7z+LvgRwiVmqP7fM=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "35edd1b0d031bc214c4590b141136177e6b2d658",
+        "rev": "5c7a1bde5646286c5c15bcf30ac6eaf068980379",
         "type": "github"
       },
       "original": {
@@ -300,11 +300,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1789986694,
-        "narHash": "sha256-NmcBEvY+7x4iFP+Uv3fe8zkazEvk3SV9igTpGFcRoD8=",
+        "lastModified": 1790228998,
+        "narHash": "sha256-nWNB2Z77IAjtK4Las4NEn5iHfRIm1OMPLxDknLGZVI0=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "82b55536079bc46a36ef951994295c9554f43423",
+        "rev": "1ed1db13001314d8f7b696a55d8d62f3e0f659ac",
         "type": "github"
       },
       "original": {
@@ -957,11 +957,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790193622,
-        "narHash": "sha256-YemLYQHgL7UwpioNGEEm6VnB2SLk8jy/xf9pK9oUaE0=",
+        "lastModified": 1790228811,
+        "narHash": "sha256-9aqaBWtE9klm0V8s7UaQTYqftsGzBv0EmY2ZIzjhLQs=",
         "ref": "dev",
-        "rev": "9e745b0e3658bd01bd62a5b97ca6f1c7d55217bf",
-        "revCount": 540,
+        "rev": "d6bc9166db1e48bdb81296c33e6fad6be804a309",
+        "revCount": 544,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
