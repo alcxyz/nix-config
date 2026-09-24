@@ -508,6 +508,24 @@
         "type": "github"
       }
     },
+    "forgejo-runner-fixes": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790258754,
+        "narHash": "sha256-3GMpa03er9LVPvJ1NcDf78NBW41qzgppRTwcQTHv8m0=",
+        "ref": "dev",
+        "rev": "f7897e39a63ea0c40e7215f569b2c5e49d175e8c",
+        "revCount": 627,
+        "type": "git",
+        "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
+      },
+      "original": {
+        "ref": "dev",
+        "rev": "f7897e39a63ea0c40e7215f569b2c5e49d175e8c",
+        "type": "git",
+        "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
+      }
+    },
     "grove": {
       "inputs": {
         "flake-utils": "flake-utils_3",
@@ -957,11 +975,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790232551,
-        "narHash": "sha256-OdLlN5nZ06T8UWpO3BYFvvMrsBEh9IVb2LgA38hXAhU=",
+        "lastModified": 1790249331,
+        "narHash": "sha256-d0stDINkvAfm8XaMnv2N1dy61hiZwCRUcLr1VjKe1Jk=",
         "ref": "dev",
-        "rev": "13c407d2d8cd1f43eac971459be6d93f7ebe1ef2",
-        "revCount": 551,
+        "rev": "8146b7952d918e4653a77a4a9717e2ae0d77061c",
+        "revCount": 554,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1225,6 +1243,7 @@
         "dms-plugins": "dms-plugins",
         "dsearch": "dsearch",
         "flake-parts": "flake-parts",
+        "forgejo-runner-fixes": "forgejo-runner-fixes",
         "grove": "grove",
         "home-manager": "home-manager",
         "hyprland": "hyprland",

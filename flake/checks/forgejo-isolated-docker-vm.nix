@@ -299,6 +299,9 @@ in
       # guard must not claim or thaw it; teardown still needs to be bounded.
       machine.start()
       machine.wait_for_unit("multi-user.target")
+      # Let the boot pressure sample finish its owned transition before
+      # switching to low pressure and later applying a manual freeze.
+      machine.wait_until_succeeds("test -e /run/forgejo-runner-aggregate-pressure/owned && test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
       machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=7\\n' > /run/fixture-pressure")
       machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = running")
       machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)

@@ -5,6 +5,8 @@ state_dir=${STATE_DIR:-/run/forgejo-runner-aggregate-pressure}
 cgroup_root=${CGROUP_ROOT:-/sys/fs/cgroup}
 systemctl_bin=${SYSTEMCTL_BIN:-systemctl}
 timeout_seconds=${TEARDOWN_TIMEOUT_SECONDS:-270}
+primary_runner=forgejo-actions-runner.service
+runner_units_text=${RUNNER_UNITS:-$primary_runner}
 unit=forgejobuilds.slice
 cgroup="$cgroup_root/forgejobuilds.slice"
 
@@ -14,6 +16,12 @@ fail() {
 }
 
 [[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || fail "invalid teardown timeout"
+IFS=$' \t\n' read -r -d '' -a runner_units <<< "$runner_units_text" || true
+((${#runner_units[@]} > 0)) || fail "runner unit list is empty"
+[[ ${runner_units[0]} == "$primary_runner" ]] || fail "primary runner must remain first"
+for candidate in "${runner_units[@]}"; do
+  [[ $candidate =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || fail "invalid runner unit name"
+done
 deadline=$((SECONDS + timeout_seconds))
 budget() {
   local cap=$1
@@ -31,6 +39,20 @@ property() {
 exec 9>"$state_dir/lifecycle.lock"
 budget "$timeout_seconds"
 flock -w "$budget_seconds" -x 9 || fail "timed out waiting for guard transition"
+
+# A changed configuration cannot orphan a previously drained runner. The
+# guard will reject the mismatch; teardown still finishes every known runner.
+if [[ -e $state_dir/runner-units ]]; then
+  mapfile -t previous_units < "$state_dir/runner-units"
+  for candidate in "${previous_units[@]}"; do
+    [[ $candidate =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || fail "invalid persisted runner unit name"
+    present=0
+    for configured in "${runner_units[@]}"; do
+      [[ $candidate != "$configured" ]] || present=1
+    done
+    ((present == 1)) || runner_units+=("$candidate")
+  done
+fi
 
 scope=$(property ControlGroup "$unit") || fail "cannot inspect aggregate cgroup"
 [[ $scope == /forgejobuilds.slice ]] || fail "aggregate cgroup scope changed"
@@ -75,36 +97,39 @@ while :; do
   sleep 1
 done
 
-# The runner can wait for an admitted job for much longer than the daemon's
-# stop budget. Its workers are gone now, so finish any pending runner stop.
-runner=$(property ActiveState forgejo-actions-runner.service) ||
-  fail "cannot inspect runner during aggregate teardown"
-case "$runner" in
-  active | activating | deactivating)
-    budget 5
-    if ! timeout --foreground "${budget_seconds}s" "$systemctl_bin" kill --signal=KILL --kill-whom=all \
-      forgejo-actions-runner.service; then
-      runner=$(property ActiveState forgejo-actions-runner.service) ||
-        fail "cannot recheck runner after kill request"
-      [[ $runner == inactive || $runner == failed ]] ||
-        fail "could not terminate drained runner"
-    fi
-    while :; do
-      runner=$(property ActiveState forgejo-actions-runner.service) ||
-        fail "cannot verify runner termination"
-      case "$runner" in
-        inactive | failed) break ;;
-        active | activating | deactivating)
-          ((SECONDS < deadline)) || fail "runner did not finish stopping"
-          sleep 1
-          ;;
-        *) fail "runner state is ambiguous after termination" ;;
-      esac
-    done
-    ;;
-  inactive | failed) ;;
-  *) fail "runner state is ambiguous during aggregate teardown" ;;
-esac
+# A runner can wait for an admitted job much longer than the daemon's stop
+# budget. Workers are gone now, so finish every pending runner stop. All
+# queries and waits consume the one aggregate deadline above.
+for runner_unit in "${runner_units[@]}"; do
+  runner=$(property ActiveState "$runner_unit") ||
+    fail "cannot inspect runner during aggregate teardown"
+  case "$runner" in
+    active | activating | deactivating)
+      budget 5
+      if ! timeout --foreground "${budget_seconds}s" "$systemctl_bin" kill --signal=KILL --kill-whom=all \
+        "$runner_unit"; then
+        runner=$(property ActiveState "$runner_unit") ||
+          fail "cannot recheck runner after kill request"
+        [[ $runner == inactive || $runner == failed ]] ||
+          fail "could not terminate drained runner"
+      fi
+      while :; do
+        runner=$(property ActiveState "$runner_unit") ||
+          fail "cannot verify runner termination"
+        case "$runner" in
+          inactive | failed) break ;;
+          active | activating | deactivating)
+            ((SECONDS < deadline)) || fail "runner did not finish stopping"
+            sleep 1
+            ;;
+          *) fail "runner state is ambiguous after termination" ;;
+        esac
+      done
+      ;;
+    inactive | failed) ;;
+    *) fail "runner state is ambiguous during aggregate teardown" ;;
+  esac
+done
 
 # Ownership is a positive assertion. Pending transitions, manual freezes and
 # changed ownership are left frozen for explicit recovery.

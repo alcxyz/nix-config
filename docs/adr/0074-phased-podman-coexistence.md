@@ -17,6 +17,28 @@ workflows. The resource and lifecycle requirements of ADR-0072 remain in force;
 this decision does not replace that implementation or authorize weaker limits.
 Controller failure and shutdown qualification precede any production CI cutover.
 
+The opt-in CI module uses a second runner identity, account, API socket and
+storage root. Both CI runtimes share `forgejobuilds.slice` and one external
+pressure controller, retaining the existing combined CPU and memory budget.
+Admission drain ownership is tracked independently for each runner. A manually
+stopped runner is not claimed or restarted during recovery.
+
+The shared lifecycle boundary closes admission across both runtimes when either
+runtime or the controller is lost. Frozen teardown empties the combined worker
+aggregate before terminating waiting runner processes and resolving an owned
+freeze. This deliberately couples CI availability during the trial; independent
+freeze controllers over the same aggregate would create conflicting ownership,
+and separate full-size budgets would increase the host's maximum CI allocation.
+The application Docker daemon remains outside this boundary.
+
+The canary may select a separately qualified runner package. Its initial runner
+includes a bounded cleanup fix for cancelled Docker actions, whose upstream
+cleanup context otherwise prevents container removal on both engines. Keep the
+ordinary Docker runner package unchanged during this qualification. A temporary,
+source-only pin to the reusable package repository supplies only this package;
+bumping the existing shared package input would also update unrelated software.
+Remove the extra pin when the ordinary package input supplies a qualified fix.
+
 Migrate application services individually after their own functional and lifecycle
 checks. Stateful trials use independent data copies; only one runtime may write
 the production data at a time. Streaming services require their existing GPU,
@@ -57,15 +79,35 @@ synthetic Forgejo local executor against a rootless Podman API beside Docker. Ru
 it with the repository root flake's actual `inputs.nixpkgs` source, for example:
 
 ```sh
-nixpkgs_path=$(nix eval --impure --raw --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath')
-nix-build --no-out-link --option max-jobs 1 --option cores 2 --expr "let pkgs = import $nixpkgs_path {}; in import ./flake/checks/forgejo-podman-paths-vm.nix { inherit pkgs; }"
+nix-build --no-out-link --impure --max-jobs 1 --cores 2 --expr '
+  let
+    flake = builtins.getFlake (toString ./.);
+    pkgs = import flake.inputs.nixpkgs {};
+    runnerPackage = pkgs.callPackage
+      "${flake.inputs.forgejo-runner-fixes}/pkgs/forgejo-runner-cancellation" {};
+  in import ./flake/checks/forgejo-podman-paths-vm.nix {
+    inherit pkgs runnerPackage;
+    productionModule = true;
+  }'
 ```
 
 The tested Docker buildx container driver needs a cgroup parent within the
 delegated Podman service, `default-load=true` for ordinary tagged `docker build`
 output, and `BUILDX_BUILDER` to select that builder for `docker build`. This VM
-does not qualify hosted workflows, registry pushes, or a production runner
-module. It remains outside standard flake checks.
+does not qualify hosted workflows or registry pushes. The invocation above
+selects the production module and qualified runner; the fixture also supports
+a minimal standalone runtime. It remains outside standard flake checks.
+
+The executor-path fixture accepts `productionModule = true` to exercise the
+same paths against the opt-in module, and `runnerPackage` to select the
+qualified runner. It verifies graceful cancellation removes native job, service
+and action containers while the API remains available. Caller-created nested
+containers and builders are checked separately during aggregate teardown. The
+companion `flake/checks/forgejo-podman-coexistence-vm.nix` checks dual-runner admission,
+configuration switching, aggregate containment and failure/shutdown handling.
+These are explicit qualification runs, not automatic host activation. The
+manual `Podman canary` workflow selects only the canary label; image publishing
+and migration of ordinary workflows remain a separate phase.
 
 Host evidence and recovery procedures belong in the private operational
 repository. Deployment manifests remain owned by GitOps; public host interfaces

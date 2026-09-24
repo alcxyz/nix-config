@@ -27,6 +27,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Temporary, isolated runner fix; keep the shared package input unchanged.
+    forgejo-runner-fixes = {
+      url = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev&rev=f7897e39a63ea0c40e7215f569b2c5e49d175e8c";
+      flake = false;
+    };
+
     reportcraft = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git";
       inputs.nixpkgs.follows = "nixpkgs";

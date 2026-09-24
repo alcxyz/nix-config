@@ -15,6 +15,8 @@ LIFECYCLE = (Path(sys.argv.pop(1)) if len(sys.argv) > 1 else
              GUARD.with_name('aggregate-lifecycle-stop.sh')).resolve()
 GATE = (Path(sys.argv.pop(1)) if len(sys.argv) > 1 else
         GUARD.with_name('runner-start-gate.sh')).resolve()
+PRIMARY = 'forgejo-actions-runner.service'
+SECOND = 'forgejo-podman-actions-runner.service'
 
 
 class GuardTests(unittest.TestCase):
@@ -25,7 +27,9 @@ class GuardTests(unittest.TestCase):
                   runner_enabled='enabled', runner_load='loaded', runner_result='success',
                   stop_state='inactive', fail_runner_action='', runner_generation='123',
                   drain_generation=None, stop_generation='0', lifecycle_active=True,
-                  teardown_required=False, show_fail_count='0'):
+                  teardown_required=False, show_fail_count='0', second_runner=None,
+                  second_marker='', runner_units=None, persisted_units=None,
+                  unknown_state=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -43,6 +47,22 @@ class GuardTests(unittest.TestCase):
                 (state / 'resume-pending').touch()
             if teardown_required:
                 (state / 'teardown-required').touch()
+            if persisted_units is not None:
+                (state / 'runner-units').write_text('\n'.join(persisted_units) + '\n')
+            if unknown_state:
+                (state / 'runners' / 'old-runner.service').mkdir(parents=True)
+            if second_runner is not None:
+                second_state = state / 'runners' / SECOND
+                second_state.mkdir(parents=True)
+                if second_marker:
+                    (second_state / second_marker).write_text(
+                        second_runner.get('drain_generation', '456') + '\n')
+                for property_name, value in {
+                    'active': 'active', 'enabled': 'enabled', 'load': 'loaded',
+                    'result': 'success', 'generation': '456'
+                }.items():
+                    (root / f'podman-runner-{property_name}').write_text(
+                        second_runner.get(property_name, value))
             (root / 'actual').write_text(initial)
             (root / 'runner-active').write_text(runner_state)
             (root / 'runner-enabled').write_text(runner_enabled)
@@ -66,27 +86,42 @@ if [[ $1 == show ]]; then
   fi
   property=${2#--property=}
   [[ $3 == --value ]]
+  case "$4" in
+    forgejo-actions-runner.service) runner_file="$FIXTURE/runner" ;;
+    forgejo-podman-actions-runner.service) runner_file="$FIXTURE/podman-runner" ;;
+    *) runner_file='' ;;
+  esac
   case "$4:$property" in
     forgejobuilds.slice:FreezerState) cat "$FIXTURE/actual" ;;
-    forgejo-actions-runner.service:ActiveState) cat "$FIXTURE/runner-active" ;;
-    forgejo-actions-runner.service:UnitFileState) cat "$FIXTURE/runner-enabled" ;;
-    forgejo-actions-runner.service:LoadState) cat "$FIXTURE/runner-load" ;;
-    forgejo-actions-runner.service:Result) cat "$FIXTURE/runner-result" ;;
-    forgejo-actions-runner.service:ExecMainStartTimestampMonotonic) cat "$FIXTURE/runner-generation" ;;
+    *:ActiveState) cat "${runner_file}-active" ;;
+    *:UnitFileState) cat "${runner_file}-enabled" ;;
+    *:LoadState) cat "${runner_file}-load" ;;
+    *:Result) cat "${runner_file}-result" ;;
+    *:ExecMainStartTimestampMonotonic) cat "${runner_file}-generation" ;;
     *) exit 2 ;;
   esac
   exit
 fi
 if [[ $1 == --no-block ]]; then
-  [[ $# == 3 && $3 == forgejo-actions-runner.service ]]
-  printf '%s\n' "$2" >> "$FIXTURE/runner-actions"
-  [[ $2 != "$FAIL_RUNNER_ACTION" ]] || exit 1
+  [[ $# == 3 ]]
+  case "$3" in
+    forgejo-actions-runner.service) runner_file="$FIXTURE/runner"; printf '%s\n' "$2" >> "$FIXTURE/runner-actions" ;;
+    forgejo-podman-actions-runner.service) runner_file="$FIXTURE/podman-runner" ;;
+    *) exit 2 ;;
+  esac
+  printf '%s:%s\n' "$2" "$3" >> "$FIXTURE/runner-unit-actions"
+  [[ $3 != forgejo-actions-runner.service || $2 != "$FAIL_RUNNER_ACTION" ]] || exit 1
   case "$2" in
     stop)
-      printf '%s' "$STOP_STATE" > "$FIXTURE/runner-active"
-      printf '%s' "$STOP_GENERATION" > "$FIXTURE/runner-generation"
+      if [[ $3 == forgejo-actions-runner.service ]]; then
+        printf '%s' "$STOP_STATE" > "${runner_file}-active"
+        printf '%s' "$STOP_GENERATION" > "${runner_file}-generation"
+      else
+        printf '%s' "${SECOND_STOP_STATE:-inactive}" > "${runner_file}-active"
+        printf '0' > "${runner_file}-generation"
+      fi
       ;;
-    start) printf active > "$FIXTURE/runner-active" ;;
+    start) printf active > "${runner_file}-active" ;;
     *) exit 2 ;;
   esac
   exit
@@ -123,13 +158,24 @@ esac
                    'STOP_GENERATION': stop_generation,
                    'FAIL_RUNNER_ACTION': fail_runner_action,
                    'LIFECYCLE_ACTIVE': '1' if lifecycle_active else '0',
-                   'SHOW_FAIL_COUNT': show_fail_count}
+                   'SHOW_FAIL_COUNT': show_fail_count,
+                   'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY]),
+                   'SECOND_STOP_STATE': (second_runner or {}).get('stop_state', 'inactive')}
             result = subprocess.run(['bash', str(GUARD)], env=env, capture_output=True)
             self.events = result.stdout.decode().splitlines()
+            self.guard_stderr = result.stderr.decode()
             actions = (root / 'actions').read_text().splitlines() if (root / 'actions').exists() else []
             self.runner_actions = ((root / 'runner-actions').read_text().splitlines()
                                    if (root / 'runner-actions').exists() else [])
+            self.runner_unit_actions = ((root / 'runner-unit-actions').read_text().splitlines()
+                                        if (root / 'runner-unit-actions').exists() else [])
             self.drain_owned = (state / 'drain-owned').exists()
+            self.second_drain_owned = (state / 'runners' / SECOND / 'drain-owned').exists()
+            self.second_drain_pending = (state / 'runners' / SECOND / 'drain-pending').exists()
+            self.first_drain_generation = ((state / 'drain-owned').read_text().strip()
+                                           if self.drain_owned else None)
+            self.second_drain_generation = ((state / 'runners' / SECOND / 'drain-owned').read_text().strip()
+                                            if self.second_drain_owned else None)
             self.drain_pending = (state / 'drain-pending').exists()
             self.resume_pending = (state / 'resume-pending').exists()
             self.drain_disowned = (state / 'drain-disowned').exists()
@@ -261,6 +307,21 @@ esac
                          (0, [], False, False))
         self.assertEqual(self.runner_actions, ['start'])
 
+    def test_switch_condition_phase_keeps_owned_drain_without_resuming(self):
+        self.assertEqual(self.run_guard([0, 0], admission=True, drain_owned=True,
+                                        runner_state='activating', runner_generation='0',
+                                        drain_generation='123'),
+                         (0, [], False, False))
+        self.assertEqual(self.runner_actions, [])
+        self.assertTrue(self.drain_owned)
+
+    def test_new_main_generation_during_condition_phase_is_disowned(self):
+        self.assertEqual(self.run_guard([0], admission=True, drain_owned=True,
+                                        runner_state='activating', runner_generation='456',
+                                        drain_generation='123'),
+                         (1, [], False, False))
+        self.assertTrue(self.drain_disowned)
+
     def test_guard_restart_does_not_claim_inactive_runner(self):
         self.assertEqual(self.run_guard([2500, 2500, 0, 0], admission=True,
                                         runner_state='inactive'),
@@ -337,11 +398,71 @@ esac
                          (1, [], False, False))
         self.assertTrue(self.drain_disowned)
 
+    def test_two_runner_drains_have_independent_generations(self):
+        self.assertEqual(self.run_guard([2500, 2500], admission=True,
+                                        second_runner={'generation': '456'},
+                                        runner_units=[PRIMARY, SECOND]),
+                         (0, [], False, False))
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'stop:{SECOND}'])
+        self.assertTrue(self.drain_owned)
+        self.assertTrue(self.second_drain_owned)
+        self.assertEqual(self.first_drain_generation, '123')
+        self.assertEqual(self.second_drain_generation, '456')
+
+    def test_second_runner_generation_change_fails_closed(self):
+        self.assertEqual(self.run_guard([0], admission=True,
+                                        second_runner={'generation': '789', 'drain_generation': '456'},
+                                        second_marker='drain-owned', runner_units=[PRIMARY, SECOND])[0], 1)
+        self.assertEqual(self.runner_unit_actions, [])
+        self.assertFalse(self.second_drain_owned)
+
+    def test_first_runner_recovers_while_second_runner_still_drains(self):
+        self.run_guard([0, 0], admission=True, drain_owned=True,
+                       runner_state='inactive', runner_generation='0',
+                       drain_generation='123',
+                       second_runner={'active': 'deactivating', 'generation': '456'},
+                       second_marker='drain-owned', runner_units=[PRIMARY, SECOND])
+        self.assertEqual(self.runner_unit_actions, [f'start:{PRIMARY}'])
+        self.assertFalse(self.drain_owned)
+        self.assertTrue(self.second_drain_owned)
+
+    def test_disabled_second_runner_is_not_claimed_or_started(self):
+        self.run_guard([2500, 2500, 0, 0], admission=True,
+                       second_runner={'enabled': 'disabled'},
+                       runner_units=[PRIMARY, SECOND])
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'start:{PRIMARY}'])
+        self.assertFalse(self.second_drain_owned)
+
+    def test_manually_stopped_second_runner_is_not_claimed(self):
+        self.run_guard([2500, 2500, 0, 0], admission=True,
+                       second_runner={'active': 'inactive', 'generation': '0'},
+                       runner_units=[PRIMARY, SECOND])
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'start:{PRIMARY}'])
+        self.assertFalse(self.second_drain_owned)
+
+    def test_ambiguous_second_drain_blocks_all_transitions(self):
+        self.assertEqual(self.run_guard([2500, 2500], admission=True,
+                                        second_runner={}, second_marker='drain-pending',
+                                        runner_units=[PRIMARY, SECOND]),
+                         (1, [], False, False))
+        self.assertEqual(self.runner_unit_actions, [])
+        self.assertTrue(self.second_drain_pending)
+
+    def test_changed_runner_list_or_unknown_state_fails_closed(self):
+        self.assertEqual(self.run_guard([0], runner_units=[PRIMARY],
+                                        persisted_units=[PRIMARY, SECOND])[0], 1)
+        self.assertEqual(self.run_guard([0], runner_units=[PRIMARY, SECOND],
+                                        second_runner={}, unknown_state=True)[0], 1)
+
 
 class LifecycleTests(unittest.TestCase):
     def run_stop(self, freezer='frozen', guard='failed', owned=False,
                  pending=False, drain_disowned=False, runner='inactive',
-                 lock_held=False, kill_stays_deactivating=False):
+                 lock_held=False, kill_stays_deactivating=False,
+                 second_runner=None, runner_units=None, persisted_units=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -353,6 +474,10 @@ class LifecycleTests(unittest.TestCase):
             (root / 'freezer').write_text(freezer)
             (root / 'guard').write_text(guard)
             (root / 'runner').write_text(runner)
+            if second_runner is not None:
+                (root / 'podman-runner').write_text(second_runner)
+            if persisted_units is not None:
+                (state / 'runner-units').write_text('\n'.join(persisted_units) + '\n')
             if owned:
                 (state / 'owned').touch()
             if pending:
@@ -367,16 +492,22 @@ if [[ $1 == show ]]; then
     --property=FreezerState:forgejobuilds.slice) cat "$FIXTURE/freezer" ;;
     --property=ActiveState:forgejo-runner-io-pressure-guard.service) cat "$FIXTURE/guard" ;;
     --property=ActiveState:forgejo-actions-runner.service) cat "$FIXTURE/runner" ;;
+    --property=ActiveState:forgejo-podman-actions-runner.service) cat "$FIXTURE/podman-runner" ;;
     *) exit 2 ;;
   esac
 elif [[ $1 == thaw && $2 == forgejobuilds.slice ]]; then
   [[ $(cat "$FIXTURE/cgroup/forgejobuilds.slice/cgroup.kill") == 1 ]]
   printf running > "$FIXTURE/freezer"
   printf 'thaw\\n' >> "$FIXTURE/actions"
-elif [[ $1 == kill && $2 == --signal=KILL && $3 == --kill-whom=all && $4 == forgejo-actions-runner.service ]]; then
+elif [[ $1 == kill && $2 == --signal=KILL && $3 == --kill-whom=all ]]; then
   [[ $(cat "$FIXTURE/cgroup/forgejobuilds.slice/cgroup.kill") == 1 ]]
-  printf 'kill\\n' >> "$FIXTURE/actions"
-  [[ $KILL_STAYS_DEACTIVATING == 1 ]] || printf inactive > "$FIXTURE/runner"
+  case "$4" in
+    forgejo-actions-runner.service) runner_file="$FIXTURE/runner"; action=kill ;;
+    forgejo-podman-actions-runner.service) runner_file="$FIXTURE/podman-runner"; action=kill-podman ;;
+    *) exit 2 ;;
+  esac
+  printf '%s\\n' "$action" >> "$FIXTURE/actions"
+  [[ $KILL_STAYS_DEACTIVATING == 1 ]] || printf inactive > "$runner_file"
 else
   exit 2
 fi
@@ -385,7 +516,8 @@ fi
             env = {**os.environ, 'FIXTURE': str(root), 'STATE_DIR': str(state),
                    'CGROUP_ROOT': str(root / 'cgroup'), 'SYSTEMCTL_BIN': str(mock),
                    'TEARDOWN_TIMEOUT_SECONDS': '2' if lock_held or kill_stays_deactivating else '270',
-                   'KILL_STAYS_DEACTIVATING': '1' if kill_stays_deactivating else '0'}
+                   'KILL_STAYS_DEACTIVATING': '1' if kill_stays_deactivating else '0',
+                   'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY])}
             with (state / 'lifecycle.lock').open('w') as lock:
                 if lock_held:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -433,16 +565,37 @@ fi
                                        kill_stays_deactivating=True),
                          (1, True, ['kill'], True, True))
 
+    def test_teardown_kills_both_runners_before_owned_thaw(self):
+        self.assertEqual(self.run_stop(owned=True, runner='deactivating',
+                                       second_runner='deactivating',
+                                       runner_units=[PRIMARY, SECOND]),
+                         (0, True, ['kill', 'kill-podman', 'thaw'], False, True))
+
+    def test_teardown_includes_runner_from_previous_configuration(self):
+        self.assertEqual(self.run_stop(owned=True, second_runner='deactivating',
+                                       runner_units=[PRIMARY],
+                                       persisted_units=[PRIMARY, SECOND]),
+                         (0, True, ['kill-podman', 'thaw'], False, True))
+
 
 class StartGateTests(unittest.TestCase):
     def run_gate(self, marker='', freezer='running', lifecycle=True, guard=True,
-                 clear_under_lock=False):
+                 clear_under_lock=False, runner_unit=PRIMARY, runner_units=None,
+                 second_marker='', persisted_units=None, unknown_state=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
             state.mkdir()
             if marker:
                 (state / marker).touch()
+            if runner_units and SECOND in runner_units:
+                (state / 'runners' / SECOND).mkdir(parents=True)
+            if second_marker:
+                (state / 'runners' / SECOND / second_marker).touch()
+            if persisted_units is not None:
+                (state / 'runner-units').write_text('\n'.join(persisted_units) + '\n')
+            if unknown_state:
+                (state / 'runners' / 'old-runner.service').mkdir(parents=True)
             mock = root / 'systemctl'
             mock.write_text('#!' + shutil.which('bash') + '\n' + '''set -eu
 if [[ $1 == is-active && $2 == --quiet ]]; then
@@ -461,7 +614,9 @@ fi
             env = {**os.environ, 'STATE_DIR': str(state), 'SYSTEMCTL_BIN': str(mock),
                    'GATE_TIMEOUT_SECONDS': '2', 'FREEZER_STATE': freezer,
                    'LIFECYCLE_ACTIVE': '1' if lifecycle else '0',
-                   'GUARD_ACTIVE': '1' if guard else '0'}
+                   'GUARD_ACTIVE': '1' if guard else '0',
+                   'RUNNER_UNIT': runner_unit,
+                   'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY])}
             if clear_under_lock:
                 with (state / 'lifecycle.lock').open('w') as lock:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -496,6 +651,27 @@ fi
 
     def test_unarmed_lifecycle_is_skipped_within_deadline(self):
         self.assertEqual(self.run_gate(lifecycle=False), (1, False))
+
+    def test_other_owned_drain_does_not_strand_first_runner(self):
+        self.assertEqual(self.run_gate(runner_units=[PRIMARY, SECOND],
+                                       persisted_units=[PRIMARY, SECOND],
+                                       second_marker='drain-owned'), (0, False))
+
+    def test_second_runner_skips_its_owned_drain(self):
+        self.assertEqual(self.run_gate(runner_unit=SECOND,
+                                       runner_units=[PRIMARY, SECOND],
+                                       persisted_units=[PRIMARY, SECOND],
+                                       second_marker='drain-owned'), (1, False))
+
+    def test_ambiguous_second_drain_blocks_both_runner_starts(self):
+        self.assertEqual(self.run_gate(runner_units=[PRIMARY, SECOND],
+                                       persisted_units=[PRIMARY, SECOND],
+                                       second_marker='drain-pending'), (1, False))
+
+    def test_changed_list_and_unknown_state_block_starts(self):
+        self.assertEqual(self.run_gate(runner_units=[PRIMARY],
+                                       persisted_units=[PRIMARY, SECOND]), (1, False))
+        self.assertEqual(self.run_gate(unknown_state=True), (1, False))
 
 
 if __name__ == '__main__':

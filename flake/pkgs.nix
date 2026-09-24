@@ -67,7 +67,7 @@ in
               };
               ffmpeg-v4l2-request = _prev.callPackage ../packages/ffmpeg-v4l2-request {};
               moonlight-v4l2-request = _prev.moonlight-qt.override {
-                ffmpeg = _final.ffmpeg-v4l2-request;
+                ffmpeg_8 = _final.ffmpeg-v4l2-request;
               };
               # Keep the Pi 3 client as its own derivation so board-specific
               # Moonlight/FFmpeg fixes can evolve independently of rpi0.

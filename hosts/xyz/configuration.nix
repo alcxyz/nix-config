@@ -160,6 +160,11 @@
       };
     };
     isolatedDocker.enable = true;
+    podmanCanary = {
+      enable = true;
+      package = pkgs.callPackage "${inputs.forgejo-runner-fixes}/pkgs/forgejo-runner-cancellation" {};
+      labels = ["forgejo-podman-canary:docker://docker.io/library/docker:27-cli"];
+    };
     name = "xyz";
     capacity = 2;
     # Bound the runner daemon and all nested workers while allowing two jobs to

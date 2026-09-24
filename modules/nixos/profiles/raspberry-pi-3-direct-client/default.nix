@@ -216,10 +216,10 @@ in {
     ];
   };
 
-  services.journald.extraConfig = ''
-    Storage=persistent
-    SystemMaxUse=100M
-  '';
+  services.journald.settings.Journal = {
+    Storage = "persistent";
+    SystemMaxUse = "100M";
+  };
 
   zramSwap.enable = true;
 }

@@ -176,6 +176,7 @@
 in {
   imports = [
     ./isolated-docker.nix
+    ./podman-canary.nix
     ./orphan-monitor.nix
     ../storage-health-monitor/default.nix
   ];

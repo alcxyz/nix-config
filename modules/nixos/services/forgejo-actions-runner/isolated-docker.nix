@@ -120,9 +120,16 @@ in {
     };
     systemd.services.forgejo-runner-aggregate-lifecycle = {
       description = "Teardown boundary for the dedicated CI aggregate";
-      bindsTo = ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"];
-      after = ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"];
+      bindsTo =
+        ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"]
+        ++ lib.optional cfg.podmanCanary.enable "forgejo-runner-podman.service";
+      after =
+        ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"]
+        ++ lib.optional cfg.podmanCanary.enable "forgejo-runner-podman.service";
       restartIfChanged = false;
+      environment.RUNNER_UNITS =
+        "forgejo-actions-runner.service"
+        + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -139,6 +146,9 @@ in {
       after = ["forgejo-runner-resource-policy.service"];
       restartIfChanged = false;
       environment = {
+        RUNNER_UNITS =
+          "forgejo-actions-runner.service"
+          + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
         ADMISSION_CONTROL_ENABLED =
           if cfg.ioPressureGuard.admissionControl.enable
           then "1"
@@ -167,6 +177,10 @@ in {
     systemd.services.forgejo-actions-runner = {
       requires = ["forgejo-runner-aggregate-lifecycle.service"];
       restartIfChanged = false;
+      environment.RUNNER_UNIT = "forgejo-actions-runner.service";
+      environment.RUNNER_UNITS =
+        "forgejo-actions-runner.service"
+        + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
       # The state directory is root-only; only this fixed condition command
       # runs as root. A skipped start must not trigger Restart=on-failure.
       serviceConfig.ExecCondition = "+${lib.getExe runnerStartGate}";

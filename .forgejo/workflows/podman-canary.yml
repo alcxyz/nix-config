@@ -1,0 +1,58 @@
+name: Podman canary
+run-name: "Opt-in Podman executor qualification"
+
+on:
+  workflow_dispatch:
+    inputs:
+      hold_seconds:
+        description: "Optional bounded wait for cancellation qualification"
+        required: false
+        default: "0"
+
+jobs:
+  canary:
+    runs-on: forgejo-podman-canary
+    timeout-minutes: 15
+    services:
+      web:
+        image: docker.io/library/httpd:2.4-alpine
+    steps:
+      - name: Job API, service DNS and nested container
+        run: |
+          set -eu
+          docker version --format '{{.Server.Version}}'
+          wget -qO- http://web/ | grep -q 'It works!'
+          test "$(docker run --rm docker.io/library/alpine:3.21 echo nested-ok)" = nested-ok
+      - name: Docker action API
+        uses: docker://docker.io/library/docker:27-cli
+        with:
+          entrypoint: /bin/sh
+          args: -ec "docker version --format '{{.Server.Version}}'"
+      - name: Adapted Buildx build and local image load
+        run: |
+          set -eu
+          builder="canary-${{ forgejo.run_id }}-${{ forgejo.run_attempt }}"
+          image="podman-canary:${{ forgejo.run_id }}-${{ forgejo.run_attempt }}"
+          cleanup() {
+            docker buildx rm --force "$builder" >/dev/null 2>&1 || true
+            docker image rm "$image" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker buildx create --name "$builder" --driver docker-container \
+            --driver-opt cgroup-parent=/forgejobuilds.slice/forgejo-runner-podman.service \
+            --driver-opt image=docker.io/moby/buildkit:buildx-stable-1 \
+            --driver-opt default-load=true
+          export BUILDX_BUILDER="$builder"
+          docker buildx inspect --bootstrap
+          mkdir -p /tmp/canary-build
+          printf 'FROM docker.io/library/alpine:3.21\nRUN echo canary-build-ok > /result\n' > /tmp/canary-build/Dockerfile
+          docker build --progress=plain -t "$image" /tmp/canary-build
+          test "$(docker run --rm "$image" cat /result)" = canary-build-ok
+      - name: Optional cancellation window
+        env:
+          HOLD_SECONDS: ${{ inputs.hold_seconds || '0' }}
+        run: |
+          case "$HOLD_SECONDS" in
+            0|30|60|120|300) sleep "$HOLD_SECONDS" ;;
+            *) echo 'Unsupported cancellation wait' >&2; exit 1 ;;
+          esac
