@@ -341,3 +341,9 @@ interface and command behavior. Private operator modules provide concrete
 credential locations, contexts, and engagement-specific integrations; their
 operational checks and recovery procedures live in the private `nix-secrets`
 Kubernetes runbooks.
+
+The module's opt-in Freelens integration adds the same primary and additional
+kubeconfig files to Freelens by path, without copying their contents. It can
+also add session-scoped XDG runtime directories. The guarded activation merge
+preserves unrelated Freelens preferences and defers its update when Freelens is
+running.

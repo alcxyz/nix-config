@@ -14,6 +14,11 @@
     ++ cfg.extraKubeconfigs
   );
   managedKubeconfig = lib.concatStringsSep ":" managedKubeconfigPaths;
+  isolatedKubeswitchConfig = pkgs.writeText "kubeswitch-managed-empty-config.yaml" ''
+    kind: SwitchConfig
+    version: v1alpha1
+    kubeconfigStores: []
+  '';
   addManagedKubeconfigs =
     lib.concatMapStringsSep "\n" (
       path: "        add_kubeconfig ${lib.escapeShellArg path}"
@@ -53,7 +58,10 @@
         exec kubectl config use-context "$1"
       fi
 
-      response="$(switcher set-context "$@")"
+      response="$(${pkgs.kubeswitch}/bin/switcher \
+        --config-path ${lib.escapeShellArg isolatedKubeswitchConfig} \
+        --kubeconfig-path "" \
+        set-context "$@")"
       status="$?"
       if [ "$status" -ne 0 ]; then
         printf '%s\n' "$response"
@@ -83,7 +91,10 @@
     text = ''
       ${setManagedKubeconfig}
 
-      response="$(${pkgs.kubeswitch}/bin/switcher "$@")"
+      response="$(${pkgs.kubeswitch}/bin/switcher \
+        --config-path ${lib.escapeShellArg isolatedKubeswitchConfig} \
+        --kubeconfig-path "" \
+        "$@")"
       status="$?"
       if [ "$status" -ne 0 ]; then
         printf '%s\n' "$response"
@@ -142,6 +153,96 @@
         exec ${package}/bin/${executable} "$@"
       '';
     };
+  freelensSettingsFile =
+    if pkgs.stdenv.hostPlatform.isDarwin
+    then "${config.home.homeDirectory}/Library/Application Support/Freelens/lens-user-store.json"
+    else "${config.xdg.configHome}/Freelens/lens-user-store.json";
+  freelensManagedStateFile = "${config.xdg.stateHome}/kubernetes/freelens-managed-sync-paths.json";
+  freelensStaticSyncPaths = lib.unique (
+    lib.optionals cfg.freelens.syncManagedKubeconfigs ([cfg.kubeconfig] ++ cfg.extraKubeconfigs)
+    ++ cfg.freelens.extraSyncPaths
+  );
+  freelensStaticSyncPathLines =
+    lib.concatMapStringsSep "\n" (
+      path: "        ${lib.escapeShellArg path}"
+    )
+    freelensStaticSyncPaths;
+  freelensRuntimeSyncPathLines =
+    lib.concatMapStringsSep "\n" (
+      path: let
+        components = lib.splitString "/" path;
+        prepareComponents =
+          lib.concatMapStringsSep "\n" (
+            component: ''
+              runtime_path="$runtime_path"/${lib.escapeShellArg component}
+              ensure_directory "$runtime_path"
+            ''
+          )
+          components;
+      in ''
+              runtime_path="$runtime_root"
+        ${prepareComponents}
+              chmod 700 -- "$runtime_path"
+              sync_paths+=("$runtime_path")
+      ''
+    )
+    cfg.freelens.xdgRuntimeSyncPaths;
+  freelensSyncCommand = pkgs.writeShellApplication {
+    name = "freelens-kubeconfig-sync";
+    runtimeInputs =
+      [pkgs.coreutils pkgs.python3]
+      ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.procps];
+    text = ''
+            sync_paths=(
+      ${freelensStaticSyncPathLines}
+            )
+
+            runtime_roots=(${lib.escapeShellArg config.xdg.stateHome})
+            runtime_root="''${XDG_RUNTIME_DIR:-}"
+      ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+        if [ -z "$runtime_root" ] && [ -d "/run/user/$(id -u)" ]; then
+          runtime_root="/run/user/$(id -u)"
+        fi
+      ''}
+            if [ -n "$runtime_root" ] && [ "$runtime_root" != ${lib.escapeShellArg config.xdg.stateHome} ]; then
+              runtime_roots+=("$runtime_root")
+            fi
+
+            ensure_directory() {
+              directory="$1"
+              if [ -L "$directory" ]; then
+                printf 'Refusing symlinked kubeconfig publication directory: %s\n' "$directory" >&2
+                exit 1
+              fi
+              if [ -e "$directory" ] && [ ! -d "$directory" ]; then
+                printf 'Refusing non-directory kubeconfig publication path: %s\n' "$directory" >&2
+                exit 1
+              fi
+              if [ ! -e "$directory" ]; then
+                umask 077
+                mkdir -m 700 -- "$directory"
+              fi
+            }
+
+            for runtime_root in "''${runtime_roots[@]}"; do
+              if [ -e "$runtime_root" ] && [ ! -d "$runtime_root" ]; then
+                printf 'Refusing non-directory XDG publication root: %s\n' "$runtime_root" >&2
+                exit 1
+              fi
+              if [ ! -e "$runtime_root" ]; then
+                umask 077
+                mkdir -p -- "$runtime_root"
+                chmod 700 -- "$runtime_root"
+              fi
+      ${freelensRuntimeSyncPathLines}
+            done
+
+            exec python3 ${./freelens-sync.py} \
+              ${lib.escapeShellArg cfg.freelens.settingsFile} \
+              ${lib.escapeShellArg cfg.freelens.managedStateFile} \
+              "''${sync_paths[@]}"
+    '';
+  };
 in {
   options.programs.kubernetes.managed = {
     enable = lib.mkEnableOption "managed Kubernetes client wrappers";
@@ -173,6 +274,51 @@ in {
       type = lib.types.bool;
       default = false;
       description = "Export KUBECONFIG for the whole user session. Wrappers work without this.";
+    };
+
+    freelens = {
+      enable = lib.mkEnableOption "declarative Freelens kubeconfig discovery";
+
+      syncManagedKubeconfigs = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Add the managed kubeconfig files to Freelens' kubeconfig sync list.";
+      };
+
+      extraSyncPaths = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Additional files or directories added to Freelens' kubeconfig sync list.";
+      };
+
+      xdgRuntimeSyncPaths = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = ''
+          Relative paths resolved below the XDG state directory and, when distinct,
+          XDG_RUNTIME_DIR. The directories are created before Freelens settings are
+          updated so either a runtime publication or its fallback can be watched.
+        '';
+      };
+
+      settingsFile = lib.mkOption {
+        type = lib.types.str;
+        default = freelensSettingsFile;
+        defaultText = lib.literalExpression ''
+          if pkgs.stdenv.hostPlatform.isDarwin then
+            "''${config.home.homeDirectory}/Library/Application Support/Freelens/lens-user-store.json"
+          else
+            "''${config.xdg.configHome}/Freelens/lens-user-store.json"
+        '';
+        description = "Mutable Freelens user preference store to merge kubeconfig sync paths into.";
+      };
+
+      managedStateFile = lib.mkOption {
+        type = lib.types.str;
+        default = freelensManagedStateFile;
+        defaultText = lib.literalExpression ''"''${config.xdg.stateHome}/kubernetes/freelens-managed-sync-paths.json"'';
+        description = "State file recording which Freelens sync paths are managed declaratively.";
+      };
     };
 
     aliases.enable = lib.mkOption {
@@ -226,6 +372,16 @@ in {
         assertion = cfg.kubeconfig != "";
         message = "programs.kubernetes.managed.kubeconfig must be set";
       }
+      {
+        assertion =
+          lib.all (
+            path:
+              builtins.match "[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*" path
+              != null
+          )
+          cfg.freelens.xdgRuntimeSyncPaths;
+        message = "programs.kubernetes.managed.freelens.xdgRuntimeSyncPaths must contain safe relative paths";
+      }
     ];
 
     home.activation.kubernetesCurrentContext = lib.hm.dag.entryAfter ["writeBoundary"] ''
@@ -273,7 +429,18 @@ in {
         switcherCommand
         kubeContextCommand
         kubeNamespaceCommand
-      ];
+      ]
+      ++ lib.optionals cfg.freelens.enable [freelensSyncCommand];
+
+    home.activation.freelensKubeconfigSync = lib.mkIf cfg.freelens.enable (
+      lib.hm.dag.entryAfter ["kubernetesCurrentContext" "linkGeneration"] ''
+        run ${freelensSyncCommand}/bin/freelens-kubeconfig-sync
+      ''
+    );
+
+    systemd.user.tmpfiles.rules = lib.mkIf (
+      cfg.freelens.enable && pkgs.stdenv.hostPlatform.isLinux
+    ) (map (path: "d %t/${path} 0700 - - -") cfg.freelens.xdgRuntimeSyncPaths);
 
     home.sessionVariables = lib.mkIf cfg.exportSessionVariable {
       KUBECONFIG = managedKubeconfig;

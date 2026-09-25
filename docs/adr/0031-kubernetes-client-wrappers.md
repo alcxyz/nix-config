@@ -59,17 +59,42 @@ response, and then runs `kubectl config use-context`. `kns` uses
 `kubectl config set-context --current --namespace` for the same reason.
 Upstream `switcher ns` does not support multi-file `KUBECONFIG`.
 
+The switcher wrappers pass an empty upstream configuration and an empty
+`--kubeconfig-path` default before caller arguments. Kubeswitch otherwise adds
+`~/.kube/config` and configured stores to an explicit `KUBECONFIG`. This keeps
+the wrapper-composed or caller-supplied file set authoritative while still
+allowing a caller to provide later command-line overrides.
+
+The module also offers an opt-in Freelens discovery integration. It adds direct
+file references for the primary and additional kubeconfigs, plus configured
+runtime directories, to Freelens' mutable kubeconfig-sync preference. It keeps
+unmanaged sync entries and other preferences intact, tracks its own previous
+entries so disabling or changing the declaration removes stale managed paths,
+and writes both files atomically. It does not copy kubeconfig contents.
+
+Freelens skips missing sync directories when it starts, so configured runtime
+directories are created with user-only permissions before the preference is
+updated. Relative runtime paths resolve under `XDG_STATE_HOME` and, when
+distinct, `XDG_RUNTIME_DIR` (or Linux's standard per-user runtime directory
+during activation). Watching both covers publishers that select the state path
+when no runtime environment is available. Linux user-tmpfiles rules recreate
+the ephemeral runtime directories at login so Freelens can watch them before a
+publisher starts. The integration leaves the
+preference store unchanged while Freelens is running; the installed
+`freelens-kubeconfig-sync` command applies a deferred update after the app exits.
+
 The module also owns the Kubernetes shell aliases (`k`, `kg`, `kl`, etc.).
 Raw Kubernetes client binaries were removed from the shared `hm.k8s` package
 set so command names are owned by the wrappers and Home Manager does not
 collide on duplicate `bin/*` entries.
 
 Additional persistent local contexts can be supplied through `extraKubeconfigs`.
-Bivrost connections instead provide an isolated session `KUBECONFIG`, which
-these wrappers preserve. Session connection targets are not added to the
-persistent merged configuration. The private integration package owns its
-catalogue and separate Boards tooling; generic Kubernetes wrappers and local
-lab contexts remain independent.
+Session tools can instead provide an isolated `KUBECONFIG`, which these wrappers
+preserve, and may opt into publishing short-lived kubeconfig files through a
+Freelens runtime sync directory. Those files are not added to the persistent
+command-wrapper composition. Private integrations own their catalogues and
+concrete runtime paths; generic Kubernetes wrappers and local contexts remain
+independent.
 
 The global `KUBECONFIG` session variable is no longer exported by default.
 The module still exposes `exportSessionVariable` as an opt-in escape hatch.
@@ -108,6 +133,9 @@ credential surface that can drift or outlive the decrypted secret.
   child process in the user session.
 - Users can still override `KUBECONFIG` explicitly for one-off alternate
   cluster sets.
+- Freelens can discover the same persistent cluster sources by reference, plus
+  explicitly enabled session publication directories, without another
+  credential copy.
 - Kubernetes package ownership is centralized in the Home Manager module rather
   than the shared package set.
 - New Kubernetes-aware tools should be added to this module when they need the

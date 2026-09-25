@@ -15,6 +15,41 @@
       touch "$out"
     '';
 in {
+  freelens-kubeconfig-sync-contract = mkRepoCheck "freelens-kubeconfig-sync-contract" [pkgs.python3] ''
+    python3 modules/home-manager/programs/kubernetes/test-freelens-sync.py
+  '';
+
+  kubeswitch-explicit-kubeconfig-contract = let
+    emptyConfig = pkgs.writeText "kubeswitch-test-empty-config.yaml" ''
+      kind: SwitchConfig
+      version: v1alpha1
+      kubeconfigStores: []
+    '';
+  in
+    mkRepoCheck "kubeswitch-explicit-kubeconfig-contract" [pkgs.kubectl pkgs.kubeswitch pkgs.ripgrep] ''
+      test_home="$TMPDIR/home"
+      mkdir -p "$test_home/.kube"
+
+      kubectl --kubeconfig "$test_home/.kube/config" \
+        config set-cluster implicit --server=https://implicit.invalid >/dev/null
+      kubectl --kubeconfig "$test_home/.kube/config" \
+        config set-context implicit --cluster=implicit >/dev/null
+      kubectl --kubeconfig "$test_home/explicit" \
+        config set-cluster explicit --server=https://explicit.invalid >/dev/null
+      kubectl --kubeconfig "$test_home/explicit" \
+        config set-context explicit --cluster=explicit >/dev/null
+
+      output="$(HOME="$test_home" KUBECONFIG="$test_home/explicit" \
+        switcher --config-path ${emptyConfig} --kubeconfig-path "" list-contexts)"
+      printf '%s\n' "$output" | rg -x explicit
+      if printf '%s\n' "$output" | rg -x implicit; then
+        exit 1
+      fi
+
+      test "$(rg -F --count -- '--kubeconfig-path ""' \
+        modules/home-manager/programs/kubernetes/default.nix)" -eq 2
+    '';
+
   configuration-evaluation = (import ./configurations.nix {inherit self pkgs;}).configuration-evaluation;
   configuration-evaluation-contract = assert import ./configurations-test.nix;
     pkgs.runCommand "configuration-evaluation-contract" {} ''
