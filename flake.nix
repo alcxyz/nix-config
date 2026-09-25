@@ -39,7 +39,7 @@
     };
 
     bivrost = {
-      url = "github:alcxyz/bivrost/main";
+      url = "github:alcxyz/bivrost/dev";
       flake = false;
     };
 

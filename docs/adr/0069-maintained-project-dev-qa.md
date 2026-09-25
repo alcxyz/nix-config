@@ -22,7 +22,9 @@ Keep `dev` current with released fixes: after promotion, fast-forward it to the
 resulting main commit when possible, or integrate main without rewriting dev
 history. A development branch must not silently lose released fixes.
 
-Bivrost follows its canonical GitHub `main` branch as a non-flake source input.
+Bivrost follows its canonical GitHub `dev` branch as a non-flake source input
+for maintainer QA on Linux and macOS. Its released `main` branch remains the
+default for other consumers.
 The existing package integration follows that input, separating source updates
 from packaging updates without changing its defaults for other consumers.
 `apps-update` refreshes Bivrost alongside the maintained apps; `dms-update` does
