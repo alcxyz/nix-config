@@ -12,9 +12,11 @@
 {
   pkgs,
   inputs ? null,
-}: let
+}:
+let
   lib = pkgs.lib;
-in rec {
+in
+rec {
   # =======================================================================
   # System (global) packages
   # =======================================================================
@@ -95,9 +97,9 @@ in rec {
     ];
 
     /*
-    -------------------------------------------------------------------
-    CLI / non-GUI base: cross-platform
-    -------------------------------------------------------------------
+      -------------------------------------------------------------------
+      CLI / non-GUI base: cross-platform
+      -------------------------------------------------------------------
     */
     base = with pkgs; [
       # Editors & UI-ish TUI
@@ -182,7 +184,8 @@ in rec {
       minikube
 
       (azure-cli.withExtensions (
-        with azure-cli.extensions; [
+        with azure-cli.extensions;
+        [
           ssh
           fzf
           azure-devops
@@ -205,9 +208,9 @@ in rec {
     ];
 
     /*
-    -------------------------------------------------------------------
-    Dev / IaC / K8s (CLI tooling)
-    -------------------------------------------------------------------
+      -------------------------------------------------------------------
+      Dev / IaC / K8s (CLI tooling)
+      -------------------------------------------------------------------
     */
     dev = with pkgs; [
       rustup
@@ -237,9 +240,10 @@ in rec {
     # Kubernetes / cloud-native CLI tools are installed by
     # modules/home-manager/programs/kubernetes/default.nix so they can be
     # wrapped with per-command KUBECONFIG handling.
-    k8s = [];
+    k8s = [ ];
 
-    ai = with pkgs;
+    ai =
+      with pkgs;
       [
         #gemini-cli
         #opencode
@@ -261,13 +265,13 @@ in rec {
     ];
 
     /*
-    -------------------------------------------------------------------
-    Desktop / GUI apps
-    We split into:
-    - desktopCommon      (intended for both Linux + mac where supported)
-    - desktopLinuxOnly   (Linux-specific or very Linux-centric)
-    - desktopMacOnly     (mac-specific exceptions to native app packaging)
-    -------------------------------------------------------------------
+      -------------------------------------------------------------------
+      Desktop / GUI apps
+      We split into:
+      - desktopCommon      (intended for both Linux + mac where supported)
+      - desktopLinuxOnly   (Linux-specific or very Linux-centric)
+      - desktopMacOnly     (mac-specific exceptions to native app packaging)
+      -------------------------------------------------------------------
     */
 
     # Cross-platform desktop apps packaged through Nix on Linux.
@@ -291,10 +295,11 @@ in rec {
       winetricks
       wineWow64Packages.waylandFull
       nautilus
+      freelens-bin
     ];
 
     # macOS GUI bundles are declared as Homebrew casks (ADR-0073).
-    desktopMacOnly = [];
+    desktopMacOnly = [ ];
 
     # Convenience combined sets
     desktopLinux = desktopCommon ++ desktopLinuxOnly;
@@ -309,11 +314,12 @@ in rec {
     ];
 
     /*
-    Workstation (xyz) GUI / desktop extras (user-level)
-    — includes the GUI apps you had scattered under xyz.nix
+      Workstation (xyz) GUI / desktop extras (user-level)
+      — includes the GUI apps you had scattered under xyz.nix
     */
     workstationExtras = (
-      with pkgs; [
+      with pkgs;
+      [
         rbw
         bitwarden-cli
         bitwarden-desktop

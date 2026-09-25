@@ -9,7 +9,8 @@
   accountHomeDirectory,
   hostInventory,
   ...
-}: let
+}:
+let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -85,7 +86,8 @@
     # TrackpadThreeFingerTapGesture = 2; # Look up & data detectors
     # TrackpadFourFingerTapGesture = 0; # Off
   };
-in {
+in
+{
   imports = [
     "${configDir}/modules/shared/shell.nix"
   ];
@@ -96,10 +98,16 @@ in {
   # ... (rest of your Nix configuration remains the same) ...
   nix = {
     settings = {
-      experimental-features = ["nix-command" "flakes"];
+      experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
       keep-derivations = true;
       keep-outputs = true;
-      trusted-users = ["root" "@admin"];
+      trusted-users = [
+        "root"
+        "@admin"
+      ];
 
       substituters = [
         "https://cache.nixos.org/"
@@ -118,7 +126,7 @@ in {
       # plus a ~1.7 GB image compression, which the 1 CPU / 3 GB default
       # cannot do in reasonable time. The host has 12 cores and 36 GB.
       maxJobs = 4;
-      config = {lib, ...}: {
+      config = { lib, ... }: {
         # The nix-builder profile pins these without a priority.
         virtualisation.cores = lib.mkForce 6;
         virtualisation.memorySize = lib.mkForce 12288;
@@ -152,7 +160,7 @@ in {
   # retention shortly before the existing Sunday GC; the retention command
   # only manages verified roots, while nix-gc collects dead store paths.
   launchd.daemons.nix-generation-retention.serviceConfig = {
-    ProgramArguments = ["${nixGenerationRetention}"];
+    ProgramArguments = [ "${nixGenerationRetention}" ];
     StartCalendarInterval = {
       Weekday = 0;
       Hour = 1;
@@ -256,25 +264,31 @@ in {
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages =
-      pkgsets.system.mac
-      ++ [
-        macSshOn
-      ];
+    systemPackages = pkgsets.system.mac ++ [
+      macSshOn
+    ];
     shells = with pkgs; [
       bash
       nushell
       (pkgs.xonsh-with-direnv or pkgs.xonsh)
       zsh
     ];
-    variables = {EDITOR = "nvim";};
+    variables = {
+      EDITOR = "nvim";
+    };
   };
 
   # Homebrew supplies macOS tools and native integrations such as Podman's VM.
   homebrew = {
     enable = true;
-    taps = ["netbirdio/tap"];
-    brews = ["libfido2" "netbirdio/tap/netbird" "openssh" "podman" "synergy-core"];
+    taps = [ "netbirdio/tap" ];
+    brews = [
+      "libfido2"
+      "netbirdio/tap/netbird"
+      "openssh"
+      "podman"
+      "synergy-core"
+    ];
     casks = [
       "audacity"
       "balenaetcher"
@@ -293,7 +307,7 @@ in {
       "obs"
       "obsidian"
       "omniwm"
-      "openlens"
+      "freelens"
       "raycast"
       "t3-code@nightly"
       "thunderbird"
@@ -413,12 +427,12 @@ in {
     CustomUserPreferences = {
       # Your existing Safari preferences (if you uncomment them)
       /*
-      "com.apple.Safari" = {
-        AutoOpenSafeDownloads = false;
-        IncludeDevelopMenu = true;
-        ShowFullURLInSmartSearchField = true;
-        WebKitDeveloperExtrasEnabledPreferenceKey = true;
-      };
+        "com.apple.Safari" = {
+          AutoOpenSafeDownloads = false;
+          IncludeDevelopMenu = true;
+          ShowFullURLInSmartSearchField = true;
+          WebKitDeveloperExtrasEnabledPreferenceKey = true;
+        };
       */
 
       # Your existing Finder preferences (consider merging into the main `finder` block above)
@@ -426,8 +440,12 @@ in {
       "com.apple.symbolichotkeys" = {
         AppleSymbolicHotKeys = {
           # 64 = Spotlight search, 65 = Finder search window (Cmd+Option+Space)
-          "64" = {enabled = false;};
-          "65" = {enabled = false;};
+          "64" = {
+            enabled = false;
+          };
+          "65" = {
+            enabled = false;
+          };
         };
       };
 
