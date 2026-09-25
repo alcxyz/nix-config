@@ -700,7 +700,10 @@ in {
   in
     assert lib.sort builtins.lessThan (operatorNames ++ nonOperatorNames)
     == lib.sort builtins.lessThan (builtins.attrNames self.homeConfigurations);
-    assert lib.all (home: home.config.programs.bnBootstrap.bullet.enable) operatorHomes;
+    assert lib.all (home: home.config.programs.bnBootstrap.bivrost.enable) operatorHomes;
+    assert lib.all (home: home.config.programs.bnBootstrap.boards.enable) operatorHomes;
+    assert lib.all (home: !(home.options.programs.bnBootstrap ? bullet)) operatorHomes;
+    assert lib.all (home: !(home.options.programs.bnBootstrap ? cli)) operatorHomes;
     assert lib.all (home: home.config.programs.kubernetes.managed.enable) operatorHomes;
     assert lib.all (home: builtins.elem home.pkgs.forge-mirror home.config.home.packages) operatorHomes;
     assert lib.all (home: !(home.options.programs ? bnBootstrap)) nonOperatorHomes;

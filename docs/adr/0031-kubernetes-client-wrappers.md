@@ -64,12 +64,12 @@ Raw Kubernetes client binaries were removed from the shared `hm.k8s` package
 set so command names are owned by the wrappers and Home Manager does not
 collide on duplicate `bin/*` entries.
 
-Engagement-specific modules can append kubeconfig files through
-`extraKubeconfigs`. For example, the private `bn-bootstrap` flake owns the
-Bullet command wrappers and appends Bullet kubeconfig paths when its Home
-Manager module is enabled. This keeps Banenor/Bullet behavior outside the
-generic Kubernetes wrapper module while still letting `switcher` and `kc` see
-those contexts after the external module materializes the files.
+Additional persistent local contexts can be supplied through `extraKubeconfigs`.
+Bivrost connections instead provide an isolated session `KUBECONFIG`, which
+these wrappers preserve. Session connection targets are not added to the
+persistent merged configuration. The private integration package owns its
+catalogue and separate Boards tooling; generic Kubernetes wrappers and local
+lab contexts remain independent.
 
 The global `KUBECONFIG` session variable is no longer exported by default.
 The module still exposes `exportSessionVariable` as an opt-in escape hatch.
