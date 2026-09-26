@@ -15,6 +15,8 @@
       touch "$out"
     '';
 in {
+  git-identity-configuration-contract = import ./git-identity.nix {inherit lib pkgs;};
+
   freelens-kubeconfig-sync-contract = mkRepoCheck "freelens-kubeconfig-sync-contract" [pkgs.python3] ''
     python3 modules/home-manager/programs/kubernetes/test-freelens-sync.py
   '';

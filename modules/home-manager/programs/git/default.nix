@@ -23,7 +23,7 @@ with lib; let
   # --- default values that make sense for one user -----------------------
 
   defaultUserName = "alcxyz";
-  defaultUserEmail = "me@alc.no";
+  defaultUserEmail = "6753563+alcxyz@users.noreply.github.com";
 
   # Global signing key (SSH public key used for commit signatures).
   # This path will be written literally into gitconfig.
@@ -66,6 +66,25 @@ in {
       type = types.str;
       default = defaultUserEmail;
       description = "Globally used Git e‑mail address.";
+    };
+
+    identityProtection = {
+      enable = mkEnableOption "Git commit and push email checks";
+
+      package = mkOption {
+        type = types.package;
+        default = pkgs.git-identity-guard;
+        description = "Package providing email checks and repository hook forwarding.";
+      };
+
+      policyFile = mkOption {
+        type = types.nullOr (types.coercedTo types.package toString types.str);
+        default = null;
+        description = ''
+          JSON policy file containing a blockedEmails list. Personal policy
+          belongs in a private module. The guard reads this file at runtime.
+        '';
+      };
     };
 
     signingKey = mkOption {
@@ -121,6 +140,13 @@ in {
   # ----------------------------------------------------------------------
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = !cfg.identityProtection.enable || cfg.identityProtection.policyFile != null;
+        message = "Git identity protection requires a policyFile.";
+      }
+    ];
+
     # --- Generate include files for each conditional block ---------------
     #
     # Git’s includeIf mechanism points to separate files; we materialize
@@ -189,13 +215,17 @@ in {
       # All current Git settings go under `settings`, which directly maps
       # to git‑config keys and sections.
       settings =
-        cfg.extraConfig
-        // {
-          # Identity and signing defaults.
-          user.name = cfg.userName;
-          user.email = cfg.userEmail;
-          alias = cfg.aliases;
-        }
+        lib.recursiveUpdate cfg.extraConfig ({
+            # Identity and signing defaults.
+            user.name = cfg.userName;
+            user.email = cfg.userEmail;
+            user.useConfigOnly = true;
+            alias = cfg.aliases;
+          }
+          // lib.optionalAttrs cfg.identityProtection.enable {
+            core.hooksPath = "${cfg.identityProtection.package}/share/git-identity-guard/hooks";
+            identityGuard.policyFile = cfg.identityProtection.policyFile;
+          })
         # Add includeIf rules that reference the files we generated above.
         // lib.mapAttrs'
         (condition: _: let

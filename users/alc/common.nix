@@ -41,6 +41,7 @@ in
   with lib; {
     # ==================== Imports of truly common modules ====================
     imports = [
+      inputs.nix-secrets.homeManagerModules.gitIdentityPolicy
       inputs.nix-secrets.homeManagerModules.sshIdentityPolicy
       # These are modules that are guaranteed to work on both OSes
       # or handle their own platform differences internally if needed

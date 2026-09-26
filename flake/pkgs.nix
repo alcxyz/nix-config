@@ -14,6 +14,7 @@ in
             np = nix-packages.packages.${system};
             wanted = [
               "forge-mirror"
+              "git-identity-guard"
               "ndrop"
               "zfs-auto-unlock"
               "helium"

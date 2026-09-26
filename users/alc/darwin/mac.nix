@@ -126,7 +126,6 @@ in {
   # Configure git signing
   programs.git.managed = {
     userName = "alcxyz";
-    userEmail = "me@alc.no";
     signingKey = "${config.home.homeDirectory}/.ssh/id_ed25519.pub"; # Use the deployed public key
     signByDefault = true;
 
