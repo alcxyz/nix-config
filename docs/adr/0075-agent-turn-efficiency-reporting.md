@@ -1,80 +1,81 @@
-# ADR-0075: Measure agent turn efficiency with a skill and read-only reporter
+# ADR-0075: Start with short model-usage summaries in T3 Code
 
 **Status:** Proposed
 **Date:** 2026-09-26
-**Applies to:** agent skills, usage reporting, Home Manager integration
+**Applies to:** T3 Code usage visibility, agent reporting, optional skill deployment
 
 ## Context
 
-Our global agent instructions encourage delegation to cheaper capable models
-without reducing quality. Seeing that a helper used a cheaper model does not
-show whether delegation saved resources: parent coordination, copied context,
-retries, and rework also contribute. We want useful feedback during a turn and
-an auditable report afterward, without making reporting itself expensive.
+Global agent instructions encourage cheaper capable helpers without reducing
+quality. We want to see whether those rules influence actual work and help us
+use our subscriptions well. A short account of which models handled which
+tasks can already be useful; precise cost accounting is not a prerequisite.
 
-The current T3 Code workflow does not provide the desired per-turn breakdown
-across the parent and its helpers. A skill can guide reporting, but cannot
-create missing telemetry or guarantee automatic invocation.
+T3 Code already represents subagent model, effort, task status, and optional
+usage. Upstream [PR #9132](https://github.com/pingdotgg/t3code/pull/9132) merged
+main-agent per-turn token accounting. Open
+[PR #9016](https://github.com/pingdotgg/t3code/pull/9016) proposes thread and
+subagent usage breakdowns. The composer-cost proposal
+[PR #9136](https://github.com/pingdotgg/t3code/pull/9136) closed without merging.
+These statuses were checked on 2026-09-26; none promises a delivery date or a
+complete live parent/helper turn summary.
 
 ## Decision
 
-Propose a Codex-only pilot: a `turn-efficiency` skill calls a deterministic,
-read-only reporter against locally available usage metadata. Validate turn and
-child-session attribution before treating totals as reliable. Keep the existing
-global instructions as the model-selection policy; the skill explains when and
-how to report, rather than duplicating that policy.
+Start with a lightweight reporting trial inside the existing T3 conversation.
+On request or at the end of meaningful delegated work, provide a few lines:
 
-The report should distinguish measured usage, estimates, and unknowns:
+- Scope: this turn, or a clearly identified session interval.
+- Models and roles: parent model, helper models, and brief tasks handled.
+- Usage: reported tokens or token shares only when available and comparable
+  within that scope; otherwise say counts are unavailable or partial.
+- Outcome: validation result and any observed retry, escalation, or rework.
 
-- Attribute input, cached-input, and output tokens to the parent and helpers by
-  model, with reasoning effort and a short task label when available.
-- Identify the exact turn and relevant child-session intervals. Account for
-  reused helpers, copied fork history, repeated events, and model switches;
-  report incomplete or ambiguous attribution instead of inventing precision.
-- Estimate API-equivalent cost only with identifiable, dated pricing and clear
-  cache accounting. Unknown prices remain unknown. This is not a subscription
-  bill or a measurement of actual money charged.
-- Show parent overhead and evidenced retries or escalations alongside validation
-  outcomes and known rework. Any comparison with an all-expensive-model run is
-  hypothetical, not proof of savings or equal quality.
+Use existing agent execution information and T3 data available through supported
+interfaces. Distinguish requested models from confirmed execution when needed.
+Do not introduce transcript scanning, a database, polling, pricing maintenance,
+or extra model calls for the first trial. Missing numbers must not prevent a
+useful task-based summary, and historical helpers must not be counted as work
+performed in the current turn. Do not invent percentages of work from task
+counts, duration, or tokens: token share describes token usage, not task value.
 
-Report on request, at useful milestones, and concisely at completion. Avoid
-continuous polling and extra model calls for accounting. In-progress reports
-are provisional; usage for the final response requires a later read. Bound
-scanning and output so the reporting overhead remains proportionate.
+Evaluate a few real turns before building anything. Include both delegated work
+and a small task deliberately kept with the parent. Check whether the summaries
+help identify appropriate delegation, unnecessary overhead, or repeated rework.
+If they are useful but inconsistent, package the reporting convention as a thin
+skill. Preserve the existing global delegation policy rather than copying it.
 
-Process telemetry locally and emit only allowlisted accounting metadata. Do
-not expose transcript text, tool payloads, credentials, or private paths in
-reports or public fixtures. Real session data remains local and uncommitted.
+Native automatic visibility belongs in T3 Code. Assess upstream #9016 and the
+existing turn accounting before proposing the smallest missing integration.
+`nix-config` owns this adoption decision and any optional skill/config deployment,
+not T3's accounting or UI. Reusable tooling belongs in `nix-packages` only if a
+specific unmet need justifies it. Private wiring, if needed, belongs in
+`nix-secrets`. This follows [ADR-0022](0022-universal-agent-instructions.md),
+[ADR-0028](0028-agent-instruction-sync-check.md), and
+[ADR-0030](0030-declarative-shared-user-policy-configs.md).
 
-Keep this public decision and non-secret skill configuration in `nix-config`.
-Place reusable reporting tooling in `nix-packages`, following
-[ADR-0028](0028-agent-instruction-sync-check.md), and deploy through Home Manager
-following [ADR-0030](0030-declarative-shared-user-policy-configs.md). Any required
-private defaults or wiring belong in `nix-secrets`; no private changes are
-needed merely to document the proposal. Preserve the canonical instruction
-ownership established by [ADR-0022](0022-universal-agent-instructions.md).
-
-Implementation and qualification are tracked in [issue #454](https://git.alc.xyz/alcxyz/nix-config/issues/454). This
-ADR does not install a skill, change delegation policy, or enable tracking.
+[Issue #454](https://git.alc.xyz/alcxyz/nix-config/issues/454) tracks the trial
+and remaining evaluation. No installed skill or automatic tracking is implied.
 
 ## Alternatives Considered
 
-- **Narrative reports from the agent alone:** easy to start, but cannot provide
-  trustworthy token totals or costs and can omit coordination overhead.
-- **Implement the T3 UI first:** could provide automatic live visibility, but
-  adds fork maintenance before attribution and usefulness are established.
-  Reconsider after the pilot proves the reporting contract.
-- **Use aggregate usage dashboards:** useful for broader trends, but cannot
-  explain the parent/helper contribution to a particular turn.
-- **Support every provider initially:** broad coverage would delay validation
-  of the core attribution model. Add adapters after the Codex pilot qualifies.
+- **Build a standalone usage reporter first:** deferred; duplicates upstream
+  accounting and introduces attribution maintenance before proving usefulness.
+- **Implement a native dashboard now:** deferred; first evaluate the existing
+  data and overlapping upstream work against the short-summary need.
+- **Wait for complete accounting:** rejected for the trial; task/model summaries
+  offer immediate, limited insight with little overhead.
 
 ## Consequences
 
-The pilot can provide evidence for delegation decisions without expanding the
-T3 fork. Provider metadata may be incomplete or change format, so fixtures,
-explicit coverage indicators, and conservative failure behavior are required.
-A skill remains invocation-dependent; reliable always-on reporting would need
-separate runtime integration. Cost estimates alone cannot establish preserved
-quality, and observational reports cannot prove counterfactual savings.
+We can start learning without another maintained subsystem. A conversational
+summary depends on available evidence and invocation; it is not an audited
+ledger. Session reports may have less reliable coverage than the current turn.
+Provider counters can include inherited history or different scopes, so unknown
+or incomparable counts remain explicit rather than being summed blindly.
+
+Model/task summaries show whether routing rules are followed. They do not prove
+cost savings, equal quality, or improved subscription headroom. Subscription
+limits need not be proportional to raw token counts; API-equivalent prices are
+not subscription charges. Keep monetary estimates and hypothetical savings out
+of the initial trial. Keep real session data local and out of public fixtures.
