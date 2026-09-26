@@ -9,8 +9,7 @@
   accountHomeDirectory,
   hostInventory,
   ...
-}:
-let
+}: let
   pkgsets = import "${configDir}/modules/nixos/common/pkgsets.nix" {
     inherit pkgs inputs;
   };
@@ -86,8 +85,7 @@ let
     # TrackpadThreeFingerTapGesture = 2; # Look up & data detectors
     # TrackpadFourFingerTapGesture = 0; # Off
   };
-in
-{
+in {
   imports = [
     "${configDir}/modules/shared/shell.nix"
   ];
@@ -126,7 +124,7 @@ in
       # plus a ~1.7 GB image compression, which the 1 CPU / 3 GB default
       # cannot do in reasonable time. The host has 12 cores and 36 GB.
       maxJobs = 4;
-      config = { lib, ... }: {
+      config = {lib, ...}: {
         # The nix-builder profile pins these without a priority.
         virtualisation.cores = lib.mkForce 6;
         virtualisation.memorySize = lib.mkForce 12288;
@@ -160,7 +158,7 @@ in
   # retention shortly before the existing Sunday GC; the retention command
   # only manages verified roots, while nix-gc collects dead store paths.
   launchd.daemons.nix-generation-retention.serviceConfig = {
-    ProgramArguments = [ "${nixGenerationRetention}" ];
+    ProgramArguments = ["${nixGenerationRetention}"];
     StartCalendarInterval = {
       Weekday = 0;
       Hour = 1;
@@ -264,9 +262,11 @@ in
   # System Packages
   # ============================================================================
   environment = {
-    systemPackages = pkgsets.system.mac ++ [
-      macSshOn
-    ];
+    systemPackages =
+      pkgsets.system.mac
+      ++ [
+        macSshOn
+      ];
     shells = with pkgs; [
       bash
       nushell
@@ -281,7 +281,7 @@ in
   # Homebrew supplies macOS tools and native integrations such as Podman's VM.
   homebrew = {
     enable = true;
-    taps = [ "netbirdio/tap" ];
+    taps = ["netbirdio/tap"];
     brews = [
       "libfido2"
       "netbirdio/tap/netbird"
@@ -427,12 +427,12 @@ in
     CustomUserPreferences = {
       # Your existing Safari preferences (if you uncomment them)
       /*
-        "com.apple.Safari" = {
-          AutoOpenSafeDownloads = false;
-          IncludeDevelopMenu = true;
-          ShowFullURLInSmartSearchField = true;
-          WebKitDeveloperExtrasEnabledPreferenceKey = true;
-        };
+      "com.apple.Safari" = {
+        AutoOpenSafeDownloads = false;
+        IncludeDevelopMenu = true;
+        ShowFullURLInSmartSearchField = true;
+        WebKitDeveloperExtrasEnabledPreferenceKey = true;
+      };
       */
 
       # Your existing Finder preferences (consider merging into the main `finder` block above)

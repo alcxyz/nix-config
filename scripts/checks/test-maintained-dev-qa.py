@@ -29,7 +29,7 @@ DMS_INPUTS = [
     "dms-plugins/aiusage",
     "dms-plugins/displaycontrol",
 ]
-APP_INPUTS = ["paperflow", "grove", "canopy"]
+APP_INPUTS = ["paperflow", "grove", "canopy", "bivrost"]
 
 DEV_URLS = {
     "paperflow": "github:alcxyz/paperflow/dev",
