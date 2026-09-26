@@ -23,7 +23,6 @@ in {
     "${configDir}/modules/home-manager/profiles/nixbox-session/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
-    "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
     "${configDir}/modules/home-manager/programs/ai/default.nix"
 
     inputs.hyprscratch.homeModules.default
@@ -110,21 +109,4 @@ in {
   };
 
   programs.ai.enable = true;
-
-  services.cloud-sync = {
-    enable = true;
-    syncInterval = "15m";
-
-    googleDrive = {
-      enable = true;
-      remote = "gdrive";
-      localPath = "${config.home.homeDirectory}/Cloud/GoogleDrive";
-    };
-
-    dropbox = {
-      enable = true;
-      remote = "dropbox";
-      localPath = "${config.home.homeDirectory}/Cloud/Dropbox";
-    };
-  };
 }
