@@ -19,7 +19,11 @@
       ];
     };
 
-    checks = import ./checks {inherit self inputs pkgs;};
+    checks =
+      import ./checks {inherit self inputs pkgs;}
+      // lib.optionalAttrs (system == "x86_64-linux") {
+        flannel-source-vm = pkgs.k3s-flannel-node-source.tests.flannel-source-vm;
+      };
 
     packages =
       {

@@ -9,6 +9,10 @@
 with lib; let
   # Define options specifically for K3s
   cfg = config.k3s; # Using a top-level 'k3s' option for clarity
+  k3sPackage =
+    if cfg.nodeIp != null
+    then pkgs.k3s-flannel-node-source
+    else pkgs.k3s;
   roleDefault =
     if hostK8sRole == null
     then "server"
@@ -28,7 +32,7 @@ with lib; let
       pkgs.gawk
       pkgs.gnugrep
       pkgs.iproute2
-      pkgs.k3s
+      k3sPackage
     ];
     text = builtins.readFile pkgs.k8s-node-reboot.networkAuditScript;
   };
@@ -172,6 +176,7 @@ in {
     # Configure K3s service
     services.k3s =
       {
+        package = k3sPackage;
         enable = true;
         role = cfg.role;
         extraFlags =
@@ -261,6 +266,6 @@ in {
     ];
 
     # Ensure the k3s package is available in the system environment
-    environment.systemPackages = [pkgs.k3s];
+    environment.systemPackages = [k3sPackage];
   };
 }

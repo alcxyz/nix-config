@@ -58,6 +58,7 @@ in
               stashdb-pop = stashdb-pop.default;
             }
             // {
+              k3s-flannel-node-source = _prev.callPackage "${nix-packages}/pkgs/k3s-flannel-node-source" {};
               nix-deploy = _prev.callPackage ../packages/nix-deploy {
                 nixDeploy = np.nix-deploy;
               };
