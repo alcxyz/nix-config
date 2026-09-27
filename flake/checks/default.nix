@@ -407,7 +407,7 @@ in {
     bash scripts/checks/test-claude-settings-merge.sh
   '';
 
-  check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
+  check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.ripgrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
     shellcheck modules/home-manager/workspace/workspace-sync.sh
     bash scripts/checks/test-workspace-sync.sh
   '';

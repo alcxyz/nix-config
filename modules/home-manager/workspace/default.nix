@@ -8,19 +8,19 @@
 }: let
   cfg = config.programs.workspace;
   allRepos = inputs.nix-secrets.repoInventory.workspaceRepos;
-  hasSelectedProfile = repo: builtins.any (profile: builtins.elem profile cfg.profiles) repo.profiles;
+  privateDirectories = inputs.nix-secrets.repoInventory.workspaceDirectories or [];
+  privateLinks = inputs.nix-secrets.repoInventory.workspaceLinks or [];
+  hasSelectedProfile = item: builtins.any (profile: builtins.elem profile cfg.profiles) item.profiles;
   selectedRepos = builtins.filter hasSelectedProfile cfg.repos;
+  selectedLinks = builtins.filter hasSelectedProfile cfg.links;
   reposJson = builtins.toJSON selectedRepos;
   repoInventoryJson = builtins.toJSON inputs.nix-secrets.repoInventory;
-  dirs = [
+  baseDirectories = [
     "apps"
     "platform"
     "infra"
     "tools"
     "tools/dms-plugins"
-    "orgs"
-    "orgs/alcorg"
-    "orgs/bn-apps"
     "forks"
     "clones"
     "sites"
@@ -29,10 +29,13 @@
     "scratch"
   ];
 
-  workspaceManifest = pkgs.writeText "workspace-manifest.json" (builtins.toJSON {
-    directories = dirs;
-    repositories = selectedRepos;
-  });
+  workspaceManifest = pkgs.writeText "workspace-manifest.json" (
+    builtins.toJSON {
+      directories = cfg.directories;
+      repositories = selectedRepos;
+      links = selectedLinks;
+    }
+  );
 
   workspaceSync = pkgs.writeShellApplication {
     name = "workspace-sync";
@@ -92,14 +95,42 @@ in {
       default = allRepos;
       description = "Declarative repository catalog from the private nix-secrets repo inventory.";
     };
+
+    directories = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = lib.unique (baseDirectories ++ privateDirectories);
+      description = "Workspace-relative directories, including private layout supplied by the inventory.";
+    };
+
+    links = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            path = lib.mkOption {
+              type = lib.types.str;
+              description = "Workspace-relative path for the link.";
+            };
+            target = lib.mkOption {
+              type = lib.types.str;
+              description = "Canonical workspace-relative target path.";
+            };
+            profiles = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Workspace profiles that include this link.";
+            };
+          };
+        }
+      );
+      default = privateLinks;
+      description = "Workspace links supplied by the private inventory.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
     home.packages = [workspaceSync];
 
     home.activation.workspaceDirs = lib.hm.dag.entryAfter ["writeBoundary"] ''
-      mkdir -p "${cfg.root}"
-      ${lib.concatMapStringsSep "\n" (dir: "mkdir -p \"${cfg.root}/${dir}\"") dirs}
+      ${workspaceSync}/bin/workspace-sync --directories
     '';
 
     xdg.configFile."workspace/repos.json".text = reposJson;
