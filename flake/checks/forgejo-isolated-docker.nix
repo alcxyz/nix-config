@@ -53,6 +53,8 @@ else let
   runnerStartGate = lib.removePrefix "+" services.forgejo-actions-runner.serviceConfig.ExecCondition;
   runnerStartGateSource = ../../modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh;
   gameHelperSource = ../../modules/nixos/services/forgejo-actions-runner/game-admission.sh;
+  gameBypassSource = ../../modules/nixos/services/forgejo-actions-runner/game-bypass-control.sh;
+  gameBypass = lib.findFirst (package: lib.hasPrefix "forgejo-runner-game-bypass" (package.name or "")) null host.environment.systemPackages;
   tests = ./test-forgejo-runner-aggregate-pressure.py;
 in
   assert runner.dockerHost == "unix:///run/forgejo-docker/docker.sock";
@@ -70,6 +72,7 @@ in
   assert orphanMonitor.PrivateMounts;
   assert orphanMonitor.KeyringMode == "private";
   assert builtins.elem "forgejo-runner-docker.service" services.forgejo-actions-runner.requires;
+  assert gameBypass != null;
   assert !(builtins.elem "docker.service" services.forgejo-actions-runner.requires);
   assert services.forgejo-runner-docker.serviceConfig.Slice == "forgejobuilds.slice";
   assert services.forgejo-runner-docker.serviceConfig.Delegate;
@@ -129,6 +132,8 @@ in
       shellcheck ${lifecycleStopSource}
       shellcheck ${runnerStartGateSource}
       shellcheck ${gameHelperSource}
-      GAME_HELPER_FILE=${gameHelperSource} python3 ${tests} ${guard} ${lifecycleStop} ${runnerStartGate}
+      shellcheck ${gameBypassSource}
+      GAME_HELPER_FILE=${gameHelperSource} GAME_BYPASS_CONTROL_FILE=${gameBypass}/bin/forgejo-runner-game-bypass \
+        python3 ${tests} ${guard} ${lifecycleStop} ${runnerStartGate}
       touch "$out"
     ''

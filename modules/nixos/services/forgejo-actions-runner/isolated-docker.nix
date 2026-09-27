@@ -55,11 +55,17 @@
     runtimeInputs = with pkgs; [coreutils procps systemd util-linux];
     text = builtins.readFile ./runner-start-gate.sh;
   };
+  gameBypass = pkgs.writeShellApplication {
+    name = "forgejo-runner-game-bypass";
+    runtimeInputs = [pkgs.coreutils];
+    text = builtins.readFile ./game-bypass-control.sh;
+  };
 in {
   options.services.forgejo-actions-runner.isolatedDocker.enable =
     lib.mkEnableOption "experimental dedicated rootless CI Docker daemon (requires qualification before activation)";
 
   config = lib.mkIf enabled {
+    environment.systemPackages = [gameBypass];
     assertions = [
       {
         assertion = cfg.resourcePolicy.enable && cfg.ioPressureGuard.enable;

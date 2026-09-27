@@ -48,8 +48,12 @@ cannot admit work before the guard's next sample. Detector errors withhold new
 work rather than terminating the running worker APIs. Existing jobs drain
 gracefully; this policy does not promise immediate resource release when a game
 starts. Severe-pressure freeze/thaw and safe shutdown remain independent.
-Broader game detection and manual controls are tracked in
-[#459](https://git.alc.xyz/alcxyz/nix-config/issues/459).
+An explicit root-only game bypass can temporarily admit runners while a game is
+detected. It may remain on until switched off or expire after a chosen uptime
+duration; reboot clears either mode. Invalid bypass state fails closed. The
+bypass affects only the game signal: pressure drains, severe-pressure freezes,
+and safe shutdown retain their normal behavior. Broader game detection is tracked
+in [#459](https://git.alc.xyz/alcxyz/nix-config/issues/459).
 
 Drain and resume ownership is persistent and transition intent is recorded
 before systemd is called. A restarted guard continues an owned drain without a

@@ -15,6 +15,8 @@ LIFECYCLE = (Path(sys.argv.pop(1)) if len(sys.argv) > 1 else
              GUARD.with_name('aggregate-lifecycle-stop.sh')).resolve()
 GATE = (Path(sys.argv.pop(1)) if len(sys.argv) > 1 else
         GUARD.with_name('runner-start-gate.sh')).resolve()
+GAME_BYPASS_CONTROL = Path(os.environ.get(
+    'GAME_BYPASS_CONTROL_FILE', GUARD.with_name('game-bypass-control.sh')))
 PRIMARY = 'forgejo-actions-runner.service'
 SECOND = 'forgejo-podman-actions-runner.service'
 
@@ -650,11 +652,13 @@ class StartGateTests(unittest.TestCase):
                  game_state=None, game_last_seen=None, game_now=100,
                  game_argv0='/games/HeroesOfTheStorm_x64.exe',
                  game_exe='wine64-preloader', missing_cmdline=False,
-                 zombie=False):
+                 zombie=False, game_bypass=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
             state.mkdir()
+            if game_bypass is not None:
+                (state / 'game-bypass').write_text(game_bypass + '\n')
             if marker:
                 (state / marker).touch()
             if game_last_seen is not None:
@@ -748,6 +752,16 @@ exit 2
                                        game_now=100), (0, False))
         self.assertFalse(self.game_start_skipped)
 
+    def test_game_bypass_manual_timed_expired_and_malformed(self):
+        for value in ('manual', '130'):
+            self.assertEqual(self.run_gate(game_state='present', game_bypass=value,
+                                           game_now=100), (0, False))
+        self.assertEqual(self.run_gate(game_state='present', game_bypass='100',
+                                       game_now=100), (1, False))
+        self.assertEqual(self.run_gate(game_state='present', game_bypass='bad',
+                                       game_now=100), (1, False))
+        self.assertTrue(self.game_start_skipped)
+
     def test_exact_wine_argv0_filters_other_helpers_and_zombies(self):
         for argv0, exe, zombie in [
             ('C:\\Games\\Battle.net.exe', 'wine64-preloader', False),
@@ -803,6 +817,34 @@ exit 2
         self.assertEqual(self.run_gate(runner_units=[PRIMARY],
                                        persisted_units=[PRIMARY, SECOND]), (1, False))
         self.assertEqual(self.run_gate(unknown_state=True), (1, False))
+
+
+class GameBypassControlTests(unittest.TestCase):
+    def test_manual_timed_expiry_and_off(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            uptime = Path(directory) / 'uptime'
+            uptime.write_text('100.00 0.00\n')
+            env = {**os.environ, 'GAME_BYPASS_STATE_DIR': str(state),
+                   'GAME_UPTIME_FILE': str(uptime)}
+
+            def control(*args):
+                return subprocess.run(['bash', str(GAME_BYPASS_CONTROL), *args],
+                                      env=env, capture_output=True, text=True)
+
+            self.assertEqual(control('on').returncode, 0)
+            self.assertEqual(control('status').stdout.strip(), 'manual')
+            self.assertEqual(control('on', '--for', '2h').returncode, 0)
+            self.assertEqual((state / 'game-bypass').read_text(), '7300\n')
+            self.assertEqual(control('status').stdout.strip(), 'timed 7200 seconds remaining')
+            uptime.write_text('7300.00 0.00\n')
+            self.assertEqual(control('status').stdout.strip(), 'expired')
+            self.assertEqual(control('off').returncode, 0)
+            self.assertEqual(control('status').stdout.strip(), 'off')
+            (state / 'game-bypass').write_text('bad\n')
+            self.assertNotEqual(control('status').returncode, 0)
+            self.assertEqual(control('status').stdout.strip(), 'invalid')
 
 
 if __name__ == '__main__':

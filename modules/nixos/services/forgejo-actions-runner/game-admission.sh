@@ -9,9 +9,30 @@ game_uptime_seconds() {
   game_now=${uptime%%.*}
 }
 
+game_bypass_status() {
+  local file="$state_dir/game-bypass" value
+  [[ -e $file || -L $file ]] || return 1
+  [[ -f $file && ! -L $file ]] || return 2
+  IFS= read -r value < "$file" || return 2
+  if [[ $value == manual ]]; then return 0; fi
+  [[ $value =~ ^[1-9][0-9]{0,17}$ ]] || return 2
+  game_uptime_seconds || return 2
+  ((game_now < value)) && return 0
+  return 1
+}
+
 game_admission_status() {
   game_reason=clear
   [[ ${GAME_ADMISSION_ENABLED:-0} == 1 ]] || return 1
+  if game_bypass_status; then
+    return 1
+  else
+    local bypass_result=$?
+    if ((bypass_result != 1)); then
+      game_reason=bypass_invalid
+      return 2
+    fi
+  fi
   local pids result pid exe argv0 basename name now last statline process_state stamp
   local proc_root=${GAME_PROC_ROOT:-/proc}
   if pids=$("${PGREP_BIN:-pgrep}" -u "$GAME_USER" 2>/dev/null); then
