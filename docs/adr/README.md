@@ -80,6 +80,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0073](0073-native-macos-gui-apps-with-nix-managed-settings.md) | Native macOS GUI apps with Nix-managed settings | Accepted | macOS, Homebrew, Home Manager, GUI apps |
 | [ADR-0074](0074-phased-podman-coexistence.md) | Qualify Podman through staged Docker coexistence | Accepted, qualification in progress | containers, development, CI |
 | [ADR-0075](0075-agent-turn-efficiency-reporting.md) | Start with short model-usage summaries in T3 Code | Proposed | T3 Code, agent reporting, optional skills |
+| [ADR-0076](0076-dms-lock-exact-head-publication.md) | Validate and merge DMS lock updates at an exact head | Accepted | DMS lock, Forgejo Actions |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

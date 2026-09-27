@@ -13,7 +13,7 @@ on:
 
 jobs:
   update:
-    name: Build, verify, and merge current DMS plugins
+    name: Build, verify, and publish current DMS plugins
     runs-on: forgejo-podman-canary
     container:
       image: docker.io/library/node:20-bookworm
@@ -84,7 +84,7 @@ jobs:
           DMS_PRIVATE_INPUT_TOKEN: ${{ secrets.DMS_PRIVATE_INPUT_TOKEN }}
         run: bash scripts/ci/run-dms-update-with-private-inputs.sh
 
-      - name: Publish and merge verified lock update
+      - name: Publish verified lock update
         if: steps.update.outputs.updated == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         env:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}

@@ -1,0 +1,53 @@
+name: Merge verified DMS lock
+run-name: "DMS lock merge queue (${{ forgejo.event_name }})"
+
+on:
+  schedule:
+    - cron: "30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  merge:
+    name: Merge verified candidate
+    runs-on: forgejo-podman-canary
+    container:
+      image: docker.io/library/node:20-bookworm
+    concurrency:
+      group: dms-plugins-lock-merge
+      cancel-in-progress: false
+    env:
+      BASE_BRANCH: dev
+      UPDATE_BRANCH: update/dms-plugins-lock
+      FORGEJO_URL: https://git.alc.xyz
+      FORGEJO_OWNER: alcxyz
+      FORGEJO_REPO: nix-config
+    steps:
+      - name: Prepare action copy paths
+        run: |
+          if [ -L /var/run ] && [ "$(readlink -f /var/run)" = /run ]; then
+            rm /var/run
+            mkdir -m 0755 /var/run
+            if [ -d /run/act ]; then
+              cp -a /run/act /var/run/act
+            fi
+            if [ -S /run/docker.sock ]; then
+              ln -s /run/docker.sock /var/run/docker.sock
+            fi
+          fi
+
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          github-server-url: https://git.alc.xyz
+          ref: dev
+
+      - name: Install runner prerequisites
+        run: |
+          apt-get update
+          apt-get install -y jq python3
+
+      - name: Merge verified lock candidate
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: scripts/forgejo/merge-dms-plugins-lock.sh

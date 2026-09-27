@@ -1,0 +1,123 @@
+name: Validate DMS lock
+run-name: "DMS lock candidate (${{ forgejo.sha }})"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  candidate:
+    name: Validate candidate
+    runs-on: forgejo-podman-canary
+    container:
+      image: docker.io/library/node:20-bookworm
+    timeout-minutes: 60
+    steps:
+      - name: Prepare action copy paths
+        run: |
+          if [ -L /var/run ] && [ "$(readlink -f /var/run)" = /run ]; then
+            rm /var/run
+            mkdir -m 0755 /var/run
+            if [ -d /run/act ]; then
+              cp -a /run/act /var/run/act
+            fi
+            if [ -S /run/docker.sock ]; then
+              ln -s /run/docker.sock /var/run/docker.sock
+            fi
+          fi
+
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          github-server-url: https://git.alc.xyz
+          ref: ${{ forgejo.sha }}
+
+      - name: Install runner prerequisites
+        run: |
+          apt-get update
+          apt-get install -y git python3 sudo udev
+
+      - name: Mark exact-head validation pending
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          EXPECTED_HEAD: ${{ forgejo.sha }}
+        run: |
+          token_file=$(mktemp)
+          chmod 600 "$token_file"
+          trap 'rm -f "$token_file"' EXIT
+          printf '%s' "$FORGEJO_TOKEN" >"$token_file"
+          python3 scripts/forgejo/commit-status.py publish \
+            --url https://git.alc.xyz --owner alcxyz --repo nix-config \
+            --sha "$EXPECTED_HEAD" --context ci/dms-lock-validation \
+            --state pending --description "Exact-head development checks are running" \
+            --token-file "$token_file"
+
+      - name: Verify the exact lock-only candidate
+        env:
+          EXPECTED_HEAD: ${{ forgejo.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain)"
+          git fetch origin dev
+          base=$(git rev-parse origin/dev)
+          test "$(git rev-parse HEAD^)" = "$base"
+          test "$(git diff --name-only "$base" HEAD)" = flake.lock
+
+      - uses: https://github.com/cachix/install-nix-action@v30
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Run development checks
+        run: |
+          revision=$(python3 - <<'PYTHON'
+          import json
+          import re
+          with open("flake.lock") as source:
+              locked = json.load(source)["nodes"]["nixpkgs"]["locked"]
+          assert locked["type"] == "github"
+          assert (locked["owner"], locked["repo"]) == ("NixOS", "nixpkgs")
+          assert re.fullmatch(r"[0-9a-f]{40}", locked["rev"])
+          print(locked["rev"])
+          PYTHON
+          )
+          nix shell --no-update-lock-file \
+            "github:NixOS/nixpkgs/$revision#treefmt" \
+            "github:NixOS/nixpkgs/$revision#alejandra" \
+            "github:NixOS/nixpkgs/$revision#shfmt" \
+            "github:NixOS/nixpkgs/$revision#shellcheck" \
+            "github:NixOS/nixpkgs/$revision#ripgrep" \
+            "github:NixOS/nixpkgs/$revision#jq" \
+            -c bash scripts/ci/check-development.sh "$(git rev-parse HEAD^)"
+
+      - name: Record successful exact-head validation
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          EXPECTED_HEAD: ${{ forgejo.sha }}
+        run: |
+          token_file=$(mktemp)
+          chmod 600 "$token_file"
+          trap 'rm -f "$token_file"' EXIT
+          printf '%s' "$FORGEJO_TOKEN" >"$token_file"
+          python3 scripts/forgejo/commit-status.py publish \
+            --url https://git.alc.xyz --owner alcxyz --repo nix-config \
+            --sha "$EXPECTED_HEAD" --context ci/dms-lock-validation \
+            --state success --description "Exact-head development checks passed" \
+            --token-file "$token_file"
+
+      - name: Record failed exact-head validation
+        if: failure()
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          EXPECTED_HEAD: ${{ forgejo.sha }}
+        run: |
+          token_file=$(mktemp)
+          chmod 600 "$token_file"
+          trap 'rm -f "$token_file"' EXIT
+          printf '%s' "$FORGEJO_TOKEN" >"$token_file"
+          python3 scripts/forgejo/commit-status.py publish \
+            --url https://git.alc.xyz --owner alcxyz --repo nix-config \
+            --sha "$EXPECTED_HEAD" --context ci/dms-lock-validation \
+            --state failure --description "Exact-head development checks failed" \
+            --token-file "$token_file"
