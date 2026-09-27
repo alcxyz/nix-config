@@ -26,7 +26,6 @@ in
               "codex-app-server"
               "codex-cli"
               "devlog"
-              "agent-sync-check"
               "omniwm"
               "zen-browser"
               "nix-deploy"

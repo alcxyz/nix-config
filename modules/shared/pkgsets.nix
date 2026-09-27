@@ -165,7 +165,6 @@ in rec {
       # Misc
       lazydocker
       parallel
-      agent-sync-check
       nix-deploy
       reportcraft
       k8s-node-reboot

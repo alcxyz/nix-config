@@ -1,8 +1,11 @@
 # ADR-0028: Agent instruction sync via packaged check-agent-sync tool
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0022](0022-universal-agent-instructions.md), amended 2026-09-26
 **Date:** 2026-05-02
 **Applies to:** `nix-packages/tools/agent-sync-check/`, `nix-config/modules/shared/pkgsets.nix`, `nix-secrets/shared/AGENTS.md`, `nix-secrets/shared/claude/CLAUDE.md`
+
+> Historical decision: automatic imports now replace mirrored content and the
+> sync tool. See the amended ADR-0022 for the current contract.
 
 ## Context
 

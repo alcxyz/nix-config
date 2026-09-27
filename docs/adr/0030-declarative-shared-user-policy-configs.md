@@ -119,7 +119,8 @@ the proper secret-management flow.
 - canonical source files live in `nix-secrets/shared/`
 - Home Manager deploys them to `~/AGENTS.md` and `~/.claude/CLAUDE.md`, with
   `~/.codex/AGENTS.md` linked to the canonical `~/AGENTS.md`
-- `check-agent-sync` enforces the allowed compatibility delta
+- Claude imports the canonical file at startup; no mirrored copy or sync tool
+  is needed (ADR-0022, amended 2026-09-26)
 
 ### Shared LLM config
 
