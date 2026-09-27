@@ -47,6 +47,7 @@ EOF
 chmod +x "$test_root/bin/docker"
 
 revision=0123456789abcdef0123456789abcdef01234567
+unset BUILDX_BUILDER
 export DOCKER_CALLS="$test_root/docker.calls"
 export PATH="$test_root/bin:$PATH"
 export WOLF_PUBLISH_TIMESTAMP=20260911t120000z
@@ -65,10 +66,16 @@ jq -e '
 ' "$test_root/local.json" >/dev/null
 rg --fixed-strings --quiet -- '--build-arg RUNTIME_IMAGE=upstream.example/wolf@sha256:base' "$DOCKER_CALLS"
 rg --fixed-strings --quiet -- '--label org.nixbox.wolf-browser=true' "$DOCKER_CALLS"
+[[ $(rg --count '^build ' "$DOCKER_CALLS") == 2 ]]
 if rg --fixed-strings --quiet 'push ' "$DOCKER_CALLS"; then
   echo "non-publishing build attempted a registry push" >&2
   exit 1
 fi
+
+: >"$DOCKER_CALLS"
+BUILDX_BUILDER=wolf-test bash "$publisher" "$test_root/manifest.json" dev "$revision" "$test_root/buildx.json"
+[[ $(rg --count '^buildx build ' "$DOCKER_CALLS") == 2 ]]
+jq -e '.published == false and .complete == true' "$test_root/buildx.json" >/dev/null
 
 : >"$DOCKER_CALLS"
 export MOCK_FAIL_FIRST_PUSH=1

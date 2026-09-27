@@ -99,7 +99,11 @@ while IFS= read -r product; do
     build_options+=(--label "$label")
   done < <(jq -r '.labels | to_entries[] | "\(.key)=\(.value)"' <<<"$product")
 
-  docker build "${build_options[@]}" "$context"
+  build_command=(docker build)
+  if [[ -n ${BUILDX_BUILDER:-} ]]; then
+    build_command=(docker buildx build)
+  fi
+  "${build_command[@]}" "${build_options[@]}" "$context"
   image_id=$(docker image inspect --format '{{.Id}}' "$local_ref")
   [[ $image_id =~ ^sha256:[0-9a-f]{64}$ ]] || {
     echo "Docker did not report a content-addressed image ID for $name" >&2

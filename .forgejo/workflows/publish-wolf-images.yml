@@ -32,7 +32,9 @@ on:
 jobs:
   build:
     name: Build exact Nix-owned contexts
-    runs-on: forgejo-docker-secondary
+    runs-on: forgejo-podman-canary
+    container:
+      image: docker.io/library/node:20-bookworm
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -48,6 +50,20 @@ jobs:
           - product: zen
             package: wolf-zen-image-product
     steps:
+      - name: Prepare action copy paths
+        run: |
+          # Podman's archive API rejects action paths through this absolute symlink.
+          if [ -L /var/run ] && [ "$(readlink -f /var/run)" = /run ]; then
+            rm /var/run
+            mkdir -m 0755 /var/run
+            if [ -d /run/act ]; then
+              cp -a /run/act /var/run/act
+            fi
+            if [ -S /run/docker.sock ]; then
+              ln -s /run/docker.sock /var/run/docker.sock
+            fi
+          fi
+
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
           github-server-url: https://git.alc.xyz
@@ -79,7 +95,16 @@ jobs:
       - name: Install build prerequisites
         run: |
           apt-get update
-          apt-get install -y docker.io git jq python3 sudo udev
+          apt-get install -y curl docker.io git jq python3 sudo udev
+          install -d /usr/local/lib/docker/cli-plugins
+          curl --fail --location --silent --show-error \
+            https://github.com/docker/buildx/releases/download/v0.20.1/buildx-v0.20.1.linux-amd64 \
+            --output /usr/local/lib/docker/cli-plugins/docker-buildx
+          printf '%s\n' \
+            '8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78  /usr/local/lib/docker/cli-plugins/docker-buildx' \
+            | sha256sum --check
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+          docker buildx version
 
       - uses: https://github.com/cachix/install-nix-action@v30
         with:
@@ -98,17 +123,27 @@ jobs:
 
       - name: Log in to the Forgejo registry
         if: forgejo.event_name == 'push' || github.event.inputs.publish == 'true'
+        env:
+          WOLF_REGISTRY_TOKEN: ${{ secrets.WOLF_REGISTRY_TOKEN }}
         run: |
-          : "${FORGEJO_REGISTRY_USER:?missing FORGEJO_REGISTRY_USER}"
-          : "${FORGEJO_REGISTRY_TOKEN:?missing FORGEJO_REGISTRY_TOKEN}"
-          printf '%s' "$FORGEJO_REGISTRY_TOKEN" \
-            | docker login git.alc.xyz -u "$FORGEJO_REGISTRY_USER" --password-stdin
+          : "${WOLF_REGISTRY_TOKEN:?missing WOLF_REGISTRY_TOKEN}"
+          printf '%s' "$WOLF_REGISTRY_TOKEN" \
+            | docker login git.alc.xyz -u alcxyz --password-stdin
 
       - name: Build and optionally publish images
         env:
           PUBLISH: ${{ forgejo.event_name == 'push' || github.event.inputs.publish == 'true' }}
         run: |
           set -euo pipefail
+          builder="wolf-${{ matrix.product }}-${{ forgejo.run_id }}-${{ forgejo.run_attempt }}"
+          cleanup() { docker buildx rm --force "$builder" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker buildx create --name "$builder" --driver docker-container \
+            --driver-opt cgroup-parent=/forgejobuilds.slice/forgejo-runner-podman.service \
+            --driver-opt image=docker.io/moby/buildkit:buildx-stable-1 \
+            --driver-opt default-load=true
+          export BUILDX_BUILDER="$builder"
+          docker buildx inspect --bootstrap >/dev/null
           publish_flag=()
           if [ "$PUBLISH" = true ]; then
             publish_flag=(--push)
