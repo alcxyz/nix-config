@@ -10,12 +10,28 @@ on:
 jobs:
   configurations:
     name: Validate candidate
-    runs-on: forgejo-docker-primary
+    runs-on: forgejo-podman-canary
+    container:
+      image: docker.io/library/node:20-bookworm
     timeout-minutes: 60
     concurrency:
       group: configurations-${{ forgejo.event.pull_request.number || forgejo.ref }}
       cancel-in-progress: true
     steps:
+      - name: Prepare action copy paths
+        run: |
+          # Podman's archive API rejects action paths through this absolute symlink.
+          if [ -L /var/run ] && [ "$(readlink -f /var/run)" = /run ]; then
+            rm /var/run
+            mkdir -m 0755 /var/run
+            if [ -d /run/act ]; then
+              cp -a /run/act /var/run/act
+            fi
+            if [ -S /run/docker.sock ]; then
+              ln -s /run/docker.sock /var/run/docker.sock
+            fi
+          fi
+
       - name: Require a maintainer-owned candidate
         env:
           EVENT: ${{ forgejo.event_name }}
