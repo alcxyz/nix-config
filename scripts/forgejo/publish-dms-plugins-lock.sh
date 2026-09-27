@@ -107,15 +107,12 @@ if [[ -z "$pr_number" || "$pr_number" == "null" ]]; then
 fi
 
 curl -fsS -K "$curl_config" -H "Accept: application/json" "${api_base}/pulls/${pr_number}" -o "$response"
-mergeable=$(jq -r '.mergeable' "$response")
-pr_head_sha=$(jq -r '.head.sha' "$response")
-pr_base_sha=$(jq -r '.base.sha' "$response")
-merge_base=$(jq -r '.merge_base // ""' "$response")
-head_repo=$(jq -r '.head.repo.full_name // ""' "$response")
-
-if [[ "$mergeable" != "true" || "$merge_base" != "$base_sha" || "$pr_base_sha" != "$base_sha" ||
-  "$pr_head_sha" != "$head_sha" || "$head_repo" != "${FORGEJO_OWNER}/${FORGEJO_REPO}" ]]; then
-  echo "DMS plugins lock update PR #${pr_number} is not a clean fast-forward candidate; leaving it open." >&2
+if ! jq -e --arg number "$pr_number" --arg base "$BASE_BRANCH" \
+  --arg head "$UPDATE_BRANCH" --arg repo "${FORGEJO_OWNER}/${FORGEJO_REPO}" \
+  '(.number // .index | tostring) == $number and .state == "open" and
+   .base.ref == $base and .head.ref == $head and .head.repo.full_name == $repo' \
+  "$response" >/dev/null; then
+  echo "DMS plugins lock update PR #${pr_number} has unexpected identity; leaving it open." >&2
   exit 1
 fi
 

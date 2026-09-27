@@ -23,6 +23,11 @@ base, and a single `flake.lock` change before requesting a guarded squash merge.
 It does not rewrite the pull-request branch. Missing or pending checks leave
 the pull request open.
 
+Publication confirms the open pull request's repository and branch identity,
+then records the build receipt for the locally verified pushed commit. Forgejo
+can briefly report stale mergeability and revision metadata after a push; the
+merge pass checks those fields against current state before merging.
+
 The validation run uses the same credential-free development check script as
 ordinary pull requests into `dev`. Forgejo does not automatically publish a
 commit status for dispatched workflows, so this run records pending before

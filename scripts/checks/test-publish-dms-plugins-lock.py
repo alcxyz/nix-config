@@ -73,9 +73,15 @@ if url.endswith("/pulls"):
     else:
         body = {"number": 47}
 elif url.endswith("/pulls/47"):
-    body = {"mergeable": True, "head": {"sha": os.environ["TEST_HEAD"],
-            "repo": {"full_name": "fixture/config"}},
-            "base": {"sha": os.environ["TEST_BASE"]}, "merge_base": os.environ["TEST_BASE"]}
+    body = {"number": int(os.environ.get("TEST_PR_NUMBER", "47")),
+            "state": os.environ.get("TEST_PR_STATE", "open"),
+            "mergeable": os.environ.get("TEST_PR_MERGEABLE", "true") == "true",
+            "head": {"sha": os.environ.get("TEST_PR_HEAD_SHA", os.environ["TEST_HEAD"]),
+                     "ref": os.environ.get("TEST_PR_HEAD_REF", "update/dms-plugins-lock"),
+                     "repo": {"full_name": os.environ.get("TEST_PR_HEAD_REPO", "fixture/config")}},
+            "base": {"sha": os.environ.get("TEST_PR_BASE_SHA", os.environ["TEST_BASE"]),
+                     "ref": os.environ.get("TEST_PR_BASE_REF", "dev")},
+            "merge_base": os.environ.get("TEST_PR_MERGE_BASE", os.environ["TEST_BASE"])}
 elif "/dispatches" in url:
     body = {}
     status = os.environ.get("TEST_DISPATCH_STATUS", "201")
@@ -179,6 +185,33 @@ exec "REAL_PYTHON" "$@"
         result = self.run_publisher()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("dispatch exact head", self.calls.read_text())
+
+    def test_delayed_pr_metadata_still_receipts_pushed_exact_head(self):
+        self.env.update({"TEST_PR_MERGEABLE": "false", "TEST_PR_HEAD_SHA": "",
+                         "TEST_PR_BASE_SHA": "", "TEST_PR_MERGE_BASE": ""})
+        result = self.run_publisher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls.read_text()
+        self.assertIn(f"--sha {HEAD} --context ci/dms-lock-build", calls)
+        self.assertIn("dispatch exact head", calls)
+
+    def test_wrong_pr_identity_blocks_receipt_and_dispatch(self):
+        for key, value in (
+            ("TEST_PR_NUMBER", "48"),
+            ("TEST_PR_STATE", "closed"),
+            ("TEST_PR_HEAD_REF", "other-branch"),
+            ("TEST_PR_HEAD_REPO", "other/repo"),
+            ("TEST_PR_BASE_REF", "main"),
+        ):
+            with self.subTest(key=key):
+                self.env[key] = value
+                result = self.run_publisher()
+                self.assertNotEqual(result.returncode, 0)
+                calls = self.calls.read_text()
+                self.assertNotIn("\nstatus ", calls)
+                self.assertNotIn("dispatch exact head", calls)
+                self.calls.unlink()
+                del self.env[key]
 
     def test_stale_candidate_is_replaced_from_current_base(self):
         self.env["TEST_REMOTE_REF"] = HEAD
