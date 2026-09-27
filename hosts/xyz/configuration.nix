@@ -157,6 +157,11 @@
         enable = true;
         severePercent = 60;
         severeDurationSeconds = 30;
+        gameProcess = {
+          enable = true;
+          user = "alc";
+          argv0Basenames = ["HeroesOfTheStorm_x64.exe"];
+        };
       };
     };
     isolatedDocker.enable = true;

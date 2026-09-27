@@ -52,6 +52,7 @@ else let
   lifecycleStopSource = ../../modules/nixos/services/forgejo-actions-runner/aggregate-lifecycle-stop.sh;
   runnerStartGate = lib.removePrefix "+" services.forgejo-actions-runner.serviceConfig.ExecCondition;
   runnerStartGateSource = ../../modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh;
+  gameHelperSource = ../../modules/nixos/services/forgejo-actions-runner/game-admission.sh;
   tests = ./test-forgejo-runner-aggregate-pressure.py;
 in
   assert runner.dockerHost == "unix:///run/forgejo-docker/docker.sock";
@@ -127,6 +128,7 @@ in
       shellcheck ${guardSource}
       shellcheck ${lifecycleStopSource}
       shellcheck ${runnerStartGateSource}
-      python3 ${tests} ${guard} ${lifecycleStop} ${runnerStartGate}
+      shellcheck ${gameHelperSource}
+      GAME_HELPER_FILE=${gameHelperSource} python3 ${tests} ${guard} ${lifecycleStop} ${runnerStartGate}
       touch "$out"
     ''

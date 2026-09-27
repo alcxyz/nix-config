@@ -336,6 +336,25 @@ in {
       admissionControl = {
         enable = lib.mkEnableOption "pressure-based admission draining for an isolated runner";
 
+        gameProcess = {
+          enable = lib.mkEnableOption "exact game process admission drain for the local user";
+          user = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "Local account whose game processes block runner admission.";
+          };
+          argv0Basenames = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            description = "Exact argv0 basenames for the local user's wine64-preloader processes that block runner admission.";
+          };
+          cooldownSeconds = lib.mkOption {
+            type = lib.types.ints.positive;
+            default = 30;
+            description = "Delay after the last game process match before owned drains may resume.";
+          };
+        };
+
         severePercent = lib.mkOption {
           type = lib.types.ints.between 2 100;
           default = 60;
@@ -471,6 +490,22 @@ in {
       {
         assertion = !cfg.ioPressureGuard.admissionControl.enable || isolated;
         message = "Pressure-based runner admission control requires isolated Docker.";
+      }
+      {
+        assertion =
+          !cfg.ioPressureGuard.admissionControl.gameProcess.enable
+          || cfg.ioPressureGuard.admissionControl.enable;
+        message = "Game process admission requires runner admission control.";
+      }
+      {
+        assertion =
+          !cfg.ioPressureGuard.admissionControl.gameProcess.enable
+          || (builtins.match "[a-z_][a-z0-9_-]*" cfg.ioPressureGuard.admissionControl.gameProcess.user
+            != null
+            && cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames != []
+            && lib.all (name: builtins.match "[A-Za-z0-9_.-]+" name != null)
+            cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames);
+        message = "Game process admission needs a local user and exact Wine argv0 basenames.";
       }
       {
         assertion =

@@ -12,6 +12,8 @@ low_threshold=${LOW_THRESHOLD_HUNDREDTHS:-500}
 high_required=${HIGH_SAMPLES_REQUIRED:-5}
 low_required=${LOW_SAMPLES_REQUIRED:-13}
 admission_control=${ADMISSION_CONTROL_ENABLED:-0}
+# shellcheck disable=SC1090
+source "${GAME_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/game-admission.sh}"
 severe_threshold=${SEVERE_THRESHOLD_HUNDREDTHS:-6000}
 severe_required=${SEVERE_SAMPLES_REQUIRED:-7}
 max_iterations=${MAX_ITERATIONS:-0}
@@ -164,6 +166,9 @@ for runner_unit in "${runner_units[@]}"; do
   if [[ $admission_control == 0 && -e $runner_state/drain-owned ]]; then
     fail "admission drain ownership remains while admission control is disabled"
   fi
+  if [[ $admission_control == 0 && -e $runner_state/game-start-skipped ]]; then
+    fail "game start ownership remains while admission control is disabled"
+  fi
 done
 flock -u 9
 
@@ -235,6 +240,7 @@ thaw_owned() {
 }
 
 request_admission_drain() {
+  local reason=${1:-pressure}
   local active generation load_state unit_file_state result
   [[ $admission_control == 1 ]] || return 0
   [[ ! -e $runner_state/drain-owned ]] || return 0
@@ -258,7 +264,7 @@ request_admission_drain() {
 
   printf '%s\n' "$generation" > "$runner_state/drain-pending"
   rm -f "$runner_state/resume-blocked-reported"
-  report_transition admission_drain_requested "runner_unit=$runner_unit active_state=$active"
+  report_transition admission_drain_requested "runner_unit=$runner_unit active_state=$active reason=$reason"
   if ! metadata --no-block stop "$runner_unit"; then
     fail "runner admission drain failed; ownership requires recovery"
   fi
@@ -296,8 +302,15 @@ validate_drain_ownership() {
 }
 
 resume_admissions() {
-  local active load_state unit_file_state result
-  [[ $admission_control == 1 && -e $runner_state/drain-owned ]] || return 0
+  local active load_state unit_file_state result marker
+  [[ $admission_control == 1 ]] || return 0
+  if [[ -e $runner_state/drain-owned ]]; then
+    marker=drain-owned
+  elif [[ -e $runner_state/game-start-skipped ]]; then
+    marker=game-start-skipped
+  else
+    return 0
+  fi
   lock_lifecycle
   [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
 
@@ -322,9 +335,9 @@ resume_admissions() {
     return 0
   fi
 
-  mv "$runner_state/drain-owned" "$runner_state/resume-pending"
+  mv "$runner_state/$marker" "$runner_state/resume-pending"
   rm -f "$runner_state/resume-blocked-reported"
-  report_transition admission_resume_requested "runner_unit=$runner_unit active_state=$active"
+  report_transition admission_resume_requested "runner_unit=$runner_unit active_state=$active reason=$marker"
   if ! metadata --no-block start "$runner_unit"; then
     fail "runner admission resume failed; ownership requires recovery"
   fi
@@ -357,6 +370,14 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
     runner_state=$(runner_state_dir "$runner_unit")
     validate_drain_ownership
   done
+  if game_admission_status; then game_status=0; else game_status=$?; fi
+  if ((game_status != 1)); then
+    for runner_unit in "${runner_units[@]}"; do
+      runner_state=$(runner_state_dir "$runner_unit")
+      # shellcheck disable=SC2154
+      request_admission_drain "$game_reason"
+    done
+  fi
   if ((pressure >= high_threshold)); then
     high=$((high + 1))
     low=0
@@ -390,7 +411,7 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
     severe=0
     if [[ $admission_control == 0 ]]; then high=0; fi
   fi
-  if ((low >= low_required)); then
+  if ((low >= low_required && game_status == 1)); then
     # Recovery always thaws the aggregate before asking the runner to poll
     # again. If jobs are still draining, resume_admissions keeps waiting for a
     # fully inactive unit while the low-pressure streak continues.

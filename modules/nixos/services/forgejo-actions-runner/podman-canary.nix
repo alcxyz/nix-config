@@ -54,6 +54,7 @@
     name = "forgejo-podman-runner-start-gate";
     runtimeInputs = with pkgs; [
       coreutils
+      procps
       systemd
       util-linux
     ];
@@ -344,6 +345,14 @@ in {
         DOCKER_HOST = "unix://${socketPath}";
         RUNNER_UNIT = runnerUnit;
         RUNNER_UNITS = "forgejo-actions-runner.service ${runnerUnit}";
+        GAME_HELPER_FILE = "${./game-admission.sh}";
+        GAME_ADMISSION_ENABLED =
+          if cfg.ioPressureGuard.admissionControl.gameProcess.enable
+          then "1"
+          else "0";
+        GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
+        GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
+        GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
       };
       serviceConfig = {
         User = "forgejo-podman-runner";

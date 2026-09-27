@@ -3,6 +3,8 @@ set -euo pipefail
 
 state_dir=${STATE_DIR:-/run/forgejo-runner-aggregate-pressure}
 systemctl_bin=${SYSTEMCTL_BIN:-systemctl}
+# shellcheck disable=SC1090
+source "${GAME_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/game-admission.sh}"
 timeout_seconds=${GATE_TIMEOUT_SECONDS:-60}
 primary_runner=forgejo-actions-runner.service
 runner_unit=${RUNNER_UNIT:-$primary_runner}
@@ -79,6 +81,16 @@ else
   runner_state=$state_dir/runners/$runner_unit
 fi
 [[ ! -e $runner_state/drain-owned ]] || exit 1
+if game_admission_status; then
+  : > "$runner_state/game-start-skipped"
+  exit 1
+else
+  scan_result=$?
+  if ((scan_result != 1)); then
+    : > "$runner_state/game-start-skipped"
+    exit 1
+  fi
+fi
 
 remaining=$((deadline - SECONDS))
 ((remaining > 0)) || exit 1
@@ -90,4 +102,5 @@ remaining=$((deadline - SECONDS))
 ((remaining > 0)) || exit 1
 ((remaining < 5)) && query_timeout=$remaining || query_timeout=5
 timeout --foreground "${query_timeout}s" "$systemctl_bin" is-active --quiet \
-  forgejo-runner-io-pressure-guard.service
+  forgejo-runner-io-pressure-guard.service || exit 1
+rm -f "$runner_state/game-start-skipped"

@@ -29,7 +29,8 @@ class GuardTests(unittest.TestCase):
                   drain_generation=None, stop_generation='0', lifecycle_active=True,
                   teardown_required=False, show_fail_count='0', second_runner=None,
                   second_marker='', runner_units=None, persisted_units=None,
-                  unknown_state=False):
+                  unknown_state=False, game_states=None, game_times=None,
+                  game_start_skipped=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -45,6 +46,8 @@ class GuardTests(unittest.TestCase):
                 (state / 'drain-pending').touch()
             if resume_pending:
                 (state / 'resume-pending').touch()
+            if game_start_skipped:
+                (state / 'game-start-skipped').touch()
             if teardown_required:
                 (state / 'teardown-required').touch()
             if persisted_units is not None:
@@ -70,6 +73,25 @@ class GuardTests(unittest.TestCase):
             (root / 'runner-result').write_text(runner_result)
             (root / 'runner-generation').write_text(runner_generation)
             (root / 'pressure').write_text('\n'.join(map(str, values)) + '\n')
+            (root / 'game-states').write_text('\n'.join(game_states or []) + '\n')
+            (root / 'game-times').write_text('\n'.join(map(str, game_times or [])) + '\n')
+            (root / 'proc' / '123').mkdir(parents=True)
+            (root / 'wine64-preloader').touch()
+            (root / 'proc' / '123' / 'exe').symlink_to(root / 'wine64-preloader')
+            (root / 'proc' / '123' / 'cmdline').write_bytes(b'C:\\Games\\HeroesOfTheStorm_x64.exe\0ignored-secret\0')
+            pgrep = root / 'pgrep'
+            pgrep.write_text('#!' + shutil.which('bash') + '\n' + '''set -eu
+[[ $1 == -u && $2 == alc && $# == 2 ]]
+count=0
+[[ ! -e $FIXTURE/scan-count ]] || count=$(cat "$FIXTURE/scan-count")
+count=$((count + 1))
+printf '%s' "$count" > "$FIXTURE/scan-count"
+state=$(sed -n "${count}p" "$FIXTURE/game-states")
+now=$(sed -n "${count}p" "$FIXTURE/game-times")
+printf '%s.00 0.00\\n' "$now" > "$FIXTURE/uptime"
+case "$state" in present) printf '123\\n'; exit 0 ;; absent) exit 1 ;; error) exit 2 ;; *) exit 2 ;; esac
+''')
+            pgrep.chmod(0o755)
             mock = root / 'systemctl'
             mock.write_text('#!' + shutil.which('bash') + '\n' + '''set -eu
 if [[ $1 == is-active && $2 == forgejo-runner-aggregate-lifecycle.service ]]; then
@@ -161,6 +183,12 @@ esac
                    'SHOW_FAIL_COUNT': show_fail_count,
                    'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY]),
                    'SECOND_STOP_STATE': (second_runner or {}).get('stop_state', 'inactive')}
+            if game_states is not None:
+                env.update({'GAME_ADMISSION_ENABLED': '1', 'GAME_USER': 'alc',
+                            'GAME_ARGV0_BASENAMES': 'HeroesOfTheStorm_x64.exe',
+                            'GAME_PROC_ROOT': str(root / 'proc'),
+                            'PGREP_BIN': str(pgrep), 'GAME_UPTIME_FILE': str(root / 'uptime'),
+                            'GAME_COOLDOWN_SECONDS': '30'})
             result = subprocess.run(['bash', str(GUARD)], env=env, capture_output=True)
             self.events = result.stdout.decode().splitlines()
             self.guard_stderr = result.stderr.decode()
@@ -179,6 +207,7 @@ esac
             self.drain_pending = (state / 'drain-pending').exists()
             self.resume_pending = (state / 'resume-pending').exists()
             self.drain_disowned = (state / 'drain-disowned').exists()
+            self.game_start_skipped = (state / 'game-start-skipped').exists()
             return result.returncode, actions, (state / 'owned').exists(), (state / 'pending').exists()
 
     def test_hysteresis_freezes_and_thaws_aggregate(self):
@@ -443,6 +472,42 @@ esac
                          [f'stop:{PRIMARY}', f'start:{PRIMARY}'])
         self.assertFalse(self.second_drain_owned)
 
+    def test_game_drains_both_runners_and_waits_through_cooldown(self):
+        self.run_guard([0, 0, 0, 0], admission=True,
+                       game_states=['present', 'absent', 'absent', 'absent'],
+                       game_times=[100, 110, 129, 130],
+                       second_runner={}, runner_units=[PRIMARY, SECOND])
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'stop:{SECOND}',
+                          f'start:{PRIMARY}', f'start:{SECOND}'])
+        self.assertFalse(self.drain_owned)
+        self.assertFalse(self.second_drain_owned)
+
+    def test_game_start_skip_resumes_only_when_enabled_and_clear(self):
+        self.run_guard([0, 0], admission=True, runner_state='inactive',
+                       runner_generation='0', game_start_skipped=True,
+                       game_states=['absent', 'absent'], game_times=[100, 100])
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertFalse(self.game_start_skipped)
+        self.run_guard([0, 0], admission=True, runner_state='inactive',
+                       runner_enabled='disabled', runner_generation='0',
+                       game_start_skipped=True,
+                       game_states=['absent', 'absent'], game_times=[100, 100])
+        self.assertEqual(self.runner_actions, [])
+        self.assertTrue(self.game_start_skipped)
+
+    def test_game_scanner_error_drains_without_guard_failure(self):
+        self.assertEqual(self.run_guard([0, 0], admission=True,
+                                        game_states=['error', 'error'],
+                                        game_times=[100, 100])[0], 0)
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+
+    def test_game_does_not_change_pressure_thaw(self):
+        self.assertEqual(self.run_guard([0, 0], initial='frozen', owned=True,
+                                        admission=True, game_states=['present', 'present'],
+                                        game_times=[100, 101])[1], ['thaw'])
+
     def test_ambiguous_second_drain_blocks_all_transitions(self):
         self.assertEqual(self.run_guard([2500, 2500], admission=True,
                                         second_runner={}, second_marker='drain-pending',
@@ -581,13 +646,19 @@ fi
 class StartGateTests(unittest.TestCase):
     def run_gate(self, marker='', freezer='running', lifecycle=True, guard=True,
                  clear_under_lock=False, runner_unit=PRIMARY, runner_units=None,
-                 second_marker='', persisted_units=None, unknown_state=False):
+                 second_marker='', persisted_units=None, unknown_state=False,
+                 game_state=None, game_last_seen=None, game_now=100,
+                 game_argv0='/games/HeroesOfTheStorm_x64.exe',
+                 game_exe='wine64-preloader', missing_cmdline=False,
+                 zombie=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
             state.mkdir()
             if marker:
                 (state / marker).touch()
+            if game_last_seen is not None:
+                (state / 'game-last-seen').write_text(str(game_last_seen) + '\n')
             if runner_units and SECOND in runner_units:
                 (state / 'runners' / SECOND).mkdir(parents=True)
             if second_marker:
@@ -611,12 +682,36 @@ else
 fi
 ''')
             mock.chmod(0o755)
+            (root / 'proc' / '123').mkdir(parents=True)
+            (root / game_exe).touch()
+            if not zombie:
+                (root / 'proc' / '123' / 'exe').symlink_to(root / game_exe)
+            else:
+                (root / 'proc' / '123' / 'stat').write_text('123 (defunct) Z 1 0 0\n')
+            if not missing_cmdline:
+                (root / 'proc' / '123' / 'cmdline').write_bytes(
+                    game_argv0.encode() + b'\0hidden\0')
+            (root / 'uptime').write_text(f'{game_now}.00 0.00\n')
+            pgrep = root / 'pgrep'
+            pgrep.write_text('#!' + shutil.which('bash') + '\n' + '''set -eu
+[[ $1 == -u && $2 == alc && $# == 2 ]]
+case "$GAME_STATE" in present) printf '123\\n'; exit 0 ;; absent) exit 1 ;; error) exit 2 ;; esac
+exit 2
+''')
+            pgrep.chmod(0o755)
             env = {**os.environ, 'STATE_DIR': str(state), 'SYSTEMCTL_BIN': str(mock),
                    'GATE_TIMEOUT_SECONDS': '2', 'FREEZER_STATE': freezer,
                    'LIFECYCLE_ACTIVE': '1' if lifecycle else '0',
                    'GUARD_ACTIVE': '1' if guard else '0',
                    'RUNNER_UNIT': runner_unit,
                    'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY])}
+            if game_state is not None:
+                env.update({'GAME_ADMISSION_ENABLED': '1', 'GAME_USER': 'alc',
+                            'GAME_ARGV0_BASENAMES': 'HeroesOfTheStorm_x64.exe',
+                            'GAME_PROC_ROOT': str(root / 'proc'),
+                            'PGREP_BIN': str(pgrep), 'GAME_UPTIME_FILE': str(root / 'uptime'),
+                            'GAME_COOLDOWN_SECONDS': '30', 'GAME_STATE': game_state,
+                            'GAME_NOW': str(game_now)})
             if clear_under_lock:
                 with (state / 'lifecycle.lock').open('w') as lock:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -628,10 +723,46 @@ fi
                 return process.returncode, (state / marker).exists()
             result = subprocess.run(['bash', str(GATE)], env=env,
                                     capture_output=True, timeout=6)
+            candidate_state = state if runner_unit == PRIMARY else state / 'runners' / SECOND
+            self.game_start_skipped = (candidate_state / 'game-start-skipped').exists()
             return result.returncode, bool(marker and (state / marker).exists())
 
     def test_clear_healthy_start_is_admitted(self):
         self.assertEqual(self.run_gate(), (0, False))
+
+    def test_game_blocks_first_start_for_both_runners(self):
+        self.assertEqual(self.run_gate(game_state='present'), (1, False))
+        self.assertTrue(self.game_start_skipped)
+        self.assertEqual(self.run_gate(game_state='present', runner_unit=SECOND,
+                                       runner_units=[PRIMARY, SECOND],
+                                       persisted_units=[PRIMARY, SECOND]), (1, False))
+        self.assertTrue(self.game_start_skipped)
+
+    def test_gate_blocks_cooldown_and_scan_error(self):
+        self.assertEqual(self.run_gate(game_state='absent', game_last_seen=80,
+                                       game_now=100), (1, False))
+        self.assertTrue(self.game_start_skipped)
+        self.assertEqual(self.run_gate(game_state='error'), (1, False))
+        self.assertTrue(self.game_start_skipped)
+        self.assertEqual(self.run_gate(game_state='absent', game_last_seen=60,
+                                       game_now=100), (0, False))
+        self.assertFalse(self.game_start_skipped)
+
+    def test_exact_wine_argv0_filters_other_helpers_and_zombies(self):
+        for argv0, exe, zombie in [
+            ('C:\\Games\\Battle.net.exe', 'wine64-preloader', False),
+            ('/games/HeroesOfTheStorm_x64.exe', 'uploader', False),
+            ('/games/HeroesOfTheStorm_x64.exe', 'wine64-preloader', True),
+        ]:
+            with self.subTest(argv0=argv0, exe=exe, zombie=zombie):
+                self.assertEqual(self.run_gate(game_state='present', game_argv0=argv0,
+                                               game_exe=exe, zombie=zombie), (0, False))
+                self.assertFalse(self.game_start_skipped)
+
+    def test_unreadable_wine_argv0_blocks_admission(self):
+        self.assertEqual(self.run_gate(game_state='present', missing_cmdline=True),
+                         (1, False))
+        self.assertTrue(self.game_start_skipped)
 
     def test_switch_start_during_owned_drain_is_skipped_without_mutation(self):
         self.assertEqual(self.run_gate(marker='drain-owned'), (1, True))

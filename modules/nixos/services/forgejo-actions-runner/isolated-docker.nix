@@ -24,7 +24,7 @@
   };
   guard = pkgs.writeShellApplication {
     name = "forgejo-runner-aggregate-pressure-guard";
-    runtimeInputs = with pkgs; [coreutils gawk systemd util-linux];
+    runtimeInputs = with pkgs; [coreutils gawk procps systemd util-linux];
     text = builtins.readFile ./aggregate-pressure-guard.sh;
   };
   lifecycleStop = pkgs.writeShellApplication {
@@ -52,7 +52,7 @@
   };
   runnerStartGate = pkgs.writeShellApplication {
     name = "forgejo-runner-start-gate";
-    runtimeInputs = with pkgs; [coreutils systemd util-linux];
+    runtimeInputs = with pkgs; [coreutils procps systemd util-linux];
     text = builtins.readFile ./runner-start-gate.sh;
   };
 in {
@@ -153,6 +153,14 @@ in {
           if cfg.ioPressureGuard.admissionControl.enable
           then "1"
           else "0";
+        GAME_HELPER_FILE = "${./game-admission.sh}";
+        GAME_ADMISSION_ENABLED =
+          if cfg.ioPressureGuard.admissionControl.gameProcess.enable
+          then "1"
+          else "0";
+        GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
+        GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
+        GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
         HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
         LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
         HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
@@ -178,6 +186,14 @@ in {
       requires = ["forgejo-runner-aggregate-lifecycle.service"];
       restartIfChanged = false;
       environment.RUNNER_UNIT = "forgejo-actions-runner.service";
+      environment.GAME_HELPER_FILE = "${./game-admission.sh}";
+      environment.GAME_ADMISSION_ENABLED =
+        if cfg.ioPressureGuard.admissionControl.gameProcess.enable
+        then "1"
+        else "0";
+      environment.GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
+      environment.GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
+      environment.GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
       environment.RUNNER_UNITS =
         "forgejo-actions-runner.service"
         + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";

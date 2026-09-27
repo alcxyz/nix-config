@@ -1,6 +1,6 @@
 # ADR-0072: Isolate runner Docker execution in a bounded rootless service
 
-- Status: Accepted; amended 2026-09-24; per-host rollout requires qualification
+- Status: Accepted; amended 2026-09-27; per-host rollout requires qualification
 - Date: 2026-09-10
 - Area: Forgejo runners, Docker, systemd
 
@@ -33,6 +33,23 @@ Recovery thaws an owned freeze before it restarts a runner it previously
 drained, and only after pressure stays low and the runner is fully inactive.
 The graceful service stop signals the runner's main process first and retains
 the existing service timeout as the eventual whole-cgroup termination boundary.
+
+An optional game-process signal can request the same admission drain before
+resource pressure rises. Match configured game executable names for a configured
+local user. Wine games may rename their Linux process; verify the Wine loader
+first, then inspect only the first executable argument, never other arguments
+or process environments. Do not infer gaming from launcher presence alone.
+The existing guard samples this signal, avoiding a second controller with
+independent stop/resume ownership. A matching game or an
+unavailable detector withholds admission. Resumption requires the game to be
+absent for a short cooldown and the existing pressure recovery conditions.
+The runner start gate also checks the signal so boot and configuration switches
+cannot admit work before the guard's next sample. Detector errors withhold new
+work rather than terminating the running worker APIs. Existing jobs drain
+gracefully; this policy does not promise immediate resource release when a game
+starts. Severe-pressure freeze/thaw and safe shutdown remain independent.
+Broader game detection and manual controls are tracked in
+[#459](https://git.alc.xyz/alcxyz/nix-config/issues/459).
 
 Drain and resume ownership is persistent and transition intent is recorded
 before systemd is called. A restarted guard continues an owned drain without a

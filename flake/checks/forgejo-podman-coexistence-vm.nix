@@ -29,6 +29,11 @@ in
       };
       config = {
         system.stateVersion = "25.11";
+        users.groups.game-fixture = {};
+        users.users.game-fixture = {
+          isSystemUser = true;
+          group = "game-fixture";
+        };
         virtualisation = {
           memorySize = 3072;
           cores = 2;
@@ -55,6 +60,11 @@ in
             transitionTimeoutSeconds = 20;
             admissionControl.severePercent = 80;
             admissionControl.severeDurationSeconds = 1;
+            admissionControl.gameProcess = {
+              enable = true;
+              user = "game-fixture";
+              argv0Basenames = ["HeroesOfTheStorm_x64.exe"];
+            };
           };
           podmanCanary = {
             enable = true;
@@ -135,6 +145,14 @@ in
       machine.succeed(f"{podman} info >/dev/null")
       machine.succeed(f"{docker} load < ${workerImage}")
       machine.succeed(f"{podman} load < ${workerImage}")
+
+      # A matching Wine argv0 drains both pollers without stopping either API.
+      machine.succeed("cp ${pkgs.bash}/bin/bash /run/wine64-preloader")
+      machine.succeed("systemd-run --unit=fixture-game --property=User=game-fixture ${pkgs.bash}/bin/bash -c \"exec -a HeroesOfTheStorm_x64.exe /run/wine64-preloader -c 'while :; do ${pkgs.coreutils}/bin/sleep 1; done'\"")
+      machine.wait_until_succeeds("test -e /run/forgejo-runner-aggregate-pressure/drain-owned && test -e /run/forgejo-runner-aggregate-pressure/runners/forgejo-podman-runner.service/drain-owned", timeout=30)
+      machine.succeed("systemctl is-active --quiet forgejo-runner-docker.service forgejo-runner-podman.service")
+      machine.succeed("systemctl stop fixture-game.service")
+      machine.wait_until_succeeds("systemctl is-active --quiet forgejo-actions-runner.service && systemctl is-active --quiet forgejo-podman-runner.service", timeout=75)
 
       # Moderate pressure stops both pollers but lets admitted workers finish;
       # low pressure resumes only units the guard itself stopped.
