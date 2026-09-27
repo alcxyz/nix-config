@@ -2,8 +2,6 @@ name: Merge verified DMS lock
 run-name: "DMS lock merge queue (${{ forgejo.event_name }})"
 
 on:
-  schedule:
-    - cron: "30 * * * *"
   workflow_dispatch:
 
 jobs:
