@@ -34,6 +34,7 @@ shellcheck --shell=bash users/alc/linux/xyz/desktop-scripts/{mail-workspace,clos
 
 python3 scripts/checks/test-configuration-ci.py
 python3 scripts/checks/test-commit-status.py
+python3 scripts/checks/test-publish-dms-plugins-lock.py
 python3 scripts/checks/test-development-ci.py
 python3 scripts/checks/test-local-package-promotion.py
 python3 scripts/checks/check-moonlight-shell-templates.py

@@ -10,7 +10,7 @@ else let
     text = "exit 0";
   };
   evaluate = isolated:
-    (import "${pkgs.path}/nixos/lib/eval-config.nix" {
+    (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       system = pkgs.stdenv.hostPlatform.system;
       specialArgs.inputs = {};
       modules = [

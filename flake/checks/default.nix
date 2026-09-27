@@ -227,7 +227,7 @@ in {
     hostConfigs = lib.genAttrs hostNames (name: self.nixosConfigurations.${name}.config);
     guards = map (name: hostConfigs.${name}.systemd.services.forgejo-runner-io-pressure-guard) hostNames;
     legacyConfig =
-      (import "${pkgs.path}/nixos/lib/eval-config.nix" {
+      (import (pkgs.path + "/nixos/lib/eval-config.nix") {
         # This fixture evaluates a NixOS service even when the surrounding
         # flake check is instantiated for a non-Linux system.
         system = "x86_64-linux";

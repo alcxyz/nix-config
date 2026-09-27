@@ -186,9 +186,8 @@ in {
         Restart = "no";
       };
     };
-    systemd.services.forgejo-actions-runner.serviceConfig.KillMode =
-      lib.mkIf cfg.ioPressureGuard.admissionControl.enable "mixed";
     systemd.services.forgejo-actions-runner = {
+      serviceConfig.KillMode = lib.mkIf cfg.ioPressureGuard.admissionControl.enable "mixed";
       requires = ["forgejo-runner-aggregate-lifecycle.service"];
       restartIfChanged = false;
       environment.RUNNER_UNIT = "forgejo-actions-runner.service";

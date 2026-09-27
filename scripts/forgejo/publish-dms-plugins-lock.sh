@@ -34,7 +34,11 @@ git commit -m "chore(dms): update plugin lock to ${REVISION:0:12}"
 
 git remote set-url origin "${FORGEJO_URL}/${FORGEJO_OWNER}/${FORGEJO_REPO}.git"
 auth_header=$(printf '%s:%s' "$FORGEJO_OWNER" "$FORGEJO_TOKEN" | base64 -w0)
-git config --local "http.${FORGEJO_URL}/.extraheader" "AUTHORIZATION: basic ${auth_header}"
+export GIT_CONFIG_COUNT=2
+export GIT_CONFIG_KEY_0="http.${FORGEJO_URL}/.extraheader"
+export GIT_CONFIG_VALUE_0=
+export GIT_CONFIG_KEY_1="http.${FORGEJO_URL}/.extraheader"
+export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic ${auth_header}"
 
 lease_args=()
 remote_ref=$(git ls-remote --heads origin "$UPDATE_BRANCH" | awk '{print $1}')
@@ -44,10 +48,12 @@ fi
 git push "${lease_args[@]}" origin "HEAD:refs/heads/${UPDATE_BRANCH}"
 
 api_base="${FORGEJO_URL}/api/v1/repos/${FORGEJO_OWNER}/${FORGEJO_REPO}"
-api_auth=(-H "Authorization: token ${FORGEJO_TOKEN}" -H "Accept: application/json" -H "Content-Type: application/json")
 payload=$(mktemp)
 response=$(mktemp)
-trap 'rm -f "$payload" "$response"' EXIT
+curl_config=$(mktemp)
+chmod 600 "$curl_config"
+trap 'rm -f "$payload" "$response" "$curl_config"' EXIT
+python3 -c 'import json, os; print("header = " + json.dumps("Authorization: token " + os.environ["FORGEJO_TOKEN"]))' >"$curl_config"
 
 jq -n \
 	--arg base "$BASE_BRANCH" \
@@ -56,7 +62,7 @@ jq -n \
 	--arg body "Automated, build-verified refresh of the aggregate DMS plugin lock to \`${REVISION}\` (DankAIUsage ${VERSION})." \
 	'{base: $base, head: $head, title: $title, body: $body}' >"$payload"
 
-status=$(curl -sS -o "$response" -w '%{http_code}' "${api_auth[@]}" \
+status=$(curl -sS -K "$curl_config" -H "Accept: application/json" -H "Content-Type: application/json" -o "$response" -w '%{http_code}' \
 	--data @"$payload" "${api_base}/pulls")
 
 case "$status" in
@@ -64,7 +70,7 @@ case "$status" in
 	pr_number=$(jq -r '.number // .index' "$response")
 	;;
 409 | 422)
-	curl -fsS "${api_auth[@]}" \
+	curl -fsS -K "$curl_config" -H "Accept: application/json" -H "Content-Type: application/json" \
 		"${api_base}/pulls?state=open&base=${BASE_BRANCH}&limit=100" -o "$response"
 	pr_number=$(jq -r --arg head "$UPDATE_BRANCH" '.[] | select(.head.ref == $head) | .number // .index' "$response" | head -n1)
 	;;
@@ -80,7 +86,7 @@ if [[ -z "$pr_number" || "$pr_number" == "null" ]]; then
 	exit 1
 fi
 
-curl -fsS "${api_auth[@]}" "${api_base}/pulls/${pr_number}" -o "$response"
+curl -fsS -K "$curl_config" -H "Accept: application/json" "${api_base}/pulls/${pr_number}" -o "$response"
 mergeable=$(jq -r '.mergeable' "$response")
 head_sha=$(jq -r '.head.sha' "$response")
 base_sha=$(jq -r '.base.sha' "$response")
@@ -91,13 +97,21 @@ if [[ "$mergeable" != "true" || "$merge_base" != "$base_sha" ]]; then
 	exit 1
 fi
 
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if ! python3 "${script_dir}/commit-status.py" require \
+	--url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --repo "$FORGEJO_REPO" \
+	--sha "$head_sha" --context 'Validate configurations / Validate candidate (pull_request)'; then
+	echo "Required validation is absent or unsuccessful for DMS plugins lock update PR #${pr_number}; leaving it open." >&2
+	exit 1
+fi
+
 jq -n \
 	--arg title "chore(dms): update plugins to ${REVISION:0:12} (#${pr_number})" \
 	--arg head "$head_sha" \
 	'{Do: "squash", MergeTitleField: $title, MergeMessageField: "", head_commit_id: $head, delete_branch_after_merge: true}' \
 	>"$payload"
 
-status=$(curl -sS -o "$response" -w '%{http_code}' "${api_auth[@]}" \
+status=$(curl -sS -K "$curl_config" -H "Accept: application/json" -H "Content-Type: application/json" -o "$response" -w '%{http_code}' \
 	-X POST --data @"$payload" "${api_base}/pulls/${pr_number}/merge")
 case "$status" in
 200 | 201 | 204)

@@ -9,7 +9,7 @@ else let
   canary = "forgejo-podman-runner.service";
   both = "${primary} ${canary}";
   evaluate = enabled: labels:
-    (import "${pkgs.path}/nixos/lib/eval-config.nix" {
+    (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       system = pkgs.stdenv.hostPlatform.system;
       specialArgs.inputs = {};
       modules = [
