@@ -45,8 +45,9 @@ jq -e '.schemaVersion == 1 and (.products | type == "array" and length > 0)' "$m
 
 result_lines=$(mktemp)
 manifest_check=$(mktemp)
+manifest_by_digest=$(mktemp)
 push_log=$(mktemp)
-trap 'rm -f "$result_lines" "$manifest_check" "$push_log"' EXIT
+trap 'rm -f "$result_lines" "$manifest_check" "$manifest_by_digest" "$push_log"' EXIT
 short_revision=${revision:0:12}
 
 write_output() {
@@ -118,16 +119,19 @@ while IFS= read -r product; do
       echo "Registry did not report a digest for $release_ref" >&2
       exit 1
     }
-    docker manifest inspect --verbose "$release_ref" >"$manifest_check"
-    jq -e \
-      --arg digest "$digest" \
-      --arg image_id "$image_id" \
-      '.Descriptor.digest == $digest and .SchemaV2Manifest.config.digest == $image_id' \
-      "$manifest_check" >/dev/null || {
+    docker buildx imagetools inspect --raw "$release_ref" >"$manifest_check"
+    docker buildx imagetools inspect --raw "${release_ref}@${digest}" >"$manifest_by_digest"
+    if ! cmp -s "$manifest_check" "$manifest_by_digest" ||
+      ! jq -e \
+        --arg image_id "$image_id" \
+        '.schemaVersion == 2
+         and (.mediaType == "application/vnd.oci.image.manifest.v1+json"
+              or .mediaType == "application/vnd.docker.distribution.manifest.v2+json")
+         and .config.digest == $image_id' \
+        "$manifest_check" >/dev/null; then
       echo "Registry manifest does not match the pushed $name image" >&2
       exit 1
-    }
-    docker manifest inspect "${release_ref}@${digest}" >/dev/null
+    fi
     jq -cn \
       --arg name "$name" \
       --arg image "$image" \
