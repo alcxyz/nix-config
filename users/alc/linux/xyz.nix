@@ -69,6 +69,9 @@ in {
 
   # ==================== XYZ-Specific Settings ====================
 
+  services.nixPackagePromotion.dms.enable = true;
+  services.nixPackagePromotion.dms.admissionUnit = "forgejo-podman-runner.service";
+
   home.packages =
     pkgsets.home.${hostRole.homePackageSet}
     ++ [

@@ -52,3 +52,26 @@ leaves a reviewable pull request open. Full activation validation remains tied
 to the updater run; the later merge pass verifies its exact committed tree and
 receipt before merging. Follow-up is tracked in
 [nix-config #470](https://git.alc.xyz/alcxyz/nix-config/issues/470).
+
+## Trusted local build placement — 2026-09-28
+
+The DMS updater now runs as the existing trusted operator on `xyz`, using its
+native persistent Nix store and ordinary Git source access. The Home Manager
+module exposes an opt-in service and daily timer; `xyz` enables it. The timer
+does not catch up missed runs on activation. It shares the local package
+promotion lock so those two native build jobs do not overlap. An optional
+systemd admission condition on `xyz` starts the updater only while the existing
+runner service is active. This defers a new build when that service is stopped
+for gaming, pressure, or maintenance; it does not pause an already running Nix
+daemon build. Daemon worker limits remain host policy.
+
+The updater fetches only the committed `dev` head, builds the selected Home
+Manager activation package, and checks the unchanged base and lock-only tree
+before using the existing publisher. The publisher reads the activated status
+token file and uses the operator's configured Git identity. No runner gains
+host store access, and the hosted updater no longer starts a build.
+
+The hosted exact-head development checks and merge gate remain. The
+`ci/dms-lock-build` receipt still means the candidate lock's activation package
+was actually built. Tracking:
+[nix-config #476](https://git.alc.xyz/alcxyz/nix-config/issues/476).

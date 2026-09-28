@@ -1,96 +1,15 @@
 name: Refresh DMS plugins lock
-run-name: "DMS plugins lock refresh (${{ forgejo.event_name }})"
 
+# Native builds use the trusted xyz operator's persistent Nix store.
 on:
-  schedule:
-    - cron: "0 6 * * *"
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish and merge a verified lock update
-        type: boolean
-        default: true
 
 jobs:
-  update:
-    name: Build, verify, and publish current DMS plugins
+  local-instructions:
     runs-on: forgejo-podman-canary
     container:
       image: docker.io/library/node:20-bookworm
-    concurrency:
-      group: dms-plugins-lock-update
-      cancel-in-progress: false
-    env:
-      BASE_BRANCH: dev
-      UPDATE_BRANCH: update/dms-plugins-lock
-
     steps:
-      - name: Prepare action copy paths
+      - name: Use the trusted local updater
         run: |
-          # Podman's archive API rejects action paths through this absolute symlink.
-          if [ -L /var/run ] && [ "$(readlink -f /var/run)" = /run ]; then
-            rm /var/run
-            mkdir -m 0755 /var/run
-            if [ -d /run/act ]; then
-              cp -a /run/act /var/run/act
-            fi
-            if [ -S /run/docker.sock ]; then
-              ln -s /run/docker.sock /var/run/docker.sock
-            fi
-          fi
-
-      - uses: https://data.forgejo.org/actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-          github-server-url: https://git.alc.xyz
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || 'dev' }}
-
-      - name: Install runner prerequisites
-        run: |
-          apt-get update
-          apt-get install -y jq python3 sudo
-
-      - uses: https://github.com/cachix/install-nix-action@v30
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Use dedicated Nix build users
-        run: |
-          groupadd --system nixbld
-          for n in 1 2 3 4; do
-            useradd --system --no-create-home --home-dir /homeless-shelter \
-              --shell /usr/sbin/nologin --gid nogroup --groups nixbld "nixbld$n"
-          done
-          chgrp nixbld /nix/store
-          chmod 1775 /nix/store
-          printf 'build-users-group = nixbld\nmax-jobs = 4\n' >>/etc/nix/nix.conf
-
-          # Check the actual builder identity and fake-home permissions before
-          # evaluating private inputs or starting the full activation build.
-          nix build --impure --no-link --expr '
-            derivation {
-              name = "nix-build-user-preflight";
-              system = builtins.currentSystem;
-              builder = "/bin/sh";
-              args = [ "-c" "test $(/usr/bin/id -u) -ne 0 && test ! -e /homeless-shelter && ! /usr/bin/mkdir /homeless-shelter 2>/dev/null && printf ok > $out" ];
-            }
-          '
-
-      - name: Refresh and verify DMS plugins
-        id: update
-        env:
-          DMS_PRIVATE_INPUT_TOKEN: ${{ secrets.DMS_PRIVATE_INPUT_TOKEN }}
-        run: bash scripts/ci/run-dms-update-with-private-inputs.sh
-
-      - name: Publish verified lock update
-        if: steps.update.outputs.updated == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish)
-        env:
-          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
-          FORGEJO_URL: https://git.alc.xyz
-          FORGEJO_OWNER: alcxyz
-          FORGEJO_REPO: nix-config
-          REVISION: ${{ steps.update.outputs.revision }}
-          VERSION: ${{ steps.update.outputs.version }}
-        run: scripts/forgejo/publish-dms-plugins-lock.sh
+          echo 'Run systemctl --user start nix-dms-update.service on xyz.'

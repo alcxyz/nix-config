@@ -41,12 +41,17 @@ case "$1" in
     esac
     exit 0 ;;
   hash-object) echo blob; exit 0 ;;
+  config) case "$2" in user.name) echo fixture ;; user.email) echo fixture@example.invalid ;; esac; exit 0 ;;
   commit) : >"$TEST_COMMITTED" ;;
   ls-remote | push)
-    [ "$GIT_CONFIG_COUNT" = 2 ] || exit 11
-    [ "$GIT_CONFIG_KEY_0" = "$GIT_CONFIG_KEY_1" ] || exit 12
-    [ -z "$GIT_CONFIG_VALUE_0" ] || exit 13
-    case "$GIT_CONFIG_VALUE_1" in *"AUTHORIZATION: basic "*) ;; *) exit 14 ;; esac
+    if [ -z "${FORGEJO_TOKEN_FILE:-}" ]; then
+      [ "$GIT_CONFIG_COUNT" = 2 ] || exit 11
+      [ "$GIT_CONFIG_KEY_0" = "$GIT_CONFIG_KEY_1" ] || exit 12
+      [ -z "$GIT_CONFIG_VALUE_0" ] || exit 13
+      case "$GIT_CONFIG_VALUE_1" in *"AUTHORIZATION: basic "*) ;; *) exit 14 ;; esac
+    else
+      [ -z "${GIT_CONFIG_COUNT:-}" ] || exit 15
+    fi
     if [ "$1" = ls-remote ] && [ -n "${TEST_REMOTE_REF:-}" ]; then
       printf '%s\trefs/heads/update/dms-plugins-lock\n' "$TEST_REMOTE_REF"
     fi
@@ -114,6 +119,7 @@ exec "REAL_PYTHON" "$@"
             ),
         )
         self.env = os.environ.copy()
+        self.env.pop("FORGEJO_TOKEN_FILE", None)
         self.env.update(
             {
                 "PATH": f"{bindir}:{os.environ['PATH']}",
@@ -152,6 +158,19 @@ exec "REAL_PYTHON" "$@"
         self.assertNotIn("/merge", calls)
         self.assertNotIn(TOKEN, calls + result.stdout + result.stderr)
         self.assertNotIn(base64.b64encode(f"fixture:{TOKEN}".encode()).decode(), calls)
+
+    def test_local_activated_token_file_uses_native_git(self):
+        token_file = self.root / "activated-token"
+        token_file.write_text(TOKEN)
+        token_file.chmod(0o600)
+        del self.env["FORGEJO_TOKEN"]
+        self.env["FORGEJO_TOKEN_FILE"] = str(token_file)
+        result = self.run_publisher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls.read_text()
+        self.assertIn(f"--sha {HEAD} --context ci/dms-lock-build", calls)
+        self.assertNotIn("git remote set-url", calls)
+        self.assertNotIn(TOKEN, calls + result.stdout + result.stderr)
 
     def test_rejects_unverified_worktree_before_commit_or_push(self):
         for status in (

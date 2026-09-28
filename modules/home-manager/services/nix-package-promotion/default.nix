@@ -24,6 +24,24 @@
       exec ${../../../../scripts/ci/run-local-package-promotion.sh}
     '';
   };
+  dmsUpdater = pkgs.writeShellApplication {
+    name = "nix-dms-update";
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      curl
+      forge-mirror
+      git
+      gawk
+      jq
+      nix
+      python3
+      util-linux
+    ];
+    text = ''
+      exec ${../../../../scripts/ci/run-local-dms-update.sh}
+    '';
+  };
 in {
   options.services.nixPackagePromotion = {
     enable = lib.mkEnableOption "trusted local validation and promotion of a package input lock";
@@ -98,6 +116,25 @@ in {
       default = "30m";
       description = "Maximum randomized delay applied to the timer.";
     };
+
+    dms = {
+      enable = lib.mkEnableOption "trusted local DMS plugin lock updates";
+      calendar = lib.mkOption {
+        type = lib.types.str;
+        default = "daily";
+        description = "systemd OnCalendar expression for native DMS lock updates.";
+      };
+      randomizedDelaySec = lib.mkOption {
+        type = lib.types.str;
+        default = "30m";
+        description = "Maximum randomized delay applied to the DMS update timer.";
+      };
+      admissionUnit = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional system unit that must be active before a DMS update starts.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -142,6 +179,50 @@ in {
         RandomizedDelaySec = cfg.randomizedDelaySec;
         Persistent = true;
         Unit = "nix-package-promotion.service";
+      };
+      Install.WantedBy = ["timers.target"];
+    };
+
+    systemd.user.services.nix-dms-update = lib.mkIf cfg.dms.enable {
+      Unit = {
+        Description = "Refresh and build DMS plugins on the trusted local Nix store";
+        After = ["network-online.target"];
+        Wants = ["network-online.target"];
+      };
+      Service =
+        {
+          Type = "oneshot";
+          ExecStart = "${dmsUpdater}/bin/nix-dms-update";
+          TimeoutStartSec = "8h";
+          SuccessExitStatus = "75";
+          UMask = "0077";
+          Nice = 10;
+          IOSchedulingClass = "idle";
+          StandardOutput = "journal";
+          StandardError = "journal";
+          Environment = [
+            "HOME=${config.home.homeDirectory}"
+            "GIT_TERMINAL_PROMPT=0"
+            "CONFIG_REMOTE=${cfg.configRemote}"
+            "CONFIG_BRANCH=${cfg.configBranch}"
+            "FORGEJO_URL=${cfg.forgejo.url}"
+            "FORGEJO_OWNER=${cfg.forgejo.owner}"
+            "FORGEJO_REPO=${cfg.forgejo.repository}"
+            "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.apiTokenFile}"
+          ];
+        }
+        // lib.optionalAttrs (cfg.dms.admissionUnit != null) {
+          ExecCondition = "${pkgs.systemd}/bin/systemctl --system is-active --quiet ${lib.escapeShellArg cfg.dms.admissionUnit}";
+        };
+    };
+
+    systemd.user.timers.nix-dms-update = lib.mkIf cfg.dms.enable {
+      Unit.Description = "Schedule trusted local DMS plugin validation";
+      Timer = {
+        OnCalendar = cfg.dms.calendar;
+        RandomizedDelaySec = cfg.dms.randomizedDelaySec;
+        Persistent = false;
+        Unit = "nix-dms-update.service";
       };
       Install.WantedBy = ["timers.target"];
     };

@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${FORGEJO_TOKEN:?FORGEJO_TOKEN is required}"
+if [[ -n ${FORGEJO_TOKEN_FILE:-} ]]; then
+  if [[ ! -r $FORGEJO_TOKEN_FILE ]]; then
+    echo "FORGEJO_TOKEN_FILE is not readable" >&2
+    exit 2
+  fi
+elif [[ -z ${FORGEJO_TOKEN:-} ]]; then
+  echo "FORGEJO_TOKEN_FILE or FORGEJO_TOKEN is required" >&2
+  exit 2
+fi
 : "${FORGEJO_URL:?FORGEJO_URL is required}"
 : "${FORGEJO_OWNER:?FORGEJO_OWNER is required}"
 : "${FORGEJO_REPO:?FORGEJO_REPO is required}"
@@ -31,13 +39,16 @@ if [[ "$(git rev-parse HEAD)" != "$base_sha" ]]; then
   exit 1
 fi
 
-git remote set-url origin "${FORGEJO_URL}/${FORGEJO_OWNER}/${FORGEJO_REPO}.git"
-auth_header=$(printf '%s:%s' "$FORGEJO_OWNER" "$FORGEJO_TOKEN" | base64 -w0)
-export GIT_CONFIG_COUNT=2
-export GIT_CONFIG_KEY_0="http.${FORGEJO_URL}/.extraheader"
-export GIT_CONFIG_VALUE_0=
-export GIT_CONFIG_KEY_1="http.${FORGEJO_URL}/.extraheader"
-export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic ${auth_header}"
+if [[ -z ${FORGEJO_TOKEN_FILE:-} ]]; then
+  # Hosted compatibility: the local operator path uses its native Git helper.
+  git remote set-url origin "${FORGEJO_URL}/${FORGEJO_OWNER}/${FORGEJO_REPO}.git"
+  auth_header=$(printf '%s:%s' "$FORGEJO_OWNER" "$FORGEJO_TOKEN" | base64 -w0)
+  export GIT_CONFIG_COUNT=2
+  export GIT_CONFIG_KEY_0="http.${FORGEJO_URL}/.extraheader"
+  export GIT_CONFIG_VALUE_0=
+  export GIT_CONFIG_KEY_1="http.${FORGEJO_URL}/.extraheader"
+  export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic ${auth_header}"
+fi
 
 remote_ref=$(git ls-remote --heads origin "$UPDATE_BRANCH" | awk '{print $1}')
 head_sha=
@@ -52,8 +63,10 @@ if [[ -n "$remote_ref" ]]; then
 fi
 
 if [[ -z "$head_sha" ]]; then
-  git config user.name "forgejo-actions"
-  git config user.email "forgejo-actions@alc.xyz"
+  if [[ -z $(git config user.name) || -z $(git config user.email) ]]; then
+    echo "A configured Git author and committer identity is required." >&2
+    exit 1
+  fi
   git switch -C "$UPDATE_BRANCH"
   git add flake.lock
   git commit -m "chore(dms): update plugin lock to ${REVISION:0:12}" \
@@ -72,7 +85,14 @@ response=$(mktemp)
 curl_config=$(mktemp)
 chmod 600 "$curl_config"
 trap 'rm -f "$payload" "$response" "$curl_config"' EXIT
-python3 -c 'import json, os; print("header = " + json.dumps("Authorization: token " + os.environ["FORGEJO_TOKEN"]))' >"$curl_config"
+python3 - "${FORGEJO_TOKEN_FILE:-}" <<'PY' >"$curl_config"
+import json
+import os
+import sys
+
+token = open(sys.argv[1], encoding="utf-8").read().strip() if sys.argv[1] else os.environ["FORGEJO_TOKEN"]
+print("header = " + json.dumps("Authorization: token " + token))
+PY
 
 jq -n \
   --arg base "$BASE_BRANCH" \
@@ -119,7 +139,11 @@ fi
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 token_file=$(mktemp)
 chmod 600 "$token_file"
-printf '%s' "$FORGEJO_TOKEN" >"$token_file"
+if [[ -n ${FORGEJO_TOKEN_FILE:-} ]]; then
+  cp "$FORGEJO_TOKEN_FILE" "$token_file"
+else
+  printf '%s' "$FORGEJO_TOKEN" >"$token_file"
+fi
 trap 'rm -f "$payload" "$response" "$curl_config" "$token_file"' EXIT
 if ! python3 "${script_dir}/commit-status.py" require \
   --url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --repo "$FORGEJO_REPO" \
