@@ -253,6 +253,9 @@
     // lib.optionalAttrs (builtins.pathExists "${plugins.dankcalendar}/packaging.json") {
       revision = plugins.dankcalendar.rev or (plugins.dankcalendar.dirtyRev or null);
     });
+  dankdiskusagePkg = pkgs.callPackage "${plugins.diskusage}/default.nix" {
+    revision = plugins.diskusage.rev or (plugins.diskusage.dirtyRev or null);
+  };
   dankaiusagePkg = pkgs.callPackage "${plugins.aiusage}/default.nix" {
     version = (builtins.fromJSON (builtins.readFile "${plugins.aiusage}/plugin.json")).version;
     revision = plugins.aiusage.rev or (plugins.aiusage.dirtyRev or null);
@@ -649,6 +652,7 @@ in {
       ]
       ++ lib.optionals (!compact) [
         dankcalendarPkg
+        dankdiskusagePkg
         dankaiusagePkg
         pkgs.translate-shell
       ];
@@ -731,7 +735,7 @@ in {
         };
         DankDiskUsage = {
           enable = !compact;
-          src = packagedPluginSource plugins.diskusage;
+          src = dankdiskusagePkg + "/share/dms-plugins/DankDiskUsage";
         };
         DankAIUsage = {
           enable = !compact;
