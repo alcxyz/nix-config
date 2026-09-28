@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ ${1:-} == --pack-context ]]; then
+  [[ $# == 3 ]] || exit 2
+  tar --zstd --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+    --hard-dereference -cf "$3" -C "$2" context manifest.json
+  exit
+fi
+
 for variable in CONFIG_REMOTE CONFIG_BRANCH FORGEJO_URL FORGEJO_OWNER FORGEJO_REPO \
   FORGEJO_API_TOKEN_FILE DOCKER_CONFIG_FILE WOLF_CONTEXT_STATE_DIRECTORY; do
   [[ -n ${!variable:-} ]] || {
@@ -89,8 +96,8 @@ if [[ $state == missing ]]; then
     jq --arg name "$name" --arg channel "$CONFIG_BRANCH" --arg revision "$revision" \
       '{schemaVersion, channel: $channel, revision: $revision, products: [.products[] | select(.name == $name) | .context = "context"]}' \
       "$manifest" >"$work/stage/manifest.json"
-    tar --zstd --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
-      -cf "$work/archives/$name.tar.zst" -C "$work/stage" context manifest.json
+    bash "$checkout/scripts/ci/run-local-wolf-contexts.sh" --pack-context \
+      "$work/stage" "$work/archives/$name.tar.zst"
     chmod -R u+w -- "$work/stage"
     rm -rf -- "$work/stage"
     hash=$(sha256sum "$work/archives/$name.tar.zst" | cut -d' ' -f1)

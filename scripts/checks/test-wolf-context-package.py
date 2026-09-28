@@ -17,6 +17,7 @@ import unittest
 from unittest import mock
 
 SOURCE = Path(__file__).resolve().parents[1] / "ci/wolf-context-package.py"
+PRODUCER = SOURCE.with_name("run-local-wolf-contexts.sh")
 spec = importlib.util.spec_from_file_location("wolf_context_package", SOURCE)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -171,6 +172,43 @@ class HandoffTests(unittest.TestCase):
                 with self.assertRaises(module.SafeError):
                     module.extract(args)
             self.assertFalse((root / "outside").exists())
+
+    def test_producer_packs_hardlinked_files_as_regular_files(self):
+        if shutil.which("zstd") is None:
+            self.skipTest("zstd is unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stage = root / "stage"
+            context = stage / "context"
+            context.mkdir(parents=True)
+            (context / "first").write_bytes(b"shared payload\n")
+            os.link(context / "first", context / "second")
+            (stage / "manifest.json").write_text("{}\n")
+            linked = root / "linked.tar.zst"
+            subprocess.run(["tar", "--zstd", "-cf", str(linked), "-C", str(stage),
+                            "context", "manifest.json"], check=True)
+            args = self.args(root)
+            args.archive = str(linked)
+            args.directory = str(root / "rejected")
+            with self.assertRaisesRegex(module.SafeError, "link or special file"):
+                module.extract(args)
+
+            packed = root / "context.tar.zst"
+            subprocess.run(["bash", str(PRODUCER), "--pack-context", str(stage), str(packed)], check=True)
+
+            with subprocess.Popen(["zstd", "-dc", str(packed)], stdout=subprocess.PIPE) as process:
+                with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
+                    entries = {member.name: member.type for member in archive}
+                self.assertEqual(process.wait(), 0)
+            self.assertEqual(entries["context/first"], tarfile.REGTYPE)
+            self.assertEqual(entries["context/second"], tarfile.REGTYPE)
+
+            args = self.args(root)
+            args.archive = str(packed)
+            args.directory = str(root / "output")
+            module.extract(args)
+            self.assertEqual((root / "output/context/first").read_bytes(), b"shared payload\n")
+            self.assertEqual((root / "output/context/second").read_bytes(), b"shared payload\n")
 
 
 if __name__ == "__main__":
