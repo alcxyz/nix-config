@@ -42,6 +42,27 @@
       exec ${../../../../scripts/ci/run-local-dms-update.sh}
     '';
   };
+  wolfContexts = pkgs.writeShellApplication {
+    name = "nix-wolf-contexts";
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      fd
+      forge-mirror
+      git
+      gnutar
+      gawk
+      jq
+      nix
+      python3
+      ripgrep
+      util-linux
+      zstd
+    ];
+    text = ''
+      exec ${../../../../scripts/ci/run-local-wolf-contexts.sh}
+    '';
+  };
 in {
   options.services.nixPackagePromotion = {
     enable = lib.mkEnableOption "trusted local validation and promotion of a package input lock";
@@ -135,6 +156,30 @@ in {
         description = "Optional system unit that must be active before a DMS update starts.";
       };
     };
+
+    wolf = {
+      enable = lib.mkEnableOption "trusted native Wolf image context publication";
+      calendar = lib.mkOption {
+        type = lib.types.str;
+        default = "*:0/15";
+        description = "Schedule for preparing committed Wolf image contexts.";
+      };
+      admissionUnit = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = cfg.dms.admissionUnit;
+        description = "Optional system unit that must be active before a native Wolf build starts.";
+      };
+      dockerConfigFile = lib.mkOption {
+        type = lib.types.str;
+        default = "${config.home.homeDirectory}/.docker/config.json";
+        description = "Docker client configuration used internally for package transport.";
+      };
+      stateDirectory = lib.mkOption {
+        type = lib.types.str;
+        default = "${config.home.homeDirectory}/.local/state/wolf-contexts";
+        description = "Directory retaining only each channel's latest successful Nix output root.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -223,6 +268,52 @@ in {
         RandomizedDelaySec = cfg.dms.randomizedDelaySec;
         Persistent = false;
         Unit = "nix-dms-update.service";
+      };
+      Install.WantedBy = ["timers.target"];
+    };
+
+    systemd.user.services.nix-wolf-contexts = lib.mkIf cfg.wolf.enable {
+      Unit = {
+        Description = "Prepare committed Wolf image contexts on the native Nix store";
+        After = ["network-online.target"];
+        Wants = ["network-online.target"];
+      };
+      Service =
+        {
+          Type = "oneshot";
+          ExecStart = "${wolfContexts}/bin/nix-wolf-contexts";
+          TimeoutStartSec = "8h";
+          SuccessExitStatus = "75";
+          UMask = "0077";
+          Nice = 10;
+          IOSchedulingClass = "idle";
+          StandardOutput = "journal";
+          StandardError = "journal";
+          Environment = [
+            "HOME=${config.home.homeDirectory}"
+            "GIT_TERMINAL_PROMPT=0"
+            "CONFIG_REMOTE=${cfg.configRemote}"
+            "CONFIG_BRANCH=${cfg.configBranch}"
+            "FORGEJO_URL=${cfg.forgejo.url}"
+            "FORGEJO_OWNER=${cfg.forgejo.owner}"
+            "FORGEJO_REPO=${cfg.forgejo.repository}"
+            "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.apiTokenFile}"
+            "DOCKER_CONFIG_FILE=${cfg.wolf.dockerConfigFile}"
+            "WOLF_CONTEXT_STATE_DIRECTORY=${cfg.wolf.stateDirectory}"
+          ];
+        }
+        // lib.optionalAttrs (cfg.wolf.admissionUnit != null) {
+          ExecCondition = "${pkgs.systemd}/bin/systemctl --system is-active --quiet ${lib.escapeShellArg cfg.wolf.admissionUnit}";
+        };
+    };
+
+    systemd.user.timers.nix-wolf-contexts = lib.mkIf cfg.wolf.enable {
+      Unit.Description = "Schedule trusted native Wolf image context preparation";
+      Timer = {
+        OnCalendar = cfg.wolf.calendar;
+        RandomizedDelaySec = "2m";
+        Persistent = false;
+        Unit = "nix-wolf-contexts.service";
       };
       Install.WantedBy = ["timers.target"];
     };

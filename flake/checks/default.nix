@@ -330,6 +330,10 @@ in {
     bash scripts/checks/test-publish-wolf-images.sh
   '';
 
+  wolf-image-context-handoff-contract = mkRepoCheck "wolf-image-context-handoff-contract" [pkgs.python3 pkgs.zstd] ''
+    python3 scripts/checks/test-wolf-context-package.py
+  '';
+
   xyz-runtime-storage-policy-contract = mkRepoCheck "xyz-runtime-storage-policy-contract" [pkgs.bash pkgs.coreutils pkgs.ripgrep pkgs.gnused] ''
     bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
   '';

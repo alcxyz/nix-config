@@ -115,3 +115,27 @@ and generic qualification checks remain here.
 
 Track implementation in the [Podman adoption milestone](https://git.alc.xyz/alcxyz/nix-config/milestone/323)
 and issues #433–#439.
+
+## Wolf image build placement — 2026-09-28
+
+The Wolf image publisher keeps its qualified Podman runner and Buildx path.
+The Nix derivations that assemble its four deployed build contexts run instead
+on the trusted `xyz` operator's persistent Nix store. A local timer fetches the
+committed development head, uses the same native build lock and admission
+condition as other local promotion work, and skips commits that did not change
+Wolf image inputs. It does not process pull request code.
+
+The producer uploads one archive per product to an exact-commit version of a
+channel-specific Forgejo generic package. It uploads a checksum and revision
+receipt last, then dispatches the existing publisher at that source commit.
+Each publisher job downloads only its own archive, checks the receipt, and
+requires the checkout to match the dispatched commit in the trusted branch's
+history. Registry publication and deployed runtime references stay unchanged.
+The initial local producer is enabled only for `dev`; `main` can use the same
+workflow after normal branch promotion.
+
+The producer retains one local Nix GC root per channel. Package cleanup keeps
+the newest two versions and versions younger than 24 hours; it removes only
+older versions in its own channel namespace. Failed partial versions can be
+resumed by matching file checksums and age out under the same policy. No CI
+runner receives host store access or a host daemon mount.

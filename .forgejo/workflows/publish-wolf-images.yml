@@ -2,17 +2,6 @@ name: Publish Wolf images
 run-name: "Wolf image build (${{ forgejo.event_name }})"
 
 on:
-  push:
-    branches: [dev, main]
-    paths:
-      - ".forgejo/workflows/publish-wolf-images.yml"
-      - "flake.lock"
-      - "flake/per-system.nix"
-      - "modules/nixos/services/wolf-streaming/browser-image/**"
-      - "modules/nixos/services/wolf-streaming/image-products.nix"
-      - "modules/nixos/services/wolf-streaming/images.nix"
-      - "modules/nixos/services/wolf-streaming/wolf-image/**"
-      - "scripts/ci/publish-wolf-images.sh"
   workflow_dispatch:
     inputs:
       publish:
@@ -28,10 +17,14 @@ on:
         options:
           - dev
           - main
+      source_sha:
+        description: Full committed revision of the prepared contexts
+        required: true
+        type: string
 
 jobs:
   build:
-    name: Build exact Nix-owned contexts
+    name: Publish exact Nix-owned contexts
     runs-on: forgejo-podman-canary
     container:
       image: docker.io/library/node:20-bookworm
@@ -42,13 +35,9 @@ jobs:
       matrix:
         include:
           - product: wolf
-            package: wolf-image-product
           - product: helium
-            package: wolf-helium-image-product
           - product: brave
-            package: wolf-brave-image-product
           - product: zen
-            package: wolf-zen-image-product
     steps:
       - name: Prepare action copy paths
         run: |
@@ -73,29 +62,35 @@ jobs:
       - name: Select and validate the release channel
         env:
           DISPATCH_CHANNEL: ${{ inputs.channel }}
-          PUBLISH: ${{ forgejo.event_name == 'push' || github.event.inputs.publish == 'true' }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = push ] || [ "$PUBLISH" = true ]; then
-            case "$GITHUB_REF_NAME" in
-              dev | main) channel="$GITHUB_REF_NAME" ;;
-              *)
-                echo 'Publishing Wolf images is restricted to dev and main.' >&2
-                exit 1
-                ;;
-            esac
-          else
-            channel="$DISPATCH_CHANNEL"
-          fi
-          case "$channel" in
+          case "$DISPATCH_CHANNEL" in
             dev | main) ;;
             *) exit 1 ;;
           esac
-          printf 'WOLF_CHANNEL=%s\n' "$channel" >>"$GITHUB_ENV"
+          case "$SOURCE_SHA" in
+            *[!0-9a-f]* | "") exit 1 ;;
+          esac
+          [ "${#SOURCE_SHA}" -eq 40 ] || exit 1
+          [ "$(git rev-parse HEAD)" = "$SOURCE_SHA" ] || {
+            echo 'Checkout is not the prepared Wolf source revision.' >&2
+            exit 1
+          }
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --quiet --no-tags --unshallow origin "refs/heads/$DISPATCH_CHANNEL"
+          else
+            git fetch --quiet --no-tags origin "refs/heads/$DISPATCH_CHANNEL"
+          fi
+          git merge-base --is-ancestor "$SOURCE_SHA" FETCH_HEAD || {
+            echo 'Prepared Wolf source is not in the trusted channel.' >&2
+            exit 1
+          }
+          printf 'WOLF_CHANNEL=%s\n' "$DISPATCH_CHANNEL" >>"$GITHUB_ENV"
 
       - name: Install build prerequisites
         run: |
           apt-get update
-          apt-get install -y curl docker.io git jq python3 sudo udev
+          apt-get install -y curl docker.io git jq python3 sudo udev zstd
           install -d /usr/local/lib/docker/cli-plugins
           curl --fail --location --silent --show-error \
             https://github.com/docker/buildx/releases/download/v0.20.1/buildx-v0.20.1.linux-amd64 \
@@ -106,23 +101,34 @@ jobs:
           chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
           docker buildx version
 
-      - uses: https://github.com/cachix/install-nix-action@v30
-        with:
-          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Build the deployed image contexts
+      - name: Download the exact native image context
         env:
-          CI_SOURCE_READ_TOKEN: ${{ secrets.CI_SOURCE_READ_TOKEN }}
-          CI_SOURCE_READ_USER: ${{ secrets.CI_SOURCE_READ_USER }}
+          WOLF_REGISTRY_TOKEN: ${{ secrets.WOLF_REGISTRY_TOKEN }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          bash scripts/ci/with-source-access.sh \
-            nix build --no-update-lock-file --out-link wolf-image-product \
-            .#${{ matrix.package }}
+          set -euo pipefail
+          python3 scripts/ci/wolf-context-package.py download \
+            --url https://git.alc.xyz --owner alcxyz \
+            --channel "$WOLF_CHANNEL" --sha "$SOURCE_SHA" \
+            --user alcxyz --token-env WOLF_REGISTRY_TOKEN \
+            --product '${{ matrix.product }}' --output wolf-context.tar.zst
+          mkdir wolf-image-product
+          python3 scripts/ci/wolf-context-package.py extract \
+            --url https://git.alc.xyz --owner alcxyz \
+            --channel "$WOLF_CHANNEL" --sha "$SOURCE_SHA" \
+            --archive wolf-context.tar.zst --directory wolf-image-product
+          jq -e --arg name '${{ matrix.product }}' --arg sha "$SOURCE_SHA" \
+            --arg channel "$WOLF_CHANNEL" \
+            '.schemaVersion == 1 and .revision == $sha and .channel == $channel and
+             (.products | length) == 1 and
+             .products[0].name == $name and .products[0].context == "context"' \
+            wolf-image-product/manifest.json >/dev/null
+          test -d wolf-image-product/context
+          jq '.products[].context = "wolf-image-product/context"' \
+            wolf-image-product/manifest.json > wolf-image-product/publish-manifest.json
 
       - name: Log in to the Forgejo registry
-        if: forgejo.event_name == 'push' || github.event.inputs.publish == 'true'
+        if: github.event.inputs.publish == 'true'
         env:
           WOLF_REGISTRY_TOKEN: ${{ secrets.WOLF_REGISTRY_TOKEN }}
         run: |
@@ -132,7 +138,7 @@ jobs:
 
       - name: Build and optionally publish images
         env:
-          PUBLISH: ${{ forgejo.event_name == 'push' || github.event.inputs.publish == 'true' }}
+          PUBLISH: ${{ github.event.inputs.publish == 'true' }}
         run: |
           set -euo pipefail
           builder="wolf-${{ matrix.product }}-${{ forgejo.run_id }}-${{ forgejo.run_attempt }}"
@@ -150,7 +156,7 @@ jobs:
           fi
           scripts/ci/publish-wolf-images.sh \
             "${publish_flag[@]}" \
-            wolf-image-product/manifest.json \
+            wolf-image-product/publish-manifest.json \
             "$WOLF_CHANNEL" \
             "$GITHUB_SHA" \
             "published-wolf-${{ matrix.product }}.json"

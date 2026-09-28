@@ -40,6 +40,7 @@ python3 scripts/checks/test-publish-dms-plugins-lock.py
 python3 scripts/checks/test-merge-dms-plugins-lock.py
 python3 scripts/checks/test-development-ci.py
 python3 scripts/checks/test-local-package-promotion.py
+python3 scripts/checks/test-wolf-context-package.py
 python3 scripts/checks/check-moonlight-shell-templates.py
 python3 scripts/checks/check-wolf-shell-templates.py
 bash scripts/checks/test-publish-wolf-images.sh

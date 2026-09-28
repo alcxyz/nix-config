@@ -71,6 +71,7 @@ in {
 
   services.nixPackagePromotion.dms.enable = true;
   services.nixPackagePromotion.dms.admissionUnit = "forgejo-podman-runner.service";
+  services.nixPackagePromotion.wolf.enable = true;
 
   home.packages =
     pkgsets.home.${hostRole.homePackageSet}
