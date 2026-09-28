@@ -145,6 +145,7 @@
 
   services.forgejo-actions-runner = {
     enable = true;
+    package = pkgs.callPackage "${inputs.forgejo-runner-fixes}/pkgs/forgejo-runner-cancellation" {};
     ioPressureGuard = {
       enable = true;
       highPercent = 20;

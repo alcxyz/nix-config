@@ -70,6 +70,7 @@
 
   services.forgejo-actions-runner = {
     enable = true;
+    package = pkgs.callPackage "${inputs.forgejo-runner-fixes}/pkgs/forgejo-runner-cancellation" {};
     ioPressureGuard.enable = true;
     ioPressureGuard.admissionControl.enable = true;
     isolatedDocker.enable = true;
