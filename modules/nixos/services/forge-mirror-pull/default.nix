@@ -57,6 +57,17 @@ in {
         description = "Private sops file containing forge mirror credentials.";
       };
 
+      forgejoSopsFile = lib.mkOption {
+        type = lib.types.nullOr (
+          lib.types.oneOf [
+            lib.types.path
+            lib.types.str
+          ]
+        );
+        default = null;
+        description = "Optional private sops file for the Forgejo token; defaults to credentials.sopsFile.";
+      };
+
       forgejoKey = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -94,7 +105,10 @@ in {
     ];
 
     sops.secrets.forge_mirror_forgejo_token = {
-      sopsFile = cfg.credentials.sopsFile;
+      sopsFile =
+        if cfg.credentials.forgejoSopsFile != null
+        then cfg.credentials.forgejoSopsFile
+        else cfg.credentials.sopsFile;
       key = cfg.credentials.forgejoKey;
       owner = cfg.user;
       mode = "0400";

@@ -59,6 +59,15 @@
     githubDeniedRepositories = ["blocked"];
     requiredPrivateRepositories = ["internal"];
   };
+  auditSeparateForgejoFile = evaluateAudit {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    githubUser = "github-account";
+    githubPrimaryRepositories = [];
+    githubDeniedRepositories = [];
+    requiredPrivateRepositories = [];
+    credentials = credentials // {forgejoSopsFile = "/credentials/forgejo.yaml";};
+  };
   auditEmptyPolicies = evaluateAudit {
     forgejoUrl = "https://forge.example";
     forgejoUser = "forgejo-account";
@@ -109,6 +118,11 @@
     forgejoUrl = "https://forge.example";
     forgejoUser = "forgejo-account";
   };
+  pullSeparateForgejoFile = evaluatePull {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    credentials = credentials // {forgejoSopsFile = "/credentials/forgejo.yaml";};
+  };
   pullEmptyScalar = evaluatePull {
     forgejoUrl = "https://forge.example";
     forgejoUser = "";
@@ -130,6 +144,9 @@
   };
 in
   assert assertionsPass auditPopulated;
+  assert auditPopulated.config.sops.secrets.forge_mirror_forgejo_token.sopsFile == credentials.sopsFile;
+  assert auditSeparateForgejoFile.config.sops.secrets.forge_mirror_forgejo_token.sopsFile == "/credentials/forgejo.yaml";
+  assert auditSeparateForgejoFile.config.sops.secrets.forge_mirror_github_token.sopsFile == credentials.sopsFile;
   assert lib.hasInfix "export FORGEJO_USER=forgejo-account" (auditExec auditPopulated);
   assert lib.hasInfix "export GITHUB_USER=github-account" (auditExec auditPopulated);
   assert lib.hasInfix "https://forge.example" (auditExec auditPopulated);
@@ -162,6 +179,9 @@ in
   assert !(auditLegacyCredential.config.sops.secrets ? forge_mirror_codeberg_token);
   assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (auditExec auditLegacyCredential));
   assert assertionsPass pullPopulated;
+  assert pullPopulated.config.sops.secrets.forge_mirror_forgejo_token.sopsFile == credentials.sopsFile;
+  assert pullSeparateForgejoFile.config.sops.secrets.forge_mirror_forgejo_token.sopsFile == "/credentials/forgejo.yaml";
+  assert pullSeparateForgejoFile.config.sops.secrets.forge_mirror_github_token.sopsFile == credentials.sopsFile;
   assert lib.hasInfix "export FORGEJO_USER=forgejo-account" (pullExec pullPopulated);
   assert lib.hasInfix "https://forge.example" (pullExec pullPopulated);
   assert lib.hasInfix "GITHUB_MIRROR_PAT_FILE=\"/credentials/github\"" (pullExec pullPopulated);
