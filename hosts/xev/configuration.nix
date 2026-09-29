@@ -16,6 +16,8 @@
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     inputs.nix-secrets.nixosModules.k8sApiVipPolicy
     inputs.nix-secrets.nixosModules.openbaoClusterPolicy
+    "${configDir}/modules/nixos/services/rustfs-native/default.nix"
+    inputs.nix-secrets.nixosModules.rustfsApplicationPolicy
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
@@ -31,6 +33,7 @@
   ];
 
   alc.private.openbaoClusterPolicy.enable = true;
+  alc.private.rustfsApplication.enable = true;
 
   boot.initrd.systemd.enable = true;
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
