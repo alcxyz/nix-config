@@ -3,16 +3,13 @@
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.services.rustfs-native;
   dataDir = toString cfg.dataDir;
-  endpointHost =
-    endpoint:
+  endpointHost = endpoint:
     lib.hasInfix "://${cfg.localEndpointHost}:" endpoint
     || lib.hasInfix "://${cfg.localEndpointHost}/" endpoint;
-in
-{
+in {
   options.services.rustfs-native = {
     enable = lib.mkEnableOption "native distributed RustFS object storage";
 
@@ -99,7 +96,7 @@ in
     };
 
     startupTopologyWaitMode = lib.mkOption {
-      type = lib.types.nullOr (lib.types.enum [ "orchestrated" ]);
+      type = lib.types.nullOr (lib.types.enum ["orchestrated"]);
       default = null;
       description = "Optional RustFS startup mode for orchestrated peer discovery.";
     };
@@ -137,9 +134,11 @@ in
         message = "services.rustfs-native.localEndpointHost must identify a member of endpoints.";
       }
       {
-        assertion = lib.all (
-          endpoint: builtins.match "https?://[^[:space:]]+" endpoint != null
-        ) cfg.endpoints;
+        assertion =
+          lib.all (
+            endpoint: builtins.match "https?://[^[:space:]]+" endpoint != null
+          )
+          cfg.endpoints;
         message = "services.rustfs-native.endpoints must be HTTP(S) volume URLs without whitespace.";
       }
       {
@@ -165,10 +164,10 @@ in
 
     systemd.services.rustfs-native = {
       description = "Native distributed RustFS object storage";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
-      unitConfig.RequiresMountsFor = [ dataDir ] ++ lib.optional (cfg.mountPoint != null) cfg.mountPoint;
+      wantedBy = ["multi-user.target"];
+      after = ["network-online.target"];
+      wants = ["network-online.target"];
+      unitConfig.RequiresMountsFor = [dataDir] ++ lib.optional (cfg.mountPoint != null) cfg.mountPoint;
       serviceConfig = {
         Type = "exec";
         User = cfg.user;
@@ -197,14 +196,15 @@ in
             (lib.escapeShellArg "--console-address=${cfg.console.address}")
           ]
         );
-        Environment = [
-          "RUSTFS_VOLUMES=${lib.concatStringsSep " " cfg.endpoints}"
-          "RUSTFS_LOCAL_ENDPOINT_HOST=${cfg.localEndpointHost}"
-          "RUSTFS_CONSOLE_ENABLE=${lib.boolToString cfg.console.enable}"
-        ]
-        ++ lib.optional (
-          cfg.startupTopologyWaitMode != null
-        ) "RUSTFS_STARTUP_TOPOLOGY_WAIT_MODE=${cfg.startupTopologyWaitMode}";
+        Environment =
+          [
+            "RUSTFS_VOLUMES=${lib.concatStringsSep " " cfg.endpoints}"
+            "RUSTFS_LOCAL_ENDPOINT_HOST=${cfg.localEndpointHost}"
+            "RUSTFS_CONSOLE_ENABLE=${lib.boolToString cfg.console.enable}"
+          ]
+          ++ lib.optional (
+            cfg.startupTopologyWaitMode != null
+          ) "RUSTFS_STARTUP_TOPOLOGY_WAIT_MODE=${cfg.startupTopologyWaitMode}";
         Restart = "on-failure";
         RestartSec = "5s";
         TimeoutStopSec = "120s";
@@ -216,7 +216,7 @@ in
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = true;
-        ReadWritePaths = [ "-${dataDir}" ];
+        ReadWritePaths = ["-${dataDir}"];
       };
     };
   };
