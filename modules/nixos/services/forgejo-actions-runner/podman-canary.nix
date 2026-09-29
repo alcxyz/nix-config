@@ -19,6 +19,20 @@
   runnerState = "/var/lib/forgejo-podman-runner";
   runnerRuntime = "/run/forgejo-podman-runner";
   envFile = "${runnerRuntime}/job.env";
+  diskSpaceEnvironment = {
+    DISK_HELPER_FILE = "${./disk-space-admission.sh}";
+    DISK_SPACE_ENABLED =
+      if cfg.ioPressureGuard.diskSpace.enable
+      then "1"
+      else "0";
+    DISK_SPACE_PATH = cfg.ioPressureGuard.diskSpace.path;
+    DISK_DRAIN_BYTES = toString (cfg.ioPressureGuard.diskSpace.drainFreeGiB * 1024 * 1024 * 1024);
+    DISK_DRAIN_PERCENT = toString cfg.ioPressureGuard.diskSpace.drainFreePercent;
+    DISK_CRITICAL_BYTES = toString (cfg.ioPressureGuard.diskSpace.criticalFreeGiB * 1024 * 1024 * 1024);
+    DISK_CRITICAL_PERCENT = toString cfg.ioPressureGuard.diskSpace.criticalFreePercent;
+    DISK_RECOVERY_BYTES = toString (cfg.ioPressureGuard.diskSpace.recoveryFreeGiB * 1024 * 1024 * 1024);
+    DISK_RECOVERY_PERCENT = toString cfg.ioPressureGuard.diskSpace.recoveryFreePercent;
+  };
   settingsFormat = pkgs.formats.yaml {};
   labelName = label: builtins.head (lib.splitString ":" label);
   runnerConfig = settingsFormat.generate "forgejo-podman-runner.yaml" {
@@ -340,27 +354,32 @@ in {
       ];
       restartIfChanged = false;
       path = [canary.package] ++ canary.extraPackages;
-      environment = {
-        HOME = runnerState;
-        DOCKER_HOST = "unix://${socketPath}";
-        RUNNER_UNIT = runnerUnit;
-        RUNNER_UNITS = "forgejo-actions-runner.service ${runnerUnit}";
-        GAME_HELPER_FILE = "${./game-admission.sh}";
-        GAME_ADMISSION_ENABLED =
-          if cfg.ioPressureGuard.admissionControl.gameProcess.enable
-          then "1"
-          else "0";
-        GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
-        GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
-        GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
-      };
+      environment =
+        diskSpaceEnvironment
+        // {
+          HOME = runnerState;
+          DOCKER_HOST = "unix://${socketPath}";
+          RUNNER_UNIT = runnerUnit;
+          RUNNER_UNITS = "forgejo-actions-runner.service ${runnerUnit}";
+          GAME_HELPER_FILE = "${./game-admission.sh}";
+          GAME_ADMISSION_ENABLED =
+            if cfg.ioPressureGuard.admissionControl.gameProcess.enable
+            then "1"
+            else "0";
+          GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
+          GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
+          GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
+        };
       serviceConfig = {
         User = "forgejo-podman-runner";
         Group = "forgejo-podman";
         WorkingDirectory = runnerState;
         RuntimeDirectory = "forgejo-podman-runner";
         RuntimeDirectoryMode = "0750";
-        Restart = "no";
+        # Retry transient runner process failures only. ExecCondition still
+        # gates each start on drain ownership, game admission and guard health.
+        Restart = "on-failure";
+        RestartSec = "30s";
         TimeoutStartSec = "90s";
         TimeoutStopSec = "3660s";
         KillMode = "mixed";

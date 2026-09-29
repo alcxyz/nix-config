@@ -32,7 +32,8 @@ class GuardTests(unittest.TestCase):
                   teardown_required=False, show_fail_count='0', second_runner=None,
                   second_marker='', runner_units=None, persisted_units=None,
                   unknown_state=False, game_states=None, game_times=None,
-                  game_start_skipped=False):
+                  game_start_skipped=False, disk_start_skipped=False,
+                  disk_values=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -50,6 +51,8 @@ class GuardTests(unittest.TestCase):
                 (state / 'resume-pending').touch()
             if game_start_skipped:
                 (state / 'game-start-skipped').touch()
+            if disk_start_skipped:
+                (state / 'disk-start-skipped').touch()
             if teardown_required:
                 (state / 'teardown-required').touch()
             if persisted_units is not None:
@@ -75,6 +78,8 @@ class GuardTests(unittest.TestCase):
             (root / 'runner-result').write_text(runner_result)
             (root / 'runner-generation').write_text(runner_generation)
             (root / 'pressure').write_text('\n'.join(map(str, values)) + '\n')
+            if disk_values is not None:
+                (root / 'disk-space').write_text('\n'.join(disk_values) + '\n')
             (root / 'game-states').write_text('\n'.join(game_states or []) + '\n')
             (root / 'game-times').write_text('\n'.join(map(str, game_times or [])) + '\n')
             (root / 'proc' / '123').mkdir(parents=True)
@@ -191,6 +196,13 @@ esac
                             'GAME_PROC_ROOT': str(root / 'proc'),
                             'PGREP_BIN': str(pgrep), 'GAME_UPTIME_FILE': str(root / 'uptime'),
                             'GAME_COOLDOWN_SECONDS': '30'})
+            if disk_values is not None:
+                env.update({'DISK_HELPER_FILE': str(GUARD.with_name('disk-space-admission.sh')),
+                            'DISK_SPACE_ENABLED': '1',
+                            'DISK_SPACE_VALUES_FILE': str(root / 'disk-space'),
+                            'DISK_DRAIN_BYTES': '30', 'DISK_DRAIN_PERCENT': '15',
+                            'DISK_CRITICAL_BYTES': '15', 'DISK_CRITICAL_PERCENT': '8',
+                            'DISK_RECOVERY_BYTES': '40', 'DISK_RECOVERY_PERCENT': '20'})
             result = subprocess.run(['bash', str(GUARD)], env=env, capture_output=True)
             self.events = result.stdout.decode().splitlines()
             self.guard_stderr = result.stderr.decode()
@@ -210,10 +222,43 @@ esac
             self.resume_pending = (state / 'resume-pending').exists()
             self.drain_disowned = (state / 'drain-disowned').exists()
             self.game_start_skipped = (state / 'game-start-skipped').exists()
+            self.disk_start_skipped = (state / 'disk-start-skipped').exists()
             return result.returncode, actions, (state / 'owned').exists(), (state / 'pending').exists()
 
     def test_hysteresis_freezes_and_thaws_aggregate(self):
         self.assertEqual(self.run_guard([2500, 2500, 1000, 0, 0]), (0, ['freeze', 'thaw'], False, False))
+
+    def test_disk_floor_drains_both_runners_then_freezes_active_workers(self):
+        self.assertEqual(self.run_guard(
+            [0] * 5, admission=True, disk_values=['100 25', '100 25',
+                                                  '100 10', '100 40', '100 40'],
+            second_runner={}, runner_units=[PRIMARY, SECOND]),
+            (0, ['freeze', 'thaw'], False, False))
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'stop:{SECOND}',
+                          f'start:{PRIMARY}', f'start:{SECOND}'])
+
+    def test_disk_recovery_requires_consecutive_headroom_samples(self):
+        self.assertEqual(self.run_guard(
+            [0] * 6, admission=True,
+            disk_values=['100 10', '100 40', '100 35',
+                         '100 40', '100 40', '100 40']),
+            (0, ['freeze', 'thaw'], False, False))
+        self.assertEqual(self.runner_actions, ['stop', 'start'])
+
+    def test_unreadable_disk_sample_fails_closed(self):
+        self.assertEqual(self.run_guard([0], admission=True,
+                                        disk_values=['invalid']),
+                         (1, ['freeze'], True, False))
+
+    def test_disk_start_skip_resumes_only_after_recovery_streak(self):
+        self.assertEqual(self.run_guard([0, 0, 0], admission=True,
+                                        runner_state='inactive', runner_generation='0',
+                                        disk_start_skipped=True,
+                                        disk_values=['100 35', '100 40', '100 40']),
+                         (0, [], False, False))
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertFalse(self.disk_start_skipped)
 
     def test_transition_events_are_ordered_and_include_duration(self):
         self.run_guard([2500, 2500, 1000, 0, 0])
@@ -652,7 +697,7 @@ class StartGateTests(unittest.TestCase):
                  game_state=None, game_last_seen=None, game_now=100,
                  game_argv0='/games/HeroesOfTheStorm_x64.exe',
                  game_exe='wine64-preloader', missing_cmdline=False,
-                 zombie=False, game_bypass=None):
+                 zombie=False, game_bypass=None, disk_value=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -709,6 +754,14 @@ exit 2
                    'GUARD_ACTIVE': '1' if guard else '0',
                    'RUNNER_UNIT': runner_unit,
                    'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY])}
+            if disk_value is not None:
+                (root / 'disk-space').write_text(disk_value + '\n')
+                env.update({'DISK_HELPER_FILE': str(GATE.with_name('disk-space-admission.sh')),
+                            'DISK_SPACE_ENABLED': '1',
+                            'DISK_SPACE_VALUES_FILE': str(root / 'disk-space'),
+                            'DISK_DRAIN_BYTES': '30', 'DISK_DRAIN_PERCENT': '15',
+                            'DISK_CRITICAL_BYTES': '15', 'DISK_CRITICAL_PERCENT': '8',
+                            'DISK_RECOVERY_BYTES': '40', 'DISK_RECOVERY_PERCENT': '20'})
             if game_state is not None:
                 env.update({'GAME_ADMISSION_ENABLED': '1', 'GAME_USER': 'alc',
                             'GAME_ARGV0_BASENAMES': 'HeroesOfTheStorm_x64.exe',
@@ -729,10 +782,29 @@ exit 2
                                     capture_output=True, timeout=6)
             candidate_state = state if runner_unit == PRIMARY else state / 'runners' / SECOND
             self.game_start_skipped = (candidate_state / 'game-start-skipped').exists()
+            self.disk_start_skipped = (candidate_state / 'disk-start-skipped').exists()
             return result.returncode, bool(marker and (state / marker).exists())
 
     def test_clear_healthy_start_is_admitted(self):
         self.assertEqual(self.run_gate(), (0, False))
+
+    def test_disk_gate_blocks_both_runners_until_recovery(self):
+        for unit in (PRIMARY, SECOND):
+            units = [PRIMARY, SECOND]
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units,
+                                           disk_value='100 25'), (1, False))
+            self.assertTrue(self.disk_start_skipped)
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units,
+                                           disk_value='100 35'), (1, False))
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units,
+                                           disk_value='100 40'), (0, False))
+
+    def test_disk_gate_fails_closed_on_invalid_sample(self):
+        self.assertEqual(self.run_gate(disk_value='invalid'), (1, False))
+        self.assertTrue(self.disk_start_skipped)
 
     def test_game_blocks_first_start_for_both_runners(self):
         self.assertEqual(self.run_gate(game_state='present'), (1, False))
