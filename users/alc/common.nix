@@ -140,7 +140,8 @@ in
     # PAW workspaces are reached as Git remotes through the ext:: transport
     # (paw workspace repository remote), which Git disables unless allowed.
     programs.git.settings.protocol.ext.allow = "user";
-    programs.workspace.enable = hostRole.sourceWorkspace or true;
+    # Only roles used for development opt in; servers are managed remotely.
+    programs.workspace.enable = hostRole.sourceWorkspace or false;
 
     # Forgejo credential helper — moved to linux/common.nix and darwin/mac.nix
     # where the sops secret path is available for inline injection.

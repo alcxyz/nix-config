@@ -4,27 +4,26 @@
       homePackageSet = "workstation";
       systemPackageSet = "workstation";
       workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+      sourceWorkspace = true;
     };
 
-    # Servers are managed from workstations and keep no source checkouts.
     nuc = {
       homePackageSet = "nuc";
       systemPackageSet = "server";
       workspaceProfiles = ["base" "infra-admin"];
-      sourceWorkspace = false;
     };
 
     k8s-worker = {
       homePackageSet = "server";
       systemPackageSet = "server";
       workspaceProfiles = ["base" "infra-admin"];
-      sourceWorkspace = false;
     };
 
     laptop-workstation = {
       homePackageSet = "workstation";
       systemPackageSet = "workstation";
       workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+      sourceWorkspace = true;
     };
 
     family-gaming = {
@@ -43,6 +42,7 @@
       homePackageSet = "mac";
       systemPackageSet = "mac";
       workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
+      sourceWorkspace = true;
     };
   };
 
