@@ -5,7 +5,7 @@ source_file=${1:?cleanup helper path required}
 fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/state/runners/forgejo-podman-runner.service"
-printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service > "$fixture/state/runner-units"
+printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service >"$fixture/state/runner-units"
 python3 - "$fixture/docker.sock" "$fixture/podman.sock" <<'PY'
 import socket
 import sys
@@ -14,7 +14,7 @@ for name in sys.argv[1:]:
     sock.bind(name)
     sock.close()
 PY
-cat > "$fixture/systemctl" <<'SH'
+cat >"$fixture/systemctl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $1 == is-active ]]; then
@@ -28,11 +28,11 @@ else
   exit 2
 fi
 SH
-cat > "$fixture/df" <<'SH'
+cat >"$fixture/df" <<'SH'
 #!/usr/bin/env bash
 printf 'Size Avail\n100 %s\n' "${MOCK_AVAILABLE:-20}"
 SH
-cat > "$fixture/curl" <<'SH'
+cat >"$fixture/curl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 args="$*"
@@ -62,12 +62,12 @@ export DOCKER_SOCKET="$fixture/docker.sock" PODMAN_SOCKET="$fixture/podman.sock"
 export MOCK_CALLS="$fixture/calls" TRIGGER_USED_PERCENT=70
 run_cleanup() { bash "$source_file"; }
 expect_none() {
-  : > "$MOCK_CALLS"
+  : >"$MOCK_CALLS"
   run_cleanup >/dev/null 2>&1
   [[ ! -s $MOCK_CALLS ]]
 }
 
-: > "$MOCK_CALLS"
+: >"$MOCK_CALLS"
 run_cleanup
 [[ $(cat "$MOCK_CALLS") == $'containers\nimages' ]]
 MOCK_AVAILABLE=31 expect_none
@@ -80,7 +80,7 @@ MOCK_DOCKER_CONTAINERS='[{"State":"running"}]' expect_none
 MOCK_PODMAN_CONTAINERS='[{"State":"paused"}]' expect_none
 MOCK_PODMAN_CONTAINERS='not-json' expect_none
 MOCK_API_FAILURE=1 expect_none
-: > "$MOCK_CALLS"
+: >"$MOCK_CALLS"
 MOCK_RUNNING_AFTER_PRUNE=1 run_cleanup
 [[ $(cat "$MOCK_CALLS") == containers ]]
 for marker in owned pending teardown-required drain-pending resume-pending drain-disowned; do

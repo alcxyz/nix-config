@@ -49,3 +49,8 @@ bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.s
   modules/nixos/services/storage-health-monitor/record-success.sh \
   modules/nixos/services/storage-health-monitor/check-recent-success.sh \
   modules/nixos/services/storage-health-monitor/check-active-unit.sh
+
+python3 flake/checks/test-forgejo-runner-aggregate-pressure.py \
+  modules/nixos/services/forgejo-actions-runner/aggregate-pressure-guard.sh
+bash scripts/checks/check-idle-podman-cleanup.sh \
+  modules/nixos/services/forgejo-actions-runner/idle-podman-cleanup.sh
