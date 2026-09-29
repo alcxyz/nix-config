@@ -360,7 +360,10 @@ in {
         WorkingDirectory = runnerState;
         RuntimeDirectory = "forgejo-podman-runner";
         RuntimeDirectoryMode = "0750";
-        Restart = "no";
+        # Retry transient runner process failures only. ExecCondition still
+        # gates each start on drain ownership, game admission and guard health.
+        Restart = "on-failure";
+        RestartSec = "30s";
         TimeoutStartSec = "90s";
         TimeoutStopSec = "3660s";
         KillMode = "mixed";

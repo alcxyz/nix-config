@@ -65,6 +65,10 @@ in
   assert enabled.users.users.forgejo-podman-runner.home != enabled.users.users.forgejo-runner.home;
   assert api.serviceConfig.User == "forgejo-podman-builder";
   assert unit.serviceConfig.User == "forgejo-podman-runner";
+  assert api.serviceConfig.Restart == "no";
+  assert unit.serviceConfig.Restart == "on-failure";
+  assert unit.serviceConfig.RestartSec == "30s";
+  assert unit.restartIfChanged == false;
   assert api.serviceConfig.Slice == "forgejobuilds.slice";
   assert enabled.systemd.services.forgejo-runner-docker.serviceConfig.Slice == "forgejobuilds.slice";
   assert socket.socketConfig.ListenStream == "/run/forgejo-podman/podman.sock";
