@@ -8,6 +8,20 @@
   enabled = cfg.enable && cfg.isolatedDocker.enable;
   stateDir = "/var/lib/forgejo-docker";
   runtimeDir = "/run/forgejo-docker";
+  diskSpaceEnvironment = {
+    DISK_HELPER_FILE = "${./disk-space-admission.sh}";
+    DISK_SPACE_ENABLED =
+      if cfg.ioPressureGuard.diskSpace.enable
+      then "1"
+      else "0";
+    DISK_SPACE_PATH = cfg.ioPressureGuard.diskSpace.path;
+    DISK_DRAIN_BYTES = toString (cfg.ioPressureGuard.diskSpace.drainFreeGiB * 1024 * 1024 * 1024);
+    DISK_DRAIN_PERCENT = toString cfg.ioPressureGuard.diskSpace.drainFreePercent;
+    DISK_CRITICAL_BYTES = toString (cfg.ioPressureGuard.diskSpace.criticalFreeGiB * 1024 * 1024 * 1024);
+    DISK_CRITICAL_PERCENT = toString cfg.ioPressureGuard.diskSpace.criticalFreePercent;
+    DISK_RECOVERY_BYTES = toString (cfg.ioPressureGuard.diskSpace.recoveryFreeGiB * 1024 * 1024 * 1024);
+    DISK_RECOVERY_PERCENT = toString cfg.ioPressureGuard.diskSpace.recoveryFreePercent;
+  };
   daemonConfig = (pkgs.formats.json {}).generate "forgejo-docker.json" {
     hosts = ["unix://${runtimeDir}/docker.sock"];
     "data-root" = "${stateDir}/overlay2";
@@ -151,31 +165,33 @@ in {
       requires = ["forgejo-runner-resource-policy.service"];
       after = ["forgejo-runner-resource-policy.service"];
       restartIfChanged = false;
-      environment = {
-        RUNNER_UNITS =
-          "forgejo-actions-runner.service"
-          + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
-        ADMISSION_CONTROL_ENABLED =
-          if cfg.ioPressureGuard.admissionControl.enable
-          then "1"
-          else "0";
-        GAME_HELPER_FILE = "${./game-admission.sh}";
-        GAME_ADMISSION_ENABLED =
-          if cfg.ioPressureGuard.admissionControl.gameProcess.enable
-          then "1"
-          else "0";
-        GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
-        GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
-        GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
-        HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
-        LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
-        HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-        LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-        SEVERE_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.admissionControl.severePercent * 100);
-        SEVERE_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.admissionControl.severeDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-        SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
-        TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.transitionTimeoutSeconds;
-      };
+      environment =
+        diskSpaceEnvironment
+        // {
+          RUNNER_UNITS =
+            "forgejo-actions-runner.service"
+            + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
+          ADMISSION_CONTROL_ENABLED =
+            if cfg.ioPressureGuard.admissionControl.enable
+            then "1"
+            else "0";
+          GAME_HELPER_FILE = "${./game-admission.sh}";
+          GAME_ADMISSION_ENABLED =
+            if cfg.ioPressureGuard.admissionControl.gameProcess.enable
+            then "1"
+            else "0";
+          GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
+          GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
+          GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
+          HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
+          LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
+          HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+          LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+          SEVERE_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.admissionControl.severePercent * 100);
+          SEVERE_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.admissionControl.severeDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+          SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
+          TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.transitionTimeoutSeconds;
+        };
       serviceConfig = {
         Type = "notify";
         NotifyAccess = "all";
@@ -190,18 +206,22 @@ in {
       serviceConfig.KillMode = lib.mkIf cfg.ioPressureGuard.admissionControl.enable "mixed";
       requires = ["forgejo-runner-aggregate-lifecycle.service"];
       restartIfChanged = false;
-      environment.RUNNER_UNIT = "forgejo-actions-runner.service";
-      environment.GAME_HELPER_FILE = "${./game-admission.sh}";
-      environment.GAME_ADMISSION_ENABLED =
-        if cfg.ioPressureGuard.admissionControl.gameProcess.enable
-        then "1"
-        else "0";
-      environment.GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
-      environment.GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
-      environment.GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
-      environment.RUNNER_UNITS =
-        "forgejo-actions-runner.service"
-        + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
+      environment =
+        diskSpaceEnvironment
+        // {
+          RUNNER_UNIT = "forgejo-actions-runner.service";
+          GAME_HELPER_FILE = "${./game-admission.sh}";
+          GAME_ADMISSION_ENABLED =
+            if cfg.ioPressureGuard.admissionControl.gameProcess.enable
+            then "1"
+            else "0";
+          GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
+          GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
+          GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
+          RUNNER_UNITS =
+            "forgejo-actions-runner.service"
+            + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
+        };
       # The state directory is root-only; only this fixed condition command
       # runs as root. A skipped start must not trigger Restart=on-failure.
       serviceConfig.ExecCondition = "+${lib.getExe runnerStartGate}";

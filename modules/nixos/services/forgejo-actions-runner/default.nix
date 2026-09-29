@@ -175,6 +175,7 @@
   };
 in {
   imports = [
+    ./idle-podman-cleanup.nix
     ./isolated-docker.nix
     ./podman-canary.nix
     ./orphan-monitor.nix
@@ -284,6 +285,45 @@ in {
 
     ioPressureGuard = {
       enable = lib.mkEnableOption "host I/O pressure guard for owned runner containers";
+
+      diskSpace = {
+        enable = lib.mkEnableOption "root filesystem space admission and critical aggregate freeze";
+        path = lib.mkOption {
+          type = lib.types.str;
+          default = "/";
+          description = "Filesystem path whose free space protects runner storage.";
+        };
+        drainFreeGiB = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 30;
+          description = "Drain runner admissions when available bytes fall below this many GiB.";
+        };
+        drainFreePercent = lib.mkOption {
+          type = lib.types.ints.between 1 99;
+          default = 15;
+          description = "Drain runner admissions when free space falls below this percentage.";
+        };
+        criticalFreeGiB = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 15;
+          description = "Freeze the aggregate when available bytes fall below this many GiB.";
+        };
+        criticalFreePercent = lib.mkOption {
+          type = lib.types.ints.between 1 99;
+          default = 8;
+          description = "Freeze the aggregate when free space falls below this percentage.";
+        };
+        recoveryFreeGiB = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 40;
+          description = "Require at least this many available GiB before resuming admissions.";
+        };
+        recoveryFreePercent = lib.mkOption {
+          type = lib.types.ints.between 1 99;
+          default = 20;
+          description = "Require at least this free percentage before resuming admissions.";
+        };
+      };
 
       highPercent = lib.mkOption {
         type = lib.types.ints.between 1 99;
@@ -478,6 +518,19 @@ in {
       {
         assertion = cfg.ioPressureGuard.lowPercent < cfg.ioPressureGuard.highPercent;
         message = "services.forgejo-actions-runner.ioPressureGuard.lowPercent must be below highPercent.";
+      }
+      {
+        assertion = !cfg.ioPressureGuard.diskSpace.enable || (isolated && cfg.ioPressureGuard.admissionControl.enable);
+        message = "Runner disk-space protection requires isolated Docker and admission draining.";
+      }
+      {
+        assertion =
+          cfg.ioPressureGuard.diskSpace.criticalFreeGiB
+          < cfg.ioPressureGuard.diskSpace.drainFreeGiB
+          && cfg.ioPressureGuard.diskSpace.drainFreeGiB < cfg.ioPressureGuard.diskSpace.recoveryFreeGiB
+          && cfg.ioPressureGuard.diskSpace.criticalFreePercent < cfg.ioPressureGuard.diskSpace.drainFreePercent
+          && cfg.ioPressureGuard.diskSpace.drainFreePercent < cfg.ioPressureGuard.diskSpace.recoveryFreePercent;
+        message = "Runner disk-space thresholds must order critical < drain < recovery for both GiB and percent.";
       }
       {
         assertion = lib.mod cfg.ioPressureGuard.highDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;

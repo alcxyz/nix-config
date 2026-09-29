@@ -174,6 +174,8 @@
     package = pkgs.callPackage "${inputs.forgejo-runner-fixes}/pkgs/forgejo-runner-cancellation" {};
     ioPressureGuard.enable = true;
     ioPressureGuard.admissionControl.enable = true;
+    ioPressureGuard.diskSpace.enable = true;
+    idlePodmanCleanup.enable = true;
     isolatedDocker.enable = true;
     podmanCanary = {
       enable = true;

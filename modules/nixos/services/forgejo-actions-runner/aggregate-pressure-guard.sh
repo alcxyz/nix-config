@@ -14,6 +14,8 @@ low_required=${LOW_SAMPLES_REQUIRED:-13}
 admission_control=${ADMISSION_CONTROL_ENABLED:-0}
 # shellcheck disable=SC1090
 source "${GAME_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/game-admission.sh}"
+# shellcheck disable=SC1090
+source "${DISK_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/disk-space-admission.sh}"
 severe_threshold=${SEVERE_THRESHOLD_HUNDREDTHS:-6000}
 severe_required=${SEVERE_SAMPLES_REQUIRED:-7}
 max_iterations=${MAX_ITERATIONS:-0}
@@ -31,8 +33,8 @@ locked_metadata_deadline=0
 report_transition() {
   local event=$1 details=${2:-} sampled_pressure=${pressure:-unknown}
   [[ $sampled_pressure =~ ^[0-9]+$ ]] || sampled_pressure=unknown
-  printf 'event=%s unit=%s sampled_full_avg10_hundredths=%s %s\n' \
-    "$event" "$unit" "$sampled_pressure" "$details" || true
+  printf 'event=%s unit=%s sampled_full_avg10_hundredths=%s sampled_disk_free_bytes=%s sampled_disk_free_percent=%s %s\n' \
+    "$event" "$unit" "$sampled_pressure" "${disk_free_bytes:-unknown}" "${disk_free_percent:-unknown}" "$details" || true
 }
 
 fail() {
@@ -168,6 +170,9 @@ for runner_unit in "${runner_units[@]}"; do
   fi
   if [[ $admission_control == 0 && -e $runner_state/game-start-skipped ]]; then
     fail "game start ownership remains while admission control is disabled"
+  fi
+  if [[ $admission_control == 0 && -e $runner_state/disk-start-skipped ]]; then
+    fail "disk start ownership remains while admission control is disabled"
   fi
 done
 flock -u 9
@@ -306,6 +311,8 @@ resume_admissions() {
   [[ $admission_control == 1 ]] || return 0
   if [[ -e $runner_state/drain-owned ]]; then
     marker=drain-owned
+  elif [[ -e $runner_state/disk-start-skipped ]]; then
+    marker=disk-start-skipped
   elif [[ -e $runner_state/game-start-skipped ]]; then
     marker=game-start-skipped
   else
@@ -357,6 +364,12 @@ for runner_unit in "${runner_units[@]}"; do
   validate_drain_ownership
 done
 if [[ -n ${PRESSURE_VALUES_FILE:-} ]]; then exec 8<"$PRESSURE_VALUES_FILE"; fi
+if [[ ${DISK_SPACE_ENABLED:-0} == 1 && -n ${DISK_SPACE_VALUES_FILE:-} ]]; then
+  exec 7<"$DISK_SPACE_VALUES_FILE"
+  # The sourced disk helper consumes this stream flag.
+  # shellcheck disable=SC2034
+  DISK_SPACE_STREAM=1
+fi
 read_pressure || fail "I/O pressure is unreadable at startup"
 "$notify_bin" --ready --status="monitoring dedicated CI aggregate" || true
 high=0
@@ -378,10 +391,22 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
       request_admission_drain "$game_reason"
     done
   fi
+  if disk_space_status; then disk_status=0; else disk_status=$?; fi
+  if ((disk_status == 4)); then
+    freeze_owned
+    fail "runner filesystem free space is unreadable; leaving owned aggregate frozen"
+  fi
+  if ((disk_status == 1 || disk_status == 2)); then
+    for runner_unit in "${runner_units[@]}"; do
+      runner_state=$(runner_state_dir "$runner_unit")
+      request_admission_drain disk_space
+    done
+  fi
+  if ((disk_status != 0)); then low=0; fi
   if ((pressure >= high_threshold)); then
     high=$((high + 1))
     low=0
-  elif ((pressure <= low_threshold)); then
+  elif ((pressure <= low_threshold && disk_status == 0)); then
     low=$((low + 1))
     high=0
   else
@@ -402,16 +427,17 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
   fi
   if [[ -e $state_dir/owned ]]; then
     freeze_owned
-    if ((low >= low_required)); then
+    if ((low >= low_required && disk_status == 0)); then
       thaw_owned
     fi
-  elif { [[ $admission_control == 1 ]] && ((severe >= severe_required)); } ||
+  elif ((disk_status == 2)) ||
+    { [[ $admission_control == 1 ]] && ((severe >= severe_required)); } ||
     { [[ $admission_control == 0 ]] && ((high >= high_required)); }; then
     freeze_owned
     severe=0
     if [[ $admission_control == 0 ]]; then high=0; fi
   fi
-  if ((low >= low_required && game_status == 1)); then
+  if ((low >= low_required && game_status == 1 && disk_status == 0)); then
     # Recovery always thaws the aggregate before asking the runner to poll
     # again. If jobs are still draining, resume_admissions keeps waiting for a
     # fully inactive unit while the low-pressure streak continues.

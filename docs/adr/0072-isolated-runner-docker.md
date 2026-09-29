@@ -24,6 +24,18 @@ owns; uncertain operations fail closed for reconciliation. A slice thaw does
 not issue Docker unpause calls, so individually paused containers remain
 paused.
 
+An opt-in root-filesystem free-space signal uses the same controller and
+ownership state for isolated runners. Falling below either the byte or percent
+admission floor gracefully drains every runner; falling below either critical
+floor freezes the aggregate to stop active worker writes. Recovery requires
+both byte and percent headroom to remain above their recovery floors for the
+normal low-pressure interval. The runner start gate checks space independently
+so boot and configuration switches cannot bypass a drain. An unreadable or
+invalid sample fails closed. This sampled guard is an emergency circuit breaker,
+not a hard storage quota: writes may consume the remaining space between samples
+or before a freeze completes. Cache cleanup and operator recovery remain needed
+when the filesystem is critically full.
+
 Isolated runners may separately opt into pressure-based admission draining.
 Moderate sustained pressure requests a non-blocking stop of only the runner
 service: Forgejo Runner stops polling, then waits for already admitted jobs up
