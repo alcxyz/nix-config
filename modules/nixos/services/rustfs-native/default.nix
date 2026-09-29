@@ -217,6 +217,7 @@ in {
       wantedBy = ["multi-user.target"];
       after = ["network-online.target"];
       wants = ["network-online.target"];
+      environment.RUSTFS_VOLUMES = lib.concatStringsSep " " cfg.endpoints;
       unitConfig.RequiresMountsFor = [dataDir] ++ lib.optional (cfg.mountPoint != null) cfg.mountPoint;
       serviceConfig = {
         Type = "exec";
@@ -255,7 +256,6 @@ in {
         );
         Environment =
           [
-            "RUSTFS_VOLUMES=${lib.concatStringsSep " " cfg.endpoints}"
             "RUSTFS_LOCAL_ENDPOINT_HOST=${cfg.localEndpointHost}"
             "RUSTFS_CONSOLE_ENABLE=${lib.boolToString cfg.console.enable}"
           ]
