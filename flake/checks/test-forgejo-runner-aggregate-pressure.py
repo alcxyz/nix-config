@@ -17,6 +17,8 @@ GATE = (Path(sys.argv.pop(1)) if len(sys.argv) > 1 else
         GUARD.with_name('runner-start-gate.sh')).resolve()
 GAME_BYPASS_CONTROL = Path(os.environ.get(
     'GAME_BYPASS_CONTROL_FILE', GUARD.with_name('game-bypass-control.sh')))
+DISK_HELPER = Path(os.environ.get(
+    'DISK_HELPER_FILE', GUARD.with_name('disk-space-admission.sh')))
 PRIMARY = 'forgejo-actions-runner.service'
 SECOND = 'forgejo-podman-actions-runner.service'
 
@@ -197,7 +199,7 @@ esac
                             'PGREP_BIN': str(pgrep), 'GAME_UPTIME_FILE': str(root / 'uptime'),
                             'GAME_COOLDOWN_SECONDS': '30'})
             if disk_values is not None:
-                env.update({'DISK_HELPER_FILE': str(GUARD.with_name('disk-space-admission.sh')),
+                env.update({'DISK_HELPER_FILE': str(DISK_HELPER),
                             'DISK_SPACE_ENABLED': '1',
                             'DISK_SPACE_VALUES_FILE': str(root / 'disk-space'),
                             'DISK_DRAIN_BYTES': '30', 'DISK_DRAIN_PERCENT': '15',
@@ -756,7 +758,7 @@ exit 2
                    'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY])}
             if disk_value is not None:
                 (root / 'disk-space').write_text(disk_value + '\n')
-                env.update({'DISK_HELPER_FILE': str(GATE.with_name('disk-space-admission.sh')),
+                env.update({'DISK_HELPER_FILE': str(DISK_HELPER),
                             'DISK_SPACE_ENABLED': '1',
                             'DISK_SPACE_VALUES_FILE': str(root / 'disk-space'),
                             'DISK_DRAIN_BYTES': '30', 'DISK_DRAIN_PERCENT': '15',

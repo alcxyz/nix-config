@@ -53,6 +53,7 @@ else let
   runnerStartGate = lib.removePrefix "+" services.forgejo-actions-runner.serviceConfig.ExecCondition;
   runnerStartGateSource = ../../modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh;
   gameHelperSource = ../../modules/nixos/services/forgejo-actions-runner/game-admission.sh;
+  diskHelperSource = ../../modules/nixos/services/forgejo-actions-runner/disk-space-admission.sh;
   gameBypassSource = ../../modules/nixos/services/forgejo-actions-runner/game-bypass-control.sh;
   gameBypass = lib.findFirst (package: lib.hasPrefix "forgejo-runner-game-bypass" (package.name or "")) null host.environment.systemPackages;
   tests = ./test-forgejo-runner-aggregate-pressure.py;
@@ -132,8 +133,10 @@ in
       shellcheck ${lifecycleStopSource}
       shellcheck ${runnerStartGateSource}
       shellcheck ${gameHelperSource}
+      shellcheck ${diskHelperSource}
       shellcheck ${gameBypassSource}
-      GAME_HELPER_FILE=${gameHelperSource} GAME_BYPASS_CONTROL_FILE=${gameBypass}/bin/forgejo-runner-game-bypass \
+      GAME_HELPER_FILE=${gameHelperSource} DISK_HELPER_FILE=${diskHelperSource} \
+        GAME_BYPASS_CONTROL_FILE=${gameBypass}/bin/forgejo-runner-game-bypass \
         python3 ${tests} ${guard} ${lifecycleStop} ${runnerStartGate}
       touch "$out"
     ''
