@@ -181,13 +181,13 @@ in {
     assert pressureGuardUnit.environment.SEVERE_SAMPLES_REQUIRED == "7";
     assert runnerUnit.serviceConfig.KillMode == "mixed";
     assert lib.all (serverRunner: serverRunner.resourcePolicy.enable && serverRunner.isolatedDocker.enable) serverRunners;
-    assert lib.all (serverRunner: !serverRunner.ioPressureGuard.admissionControl.enable) serverRunners;
+    assert lib.all (serverRunner: serverRunner.ioPressureGuard.admissionControl.enable) serverRunners;
     assert lib.all (serverRunner: serverRunner.dockerHost == "unix:///run/forgejo-docker/docker.sock") serverRunners;
     assert lib.all (host: builtins.elem "forgejo-runner-docker.service" host.systemd.services.forgejo-actions-runner.requires) serverConfigs;
     assert lib.all (host: !(builtins.elem "docker.service" host.systemd.services.forgejo-actions-runner.requires)) serverConfigs;
     assert lib.all (host: host.users.users.forgejo-runner.extraGroups == []) serverConfigs;
-    assert lib.all (host: !(host.systemd.services.forgejo-actions-runner.serviceConfig ? KillMode)) serverConfigs;
-    assert lib.all (host: host.systemd.services.forgejo-runner-io-pressure-guard.environment.ADMISSION_CONTROL_ENABLED == "0") serverConfigs;
+    assert lib.all (host: host.systemd.services.forgejo-actions-runner.serviceConfig.KillMode == "mixed") serverConfigs;
+    assert lib.all (host: host.systemd.services.forgejo-runner-io-pressure-guard.environment.ADMISSION_CONTROL_ENABLED == "1") serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
     assert buildSlice.MemoryHigh == "40%";
