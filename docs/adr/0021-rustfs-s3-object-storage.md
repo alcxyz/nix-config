@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-26
-**Applies to:** Kubernetes application object storage
+**Applies to:** Application object storage
 
 ## Context
 
@@ -12,10 +12,18 @@ must remain outside the storage dependency path it protects.
 
 ## Decision
 
-Use RustFS for application object storage inside Kubernetes, initially in
-standalone mode. Kubernetes owns scheduling and the persistent-volume lifecycle.
-Replicated volumes can support recovery from node loss, but neither replication
-nor rescheduling substitutes for independent backups or restore qualification.
+Use RustFS for application object storage. The initial standalone Kubernetes
+deployment remains the active service while a native, distributed three-member
+service is staged on independent host storage. The native service runs under
+systemd with a dedicated service identity and explicit mounted-storage and
+credential-file dependencies. Its package and topology are selected by the
+caller; the public module contains no private host placement or secret wiring.
+
+Prepare and copy application objects, verify basic S3 operations with the
+actual consumers, and retain the existing endpoint for rollback during
+cutover. Qualify physical node-loss recovery and healing separately before
+claiming high availability. A distributed object store does not replace
+independent backups or restore qualification.
 
 Keep backup storage separate under
 [ADR-0052](0052-xev-primary-k8s-backup-target.md).
@@ -37,13 +45,15 @@ documentation under
   exceed the intended initial operational scope.
 - **Cloud object storage:** introduces recurring cost and an external dependency
   for primary application storage.
-- **Host-only application storage:** bypasses Kubernetes scheduling and requires
-  a separate host availability strategy. Host-level storage remains appropriate
-  for the independent backup role.
+- **Host-only application storage:** initially deferred because it requires a
+  separate host availability strategy. Native distributed RustFS now provides
+  that strategy without coupling object availability to Kubernetes storage.
 
 ## Consequences
 
-Applications share an S3-compatible interface, while application object-store
-availability depends on Kubernetes health. The original choice accepted product
-maturity risk; upgrades and any replacement need compatibility and recovery
-validation. API compatibility alone does not establish a safe migration.
+Applications retain an S3-compatible interface. During staging, availability
+still depends on the current Kubernetes service. After promotion, availability
+depends on the native member topology and host storage instead. The original
+choice accepted product maturity risk; upgrades and migration need compatibility
+and recovery validation. API compatibility alone does not establish a safe
+migration.

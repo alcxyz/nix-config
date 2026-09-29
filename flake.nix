@@ -96,6 +96,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Application storage is qualified independently of the backup service.
+    rustfs-app = {
+      url = "github:rustfs/rustfs/1.0.0-rc.6";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     rustfs = {
       url = "github:rustfs/rustfs/1.0.0-beta.10";
       inputs.nixpkgs.follows = "nixpkgs";

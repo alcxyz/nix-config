@@ -1240,6 +1240,7 @@
         "quickshell": "quickshell",
         "reportcraft": "reportcraft",
         "rustfs": "rustfs",
+        "rustfs-app": "rustfs-app",
         "sops-nix": "sops-nix",
         "stashdb-pop": "stashdb-pop",
         "videdupe": "videdupe",
@@ -1267,6 +1268,27 @@
         "type": "github"
       }
     },
+    "rust-overlay_2": {
+      "inputs": {
+        "nixpkgs": [
+          "rustfs-app",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788591095,
+        "narHash": "sha256-Vh+BeLWfbTT9AecazIsQ/Tkg/RzJeX3lEduANf256WA=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "c361047d3a538f547f1617bb6b410411929ac9cc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
     "rustfs": {
       "inputs": {
         "nixpkgs": [
@@ -1285,6 +1307,28 @@
       "original": {
         "owner": "rustfs",
         "ref": "1.0.0-beta.10",
+        "repo": "rustfs",
+        "type": "github"
+      }
+    },
+    "rustfs-app": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-overlay": "rust-overlay_2"
+      },
+      "locked": {
+        "lastModified": 1789045742,
+        "narHash": "sha256-+ZcLd6WlT5X48u4LHYQVw+QgaVotpEN4JLKy8N86ejM=",
+        "owner": "rustfs",
+        "repo": "rustfs",
+        "rev": "5cd58319ed6148ed7f09f2a4d0b4e46e429f043a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rustfs",
+        "ref": "1.0.0-rc.6",
         "repo": "rustfs",
         "type": "github"
       }

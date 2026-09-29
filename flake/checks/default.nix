@@ -79,6 +79,14 @@ in {
         touch "$out"
       '';
 
+  rustfs-native-interface-contract =
+    if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+    then import ./rustfs-native.nix {inherit inputs pkgs;}
+    else
+      pkgs.runCommand "rustfs-native-interface-contract-unsupported" {} ''
+        touch "$out"
+      '';
+
   torrent-policy-interface-contract =
     if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
     then import ./torrent-policy.nix {inherit inputs pkgs;}
