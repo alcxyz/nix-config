@@ -6,16 +6,19 @@
       workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
     };
 
+    # Servers are managed from workstations and keep no source checkouts.
     nuc = {
       homePackageSet = "nuc";
       systemPackageSet = "server";
       workspaceProfiles = ["base" "infra-admin"];
+      sourceWorkspace = false;
     };
 
     k8s-worker = {
       homePackageSet = "server";
       systemPackageSet = "server";
       workspaceProfiles = ["base" "infra-admin"];
+      sourceWorkspace = false;
     };
 
     laptop-workstation = {
