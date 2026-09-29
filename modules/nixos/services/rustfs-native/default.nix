@@ -6,6 +6,7 @@
 }: let
   cfg = config.services.rustfs-native;
   dataDir = toString cfg.dataDir;
+  tlsEnabled = cfg.tls.certFile != null && cfg.tls.keyFile != null;
   endpointHost = endpoint:
     lib.hasInfix "://${cfg.localEndpointHost}:" endpoint
     || lib.hasInfix "://${cfg.localEndpointHost}/" endpoint;
@@ -60,6 +61,35 @@ in {
     secretKeyFile = lib.mkOption {
       type = lib.types.str;
       description = "Already activated file containing the RustFS secret key.";
+    };
+
+    tls = {
+      certFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Already activated PEM server certificate file; requires keyFile.";
+      };
+      keyFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Already activated PEM server private key file; requires certFile.";
+      };
+      caCertFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional already activated PEM CA bundle for outbound TLS trust.";
+      };
+      trustSystemCA = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Also load system CA certificates for outbound TLS connections.";
+      };
+    };
+
+    standardParity = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = null;
+      description = "Explicit standard storage-class parity shard count; null leaves RustFS default unchanged.";
     };
 
     console = {
@@ -152,6 +182,26 @@ in {
         ];
         message = "services.rustfs-native credential file paths must be absolute.";
       }
+      {
+        assertion = (cfg.tls.certFile == null) == (cfg.tls.keyFile == null);
+        message = "services.rustfs-native.tls certFile and keyFile must be set together.";
+      }
+      {
+        assertion = cfg.tls.caCertFile == null || tlsEnabled;
+        message = "services.rustfs-native.tls.caCertFile requires a TLS server certificate and key.";
+      }
+      {
+        assertion = !cfg.tls.trustSystemCA || tlsEnabled;
+        message = "services.rustfs-native.tls.trustSystemCA requires a TLS server certificate and key.";
+      }
+      {
+        assertion = lib.all (path: path == null || lib.hasPrefix "/" path) [
+          cfg.tls.certFile
+          cfg.tls.keyFile
+          cfg.tls.caCertFile
+        ];
+        message = "services.rustfs-native.tls file paths must be absolute.";
+      }
     ];
 
     users.users.${cfg.user} = {
@@ -172,10 +222,16 @@ in {
         Type = "exec";
         User = cfg.user;
         Group = cfg.group;
-        LoadCredential = [
-          "rustfs_access_key:${cfg.accessKeyFile}"
-          "rustfs_secret_key:${cfg.secretKeyFile}"
-        ];
+        LoadCredential =
+          [
+            "rustfs_access_key:${cfg.accessKeyFile}"
+            "rustfs_secret_key:${cfg.secretKeyFile}"
+          ]
+          ++ lib.optionals tlsEnabled [
+            "rustfs_cert.pem:${cfg.tls.certFile}"
+            "rustfs_key.pem:${cfg.tls.keyFile}"
+          ]
+          ++ lib.optional (cfg.tls.caCertFile != null) "ca.crt:${cfg.tls.caCertFile}";
         ExecStartPre =
           lib.optional (
             cfg.mountPoint != null
@@ -195,6 +251,7 @@ in {
             "--console-enable"
             (lib.escapeShellArg "--console-address=${cfg.console.address}")
           ]
+          ++ lib.optional tlsEnabled "--tls-path=%d"
         );
         Environment =
           [
@@ -202,6 +259,9 @@ in {
             "RUSTFS_LOCAL_ENDPOINT_HOST=${cfg.localEndpointHost}"
             "RUSTFS_CONSOLE_ENABLE=${lib.boolToString cfg.console.enable}"
           ]
+          ++ lib.optional tlsEnabled "RUSTFS_TLS_PATH=%d"
+          ++ lib.optional cfg.tls.trustSystemCA "RUSTFS_TRUST_SYSTEM_CA=1"
+          ++ lib.optional (cfg.standardParity != null) "RUSTFS_STORAGE_CLASS_STANDARD=EC:${toString cfg.standardParity}"
           ++ lib.optional (
             cfg.startupTopologyWaitMode != null
           ) "RUSTFS_STARTUP_TOPOLOGY_WAIT_MODE=${cfg.startupTopologyWaitMode}";

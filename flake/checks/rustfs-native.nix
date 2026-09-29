@@ -36,6 +36,22 @@
     };
   cfg = (evaluate base).config;
   service = cfg.systemd.services.rustfs-native;
+  secure =
+    (evaluate (base
+      // {
+        endpoints = [
+          "https://node-a.example.invalid:9000/var/lib/rustfs-app"
+          "https://node-b.example.invalid:9000/var/lib/rustfs-app"
+          "https://node-c.example.invalid:9000/var/lib/rustfs-app"
+        ];
+        tls = {
+          certFile = "/run/credentials/rustfs-cert";
+          keyFile = "/run/credentials/rustfs-key";
+          caCertFile = "/run/credentials/rustfs-ca";
+          trustSystemCA = true;
+        };
+        standardParity = 1;
+      })).config.systemd.services.rustfs-native;
   invalid = policy:
     !(builtins.tryEval (builtins.deepSeq (evaluate policy).config.system.build.toplevel.drvPath true))
     .success;
@@ -49,6 +65,9 @@ in
     "rustfs_secret_key:/run/credentials/rustfs-secret"
   ];
   assert lib.hasInfix "--access-key-file=%d/rustfs_access_key" service.serviceConfig.ExecStart;
+  assert !(lib.hasInfix "--tls-path" service.serviceConfig.ExecStart);
+  assert !(lib.elem "RUSTFS_TLS_PATH=%d" service.serviceConfig.Environment);
+  assert !(lib.any (value: lib.hasPrefix "RUSTFS_STORAGE_CLASS_STANDARD=" value) service.serviceConfig.Environment);
   assert !(lib.hasInfix "--console-enable" service.serviceConfig.ExecStart);
   assert lib.elem "RUSTFS_CONSOLE_ENABLE=false" service.serviceConfig.Environment;
   assert lib.elem "/var/lib/rustfs-app" service.unitConfig.RequiresMountsFor;
@@ -58,10 +77,31 @@ in
   service.serviceConfig.Environment;
   assert service.serviceConfig.ReadWritePaths == ["-/var/lib/rustfs-app"];
   assert service.serviceConfig.MemoryHigh == "2G";
+  assert secure.serviceConfig.LoadCredential
+  == [
+    "rustfs_access_key:/run/credentials/rustfs-access"
+    "rustfs_secret_key:/run/credentials/rustfs-secret"
+    "rustfs_cert.pem:/run/credentials/rustfs-cert"
+    "rustfs_key.pem:/run/credentials/rustfs-key"
+    "ca.crt:/run/credentials/rustfs-ca"
+  ];
+  assert lib.hasInfix "--tls-path=%d" secure.serviceConfig.ExecStart;
+  assert lib.elem "RUSTFS_TLS_PATH=%d" secure.serviceConfig.Environment;
+  assert lib.elem "RUSTFS_TRUST_SYSTEM_CA=1" secure.serviceConfig.Environment;
+  assert lib.elem "RUSTFS_STORAGE_CLASS_STANDARD=EC:1" secure.serviceConfig.Environment;
   assert invalid (base // {dataDir = "relative";});
   assert invalid (base // {localEndpointHost = "missing.example.invalid";});
   assert invalid (base // {endpoints = [];});
   assert invalid (base // {mountPoint = "/srv/unrelated";});
+  assert invalid (base // {tls.certFile = "/run/cert";});
+  assert invalid (base // {tls.caCertFile = "/run/ca";});
+  assert invalid (base
+    // {
+      tls = {
+        certFile = "relative";
+        keyFile = "/run/key";
+      };
+    });
     pkgs.runCommand "rustfs-native-interface-contract" {} ''
       touch "$out"
     ''
