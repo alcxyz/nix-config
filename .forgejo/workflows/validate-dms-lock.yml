@@ -68,6 +68,8 @@ jobs:
           install_url: https://releases.nixos.org/nix/nix-2.35.1/install
           extra_nix_config: |
             experimental-features = nix-command flakes
+            # Rootless Podman cannot mount a sandbox /proc; skip the failing attempt.
+            sandbox = false
 
       - name: Run development checks
         run: |
