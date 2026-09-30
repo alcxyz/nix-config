@@ -4,8 +4,6 @@
 # The host firewall controls access to the configured port.
 {
   config,
-  configDir,
-  inputs ? {},
   lib,
   pkgs,
   ...
@@ -24,11 +22,15 @@ with lib; let
     if cfg.autoUpdate.promotionFlakeUri == null
     then ""
     else cfg.autoUpdate.promotionFlakeUri;
-  configurationSource =
-    if builtins.isAttrs configDir && configDir ? outPath
-    then configDir.outPath
-    else toString configDir;
-  snapshotNixpkgsRevision = (inputs.nixpkgs or {}).rev or "";
+  # With unattended updates, T3 and its providers live in a profile the
+  # updater replaces without Home Manager activation (ADR-0077).
+  profileMode = cfg.autoUpdate.enable;
+  aiStackProfile = "${config.home.homeDirectory}/.local/state/nix/profiles/ai-stack";
+  seedBundle = pkgs."ai-stack-${managedChannel}";
+  t3Executable =
+    if profileMode
+    then "${aiStackProfile}/bin/t3"
+    else "${cfg.package}/bin/t3";
   activationGuard = pkgs.writeShellApplication {
     name = "t3code-activation-guard";
     runtimeInputs = with pkgs; [
@@ -172,6 +174,100 @@ with lib; let
     '';
   };
 
+  # Exits 0 once T3 has no starting or running turns for the settle window,
+  # 75 (retry later) otherwise.
+  idleCheck = pkgs.writeShellApplication {
+    name = "t3code-idle-check";
+    runtimeInputs = with pkgs; [coreutils sqlite];
+    text = ''
+      if [[ "''${T3CODE_ALLOW_ACTIVE_RESTART:-0}" == "1" ]]; then
+        echo "T3 Code active-session guard explicitly bypassed."
+        exit 0
+      fi
+      database="''${T3CODE_STATE_DATABASE:-${cfg.baseDir}/userdata/state.sqlite}"
+      if [[ ! -r "$database" ]]; then
+        exit 0
+      fi
+      active_sessions() {
+        sqlite3 -readonly -cmd '.timeout 5000' "$database" \
+          "SELECT count(*) FROM projection_thread_sessions WHERE status IN ('starting', 'running');"
+      }
+      count=$(active_sessions)
+      if [[ "$count" == 0 ]]; then
+        sleep "''${T3CODE_SETTLE_SECONDS:-${toString cfg.restartGuard.settleSeconds}}"
+        count=$(active_sessions)
+      fi
+      if [[ "$count" != 0 ]]; then
+        echo "T3 Code is busy or its session state is unreadable ($count); deferring the restart." >&2
+        echo "Retry when the turns finish, or set T3CODE_ALLOW_ACTIVE_RESTART=1 for an intentional interruption." >&2
+        exit 75
+      fi
+    '';
+  };
+
+  # ADR-0077: switch the AI stack profile to a built bundle, refusing
+  # same-channel downgrades and restarting T3 only when it is idle.
+  aiStackSwitch = pkgs.writeShellApplication {
+    name = "t3code-ai-stack-switch";
+    runtimeInputs = with pkgs; [
+      coreutils
+      gnused
+      nix
+      systemd
+    ];
+    text = ''
+      candidate=$1
+      profile="''${T3CODE_AI_STACK_PROFILE:-${aiStackProfile}}"
+      channel=${escapeShellArg managedChannel}
+      current=""
+      if [[ -e "$profile" ]]; then
+        current=$(readlink -f "$profile")
+      fi
+      if [[ "$candidate" == "$current" ]]; then
+        echo "The AI stack profile is already current."
+        exit 0
+      fi
+
+      t3_version() {
+        { readlink "$1/bin/t3" || true; } | sed -nE 's#^/nix/store/[a-z0-9]+-t3code-([^/]+)/bin/t3$#\1#p'
+      }
+      current_channel=$(sed -nE 's#^/nix/store/[a-z0-9]+-ai-stack-(.+)$#\1#p' <<<"$current")
+      new_version=$(t3_version "$candidate")
+      old_version=""
+      if [[ -n "$current" ]]; then
+        old_version=$(t3_version "$current")
+      fi
+      if [[ -z "$new_version" ]]; then
+        echo "Cannot read the T3 Code version of $candidate." >&2
+        exit 76
+      fi
+      if [[ "$current_channel" == "$channel" && -n "$old_version" && "$new_version" != "$old_version" ]] \
+        && [[ "$(printf '%s\n%s\n' "$new_version" "$old_version" | sort -V | head -n1)" == "$new_version" ]] \
+        && [[ "''${T3CODE_ALLOW_DOWNGRADE:-0}" != "1" ]]; then
+        echo "Refusing to downgrade T3 Code from $old_version to $new_version." >&2
+        echo "Set T3CODE_ALLOW_DOWNGRADE=1 for an intentional rollback." >&2
+        exit 76
+      fi
+
+      summary="$candidate (T3 ''${old_version:-none} -> $new_version)"
+      if [[ "''${T3CODE_AUTO_UPDATE_DRY_RUN:-0}" == "1" ]]; then
+        echo "Dry run complete; would switch the AI stack to $summary."
+        exit 0
+      fi
+
+      t3_active=false
+      if systemctl --user --quiet is-active t3code.service; then
+        t3_active=true
+        ${idleCheck}/bin/t3code-idle-check
+      fi
+      nix-env --profile "$profile" --set "$candidate"
+      echo "Switched the AI stack to $summary."
+      if [[ "$t3_active" == true ]]; then
+        systemctl --user restart t3code.service
+      fi
+    '';
+  };
+
   autoUpdate = pkgs.writeShellApplication {
     name = "t3code-auto-update";
     runtimeInputs = with pkgs; [
@@ -181,21 +277,7 @@ with lib; let
       openssh
     ];
     text = ''
-      # The snapshot rebuilds all of Home Manager, not just the T3 packages.
-      # Userspace from another nixpkgs cannot load the system's graphics
-      # drivers (glibc skew), so never activate a snapshot the system has
-      # moved past; a normal Home Manager deploy refreshes the snapshot.
-      snapshot_nixpkgs=${escapeShellArg snapshotNixpkgsRevision}
-      nixos_version="''${T3CODE_NIXOS_VERSION:-/run/current-system/sw/bin/nixos-version}"
-      if [[ -n "$snapshot_nixpkgs" && -x "$nixos_version" ]]; then
-        system_nixpkgs=$("$nixos_version" --json | jq -er '.nixpkgsRevision')
-        if [[ "$system_nixpkgs" != "$snapshot_nixpkgs" ]]; then
-          echo "Refusing to activate: the pinned Home Manager snapshot uses nixpkgs $snapshot_nixpkgs, but the running system uses $system_nixpkgs." >&2
-          echo "Deploy Home Manager from the same checkout as the system to refresh the snapshot." >&2
-          exit 76
-        fi
-      fi
-      target=${escapeShellArg "${configurationSource}#homeConfigurations.${cfg.autoUpdate.homeConfiguration}.activationPackage"}
+      channel=${escapeShellArg managedChannel}
       package_flake=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
       promotion_flake_default=${escapeShellArg promotionFlakeDefault}
       promotion_flake="''${T3CODE_PROMOTION_FLAKE:-$promotion_flake_default}"
@@ -210,17 +292,9 @@ with lib; let
         ' <<<"$metadata")
         echo "Using the nix-packages revision promoted by $promotion_flake"
       fi
-      echo "Building the pinned Home Manager configuration with packages from $package_flake"
-      activation=$(
-        nix build --no-link --print-out-paths \
-          --override-input nix-packages "$package_flake" \
-          "$target"
-      )
-      if [[ "''${T3CODE_AUTO_UPDATE_DRY_RUN:-0}" == "1" ]]; then
-        echo "Dry run complete; built $activation without activating it."
-        exit 0
-      fi
-      exec "$activation/activate"
+      echo "Building ai-stack-$channel from $package_flake"
+      candidate=$(nix build --no-link --print-out-paths "$package_flake#ai-stack-$channel")
+      exec ${aiStackSwitch}/bin/t3code-ai-stack-switch "$candidate"
     '';
   };
 in {
@@ -283,7 +357,7 @@ in {
     };
 
     autoUpdate = {
-      enable = mkEnableOption "unattended T3 Code and provider package updates using the pinned Home Manager configuration";
+      enable = mkEnableOption "unattended T3 Code and provider updates through the ai-stack profile (ADR-0077)";
 
       flakeUri = mkOption {
         type = types.nullOr types.str;
@@ -294,7 +368,7 @@ in {
       packageFlakeUri = mkOption {
         type = types.str;
         example = "git+https://code.example.net/operator/nix-packages.git?ref=dev";
-        description = "Flake URI used only to override the nix-packages input of the immutable configuration snapshot. The URI must not contain a fragment.";
+        description = "nix-packages flake that provides the ai-stack bundles when no promotion flake is set. The URI must not contain a fragment.";
       };
 
       promotionFlakeUri = mkOption {
@@ -305,8 +379,9 @@ in {
       };
 
       homeConfiguration = mkOption {
-        type = types.str;
-        description = "Home Manager configuration attribute to activate.";
+        type = types.nullOr types.str;
+        default = null;
+        description = "Deprecated and unused since ADR-0077; unattended updates no longer activate Home Manager.";
       };
 
       calendar = mkOption {
@@ -346,7 +421,7 @@ in {
       };
       Service = {
         Type = "simple";
-        ExecStart = "${cfg.package}/bin/t3 serve --host ${cfg.host} --port ${toString cfg.port} --base-dir ${cfg.baseDir}";
+        ExecStart = "${t3Executable} serve --host ${cfg.host} --port ${toString cfg.port} --base-dir ${cfg.baseDir}";
         Environment = "SHELL=${pkgs.bash}/bin/bash";
         # A clean provider/server exit is still unexpected for a persistent
         # headless environment. Systemd stop operations suppress restarts.
@@ -358,7 +433,34 @@ in {
       Install.WantedBy = ["default.target"];
     };
 
-    home.activation.t3codeRestartGuard = mkIf cfg.restartGuard.enable (
+    home.sessionPath = mkIf profileMode ["${aiStackProfile}/bin"];
+    home.packages = mkIf profileMode [aiStackSwitch];
+
+    # Seed the profile on first deployment or a channel change. After that
+    # the updater owns it, so a deploy never rolls the AI stack back.
+    home.activation.t3codeSeedAiStack = mkIf profileMode (
+      lib.hm.dag.entryBetween ["reloadSystemd"] ["writeBoundary"] ''
+        profile=${escapeShellArg aiStackProfile}
+        current=""
+        if [[ -e "$profile" ]]; then
+          current=$(readlink -f "$profile")
+        fi
+        current_channel=$(${pkgs.gnused}/bin/sed -nE 's#^/nix/store/[a-z0-9]+-ai-stack-(.+)$#\1#p' <<<"$current")
+        if [[ -z "$current" || "$current_channel" != ${escapeShellArg managedChannel} ]]; then
+          run ${pkgs.nix}/bin/nix-env --profile "$profile" --set ${seedBundle}
+          if ${pkgs.systemd}/bin/systemctl --user --quiet is-active t3code.service; then
+            if ${idleCheck}/bin/t3code-idle-check; then
+              run mkdir -p "$(dirname ${escapeShellArg restartMarker})"
+              run touch ${escapeShellArg restartMarker}
+            else
+              warnEcho "T3 Code is busy; restart t3code.service later to use the seeded AI stack."
+            fi
+          fi
+        fi
+      ''
+    );
+
+    home.activation.t3codeRestartGuard = mkIf (cfg.restartGuard.enable && !profileMode) (
       lib.hm.dag.entryBetween ["reloadSystemd"] ["linkGeneration"] ''
         run ${activationGuard}/bin/t3code-activation-guard
       ''
@@ -379,7 +481,7 @@ in {
       ''
     );
 
-    home.activation.t3codeRecordManagedVersion =
+    home.activation.t3codeRecordManagedVersion = mkIf (!profileMode) (
       lib.hm.dag.entryAfter (
         ["reloadSystemd"] ++ optional cfg.restartGuard.enable "t3codeApplyManagedUnit"
       ) ''
@@ -394,16 +496,16 @@ in {
         printf '%s\n' ${escapeShellArg managedChannel} > "$channel_tmp"
         chmod 0644 "$channel_tmp"
         run mv -f "$channel_tmp" "$channel_state"
-      '';
+      ''
+    );
 
     systemd.user.services.t3code-auto-update = mkIf cfg.autoUpdate.enable {
       Unit = {
-        Description = "Refresh T3 Code packages within the pinned Home Manager configuration";
+        Description = "Refresh the T3 Code and AI provider profile";
         After = ["network-online.target"];
         Wants = ["network-online.target"];
-        # This service runs Home Manager activation itself. Its store path can
-        # change with the package override being activated, so restarting it
-        # from reloadSystemd would terminate that activation midway through.
+        # A Home Manager deploy must not kill an update midway through a
+        # profile switch or T3 restart.
         X-RestartIfChanged = false;
       };
       Service = {
@@ -418,7 +520,7 @@ in {
     };
 
     systemd.user.timers.t3code-auto-update = mkIf cfg.autoUpdate.enable {
-      Unit.Description = "Nightly package-only update for T3 Code and its providers";
+      Unit.Description = "Scheduled AI stack profile update for T3 Code and its providers";
       Timer = {
         OnCalendar = cfg.autoUpdate.calendar;
         RandomizedDelaySec = cfg.autoUpdate.randomizedDelaySec;

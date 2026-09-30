@@ -454,6 +454,8 @@ in {
         {
           services.t3code.channel = lib.mkForce "upstream";
           services.t3code.package = lib.mkForce home.config.services.t3code.package;
+          # The legacy restart guard applies only without the ai-stack profile.
+          services.t3code.autoUpdate.enable = lib.mkForce false;
         }
       ];
     };
@@ -463,6 +465,7 @@ in {
           services.t3code.channel = lib.mkForce "fork";
           # Exercise channel behavior independently of the producer lock.
           services.t3code.package = lib.mkForce home.config.services.t3code.package;
+          services.t3code.autoUpdate.enable = lib.mkForce false;
         }
       ];
     };
@@ -478,9 +481,22 @@ in {
     applyManagedUnit = self.homeConfigurations.alc-xyz.config.home.activation.t3codeApplyManagedUnit.data;
     forkGuard = lib.removePrefix "run " forkHome.config.home.activation.t3codeRestartGuard.data;
     stableForkGuard = lib.removePrefix "run " stableForkHome.config.home.activation.t3codeRestartGuard.data;
+    switcher = "${lib.head (lib.filter (p: lib.hasInfix "t3code-ai-stack-switch" (toString p)) home.config.home.packages)}/bin/t3code-ai-stack-switch";
+    fakeT3 = version:
+      pkgs.runCommand "t3code-${version}" {} ''
+        mkdir -p $out/bin
+        touch $out/bin/t3
+      '';
+    fakeStack = channel: version:
+      pkgs.runCommand "ai-stack-${channel}" {} ''
+        mkdir -p $out/bin
+        ln -s ${fakeT3 version}/bin/t3 $out/bin/t3
+      '';
   in
     assert forkHome.config.services.t3code.baseDir == home.config.services.t3code.baseDir;
-    assert forkHome.config.systemd.user.services.t3code.Service.ExecStart == home.config.systemd.user.services.t3code.Service.ExecStart;
+    assert forkHome.config.systemd.user.services.t3code.Service.ExecStart == upstreamHome.config.systemd.user.services.t3code.Service.ExecStart;
+    assert lib.hasPrefix "${home.config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/bin/t3 " (lib.head home.config.systemd.user.services.t3code.Service.ExecStart);
+    assert !(home.config.home.activation ? t3codeRestartGuard);
     assert t3Unit.X-RestartIfChanged == false;
     assert unit.X-RestartIfChanged == false;
     assert service.Restart == "on-failure";
@@ -495,17 +511,34 @@ in {
           echo "Promotion flake default contains literal shell quotes" >&2
           exit 1
         fi
-        grep -F "snapshot_nixpkgs=${inputs.nixpkgs.rev}" ${updater}
-        # A system on another nixpkgs must stop the updater before any build.
-        printf '#!/bin/sh\necho %s\n' "'{\"nixpkgsRevision\":\"0000000000000000000000000000000000000000\"}'" > fake-nixos-version
-        chmod +x fake-nixos-version
-        status=0
-        T3CODE_NIXOS_VERSION=$PWD/fake-nixos-version ${updater} 2> skew.log || status=$?
-        if [[ "$status" != 76 ]] || ! grep -F "Refusing to activate" skew.log; then
-          echo "Updater did not refuse a nixpkgs skew (exit $status)" >&2
-          cat skew.log >&2
+        grep -F "ai-stack-$channel" ${updater}
+        if grep -F "activate" ${updater}; then
+          echo "The unattended updater must not activate Home Manager" >&2
           exit 1
         fi
+        # Decision logic of the profile switch, against fake bundles.
+        switch() {
+          local current=$1 candidate=$2
+          rm -f profile
+          if [[ -n "$current" ]]; then ln -s "$current" profile; fi
+          status=0
+          T3CODE_AI_STACK_PROFILE=$PWD/profile T3CODE_AUTO_UPDATE_DRY_RUN=1 ${switcher} "$candidate" > switch.log 2>&1 || status=$?
+        }
+        expect() {
+          if [[ "$status" != "$1" ]] || ! grep -qF "$2" switch.log; then
+            echo "Expected exit $1 with '$2', got $status:" >&2
+            cat switch.log >&2
+            exit 1
+          fi
+        }
+        old=${fakeStack "fork-nightly" "0.0.45-nightly.2"}
+        new=${fakeStack "fork-nightly" "0.0.45-nightly.10"}
+        stable=${fakeStack "fork-stable" "0.0.44"}
+        switch "$new" "$new"; expect 0 "already current"
+        switch "$old" "$new"; expect 0 "would switch"
+        switch "" "$new"; expect 0 "T3 none -> 0.0.45-nightly.10"
+        switch "$new" "$old"; expect 76 "Refusing to downgrade"
+        switch "$stable" "$old"; expect 0 "would switch"
         grep -F "T3CODE_CGROUP_FILE" ${guard}
         grep -F "t3code\\.service" ${guard}
         grep -F 'systemctl --user restart t3code.service' ${

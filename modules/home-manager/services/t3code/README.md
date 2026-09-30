@@ -32,10 +32,16 @@ stable/nightly switch permits a different release version, while accidental
 downgrades within the selected channel remain blocked. Legacy `fork` channel
 state is treated as nightly for the downgrade guard.
 
-Unattended updates refresh packages inside the active configuration snapshot,
-so they retain its selected channel. A new fork revision must be promoted in
-`nix-packages` before that channel receives it. Returning to upstream is the
-same configuration change in the opposite direction.
+With `autoUpdate.enable`, T3 and its providers run from the
+`~/.local/state/nix/profiles/ai-stack` profile instead (ADR-0077). Home Manager
+seeds it on first deployment or a channel change; afterwards
+`t3code-auto-update` builds the promoted `ai-stack-<channel>` bundle and
+`t3code-ai-stack-switch` installs it, refusing same-channel downgrades and
+restarting T3 only when it is idle. Neither runs Home Manager activation. Roll
+back with `nix-env --profile ~/.local/state/nix/profiles/ai-stack --rollback`
+followed by `systemctl --user restart t3code`. A new fork revision must be
+promoted in `nix-packages` before that channel receives it. Returning to
+upstream is the same configuration change in the opposite direction.
 
 Qualify patches against the selected upstream version before sharing state:
 start upstream, apply the fork, and reopen with upstream using disposable test
