@@ -25,7 +25,7 @@ in {
     inputs.nix-secrets.nixosModules.rpi0Hardware
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
-    "${configDir}/modules/nixos/profiles/nixbox-client/default.nix"
+    "${configDir}/modules/nixos/profiles/nixbox-direct-client/default.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/bluetooth-audio-receiver/default.nix"
@@ -36,9 +36,8 @@ in {
   boot.loader.generic-extlinux-compatible.enable = true;
   boot.loader.generic-extlinux-compatible.configurationLimit = 2;
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  # Direct DRM sessions bypass Hyprland's monitor rule. Pin the single TV
-  # connector to its proven EDID mode so EGLFS cannot select the preferred
-  # 4K30 timing for a 1080p stream.
+  # Pin the single TV connector to its proven EDID mode so EGLFS cannot select
+  # the preferred 4K30 timing for a 1080p stream.
   boot.kernelParams = ["video=HDMI-A-1:1920x1080@60e"];
 
   nix.settings.require-sigs = false;
@@ -92,17 +91,14 @@ in {
 
   hardware.firmware = [pkgs.broadcom-bt-firmware];
 
-  services.nixbox-client = {
+  # Direct-DRM appliance only: Moonlight owns the display for the Wolf browser
+  # and Steam streams, with no composited session, Hyprland or DMS.
+  services.nixbox-direct-client = {
     enable = true;
     user = username;
-    enableBootSplash = false;
-    outputMode = "1920x1080@60";
   };
 
   services.moonlight-client = {
-    # The appliance boots directly into public Helium with Moonlight owning
-    # DRM. The composited couch remains an explicit maintenance/recovery mode.
-    defaultSessionMode = "direct-browser";
     streamHost = "SteamHeadless";
     streamApplication = "Steam Big Picture";
     enableDirectDrmStream = true;

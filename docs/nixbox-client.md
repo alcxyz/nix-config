@@ -130,10 +130,11 @@ ssh rpi0 nixbox-mode
 ssh rpi0 nixbox-mode direct-browser # public Helium
 ssh rpi0 nixbox-mode direct-stream  # Steam
 ssh rpi0 nixbox-mode direct-private # protected browser selector
-
-# Force an active direct-display session back to the compositor.
-ssh rpi0 nixbox-mode couch
 ```
+
+The single-board appliances (`rpi0`–`rpi3`) use the direct-only
+`nixbox-direct-client` profile. They carry no composited session, Hyprland or
+DMS, so `couch` is not available there. Use SSH for recovery.
 
 `nixbox-mode` is the shared session command; it
 is also installed by compact clients. The `direct-private` mode opens the

@@ -2,56 +2,10 @@
 {
   configDir,
   pkgs,
-  username,
   ...
 }: {
-  imports = [
-    "${configDir}/modules/home-manager/services/dms/default.nix"
-    "${configDir}/modules/home-manager/profiles/nixbox-session/default.nix"
-  ];
+  imports = ["${configDir}/users/alc/linux/embedded.nix"];
 
-  # This is an appliance profile, not the shared Linux operator profile.
-  # Runtime dependencies for DMS and Waynergy are owned by their modules;
-  # retain only a small set of tools useful for local recovery and input/audio
-  # diagnostics.
-  home = {
-    inherit username;
-    homeDirectory = "/home/${username}";
-    stateVersion = "24.11";
-    packages = with pkgs; [
-      bluetuith
-      btop
-      jq
-      ripgrep
-      wl-clipboard
-    ];
-  };
-
-  programs.home-manager.enable = true;
-  colorscheme.name = "catppuccin-mocha";
-
-  services.dms = {
-    enable = true;
-    profile = "compact";
-    pluginSettingsFile = null;
-    dock = {
-      enable = true;
-      autoHide = true;
-    };
-    polkitDialog = {
-      width = 760;
-      height = 460;
-    };
-    settings = {
-      customPowerActionReboot = "couch-session-power-action reboot";
-      customPowerActionPowerOff = "couch-session-power-action poweroff";
-    };
-  };
-
-  services.waynergy = {
-    screenName = "rpi0";
-    # Consume the shared XPS-qualified bridge so Waynergy buttons and drags
-    # reach XWayland Moonlight without changing the WLR compositor path.
-    wlrXwaylandBridge = true;
-  };
+  # Diagnostics for rpi0's Bluetooth audio receiver.
+  home.packages = [pkgs.bluetuith];
 }

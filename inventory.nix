@@ -162,7 +162,6 @@
       platform = "nixos";
       role = "embedded";
       k8sRole = null;
-      deployAll = false;
       skipManagedUserSshSecrets = true;
       configuration = ./hosts/rpi1/configuration.nix;
       osIcon = "";
