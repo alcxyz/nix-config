@@ -26,6 +26,7 @@
     export SUDO_BIN=/run/wrappers/bin/sudo
     exec ${lib.getExe pkgs.nix-gc-maintenance} \
       --automatic-retention \
+      --keep ${toString config.alc.nix.keepGenerations} \
       --user ${lib.escapeShellArg accountUsername} \
       --home ${lib.escapeShellArg accountHomeDirectory}
   '';
@@ -38,6 +39,7 @@ in {
     ../../shared/shell.nix
     inputs.nix-secrets.nixosModules.distributedBuildClientPolicy
     ./nsswitch.nix
+    ./nix-retention.nix
     ../security/credential-consent/default.nix
     ../services/snapshot-restic-home/default.nix
     ../services/storage-health-monitor/default.nix

@@ -28,7 +28,9 @@ nix.gc = {
 Generation retention is a separate, guarded prerequisite of automatic GC. It
 checks the system profile and the configured managed user's Home Manager and
 user profiles. Retention triggers when any profile exceeds 20 generations or
-when the Nix filesystem has less than 15% free. When triggered, it validates
+when the Nix filesystem has less than 15% free. Hosts may lower the retained
+count with `alc.nix.keepGenerations` (default 10); the trigger stays at twice
+that count. Small, rarely changed SD-card hosts keep 3. When triggered, it validates
 every current profile closure before pruning profiles back to the latest 10
 generations. Any validation failure aborts retention and the dependent GC.
 

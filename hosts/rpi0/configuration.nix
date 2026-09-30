@@ -269,4 +269,7 @@ in {
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
+
+  # Static SD-card host: fewer rollback anchors are enough (ADR-0013).
+  alc.nix.keepGenerations = 3;
 }
