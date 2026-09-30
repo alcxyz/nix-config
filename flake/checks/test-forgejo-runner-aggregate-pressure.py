@@ -262,6 +262,25 @@ esac
         self.assertEqual(self.runner_actions, ['start'])
         self.assertFalse(self.disk_start_skipped)
 
+    def test_pressure_freeze_thaws_while_disk_is_between_floors(self):
+        # A frozen daemon cannot prune; waiting for disk recovery deadlocks.
+        self.assertEqual(self.run_guard([2500, 2500, 0, 0],
+                                        disk_values=['100 35'] * 4),
+                         (0, ['freeze', 'thaw'], False, False))
+
+    def test_critical_disk_keeps_aggregate_frozen_at_low_pressure(self):
+        self.assertEqual(self.run_guard([0, 0, 0, 0], admission=True,
+                                        disk_values=['100 10'] * 4),
+                         (0, ['freeze'], True, False))
+        self.assertEqual(self.runner_actions, ['stop'])
+
+    def test_thaw_between_disk_floors_withholds_admission(self):
+        self.assertEqual(self.run_guard([7000, 7000, 7000, 0, 0, 0], admission=True,
+                                        disk_values=['100 35'] * 6),
+                         (0, ['freeze', 'thaw'], False, False))
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+
     def test_transition_events_are_ordered_and_include_duration(self):
         self.run_guard([2500, 2500, 1000, 0, 0])
         self.assertEqual([line.split()[0] for line in self.events],

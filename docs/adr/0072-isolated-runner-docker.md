@@ -27,9 +27,12 @@ paused.
 An opt-in root-filesystem free-space signal uses the same controller and
 ownership state for isolated runners. Falling below either the byte or percent
 admission floor gracefully drains every runner; falling below either critical
-floor freezes the aggregate to stop active worker writes. Recovery requires
-both byte and percent headroom to remain above their recovery floors for the
-normal low-pressure interval. The runner start gate checks space independently
+floor freezes the aggregate to stop active worker writes. Resuming admission
+requires both byte and percent headroom to remain above their recovery floors
+for the normal low-pressure interval. Thawing an owned freeze requires only low
+pressure and space above the critical floors: a frozen daemon cannot run the
+cleanup that would restore headroom, so waiting for recovery would hold the
+freeze indefinitely. The runner start gate checks space independently
 so boot and configuration switches cannot bypass a drain. An unreadable or
 invalid sample fails closed. This sampled guard is an emergency circuit breaker,
 not a hard storage quota: writes may consume the remaining space between samples

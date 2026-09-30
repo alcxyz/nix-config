@@ -375,6 +375,7 @@ read_pressure || fail "I/O pressure is unreadable at startup"
 high=0
 severe=0
 low=0
+recovered=0
 iteration=0
 while ((max_iterations == 0 || iteration < max_iterations)); do
   iteration=$((iteration + 1))
@@ -402,16 +403,24 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
       request_admission_drain disk_space
     done
   fi
-  if ((disk_status != 0)); then low=0; fi
+  # Thawing depends on pressure alone: a freeze must not outlive its cause
+  # while the disk sits between the drain and recovery floors, because the
+  # frozen daemon cannot run the prune that would restore headroom. Resuming
+  # admission still requires a consecutive recovered-disk streak.
   if ((pressure >= high_threshold)); then
     high=$((high + 1))
     low=0
-  elif ((pressure <= low_threshold && disk_status == 0)); then
+  elif ((pressure <= low_threshold)); then
     low=$((low + 1))
     high=0
   else
     low=0
     high=0
+  fi
+  if ((low > 0 && disk_status == 0)); then
+    recovered=$((recovered + 1))
+  else
+    recovered=0
   fi
   if ((pressure >= severe_threshold)); then
     severe=$((severe + 1))
@@ -427,7 +436,8 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
   fi
   if [[ -e $state_dir/owned ]]; then
     freeze_owned
-    if ((low >= low_required && disk_status == 0)); then
+    # A critical disk keeps active workers frozen until space is recovered.
+    if ((low >= low_required && disk_status != 2)); then
       thaw_owned
     fi
   elif ((disk_status == 2)) ||
@@ -437,7 +447,7 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
     severe=0
     if [[ $admission_control == 0 ]]; then high=0; fi
   fi
-  if ((low >= low_required && game_status == 1 && disk_status == 0)); then
+  if ((recovered >= low_required && game_status == 1)); then
     # Recovery always thaws the aggregate before asking the runner to poll
     # again. If jobs are still draining, resume_admissions keeps waiting for a
     # fully inactive unit while the low-pressure streak continues.
@@ -445,7 +455,7 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
       runner_state=$(runner_state_dir "$runner_unit")
       resume_admissions
     done
-    low=$low_required
+    recovered=$low_required
   fi
   if ((max_iterations != 0 && iteration >= max_iterations)); then break; fi
   sleep "$sample_seconds"

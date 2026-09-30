@@ -250,5 +250,30 @@ in {
         Persistent = true;
       };
     };
+    # Pressure pruning follows the dedicated daemon, so build cache left in the
+    # host daemon by earlier CI or manual builds is otherwise never reclaimed.
+    # Tagged images, containers and volumes stay untouched for host workloads.
+    systemd.services.host-docker-cache-prune = lib.mkIf config.virtualisation.docker.enable {
+      description = "Prune stale host Docker build cache and dangling images";
+      after = ["docker.service"];
+      requires = ["docker.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = [
+          "${config.virtualisation.docker.package}/bin/docker builder prune --all --force --filter until=168h"
+          "${config.virtualisation.docker.package}/bin/docker image prune --force"
+        ];
+        Nice = 10;
+        IOSchedulingClass = "idle";
+      };
+    };
+    systemd.timers.host-docker-cache-prune = lib.mkIf config.virtualisation.docker.enable {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnCalendar = "weekly";
+        RandomizedDelaySec = "6h";
+        Persistent = true;
+      };
+    };
   };
 }
