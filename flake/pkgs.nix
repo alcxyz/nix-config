@@ -64,6 +64,7 @@ in
                 nixDeploy = np.nix-deploy;
               };
               reportcraft = inputs.reportcraft.packages.${system}.default;
+              openbao = inputs.nixpkgs-openbao.legacyPackages.${system}.openbao;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
                 quickshell = inputs.quickshell.packages.${system}.default;

@@ -6,6 +6,9 @@
   # ---- Inputs -----------------------------------------------------------
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Hold host OpenBao at the reviewed 2.6.2 until adoption finishes and the
+    # next release is reviewed; remove once nixpkgs' version is accepted.
+    nixpkgs-openbao.url = "github:NixOS/nixpkgs/6774f7bc253789b113a4f39285dc0fa100abeacc";
 
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware/master";
