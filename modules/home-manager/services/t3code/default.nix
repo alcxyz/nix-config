@@ -5,6 +5,7 @@
 {
   config,
   configDir,
+  inputs ? {},
   lib,
   pkgs,
   ...
@@ -27,6 +28,7 @@ with lib; let
     if builtins.isAttrs configDir && configDir ? outPath
     then configDir.outPath
     else toString configDir;
+  snapshotNixpkgsRevision = (inputs.nixpkgs or {}).rev or "";
   activationGuard = pkgs.writeShellApplication {
     name = "t3code-activation-guard";
     runtimeInputs = with pkgs; [
@@ -179,6 +181,20 @@ with lib; let
       openssh
     ];
     text = ''
+      # The snapshot rebuilds all of Home Manager, not just the T3 packages.
+      # Userspace from another nixpkgs cannot load the system's graphics
+      # drivers (glibc skew), so never activate a snapshot the system has
+      # moved past; a normal Home Manager deploy refreshes the snapshot.
+      snapshot_nixpkgs=${escapeShellArg snapshotNixpkgsRevision}
+      nixos_version="''${T3CODE_NIXOS_VERSION:-/run/current-system/sw/bin/nixos-version}"
+      if [[ -n "$snapshot_nixpkgs" && -x "$nixos_version" ]]; then
+        system_nixpkgs=$("$nixos_version" --json | jq -er '.nixpkgsRevision')
+        if [[ "$system_nixpkgs" != "$snapshot_nixpkgs" ]]; then
+          echo "Refusing to activate: the pinned Home Manager snapshot uses nixpkgs $snapshot_nixpkgs, but the running system uses $system_nixpkgs." >&2
+          echo "Deploy Home Manager from the same checkout as the system to refresh the snapshot." >&2
+          exit 76
+        fi
+      fi
       target=${escapeShellArg "${configurationSource}#homeConfigurations.${cfg.autoUpdate.homeConfiguration}.activationPackage"}
       package_flake=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
       promotion_flake_default=${escapeShellArg promotionFlakeDefault}

@@ -495,6 +495,17 @@ in {
           echo "Promotion flake default contains literal shell quotes" >&2
           exit 1
         fi
+        grep -F "snapshot_nixpkgs=${inputs.nixpkgs.rev}" ${updater}
+        # A system on another nixpkgs must stop the updater before any build.
+        printf '#!/bin/sh\necho %s\n' "'{\"nixpkgsRevision\":\"0000000000000000000000000000000000000000\"}'" > fake-nixos-version
+        chmod +x fake-nixos-version
+        status=0
+        T3CODE_NIXOS_VERSION=$PWD/fake-nixos-version ${updater} 2> skew.log || status=$?
+        if [[ "$status" != 76 ]] || ! grep -F "Refusing to activate" skew.log; then
+          echo "Updater did not refuse a nixpkgs skew (exit $status)" >&2
+          cat skew.log >&2
+          exit 1
+        fi
         grep -F "T3CODE_CGROUP_FILE" ${guard}
         grep -F "t3code\\.service" ${guard}
         grep -F 'systemctl --user restart t3code.service' ${

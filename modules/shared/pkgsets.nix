@@ -248,7 +248,6 @@ in rec {
       ]
       ++ lib.optionals stdenv.hostPlatform.isLinux [
         t3code
-        herdr
       ];
 
     gaming = with pkgs; [
