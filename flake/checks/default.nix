@@ -466,6 +466,9 @@ in {
         }
       ];
     };
+    stableForkHome = forkHome.extendModules {
+      modules = [{services.t3code.forkReleaseChannel = lib.mkForce "stable";}];
+    };
     t3Unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code.Unit;
     unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Unit;
     service = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Service;
@@ -474,6 +477,7 @@ in {
     guard = lib.removePrefix "run " upstreamHome.config.home.activation.t3codeRestartGuard.data;
     applyManagedUnit = self.homeConfigurations.alc-xyz.config.home.activation.t3codeApplyManagedUnit.data;
     forkGuard = lib.removePrefix "run " forkHome.config.home.activation.t3codeRestartGuard.data;
+    stableForkGuard = lib.removePrefix "run " stableForkHome.config.home.activation.t3codeRestartGuard.data;
   in
     assert forkHome.config.services.t3code.baseDir == home.config.services.t3code.baseDir;
     assert forkHome.config.systemd.user.services.t3code.Service.ExecStart == home.config.systemd.user.services.t3code.Service.ExecStart;
@@ -484,7 +488,7 @@ in {
     assert service.RestartPreventExitStatus == "76";
     assert timer.Persistent;
       pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep pkgs.python3];} ''
-        python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)} ${lib.escapeShellArg (lib.removeSuffix "\n" forkGuard)}
+        python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)} ${lib.escapeShellArg (lib.removeSuffix "\n" forkGuard)} ${lib.escapeShellArg (lib.removeSuffix "\n" stableForkGuard)}
         grep -F "promotion_flake_default='git+https://git.alc.xyz/alcxyz/nix-config.git?ref=dev'" ${updater}
         grep -F 'promotion_flake="''${T3CODE_PROMOTION_FLAKE:-$promotion_flake_default}"' ${updater}
         if grep -F ":-'git+" ${updater}; then

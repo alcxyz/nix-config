@@ -44,6 +44,7 @@ in {
   services.t3code = {
     enable = true;
     channel = "fork"; # Select "upstream" to return to the upstream build.
+    forkReleaseChannel = "nightly";
     port = 3773;
     autoUpdate = {
       packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";

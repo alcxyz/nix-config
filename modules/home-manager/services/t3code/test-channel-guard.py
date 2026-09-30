@@ -42,7 +42,7 @@ def check(script, accepted_channel, accepted_version, expected, inside_service=F
         assert not (root / "restart").exists()
 
 
-upstream, fork = sys.argv[1:]
+upstream, fork, stable = sys.argv[1:]
 check(upstream, None, "9999.0.0", 76)  # Legacy state belongs to upstream.
 check(upstream, "upstream", "9999.0.0", 76)
 check(fork, "fork", "9999.0.0", 76)
@@ -53,4 +53,10 @@ check(fork, "fork", "0.0.1", 0)
 check(upstream, "invalid", "0.0.1", 76)
 check(upstream, "fork", "9999.0.0", 75, inside_service=True)
 check(fork, "upstream", "9999.0.0", 75, inside_service=True)
-print("T3 channel guard: 10 cases passed")
+check(fork, "fork-nightly", "9999.0.0", 76)
+check(stable, "fork-stable", "9999.0.0", 76)
+check(stable, "fork-nightly", "9999.0.0", 0)
+check(stable, "fork", "9999.0.0", 0)
+check(fork, "fork-stable", "9999.0.0", 0)
+check(stable, "fork-nightly", "9999.0.0", 75, inside_service=True)
+print("T3 channel guard: 16 cases passed")

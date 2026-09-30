@@ -3,25 +3,34 @@
 Select the package for the existing headless service:
 
 ```nix
-services.t3code.channel = "upstream"; # or "fork"
+services.t3code = {
+  channel = "fork"; # or "upstream"
+  forkReleaseChannel = "nightly"; # or "stable"
+};
 ```
 
-`upstream` selects `pkgs.t3code`; `fork` selects `pkgs.t3code-fork`.
-Both come from the pinned `nix-packages` input and share its nightly source
-revision and build recipe. The fork adds the reviewed patches. The overnight
-package scan validates both variants before promoting a new nightly; a failed
-build or patch conflict leaves the previous promoted revision in place.
-An explicit `services.t3code.package` override still takes precedence.
+`upstream` selects `pkgs.t3code`, the published upstream nightly.
+`fork` with `nightly` selects `pkgs.t3code-fork`, the compatibility alias for
+`pkgs.t3code-fork-nightly`. `fork` with `stable` selects
+`pkgs.t3code-fork-stable`. Both fork channels apply the same maintained feature
+changes to exact published upstream release commits. They do not follow raw
+upstream `main`.
 
-The consumer lock must first be updated to a promoted `nix-packages` revision
-that exports both packages. After that one-time adoption, changing channels
-does not require changing the lock or the service wiring.
+The packages come from the pinned `nix-packages` input. Select a revision that
+exports the requested package before switching to stable. An explicit
+`services.t3code.package` override still takes precedence.
+
+Hourly discovery checks for newly published releases and tested fork promotions.
+Unchanged candidates skip builds. Each fork channel advances only after its
+validation passes; a conflict leaves that channel's last tested revision in place.
+Package and consumer validation still gate deployment.
 
 Apply the configuration through the usual Home Manager activation. Changing
 channels preserves the service name, address, port, and state directory. The
-existing idle-turn and service-cgroup guards still govern restarts. Changing
-channels deliberately permits a different release version; accidental
-version downgrades within the same channel remain blocked.
+existing idle-turn and service-cgroup guards still govern restarts. An explicit
+stable/nightly switch permits a different release version, while accidental
+downgrades within the selected channel remain blocked. Legacy `fork` channel
+state is treated as nightly for the downgrade guard.
 
 Unattended updates refresh packages inside the active configuration snapshot,
 so they retain its selected channel. A new fork revision must be promoted in

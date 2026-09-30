@@ -12,6 +12,10 @@
 with lib; let
   cfg = config.services.t3code;
   managedVersion = getVersion cfg.package;
+  managedChannel =
+    if cfg.channel == "fork"
+    then "fork-${cfg.forkReleaseChannel}"
+    else "upstream";
   managedVersionState = "${cfg.baseDir}/userdata/managed-t3code-version";
   managedChannelState = "${cfg.baseDir}/userdata/managed-t3code-channel";
   restartMarker = "${cfg.baseDir}/userdata/managed-t3code-restart-required";
@@ -34,7 +38,7 @@ with lib; let
     ];
     text = ''
       managed_version=${escapeShellArg managedVersion}
-      managed_channel=${escapeShellArg cfg.channel}
+      managed_channel=${escapeShellArg managedChannel}
       channel_state="''${T3CODE_CHANNEL_STATE:-${managedChannelState}}"
       version_state="''${T3CODE_VERSION_STATE:-${managedVersionState}}"
       restart_marker="''${T3CODE_RESTART_MARKER:-${restartMarker}}"
@@ -72,9 +76,14 @@ with lib; let
       if [[ -r "$channel_state" ]]; then
         read -r accepted_channel < "$channel_state" || true
       fi
-      if [[ "$accepted_channel" != upstream && "$accepted_channel" != fork ]]; then
+      if [[ "$accepted_channel" != upstream && "$accepted_channel" != fork && "$accepted_channel" != fork-nightly && "$accepted_channel" != fork-stable ]]; then
         echo "Invalid managed T3 Code channel state at $channel_state." >&2
         exit 76
+      fi
+
+      # Legacy fork selection follows the nightly compatibility alias.
+      if [[ "$accepted_channel" == fork ]]; then
+        accepted_channel=fork-nightly
       fi
 
       # Selecting another channel is an intentional package change. Versions
@@ -208,13 +217,24 @@ in {
       description = "Package channel for the existing service. Changing channels preserves its address and state directory.";
     };
 
+    forkReleaseChannel = mkOption {
+      type = types.enum ["nightly" "stable"];
+      default = "nightly";
+      description = "Published upstream release channel used by the tested fork. Applies when channel is fork.";
+    };
+
     package = mkOption {
       type = types.package;
       default =
         if cfg.channel == "fork"
-        then pkgs.t3code-fork
+        then
+          (
+            if cfg.forkReleaseChannel == "stable"
+            then pkgs.t3code-fork-stable
+            else pkgs.t3code-fork
+          )
         else pkgs.t3code;
-      defaultText = literalExpression ''if config.services.t3code.channel == "fork" then pkgs.t3code-fork else pkgs.t3code'';
+      defaultText = literalExpression ''if config.services.t3code.channel == "fork" then (if config.services.t3code.forkReleaseChannel == "stable" then pkgs.t3code-fork-stable else pkgs.t3code-fork) else pkgs.t3code'';
       description = "T3 Code package to run and protect from unintended downgrades.";
     };
 
@@ -355,7 +375,7 @@ in {
         run mv -f "$tmp" "$version_state"
         channel_state=${escapeShellArg managedChannelState}
         channel_tmp=$(mktemp "''${channel_state}.XXXXXX")
-        printf '%s\n' ${escapeShellArg cfg.channel} > "$channel_tmp"
+        printf '%s\n' ${escapeShellArg managedChannel} > "$channel_tmp"
         chmod 0644 "$channel_tmp"
         run mv -f "$channel_tmp" "$channel_state"
       '';

@@ -22,6 +22,8 @@ in
               "kdash"
               "t3code"
               "t3code-fork"
+              "t3code-fork-nightly"
+              "t3code-fork-stable"
               "claude-code"
               "codex-app-server"
               "codex-cli"
