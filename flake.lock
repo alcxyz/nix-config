@@ -934,11 +934,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1790735455,
-        "narHash": "sha256-IbULc4JQdXU3uGJretRzzejumhX+6ZQStL0YOOQxLHI=",
+        "lastModified": 1790738131,
+        "narHash": "sha256-axjtiElNlwbQ1lsu2EZ1MUlVotpJSH/8Sdfki8wrcc0=",
         "ref": "dev",
-        "rev": "87ab727a86648ab358d75ab2c5ea466c6619e0d3",
-        "revCount": 662,
+        "rev": "3f19c7f0509b9ad2476595d7a6cc5e3fb00b1d1a",
+        "revCount": 664,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
