@@ -102,6 +102,11 @@ in {
       ];
       keep-derivations = true;
       keep-outputs = true;
+      # Emergency backstop: when free space drops below min-free during a
+      # build or substitution, Nix collects dead paths until max-free is
+      # available. Like scheduled GC, it never deletes generations (ADR-0013).
+      min-free = 10 * 1024 * 1024 * 1024;
+      max-free = 50 * 1024 * 1024 * 1024;
       trusted-users = [
         "root"
         "@admin"
@@ -134,13 +139,13 @@ in {
 
     gc = {
       automatic = true;
+      # Daily so the per-run cap keeps pace with build churn. Ordinary GC
+      # only frees dead paths. Guarded generation retention runs separately
+      # shortly before this job; see ADR-0013.
       interval = {
-        Weekday = 0;
         Hour = 2;
         Minute = 0;
       };
-      # Ordinary GC only frees dead paths. Guarded generation retention runs
-      # separately shortly before this job; see ADR-0013.
       options = "--max-freed 10G";
     };
 
@@ -155,12 +160,11 @@ in {
   };
 
   # launchd has no direct dependency edge between calendar jobs. Run guarded
-  # retention shortly before the existing Sunday GC; the retention command
-  # only manages verified roots, while nix-gc collects dead store paths.
+  # retention shortly before the daily GC; the retention command only
+  # manages verified roots, while nix-gc collects dead store paths.
   launchd.daemons.nix-generation-retention.serviceConfig = {
     ProgramArguments = ["${nixGenerationRetention}"];
     StartCalendarInterval = {
-      Weekday = 0;
       Hour = 1;
       Minute = 45;
     };

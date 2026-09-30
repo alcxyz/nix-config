@@ -612,16 +612,22 @@ in {
 
   nix-gc-retention-module-contract = let
     nixosGc = self.nixosConfigurations.xyz.config.systemd.services.nix-gc;
+    nixosNix = self.nixosConfigurations.xyz.config.nix;
+    darwinNix = self.darwinConfigurations.mac.config.nix;
     darwinRetention = self.darwinConfigurations.mac.config.launchd.daemons.nix-generation-retention.serviceConfig;
     darwinGc = self.darwinConfigurations.mac.config.launchd.daemons.nix-gc.serviceConfig;
   in
     assert builtins.elem "nix-generation-retention.service" nixosGc.requires;
     assert builtins.elem "nix-generation-retention.service" nixosGc.after;
-    assert darwinRetention.StartCalendarInterval.Weekday == 0;
+    assert nixosNix.settings.min-free > 0;
+    assert nixosNix.settings.max-free > nixosNix.settings.min-free;
+    assert darwinRetention.StartCalendarInterval.Weekday or null == null;
     assert darwinRetention.StartCalendarInterval.Hour == 1;
     assert darwinRetention.StartCalendarInterval.Minute == 45;
-    assert darwinGc.StartCalendarInterval.Weekday == 0;
+    assert darwinGc.StartCalendarInterval.Weekday or null == null;
     assert darwinGc.StartCalendarInterval.Hour == 2;
+    assert darwinNix.settings.min-free > 0;
+    assert darwinNix.settings.max-free > darwinNix.settings.min-free;
       pkgs.runCommand "nix-gc-retention-module-contract" {} ''
         touch "$out"
       '';

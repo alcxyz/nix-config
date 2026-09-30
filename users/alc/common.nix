@@ -52,6 +52,7 @@ in
       "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
       "${configDir}/modules/home-manager/programs/ssh/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
+      "${configDir}/modules/home-manager/services/nix-stale-gcroots/default.nix"
       "${configDir}/modules/shared/host-metadata.nix"
     ];
 
@@ -61,6 +62,7 @@ in
     home.stateVersion = "24.11";
 
     programs.home-manager.enable = true;
+    services.nix-stale-gcroots.enable = true;
 
     # ==================== Nix-Colors Settings ====================
     colorscheme.name = "catppuccin-mocha";

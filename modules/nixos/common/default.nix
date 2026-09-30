@@ -57,6 +57,11 @@ in {
       warn-dirty = false;
       sandbox = true;
       auto-optimise-store = true;
+      # Emergency backstop: when free space drops below min-free during a
+      # build or substitution, Nix collects dead paths until max-free is
+      # available. Like scheduled GC, it never deletes generations (ADR-0013).
+      min-free = 10 * 1024 * 1024 * 1024;
+      max-free = 50 * 1024 * 1024 * 1024;
       trusted-users = [
         "root"
         username
@@ -78,9 +83,11 @@ in {
     };
     gc = {
       automatic = true;
-      dates = "weekly";
-      # Ordinary GC only frees dead paths. Guarded generation retention runs
-      # separately before this service; see ADR-0013.
+      # Daily so the per-run cap keeps pace with build churn; a weekly 10G
+      # cap let dead paths accumulate. Ordinary GC only frees dead paths.
+      # Guarded generation retention runs separately before this service;
+      # see ADR-0013.
+      dates = "daily";
       options = "--max-freed 10G";
     };
     package = pkgs.nixVersions.latest;
