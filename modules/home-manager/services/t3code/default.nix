@@ -359,12 +359,6 @@ in {
     autoUpdate = {
       enable = mkEnableOption "unattended T3 Code and provider updates through the ai-stack profile (ADR-0077)";
 
-      flakeUri = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Deprecated configuration-flake URI retained for compatibility; unattended activation never evaluates it.";
-      };
-
       packageFlakeUri = mkOption {
         type = types.str;
         example = "git+https://code.example.net/operator/nix-packages.git?ref=dev";
@@ -376,12 +370,6 @@ in {
         default = null;
         example = "git+https://code.example.net/operator/nix-config.git?ref=dev";
         description = "Configuration flake whose committed nix-packages lock is the package promotion authority. When set, unattended updates use its pinned revision instead of the moving packageFlakeUri ref.";
-      };
-
-      homeConfiguration = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Deprecated and unused since ADR-0077; unattended updates no longer activate Home Manager.";
       };
 
       calendar = mkOption {
