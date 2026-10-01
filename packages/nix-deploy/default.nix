@@ -10,6 +10,16 @@
   nixosHostNames = lib.filter (host: inventory.hosts.${host}.platform == "nixos") hostNames;
   homeManagerHostNames = lib.filter (host: inventory.hosts.${host}.homeManager or true) hostNames;
   deployableInAll = host: inventory.hosts.${host}.deployAll or true;
+  # Embedded-etcd members switch one at a time behind a readiness gate so a
+  # fleet deploy cannot disrupt more than one quorum member at once (#511).
+  k3sServerHostNames =
+    lib.filter (
+      host: let
+        role = inventory.hosts.${host}.k8sRole or null;
+      in
+        role != null && inventory.k8sRoles.${role}.role == "server"
+    )
+    nixosHostNames;
 
   deployAllHostNames =
     lib.optional (builtins.elem "xyz" nixosHostNames && deployableInAll "xyz") "xyz"
@@ -59,6 +69,13 @@
     deployAllHosts = deployAllHostNames;
     inherit aliases sshHosts systemSshUsers systemActivationModes;
     systemRemoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
+    serialSystemHosts = k3sServerHostNames;
+    # The node's own API server must be ready (this includes etcd health) and
+    # the control plane must report the node Ready. kubectl comes from PATH so
+    # the managed kubeconfig wrapper applies; the context is pinned so a
+    # switched kubectx cannot point the gate at another cluster.
+    serialReadyCommand = "kubectl --context funhouse --request-timeout=10s --server https://{host}:6443 get --raw=/readyz >/dev/null && kubectl --context funhouse wait --for=condition=Ready node/{host} --timeout=30s";
+    serialReadyTimeoutSeconds = 600;
     hostColors = {
       xyz = "137;180;250";
       nux = "166;227;161";
