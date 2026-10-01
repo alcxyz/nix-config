@@ -468,6 +468,9 @@ in {
   };
 
   nix.settings.max-jobs = 8;
+  # The 199G disk is shared with media and workstation state; five rollback
+  # anchors are enough here (ADR-0013).
+  alc.nix.keepGenerations = 5;
 
   system.stateVersion = lib.mkForce "25.11";
 }
