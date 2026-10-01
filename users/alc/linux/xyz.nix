@@ -37,6 +37,12 @@
 in {
   inherit (hyprlandContract) assertions;
 
+  # Bane NOR Azure sign-in opens in the dedicated Brave profile.
+  programs.bnBootstrap.bivrost.authenticationBrowser = {
+    executable = "brave";
+    arguments = ["--profile-directory=Profile 5" "{url}"];
+  };
+
   # Import the common Linux configuration
   imports = [
     "${configDir}/users/alc/linux/operator.nix"

@@ -38,6 +38,11 @@ in {
     ln -s /Applications/WezTerm.app/Contents/Resources/wezterm.sh "$out/etc/profile.d/wezterm.sh"
   '';
   programs.karabiner.managed.enable = true;
+  # Bane NOR Azure sign-in opens in Zen, which holds only the Bane NOR profile.
+  programs.bnBootstrap.bivrost.authenticationBrowser = {
+    executable = "/usr/bin/open";
+    arguments = ["-a" "Zen" "{url}"];
+  };
   programs.atuin.daemon.enable = false;
   programs.moonlightEndpoints.launchers = [
     {

@@ -93,11 +93,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790716087,
-        "narHash": "sha256-xKA5t2dBzeCg0OX5HVw1VNT1YYIwAnh7dHxX369sGFM=",
+        "lastModified": 1790863727,
+        "narHash": "sha256-QRyH1ZoTqCXhlBqhT8Ss+lhnTTxI5toHfhQY9JIYwok=",
         "ref": "dev",
-        "rev": "0dc26ccd1136728ebffb886fb7eb2484595ae093",
-        "revCount": 44,
+        "rev": "49a1e0fa228f73b19fb935a84f6f368880f09e03",
+        "revCount": 45,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       },
