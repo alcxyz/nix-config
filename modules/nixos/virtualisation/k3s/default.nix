@@ -25,6 +25,7 @@ with lib; let
     if hostK8sRole == null
     then []
     else hostK8sRole.extraFlags or [];
+  firewallDropGuard = config.networking.firewall.enable && !config.networking.nftables.enable;
   networkPathAudit = pkgs.writeShellApplication {
     name = "k8s-node-network-audit";
     runtimeInputs = [
@@ -241,6 +242,43 @@ in {
         AccuracySec = "30s";
         Persistent = true;
         Unit = "k3s-network-path-audit.service";
+      };
+    };
+
+    # A NixOS firewall reload appends a temporary drop-all `nixos-drop` jump to
+    # INPUT and removes it when the reload finishes. k3s's network-policy
+    # controller rewrites the filter table from an earlier snapshot, so a
+    # reload that overlaps its sync can resurrect that jump and leave the node
+    # dropping all ingress (2026-10-01, nux). Remove any jump that remains
+    # while no reload is running.
+    systemd.services.k3s-firewall-drop-guard = mkIf firewallDropGuard {
+      description = "Remove a stale firewall reload drop rule on k3s nodes";
+      serviceConfig = {
+        Type = "oneshot";
+        LogLevelMax = "notice";
+      };
+      path = [config.networking.firewall.package pkgs.systemd];
+      script = ''
+        reloading() {
+          [[ "$(systemctl show -p ActiveState --value firewall.service)" == reloading ]]
+        }
+        reloading && exit 0
+        for cmd in iptables ip6tables; do
+          $cmd -w 5 -C INPUT -j nixos-drop 2>/dev/null || continue
+          reloading && exit 0
+          while $cmd -w 5 -D INPUT -j nixos-drop 2>/dev/null; do :; done
+          echo "<4>removed stale nixos-drop jump from $cmd INPUT"
+        done
+      '';
+    };
+
+    systemd.timers.k3s-firewall-drop-guard = mkIf firewallDropGuard {
+      description = "Check for a stale firewall reload drop rule";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "1m";
+        OnUnitActiveSec = "20s";
+        AccuracySec = "1s";
       };
     };
 
