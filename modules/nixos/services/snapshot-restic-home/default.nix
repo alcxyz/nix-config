@@ -105,27 +105,50 @@
       exec 9>/run/lock/snapshot-restic-home.lock
       flock 9
 
+      snapshot_dataset=${lib.escapeShellArg cfg.sourceDataset}
+      snapshot_mountpoint=${lib.escapeShellArg cfg.sourceMountPoint}
+      destroy_attempts=5
+      destroy_retry_delay=3
+      ${builtins.readFile ./snapshot-cleanup.sh}
+
       snapshot_name="restic-$(date -u +%Y%m%dT%H%M%SZ)-$$"
-      snapshot=${lib.escapeShellArg cfg.sourceDataset}@"$snapshot_name"
-      snapshot_path=${lib.escapeShellArg cfg.sourceMountPoint}/.zfs/snapshot/"$snapshot_name"/${lib.escapeShellArg cfg.sourceRelativePath}
+      snapshot="$snapshot_dataset@$snapshot_name"
+      snapshot_path="$snapshot_mountpoint/.zfs/snapshot/$snapshot_name"/${lib.escapeShellArg cfg.sourceRelativePath}
       bind_path=${lib.escapeShellArg backupPath}
       snapshot_created=false
       bind_mounted=false
+      sweep_failed=false
 
+      # A failed snapshot cleanup must fail the unit so it is noticed.
       cleanup() {
         status=$?
         trap - EXIT INT TERM
         if [ "$bind_mounted" = true ]; then
           umount "$bind_path" || true
         fi
-        if [ "$snapshot_created" = true ]; then
-          zfs destroy "$snapshot" || true
+        if [ "$snapshot_created" = true ] && ! destroy_snapshot "$snapshot_name"; then
+          [ "$status" -ne 0 ] || status=1
+        fi
+        if [ "$sweep_failed" = true ]; then
+          [ "$status" -ne 0 ] || status=1
         fi
         exit "$status"
       }
-      trap cleanup EXIT INT TERM
+      trap cleanup EXIT
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
 
-      zfs snapshot "$snapshot"
+      # Leftovers from earlier failed cleanups are retried, but do not block
+      # today's backup.
+      # A killed run can leave its bind mount behind, keeping its snapshot busy.
+      while mountpoint -q "$bind_path"; do
+        umount "$bind_path"
+      done
+      if ! sweep_leftover_snapshots; then
+        sweep_failed=true
+      fi
+
+      zfs snapshot -o "$snapshot_owner_property=true" "$snapshot"
       snapshot_created=true
       if [ ! -d "$snapshot_path" ]; then
         echo "snapshot source path is unavailable" >&2
@@ -134,8 +157,8 @@
 
       install -d -m 0700 "$bind_path"
       mount --bind "$snapshot_path" "$bind_path"
-      mount -o remount,bind,ro "$bind_path"
       bind_mounted=true
+      mount -o remount,bind,ro "$bind_path"
 
       restic backup "$bind_path" \
         --host ${lib.escapeShellArg cfg.backupHost} \

@@ -346,6 +346,11 @@ in {
     bash scripts/checks/test-xyz-runtime-storage-policy.sh hosts/xyz/xyz-runtime-storage-policy.sh
   '';
 
+  snapshot-restic-home-cleanup-contract = mkRepoCheck "snapshot-restic-home-cleanup-contract" [pkgs.bash pkgs.coreutils pkgs.diffutils pkgs.gnugrep] ''
+    bash modules/nixos/services/snapshot-restic-home/test-snapshot-cleanup.sh \
+      modules/nixos/services/snapshot-restic-home/snapshot-cleanup.sh
+  '';
+
   storage-health-monitor-contract = let
     host = self.nixosConfigurations.xyz.config;
     monitored = host.services.storage-health-monitor.units;
