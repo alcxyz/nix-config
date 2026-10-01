@@ -91,6 +91,15 @@ in {
       name = "iqn.2026-05.xyz.alc:${host}";
     };
 
+    # Running Longhorn engines keep a handle on the iscsid process they started
+    # with; restarting it during activation breaks their frontend operations
+    # (for example online expansion) until the node reboots. The running daemon
+    # keeps its binary and configuration until its next start, normally the
+    # next reboot; iscsiadm and other package paths update at switch time.
+    # switch-to-configuration-ng currently ignores changed .socket units, so
+    # iscsid.socket needs no setting; recheck if that upstream FIXME changes.
+    systemd.services.iscsid.restartIfChanged = false;
+
     # Keep NFS userspace available for Longhorn RWX/share-manager support.
     environment.systemPackages = with pkgs; [
       cryptsetup
