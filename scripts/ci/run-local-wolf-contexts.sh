@@ -8,6 +8,22 @@ if [[ ${1:-} == --pack-context ]]; then
   exit
 fi
 
+# Succeeds when two product manifests describe identical image inputs: every
+# product field (context, build arguments, labels), independent of order.
+same_products() {
+  local new old
+  new=$(jq -cS '[.products[]] | sort_by(.name)' "$1") || return 2
+  [[ -f $2 ]] || return 1
+  old=$(jq -cS '[.products[]] | sort_by(.name)' "$2") || return 1
+  [[ -n $new && $new == "$old" ]]
+}
+
+if [[ ${1:-} == --same-products ]]; then
+  [[ $# == 3 ]] || exit 2
+  same_products "$2" "$3"
+  exit
+fi
+
 for variable in CONFIG_REMOTE CONFIG_BRANCH FORGEJO_URL FORGEJO_OWNER FORGEJO_REPO \
   FORGEJO_API_TOKEN_FILE DOCKER_CONFIG_FILE WOLF_CONTEXT_STATE_DIRECTORY; do
   [[ -n ${!variable:-} ]] || {
@@ -79,6 +95,30 @@ if [[ $state == missing ]]; then
   manifest="$work/product/manifest.json"
   jq -e '.schemaVersion == 1 and ([.products[].name] | sort) == ["brave","helium","wolf","zen"]' "$manifest" >/dev/null
 
+  # flake.lock bumps (for example unrelated nix-packages updates) usually leave
+  # every image input unchanged. Skip when the products match the last
+  # successfully dispatched set and the publish recipe itself did not change.
+  dispatched="$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.dispatched.json"
+  # A search error counts as a recipe change, so the run publishes.
+  recipe_changed=yes
+  if [[ -f $work/changed ]]; then
+    if rg -q '^(\.forgejo/workflows/publish-wolf-images\.yml|scripts/ci/(publish-wolf-images|wolf-context-package|run-local-wolf-contexts)\.(sh|py))$' "$work/changed"; then
+      recipe_changed=yes
+    elif [[ $? == 1 ]]; then
+      recipe_changed=no
+    fi
+  fi
+  if [[ $recipe_changed == no ]] && same_products "$manifest" "$dispatched"; then
+    [[ $(remote_head) == "$revision" ]] || {
+      echo 'Wolf source advanced during build; deferring.' >&2
+      exit 75
+    }
+    echo 'Wolf image inputs match the last dispatched products; recording the revision without publishing.'
+    printf '%s\n' "$revision" >"$checkpoint.new"
+    mv -f -- "$checkpoint.new" "$checkpoint"
+    exit 0
+  fi
+
   mkdir "$work/archives"
   products='{}'
   for name in wolf helium brave zen; do
@@ -112,6 +152,11 @@ if [[ $state == missing ]]; then
     exit 75
   }
   python3 "$client" upload "${package[@]}" --directory "$work/archives" --receipt "$work/archives/complete.json"
+  # Bind the uploaded products to their revision for the dispatch record.
+  jq --arg revision "$revision" '{revision: $revision, products}' "$manifest" \
+    >"$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.uploaded.json.new"
+  mv -f -- "$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.uploaded.json.new" \
+    "$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.uploaded.json"
   nix-store --realise "$(readlink -f "$work/product")" \
     --add-root "$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH" --indirect >/dev/null
 fi
@@ -123,6 +168,18 @@ fi
 python3 "$client" dispatch --url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" \
   --channel "$CONFIG_BRANCH" --sha "$revision" --repo "$FORGEJO_REPO" \
   --api-token-file "$FORGEJO_API_TOKEN_FILE"
+# Record what was dispatched, but only when the uploaded products provably
+# belong to this revision; otherwise drop the record so the next run publishes.
+# A dispatch only starts CI: if that publish job fails, rerun it (or wait for
+# the next real input change), since identical inputs are not re-dispatched.
+uploaded="$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.uploaded.json"
+if [[ -f $uploaded && $(jq -r '.revision // empty' "$uploaded" 2>/dev/null) == "$revision" ]]; then
+  jq '{products}' "$uploaded" >"$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.dispatched.json.new"
+  mv -f -- "$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.dispatched.json.new" \
+    "$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.dispatched.json"
+else
+  rm -f -- "$WOLF_CONTEXT_STATE_DIRECTORY/$CONFIG_BRANCH.dispatched.json"
+fi
 printf '%s\n' "$revision" >"$checkpoint.new"
 mv -f -- "$checkpoint.new" "$checkpoint"
 python3 "$client" prune "${package[@]}"

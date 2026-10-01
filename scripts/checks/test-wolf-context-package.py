@@ -210,6 +210,158 @@ class HandoffTests(unittest.TestCase):
             self.assertEqual((root / "output/context/first").read_bytes(), b"shared payload\n")
             self.assertEqual((root / "output/context/second").read_bytes(), b"shared payload\n")
 
+    def test_producer_compares_all_product_inputs(self):
+        if shutil.which("jq") is None:
+            self.skipTest("jq is unavailable")
+        products = [{"name": name, "context": f"/nix/store/{name}-context",
+                     "buildArgs": {"RUNTIME_IMAGE": "runtime:1"},
+                     "labels": {"io.nixbox.wolf-browser.context": f"/nix/store/{name}-context"}}
+                    for name in ("wolf", "helium", "brave", "zen")]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def write(name, items):
+                path = root / name
+                path.write_text(json.dumps({"schemaVersion": 1, "products": items}))
+                return path
+
+            def variant(field, value):
+                items = json.loads(json.dumps(products))
+                items[3][field] = value
+                return items
+
+            def same(new, old):
+                return subprocess.run(["bash", str(PRODUCER), "--same-products", str(new), str(old)]).returncode
+
+            current = write("current.json", products)
+            # Product order does not matter.
+            self.assertEqual(same(current, write("reordered.json", list(reversed(products)))), 0)
+            # Any image input differs: context, build arguments or labels.
+            self.assertNotEqual(same(current, write("context.json", variant("context", "/nix/store/zen-new"))), 0)
+            self.assertNotEqual(same(current, write("args.json", variant("buildArgs", {"RUNTIME_IMAGE": "runtime:2"}))), 0)
+            self.assertNotEqual(same(current, write("labels.json", variant("labels", {}))), 0)
+            # A missing or unreadable previous record never suppresses publishing.
+            self.assertNotEqual(same(current, root / "missing.json"), 0)
+            (root / "broken.json").write_text("{not json")
+            self.assertNotEqual(same(current, root / "broken.json"), 0)
+
+    def test_producer_skips_only_after_a_dispatch_with_identical_inputs(self):
+        tools = ("git", "jq", "rg", "fd", "flock", "tar", "zstd", "awk")
+        if any(shutil.which(tool) is None for tool in tools):
+            self.skipTest("producer tools are unavailable")
+        # A small real store directory without links serves as every context.
+        context = Path(shutil.which("jq")).resolve().parents[1]
+        if not str(context).startswith("/nix/store/") or any(
+                path.is_symlink() for path in context.rglob("*")):
+            self.skipTest("no link-free store directory is available")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            remote, source, shims, state, log = (root / name for name in
+                                                 ("remote.git", "source", "bin", "state", "calls"))
+            shims.mkdir()
+            log.write_text("")
+            for name, body in {
+                # Out-link a product directory whose manifest comes from products.json.
+                "nix": """#!/usr/bin/env bash
+set -eu
+link=; while [[ $# -gt 0 ]]; do [[ $1 == --out-link ]] && { link=$2; shift; }; shift; done
+product=$(mktemp -d "$MOCK_ROOT/product.XXXX")
+jq '{schemaVersion: 1, products: .}' products.json >"$product/manifest.json"
+ln -s "$product" "$link"
+""",
+                "nix-store": """#!/usr/bin/env bash
+set -eu
+[[ ! -e $MOCK_ROOT/fail-root ]] || exit 1
+path=$2; while [[ $# -gt 0 ]]; do [[ $1 == --add-root ]] && root=$2; shift; done
+ln -sfn "$path" "$root"
+""",
+            }.items():
+                # The build sandbox has no /usr/bin/env; use an absolute shell.
+                (shims / name).write_text(body.replace("#!/usr/bin/env bash", "#!" + shutil.which("bash"), 1))
+                (shims / name).chmod(0o755)
+
+            subprocess.run(["git", "init", "-q", "--bare", "-b", "dev", str(remote)], check=True)
+            subprocess.run(["git", "init", "-q", "-b", "dev", str(source)], check=True)
+            client = source / "scripts/ci/wolf-context-package.py"
+            client.parent.mkdir(parents=True)
+            shutil.copy(PRODUCER, source / "scripts/ci/run-local-wolf-contexts.sh")
+            client.write_text("""import os, sys
+action = sys.argv[1]
+with open(os.environ["MOCK_LOG"], "a") as log:
+    log.write(action + "\\n")
+if action == "exists":
+    marker = os.environ["MOCK_ROOT"] + "/exists"
+    print(open(marker).read().strip() if os.path.exists(marker) else "missing")
+if action == "dispatch" and os.path.exists(os.environ["MOCK_ROOT"] + "/fail-dispatch"):
+    sys.exit(1)
+""")
+            products = [{"name": name, "context": str(context), "buildArgs": {}, "labels": {}}
+                        for name in ("wolf", "helium", "brave", "zen")]
+
+            def commit(lock, items=products):
+                (source / "flake.lock").write_text(lock)
+                (source / "products.json").write_text(json.dumps(items))
+                subprocess.run(["git", "-C", str(source), "add", "-A"], check=True)
+                subprocess.run(["git", "-C", str(source), "-c", "user.name=t", "-c", "user.email=t@t",
+                                "commit", "-qm", lock], check=True)
+                subprocess.run(["git", "-C", str(source), "push", "-qf", str(remote), "dev"], check=True)
+
+            def produce():
+                log.write_text("")
+                token = root / "token"
+                token.write_text("x")
+                env = dict(os.environ, PATH=f"{shims}:{os.environ['PATH']}", MOCK_ROOT=str(root),
+                           MOCK_LOG=str(log), CONFIG_REMOTE=str(remote), CONFIG_BRANCH="dev",
+                           FORGEJO_URL="https://forge.invalid", FORGEJO_OWNER="o", FORGEJO_REPO="r",
+                           FORGEJO_API_TOKEN_FILE=str(token), DOCKER_CONFIG_FILE=str(token),
+                           WOLF_CONTEXT_STATE_DIRECTORY=str(state), XDG_RUNTIME_DIR=str(root))
+                result = subprocess.run(["bash", str(PRODUCER)], env=env, capture_output=True, text=True)
+                return result.returncode, log.read_text().split()
+
+            commit("lock-1")
+            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
+            # An input-neutral lock bump records the revision without publishing.
+            commit("lock-2")
+            self.assertEqual(produce(), (0, ["exists"]))
+            # A changed image input publishes.
+            changed = [dict(item, buildArgs={"RUNTIME_IMAGE": "new"}) for item in products]
+            commit("lock-3", changed)
+            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
+            # A failed dispatch must not let identical inputs skip the next publish.
+            (root / "fail-dispatch").touch()
+            commit("lock-4", products)
+            code, calls = produce()
+            self.assertNotEqual(code, 0)
+            self.assertEqual(calls, ["exists", "upload", "dispatch"])
+            (root / "fail-dispatch").unlink()
+            commit("lock-5", products)
+            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
+
+            # Root registration fails after upload; the retry finds the upload,
+            # dispatches it and records this revision's products.
+            moved = [dict(item, labels={"moved": "yes"}) for item in products]
+            (root / "fail-root").touch()
+            commit("lock-6", moved)
+            code, calls = produce()
+            self.assertNotEqual(code, 0)
+            self.assertEqual(calls, ["exists", "upload"])
+            (root / "fail-root").unlink()
+            (root / "exists").write_text("present")
+            self.assertEqual(produce(), (0, ["exists", "dispatch", "prune"]))
+            (root / "exists").unlink()
+            commit("lock-7", moved)
+            self.assertEqual(produce(), (0, ["exists"]))
+
+            # Without proof of which revision was uploaded, no record is kept and
+            # identical inputs publish again.
+            (state / "dev.uploaded.json").unlink()
+            (root / "exists").write_text("present")
+            commit("lock-8", products)
+            self.assertEqual(produce(), (0, ["exists", "dispatch", "prune"]))
+            (root / "exists").unlink()
+            self.assertFalse((state / "dev.dispatched.json").exists())
+            commit("lock-9", products)
+            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
 
 if __name__ == "__main__":
     unittest.main()

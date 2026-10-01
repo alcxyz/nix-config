@@ -338,7 +338,7 @@ in {
     bash scripts/checks/test-publish-wolf-images.sh
   '';
 
-  wolf-image-context-handoff-contract = mkRepoCheck "wolf-image-context-handoff-contract" [pkgs.python3 pkgs.zstd] ''
+  wolf-image-context-handoff-contract = mkRepoCheck "wolf-image-context-handoff-contract" [pkgs.python3 pkgs.zstd pkgs.jq pkgs.git pkgs.ripgrep pkgs.fd pkgs.util-linux pkgs.gnutar pkgs.gawk pkgs.coreutils pkgs.bash] ''
     python3 scripts/checks/test-wolf-context-package.py
   '';
 
