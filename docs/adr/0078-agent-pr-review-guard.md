@@ -34,7 +34,7 @@ REST merges. It blocks them unless the PR has the review comment, and also
 blocks when it cannot verify the comment.
 
 Cost is tracked during an initial QA period before the requirement is
-reconsidered.
+reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
 
 ## Alternatives Considered
 
