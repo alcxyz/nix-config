@@ -424,8 +424,8 @@ in {
     bash scripts/checks/test-claude-settings-merge.sh
   '';
 
-  check-agent-pr-review-guard = mkRepoCheck "check-agent-pr-review-guard" [pkgs.python3] ''
-    python3 scripts/checks/test-pr-review-guard.py
+  check-agent-pr-review = mkRepoCheck "check-agent-pr-review" [pkgs.python3 pkgs.git] ''
+    python3 scripts/checks/test-pr-review.py
   '';
 
   check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.ripgrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''

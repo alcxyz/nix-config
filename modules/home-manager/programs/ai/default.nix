@@ -7,12 +7,22 @@
 }:
 with lib; let
   cfg = config.programs.ai;
-  # Agent PR review guard (ADR-0078). The hook command uses the stable profile
-  # path so managed hook entries do not change with each generation.
+  # Agent PR reviews (ADR-0078): `pr-review` runs and records the reviews, and
+  # the guard blocks agent merges without a comment for the PR's head. The hook
+  # command uses the stable profile path so managed hook entries do not change
+  # with each generation. Reviewer clients (codex, claude) come from PATH.
+  prReviewConfig = pkgs.writeText "pr-review.json" (builtins.toJSON {
+    inherit (cfg.prReview) reviewers timeout;
+  });
+  prReview = pkgs.writeShellApplication {
+    name = "pr-review";
+    runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
+    text = ''PR_REVIEW_CONFIG=${prReviewConfig} exec python3 ${./pr-review.py} "$@"'';
+  };
   prReviewGuard = pkgs.writeShellApplication {
     name = "agent-pr-review-guard";
-    runtimeInputs = [pkgs.python3 pkgs.gh];
-    text = ''exec python3 ${./pr-review-guard.py} "$@"'';
+    runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
+    text = ''exec python3 ${./pr-review.py} guard'';
   };
   prReviewHooks = {
     PreToolUse = [
@@ -22,7 +32,7 @@ with lib; let
           {
             type = "command";
             command = "${config.home.profileDirectory}/bin/agent-pr-review-guard";
-            timeout = 60;
+            timeout = 120;
           }
         ];
       }
@@ -46,9 +56,59 @@ with lib; let
 in {
   options.programs.ai = {
     enable = mkEnableOption "Module for vibe coding stuff";
+
+    prReview = {
+      reviewers = mkOption {
+        type = types.listOf (types.submodule {
+          options = {
+            name = mkOption {
+              type = types.strMatching "[A-Za-z0-9_-]+";
+              description = "Short name for the reviewer's result files; not prompt, status or lock.";
+            };
+            client = mkOption {
+              type = types.enum ["codex" "claude"];
+              description = "CLI that runs the reviewer read-only.";
+            };
+            model = mkOption {type = types.str;};
+            effort = mkOption {
+              type = types.str;
+              default = "high";
+            };
+          };
+        });
+        default = [
+          {
+            name = "gpt";
+            client = "codex";
+            model = "gpt-6.1-sol";
+          }
+          {
+            name = "opus";
+            client = "claude";
+            model = "claude-opus-5-5";
+          }
+        ];
+        description = "Read-only reviewers that `pr-review run` starts in parallel (ADR-0078).";
+      };
+      timeout = mkOption {
+        type = types.ints.positive;
+        default = 1800;
+        description = "Seconds before a reviewer is stopped and recorded as timed out.";
+      };
+    };
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = let
+          names = map (reviewer: reviewer.name) cfg.prReview.reviewers;
+        in
+          names != [] && length names == length (unique names) && !(any (name: elem name ["prompt" "status" "lock"]) names);
+        message = "programs.ai.prReview.reviewers needs at least one reviewer, unique names, and no reserved names (prompt, status, lock).";
+      }
+    ];
+
     programs.opencode = {
       enable = true;
       tui = {
@@ -60,7 +120,7 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [prReviewGuard];
+    home.packages = [prReview prReviewGuard];
 
     # Codex merges hooks from every source, so a managed user-level file is
     # enough; repository hooks keep working alongside it.
