@@ -25,6 +25,18 @@ printf '%s\n' '{"theme":"dark","statusLine":{"command":"old","padding":2}}' >"$s
 merge
 jq -e '.theme == "dark" and .statusLine.command == "managed" and .statusLine.padding == 2' "$settings" >/dev/null
 
+# Managed hooks are added beside user hooks, replace a user copy of the same
+# command, and stay single across repeated merges.
+printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"guard","timeout":60}]}]}}' >"$fixture/managed-hooks.json"
+printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"secrets"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"guard","timeout":5}]}],"Stop":[{"hooks":[{"type":"command","command":"stop"}]}]}}' >"$settings"
+bash "$script" "$settings" "$fixture/managed-hooks.json"
+bash "$script" "$settings" "$fixture/managed-hooks.json"
+jq -e '
+  [.hooks.PreToolUse[].hooks[].command] == ["secrets", "guard"]
+  and .hooks.PreToolUse[1].hooks[0].timeout == 60
+  and .hooks.Stop[0].hooks[0].command == "stop"
+' "$settings" >/dev/null || fail 'managed hooks were not combined with user hooks'
+
 # Malformed, empty, non-object, and multiple JSON documents must be preserved.
 for content in '{broken' '' '[]' 'null' '{} {}'; do
   printf '%s' "$content" >"$settings"

@@ -21,9 +21,20 @@ mkdir -p -- "$(dirname "$settings_file")" || fail 'cannot create settings direct
 settings_tmp=$(mktemp "$settings_file.tmp.XXXXXX") || fail 'cannot create temporary file'
 
 if [ -e "$settings_file" ] || [ -L "$settings_file" ]; then
+  # Hook event arrays are combined rather than replaced, so user-added hooks
+  # survive. A user hook group that runs a managed hook command is replaced by
+  # the managed definition; changing a managed command leaves the old entry.
   jq -e -s '
     if length == 2 and all(.[]; type == "object") then
-      .[0] * .[1]
+      .[0] as $user | .[1] as $managed
+      | [$managed.hooks // {} | .[][]? | .hooks[]?.command] as $commands
+      | ($user * $managed)
+      | if ($managed.hooks // null) == null then . else
+          .hooks = reduce ($managed.hooks | keys[]) as $event ($user.hooks // {};
+            .[$event] = ((.[$event] // [])
+              | map(select(any(.hooks[]?.command; IN($commands[])) | not)))
+              + $managed.hooks[$event])
+        end
     else
       error("expected one JSON object in each settings file")
     end

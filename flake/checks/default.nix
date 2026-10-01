@@ -419,6 +419,10 @@ in {
     bash scripts/checks/test-claude-settings-merge.sh
   '';
 
+  check-agent-pr-review-guard = mkRepoCheck "check-agent-pr-review-guard" [pkgs.python3] ''
+    python3 scripts/checks/test-pr-review-guard.py
+  '';
+
   check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.ripgrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
     shellcheck modules/home-manager/workspace/workspace-sync.sh
     bash scripts/checks/test-workspace-sync.sh
