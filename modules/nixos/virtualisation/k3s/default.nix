@@ -26,6 +26,31 @@ with lib; let
     then []
     else hostK8sRole.extraFlags or [];
   firewallDropGuard = config.networking.firewall.enable && !config.networking.nftables.enable;
+  # Node-to-node ports the cluster needs whenever the host firewall is on.
+  clusterTCPPorts = [
+    6443 # K3s API Server
+    2379 # K3s etcd client port
+    2380 # K3s etcd peer port
+    7946 # MetalLB speaker memberlist
+    10250 # Kubelet metrics endpoint for Metrics Server
+  ];
+  clusterUDPPorts = [
+    8472 # Flannel VXLAN backend
+    7946 # MetalLB speaker memberlist
+  ];
+  # Pod and service traffic traverses the node over the CNI bridge and
+  # flannel overlay. Treat those interfaces as trusted so cross-node
+  # cluster traffic is not filtered like regular host ingress.
+  clusterInterfaces = [
+    "cni0"
+    "flannel.1"
+  ];
+  missingFrom = required: present: lib.filter (item: !(builtins.elem item present)) required;
+  firewall = config.networking.firewall;
+  missingClusterAccess =
+    map toString (missingFrom clusterTCPPorts firewall.allowedTCPPorts)
+    ++ map (port: "${toString port}/udp") (missingFrom clusterUDPPorts firewall.allowedUDPPorts)
+    ++ missingFrom clusterInterfaces firewall.trustedInterfaces;
   networkPathAudit = pkgs.writeShellApplication {
     name = "k8s-node-network-audit";
     runtimeInputs = [
@@ -129,6 +154,14 @@ in {
       ++ optional (cfg.nodeIp != null) {
         assertion = cfg.nodeInterface != null;
         message = "k3s.nodeInterface must be set when k3s.nodeIp is pinned.";
+      }
+      # A firewall that blocks cluster traffic isolates the node while it keeps
+      # internet access, which leaves its cloudflared connector serving errors.
+      # This checks declared openings only (exact entries, not port ranges);
+      # k3s-firewall-drop-guard handles the runtime reload drop rule.
+      ++ optional firewall.enable {
+        assertion = missingClusterAccess == [];
+        message = "k3s on ${config.networking.hostName} needs cluster traffic allowed through the firewall; missing: ${lib.concatStringsSep ", " missingClusterAccess}.";
       };
 
     # Ensure rpcbind is enabled, often a dependency for Kubernetes components
@@ -283,25 +316,9 @@ in {
     };
 
     # Configure firewall for K3s
-    networking.firewall.allowedTCPPorts = [
-      6443 # K3s API Server
-      2379 # K3s etcd client port
-      2380 # K3s etcd peer port
-      7946 # MetalLB speaker memberlist
-      10250 # Kubelet metrics endpoint for Metrics Server
-    ];
-    networking.firewall.allowedUDPPorts = [
-      8472 # Flannel VXLAN backend
-      7946 # MetalLB speaker memberlist
-    ];
-
-    # Pod and service traffic traverses the node over the CNI bridge and
-    # flannel overlay. Treat those interfaces as trusted so cross-node
-    # cluster traffic is not filtered like regular host ingress.
-    networking.firewall.trustedInterfaces = [
-      "cni0"
-      "flannel.1"
-    ];
+    networking.firewall.allowedTCPPorts = clusterTCPPorts;
+    networking.firewall.allowedUDPPorts = clusterUDPPorts;
+    networking.firewall.trustedInterfaces = clusterInterfaces;
 
     # Ensure the k3s package is available in the system environment
     environment.systemPackages = [k3sPackage];
