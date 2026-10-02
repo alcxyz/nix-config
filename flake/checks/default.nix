@@ -17,6 +17,10 @@
 in {
   git-identity-configuration-contract = import ./git-identity.nix {inherit lib pkgs;};
 
+  k3s-self-fence-contract = mkRepoCheck "k3s-self-fence-contract" [pkgs.python3] ''
+    python3 modules/nixos/virtualisation/k3s/test-self-fence.py
+  '';
+
   freelens-kubeconfig-sync-contract = mkRepoCheck "freelens-kubeconfig-sync-contract" [pkgs.python3] ''
     python3 modules/home-manager/programs/kubernetes/test-freelens-sync.py
   '';
