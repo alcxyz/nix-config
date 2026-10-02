@@ -105,6 +105,28 @@ assert local.returncode == 1
             self.assertIn("--keep-going", commands[1])
             self.assertTrue(all("--no-update-lock-file" in command for command in commands))
 
+    def test_out_link_prefix_roots_native_check_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mock = Path(directory) / "nix"
+            calls = Path(directory) / "calls"
+            mock.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\n')
+            mock.chmod(0o755)
+            subprocess.run(
+                ["bash", str(ROOT / "scripts/ci/check-configurations.sh")],
+                env={
+                    **os.environ,
+                    "PATH": directory + os.pathsep + os.environ["PATH"],
+                    "CALLS": str(calls),
+                    "CHECK_RESULTS_OUT_LINK": "/roots/run/check",
+                },
+                check=True,
+            )
+            commands = calls.read_text().splitlines()
+            self.assertNotIn("--out-link", commands[0])
+            self.assertEqual(
+                commands[1], "flake check --keep-going --no-update-lock-file --out-link /roots/run/check"
+            )
+
     def test_credentials_are_restricted_to_the_source_host(self):
         helper = ROOT / "scripts/ci/git-source-credentials.sh"
         for operation, protocol, host, expected in [

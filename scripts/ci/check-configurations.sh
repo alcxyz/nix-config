@@ -12,5 +12,10 @@ if [[ $phase == all || $phase == all-systems ]]; then
   nix flake check --all-systems --no-build --no-update-lock-file
 fi
 if [[ $phase == all || $phase == native ]]; then
-  nix flake check --keep-going --no-update-lock-file
+  native_args=(--keep-going --no-update-lock-file)
+  # Optional out-link prefix that GC-roots the built check results.
+  if [[ -n ${CHECK_RESULTS_OUT_LINK:-} ]]; then
+    native_args+=(--out-link "$CHECK_RESULTS_OUT_LINK")
+  fi
+  nix flake check "${native_args[@]}"
 fi

@@ -82,6 +82,37 @@ with open(sys.argv[1], encoding="utf-8") as source:
 PY
 )
 
+# Root validated check results outside the temporary checkout so scheduled GC
+# does not force the next run to rebuild VM tests and patched packages.
+validate_configurations() {
+  local run_roots result
+  if [[ -z ${CHECK_RESULTS_ROOT_DIR:-} ]]; then
+    (cd "$checkout" && bash scripts/ci/check-configurations.sh)
+    return
+  fi
+  mkdir -p -- "$CHECK_RESULTS_ROOT_DIR" || return
+  # Drop partial roots left by runs that were killed before finishing.
+  for stale in "$CHECK_RESULTS_ROOT_DIR"/run.*; do
+    if [[ -d $stale && ! -e $stale/complete ]]; then
+      rm -rf -- "$stale"
+    fi
+  done
+  run_roots=$(mktemp -d "$CHECK_RESULTS_ROOT_DIR/run.XXXXXX") || return
+  if (cd "$checkout" && CHECK_RESULTS_OUT_LINK="$run_roots/check" bash scripts/ci/check-configurations.sh); then
+    touch -- "$run_roots/complete" || return
+    # Keep only the latest successful run's roots.
+    for stale in "$CHECK_RESULTS_ROOT_DIR"/run.*; do
+      if [[ $stale != "$run_roots" ]]; then
+        rm -rf -- "$stale"
+      fi
+    done
+  else
+    result=$?
+    rm -rf -- "$run_roots"
+    return "$result"
+  fi
+}
+
 status() {
   local revision=$1 state=$2 description=$3
   python3 "$checkout/scripts/forgejo/commit-status.py" publish \
@@ -99,7 +130,7 @@ validate_current_head() {
   fi
 
   status "$base_revision" pending "Trusted local full validation is running"
-  if (cd "$checkout" && bash scripts/ci/check-configurations.sh); then
+  if validate_configurations; then
     if [[ $(git -C "$checkout" rev-parse HEAD) != "$base_revision" ]] ||
       [[ -n $(git -C "$checkout" status --porcelain) ]]; then
       echo "Configuration validation changed the exact candidate tree." >&2
@@ -150,8 +181,8 @@ fi
 (
   cd "$checkout"
   scripts/ci/verify-ai-package-stack.sh flake.lock
-  bash scripts/ci/check-configurations.sh
 )
+validate_configurations
 
 if [[ $(git -C "$checkout" status --porcelain) != " M flake.lock" ]]; then
   echo "Validation changed files other than the package lock; refusing publication." >&2

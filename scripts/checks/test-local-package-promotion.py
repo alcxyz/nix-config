@@ -58,6 +58,8 @@ fi
             """#!/usr/bin/env bash
 set -eu
 echo "config:${1:-all}" >> "$CALLS"
+if [[ ${FAIL_CONFIG:-0} == 1 ]]; then exit 29; fi
+if [[ -n ${CHECK_RESULTS_OUT_LINK:-} ]]; then ln -s /nix/store/fixture-check "$CHECK_RESULTS_OUT_LINK"; fi
 """,
         )
         self.write_executable(
@@ -229,6 +231,35 @@ else:
         self.assertEqual(self.remote_config_head(), self.config_base)
         self.assertFalse(self.status_log.exists())
 
+
+    def test_successful_validation_replaces_previous_check_roots(self):
+        roots = self.root / "check-roots"
+        previous = roots / "run.previous"
+        previous.mkdir(parents=True)
+        (previous / "check").symlink_to("/nix/store/previous-check")
+        (previous / "complete").touch()
+        result = self.run_promoter(CHECK_RESULTS_ROOT_DIR=str(roots))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        runs = list(roots.iterdir())
+        self.assertEqual(len(runs), 1)
+        self.assertNotEqual(runs[0], previous)
+        self.assertEqual(os.readlink(runs[0] / "check"), "/nix/store/fixture-check")
+        self.assertTrue((runs[0] / "complete").exists())
+
+    def test_failed_validation_keeps_previous_check_roots(self):
+        roots = self.root / "check-roots"
+        previous = roots / "run.previous"
+        previous.mkdir(parents=True)
+        (previous / "check").symlink_to("/nix/store/previous-check")
+        (previous / "complete").touch()
+        interrupted = roots / "run.interrupted"
+        interrupted.mkdir()
+        (interrupted / "check").symlink_to("/nix/store/partial-check")
+        result = self.run_promoter(CHECK_RESULTS_ROOT_DIR=str(roots), FAIL_CONFIG="1")
+        self.assertEqual(result.returncode, 29, result.stderr)
+        self.assertEqual(list(roots.iterdir()), [previous])
+        self.assertEqual(self.remote_config_head(), self.config_base)
+        self.assertNotIn("--state success", self.status_log.read_text() if self.status_log.exists() else "")
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,7 +15,8 @@
       git
       gawk
       jq
-      nix
+      # `nix flake check --out-link` needs Nix 2.35; plain pkgs.nix lags.
+      nixVersions.latest
       openssh
       python3
       util-linux
@@ -213,6 +214,7 @@ in {
           "FORGEJO_REPO=${cfg.forgejo.repository}"
           "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.apiTokenFile}"
           "FORGEJO_STATUS_CONTEXT=${cfg.forgejo.statusContext}"
+          "CHECK_RESULTS_ROOT_DIR=${config.home.homeDirectory}/.local/state/nix-package-promotion/check-roots"
         ];
       };
     };
