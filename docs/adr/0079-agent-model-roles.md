@@ -1,8 +1,8 @@
 # ADR-0079: Name agent model roles instead of model versions
 
-**Status:** Accepted
+**Status:** Accepted (implemented 2026-10-02)
 **Date:** 2026-10-02
-**Applies to:** `modules/home-manager/programs/ai/`, `users/alc/common.nix`, `users/alc/configs/llm/config.toml`, `docs/llm-config.toml.example`, `~/.codex/config.toml`, `~/.codex/<role>.config.toml`, `~/.claude/agents/`, `~/.config/llm/config.toml`, nix-secrets role table and agent instructions
+**Applies to:** `modules/home-manager/programs/ai/`, `users/alc/common.nix`, `docs/llm-config.toml.example`, the retired `users/alc/configs/llm/config.toml`, `~/.codex/config.toml`, `~/.codex/<role>.config.toml`, `~/.claude/agents/`, `~/.config/llm/config.toml`, nix-secrets role table and agent instructions
 
 ## Context
 
@@ -51,7 +51,11 @@ configuration, independent of `programs.ai.enable`, which keeps gating
   merges only the managed role tables, as the Claude settings merge (ADR-0078)
   does for hooks. Unlike that merge, it records the role names it manages in a
   state file under `~/.local/state/`, and removes the tables of recorded roles
-  that are no longer defined. Everything else Codex wrote stays.
+  that are no longer defined. Everything else Codex wrote stays. The merge
+  checks the parsed result, refuses layouts it cannot change safely, and does
+  not replace the file if Codex saved it meanwhile; without a lock shared with
+  Codex, a save in the instant between that check and the rename can still be
+  lost. A failed merge only warns, because `-p <role>` keeps working.
 - One Claude agent definition per role in `~/.claude/agents/`. A definition's
   body becomes that agent's system prompt, so each carries a short
   general-purpose prompt and inherits the default tools; it exists for
@@ -130,6 +134,5 @@ The role files rely on Codex's file-based profiles (`-p` loading
 Code's default behaviour with a role's prompt is verified before instructions
 rely on it.
 
-ADR-0029 and ADR-0030 carry amendment notes for the shared LLM config source
-and placement; ADR-0078's reviewer defaults are amended when the
-implementation lands.
+ADR-0029 and ADR-0030 are amended for the shared LLM config source and
+placement, and ADR-0078 for the reviewer defaults.

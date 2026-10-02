@@ -1,25 +1,26 @@
-# Quality-first baseline. Reintroduce lower-cost role tiers only after evals
-# show that they preserve classification and extraction accuracy.
+# Shape of ~/.config/llm/config.toml (ADR-0029). The deployed file is generated
+# from the agent role table (ADR-0079, programs.ai.roles and llmConfigRoles);
+# the model values below are placeholders, not the current choice.
 [roles.fast]
 provider    = "openai"
-model       = "gpt-5.6-sol"
+model       = "<codex model of the mapped role>"
 transport   = "cli"
 api_key_env = "OPENAI_API_KEY"
 
 [roles.fast.backup]
 provider    = "anthropic"
-model       = "claude-haiku-4-5-20251001"
+model       = "<Claude alias or model of the mapped role>"
 transport   = "cli"
 api_key_env = "ANTHROPIC_API_KEY"
 
 [roles.strong]
 provider    = "openai"
-model       = "gpt-5.6-sol"
+model       = "<codex model of the mapped role>"
 transport   = "cli"
 api_key_env = "OPENAI_API_KEY"
 
 [roles.strong.backup]
 provider    = "anthropic"
-model       = "claude-sonnet-4-6-20250514"
+model       = "<Claude alias or model of the mapped role>"
 transport   = "cli"
 api_key_env = "ANTHROPIC_API_KEY"

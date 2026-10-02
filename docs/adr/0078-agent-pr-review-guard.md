@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, Claude Code and Codex CLI user hooks
 
@@ -18,7 +18,8 @@ not mistake for a human review.
 ## Decision
 
 Before an agent merges a PR it created, it obtains independent read-only
-reviews from `gpt-6.1-sol` (high) and Claude Opus 5.5 (high). Each runs sandboxed
+reviews from a Codex and a Claude reviewer, by default the `deep` agent role
+(ADR-0079) on each client. Each runs sandboxed
 without write or forge access and is given the diff and the PR description. The
 agent addresses or justifies the findings, then posts one PR comment whose first
 line is `Automated read-only review (<short head sha> on <target branch>):
@@ -49,7 +50,11 @@ hand or depend on which models their own client offers:
   and refuses unless every reviewer completed for that head, except for skips.
 - `pr-review check <pr>` reports whether a comment names the current head.
 
-Reviewers are the `programs.ai.prReview.reviewers` option.
+Reviewers are the `programs.ai.prReview.reviewers` option, which defaults to
+the `deep` role's resolved models and efforts. `pr-review` never loads a role
+profile, so its isolation is unchanged. A role can name a Claude alias, so each
+result records the model the client reports (Claude's JSON result, Codex's
+session header) alongside the configured one.
 
 `programs.ai` installs `agent-pr-review-guard` as a `PreToolUse` hook for shell
 commands in both clients. Claude receives it through the managed settings merge,

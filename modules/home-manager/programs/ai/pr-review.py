@@ -474,10 +474,60 @@ def reviewer_command(reviewer, tree, output):
         argv = [
             "claude", "-p", "--model", model, "--effort", effort, "--restricted",
             "--tools", "Read,Grep,Glob", "--strict-mcp-config", "--no-session-persistence",
-            "--permission-mode", "dontAsk",
+            "--permission-mode", "dontAsk", "--output-format", "json",
         ]
-        return argv, tree, output
+        return argv, tree, output + ".json"
     raise ReviewError(f"unknown reviewer client {reviewer['client']!r}")
+
+
+CODEX_MODEL = re.compile(r"^model:[ \t]*(\S+)[ \t]*$", re.MULTILINE)
+
+
+def codex_header_model(log_text):
+    """Return the model from Codex's session header, or None.
+
+    The header sits between the first two `--------` lines; the prompt, which
+    contains the untrusted PR body and diff, follows it and is never searched.
+    """
+    parts = re.split(r"^--------[ \t]*$", log_text, maxsplit=2, flags=re.MULTILINE)
+    if len(parts) < 3:
+        return None
+    match = CODEX_MODEL.search(parts[1])
+    return match.group(1) if match else None
+
+
+def claude_result(reply):
+    """Return (review text, reported models) from Claude's JSON result."""
+    if not isinstance(reply, dict) or not isinstance(reply.get("result"), str):
+        raise ValueError("no string result")
+    usage = reply.get("modelUsage")
+    # Claude Code also uses a helper model, and token counts cannot tell which
+    # one reviewed, so record every model the client reports.
+    reported = ", ".join(sorted(name for name in usage if isinstance(name, str))) if isinstance(usage, dict) else ""
+    return reply["result"], reported or None
+
+
+def finish_reviewer(reviewer, output, log_path, stdout_path):
+    """Write the review text to `output` and return the model the client reported.
+
+    A role can name a Claude alias (ADR-0079), so the recorded model is what the
+    client reports, not what it was given. Claude's JSON result is unpacked into
+    the review file; Codex prints its model in the session header on stderr.
+    A result that cannot be read leaves no review file, so it counts as failed.
+    """
+    try:
+        if reviewer["client"] == "claude":
+            with open(stdout_path, encoding="utf-8") as handle:
+                text, reported = claude_result(json.load(handle))
+            with open(output, "w", encoding="utf-8") as handle:
+                handle.write(text if text.endswith("\n") else text + "\n")
+            return reported
+        with open(log_path, encoding="utf-8") as handle:
+            return codex_header_model(handle.read())
+    except (OSError, ValueError) as error:
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(f"cannot read the reviewer result: {error}\n")
+        return None
 
 
 VERDICT = re.compile(
@@ -552,11 +602,11 @@ def run_reviewers(config, prompt_path, tree, directory):
                     )
                 except OSError as error:
                     log.write(f"cannot start {argv[0]}: {error}\n")
-            jobs.append((reviewer, output, process, log, stdout, time.monotonic()))
+            jobs.append((reviewer, output, process, log, stdout, stdout_path, time.monotonic()))
 
         results = {}
-        for reviewer, output, process, log, stdout, started in jobs:
-            status, code = "failed", None
+        for reviewer, output, process, log, stdout, stdout_path, started in jobs:
+            status, code, reported = "failed", None, None
             if process is not None:
                 try:
                     code = process.wait(timeout=max(0, deadline - time.monotonic()))
@@ -564,14 +614,17 @@ def run_reviewers(config, prompt_path, tree, directory):
                     stop(process)
                     status = "timeout"
                 else:
+                    for handle in {log, stdout}:
+                        handle.flush()
+                    reported = finish_reviewer(reviewer, output, log.name, stdout_path)
                     status = "ok" if code == 0 and has_verdict(output) else "failed"
             results[reviewer["name"]] = {
                 "status": status, "exit": code, "seconds": round(time.monotonic() - started),
-                "output": output, "reviewer": reviewer,
+                "output": output, "reviewer": reviewer, "reported_model": reported,
             }
         return results
     finally:
-        for _, _, process, log, stdout, _ in jobs:
+        for _, _, process, log, stdout, _, _ in jobs:
             if process is not None and process.poll() is None:
                 stop(process)
             for handle in {log, stdout}:
@@ -635,7 +688,8 @@ def cmd_run(args):
 def print_results(results):
     failed = False
     for name, result in results.items():
-        print(f"\n===== {name}: {result['status']} ({result['seconds']}s)")
+        reported = result.get("reported_model")
+        print(f"\n===== {name}: {result['status']} ({result['seconds']}s{', ' + reported if reported else ''})")
         if result["status"] == "ok":
             try:
                 with open(result["output"], encoding="utf-8") as handle:
@@ -650,7 +704,8 @@ def print_results(results):
 
 
 def output_or_log(output, log):
-    return f"{output} and {log}" if os.path.exists(output) else log
+    files = [path for path in (output, output + ".json") if os.path.exists(path)]
+    return " and ".join(files + [log])
 
 
 def cmd_comment(args):

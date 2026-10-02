@@ -938,11 +938,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790840800,
-        "narHash": "sha256-QjjUCoud4MFkbAyfYob4xi2QJVWXb2y6yv+dKU7rpTM=",
+        "lastModified": 1790969949,
+        "narHash": "sha256-t6rK9SqEC0h/azeD5edSHwErVHveLiiT20lSjyak2C8=",
         "ref": "dev",
-        "rev": "f8a583b8e9aadcba2c0da943994b6e56f1a2f929",
-        "revCount": 614,
+        "rev": "e00b30755f6f57223cc582f9bf0d0d6179e719aa",
+        "revCount": 628,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },

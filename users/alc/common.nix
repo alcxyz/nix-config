@@ -44,6 +44,7 @@ in
     imports = [
       inputs.nix-secrets.homeManagerModules.gitIdentityPolicy
       inputs.nix-secrets.homeManagerModules.sshIdentityPolicy
+      inputs.nix-secrets.homeManagerModules.agentRoles
       # These are modules that are guaranteed to work on both OSes
       # or handle their own platform differences internally if needed
       "${configDir}/modules/home-manager/shell/default.nix"
@@ -52,6 +53,8 @@ in
       "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
       "${configDir}/modules/home-manager/programs/ssh/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
+      # Agent model roles (ADR-0079) follow the shared agent instructions to every host.
+      "${configDir}/modules/home-manager/programs/ai/roles.nix"
       "${configDir}/modules/home-manager/services/nix-stale-gcroots/default.nix"
       "${configDir}/modules/shared/host-metadata.nix"
     ];
@@ -109,9 +112,6 @@ in
     # ==================== Symlinked configs (live editing, all hosts) ====================
     xdg.configFile."television".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/television";
-
-    xdg.configFile."llm/config.toml".source =
-      config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/llm/config.toml";
 
     home.file.".claude/CLAUDE.md".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/src/infra/nix-secrets/shared/claude/CLAUDE.md";

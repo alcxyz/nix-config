@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): once #522 lands, `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets, replacing `users/alc/configs/llm/config.toml` and the live-edit link. Until then, the current file stays authoritative.
+**Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
 **Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/leantime-tidy`, `tools/paperless-tools`
 
 ## Context
@@ -74,10 +74,11 @@ transport   = "cli"
 api_key_env = "ANTHROPIC_API_KEY"
 ```
 
-A checked-in reference copy lives at `docs/llm-config.toml.example`.
-The canonical deployed user config lives at
-`users/alc/configs/llm/config.toml` and is linked into
-`~/.config/llm/config.toml` via home-manager.
+`docs/llm-config.toml.example` shows the shape with placeholder models.
+Since ADR-0079, Home Manager generates `~/.config/llm/config.toml` from
+`programs.ai.llmConfigRoles`, which maps `fast` and `strong` to agent roles; the
+values live in nix-secrets. The hand-maintained `users/alc/configs/llm/config.toml`
+and its live-edit link are retired.
 
 ### Fields
 
@@ -148,9 +149,10 @@ would break tools that have not adopted the shared config yet.
 **Keep OpenAI as API-only:** Rejected. The desired direction is local CLI as
 the primary path, with API as optional support.
 
-**Put the shared config in `nix-secrets`:** Rejected. This is configuration
-policy, not secret material. Secrets referenced by `api_key_env` remain
-separate.
+**Put the shared config in `nix-secrets`:** Rejected at the time. This is
+configuration policy, not secret material. Secrets referenced by `api_key_env`
+remain separate. ADR-0079 later moved the values next to the private agent
+instructions that name the same roles.
 
 ## Consequences
 

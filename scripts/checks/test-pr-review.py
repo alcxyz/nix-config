@@ -333,16 +333,19 @@ with tempfile.TemporaryDirectory() as tmp:
     pathlib.Path(repository, ".gitattributes").write_text("* binary\n")
     subprocess.run(git + ["config", "filter.probe.smudge", f"touch {tmp}/filter-ran; cat"], check=True)
 
-    # Fake reviewer CLIs: codex writes its -o file, claude prints to stdout.
+    # Fake reviewer CLIs: codex writes its -o file and reports its model on
+    # stderr; claude prints a JSON result with per-model usage to stdout.
     bin_dir = os.path.join(tmp, "bin")
     os.mkdir(bin_dir)
     scripts = {
         "codex": 'cat >/dev/null; case "$*" in *"--ignore-user-config --ignore-rules --disable apps"*) ;; *) exit 3;; esac; '
                  'test -z "$FORGEJO_API_TOKEN_FILE$GH_TOKEN" || exit 4; '
+                 'printf "OpenAI Codex\\n--------\\nmodel: gpt-reported\\n--------\\nuser\\nmodel: gpt-spoofed\\n" >&2; '
                  'while [ "$1" != -o ]; do shift; done; test -f file && echo "Verdict: no findings" >"$2"',
         "claude": 'cat >/dev/null; test -f file || exit 1; test ! -L link || exit 5; test ! -e sub/.GIT || exit 7; '
                   'test "$(cat link)" = "symbolic link to /etc/passwd" || exit 6; '
-                  'case "$*" in *--restricted*) printf "Reading the diff.\\n\\n**Verdict: no findings**\\n";; *) exit 3;; esac',
+                  'case "$*" in *"--restricted"*"--output-format json"*) printf \'{"result": "Reading the diff.\\\\n\\\\n**Verdict: no findings**", '
+                  '"modelUsage": {"claude-helper": {"outputTokens": 3}, "claude-reported": {"outputTokens": 90}}}\';; *) exit 3;; esac',
     }
     for name, body in scripts.items():
         path = os.path.join(bin_dir, name)
@@ -391,6 +394,10 @@ with tempfile.TemporaryDirectory() as tmp:
     state = os.path.join(tmp, "state", "pr-review", "github.com", "o", "r", "4", head)
     status = json.loads(pathlib.Path(state, "status.json").read_text())
     assert {r["status"] for r in status["reviewers"].values()} == {"ok"}, status
+    # Roles can pass aliases (ADR-0079), so the recorded model is the reported one.
+    reported = {name: r["reported_model"] for name, r in status["reviewers"].items()}
+    assert reported == {"gpt": "gpt-reported", "opus": "claude-helper, claude-reported"}, reported
+    assert "gpt: ok" in output and "gpt-reported)" in output and "claude-helper, claude-reported)" in output, output
     prompt = pathlib.Path(state, "prompt.md").read_text()
     assert "+{braces} survive" in prompt and "+one" not in prompt, prompt
     assert not os.path.exists(os.path.join(tmp, "hook-ran")), "repository hooks must not run"
@@ -404,11 +411,19 @@ with tempfile.TemporaryDirectory() as tmp:
     assert code == 0 and posted[-1][1] == f"Automated read-only review ({head[:12]} on dev): no findings.", posted
 
     # A reviewer that exits 0 without a valid verdict has not reviewed anything.
-    pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\ncat >/dev/null\necho \"Verdict: unable to review\"\n")
+    pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\ncat >/dev/null\necho '{\"result\": \"Verdict: unable to review\"}'\n")
     code, output = cli("run", "4", "--force")
     assert code == 1 and "opus: failed" in output, output
     code, output = cli("comment", "4", "no findings.")
     assert code == 1 and "by opus;" in output, output
+    # A malformed JSON result is a failed review, not a crash, and the other
+    # reviewer's result is still recorded.
+    pathlib.Path(bin_dir, "claude").write_text(
+        "#!/bin/sh\ncat >/dev/null\necho '{\"result\": null, \"modelUsage\": {\"x\": {\"outputTokens\": null}}}'\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 1 and "opus: failed" in output and "gpt: ok" in output, output
+    status = json.loads(pathlib.Path(state, "status.json").read_text())
+    assert status["reviewers"]["gpt"]["reported_model"] == "gpt-reported", status
     pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\n" + scripts["claude"] + "\n")
     code, output = cli("run", "4")
     assert code == 0, output
