@@ -32,9 +32,11 @@ private repository. Public hosted CI reads only the exact status receipt.
 
 For package input promotion, `scripts/ci/verify-ai-package-stack.sh flake.lock`
 validates the standalone producer and the candidate consumer separately before
-the local promoter can publish success. It also rechecks the package update
-queue, producer head, and consumer base immediately before its compare-and-swap
-push. A package version string or a source-text match is insufficient: the
+the local promoter can publish the revision. It rechecks the package update
+queue and producer head immediately before moving the nix-packages `promoted`
+branch with a lease. `just lock-packages` moves the configuration lock to
+`promoted` when a deployment needs it
+([ADR-0080](adr/0080-promoted-package-ref.md)). A package version string or a source-text match is insufficient: the
 consumer can override dependency inputs.
 
 [ADR-0067](adr/0067-explicit-consumer-and-platform-validation.md) defines the

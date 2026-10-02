@@ -59,6 +59,7 @@ fi
 set -eu
 echo "config:${1:-all}" >> "$CALLS"
 if [[ ${FAIL_CONFIG:-0} == 1 ]]; then exit 29; fi
+if [[ ${FAIL_HEAD_CONFIG:-0} == 1 ]] && ! grep -q "$PRODUCER_REVISION" flake.lock; then exit 31; fi
 if [[ -n ${CHECK_RESULTS_OUT_LINK:-} ]]; then ln -s /nix/store/fixture-check "$CHECK_RESULTS_OUT_LINK"; fi
 """,
         )
@@ -162,8 +163,9 @@ else:
             "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
             "CONFIG_REMOTE": self.config_remote.as_uri(),
             "CONFIG_BRANCH": "dev",
-            "NIX_PACKAGES_REMOTE_URL": str(self.packages_remote),
+            "NIX_PACKAGES_REMOTE_URL": self.packages_remote.as_uri(),
             "NIX_PACKAGES_BRANCH": "dev",
+            "NIX_PACKAGES_PROMOTED_BRANCH": "promoted",
             "NIX_PACKAGES_QUEUE_API_URL": "https://example.invalid/queue",
             "FORGEJO_URL": self.root.parent.as_uri(),
             "FORGEJO_OWNER": self.root.name,
@@ -174,6 +176,8 @@ else:
             "CALLS": str(self.calls),
             "STATUS_LOG": str(self.status_log),
             "QUEUE_COUNTER": str(self.queue_counter),
+            # Keep the run lock away from a live promoter on the same host.
+            "XDG_RUNTIME_DIR": str(self.root),
             **extra,
         }
         return subprocess.run(
@@ -188,49 +192,118 @@ else:
             ["git", "--git-dir", self.config_remote, "rev-parse", "refs/heads/dev"], text=True
         ).strip()
 
-    def test_changed_lock_is_verified_once_and_receipted_after_exact_push(self):
+    def remote_promoted(self):
+        result = subprocess.run(
+            ["git", "--git-dir", self.packages_remote, "rev-parse", "--verify", "--quiet", "refs/heads/promoted"],
+            text=True,
+            capture_output=True,
+        )
+        return result.stdout.strip() or None
+
+    def set_promoted(self, revision):
+        subprocess.run(
+            ["git", "--git-dir", self.packages_remote, "update-ref", "refs/heads/promoted", revision], check=True
+        )
+
+    def success_receipts(self):
+        if not self.status_log.exists():
+            return []
+        return [line.split("--sha ")[1].split()[0] for line in self.status_log.read_text().splitlines() if "--state success" in line]
+
+    def test_changed_producer_is_verified_once_and_promoted_without_config_commit(self):
         self.assertFalse(os.access(self.config_work / "scripts/ci/check-configurations.sh", os.X_OK))
         result = self.run_promoter()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.calls.read_text().splitlines(), ["verify", "config:all"])
-        self.assertNotEqual(self.remote_config_head(), self.config_base)
-        statuses = self.status_log.read_text()
-        self.assertIn("--state success", statuses)
-        self.assertIn(f"--sha {self.remote_config_head()}", statuses)
+        # The unchanged head is receipted first, then the candidate is verified.
+        self.assertEqual(self.calls.read_text().splitlines(), ["config:all", "verify", "config:all"])
+        self.assertEqual(self.remote_config_head(), self.config_base)
+        self.assertEqual(self.remote_promoted(), self.new_package)
+        self.assertEqual(self.success_receipts(), [self.config_base])
 
-    def test_queue_opened_during_validation_defers_without_push_or_success(self):
+    def test_previous_promotion_is_replaced(self):
+        self.set_promoted(self.old_package)
+        result = self.run_promoter()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.remote_promoted(), self.new_package)
+
+    def test_current_promotion_only_validates_configuration_head(self):
+        self.set_promoted(self.new_package)
+        result = self.run_promoter()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls.read_text().splitlines(), ["config:all"])
+        self.assertEqual(self.remote_config_head(), self.config_base)
+        self.assertIn(f"--sha {self.config_base}", self.status_log.read_text())
+
+    def test_locked_producer_is_promoted_after_head_validation(self):
+        self.write_lock(self.config_work / "flake.lock", self.new_package)
+        head = self.commit_all(self.config_work, "lock")
+        subprocess.run(["git", "-C", self.config_work, "push", "origin", "HEAD:dev"], check=True)
+        result = self.run_promoter()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls.read_text().splitlines(), ["config:all", "verify"])
+        self.assertIn(f"--sha {head} --context ci/local-configurations --token-file", self.status_log.read_text())
+        self.assertEqual(self.remote_promoted(), self.new_package)
+
+    def test_failed_head_validation_does_not_promote_locked_producer(self):
+        self.write_lock(self.config_work / "flake.lock", self.new_package)
+        self.commit_all(self.config_work, "lock")
+        subprocess.run(["git", "-C", self.config_work, "push", "origin", "HEAD:dev"], check=True)
+        result = self.run_promoter(FAIL_CONFIG="1")
+        self.assertEqual(result.returncode, 29, result.stderr)
+        self.assertIsNone(self.remote_promoted())
+
+    def test_queue_opened_during_validation_defers_without_promotion(self):
         result = self.run_promoter(QUEUE_ON_SECOND="1")
         self.assertEqual(result.returncode, 75, result.stderr)
-        self.assertEqual(self.remote_config_head(), self.config_base)
-        self.assertFalse(self.status_log.exists())
+        self.assertIsNone(self.remote_promoted())
+        self.assertEqual(self.success_receipts(), [self.config_base])
 
     def test_existing_queue_still_validates_current_configuration_head(self):
         result = self.run_promoter(QUEUE_ALWAYS="1")
         self.assertEqual(result.returncode, 75, result.stderr)
-        self.assertEqual(self.remote_config_head(), self.config_base)
+        self.assertIsNone(self.remote_promoted())
         self.assertEqual(self.calls.read_text().splitlines(), ["config:all"])
         statuses = self.status_log.read_text()
         self.assertIn("--state success", statuses)
         self.assertIn(f"--sha {self.config_base}", statuses)
 
-    def test_producer_advance_during_validation_defers_without_push(self):
+    def test_producer_advance_during_validation_defers_without_promotion(self):
         result = self.run_promoter(ADVANCE_PACKAGES="1")
         self.assertEqual(result.returncode, 75, result.stderr)
-        self.assertEqual(self.remote_config_head(), self.config_base)
-        self.assertFalse(self.status_log.exists())
+        self.assertIsNone(self.remote_promoted())
+        self.assertEqual(self.success_receipts(), [self.config_base])
 
-    def test_configuration_base_advance_during_validation_defers_candidate(self):
+    def test_configuration_advance_during_validation_still_promotes(self):
         result = self.run_promoter(ADVANCE_CONFIG="1")
-        self.assertEqual(result.returncode, 75, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotEqual(self.remote_config_head(), self.config_base)
-        self.assertFalse(self.status_log.exists())
+        self.assertEqual(self.remote_promoted(), self.new_package)
 
-    def test_failed_validation_never_pushes_or_publishes_success(self):
+    def test_failed_validation_never_promotes(self):
         result = self.run_promoter(FAIL_VERIFY="1")
         self.assertEqual(result.returncode, 23, result.stderr)
         self.assertEqual(self.remote_config_head(), self.config_base)
-        self.assertFalse(self.status_log.exists())
+        self.assertIsNone(self.remote_promoted())
+        self.assertEqual(self.success_receipts(), [self.config_base])
 
+    def test_failed_head_still_promotes_fixing_candidate(self):
+        result = self.run_promoter(FAIL_HEAD_CONFIG="1")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(self.calls.read_text().splitlines(), ["config:all", "verify", "config:all"])
+        self.assertEqual(self.remote_promoted(), self.new_package)
+        self.assertIn(f"--sha {self.config_base} --context ci/local-configurations --token-file {self.token} --state failure", self.status_log.read_text())
+        self.assertEqual(self.success_receipts(), [])
+
+    def test_failed_head_still_fails_a_deferred_promotion(self):
+        result = self.run_promoter(FAIL_HEAD_CONFIG="1", QUEUE_ON_SECOND="1")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIsNone(self.remote_promoted())
+
+    def test_failed_head_and_candidate_never_promote(self):
+        result = self.run_promoter(FAIL_CONFIG="1")
+        self.assertEqual(result.returncode, 29, result.stderr)
+        self.assertEqual(self.calls.read_text().splitlines(), ["config:all", "verify", "config:all"])
+        self.assertIsNone(self.remote_promoted())
 
     def test_successful_validation_replaces_previous_check_roots(self):
         roots = self.root / "check-roots"
@@ -258,7 +331,7 @@ else:
         result = self.run_promoter(CHECK_RESULTS_ROOT_DIR=str(roots), FAIL_CONFIG="1")
         self.assertEqual(result.returncode, 29, result.stderr)
         self.assertEqual(list(roots.iterdir()), [previous])
-        self.assertEqual(self.remote_config_head(), self.config_base)
+        self.assertIsNone(self.remote_promoted())
         self.assertNotIn("--state success", self.status_log.read_text() if self.status_log.exists() else "")
 
 if __name__ == "__main__":

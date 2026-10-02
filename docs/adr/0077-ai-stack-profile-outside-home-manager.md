@@ -1,6 +1,6 @@
 # ADR-0077: Update the AI stack in its own profile, outside Home Manager
 
-**Status:** Accepted
+**Status:** Accepted; the updater follows the nix-packages `promoted` branch since [ADR-0080](0080-promoted-package-ref.md)
 **Date:** 2026-09-30
 **Applies to:** `modules/home-manager/services/t3code/`, nix-packages `ai-stack-*` outputs
 

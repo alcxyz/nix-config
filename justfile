@@ -108,6 +108,11 @@ workspace-status:
 update *INPUTS:
     nix flake update {{INPUTS}}
 
+# Lock nix-packages to the locally validated `promoted` revision (ADR-0080).
+[group("update")]
+lock-packages:
+    bash scripts/update-inputs/lock-promoted-packages.sh
+
 # Refresh maintained dev projects only; inspect the lock diff before switching.
 [group("update")]
 apps-update:

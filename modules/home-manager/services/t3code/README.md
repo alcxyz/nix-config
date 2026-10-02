@@ -35,8 +35,9 @@ state is treated as nightly for the downgrade guard.
 With `autoUpdate.enable`, T3 and its providers run from the
 `~/.local/state/nix/profiles/ai-stack` profile instead (ADR-0077). Home Manager
 seeds it on first deployment or a channel change; afterwards
-`t3code-auto-update` builds the promoted `ai-stack-<channel>` bundle and
-`t3code-ai-stack-switch` installs it, refusing same-channel downgrades and
+`t3code-auto-update` builds the `ai-stack-<channel>` bundle from the
+nix-packages `promoted` branch, which moves only after local configuration
+validation (ADR-0080), and `t3code-ai-stack-switch` installs it, refusing same-channel downgrades and
 restarting T3 only when it is idle. Neither runs Home Manager activation. Roll
 back with `nix-env --profile ~/.local/state/nix/profiles/ai-stack --rollback`
 followed by `systemctl --user restart t3code`. A new fork revision must be

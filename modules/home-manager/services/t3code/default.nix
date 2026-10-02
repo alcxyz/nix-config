@@ -18,10 +18,6 @@ with lib; let
   managedVersionState = "${cfg.baseDir}/userdata/managed-t3code-version";
   managedChannelState = "${cfg.baseDir}/userdata/managed-t3code-channel";
   restartMarker = "${cfg.baseDir}/userdata/managed-t3code-restart-required";
-  promotionFlakeDefault =
-    if cfg.autoUpdate.promotionFlakeUri == null
-    then ""
-    else cfg.autoUpdate.promotionFlakeUri;
   # With unattended updates, T3 and its providers live in a profile the
   # updater replaces without Home Manager activation (ADR-0077).
   profileMode = cfg.autoUpdate.enable;
@@ -278,20 +274,9 @@ with lib; let
     ];
     text = ''
       channel=${escapeShellArg managedChannel}
-      package_flake=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
-      promotion_flake_default=${escapeShellArg promotionFlakeDefault}
-      promotion_flake="''${T3CODE_PROMOTION_FLAKE:-$promotion_flake_default}"
-      if [[ -n "$promotion_flake" ]]; then
-        metadata=$(nix flake metadata --refresh --json "$promotion_flake")
-        package_flake=$(jq -er '
-          .locks.nodes["nix-packages"].locked
-          | if .type == "git" and (.url | type) == "string" and (.ref | type) == "string" and (.rev | type) == "string"
-            then "git+\(.url)?ref=\(.ref)&rev=\(.rev)"
-            else error("promoted nix-packages lock is not a pinned git input")
-            end
-        ' <<<"$metadata")
-        echo "Using the nix-packages revision promoted by $promotion_flake"
-      fi
+      package_flake_default=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
+      # Pin the moving ref once, so the build and the log name one revision.
+      package_flake=$(nix flake metadata --refresh --json "''${T3CODE_PACKAGE_FLAKE:-$package_flake_default}" | jq -er .url)
       echo "Building ai-stack-$channel from $package_flake"
       candidate=$(nix build --no-link --print-out-paths "$package_flake#ai-stack-$channel")
       exec ${aiStackSwitch}/bin/t3code-ai-stack-switch "$candidate"
@@ -361,15 +346,8 @@ in {
 
       packageFlakeUri = mkOption {
         type = types.str;
-        example = "git+https://code.example.net/operator/nix-packages.git?ref=dev";
-        description = "nix-packages flake that provides the ai-stack bundles when no promotion flake is set. The URI must not contain a fragment.";
-      };
-
-      promotionFlakeUri = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        example = "git+https://code.example.net/operator/nix-config.git?ref=dev";
-        description = "Configuration flake whose committed nix-packages lock is the package promotion authority. When set, unattended updates use its pinned revision instead of the moving packageFlakeUri ref.";
+        example = "git+https://code.example.net/operator/nix-packages.git?ref=promoted";
+        description = "nix-packages flake that provides the ai-stack bundles, normally the branch moved by local package promotion (ADR-0080). Each run pins its current revision. The URI must not contain a fragment.";
       };
 
       calendar = mkOption {
@@ -387,15 +365,10 @@ in {
   };
 
   config = mkIf cfg.enable {
-    assertions =
-      optional cfg.autoUpdate.enable {
-        assertion = !hasInfix "#" cfg.autoUpdate.packageFlakeUri;
-        message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
-      }
-      ++ optional (cfg.autoUpdate.enable && cfg.autoUpdate.promotionFlakeUri != null) {
-        assertion = !hasInfix "#" cfg.autoUpdate.promotionFlakeUri;
-        message = "services.t3code.autoUpdate.promotionFlakeUri must not contain a fragment.";
-      };
+    assertions = optional cfg.autoUpdate.enable {
+      assertion = !hasInfix "#" cfg.autoUpdate.packageFlakeUri;
+      message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
+    };
 
     systemd.user.services.t3code = {
       Unit = {

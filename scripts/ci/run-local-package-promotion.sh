@@ -2,7 +2,7 @@
 set -euo pipefail
 
 for variable in CONFIG_REMOTE CONFIG_BRANCH NIX_PACKAGES_REMOTE_URL NIX_PACKAGES_BRANCH \
-  NIX_PACKAGES_QUEUE_API_URL FORGEJO_URL FORGEJO_OWNER FORGEJO_REPO \
+  NIX_PACKAGES_PROMOTED_BRANCH NIX_PACKAGES_QUEUE_API_URL FORGEJO_URL FORGEJO_OWNER FORGEJO_REPO \
   FORGEJO_STATUS_CONTEXT FORGEJO_API_TOKEN_FILE; do
   if [[ -z ${!variable:-} ]]; then
     echo "${variable} is required" >&2
@@ -10,7 +10,7 @@ for variable in CONFIG_REMOTE CONFIG_BRANCH NIX_PACKAGES_REMOTE_URL NIX_PACKAGES
   fi
 done
 
-for branch in "$CONFIG_BRANCH" "$NIX_PACKAGES_BRANCH"; do
+for branch in "$CONFIG_BRANCH" "$NIX_PACKAGES_BRANCH" "$NIX_PACKAGES_PROMOTED_BRANCH"; do
   if [[ ! $branch =~ ^[A-Za-z0-9._/-]+$ || $branch == *..* ]]; then
     echo "Invalid branch name" >&2
     exit 2
@@ -44,7 +44,14 @@ if not (network_match or local_match):
 PY
 
 work_root=$(mktemp -d)
-cleanup() { rm -rf -- "$work_root"; }
+cleanup() {
+  local status=$?
+  rm -rf -- "$work_root"
+  # A deferred promotion must not hide a failing configuration head.
+  if ((status == 75 && ${head_failed:-0})); then
+    exit 1
+  fi
+}
 trap cleanup EXIT
 
 exec 9>"${XDG_RUNTIME_DIR:-$work_root}/nix-package-promotion.lock"
@@ -71,6 +78,9 @@ if [[ ! $producer_revision =~ ^[0-9a-f]{40}$ ]]; then
   echo "Unable to resolve the package producer branch." >&2
   exit 1
 fi
+# The promoted branch records the newest producer revision that passed the full
+# configuration gate (ADR-0080). It is absent until the first promotion.
+promoted_revision=$(git ls-remote "$NIX_PACKAGES_REMOTE_URL" "refs/heads/${NIX_PACKAGES_PROMOTED_BRANCH}" | awk 'NR == 1 {print $1}')
 
 export NIX_PACKAGES_REMOTE_URL NIX_PACKAGES_BRANCH NIX_PACKAGES_QUEUE_API_URL
 locked_revision=$(
@@ -126,7 +136,7 @@ validate_current_head() {
     --url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --repo "$FORGEJO_REPO" \
     --sha "$base_revision" --context "$FORGEJO_STATUS_CONTEXT"; then
     echo "The trusted configuration head already has an exact local validation receipt."
-    exit 0
+    return 0
   fi
 
   status "$base_revision" pending "Trusted local full validation is running"
@@ -146,6 +156,35 @@ validate_current_head() {
   fi
 }
 
+# Move the promoted branch to the validated producer revision. The update
+# queue and producer head are rechecked directly before the push, and the lease
+# rejects a concurrent promotion. No configuration commit is created.
+publish_promotion() {
+  local packages="$work_root/nix-packages"
+  git init --quiet "$packages"
+  git -C "$packages" remote add origin "$NIX_PACKAGES_REMOTE_URL"
+  # Tracking refs let pre-push guards see that no new commits are published.
+  git -C "$packages" fetch --quiet --no-tags --depth=1 origin \
+    "+refs/heads/${NIX_PACKAGES_BRANCH}:refs/remotes/origin/${NIX_PACKAGES_BRANCH}"
+  if [[ -n $promoted_revision ]]; then
+    git -C "$packages" fetch --quiet --no-tags --depth=1 origin \
+      "+refs/heads/${NIX_PACKAGES_PROMOTED_BRANCH}:refs/remotes/origin/${NIX_PACKAGES_PROMOTED_BRANCH}"
+  fi
+  if [[ $(git -C "$packages" rev-parse "refs/remotes/origin/${NIX_PACKAGES_BRANCH}") != "$producer_revision" ]]; then
+    echo "Package promotion deferred because the producer branch advanced." >&2
+    exit 75
+  fi
+  "$checkout/scripts/ci/check-package-promotion-readiness.sh" "$producer_revision"
+  git -C "$packages" push --quiet \
+    --force-with-lease="refs/heads/${NIX_PACKAGES_PROMOTED_BRANCH}:${promoted_revision}" \
+    origin "${producer_revision}:refs/heads/${NIX_PACKAGES_PROMOTED_BRANCH}"
+  if [[ $(git ls-remote "$NIX_PACKAGES_REMOTE_URL" "refs/heads/${NIX_PACKAGES_PROMOTED_BRANCH}" | awk 'NR == 1 {print $1}') != "$producer_revision" ]]; then
+    echo "Published package promotion could not be confirmed." >&2
+    exit 1
+  fi
+  echo "Promoted locally verified package revision ${producer_revision:0:12}."
+}
+
 if "$checkout/scripts/ci/check-package-promotion-readiness.sh" "$producer_revision"; then
   :
 else
@@ -156,10 +195,35 @@ else
   exit "$readiness_result"
 fi
 
-if [[ $locked_revision == "$producer_revision" ]]; then
+if [[ $promoted_revision == "$producer_revision" ]]; then
   validate_current_head
   exit 0
 fi
+
+if [[ $locked_revision == "$producer_revision" ]]; then
+  # The committed lock already selects the producer, so the configuration
+  # head's own receipt covers the configuration gate.
+  validate_current_head
+  # Validation can take hours; defer rather than verify a superseded producer.
+  "$checkout/scripts/ci/check-package-promotion-readiness.sh" "$producer_revision"
+  (
+    cd "$checkout"
+    scripts/ci/verify-ai-package-stack.sh flake.lock
+  )
+  publish_promotion
+  exit 0
+fi
+
+# The configuration head is not superseded by a lock commit, so it needs its
+# own receipt for main promotion. A failing head still lets a producer that
+# fixes it be validated and promoted.
+head_failed=0
+if ! validate_current_head; then
+  head_failed=1
+  echo "The configuration head has no success receipt; validating the package candidate anyway." >&2
+fi
+# Head validation can take hours; defer rather than lock a newer producer.
+"$checkout/scripts/ci/check-package-promotion-readiness.sh" "$producer_revision"
 
 (
   cd "$checkout"
@@ -188,32 +252,8 @@ if [[ $(git -C "$checkout" status --porcelain) != " M flake.lock" ]]; then
   echo "Validation changed files other than the package lock; refusing publication." >&2
   exit 1
 fi
-git -C "$checkout" add flake.lock
-verified_tree=$(git -C "$checkout" write-tree)
-
-# Recheck all moving publication inputs after the expensive build and directly
-# before creating and pushing the commit. Any advance is deferred to a fresh run.
-"$checkout/scripts/ci/check-package-promotion-readiness.sh" "$producer_revision"
-remote_config_revision=$(git ls-remote "$CONFIG_REMOTE" "refs/heads/${CONFIG_BRANCH}" | awk 'NR == 1 {print $1}')
-if [[ $remote_config_revision != "$base_revision" ]]; then
-  echo "Configuration branch advanced during validation; deferring." >&2
-  exit 75
-fi
-
-git -C "$checkout" -c user.name="local-package-promotion" \
-  -c user.email="local-package-promotion@localhost" \
-  commit --quiet -m "chore(nix-packages): update lock to ${producer_revision:0:12}"
-published_revision=$(git -C "$checkout" rev-parse HEAD)
-if [[ $(git -C "$checkout" rev-parse 'HEAD^{tree}') != "$verified_tree" ]]; then
-  echo "Committed tree differs from the verified candidate." >&2
+publish_promotion
+if ((head_failed)); then
+  echo "The package candidate was promoted, but the configuration head has no success receipt." >&2
   exit 1
 fi
-
-git -C "$checkout" push --quiet origin "HEAD:refs/heads/${CONFIG_BRANCH}"
-remote_config_revision=$(git ls-remote "$CONFIG_REMOTE" "refs/heads/${CONFIG_BRANCH}" | awk 'NR == 1 {print $1}')
-if [[ $remote_config_revision != "$published_revision" ]]; then
-  echo "Published configuration head could not be confirmed." >&2
-  exit 1
-fi
-status "$published_revision" success "Trusted local package and configuration validation passed"
-echo "Published a locally verified package lock."

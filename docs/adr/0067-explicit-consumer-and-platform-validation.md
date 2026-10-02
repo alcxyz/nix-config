@@ -1,6 +1,6 @@
 # ADR-0067: Explicit consumer and platform validation
 
-**Status:** Accepted; local promotion placement amended 2026-09-19
+**Status:** Accepted; local promotion placement amended 2026-09-19; lock publication replaced by a promoted package ref in [ADR-0080](0080-promoted-package-ref.md)
 **Date:** 2026-09-07
 **Accepted:** 2026-09-08
 **Applies to:** `flake/`, Forgejo checks, package input promotion, cross-repository validation

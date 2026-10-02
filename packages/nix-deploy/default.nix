@@ -1,6 +1,11 @@
 {
   lib,
+  coreutils,
+  gawk,
+  git,
+  jq,
   nixDeploy,
+  writeShellApplication,
   writeShellScriptBin,
   writeText,
 }: let
@@ -88,7 +93,15 @@
   };
 
   configFile = writeText "nix-deploy-inventory-v1.json" (builtins.toJSON config);
+  # Warns, without failing or changing the checkout, when the lock differs from
+  # the validated package revision (ADR-0080).
+  lockCheck = writeShellApplication {
+    name = "nix-deploy-lock-check";
+    runtimeInputs = [coreutils gawk git jq];
+    text = builtins.readFile ../../scripts/update-inputs/lock-promoted-packages.sh;
+  };
   wrapper = writeShellScriptBin "deploy" ''
+    ${lockCheck}/bin/nix-deploy-lock-check --check || true
     exec ${nixDeploy}/bin/deploy --config "''${NIX_DEPLOY_CONFIG:-${configFile}}" "$@"
   '';
 in

@@ -410,6 +410,7 @@ in {
     python3 scripts/checks/test-configuration-ci.py
     python3 scripts/checks/test-commit-status.py
     python3 scripts/checks/test-local-package-promotion.py
+    python3 scripts/checks/test-lock-promoted-packages.py
   '';
 
   ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.git pkgs.gnugrep pkgs.python3 pkgs.ripgrep] ''
@@ -524,10 +525,10 @@ in {
     assert timer.Persistent;
       pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep pkgs.python3];} ''
         python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)} ${lib.escapeShellArg (lib.removeSuffix "\n" forkGuard)} ${lib.escapeShellArg (lib.removeSuffix "\n" stableForkGuard)}
-        grep -F "promotion_flake_default='git+https://git.alc.xyz/alcxyz/nix-config.git?ref=dev'" ${updater}
-        grep -F 'promotion_flake="''${T3CODE_PROMOTION_FLAKE:-$promotion_flake_default}"' ${updater}
+        grep -F "package_flake_default='git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=promoted'" ${updater}
+        grep -F 'nix flake metadata --refresh --json "''${T3CODE_PACKAGE_FLAKE:-$package_flake_default}"' ${updater}
         if grep -F ":-'git+" ${updater}; then
-          echo "Promotion flake default contains literal shell quotes" >&2
+          echo "Package flake default contains literal shell quotes" >&2
           exit 1
         fi
         grep -F "ai-stack-$channel" ${updater}

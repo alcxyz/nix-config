@@ -21,6 +21,7 @@ shellcheck \
   scripts/forgejo/publish-dms-plugins-lock.sh \
   scripts/forgejo/merge-dms-plugins-lock.sh \
   scripts/ops/*.sh \
+  scripts/update-inputs/lock-promoted-packages.sh \
   modules/nixos/services/storage-health-monitor/*.sh \
   modules/nixos/services/wolf-streaming/browser-image/*.sh
 shellcheck --shell=bash hosts/xyz/xyz-*.sh
@@ -40,6 +41,7 @@ python3 scripts/checks/test-publish-dms-plugins-lock.py
 python3 scripts/checks/test-merge-dms-plugins-lock.py
 python3 scripts/checks/test-development-ci.py
 python3 scripts/checks/test-local-package-promotion.py
+python3 scripts/checks/test-lock-promoted-packages.py
 python3 scripts/checks/test-wolf-context-package.py
 python3 scripts/checks/check-moonlight-shell-templates.py
 python3 scripts/checks/check-wolf-shell-templates.py

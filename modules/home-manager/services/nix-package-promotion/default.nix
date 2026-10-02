@@ -66,12 +66,12 @@
   };
 in {
   options.services.nixPackagePromotion = {
-    enable = lib.mkEnableOption "trusted local validation and promotion of a package input lock";
+    enable = lib.mkEnableOption "trusted local validation and promotion of package revisions";
 
     configRemote = lib.mkOption {
       type = lib.types.str;
       example = "https://code.example.net/operator/config.git";
-      description = "Git remote for the trusted configuration branch. Native Git credentials provide push access.";
+      description = "Git remote for the trusted configuration branch that is validated with each package candidate.";
     };
 
     configBranch = lib.mkOption {
@@ -83,7 +83,7 @@ in {
     packagesRemote = lib.mkOption {
       type = lib.types.str;
       example = "https://code.example.net/operator/packages.git";
-      description = "Git remote whose trusted package branch is promoted into the configuration lock.";
+      description = "Git remote whose trusted package branch is validated and promoted. Native Git credentials provide push access to the promoted branch.";
     };
 
     packagesBranch = lib.mkOption {
@@ -207,6 +207,8 @@ in {
           "CONFIG_BRANCH=${cfg.configBranch}"
           "NIX_PACKAGES_REMOTE_URL=${cfg.packagesRemote}"
           "NIX_PACKAGES_BRANCH=${cfg.packagesBranch}"
+          # The t3code updater and the deploy wrapper follow this name (ADR-0080).
+          "NIX_PACKAGES_PROMOTED_BRANCH=promoted"
           "NIX_PACKAGES_QUEUE_API_URL=${cfg.packagesQueueApiUrl}"
           "FORGEJO_URL=${cfg.forgejo.url}"
           "FORGEJO_OWNER=${cfg.forgejo.owner}"

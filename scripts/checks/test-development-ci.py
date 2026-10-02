@@ -98,7 +98,7 @@ class DevelopmentCI(unittest.TestCase):
         calls = self.calls.read_text().splitlines()
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
         self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 6)
-        self.assertEqual(sum(call.startswith("python3:") for call in calls), 10)
+        self.assertEqual(sum(call.startswith("python3:") for call in calls), 11)
         self.assertIn("shellcheck:--shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh", calls)
         self.assertIn("shellcheck:--shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh", calls)
         self.assertIn("python3:scripts/checks/check-moonlight-shell-templates.py", calls)

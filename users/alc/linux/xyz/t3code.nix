@@ -47,8 +47,7 @@ in {
     forkReleaseChannel = "nightly";
     port = 3773;
     autoUpdate = {
-      packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";
-      promotionFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-config.git?ref=dev";
+      packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=promoted";
     };
   };
 }
