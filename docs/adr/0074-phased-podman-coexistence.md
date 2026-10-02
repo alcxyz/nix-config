@@ -38,6 +38,8 @@ ordinary Docker runner package unchanged during this qualification. A temporary,
 source-only pin to the reusable package repository supplies only this package;
 bumping the existing shared package input would also update unrelated software.
 Remove the extra pin when the ordinary package input supplies a qualified fix.
+That pin was removed on 2026-10-02: the shared input supplies the identical
+package, and both runner identities now build it from there.
 
 Migrate application services individually after their own functional and lifecycle
 checks. Stateful trials use independent data copies; only one runtime may write
@@ -84,7 +86,7 @@ nix-build --no-out-link --impure --max-jobs 1 --cores 2 --expr '
     flake = builtins.getFlake (toString ./.);
     pkgs = import flake.inputs.nixpkgs {};
     runnerPackage = pkgs.callPackage
-      "${flake.inputs.forgejo-runner-fixes}/pkgs/forgejo-runner-cancellation" {};
+      "${flake.inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
   in import ./flake/checks/forgejo-podman-paths-vm.nix {
     inherit pkgs runnerPackage;
     productionModule = true;

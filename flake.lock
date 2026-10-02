@@ -489,24 +489,6 @@
         "type": "github"
       }
     },
-    "forgejo-runner-fixes": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1790258754,
-        "narHash": "sha256-3GMpa03er9LVPvJ1NcDf78NBW41qzgppRTwcQTHv8m0=",
-        "ref": "dev",
-        "rev": "f7897e39a63ea0c40e7215f569b2c5e49d175e8c",
-        "revCount": 627,
-        "type": "git",
-        "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
-      },
-      "original": {
-        "ref": "dev",
-        "rev": "f7897e39a63ea0c40e7215f569b2c5e49d175e8c",
-        "type": "git",
-        "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
-      }
-    },
     "grove": {
       "inputs": {
         "flake-utils": "flake-utils_3",
@@ -1240,7 +1222,6 @@
         "dms-plugins": "dms-plugins",
         "dsearch": "dsearch",
         "flake-parts": "flake-parts",
-        "forgejo-runner-fixes": "forgejo-runner-fixes",
         "grove": "grove",
         "home-manager": "home-manager",
         "hyprland": "hyprland",
