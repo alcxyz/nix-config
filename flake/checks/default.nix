@@ -432,8 +432,10 @@ in {
     python3 scripts/checks/test-pr-review.py
   '';
 
-  check-agent-model-roles = mkRepoCheck "check-agent-model-roles" [(pkgs.python3.withPackages (ps: [ps.tomlkit]))] ''
+  check-agent-model-roles = mkRepoCheck "check-agent-model-roles" [(pkgs.python3.withPackages (ps: [ps.tomlkit])) pkgs.bash pkgs.jq pkgs.gnugrep pkgs.shellcheck] ''
     python3 scripts/checks/test-codex-roles.py
+    shellcheck modules/home-manager/programs/ai/agent-role.sh scripts/checks/test-agent-role.sh
+    bash scripts/checks/test-agent-role.sh
   '';
 
   check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.ripgrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''

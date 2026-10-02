@@ -66,6 +66,13 @@ configuration, independent of `programs.ai.enable`, which keeps gating
   Anthropic entries use the CLI transport, because aliases are Claude Code
   names rather than API model IDs; the schema has no effort field.
 - `pr-review` reviewer defaults, from the `deep` role on both providers.
+- `agent-role`, which prints a role's model or effort for one client from
+  `~/.config/agent-roles/roles.json`. Invocations that skip user
+  configuration do not load role profiles or agent definitions: Claude Code's
+  `--safe-mode` and `--restricted` disable custom agents, and Codex's
+  `--ignore-user-config` skips profiles. Such calls pass
+  `--model "$(agent-role <role> claude model)"` and the matching effort instead,
+  so their instructions still name only roles.
 
 Tools that only need a model receive the role's resolved model and effort
 rather than a profile or agent definition. `pr-review` in particular keeps

@@ -55,6 +55,12 @@ with lib; let
     })
     roles));
 
+  agentRole = pkgs.writeShellApplication {
+    name = "agent-role";
+    runtimeInputs = [pkgs.jq];
+    text = builtins.readFile ./agent-role.sh;
+  };
+
   mergeCodexRoles = pkgs.writeShellApplication {
     name = "merge-codex-roles";
     runtimeInputs = [(pkgs.python3.withPackages (ps: [ps.tomlkit]))];
@@ -113,6 +119,16 @@ in {
       ];
 
       warnings = optional (cfg.llmConfigRoles == {}) "programs.ai.roles is set but programs.ai.llmConfigRoles is empty, so ~/.config/llm/config.toml is not generated.";
+
+      # Invocations that skip user configuration resolve roles through
+      # `agent-role` instead of profiles or agent definitions.
+      home.packages = [agentRole];
+      xdg.configFile."agent-roles/roles.json".text = builtins.toJSON (mapAttrs (_: role: {
+          inherit (role) description;
+          codex = {inherit (role.codex) model effort;};
+          claude = {inherit (role.claude) model effort;};
+        })
+        roles);
 
       home.file =
         mapAttrs' (name: role: nameValuePair ".codex/${name}.config.toml" {source = codexRoleFile name role;}) roles
