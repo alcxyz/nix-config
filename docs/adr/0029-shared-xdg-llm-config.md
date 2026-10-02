@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
+**Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): once #522 lands, `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets, replacing `users/alc/configs/llm/config.toml` and the live-edit link. Until then, the current file stays authoritative.
 **Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/leantime-tidy`, `tools/paperless-tools`
 
 ## Context

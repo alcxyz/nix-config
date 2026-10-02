@@ -33,8 +33,8 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0026](0026-unified-source-directory-layout.md) | Unified source directory layout across machines | Accepted, implemented on xyz | all hosts, home-manager |
 | [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | Retired PipeWire virtual sink for per-app audio isolation (wcap) | Retired | `modules/nixos/common/`, hyprland |
 | [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Superseded by ADR-0022 | agent instructions, nix-packages, nix-secrets |
-| [ADR-0029](0029-shared-xdg-llm-config.md) | Shared XDG LLM config for local tooling | Accepted | local tooling, llm config, xdg |
-| [ADR-0030](0030-declarative-shared-user-policy-configs.md) | Declarative deployment for shared user policy configs | Accepted | home-manager, shared policy, config deployment |
+| [ADR-0029](0029-shared-xdg-llm-config.md) | Shared XDG LLM config for local tooling | Accepted, amended | local tooling, llm config, xdg |
+| [ADR-0030](0030-declarative-shared-user-policy-configs.md) | Declarative deployment for shared user policy configs | Accepted, amended | home-manager, shared policy, config deployment |
 | [ADR-0031](0031-kubernetes-client-wrappers.md) | Kubernetes client wrappers with per-command kubeconfig | Accepted | k3s, home-manager, client tooling |
 | [ADR-0032](0032-ssh-key-ownership-and-deployment.md) | SSH key ownership and deployment | Accepted | ssh, nixos, home-manager, sops |
 | [ADR-0033](0033-dms-hyprland-layer-recovery-watcher.md) | DMS Hyprland layer recovery watcher | Accepted | Hyprland, DMS, home-manager |
@@ -83,6 +83,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0076](0076-dms-lock-exact-head-publication.md) | Validate and merge DMS lock updates at an exact head | Accepted | DMS lock, Forgejo Actions |
 | [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted | T3 Code, AI providers, Home Manager |
 | [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Accepted | AI agents, pull requests, Home Manager |
+| [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Accepted | AI agents, Home Manager, Codex, Claude Code |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the
