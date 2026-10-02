@@ -88,6 +88,18 @@ in
                   ];
                 qmakeFlags = (old.qmakeFlags or []) ++ ["CONFIG+=gpuslow"];
               });
+              # pihole-ftl 6.7.1 sets but never reads a variable in
+              # src/config/validator.c, which GCC 16 promotes to an error.
+              pihole-ftl = _prev.pihole-ftl.overrideAttrs (old: {
+                env =
+                  (old.env or {})
+                  // {
+                    NIX_CFLAGS_COMPILE = toString [
+                      (old.env.NIX_CFLAGS_COMPILE or "")
+                      "-Wno-error=unused-but-set-variable"
+                    ];
+                  };
+              });
             }
             # SentinelOne kills freshly-built binaries during test phase on macOS.
             # Skip nushell tests to avoid build failure on managed Macs.

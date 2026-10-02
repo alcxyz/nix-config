@@ -92,10 +92,16 @@ in {
 
   # Preserve the completed boot lockup until Hyprland takes ownership, then
   # let the distinct Quickshell STARTING SESSION animation cover the handoff.
-  systemd.services.plymouth-quit.serviceConfig.ExecStart = lib.mkForce [
-    ""
-    "${lib.getExe' pkgs.plymouth "plymouth"} quit --retain-splash"
-  ];
+  # Keep upstream's `-` prefix: `plymouth quit` exits 1 when no daemon is
+  # running. The override also makes NixOS restart this boot-only unit on
+  # switch, which serves no purpose.
+  systemd.services.plymouth-quit = {
+    restartIfChanged = false;
+    serviceConfig.ExecStart = lib.mkForce [
+      ""
+      "-${lib.getExe' pkgs.plymouth "plymouth"} quit --retain-splash"
+    ];
+  };
 
   # DMS power actions already run the approved compositor-owned reverse
   # animation. Do not replay a second power transition after Hyprland exits.
