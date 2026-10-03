@@ -177,6 +177,15 @@ assert "on main" in review.review_problem([PINNED], HEAD, "main")
 assert review.review_problem(["LGTM"], HEAD, "dev") == "has no automated review comment"
 assert review.review_problem([f"Automated read-only review ({HEAD[:12]} on topic(x)): no findings."], HEAD, "topic(x)") is None
 
+# The mode follows the pinned prefix, so guards that predate it read the same target.
+follow = f"Automated read-only review ({HEAD[:12]} on dev): follow-up to {'1' * 12}: fixed."
+assert review.review_problem([follow], HEAD, "dev") is None and review.PINNED.match(follow)[2] == "dev"
+
+# Changed lines count hunk lines only, including blank ones and ones that look like headers.
+sample = ("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n context\n\n--- sql comment\n"
+          "+++ added\n-old\n+new\ndiff --git a/y b/y\nBinary files a/y and b/y differ\n")
+assert review.changed_lines(sample) == 4, review.changed_lines(sample)
+
 
 # Forge values used in paths and refspecs must look like a commit and a branch.
 def bad_forgejo(pr, path, data=None, accept="application/json"):
@@ -408,7 +417,7 @@ with tempfile.TemporaryDirectory() as tmp:
     code, output = cli("run", "4")
     assert code == 0 and "already reviewed" in output, output
     code, output = cli("comment", "4", "no findings.")
-    assert code == 0 and posted[-1][1] == f"Automated read-only review ({head[:12]} on dev): no findings.", posted
+    assert code == 0 and posted[-1][1] == f"Automated read-only review ({head[:12]} on dev): full: no findings.", posted
 
     # A reviewer that exits 0 without a valid verdict has not reviewed anything.
     pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\ncat >/dev/null\necho '{\"result\": \"Verdict: unable to review\"}'\n")
@@ -473,5 +482,144 @@ with tempfile.TemporaryDirectory() as tmp:
     assert code == 1 and "timeout" in output and "does not mean no findings" in output, output
     code, output = cli("comment", "4", "no findings.")
     assert code == 1 and "gpt, opus" in output, output
+
+    # Follow-ups: small fixes on top of the last completed round review only the fixes.
+    pathlib.Path(bin_dir, "codex").write_text("#!/bin/sh\n" + scripts["codex"] + "\n")
+    pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\n" + scripts["claude"] + "\n")
+    config["timeout"] = 20
+    config["reviewers"][1] = {"name": "opus", "client": "claude", "model": "m", "effort": "high"}
+    pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps(config))
+    rounds = os.path.dirname(state)
+
+    def at(sha, base="dev"):
+        review.pr_info = lambda pr: {"title": "t", "body": "", "head": sha, "base": base, "url": "u"}
+
+    def push(content, *parents, ref="refs/pull/4/head", files=None, extra=""):
+        """Commit `file` with `content` on top of `parents`, the other files from `files`, and push it to `ref`."""
+        blob = git_out("hash-object", "-w", "--stdin", stdin=content)
+        listing = [line for line in git_out("ls-tree", files or parents[0]).splitlines() if not line.endswith("\tfile")]
+        tree = git_out("mktree", stdin="\n".join(listing + [f"100644 blob {blob}\tfile"]) + "\n" + extra)
+        sha = git_out("commit-tree", tree, *[arg for parent in parents for arg in ("-p", parent)], "-m", "c")
+        subprocess.run(author_git + ["push", "-qf", "origin", f"{sha}:{ref}"], check=True)
+        return sha
+
+    def state_of(sha):
+        return json.loads(pathlib.Path(rounds, sha, "status.json").read_text())
+
+    def review_round(sha, expected, *flags, base="dev"):
+        """Run on `sha` and return the mode its comment records."""
+        at(sha, base)
+        code, output = cli("run", "4", *flags)
+        assert code == 0 and expected in output, (expected, output)
+        code, output = cli("comment", "4", "no findings.")
+        assert code == 0, output
+        return posted[-1][1].split("): ", 1)[1].rsplit(": ", 1)[0]
+
+    # A round from before follow-ups lacks a merge base, so the next one is full.
+    at(head)
+    code, output = cli("run", "4", "--force")
+    assert code == 0 and "(full review: --force repeats the full review of this head)" in output, output
+    status = state_of(head)
+    for key in ("mode", "finished", "merge_base", "response"):
+        status.pop(key, None)
+    pathlib.Path(rounds, head, "status.json").write_text(json.dumps(status))
+    first = push("one\n{braces} survive\nfirst\n", head)
+    assert review_round(first, f"(full review: the round at {head[:12]} predates follow-ups)",
+                        "--response", "kept the parser.") == "full"
+    assert "## Author's response to earlier findings\n\nkept the parser." in \
+        pathlib.Path(rounds, first, "prompt.md").read_text()
+
+    # The follow-up gives every reviewer the previous findings, the response
+    # and the interdiff, with the whole PR diff as context. No comment is needed
+    # on the earlier round.
+    fix = push("one\n{braces} survive\nfixed\n", first)
+    assert review_round(fix, f"(follow-up to {first[:12]})", "--response", "fixed the parser.") \
+        == f"follow-up to {first[:12]}"
+    status = state_of(fix)
+    assert (status["mode"], status["previous"], status["root"], status["followups"]) == ("follow-up", first, first, 1)
+    prompt = pathlib.Path(rounds, fix, "prompt.md").read_text()
+    assert "This is a follow-up review" in prompt and "## Author's response\n\nfixed the parser." in prompt, prompt
+    assert f"### Round at {first[:12]} (full)" in prompt and "#### gpt\n\nVerdict: no findings" in prompt, prompt
+    interdiff, whole = prompt.split("## Interdiff")[1].split("## Full PR diff")
+    assert "+fixed" in interdiff and "+{braces}" not in interdiff and "+{braces} survive" in whole, prompt
+    assert os.path.exists(pathlib.Path(rounds, head, "status.json")), "earlier rounds are kept"
+
+    # --force on a follow-up repeats the follow-up.
+    code, output = cli("run", "4", "--force", "--response", "fixed the parser.")
+    assert code == 0 and f"(follow-up to {first[:12]})" in output, output
+
+    # Later follow-ups see every round since the full review; at most
+    # MAX_FOLLOW_UPS run in a row.
+    for count in (2, 3):
+        fix = push(f"one\n{{braces}} survive\nfixed {count}\n", fix)
+        assert review_round(fix, "(follow-up to").startswith("follow-up to")
+        assert (state_of(fix)["followups"], state_of(fix)["root"]) == (count, first)
+    prompt = pathlib.Path(rounds, fix, "prompt.md").read_text()
+    assert prompt.count("### Round at") == 3 and "Author's response before this round:\n\nfixed the parser." in prompt
+    fix = push("one\n{braces} survive\nfixed 4\n", fix)
+    assert review_round(fix, "(full review: 3 follow-ups in a row)") == "full"
+
+    # --full reviews the whole PR, also again after a follow-up of the same head.
+    fix = push("one\n{braces} survive\nfixed 5\n", fix)
+    at(fix)
+    code, output = cli("run", "4")
+    assert code == 0 and state_of(fix)["mode"] == "follow-up", output
+    assert review_round(fix, "(full review: --full was given)", "--full") == "full"
+
+    # --force on a follow-up repeats it against its own round, not the latest one.
+    full_round, fix = fix, push("one\n{braces} survive\nfixed 6\n", fix)
+    assert review_round(fix, f"(follow-up to {full_round[:12]})") == f"follow-up to {full_round[:12]}"
+    at(push("unrelated\n", fix))
+    assert cli("run", "4")[0] == 0
+    at(fix)
+    code, output = cli("run", "4", "--force")
+    assert code == 0 and f"(follow-up to {full_round[:12]})" in output, output
+
+    # A large or binary change, a rebase, merging the target in, a retarget
+    # or changed reviewers each need a full review.
+    fix = push("one\n{braces} survive\n" + "more\n" * 60, fix)
+    review_round(fix, "(full review: more than 40 lines changed since")
+    binary = git_out("hash-object", "-w", "--stdin", stdin="\0binary\n")
+    fix = push("one\n", fix, extra=f"100644 blob {binary}\tblob.bin\n")
+    review_round(fix, "(full review: binary files changed since")
+    dev = git_out("rev-parse", "origin/dev")
+    fix = push("rebased\n", dev, files=fix)
+    review_round(fix, "(full review: the head does not descend from")
+    moved = push("dev moved\n", dev, ref="refs/heads/dev")
+    fix = push("rebased\nmerged\n", fix, moved)
+    review_round(fix, "(full review: the merge base with the target changed since")
+    push("main\n", dev, ref="refs/heads/main")
+    fix = push("rebased\nmerged\nretargeted\n", fix)
+    review_round(fix, "(full review: no earlier completed round on main", base="main")
+    # Removing a reviewer would drop its findings from the follow-up.
+    removed = config["reviewers"].pop()
+    pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps(config))
+    fix = push("rebased\nmerged\nretargeted\nreviewers\n", fix)
+    review_round(fix, "(full review: no earlier completed round on main with the current reviewers", base="main")
+    # A cached follow-up by other reviewers no longer counts.
+    fix = push("rebased\nmerged\nretargeted\nreviewers\nagain\n", fix)
+    review_round(fix, f"(follow-up to", base="main")
+    config["reviewers"].append(removed)
+    pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps(config))
+    code, output = cli("comment", "4", "no findings.")
+    assert code == 1 and "by gpt, opus;" in output, output
+
+    # A missing earlier round falls back to a full review.
+    config["reviewers"].pop()
+    pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps(config))
+    os.remove(pathlib.Path(rounds, state_of(fix)["previous"], "gpt.md"))
+    fix = push("rebased\nmerged\nretargeted\nreviewers\nagain\nmissing\n", fix)
+    review_round(fix, "(full review: an earlier round's findings are missing since", base="main")
+    # So does an earlier round that is no longer complete, deeper in the chain.
+    root = fix
+    fix = push("chain 1\n", root)
+    review_round(fix, f"(follow-up to {root[:12]})", base="main")
+    fix = push("chain 2\n", fix)
+    review_round(fix, "(follow-up to", base="main")
+    status = state_of(root)
+    status["reviewers"]["gpt"]["status"] = "failed"
+    pathlib.Path(rounds, root, "status.json").write_text(json.dumps(status))
+    fix = push("chain 3\n", fix)
+    review_round(fix, "(full review: an earlier round's findings are missing since", base="main")
 
 print("pr-review tests passed")

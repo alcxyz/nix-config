@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, Claude Code and Codex CLI user hooks
 
@@ -23,9 +23,10 @@ reviews from a Codex and a Claude reviewer, by default the `deep` agent role
 without write or forge access and is given the diff and the PR description. The
 agent addresses or justifies the findings, then posts one PR comment whose first
 line is `Automated read-only review (<short head sha> on <target branch>):
-<outcome>`. A trivial PR
-may record `skipped (<reason>)` as the outcome. Comments name no models and
-carry no signatures.
+<mode>: <outcome>`, where the mode is `full` or `follow-up to <short sha>`. A
+trivial PR may record `skipped (<reason>)` as the outcome, without a mode.
+Low-severity findings may be justified or tracked in an issue instead of fixed
+with a new commit. Comments name no models and carry no signatures.
 
 `programs.ai` installs `pr-review`, so agents do not assemble the reviews by
 hand or depend on which models their own client offers:
@@ -43,9 +44,23 @@ hand or depend on which models their own client offers:
   variables, but can read local files, including stored credentials, without
   network access. Results and a status per reviewer,
   including its model and effort, are kept per head SHA; the target branch is
-  recorded and must still match. A failed or
+  recorded and must still match. Earlier rounds are kept. A failed or
   timed-out reviewer, or one whose reply lacks one of the requested verdicts, is
   reported as a missing review, never as no findings.
+- A new head is reviewed as a **follow-up** of the last round that the
+  configured reviewers, and only they, completed on the same target, when it
+  descends from that round with the same merge base, at most 40 lines or 40%
+  of the PR's changed lines changed since, no binary files changed, and fewer
+  than three follow-ups ran in a row. Reviewers then get the findings of every
+  round since the last full review, the author's `--response` as a claim to
+  check, the interdiff to review, and the whole PR diff and checkout as
+  context; they raise new findings in untouched code only if they are
+  blocking. Otherwise, or with `--full`, `run` reviews the whole PR and says
+  why; a missing earlier round also forces a full review, and the response is
+  still passed on. `--force` repeats the head's previous mode. A result from a
+  different reviewer set counts for no reviewer. Fix rounds then cost roughly what the fixes need, and fresh
+  low-severity findings in unchanged code stop restarting the loop
+  ([#524](https://git.alc.xyz/alcxyz/nix-config/issues/524)).
 - `pr-review comment <pr> "<outcome>"` posts the comment for the current head,
   and refuses unless every reviewer completed for that head, except for skips.
 - `pr-review check <pr>` reports whether a comment names the current head.
@@ -62,7 +77,10 @@ which now combines hook arrays instead of replacing them. Codex receives a
 managed `~/.codex/hooks.json`, which Codex loads alongside other hook sources.
 The guard recognises `gh pr merge`, GitHub `pulls/N/merge` API calls, and Forgejo
 REST merges. It blocks them unless a review comment names the PR's current head
-commit and target branch, so new commits or a retargeted PR need a new review. It also blocks when it
+commit and target branch, so new commits or a retargeted PR need a new review.
+The comment's mode follows the pinned prefix, so older guards still accept it;
+the guard does not check the chain of rounds, which `run` enforces from local
+state when it selects a follow-up. It also blocks when it
 cannot verify the comment, including when its lookups exceed a 90-second
 deadline inside the 120-second hook timeout. The guard and `pr-review` share one script.
 
@@ -78,6 +96,12 @@ reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
   out of scope, and could not cover Forgejo REST calls or web merges.
 - **A single fixed reviewer:** a model would review its own work when it is
   also the author.
+- **Resuming the reviewers' earlier sessions for follow-ups:** conflicts with
+  their ephemeral, isolated runs, and the earlier checkout is gone.
+- **A follow-up time limit:** time alone does not make a follow-up wrong;
+  changed reviewers do, and they force a full review.
+- **Chaining follow-ups through posted comments, checked by the guard:** agents
+  fix and push before commenting, so it would need a comment for every round.
 - **`pr-review` in nix-packages:** reusable tooling lives there, but the command
   is tied to this decision's comment format, guard and reviewer settings, so it
   stays next to the guard.
