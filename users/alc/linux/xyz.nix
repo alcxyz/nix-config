@@ -301,6 +301,7 @@ in {
   services.devlog.weekly.enable = true;
 
   programs.ai.enable = true;
+  programs.ai.forgejoMcp.enable = true;
   programs.stashdb-pop.enable = true;
 
   services.cloud-sync = {

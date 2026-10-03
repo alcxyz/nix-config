@@ -97,6 +97,62 @@ expect("curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge", 2)
 expect('curl -X POST "$FORGEJO/api/v1/repos/o/r/pulls/8/merge"', 2)
 expect("curl --request GET https://git.example/api/v1/repos/o/r/pulls/8/merge", 0)
 
+# fj merges are verified like REST merges and need literal targets; tea merges are refused.
+seen, _ = expect("fj pr merge o/r#7 -M squash -d", 0)
+assert (seen[0][0].host, seen[0][0].owner, seen[0][0].repo, seen[0][0].number) == (review.FORGEJO_URL, "o", "r", "7"), seen
+expect("fj -H git.alc.xyz pr merge --method=squash o/r#9", 2)
+expect("cd x && fj pr merge -m 'body' o/r#7", 0)
+for command, hint in (
+    ("fj pr merge 7", "owner/repo#N"),
+    ("fj pr merge -R origin o/r#7", "owner/repo#N"),
+    ("fj --host codeberg.org pr merge o/r#7", "only https://git.alc.xyz"),
+    ("fj -Hcodeberg.org pr merge o/r#7", "only https://git.alc.xyz"),
+    ("fj --ssh x pr merge o/r#7", "fj pr merge owner/repo#N"),
+    ("fj pr merge o/r#7\necho --help", "fj pr merge owner/repo#N"),
+    ("tea pulls merge --repo o/r 7", "use `fj pr merge"),
+    ("tea pr m -r o/r 7", "use `fj pr merge"),
+    ("tea pulls --fields index merge --repo o/r 7", "use `fj pr merge"),
+):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and hint in message and not calls, (command, message)
+# A reviewed fj merge does not let another merge in the same command through.
+expect("fj pr merge o/r#7 && gh pr merge 9", 2)
+expect("fj pr merge o/r#7; curl -X POST https://git.example/api/v1/repos/o/r/pulls/8/merge", 2)
+expect("fj pr merge o/r#7; fj pr merge o/r#8", 2)
+expect("fj pr merge o/r#7 && tea pulls merge --repo o/r 7", 2)
+assert not expect("fj pr view o/r#7", 0)[0]
+assert not expect("tea pulls list --repo o/r", 0)[0]
+assert not expect("echo fj; tea issues ls", 0)[0]
+
+
+# Forgejo MCP calls are limited to the allowlist (ADR-0081), whatever their input.
+def mcp_hook(tool):
+    sys.stdin = io.StringIO(json.dumps({"tool_name": tool, "tool_input": {"owner": "o", "repo": "r", "index": 7}}))
+    sys.stderr = io.StringIO()
+    try:
+        return review.main(["guard"]), sys.stderr.getvalue()
+    finally:
+        sys.stdin, sys.stderr = sys.__stdin__, sys.__stderr__
+
+
+with tempfile.NamedTemporaryFile("w", suffix=".json") as tools:
+    json.dump(["get_issue_by_index", "create_issue_comment"], tools)
+    tools.flush()
+    os.environ["AGENT_FORGEJO_MCP_TOOLS"] = tools.name
+    assert mcp_hook("mcp__forgejo__get_issue_by_index")[0] == 0
+    assert mcp_hook("mcp__forgejo__create_issue_comment")[0] == 0
+    code, message = mcp_hook("mcp__forgejo__merge_pull_request")
+    assert code == 2 and "not enabled for agents" in message, message
+    assert mcp_hook("mcp__forgejo__delete_org")[0] == 2
+    assert mcp_hook("mcp__other__merge_pull_request")[0] == 0
+    del os.environ["AGENT_FORGEJO_MCP_TOOLS"]
+assert mcp_hook("mcp__forgejo__get_issue_by_index")[0] == 2, "no allowlist blocks every tool"
+os.environ["AGENT_FORGEJO_MCP_TOOLS"] = "/nonexistent/tools.json"
+code, message = mcp_hook("mcp__forgejo__get_issue_by_index")
+assert code == 2 and "could not verify" in message, message
+del os.environ["AGENT_FORGEJO_MCP_TOOLS"]
+
 # Unresolvable merge targets block with guidance.
 code, message = hook("curl -X POST https://git.example/api/v1/repos/o/r/pulls/$PR/merge")
 assert code == 2 and "literal owner" in message, message

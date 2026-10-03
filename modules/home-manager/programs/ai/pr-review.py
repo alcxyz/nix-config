@@ -24,9 +24,11 @@ justified. Otherwise, or with --full, it reviews the whole PR.
 
 As a hook, Claude Code and Codex CLI pass the pending shell command as JSON on
 stdin (tool_input.command). Merges are recognised as `gh pr merge`, `gh api`
-calls to GitHub's pulls/N/merge endpoint, or REST calls to a Forgejo/GitHub
-.../pulls/N/merge URL. Exit code 2 with a reason on stderr blocks the call in
-both clients. Lookup failures also block: the agent should ask the operator
+calls to GitHub's pulls/N/merge endpoint, REST calls to a Forgejo/GitHub
+.../pulls/N/merge URL, and `fj pr merge`; `tea` merges are refused. Calls to Forgejo
+MCP tools (ADR-0081) are blocked unless the tool is in the agent allowlist
+named by AGENT_FORGEJO_MCP_TOOLS, which never includes merges. Exit code 2
+with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
 instead of guessing. This is an accident guard for agent sessions, not a
 security boundary.
 """
@@ -78,6 +80,13 @@ API_MERGE = re.compile(
     r"(?:https?://(?P<host>[^/\s\"']+))?/*(?:api/v\d+/)?repos/"
     r"(?P<owner>[^/\s\"']+)/(?P<repo>[^/\s\"']+)/pulls/(?P<number>[^/\s\"']+)/merge\b"
 )
+# fj merges: flags that take a value, and accepted PR references.
+FJ_VALUE_FLAGS = {"-H", "--host", "-C", "--cwd", "--style", "-R", "--remote", "-M", "--method",
+                  "-t", "--title", "-m", "--message"}
+FJ_PR = re.compile(
+    r"^(?:(?P<owner>[A-Za-z0-9][A-Za-z0-9_.-]*)/(?P<repo>[A-Za-z0-9][A-Za-z0-9_.-]*))?#?(?P<number>\d+)$"
+)
+MCP_PREFIX = "mcp__forgejo__"
 READ_ONLY_METHOD = re.compile(r"(?:-X|--request|--method)[\s=]+[\"']?GET\b", re.IGNORECASE)
 LITERAL = re.compile(r"^[A-Za-z0-9_.-]+$")
 PR_URL = re.compile(
@@ -1015,11 +1024,79 @@ def gh_pr_merge(tokens, cwd):
     return view, cwd
 
 
+def cli_calls(tokens, program, value_flags):
+    """Yield (words, flags) for each `program` call: positional words and flag values."""
+    for index, token in enumerate(tokens):
+        if os.path.basename(token) != program:
+            continue
+        words, flags, args = [], {}, iter(tokens[index + 1:])
+        for token in args:
+            if token in SEPARATORS:
+                break
+            name, has_value, value = token.partition("=")
+            if not has_value and not token.startswith("--") and token[:2] in value_flags and len(token) > 2:
+                name, has_value, value = token[:2], True, token[2:]  # attached short value: -Hhost
+            if name in value_flags:
+                flags[name] = value if has_value else next(args, "")
+            elif not token.startswith("-"):
+                words.append(token)
+        yield words, flags
+
+
+def cli_merges(tokens):
+    """Yield (description, PR or None, problem) for each `fj` or `tea` merge."""
+    # A call that mentions a merge in a shape the parser does not expect (an
+    # unknown option with a value, extra arguments) is blocked, not let through.
+    for words, flags in cli_calls(tokens, "fj", FJ_VALUE_FLAGS):
+        if "pr" not in words or "merge" not in words:
+            continue
+        ref = "the PR (fj pr merge " + " ".join(words[2:3]) + ")"
+        if words[:2] != ["pr", "merge"] or len(words) > 3:
+            yield ref, None, "use the form `fj pr merge owner/repo#N` with only the options it documents"
+            continue
+        host = (flags.get("-H") or flags.get("--host") or "").removeprefix("https://").rstrip("/")
+        match = FJ_PR.match(words[2]) if len(words) > 2 else None
+        if host and host not in FORGEJO_REMOTE_HOSTS:
+            yield ref, None, f"only {FORGEJO_URL} is supported for Forgejo merges"
+        elif not match or not match["owner"] or "-R" in flags or "--remote" in flags:
+            yield ref, None, "name the PR as a literal owner/repo#N, without --remote"
+        else:
+            yield ref, PR("forgejo", FORGEJO_URL, match["owner"], match["repo"], match["number"]), None
+
+    # tea resolves --repo as a local checkout when such a path exists, so the
+    # guard cannot know which repository it merges; its merges are refused.
+    for words, _flags in cli_calls(tokens, "tea", set()):
+        if {"pulls", "pull", "pr"} & set(words) and {"merge", "m"} & set(words):
+            yield "the PR (tea pulls merge)", None, "tea merges are not verified; use `fj pr merge owner/repo#N`"
+
+
+def mcp_check(tool):
+    """Return None when the Forgejo MCP tool is allowed for agents, otherwise a reason to block."""
+    path = os.environ.get("AGENT_FORGEJO_MCP_TOOLS")
+    allowed = set()
+    if path:
+        with open(path, encoding="utf-8") as handle:
+            allowed = set(json.load(handle))
+    if tool in allowed:
+        return None
+    return (f"the Forgejo MCP tool {tool!r} is not enabled for agents (ADR-0081). Merge with `fj pr merge "
+            "owner/repo#N` or the REST API after the review, or ask the operator.")
+
+
 def guard_check(command, cwd):
     """Return None when the command may run, otherwise a reason to block."""
-    if "merge" not in command:
+    if "merge" not in command and "tea" not in command:
         return None
     tokens = tokenize(command)
+
+    # Every fj/tea merge must pass, and does not exempt a gh or REST merge in the same command.
+    for ref, pr, problem in cli_merges(tokens):
+        if pr is None:
+            return f"cannot verify {ref}: {problem}."
+        info = pr_info(pr)
+        problem = review_problem(comment_bodies(pr), info["head"], info["base"])
+        if problem:
+            return f"{pr} {problem}."
 
     found = gh_pr_merge(tokens, cwd)
     if found:
@@ -1091,6 +1168,13 @@ def guard(_args):
         payload = json.load(sys.stdin)
     except ValueError:
         return 0
+    tool = payload.get("tool_name")
+    if isinstance(tool, str) and tool.startswith(MCP_PREFIX):
+        reason = mcp_check(tool[len(MCP_PREFIX):])
+        if reason is None:
+            return 0
+        print(f"Blocked by the agent PR review guard: {reason}", file=sys.stderr)
+        return 2
     command = (payload.get("tool_input") or {}).get("command")
     if not isinstance(command, str):
         return 0

@@ -37,6 +37,22 @@ jq -e '
   and .hooks.Stop[0].hooks[0].command == "stop"
 ' "$settings" >/dev/null || fail 'managed hooks were not combined with user hooks'
 
+# Managed permission rules are added to the user's without duplicates, and an
+# empty managed list keeps the user's rules.
+printf '%s\n' '{"permissions":{"allow":["mcp__x__read","mcp__x__list"]}}' >"$fixture/managed-permissions.json"
+printf '%s\n' '{"permissions":{"allow":["Bash(ls:*)","mcp__x__read"],"deny":["Bash(sops -d:*)"],"defaultMode":"default"}}' >"$settings"
+bash "$script" "$settings" "$fixture/managed-permissions.json"
+bash "$script" "$settings" "$fixture/managed-permissions.json"
+jq -e '
+  .permissions.allow == ["Bash(ls:*)", "mcp__x__read", "mcp__x__list"]
+  and .permissions.deny == ["Bash(sops -d:*)"]
+  and .permissions.defaultMode == "default"
+' "$settings" >/dev/null || fail 'managed permissions were not combined with user permissions'
+printf '%s\n' '{"permissions":{"allow":[]}}' >"$fixture/managed-permissions.json"
+bash "$script" "$settings" "$fixture/managed-permissions.json"
+jq -e '.permissions.allow == ["Bash(ls:*)", "mcp__x__read", "mcp__x__list"]' "$settings" >/dev/null ||
+  fail 'an empty managed rule list replaced user rules'
+
 # Malformed, empty, non-object, and multiple JSON documents must be preserved.
 for content in '{broken' '' '[]' 'null' '{} {}'; do
   printf '%s' "$content" >"$settings"

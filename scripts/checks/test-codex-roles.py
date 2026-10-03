@@ -125,6 +125,40 @@ with tempfile.TemporaryDirectory() as tmp:
     result = merge(config, state, {"light": role("light")})
     assert result.returncode == 1 and config.read_text() == 'agents = "x"\n', result
 
+# MCP servers use the same merge for [mcp_servers.<name>], including nested tool tables (ADR-0081).
+with tempfile.TemporaryDirectory() as tmp:
+    root = pathlib.Path(tmp)
+    config = root / "codex" / "config.toml"
+    state = root / "state" / "codex-mcp.json"
+    config.parent.mkdir()
+    config.write_text('[agents.deep]\ndescription = "d"\nconfig_file = "/d.toml"\n\n[mcp_servers.mine]\ncommand = "mine"\n')
+    server = {
+        "command": "/profile/bin/forgejo-mcp-agent",
+        "enabled_tools": ["get_repo", "create_issue"],
+        "default_tools_approval_mode": "prompt",
+        "tools": {"get_repo": {"approval_mode": "approve"}},
+    }
+    servers_file = root / "servers.json"
+
+    def merge_servers(servers):
+        servers_file.write_text(json.dumps(servers))
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), str(config), str(state), str(servers_file), "mcp_servers"],
+            capture_output=True, text=True,
+        )
+
+    result = merge_servers({"forgejo": server})
+    assert result.returncode == 0, result.stderr
+    data = tomllib.loads(config.read_text())
+    assert data["mcp_servers"] == {"mine": {"command": "mine"}, "forgejo": server}, data
+    assert data["agents"]["deep"]["description"] == "d", data
+    assert json.loads(state.read_text()) == {"managed": ["forgejo"]}
+    result = merge_servers({"forgejo": server})
+    assert result.returncode == 0 and tomllib.loads(config.read_text())["mcp_servers"]["forgejo"] == server, result
+    result = merge_servers({})
+    assert result.returncode == 0, result.stderr
+    assert tomllib.loads(config.read_text())["mcp_servers"] == {"mine": {"command": "mine"}}
+
 # A file Codex rewrote between reading and replacing it is never overwritten.
 import importlib.util
 spec = importlib.util.spec_from_file_location("codex_roles", SCRIPT)

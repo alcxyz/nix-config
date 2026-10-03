@@ -109,4 +109,5 @@ in {
   };
 
   programs.ai.enable = true;
+  programs.ai.forgejoMcp.enable = true;
 }

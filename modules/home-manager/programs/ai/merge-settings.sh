@@ -24,6 +24,8 @@ if [ -e "$settings_file" ] || [ -L "$settings_file" ]; then
   # Hook event arrays are combined rather than replaced, so user-added hooks
   # survive. A user hook group that runs a managed hook command is replaced by
   # the managed definition; changing a managed command leaves the old entry.
+  # Permission rule lists are combined the same way; a rule dropped from the
+  # managed settings stays until removed by hand.
   jq -e -s '
     if length == 2 and all(.[]; type == "object") then
       .[0] as $user | .[1] as $managed
@@ -34,6 +36,11 @@ if [ -e "$settings_file" ] || [ -L "$settings_file" ]; then
             .[$event] = ((.[$event] // [])
               | map(select(any(.hooks[]?.command; IN($commands[])) | not)))
               + $managed.hooks[$event])
+        end
+      | if ($managed.permissions // null) == null then . else
+          .permissions = reduce ($managed.permissions | to_entries[] | select(.value | type == "array")) as $rule (.permissions;
+            (($user.permissions // {})[$rule.key] // []) as $mine
+            | .[$rule.key] = $mine + ($rule.value - $mine))
         end
     else
       error("expected one JSON object in each settings file")
