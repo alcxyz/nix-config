@@ -108,6 +108,13 @@ expect("fj pr merge 2>/dev/null o/r#7 >out.txt", 0)
 expect("fj pr merge o/r#7 2> err >> log </dev/null >&2 >| f", 0)
 expect("fj pr merge o/r#7 -m 'a > b' &>>log <<< y |& tail", 0)
 expect("fj pr merge o/r#9 2>&1 | tail -5", 2)
+# A redirection ends the word before it, and only unquoted digits name a file descriptor.
+expect("fj pr merge>/dev/null o/r#7", 0)
+expect("fj pr merge&>/dev/null o/r#9", 2)
+for command in ('gh pr merge "9">/dev/null --squash', "gh pr merge 9''>/dev/null", "gh pr merge \\9>x",
+                "gh pr merge 12>x 9"):
+    seen, _ = expect(command, 2)
+    assert seen[0][0][3] == "9", (command, seen)
 seen, _ = expect("gh pr merge --squash 2>&1 -R owner/repo", 2)
 assert seen[0][0][3:6] == ["--repo", "owner/repo", "--json"], seen
 seen, _ = expect("gh pr merge &>/dev/null 9", 2)
@@ -126,6 +133,7 @@ for command, hint in (
     ("fj pr merge '>' o/r#7", "unexpected arguments: o/r#7"),
     ("fj pr merge \\>x o/r#7", "unexpected arguments: o/r#7"),
     ("tea pulls --fields '>' merge --repo o/r 7", "use `fj pr merge"),
+    ("tea pulls merge>/dev/null --repo o/r 7", "use `fj pr merge"),
     ("tea pulls merge --repo o/r 7", "use `fj pr merge"),
     ("tea pr m -r o/r 7", "use `fj pr merge"),
     ("tea pulls --fields index merge --repo o/r 7", "use `fj pr merge"),

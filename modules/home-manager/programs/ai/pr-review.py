@@ -72,11 +72,9 @@ RESERVED_NAMES = {"prompt", "status", "lock"}
 GIT = ["git", "-c", "core.hooksPath=/dev/null"]
 GUARD_DEADLINE = 90
 SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "\n"}
-# A redirection such as `>log`, `2>/dev/null` or `<in`; an empty target is in the next token.
-REDIRECTION = re.compile(r"^\d*(?:>>?|<<<|<<-?|<)(?P<target>.*)$", re.DOTALL)
-# Quoted or escaped `<` and `>` are literal, not redirections; they are marked while lexing.
-LITERAL_ANGLES = str.maketrans("<>", "\ue000\ue001")
-RESTORE_ANGLES = str.maketrans("\ue000\ue001", "<>")
+# Unquoted redirection operators, longest first; tokenize drops each with its target.
+REDIRECT_OPERATORS = ("&>>", "&>", "<<<", "<<-", "<<", "<>", "<&", "<", ">>", ">&", ">|", ">")
+REDIRECT = "\ue000"
 GH_MERGE_VALUE_FLAGS = {
     "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
     "-A", "--author-email", "--match-head-commit",
@@ -991,36 +989,49 @@ def cmd_check(args):
     return 0
 
 
-def mark_literal_angles(command):
-    """Mark quoted or escaped `<` and `>`, and write `2>&1`, `&>log` and `>|log` as `2>1`, `>log` and `>log`."""
+def mark_redirections(command):
+    """Replace each unquoted redirection operator, with its file descriptor number, by a REDIRECT word."""
     out, quote, index = [], None, 0
+    word_start, digits = 0, True  # where the current word starts, and whether it is only unquoted digits
     while index < len(command):
         char = command[index]
-        if quote is None and command.startswith(("&>", ">&", "<&", ">|"), index):
-            out.append(command[index + 1] if char == "&" else char)
-            index += 2
-            continue
+        if quote is None:
+            operator = next((op for op in REDIRECT_OPERATORS if command.startswith(op, index)), "")
+            if operator and not command.startswith("(", index + len(operator)):  # not `<(…)`
+                if digits and char != "&":
+                    del out[word_start:]  # `2>`: the digits name a file descriptor
+                out.append(f" {REDIRECT} ")
+                index += len(operator)
+                word_start, digits = len(out), True
+                continue
+            if char.isspace() or char in ";&|()":
+                out.append(char)
+                index += 1
+                word_start, digits = len(out), True
+                continue
         if char == "\\" and quote != "'":
-            out.append(command[index:index + 2].translate(LITERAL_ANGLES))
+            out.append(command[index:index + 2])
             index += 2
+            digits = False
             continue
         if quote is None and command.startswith("$'", index):
             quote = "$'"
             out.append("$")
-            char = "'"
             index += 1
+            char = "'"
         elif quote is None and char in "'\"":
             quote = char
         elif quote is not None and char == quote[-1]:
             quote = None
-        out.append(char if quote is None else char.translate(LITERAL_ANGLES))
+        digits = digits and quote is None and char in "0123456789"
+        out.append(char)
         index += 1
     return "".join(out)
 
 
 def tokenize(command):
-    """Split a command into words and operators, dropping redirections."""
-    lexer = shlex.shlex(mark_literal_angles(command), posix=True, punctuation_chars=";&|()")
+    """Split a command into words and operators, dropping redirections and their targets."""
+    lexer = shlex.shlex(mark_redirections(command), posix=True, punctuation_chars=";&|()")
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
@@ -1029,12 +1040,10 @@ def tokenize(command):
         return command.split()
     tokens, args = [], iter(lexed)
     for token in args:
-        match = REDIRECTION.match(token)
-        if match:
-            if not match["target"]:
-                next(args, None)
-            continue
-        tokens.append(token.translate(RESTORE_ANGLES))
+        if token == REDIRECT:
+            next(args, None)
+        else:
+            tokens.append(token)
     return tokens
 
 
