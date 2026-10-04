@@ -72,6 +72,8 @@ RESERVED_NAMES = {"prompt", "status", "lock"}
 GIT = ["git", "-c", "core.hooksPath=/dev/null"]
 GUARD_DEADLINE = 90
 SEPARATORS = {";", "&&", "||", "|", "&", "(", ")", "\n"}
+# A redirection such as `>log`, `2>/dev/null` or `<in`; an empty target is in the next token.
+REDIRECTION = re.compile(r"^\d*(?:>>?|<)(?P<target>.*)$")
 GH_MERGE_VALUE_FLAGS = {
     "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
     "-A", "--author-email", "--match-head-commit",
@@ -996,6 +998,17 @@ def tokenize(command):
         return command.split()
 
 
+def skip_redirection(token, args):
+    """Consume a redirection and its target from args; return False for other tokens."""
+    match = REDIRECTION.match(token)
+    if not match:
+        return False
+    # The lexer splits `2>&1` into `2>`, `&`, `1` and `>|file` into `>`, `|`, `file`.
+    if not match["target"] and next(args, "") in ("&", "|"):
+        next(args, None)
+    return True
+
+
 def gh_pr_merge(tokens, cwd):
     """Return (selector args, cwd) for the first `gh pr merge`, or None."""
     for index in range(len(tokens) - 2):
@@ -1012,6 +1025,8 @@ def gh_pr_merge(tokens, cwd):
     for token in args:
         if token in SEPARATORS:
             break
+        if skip_redirection(token, args):
+            continue
         name = token.split("=", 1)[0]
         if name in ("-R", "--repo"):
             repo = token.split("=", 1)[1] if "=" in token else next(args, None)
@@ -1033,6 +1048,8 @@ def cli_calls(tokens, program, value_flags):
         for token in args:
             if token in SEPARATORS:
                 break
+            if skip_redirection(token, args):
+                continue
             name, has_value, value = token.partition("=")
             if not has_value and not token.startswith("--") and token[:2] in value_flags and len(token) > 2:
                 name, has_value, value = token[:2], True, token[2:]  # attached short value: -Hhost
@@ -1052,7 +1069,9 @@ def cli_merges(tokens):
             continue
         ref = "the PR (fj pr merge " + " ".join(words[2:3]) + ")"
         if words[:2] != ["pr", "merge"] or len(words) > 3:
-            yield ref, None, "use the form `fj pr merge owner/repo#N` with only the options it documents"
+            unexpected = shlex.join(words[3:] if words[:2] == ["pr", "merge"] else words)
+            yield ref, None, ("use the form `fj pr merge owner/repo#N` with only the options it documents "
+                              f"(unexpected arguments: {unexpected})")
             continue
         host = (flags.get("-H") or flags.get("--host") or "").removeprefix("https://").rstrip("/")
         match = FJ_PR.match(words[2]) if len(words) > 2 else None
