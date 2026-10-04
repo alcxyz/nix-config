@@ -102,6 +102,15 @@ seen, _ = expect("fj pr merge o/r#7 -M squash -d", 0)
 assert (seen[0][0].host, seen[0][0].owner, seen[0][0].repo, seen[0][0].number) == (review.FORGEJO_URL, "o", "r", "7"), seen
 expect("fj -H git.alc.xyz pr merge --method=squash o/r#9", 2)
 expect("cd x && fj pr merge -m 'body' o/r#7", 0)
+# Simple redirections at the end of a one-line merge are not arguments.
+expect("fj pr merge o/r#7 --method squash -t 'x' -m 'y z' 2>&1 | tail -5", 0)
+expect("fj pr merge o/r#7 >/dev/null 2>&1", 0)
+expect("fj pr merge o/r#7 &>>log |& head -n 20\n", 0)
+expect("fj pr merge o/r#7 -m 'a 2>&1'", 0)
+expect("fj pr merge o/r#9 2>&1 | tail -5", 2)
+seen, _ = expect("gh pr merge 9 --squash 2>&1 | tail -3", 2)
+assert seen[0][0][3] == "9", seen
+expect("gh pr merge 7 --squash >/dev/null", 0)
 for command, hint in (
     ("fj pr merge 7", "owner/repo#N"),
     ("fj pr merge -R origin o/r#7", "owner/repo#N"),
@@ -109,6 +118,15 @@ for command, hint in (
     ("fj -Hcodeberg.org pr merge o/r#7", "only https://git.alc.xyz"),
     ("fj --ssh x pr merge o/r#7", "fj pr merge owner/repo#N"),
     ("fj pr merge o/r#7\necho --help", "fj pr merge owner/repo#N"),
+    ("fj pr merge o/r#7 extra", "arguments as: o/r#7 extra"),
+    # Other redirections are still read as arguments, so the merge is refused.
+    ("fj pr merge 2>/dev/null o/r#7", "arguments as: 2>/dev/null o/r#7"),
+    ("fj pr merge o/r#7 \\ >x", "fj pr merge owner/repo#N"),
+    ("fj pr merge o/r#7 2>&1\necho", "fj pr merge owner/repo#N"),
+    ("fj pr merge o/r#7 2>&1 | fj pr merge o/r#8", "fj pr merge owner/repo#N"),
+    ("fj pr merge o/r#7\r2>&1", "fj pr merge owner/repo#N"),
+    ("fj pr merge o/r#7 \u0663>x", "arguments as: o/r#7 \u0663>x"),
+    ("fj pr merge o/r#7 '>' x", "arguments as: o/r#7 > x"),
     ("tea pulls merge --repo o/r 7", "use `fj pr merge"),
     ("tea pr m -r o/r 7", "use `fj pr merge"),
     ("tea pulls --fields index merge --repo o/r 7", "use `fj pr merge"),

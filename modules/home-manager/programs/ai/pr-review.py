@@ -72,6 +72,14 @@ RESERVED_NAMES = {"prompt", "status", "lock"}
 GIT = ["git", "-c", "core.hooksPath=/dev/null"]
 GUARD_DEADLINE = 90
 SEPARATORS = {";", "&&", "||", "|", "&", "(", ")", "\n"}
+# Simple redirections such as `2>&1` or `>/dev/null`, optionally piped to tail or
+# head, at the end of a command. Without quotes, escapes or other commands, removing
+# them cannot hide a merge.
+TRAILING_REDIRECTIONS = re.compile(
+    r"(?:[ \t]+(?:\d*>>?|&>>?|\d*<)(?:&(?:\d+|-)|[ \t]*[\w./~-]+))+"
+    r"(?:[ \t]*\|&?[ \t]*(?:tail|head)(?:[ \t]+-n)?(?:[ \t]+-?\d+)?)?$",
+    re.ASCII,
+)
 GH_MERGE_VALUE_FLAGS = {
     "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
     "-A", "--author-email", "--match-head-commit",
@@ -986,8 +994,17 @@ def cmd_check(args):
     return 0
 
 
+def strip_trailing_redirections(command):
+    """Drop TRAILING_REDIRECTIONS from a one-line command."""
+    command = command.strip()
+    match = TRAILING_REDIRECTIONS.search(command)
+    if not match or "\n" in command or command[:match.start()].endswith("\\"):
+        return command
+    return command[:match.start()]
+
+
 def tokenize(command):
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
+    lexer = shlex.shlex(strip_trailing_redirections(command), posix=True, punctuation_chars=";&|()")
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
@@ -1052,7 +1069,10 @@ def cli_merges(tokens):
             continue
         ref = "the PR (fj pr merge " + " ".join(words[2:3]) + ")"
         if words[:2] != ["pr", "merge"] or len(words) > 3:
-            yield ref, None, "use the form `fj pr merge owner/repo#N` with only the options it documents"
+            problem = "use the form `fj pr merge owner/repo#N` with only the options it documents"
+            if words[:2] == ["pr", "merge"]:
+                problem += f" (it read the arguments as: {' '.join(words[2:])})"
+            yield ref, None, problem
             continue
         host = (flags.get("-H") or flags.get("--host") or "").removeprefix("https://").rstrip("/")
         match = FJ_PR.match(words[2]) if len(words) > 2 else None
