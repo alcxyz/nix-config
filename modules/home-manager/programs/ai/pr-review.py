@@ -71,9 +71,12 @@ RESERVED_NAMES = {"prompt", "status", "lock"}
 # Repository hooks come from the PR head and must not run outside the reviewers' sandbox.
 GIT = ["git", "-c", "core.hooksPath=/dev/null"]
 GUARD_DEADLINE = 90
-SEPARATORS = {";", "&&", "||", "|", "&", "(", ")", "\n"}
+SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "\n"}
 # A redirection such as `>log`, `2>/dev/null` or `<in`; an empty target is in the next token.
-REDIRECTION = re.compile(r"^\d*(?:>>?|<)(?P<target>.*)$")
+REDIRECTION = re.compile(r"^\d*(?:>>?|<<<|<<-?|<)(?P<target>.*)$", re.DOTALL)
+# Quoted or escaped `<` and `>` are literal, not redirections; they are marked while lexing.
+LITERAL_ANGLES = str.maketrans("<>", "\ue000\ue001")
+RESTORE_ANGLES = str.maketrans("\ue000\ue001", "<>")
 GH_MERGE_VALUE_FLAGS = {
     "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
     "-A", "--author-email", "--match-head-commit",
@@ -988,25 +991,51 @@ def cmd_check(args):
     return 0
 
 
+def mark_literal_angles(command):
+    """Mark quoted or escaped `<` and `>`, and write `2>&1`, `&>log` and `>|log` as `2>1`, `>log` and `>log`."""
+    out, quote, index = [], None, 0
+    while index < len(command):
+        char = command[index]
+        if quote is None and command.startswith(("&>", ">&", "<&", ">|"), index):
+            out.append(command[index + 1] if char == "&" else char)
+            index += 2
+            continue
+        if char == "\\" and quote != "'":
+            out.append(command[index:index + 2].translate(LITERAL_ANGLES))
+            index += 2
+            continue
+        if quote is None and command.startswith("$'", index):
+            quote = "$'"
+            out.append("$")
+            char = "'"
+            index += 1
+        elif quote is None and char in "'\"":
+            quote = char
+        elif quote is not None and char == quote[-1]:
+            quote = None
+        out.append(char if quote is None else char.translate(LITERAL_ANGLES))
+        index += 1
+    return "".join(out)
+
+
 def tokenize(command):
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
+    """Split a command into words and operators, dropping redirections."""
+    lexer = shlex.shlex(mark_literal_angles(command), posix=True, punctuation_chars=";&|()")
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
-        return list(lexer)
+        lexed = list(lexer)
     except ValueError:
         return command.split()
-
-
-def skip_redirection(token, args):
-    """Consume a redirection and its target from args; return False for other tokens."""
-    match = REDIRECTION.match(token)
-    if not match:
-        return False
-    # The lexer splits `2>&1` into `2>`, `&`, `1` and `>|file` into `>`, `|`, `file`.
-    if not match["target"] and next(args, "") in ("&", "|"):
-        next(args, None)
-    return True
+    tokens, args = [], iter(lexed)
+    for token in args:
+        match = REDIRECTION.match(token)
+        if match:
+            if not match["target"]:
+                next(args, None)
+            continue
+        tokens.append(token.translate(RESTORE_ANGLES))
+    return tokens
 
 
 def gh_pr_merge(tokens, cwd):
@@ -1025,8 +1054,6 @@ def gh_pr_merge(tokens, cwd):
     for token in args:
         if token in SEPARATORS:
             break
-        if skip_redirection(token, args):
-            continue
         name = token.split("=", 1)[0]
         if name in ("-R", "--repo"):
             repo = token.split("=", 1)[1] if "=" in token else next(args, None)
@@ -1048,8 +1075,6 @@ def cli_calls(tokens, program, value_flags):
         for token in args:
             if token in SEPARATORS:
                 break
-            if skip_redirection(token, args):
-                continue
             name, has_value, value = token.partition("=")
             if not has_value and not token.startswith("--") and token[:2] in value_flags and len(token) > 2:
                 name, has_value, value = token[:2], True, token[2:]  # attached short value: -Hhost
@@ -1069,7 +1094,7 @@ def cli_merges(tokens):
             continue
         ref = "the PR (fj pr merge " + " ".join(words[2:3]) + ")"
         if words[:2] != ["pr", "merge"] or len(words) > 3:
-            unexpected = shlex.join(words[3:] if words[:2] == ["pr", "merge"] else words)
+            unexpected = " ".join(words[3:] if words[:2] == ["pr", "merge"] else words)
             yield ref, None, ("use the form `fj pr merge owner/repo#N` with only the options it documents "
                               f"(unexpected arguments: {unexpected})")
             continue
