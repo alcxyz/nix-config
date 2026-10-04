@@ -90,6 +90,9 @@ and its live-edit link are retired.
   - `prefer-cli` — use CLI when supported, otherwise API if configured
   - `prefer-api` — use API when configured, otherwise CLI if supported
 - `api_key_env`: optional env var name for API auth
+- `effort`: optional reasoning effort for the CLI transports (Codex
+  `model_reasoning_effort`, Claude Code `--effort`); empty keeps the CLI's
+  default. Generated from the mapped agent role. Added 2026-10-04.
 - `backup`: optional provider/model entry with the same schema
 
 The intended default posture is OpenAI primary with `cli`, Anthropic backup

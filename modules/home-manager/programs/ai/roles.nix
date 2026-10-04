@@ -70,6 +70,7 @@ with lib; let
   llmEntry = role: {
     provider = "openai";
     model = role.codex.model;
+    effort = role.codex.effort;
     transport = "cli";
     api_key_env = "OPENAI_API_KEY";
     # Claude aliases are Claude Code names, not API model IDs, so the backup
@@ -77,6 +78,7 @@ with lib; let
     backup = {
       provider = "anthropic";
       model = role.claude.model;
+      effort = role.claude.effort;
       transport = "cli";
       api_key_env = "ANTHROPIC_API_KEY";
     };

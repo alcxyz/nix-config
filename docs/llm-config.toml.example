@@ -4,23 +4,27 @@
 [roles.fast]
 provider    = "openai"
 model       = "<codex model of the mapped role>"
+effort      = "<codex effort of the mapped role>"
 transport   = "cli"
 api_key_env = "OPENAI_API_KEY"
 
 [roles.fast.backup]
 provider    = "anthropic"
 model       = "<Claude alias or model of the mapped role>"
+effort      = "<Claude effort of the mapped role>"
 transport   = "cli"
 api_key_env = "ANTHROPIC_API_KEY"
 
 [roles.strong]
 provider    = "openai"
 model       = "<codex model of the mapped role>"
+effort      = "<codex effort of the mapped role>"
 transport   = "cli"
 api_key_env = "OPENAI_API_KEY"
 
 [roles.strong.backup]
 provider    = "anthropic"
 model       = "<Claude alias or model of the mapped role>"
+effort      = "<Claude effort of the mapped role>"
 transport   = "cli"
 api_key_env = "ANTHROPIC_API_KEY"

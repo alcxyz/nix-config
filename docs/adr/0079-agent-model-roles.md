@@ -64,7 +64,8 @@ configuration, independent of `programs.ai.enable`, which keeps gating
   chosen from the agent roles, each with a backup on the other provider. It
   replaces the hand-maintained `users/alc/configs/llm/config.toml`. Generated
   Anthropic entries use the CLI transport, because aliases are Claude Code
-  names rather than API model IDs; the schema has no effort field.
+  names rather than API model IDs. Since 2026-10-04 each entry also carries
+  the role's effort in ADR-0029's optional `effort` field.
 - `pr-review` reviewer defaults, from the `deep` role on both providers.
 - `agent-role`, which prints a role's model or effort for one client from
   `~/.config/agent-roles/roles.json`. Invocations that skip user

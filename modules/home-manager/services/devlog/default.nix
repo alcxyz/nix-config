@@ -22,6 +22,12 @@ in {
       description = "Path to the journal git repo.";
     };
 
+    notifyOnFailure = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Show a desktop notification when a devlog run fails, so failures are not only visible in the journal.";
+    };
+
     catchUpDays = lib.mkOption {
       type = lib.types.ints.positive;
       default = 30;
@@ -42,7 +48,11 @@ in {
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
       systemd.user.services.devlog = {
-        Unit.Description = "Generate daily devlog from GitHub activity";
+        Unit =
+          {
+            Description = "Generate daily devlog from development activity";
+          }
+          // lib.optionalAttrs cfg.notifyOnFailure {OnFailure = "devlog-failure@%n.service";};
         Service = {
           Type = "oneshot";
           ExecStart = "${pkgs.devlog}/bin/devlog catch-up -repo ${cfg.repoPath} -days ${toString cfg.catchUpDays}";
@@ -67,9 +77,24 @@ in {
       };
     }
 
+    (lib.mkIf cfg.notifyOnFailure {
+      # Instanced by OnFailure with the failed unit's name.
+      systemd.user.services."devlog-failure@" = {
+        Unit.Description = "Report failed devlog unit %i";
+        Service = {
+          Type = "oneshot";
+          ExecStart = ''${pkgs.libnotify}/bin/notify-send --urgency=critical --app-name=devlog "%i failed" "Inspect it with: journalctl --user -u %i"'';
+        };
+      };
+    })
+
     (lib.mkIf cfg.weekly.enable {
       systemd.user.services.devlog-weekly = {
-        Unit.Description = "Generate weekly devlog summary";
+        Unit =
+          {
+            Description = "Generate weekly devlog summary";
+          }
+          // lib.optionalAttrs cfg.notifyOnFailure {OnFailure = "devlog-failure@%n.service";};
         Service = {
           Type = "oneshot";
           ExecStart = "${pkgs.devlog}/bin/devlog weekly -repo ${cfg.repoPath}";
