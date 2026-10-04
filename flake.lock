@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1790997625,
-        "narHash": "sha256-aJKfi55J6TC2lEruE3SFH1aHWMT68+LtKcq7HMxbOQw=",
+        "lastModified": 1791044651,
+        "narHash": "sha256-1k1F4kf/jTSg0Jz5Am6urGs/XwqkYRcyekpbSILTvlI=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "7610c632da1a53077ee2c4bc682855a13b5cd49e",
+        "rev": "da697b0e3ea8dfad783ef4b467b2dcee0adb65ba",
         "type": "github"
       },
       "original": {
@@ -69,11 +69,11 @@
     "bivrost": {
       "flake": false,
       "locked": {
-        "lastModified": 1790720452,
-        "narHash": "sha256-32DiQLRZTu20UcPY8C93JWrsFMEQx73MYAb3I+NEU/Y=",
+        "lastModified": 1790866567,
+        "narHash": "sha256-0GQ3jUsWJt30/AYEtGjajR8CVNCE+DuYQ7e0UfPohqc=",
         "owner": "alcxyz",
         "repo": "bivrost",
-        "rev": "b96bb82f54678d404a51b2ddb3703c6f1dda8042",
+        "rev": "497279f6cca5f0f182b7c770886685ae85e05f69",
         "type": "github"
       },
       "original": {
@@ -916,11 +916,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1790965847,
-        "narHash": "sha256-MOc0cUDRrw0jYczES+JoU/gqzGiVlJ02NXR6tu1uI7o=",
+        "lastModified": 1791102910,
+        "narHash": "sha256-YnzKr5JIMl8mFziqUUHpGXszhtyks60MdTGllvtUNqs=",
         "ref": "dev",
-        "rev": "bf4cea78b4df4f427049720a60448845b39e4275",
-        "revCount": 692,
+        "rev": "5e06afb498b7999ac5ac9aa80fcdf46072c9216e",
+        "revCount": 705,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
