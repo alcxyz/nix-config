@@ -3,14 +3,22 @@
 
 A node cut off from its peers keeps running its containers. If the rest of the
 cluster then releases that node's volumes, the old processes could keep
-writing. This agent stops k3s and kills its containers once the node has been
-unhealthy for FENCE_AFTER seconds, so a cluster-side controller can safely
-apply the out-of-service taint later (gitops ADR-058). All probes of a poll run
-in parallel, so a poll takes at most about 6 s plus POLL. Worst case from failure to a
-verified fence: BOOT_GRACE 150 + AMBIGUOUS_FENCE_AFTER 150 + two polls ~22 +
-fence commands ~75 = ~400 s. The controller starts its own timer only when it
-sees the node not Ready (~40 s after the failure) and waits TAINT_AFTER 480 s.
-All deadlines use CLOCK_BOOTTIME, so wall-clock changes cannot postpone a fence.
+writing. This agent reboots the node once it has been unhealthy for
+FENCE_AFTER seconds, with a persistent MARKER that keeps k3s from starting
+again, so a cluster-side controller can safely apply the out-of-service taint
+later (gitops ADR-058). A reboot is the fence because nothing short of it can
+rule out orphaned container processes or busy mounts. All probes of a poll run
+in parallel, so a poll takes at most about 6 s plus POLL. Worst case from
+failure to a fenced node: BOOT_GRACE 150 + AMBIGUOUS_FENCE_AFTER 150 + two polls
+~22 + a reboot attempt 30 + REBOOT_RETRY 30 + a poll 5 + systemd-shutdown
+killing processes and unmounting up to ~90 = ~480 s. That stays below the
+controller's earliest taint: it starts its timer only when it sees the node
+not Ready (~40 s after the failure) and waits TAINT_AFTER 480 s, ~520 s in all.
+A process stuck in D state on a dead volume cannot complete its writes, and
+RebootWatchdogSec bounds the shutdown. A host whose reboot watchdog is off
+(rebootWatchdogSec "0") may wedge after its processes are gone: it stays
+fenced but needs a power cycle. All deadlines use CLOCK_BOOTTIME, so wall-clock
+changes cannot postpone a fence.
 
 Each poll classifies the node from the cluster's point of view, regardless of
 the state of k3s itself:
@@ -26,35 +34,53 @@ the state of k3s itself:
 - isolated (unhealthy): no peer accepts a connection.
 
 Only the first BOOT_GRACE seconds after boot and after the agent restarts k3s
-are exempt, so k3s can rejoin.
+are exempt, so k3s can rejoin. A k3s start the agent did not make (an operator
+or a rebuild) delays a fence until BOOT_GRACE after the unhealthy period began,
+which also bounds a crash-looping k3s.
 
-Fencing is recorded in MARKER before it starts and marked complete only once
-no k3s container survives; an interrupted fence is retried, and any doubt about
-survivors, or about k3s itself having stopped, forces a reboot, and so does a
-failure to write MARKER: k3s.service must not start while MARKER exists (the
-module adds a ConditionPathExists), so timers and rebuilds cannot undo a fence.
+MARKER lives on persistent storage and records the boot_id of the fencing
+boot, the reason, the backoff and the phase. The agent writes it (phase
+"fencing") before `systemctl reboot --force`; if it cannot, it powers off
+instead, because a reboot without a marker would start k3s again. A marker
+write that hangs for MARKER_WRITE_TIMEOUT (a stalled disk) crashes the kernel
+through /proc/sysrq-trigger ('c'): a poweroff or sync could block on the disk
+while userspace keeps running, but a panic stops every CPU at once. With the
+panic timeout set to 0 first (the kubelet sets 10) the node then stays halted
+until it is power-cycled. A
+timed-out write is cancelled before it replaces MARKER, and no release happens
+while it is still outstanding. A marker
+from an earlier boot means the reboot happened: the phase becomes "fenced".
+A "fencing" marker from this boot means the reboot did not happen: the agent
+retries with `--force --force`. An unreadable marker is rewritten as "fencing"
+for this boot and rebooted once, so it cannot loop. k3s.service must not start
+while MARKER exists (the module adds a ConditionPathExists), so timers and
+rebuilds cannot undo a fence. Heartbeats are written only while healthy: the
+controller restarts its taint timer on a heartbeat newer than the failure.
+
 A fenced node restarts k3s only when that cannot bring old workloads back
-before the cluster releases their volumes: while a peer API server is ready,
-it waits until its Node carries an out-of-service taint (or the controller is
-disabled for it); while no API server is ready anywhere, it waits for a peer
-to be reachable on the API port (a refused connection counts), so the cluster
-recovers after every node fenced during a network-wide outage. Either
-condition must hold for UNFENCE_STABLE seconds, with exponential backoff, and
-the post-unfence grace survives agent restarts. Removing MARKER by hand
-releases any fence. For maintenance, stop this service: it then marks its
+before the cluster releases their volumes. If any peer API server answers an
+authenticated request (even with /readyz failing), it waits for release
+evidence: its Node carries an out-of-service taint and no pods (other than
+finished, DaemonSet, mirror or taint-tolerating ones) or VolumeAttachments
+remain for it, or the controller is disabled for it and never tainted it. Only when no
+API server answers at all does a peer reachable on the API port suffice (a
+refused connection counts), so the cluster recovers after every node fenced
+during a network-wide outage. Either condition must hold for UNFENCE_STABLE
+seconds, with exponential backoff, and the post-unfence grace survives agent
+restarts. Removing MARKER by hand releases any fence (with a grace that also
+survives restarts). For maintenance, stop this service: it then marks its
 Node `fence.alc.xyz/agent-mode=stopped`, and the controller does not taint a
-node whose agent is not enforcing. A fenced agent never marks itself stopped,
-and after a completed fence it reports an enforce heartbeat when it can, as
-positive evidence for the controller. While healthy, the agent records
-`fence.alc.xyz/agent-heartbeat` and `fence.alc.xyz/agent-mode` on its Node
-with the field manager node-self-fence; the controller reads the API
-server's managedFields time for that manager, not the node's clock.
-There is deliberately no pause switch: a paused agent with a fresh enforce
-heartbeat would let the controller release volumes that are still in use. Use
-the controller's `fence.alc.xyz/disabled` annotation for planned work.
+node whose agent is not enforcing. A fenced agent never marks itself stopped.
+While healthy, the agent records `fence.alc.xyz/agent-heartbeat` and
+`fence.alc.xyz/agent-mode` on its Node with the field manager node-self-fence;
+the controller reads the API server's managedFields time for that manager, not
+the node's clock. There is deliberately no pause switch: a paused agent with a
+fresh enforce heartbeat would let the controller release volumes that are
+still in use. Use the controller's `fence.alc.xyz/disabled` annotation for
+planned work.
 
-The unit name must not start with "k3s": k3s-killall.sh stops every k3s*
-service.
+The history file stays in the runtime directory: its times are CLOCK_BOOTTIME
+and must not survive a reboot.
 """
 
 from __future__ import annotations
@@ -66,12 +92,15 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 FENCE_AFTER = float(os.environ.get("FENCE_AFTER", "60"))
 AMBIGUOUS_FENCE_AFTER = float(os.environ.get("AMBIGUOUS_FENCE_AFTER", "150"))
 BOOT_GRACE = float(os.environ.get("BOOT_GRACE", "150"))
 UNFENCE_STABLE = float(os.environ.get("UNFENCE_STABLE", "30"))
+REBOOT_RETRY = float(os.environ.get("REBOOT_RETRY", "30"))
+MARKER_WRITE_TIMEOUT = float(os.environ.get("MARKER_WRITE_TIMEOUT", "15"))
 POLL = float(os.environ.get("POLL_SECONDS", "5"))
 HEARTBEAT = float(os.environ.get("HEARTBEAT_SECONDS", "60"))
 MODE = os.environ.get("FENCE_MODE", "observe")
@@ -80,13 +109,13 @@ PEERS = [peer for peer in os.environ.get("PEERS", "").split() if peer]
 API_PORT = int(os.environ.get("API_PORT", "6443"))
 KUBECONFIG = os.environ.get("KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
 K3S = os.environ.get("K3S_BIN", "k3s")
-KILLALL = os.environ.get("KILLALL_BIN", "k3s-killall.sh")
-STATE_DIR = os.environ.get("STATE_DIRECTORY", "/run/node-self-fence")
-MARKER = os.path.join(STATE_DIR, "fenced")
-HISTORY = os.path.join(STATE_DIR, "history.json")
-# Only k3s's own runtime; Docker-based CI containers use a different address.
-K3S_SHIM_PATTERN = "containerd-shim.*-address /run/k3s/containerd"
-K3S_PROCESS_PATTERN = "/bin/k3s (server|agent)"
+RUN_DIR = os.environ.get("RUNTIME_DIRECTORY", "/run/node-self-fence")
+MARKER = os.environ.get("FENCE_MARKER", "/var/lib/node-self-fence/fenced")
+HISTORY = os.path.join(RUN_DIR, "history.json")
+BOOT_ID = "/proc/sys/kernel/random/boot_id"
+PANIC = "/proc/sys/kernel/panic"
+SYSRQ = "/proc/sysrq-trigger"
+OUT_OF_SERVICE = "node.kubernetes.io/out-of-service"
 REFENCE_WINDOW = 900
 
 HEALTHY = "healthy"
@@ -132,33 +161,48 @@ def run(args: list[str], timeout: float) -> int:
                 return -1
 
 
-def capture(args: list[str], timeout: float) -> tuple[int, str]:
+def capture_full(args: list[str], timeout: float) -> tuple[int, str, str]:
+    """Return (status, stdout, stderr); status -1 means the command timed out."""
     try:
         result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
-        return -1, ""
+        return -1, "", ""
     finally:
         notify("WATCHDOG=1")
-    return result.returncode, result.stdout
+    return result.returncode, result.stdout, result.stderr
 
 
-def kubectl(server: str, args: list[str]) -> tuple[int, str]:
-    return capture(
+def capture(args: list[str], timeout: float) -> tuple[int, str]:
+    return capture_full(args, timeout)[:2]
+
+
+def kubectl_full(server: str, args: list[str]) -> tuple[int, str, str]:
+    return capture_full(
         [K3S, "kubectl", "--kubeconfig", KUBECONFIG, "--server", f"https://{server}:{API_PORT}",
          "--request-timeout=3s", *args],
         timeout=6,
     )
 
 
+def kubectl(server: str, args: list[str]) -> tuple[int, str]:
+    return kubectl_full(server, args)[:2]
+
+
+def kubectl_json(server: str, args: list[str]) -> dict | None:
+    status, output = kubectl(server, [*args, "-o", "json"])
+    if status != 0:
+        return None
+    try:
+        value = json.loads(output)
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def node_ready_via(server: str) -> bool:
     """True only if this API server answers that this Node is Ready."""
-    status, output = kubectl(server, ["get", "node", NODE, "-o", "json"])
-    if status != 0:
-        return False
-    try:
-        conditions = json.loads(output).get("status", {}).get("conditions") or []
-    except ValueError:
-        return False
+    node = kubectl_json(server, ["get", "node", NODE])
+    conditions = ((node or {}).get("status") or {}).get("conditions") or []
     return any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions)
 
 
@@ -202,35 +246,113 @@ def annotate_heartbeat(now: float, mode: str = MODE) -> bool:
     return False
 
 
-def released_by_cluster(server: str) -> bool:
-    """True if this Node carries an out-of-service taint or opted out of the controller."""
-    status, output = kubectl(server, ["get", "node", NODE, "-o", "json"])
-    if status != 0:
+def tolerates(pod: dict, taint: dict) -> bool:
+    """True if the pod tolerates the taint indefinitely, so it is never evicted."""
+    for toleration in (pod.get("spec") or {}).get("tolerations") or []:
+        if toleration.get("effect") not in (None, "", taint.get("effect")):
+            continue
+        if toleration.get("tolerationSeconds") is not None:
+            continue  # evicted later, so still running for now
+        key = toleration.get("key") or ""
+        if (toleration.get("operator") or "Equal") == "Exists":
+            if key in ("", OUT_OF_SERVICE):
+                return True
+        elif key == OUT_OF_SERVICE:
+            if (toleration.get("value") or "") == (taint.get("value") or ""):
+                return True
+    return False
+
+
+def blocks_release(pod: dict, taint: dict) -> bool:
+    """False for finished pods and pods the out-of-service taint never evicts."""
+    metadata = pod.get("metadata") or {}
+    if any(owner.get("kind") == "DaemonSet" for owner in metadata.get("ownerReferences") or []):
         return False
+    if "kubernetes.io/config.mirror" in (metadata.get("annotations") or {}):
+        return False
+    # Finished pods run no containers, and the taint may never remove them.
+    if (pod.get("status") or {}).get("phase") in ("Succeeded", "Failed"):
+        return False
+    return not tolerates(pod, taint)
+
+
+# kubectl's stderr when no API server could give evidence: dial errors and client
+# timeouts, refused connections, and server errors from a backend that is down.
+NO_ANSWER_ERRORS = ("Unable to connect to the server", "was refused",
+                    "Error from server (InternalError)", "(ServiceUnavailable)", "(Timeout)")
+
+
+def release_status(server: str) -> str:
+    """Return "no-answer", "released" or "held" for this Node as seen by server.
+
+    Only transport failures and server-side outages are "no-answer"; any other
+    failure (NotFound, Forbidden, Unauthorized, throttling, unknown) is "held".
+    Timeouts stay "no-answer" deliberately: after a network-wide outage fenced
+    every node, the first to restart k3s may serve an API that hangs without
+    etcd quorum, and treating that as "held" would deadlock the others.
+    """
+    status, output, errors = kubectl_full(server, ["get", "node", NODE, "-o", "json"])
+    if status == -1 or (status != 0 and any(e in errors for e in NO_ANSWER_ERRORS)):
+        return "no-answer"
+    if status != 0:
+        return "held"
     try:
         node = json.loads(output)
     except ValueError:
-        return False
-    taints = node.get("spec", {}).get("taints") or []
-    disabled = (node.get("metadata", {}).get("annotations") or {}).get("fence.alc.xyz/disabled")
-    return disabled == "true" or any(
-        t.get("key") == "node.kubernetes.io/out-of-service" for t in taints)
+        return "held"
+    taints = [t for t in (node.get("spec") or {}).get("taints") or []
+              if t.get("key") == OUT_OF_SERVICE]
+    if not taints:
+        # The controller never taints a disabled node, so its volumes never moved.
+        disabled = ((node.get("metadata") or {}).get("annotations") or {}).get(
+            "fence.alc.xyz/disabled")
+        return "released" if disabled == "true" else "held"
+    pods = kubectl_json(server, ["get", "pods", "-A", f"--field-selector=spec.nodeName={NODE}"])
+    if pods is None or any(blocks_release(pod, taints[0]) for pod in pods.get("items") or []):
+        return "held"
+    attachments = kubectl_json(server, ["get", "volumeattachments"])
+    if attachments is None or any((va.get("spec") or {}).get("nodeName") == NODE
+                                  for va in attachments.get("items") or []):
+        return "held"
+    return "released"
 
 
-def k3s_stopped() -> bool:
-    """True only if pgrep positively found neither k3s nor a k3s container shim."""
-    for pattern in (K3S_SHIM_PATTERN, K3S_PROCESS_PATTERN):
-        status, _ = capture(["pgrep", "-f", pattern], timeout=5)
-        if status != 1:
-            return False
-    return True
+def k3s_age() -> float | None:
+    """Seconds since k3s.service last started its main process, or None if unknown."""
+    status, output = capture(["systemctl", "show", "-p", "ExecMainStartTimestampMonotonic",
+                              "--value", "k3s.service"], timeout=5)
+    try:
+        started = int(output.strip()) if status == 0 else 0
+    except ValueError:
+        return None
+    if started <= 0:
+        return None
+    return time.monotonic() - started / 1e6  # both CLOCK_MONOTONIC
+
+
+def sysrq(command: str) -> None:
+    if command == "c":
+        # The kubelet sets kernel.panic to 10; a reboot after the panic would
+        # come up without the marker and start k3s again, so halt instead.
+        with open(PANIC, "w", encoding="ascii") as handle:
+            handle.write("0")
+    with open(SYSRQ, "w", encoding="ascii") as handle:
+        handle.write(command)
+
+
+def boot_id() -> str:
+    try:
+        with open(BOOT_ID, encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
 
 
 def boottime() -> float:
     return time.clock_gettime(time.CLOCK_BOOTTIME)
 
 
-def parallel(probe, targets: list[str]) -> list[bool]:
+def parallel(probe, targets: list[str]) -> list:
     """Run probe against every target at once so a poll stays short."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(targets)) as pool:
         return list(pool.map(probe, targets))
@@ -259,12 +381,24 @@ def classify(ready, peer_api_ready, peer_accepts) -> tuple[str, str]:
     return UNHEALTHY, "no peer accepts a connection: node is isolated"
 
 
-def write_json(path: str, value: dict) -> None:
-    os.makedirs(STATE_DIR, exist_ok=True)
+def write_json(path: str, value: dict, cancel: threading.Event | None = None) -> None:
+    """Replace path atomically and durably, unless cancel is set before the replace."""
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
     temporary = path + ".tmp"
     with open(temporary, "w", encoding="utf-8") as handle:
         json.dump(value, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    if cancel is not None and cancel.is_set():
+        os.remove(temporary)
+        return
     os.replace(temporary, path)
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def read_json(path: str) -> dict | None:
@@ -278,9 +412,10 @@ def read_json(path: str) -> dict | None:
 
 class Agent:
     def __init__(self, ops=None) -> None:
-        # ops: (run, k3s_stopped, annotate_heartbeat) for tests.
+        # ops: (run, annotate_heartbeat, k3s_age, boot_id, sysrq) for tests.
         # step() receives CLOCK_BOOTTIME seconds, which is also the uptime.
-        (self.run, self.k3s_stopped, self.annotate) = ops or (run, k3s_stopped, annotate_heartbeat)
+        (self.run, self.annotate, self.k3s_age, self.boot_id, self.sysrq) = (
+            ops or (run, annotate_heartbeat, k3s_age, boot_id, sysrq))
         self.unhealthy_since: float | None = None
         self.reachable_since: float | None = None
         self.last_heartbeat = -1e12
@@ -289,28 +424,34 @@ class Agent:
         self.grace_until = max(BOOT_GRACE, float(history.get("grace_until", 0.0)))
         self.state = read_json(MARKER)
         self.marker_on_disk = os.path.exists(MARKER)
+        self.writer: threading.Thread | None = None  # a marker write that timed out
         if self.marker_on_disk and self.state is None:
-            log("fence marker unreadable; completing the fence")
-            self.state = {"phase": "fencing", "reason": "unreadable fence marker",
-                          "backoff": 60.0, "not_before": 0.0}
+            # Unknown boot: reboot once, after rewriting it for this boot.
+            log("fence marker unreadable; fencing again")
+            self.state = {"phase": "fencing", "boot_id": None, "reason": "unreadable fence marker",
+                          "backoff": 60.0, "attempts": 0}
 
     def step(self, now: float, probes) -> str:
-        """Advance one poll at wall-clock now; returns the action for logs and tests."""
+        """Advance one poll at boot time now; returns the action for logs and tests."""
         if self.state is not None:
+            if self.write_pending() and self.state.get("phase") != "fencing":
+                # It could still recreate MARKER after a release. A fence that
+                # is still "fencing" keeps retrying its crash or reboot instead.
+                self.reachable_since = None
+                return "fenced, marker write still pending"
             if self.marker_on_disk and not os.path.exists(MARKER):
                 log("fence marker removed by hand; releasing the fence")
                 self.state = None
                 self.marker_on_disk = False
                 self.grace_until = now + BOOT_GRACE
+                self.record_history(grace_until=self.grace_until)
                 return "released"
             if MODE != "enforce":
                 # Fencing was switched off: do not leave k3s blocked.
                 log("fence marker present in observe mode; releasing it and starting k3s")
                 self.release(now)
                 return "released for observe mode"
-            if self.state.get("phase") == "fencing":
-                return self.complete_fence()
-            return self.try_unfence(now, probes)
+            return self.fenced_step(now, probes)
         if now < self.grace_until:
             self.unhealthy_since = None
             return "grace"
@@ -328,8 +469,15 @@ class Agent:
         if self.unhealthy_since is None:
             self.unhealthy_since = now
         deadline = AMBIGUOUS_FENCE_AFTER if verdict == AMBIGUOUS else FENCE_AFTER
-        if now - self.unhealthy_since < deadline:
+        elapsed = now - self.unhealthy_since
+        if elapsed < deadline:
             return f"{verdict}, waiting"
+        if elapsed < BOOT_GRACE:
+            # Someone else restarted k3s; give it time to rejoin, but never more
+            # than BOOT_GRACE into the unhealthy period, so a crash loop still fences.
+            age = self.k3s_age()
+            if age is not None and age < BOOT_GRACE:
+                return "k3s restarted, grace"
         self.unhealthy_since = None
         if MODE != "enforce":
             log(f"observe mode: would fence now ({reason})")
@@ -341,69 +489,128 @@ class Agent:
         history = read_json(HISTORY) or {}
         recent = now - history.get("last_unfence", -1e12) < REFENCE_WINDOW
         backoff = min(history.get("backoff", 30.0) * 2, 3600.0) if recent else 60.0
-        self.state = {"phase": "fencing", "reason": reason,
-                      "backoff": backoff, "not_before": now + backoff}
-        if not self.persist():
-            return self.reboot("cannot write the fence marker, so nothing would keep k3s stopped")
-        return self.complete_fence()
+        self.state = {"phase": "fencing", "boot_id": None, "reason": reason,
+                      "backoff": backoff, "attempts": 0}
+        return self.request_reboot(now)
 
-    def persist(self) -> bool:
-        try:
-            write_json(MARKER, self.state)
-        except OSError as error:
-            log(f"cannot write the fence marker: {error}")
+    def persist(self) -> bool | None:
+        """Write MARKER; False if that failed, None if it hung past MARKER_WRITE_TIMEOUT."""
+        if self.write_pending():
+            log("an earlier fence marker write is still hanging")
+            return None
+        result = {}
+        state = dict(self.state)
+        cancel = threading.Event()
+
+        def write() -> None:
+            try:
+                write_json(MARKER, state, cancel)
+                result["ok"] = True
+            except OSError as error:
+                log(f"cannot write the fence marker: {error}")
+
+        # A stalled disk can block fsync indefinitely; never wait on it unbounded.
+        writer = threading.Thread(target=write, daemon=True)
+        writer.start()
+        writer.join(MARKER_WRITE_TIMEOUT)
+        if writer.is_alive():
+            cancel.set()
+            self.writer = writer
+            log(f"fence marker write hung for {MARKER_WRITE_TIMEOUT:.0f}s")
+            return None
+        if not result:
             return False
         self.marker_on_disk = True
         return True
 
-    def reboot(self, reason: str) -> str:
-        log(f"{reason}; forcing a reboot")
-        self.run(["systemctl", "reboot", "--force"], 60)
+    def write_pending(self) -> bool:
+        return self.writer is not None and self.writer.is_alive()
+
+    def sysrq_crash(self, reason: str) -> str:
+        """Panic the kernel: no device shutdown or sync can block on the stalled disk."""
+        log(f"{reason}; crashing the kernel through sysrq")
+        try:
+            self.sysrq("c")
+        except OSError as error:
+            log(f"sysrq crash failed: {error}")
+            self.run(["systemctl", "poweroff", "--force", "--force", "--no-sync"], 30)
+        return "sysrq crash"
+
+    def poweroff(self, reason: str) -> str:
+        log(f"{reason}; forcing a poweroff")
+        self.run(["systemctl", "poweroff", "--force"], 60)
+        return "poweroff"
+
+    def request_reboot(self, now: float) -> str:
+        """Record this boot as fencing, then reboot; escalate on a retry."""
+        boot = self.boot_id()
+        if not boot:
+            return self.poweroff("cannot read the boot id, so a reboot could not be confirmed")
+        attempts = int(self.state.get("attempts", 0))
+        self.state.update(boot_id=boot, attempts=attempts + 1, attempted_at=now)
+        persisted = self.persist()
+        # A reboot without a marker would start k3s again.
+        if persisted is None:
+            # The disk is stuck, so a poweroff could hang as well.
+            return self.sysrq_crash("the disk does not complete the fence marker write")
+        if not persisted:
+            return self.poweroff("cannot persist the fence marker")
+        command = ["systemctl", "reboot", "--force"] + (["--force"] if attempts else [])
+        log(f"rebooting to fence ({' '.join(command)})")
+        self.run(command, 30)
         return "reboot"
 
-    def complete_fence(self) -> str:
-        """Stop k3s and kill its containers; idempotent, retried until verified."""
-        try:
-            self.run(["systemctl", "stop", "k3s.service"], 20)
-            self.run([KILLALL], 45)
-            stopped = self.k3s_stopped()
-        except Exception as error:  # noqa: BLE001 - any doubt means survivors
-            log(f"fence command failed: {error!r}")
-            stopped = False
-        if not stopped:
-            return self.reboot("cannot confirm that k3s and all its containers stopped")
-        self.state["phase"] = "fenced"
-        if not self.persist():
-            return self.reboot("cannot record the completed fence")
-        log(f"fenced; k3s restarts once the cluster has released this node, not before "
-            f"{self.state['backoff']:.0f}s")
-        # Positive evidence for the controller, if the API is reachable at all.
-        self.annotate(0.0)
-        return "fenced"
+    def fenced_step(self, now: float, probes) -> str:
+        boot = self.boot_id()
+        if not boot:
+            return self.poweroff("cannot read the boot id while fenced")
+        marker_boot = self.state.get("boot_id")
+        if marker_boot is not None and marker_boot != boot:
+            # The fencing reboot (or a later one) happened; old times are void.
+            self.state.update(phase="fenced", boot_id=boot,
+                              not_before=now + float(self.state.get("backoff", 60.0)))
+            self.state.pop("attempted_at", None)
+            if not self.persist():
+                log("cannot update the fence marker; it still blocks k3s")
+            log(f"fenced; k3s restarts once the cluster has released this node, not before "
+                f"{self.state['backoff']:.0f}s")
+        elif self.state.get("phase") != "fenced":
+            if now - float(self.state.get("attempted_at", -1e12)) < REBOOT_RETRY:
+                return "fencing, reboot pending"
+            if "attempted_at" in self.state:
+                log("the fencing reboot did not happen")
+            return self.request_reboot(now)
+        return self.try_unfence(now, probes)
 
     def try_unfence(self, now: float, probes) -> str:
-        _, peer_api_ready, _, peer_reachable, released = probes
-        if any(parallel(peer_api_ready, PEERS)):
-            # The cluster is up: restart only once it has released this node.
-            if not any(parallel(released, PEERS)):
+        peer_reachable, release = probes[3:5]
+        statuses = parallel(release, PEERS)
+        if "released" not in statuses:
+            if "held" in statuses:
+                # An API server answers: only release evidence may restart k3s.
                 self.reachable_since = None
                 return "fenced, waiting for the cluster to release this node"
-        elif not any(parallel(peer_reachable, PEERS)):
-            self.reachable_since = None
-            return "fenced, peers unreachable"
+            if not any(parallel(peer_reachable, PEERS)):
+                self.reachable_since = None
+                return "fenced, peers unreachable"
         if self.reachable_since is None:
             self.reachable_since = now
-        if now - self.reachable_since < UNFENCE_STABLE or now < self.state["not_before"]:
+        not_before = float(self.state.get("not_before", 0.0))
+        if now - self.reachable_since < UNFENCE_STABLE or now < not_before:
             return "fenced, waiting"
         log("safe to restart k3s; starting it")
         backoff = self.state["backoff"]
         self.release(now)
-        try:
-            write_json(HISTORY, {"backoff": backoff, "last_unfence": now,
-                                 "grace_until": self.grace_until})
-        except OSError as error:
-            log(f"cannot record unfence history: {error}")
+        self.record_history(backoff=backoff, last_unfence=now, grace_until=self.grace_until)
         return "unfenced"
+
+    def record_history(self, **values) -> None:
+        history = read_json(HISTORY) or {}
+        history.update(values)
+        try:
+            write_json(HISTORY, history)
+        except OSError as error:
+            log(f"cannot record fence history: {error}")
 
     def release(self, now: float) -> None:
         try:
@@ -442,7 +649,7 @@ def main() -> int:
     global AGENT
     agent = AGENT = Agent()
     notify("READY=1")
-    probes = (node_ready_via, api_ready, tcp_accepts, tcp_reachable, released_by_cluster)
+    probes = (node_ready_via, api_ready, tcp_accepts, tcp_reachable, release_status)
     while True:
         try:
             agent.step(boottime(), probes)

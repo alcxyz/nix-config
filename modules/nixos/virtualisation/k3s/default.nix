@@ -161,9 +161,9 @@ in {
         type = types.bool;
         default = cfg.role == "server";
         description = ''
-          Stop k3s and kill its containers when this server cannot confirm it
-          is a healthy cluster member, so its volumes can be released safely
-          (gitops ADR-058).
+          Reboot this server, and keep k3s from starting until the cluster has
+          released it, when it cannot confirm it is a healthy cluster member,
+          so its volumes can be released safely (gitops ADR-058).
         '';
       };
 
@@ -189,7 +189,11 @@ in {
           How long the node must be unhealthy before it fences (150 s when the
           control plane looks down everywhere). The cluster-side out-of-service
           taint must wait longer than the worst case documented in
-          self-fence.py (about 400 s from failure to a verified fence).
+          self-fence.py: boot grace 150 s + ambiguous deadline 150 s + polls
+          ~22 s + a reboot attempt and retry ~65 s + systemd-shutdown killing
+          and unmounting up to ~90 s, about 480 s from failure to a fenced
+          node. With rebootWatchdogSec = "0" the reboot may wedge after
+          processes are gone: the node stays fenced but needs a power cycle.
         '';
       };
     };
@@ -228,8 +232,6 @@ in {
 
     # ADR-058: fence a server that cannot confirm it is a healthy cluster
     # member. It runs outside k3s so it still works when k3s is the problem.
-    # Not named k3s-*: k3s-killall.sh stops every k3s*.service, which would
-    # include the agent running it.
     systemd.services.node-self-fence = mkIf cfg.selfFence.enable {
       description = "Fence this k3s server when it is cut off from the cluster";
       # No ordering on k3s: a k3s start job stuck in activating must not keep
@@ -237,7 +239,6 @@ in {
       wantedBy = ["multi-user.target"];
       path = [
         k3sPackage
-        pkgs.procps
         pkgs.systemd
       ];
       environment = {
@@ -246,18 +247,20 @@ in {
         FENCE_MODE = cfg.selfFence.mode;
         FENCE_AFTER = toString cfg.selfFence.fenceAfterSeconds;
         K3S_BIN = "${k3sPackage}/bin/k3s";
-        KILLALL_BIN = "${k3sPackage}/bin/k3s-killall.sh";
-        STATE_DIRECTORY = "/run/node-self-fence";
+        # Persistent, so the fence survives the reboot that enforces it.
+        FENCE_MARKER = "/var/lib/node-self-fence/fenced";
       };
       serviceConfig = {
         Type = "notify";
         NotifyAccess = "main";
-        # Restarting the agent must not clear its fence marker.
         ExecStart = "${pkgs.python3}/bin/python3 ${./self-fence.py}";
         Restart = "always";
         RestartSec = 5;
         # The agent also feeds the watchdog while fencing commands run.
         WatchdogSec = 120;
+        StateDirectory = "node-self-fence";
+        # History times are CLOCK_BOOTTIME: keep them across agent restarts,
+        # never across a reboot.
         RuntimeDirectory = "node-self-fence";
         RuntimeDirectoryPreserve = "yes";
       };
@@ -266,7 +269,7 @@ in {
     # While a fence is in place, nothing (timers, rebuilds, operators) may start
     # k3s and its old containers' volumes; the agent removes the marker first.
     systemd.services.k3s.unitConfig.ConditionPathExists =
-      mkIf cfg.selfFence.enable "!/run/node-self-fence/fenced";
+      mkIf cfg.selfFence.enable "!/var/lib/node-self-fence/fenced";
 
     # A newly installed host may start with a reset RTC.  time-sync.target is
     # only an ordering target and does not itself prove that NTP has corrected
