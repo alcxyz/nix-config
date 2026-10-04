@@ -1,8 +1,8 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks)
 **Date:** 2026-10-01
-**Applies to:** `modules/home-manager/programs/ai/`, Claude Code and Codex CLI user hooks
+**Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
 ## Context
 
@@ -73,9 +73,15 @@ session header) alongside the configured one.
 
 `programs.ai` installs `agent-pr-review-guard` as a `PreToolUse` hook for shell
 commands in both clients. Claude receives it through the managed settings merge,
-which now combines hook arrays instead of replacing them. Codex receives a
-managed `~/.codex/hooks.json`, which Codex loads alongside other hook sources.
-The guard recognises `gh pr merge`, GitHub `pulls/N/merge` API calls, Forgejo
+which now combines hook arrays instead of replacing them. Codex runs hooks
+from `~/.codex/hooks.json` only after they are trusted in its `/hooks` view,
+and skips them silently until then. On NixOS hosts,
+`security.agentPrReviewGuard` therefore declares the hook in
+`/etc/codex/requirements.toml`, where Codex trusts it by policy, pins hooks on,
+and installs a script under its `managed_dir` that runs the calling user's
+guard. For the module's `users`, a missing guard blocks every hooked call.
+Other hosts keep the user `~/.codex/hooks.json`, which must be trusted once
+per change to take effect. The guard recognises `gh pr merge`, GitHub `pulls/N/merge` API calls, Forgejo
 REST merges and `fj pr merge`, and refuses `tea` merges. It blocks them unless a review comment names the PR's current head
 commit and target branch, so new commits or a retargeted PR need a new review.
 The comment's mode follows the pinned prefix, so older guards still accept it;
@@ -125,5 +131,13 @@ the configured Forgejo URL, and do not follow redirects. Forge or network outage
 block agent merges until the operator merges or the outage ends. Each review
 adds model cost and latency to every agent PR. Comments in the earlier format
 without a head SHA no longer satisfy the guard. Diffs over 400 kB are refused
-rather than truncated. The command is tracked in
+rather than truncated. Where both the managed
+and a trusted user hook exist, the guard runs twice per call, which is harmless.
+A host that enables `security.agentPrReviewGuard` for a user without
+`programs.ai` blocks that user's Codex shell and Forgejo MCP calls. The managed
+hook entry cannot be disabled by the user, but the guard it runs comes from the
+user's profile, which the user can replace. The managed hook also holds a
+hand-made Codex server named `forgejo` to the allowlist, and applies to
+`pr-review`'s own Codex reviewers, which cannot complete merge lookups without
+network access. The command is tracked in
 [#512](https://git.alc.xyz/alcxyz/nix-config/issues/512).

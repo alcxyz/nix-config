@@ -31,8 +31,14 @@ in {
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/profiles/nixbox-session/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
+    "${configDir}/modules/nixos/security/agent-pr-review-guard/default.nix"
     inputs.nix-secrets.nixosModules.xpsPrivate
   ];
+
+  security.agentPrReviewGuard = {
+    enable = true;
+    users = [username];
+  };
 
   boot.initrd.systemd.enable = true;
   # Keep the proven early display path so the diagnostic console can reach

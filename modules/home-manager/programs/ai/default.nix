@@ -272,8 +272,9 @@ in {
 
     home.packages = [prReview prReviewGuard];
 
-    # Codex merges hooks from every source, so a managed user-level file is
-    # enough; repository hooks keep working alongside it.
+    # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
+    # enforce the guard through security.agentPrReviewGuard instead; this file
+    # serves other hosts once trusted.
     home.file.".codex/hooks.json".text = builtins.toJSON {hooks = prReviewHooks;};
 
     home.activation.claudeStatusline = lib.hm.dag.entryAfter ["writeBoundary"] ''

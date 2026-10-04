@@ -19,6 +19,7 @@
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/desktop.nix"
     "${configDir}/modules/nixos/hardware/display-device-guard.nix"
+    "${configDir}/modules/nixos/security/agent-pr-review-guard/default.nix"
     inputs.nix-secrets.nixosModules.xyzDisplay
     inputs.nix-secrets.nixosModules.xyzInputHardwarePolicy
     inputs.nix-secrets.nixosModules.xyzNetworkIdentity
@@ -49,6 +50,10 @@
   security.credentialConsent = {
     enable = true;
     ownerUsers = [username];
+  };
+  security.agentPrReviewGuard = {
+    enable = true;
+    users = [username];
   };
 
   programs.hyprlock.enable = true;
