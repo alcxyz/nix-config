@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1791044651,
-        "narHash": "sha256-1k1F4kf/jTSg0Jz5Am6urGs/XwqkYRcyekpbSILTvlI=",
+        "lastModified": 1791097233,
+        "narHash": "sha256-+KPrRI4VJeWJLKvZbIsbTU/vQmpnxIzk+GWx5D1nRgo=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "da697b0e3ea8dfad783ef4b467b2dcee0adb65ba",
+        "rev": "f2f4379bc27bed1bd92df4480eed25c7f137eeb0",
         "type": "github"
       },
       "original": {
@@ -132,11 +132,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790507591,
-        "narHash": "sha256-f9i3DmpYZcQx0njLXcqVgFluAw7/8t/EdFNNVmBrn+k=",
+        "lastModified": 1791098903,
+        "narHash": "sha256-gwBKhGdfmEIDC2ntxtgNm5wm+JsXKro8I+WtAEXkeQA=",
         "owner": "alcxyz",
         "repo": "canopy",
-        "rev": "84ccb9b38a359e46f4f09e7911f713d040a4cf4c",
+        "rev": "408d3df59221e18e4f1f6e34d679b81a41eb4cb2",
         "type": "github"
       },
       "original": {
@@ -281,11 +281,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1790854042,
-        "narHash": "sha256-eJ8uMEC5HI+oqPuN6qY5rRufaH7x/zKb0EhHaXDo6cc=",
+        "lastModified": 1791111670,
+        "narHash": "sha256-IDKnetqO5A2xqhFeFLDfGrJ59oDGfKuQWq6Syx4CnVA=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "ac7ac2a430990d1848e4090c19a64f0e194e1ffc",
+        "rev": "a77be7e70eda9d536b5ed17a37f8712e35c530e1",
         "type": "github"
       },
       "original": {
@@ -497,11 +497,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790720457,
-        "narHash": "sha256-qeUXPF+bPE9IKVRFZE6aCu9V1QLlNyr7U8Q23DiiIJQ=",
+        "lastModified": 1791104053,
+        "narHash": "sha256-8Ifld4QBLLHevq7qBGAWWMaZtvhj4uGiB9ieMvy54qM=",
         "owner": "alcxyz",
         "repo": "grove",
-        "rev": "3929c5609269a4ebda542199be8a9dfe65d91150",
+        "rev": "dd8d0999652bf87b90000b024d9393f67367e567",
         "type": "github"
       },
       "original": {
@@ -1075,11 +1075,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790507592,
-        "narHash": "sha256-7gmRICK76mBr5A5SJjmcoyz+FF9xDT9fnjCKUPbzSAk=",
+        "lastModified": 1791107350,
+        "narHash": "sha256-27W6jSvvmLryJ306E925Yu2arHRqhGn2OzGJ4cHCoKA=",
         "owner": "alcxyz",
         "repo": "paperflow",
-        "rev": "849e9d50e52b7cefca397a562998cca5c4a4af8e",
+        "rev": "5163a7885f0d76132a3b030ac056eca5ba3f5c10",
         "type": "github"
       },
       "original": {
