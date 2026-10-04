@@ -1,6 +1,6 @@
 # ADR-0081: Give agents a Forgejo MCP client with an allowlist
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-10-04: guarded MCP merges)
 **Date:** 2026-10-03
 **Applies to:** `modules/home-manager/programs/ai/`, Claude Code and Codex CLI user configuration
 
@@ -31,12 +31,26 @@ a new, unguarded path. The guard also did not recognise `fj pr merge` and
 - **Writes** (`writeTools`): create, edit, label, link and close issues; comment;
   create and edit PRs. They keep each client's approval (Codex
   `approval_mode = "prompt"`, Claude Code's permission mode).
-- **Not exposed:** merges, deletion, administration, file writes, attachments
+- **Merges** (`merge`, off by default): `merge_pull_request`, which the
+  ADR-0078 guard checks like any other merge. It needs a review comment for
+  the PR's current head on the server's `url`, which must be the guard's own
+  instance, and literal `owner`, `repo` and `index` arguments. It accepts only
+  the tool's known arguments, with `force_merge` and
+  `merge_when_checks_succeed` only as false, because both merge later at a head
+  the review may not cover. Both clients' `forgejo` registrations must be the
+  managed ones, as recorded by the registration helpers; a hand-made entry
+  they left in place may point at another instance. The guard does not read
+  client configuration, so registrations made outside `programs.ai` (another
+  `CODEX_HOME` or `CLAUDE_CONFIG_DIR`, project files, command-line servers, or
+  an entry edited after activation) are not verified, as with other merge
+  paths that bypass the guard. The tool keeps each client's approval. Hosts enable it only where the guard runs as a hook
+  in both clients; on NixOS, Codex needs the managed hook (ADR-0078).
+- **Not exposed:** deletion, administration, file writes, attachments
   (which upload local files), webhooks, releases, workflow dispatch and time
-  tracking. The module refuses a configuration that enables
-  `merge_pull_request`.
+  tracking. The module refuses `merge_pull_request` in `readTools` or
+  `writeTools`.
 
-Merges stay on the shell paths that the ADR-0078 guard verifies. The guard now
+Shell merges stay available. The guard
 also recognises `fj pr merge` and needs a literal `owner/repo#N`. It refuses
 `tea` merges: `tea --repo` is read as a local checkout when such a path exists,
 so the guard cannot tell which repository a tea merge targets.
@@ -59,10 +73,12 @@ arguments or client configuration. `tokenFile` defaults to the session's
 
 ## Alternatives Considered
 
-- **Guard MCP merges with the review check:** would allow reviewed merges
-  through MCP, but Codex hook coverage of MCP calls is not verified, so one
-  client could merge unguarded. Keeping merges on shell paths gives one guarded
-  route.
+- **Keep merges on shell paths only:** the original decision, while Codex
+  hook coverage of MCP calls was unverified. Tests on Codex 0.160 showed that
+  its `PreToolUse` hooks see direct MCP calls and calls from its code-mode
+  tool under the same `mcp__forgejo__` name, with the arguments as
+  `tool_input`, and that exit code 2 blocks them. A structured merge is
+  easier to verify than a parsed shell command.
 - **A forge-side control:** rejected in ADR-0078; anyone can post the comment,
   and it would change the forge for an accident guard.
 - **Expose every tool and rely on prompts:** sessions often bypass prompts, and

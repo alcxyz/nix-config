@@ -95,6 +95,12 @@ FJ_PR = re.compile(
     r"^(?:(?P<owner>[A-Za-z0-9][A-Za-z0-9_.-]*)/(?P<repo>[A-Za-z0-9][A-Za-z0-9_.-]*))?#?(?P<number>\d+)$"
 )
 MCP_PREFIX = "mcp__forgejo__"
+MCP_MERGE = "merge_pull_request"
+# Arguments an agent's MCP merge may set; force and scheduled merges only as false.
+MCP_MERGE_ARGUMENTS = {"owner", "repo", "index", "style", "title", "message", "delete_branch_after_merge"}
+MCP_MERGE_FALSE_ARGUMENTS = {"force_merge", "merge_when_checks_succeed"}
+# The Forgejo instance the MCP server talks to, which MCP merges are checked on.
+FORGEJO_MCP_URL = os.environ.get("AGENT_FORGEJO_MCP_URL", FORGEJO_URL).rstrip("/")
 READ_ONLY_METHOD = re.compile(r"(?:-X|--request|--method)[\s=]+[\"']?GET\b", re.IGNORECASE)
 LITERAL = re.compile(r"^[A-Za-z0-9_.-]+$")
 PR_URL = re.compile(
@@ -1090,17 +1096,63 @@ def cli_merges(tokens):
             yield "the PR (tea pulls merge)", None, "tea merges are not verified; use `fj pr merge owner/repo#N`"
 
 
-def mcp_check(tool):
-    """Return None when the Forgejo MCP tool is allowed for agents, otherwise a reason to block."""
+def mcp_check(tool, arguments):
+    """Return None when the Forgejo MCP call is allowed for agents, otherwise a reason to block."""
     path = os.environ.get("AGENT_FORGEJO_MCP_TOOLS")
     allowed = set()
     if path:
         with open(path, encoding="utf-8") as handle:
             allowed = set(json.load(handle))
-    if tool in allowed:
-        return None
-    return (f"the Forgejo MCP tool {tool!r} is not enabled for agents (ADR-0081). Merge with `fj pr merge "
-            "owner/repo#N` or the REST API after the review, or ask the operator.")
+    if tool not in allowed:
+        return (f"the Forgejo MCP tool {tool!r} is not enabled for agents (ADR-0081). Merge with `fj pr merge "
+                "owner/repo#N` or the REST API after the review, or ask the operator.")
+    if tool == MCP_MERGE:
+        return mcp_merge_check(arguments)
+    return None
+
+
+def managed_servers(path):
+    """Return the MCP server names programs.ai registered for a client, from its state file."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            names = json.load(handle).get("managed", [])
+    except (OSError, ValueError, AttributeError):
+        return set()
+    return set(names) if isinstance(names, list) else set()
+
+
+def mcp_merge_check(arguments):
+    """Return None when an MCP merge targets a PR whose current head was reviewed, otherwise a reason to block."""
+    if not isinstance(arguments, dict):
+        return "cannot verify the MCP merge: the call has no arguments."
+    unknown = sorted(set(arguments) - MCP_MERGE_ARGUMENTS - MCP_MERGE_FALSE_ARGUMENTS)
+    if unknown:
+        return f"cannot verify the MCP merge: unexpected arguments {', '.join(unknown)}."
+    # Both merge later, at a head the review may not cover.
+    for option in sorted(MCP_MERGE_FALSE_ARGUMENTS):
+        if arguments.get(option):
+            return f"the MCP merge sets {option}, which agents may not use; merge once the checks pass."
+    # The lookup must reach the instance the merge goes to, with the guard's token.
+    if FORGEJO_MCP_URL != FORGEJO_URL:
+        return f"MCP merges are verified only when the server uses {FORGEJO_URL}, not {FORGEJO_MCP_URL}."
+    # A `forgejo` server that existed before programs.ai is left in place and
+    # may point elsewhere; the registration helpers then do not list it.
+    state = os.environ.get("AGENT_MCP_STATE_DIR", "")
+    for client in ("codex", "claude"):
+        path = os.path.join(state, f"{client}-managed.json")
+        if not state or "forgejo" not in managed_servers(path):
+            return (f"the `forgejo` MCP server for {client} is not the one programs.ai manages ({path}), so the "
+                    "merge target cannot be verified; merge with `fj pr merge owner/repo#N`.")
+    owner, repo, index = arguments.get("owner"), arguments.get("repo"), arguments.get("index")
+    if isinstance(index, float) and index.is_integer():
+        index = int(index)
+    names_ok = all(isinstance(name, str) and LITERAL.match(name) and name not in (".", "..") for name in (owner, repo))
+    if not names_ok or type(index) is not int or index < 1:
+        return "cannot verify the MCP merge: give owner, repo and index as literal values."
+    pr = PR("forgejo", FORGEJO_MCP_URL, owner, repo, str(index))
+    info = pr_info(pr)
+    problem = review_problem(comment_bodies(pr), info["head"], info["base"])
+    return f"{pr} {problem}." if problem else None
 
 
 def guard_check(command, cwd):
@@ -1189,29 +1241,27 @@ def guard(_args):
     except ValueError:
         return 0
     tool = payload.get("tool_name")
-    if isinstance(tool, str) and tool.startswith(MCP_PREFIX):
-        reason = mcp_check(tool[len(MCP_PREFIX):])
-        if reason is None:
+    tool_input = payload.get("tool_input")
+    mcp_tool = tool[len(MCP_PREFIX):] if isinstance(tool, str) and tool.startswith(MCP_PREFIX) else None
+    if mcp_tool is None:
+        command = (tool_input or {}).get("command")
+        if not isinstance(command, str):
             return 0
-        print(f"Blocked by the agent PR review guard: {reason}", file=sys.stderr)
-        return 2
-    command = (payload.get("tool_input") or {}).get("command")
-    if not isinstance(command, str):
-        return 0
-    cwd = payload.get("cwd") or os.getcwd()
+        cwd = payload.get("cwd") or os.getcwd()
     # One deadline for all lookups, well inside the 120 s hook timeout: a client
     # that kills a hook on timeout may treat that as non-blocking.
     signal.signal(signal.SIGALRM, guard_deadline)
     signal.alarm(GUARD_DEADLINE)
     try:
-        reason = guard_check(command, cwd)
+        reason = mcp_check(mcp_tool, tool_input) if mcp_tool is not None else guard_check(command, cwd)
     except Exception as error:  # any failure must block, not let the merge through
         reason = f"could not verify the automated review: {error}."
     finally:
         signal.alarm(0)
     if reason is None:
         return 0
-    print(f"Blocked by the agent PR review guard: {reason} {GUIDANCE}", file=sys.stderr)
+    guidance = f" {GUIDANCE}" if mcp_tool in (None, MCP_MERGE) else ""
+    print(f"Blocked by the agent PR review guard: {reason}{guidance}", file=sys.stderr)
     return 2
 
 

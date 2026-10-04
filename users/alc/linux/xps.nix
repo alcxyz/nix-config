@@ -110,4 +110,6 @@ in {
 
   programs.ai.enable = true;
   programs.ai.forgejoMcp.enable = true;
+  # The managed Codex hook (security.agentPrReviewGuard) enforces the guard here.
+  programs.ai.forgejoMcp.merge = true;
 }

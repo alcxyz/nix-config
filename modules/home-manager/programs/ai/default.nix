@@ -22,7 +22,7 @@ with lib; let
   prReviewGuard = pkgs.writeShellApplication {
     name = "agent-pr-review-guard";
     runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
-    text = ''AGENT_FORGEJO_MCP_TOOLS=${forgejoMcpTools} exec python3 ${./pr-review.py} guard'';
+    text = ''AGENT_FORGEJO_MCP_TOOLS=${forgejoMcpTools} AGENT_FORGEJO_MCP_URL=${escapeShellArg mcp.url} AGENT_MCP_STATE_DIR=${escapeShellArg "${config.xdg.stateHome}/agent-mcp"} exec python3 ${./pr-review.py} guard'';
   };
   guardHook = matcher: {
     inherit matcher;
@@ -44,8 +44,10 @@ with lib; let
   # Forgejo MCP client for agents (ADR-0081). The wrapper reads the token file
   # at start, so the token never appears in arguments or client configuration.
   mcp = cfg.forgejoMcp;
+  # The merge tool is checked by the guard like other merges (ADR-0078).
+  mcpTools = mcp.readTools ++ mcp.writeTools ++ optional mcp.merge "merge_pull_request";
   forgejoMcpTools = pkgs.writeText "forgejo-mcp-tools.json" (builtins.toJSON (
-    optionals mcp.enable (mcp.readTools ++ mcp.writeTools)
+    optionals mcp.enable mcpTools
   ));
   forgejoMcpAgent = pkgs.writeShellApplication {
     name = "forgejo-mcp-agent";
@@ -67,7 +69,7 @@ with lib; let
   codexMcpServers = pkgs.writeText "codex-mcp-servers.json" (builtins.toJSON (optionalAttrs mcp.enable {
     forgejo = {
       command = forgejoMcpCommand;
-      enabled_tools = mcp.readTools ++ mcp.writeTools;
+      enabled_tools = mcpTools;
       default_tools_approval_mode = "prompt";
       tools = genAttrs mcp.readTools (_: {approval_mode = "approve";});
     };
@@ -237,7 +239,17 @@ in {
           "create_pull_request"
           "update_pull_request"
         ];
-        description = "Tools that change issues or PRs; they keep the client's approval. Never add merge_pull_request: merges go through the review guard (ADR-0078).";
+        description = "Tools that change issues or PRs; they keep the client's approval. Enable merges with `merge` instead of listing merge_pull_request.";
+      };
+      merge = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Expose merge_pull_request. The guard allows it only when a review
+          comment names the PR's current head, and refuses force and scheduled
+          merges (ADR-0078). Enable only where the guard runs as a hook in both
+          clients: on NixOS, Codex needs security.agentPrReviewGuard.
+        '';
       };
     };
   };
@@ -248,7 +260,7 @@ in {
     assertions = [
       {
         assertion = !mcp.enable || (mcp.tokenFile != null && !(elem "merge_pull_request" (mcp.readTools ++ mcp.writeTools)));
-        message = "programs.ai.forgejoMcp needs a tokenFile and must not enable merge_pull_request (ADR-0081).";
+        message = "programs.ai.forgejoMcp needs a tokenFile, and enables merge_pull_request only through its merge option (ADR-0081).";
       }
       {
         assertion = let

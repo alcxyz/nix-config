@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -89,8 +89,8 @@ the guard does not check the chain of rounds, which `run` enforces from local
 state when it selects a follow-up. It also blocks when it
 cannot verify the comment, including when its lookups exceed a 90-second
 deadline inside the 120-second hook timeout. The hook also matches Forgejo MCP
-tools and blocks any outside the ADR-0081 allowlist, which has no merge tool,
-so MCP adds no merge path. The guard and `pr-review` share one script.
+tools, blocks any outside the ADR-0081 allowlist, and checks an enabled
+`merge_pull_request` like other merges, from its structured arguments. The guard and `pr-review` share one script.
 
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).

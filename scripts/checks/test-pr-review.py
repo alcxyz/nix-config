@@ -145,8 +145,9 @@ assert not expect("echo fj; tea issues ls", 0)[0]
 
 
 # Forgejo MCP calls are limited to the allowlist (ADR-0081), whatever their input.
-def mcp_hook(tool):
-    sys.stdin = io.StringIO(json.dumps({"tool_name": tool, "tool_input": {"owner": "o", "repo": "r", "index": 7}}))
+def mcp_hook(tool, tool_input=None):
+    tool_input = {"owner": "o", "repo": "r", "index": 7} if tool_input is None else tool_input
+    sys.stdin = io.StringIO(json.dumps({"tool_name": tool, "tool_input": tool_input}))
     sys.stderr = io.StringIO()
     try:
         return review.main(["guard"]), sys.stderr.getvalue()
@@ -165,6 +166,65 @@ with tempfile.NamedTemporaryFile("w", suffix=".json") as tools:
     assert mcp_hook("mcp__forgejo__delete_org")[0] == 2
     assert mcp_hook("mcp__other__merge_pull_request")[0] == 0
     del os.environ["AGENT_FORGEJO_MCP_TOOLS"]
+
+# An enabled MCP merge is verified like other merges, on the MCP server's instance.
+with tempfile.NamedTemporaryFile("w", suffix=".json") as tools, tempfile.TemporaryDirectory() as state:
+    json.dump(["get_issue_by_index", "merge_pull_request"], tools)
+    tools.flush()
+    os.environ["AGENT_FORGEJO_MCP_TOOLS"] = tools.name
+    os.environ["AGENT_MCP_STATE_DIR"] = state
+    for client in ("codex", "claude"):
+        pathlib.Path(state, f"{client}-managed.json").write_text(json.dumps({"managed": ["forgejo"]}))
+    merge = "mcp__forgejo__merge_pull_request"
+    calls.clear()
+    code, message = mcp_hook(merge, {"owner": "o", "repo": "r", "index": 7, "style": "squash", "title": "t"})
+    assert code == 0, message
+    assert (calls[0][0].host, calls[0][0].owner, calls[0][0].repo, calls[0][0].number) == (
+        review.FORGEJO_MCP_URL, "o", "r", "7"), calls
+    assert mcp_hook(merge, {"owner": "o", "repo": "r", "index": 7.0, "style": "merge"})[0] == 0
+    code, message = mcp_hook(merge, {"owner": "o", "repo": "r", "index": 9, "style": "squash"})
+    assert code == 2 and f"current head {HEAD[:12]}" in message and "pr-review run <pr>" in message, message
+    for arguments, hint in (
+        ({"owner": "o", "repo": "r", "index": 7, "style": "squash", "force_merge": True}, "force_merge"),
+        ({"owner": "o", "repo": "r", "index": 7, "style": "squash", "merge_when_checks_succeed": True},
+         "merge_when_checks_succeed"),
+        ({"owner": "..", "repo": "r", "index": 7, "style": "squash"}, "literal values"),
+        ({"owner": "o", "repo": "r/x", "index": 7, "style": "squash"}, "literal values"),
+        ({"owner": "o", "repo": "r", "index": "7", "style": "squash"}, "literal values"),
+        ({"owner": "o", "repo": "r", "index": True, "style": "squash"}, "literal values"),
+        ({"owner": "o", "repo": "r", "index": 7.5, "style": "squash"}, "literal values"),
+        ({"owner": "o", "repo": "r", "style": "squash"}, "literal values"),
+        ({"owner": "o", "repo": "r", "index": 7, "style": "squash", "auto_merge": True}, "unexpected arguments auto_merge"),
+        ([], "no arguments"),
+    ):
+        calls.clear()
+        code, message = mcp_hook(merge, arguments)
+        assert code == 2 and hint in message and not calls, (arguments, message)
+    assert mcp_hook(merge, {"owner": "o", "repo": "r", "index": 7, "style": "squash", "force_merge": False,
+                            "merge_when_checks_succeed": False, "delete_branch_after_merge": True})[0] == 0
+    # A `forgejo` server that programs.ai does not manage for either client may
+    # point elsewhere: MCP merges are refused.
+    reviewed = {"owner": "o", "repo": "r", "index": 7, "style": "squash"}
+    claude_state = pathlib.Path(state, "claude-managed.json")
+    for content in (json.dumps({"managed": []}), "{not json", json.dumps({"managed": "forgejo"}), None):
+        if content is None:
+            claude_state.unlink()
+        else:
+            claude_state.write_text(content)
+        calls.clear()
+        code, message = mcp_hook(merge, reviewed)
+        assert code == 2 and "not the one programs.ai manages" in message and not calls, (content, message)
+    claude_state.write_text(json.dumps({"managed": ["forgejo"]}))
+    assert mcp_hook(merge, reviewed)[0] == 0
+    # The lookup only covers the guard's own instance.
+    review.FORGEJO_MCP_URL = "https://other.example"
+    code, message = mcp_hook(merge, reviewed)
+    assert code == 2 and "only when the server uses" in message, message
+    review.FORGEJO_MCP_URL = review.FORGEJO_URL
+    # Other allowed tools still pass without lookups or review guidance.
+    calls.clear()
+    assert mcp_hook("mcp__forgejo__get_issue_by_index") == (0, "") and not calls
+    del os.environ["AGENT_FORGEJO_MCP_TOOLS"], os.environ["AGENT_MCP_STATE_DIR"]
 assert mcp_hook("mcp__forgejo__get_issue_by_index")[0] == 2, "no allowlist blocks every tool"
 os.environ["AGENT_FORGEJO_MCP_TOOLS"] = "/nonexistent/tools.json"
 code, message = mcp_hook("mcp__forgejo__get_issue_by_index")

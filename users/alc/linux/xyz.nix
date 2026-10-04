@@ -302,6 +302,8 @@ in {
 
   programs.ai.enable = true;
   programs.ai.forgejoMcp.enable = true;
+  # The managed Codex hook (security.agentPrReviewGuard) enforces the guard here.
+  programs.ai.forgejoMcp.merge = true;
   programs.stashdb-pop.enable = true;
 
   services.cloud-sync = {
