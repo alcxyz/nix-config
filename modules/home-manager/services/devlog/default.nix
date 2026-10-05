@@ -88,12 +88,13 @@ in {
           ExecStart = "${pkgs.devlog}/bin/devlog catch-up -repo ${cfg.repoPath} -days ${toString cfg.catchUpDays}${forgejoArgs}";
           StandardOutput = "journal";
           StandardError = "journal";
-          Environment = [
-            "PATH=${lib.makeBinPath [pkgs.git pkgs.gh pkgs.claude-code pkgs.codex-cli pkgs.forge-mirror pkgs.coreutils pkgs.bash pkgs.openssh]}"
-            "HOME=${config.home.homeDirectory}"
-            "SSH_AUTH_SOCK=%t/ssh-agent"
-          ]
-          ++ lib.optional (cfg.forgejo.url != null) "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.tokenFile}";
+          Environment =
+            [
+              "PATH=${lib.makeBinPath [pkgs.git pkgs.gh pkgs.claude-code pkgs.codex-cli pkgs.forge-mirror pkgs.coreutils pkgs.bash pkgs.openssh]}"
+              "HOME=${config.home.homeDirectory}"
+              "SSH_AUTH_SOCK=%t/ssh-agent"
+            ]
+            ++ lib.optional (cfg.forgejo.url != null) "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.tokenFile}";
         };
       };
 

@@ -18,6 +18,8 @@
       systemd
       util-linux
     ];
+    # The jq programs use their own $variables inside single quotes.
+    excludeShellChecks = ["SC2016"];
     text = builtins.readFile ./idle-podman-cleanup.sh;
   };
 in {
@@ -28,9 +30,16 @@ in {
       default = 70;
       description = "Run idle Podman cleanup when root filesystem usage reaches this percentage.";
     };
+    imageMinAge = lib.mkOption {
+      type = lib.types.strMatching "[1-9][0-9]*h";
+      default = "48h";
+      description = "Minimum time since creation, in hours, of unused Podman images removed by idle cleanup.";
+    };
     interval = lib.mkOption {
       type = lib.types.str;
-      default = "30min";
+      # Runners are idle only during short admission drains, so a long interval
+      # misses most cleanup windows. Checks outside a window exit immediately.
+      default = "5min";
       description = "Interval between idle cleanup checks.";
     };
   };
@@ -44,7 +53,7 @@ in {
     ];
 
     systemd.services.forgejo-idle-podman-cleanup = {
-      description = "Prune old idle Podman CI artifacts under disk pressure";
+      description = "Prune leaked builders and old idle Podman CI artifacts under disk pressure";
       after = [
         "forgejo-runner-io-pressure-guard.service"
         "forgejo-runner-docker.service"
@@ -56,6 +65,7 @@ in {
         CRITICAL_FREE_BYTES = toString (cfg.ioPressureGuard.diskSpace.criticalFreeGiB * 1024 * 1024 * 1024);
         CRITICAL_FREE_PERCENT = toString cfg.ioPressureGuard.diskSpace.criticalFreePercent;
         DISK_PATH = cfg.ioPressureGuard.diskSpace.path;
+        IMAGE_MIN_AGE = cleanup.imageMinAge;
       };
       serviceConfig = {
         Type = "oneshot";
@@ -71,7 +81,7 @@ in {
       timerConfig = {
         OnBootSec = "20min";
         OnUnitActiveSec = cleanup.interval;
-        RandomizedDelaySec = "5min";
+        RandomizedDelaySec = "1min";
         Persistent = false;
       };
     };
