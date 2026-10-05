@@ -4,14 +4,16 @@
   pkgs,
   ...
 }: let
-  webUrl = "https://t3code.alc.xyz";
-  webLauncher = pkgs.writeShellApplication {
-    name = "t3code-web";
-    runtimeInputs = [pkgs.xdg-utils];
-    text = ''
-      exec xdg-open ${lib.escapeShellArg webUrl}
-    '';
-  };
+  mkWebLauncher = name: url:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [pkgs.xdg-utils];
+      text = ''
+        exec xdg-open ${lib.escapeShellArg url}
+      '';
+    };
+  webLauncher = mkWebLauncher "t3code-web" "https://t3code.alc.xyz";
+  bnWebLauncher = mkWebLauncher "t3code-bn-web" "https://t3code-bn.alc.xyz";
 in {
   imports = ["${configDir}/modules/home-manager/services/t3code/default.nix"];
 
@@ -40,12 +42,23 @@ in {
     categories = ["Development"];
     settings.TryExec = "${webLauncher}/bin/t3code-web";
   };
+  xdg.desktopEntries.t3code-bn = {
+    name = "T3 Code bn-apps (xyz)";
+    comment = "Connect to the bn-apps T3 Code instance on xyz";
+    icon = "t3code";
+    exec = "${bnWebLauncher}/bin/t3code-bn-web";
+    categories = ["Development"];
+    settings.TryExec = "${bnWebLauncher}/bin/t3code-bn-web";
+  };
 
   services.t3code = {
     enable = true;
     channel = "fork"; # Select "upstream" to return to the upstream build.
     forkReleaseChannel = "nightly";
     port = 3773;
+    # bn-apps work projects get their own server, so they never mix with
+    # personal projects in the sidebar.
+    instances.bn.port = 3774;
     autoUpdate = {
       packageFlakeUri = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=promoted";
     };

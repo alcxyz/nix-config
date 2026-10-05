@@ -1,7 +1,8 @@
 # modules/home-manager/services/t3code/default.nix
 #
-# Runs t3code in headless server mode (t3 serve), listening on all interfaces.
-# The host firewall controls access to the configured port.
+# Runs t3code in headless server mode (t3 serve), listening on all interfaces,
+# plus any additional instances. The host firewall controls access to the
+# configured ports.
 {
   config,
   lib,
@@ -27,6 +28,51 @@ with lib; let
     if profileMode
     then "${aiStackProfile}/bin/t3"
     else "${cfg.package}/bin/t3";
+  # The primary server keeps the historical unit name and state. Additional
+  # instances share its executable, so the guards below cover all of them.
+  instances =
+    [
+      {
+        unit = "t3code";
+        description = "t3code headless server";
+        inherit (cfg) port baseDir;
+      }
+    ]
+    ++ mapAttrsToList (name: instance: {
+      unit = "t3code-${name}";
+      description = "t3code headless server (${name})";
+      inherit (instance) port baseDir;
+    })
+    cfg.instances;
+  unitNames = map (instance: "${instance.unit}.service") instances;
+  # Instance names are restricted to [a-z0-9-], so the list needs no quoting.
+  unitArgs = concatStringsSep " " unitNames;
+  serviceCgroupPattern = "(^|/)(${concatMapStringsSep "|" escapeRegex unitNames})(/|$)";
+  # Prints the starting or running turn count summed over every instance's
+  # state database. A missing database counts as idle; an unreadable one makes
+  # the result non-numeric, which callers treat as busy.
+  activeSessionsFunction = ''
+    state_databases=(${escapeShellArgs (map (instance: "${instance.baseDir}/userdata/state.sqlite") instances)})
+    if [[ -n "''${T3CODE_STATE_DATABASE:-}" ]]; then
+      state_databases=("$T3CODE_STATE_DATABASE")
+    fi
+    active_sessions() {
+      local total=0 database count
+      for database in "''${state_databases[@]}"; do
+        if [[ ! -r "$database" ]]; then
+          continue
+        fi
+        count=$(sqlite3 -readonly -cmd '.timeout 5000' "$database" \
+          "SELECT count(*) FROM projection_thread_sessions WHERE status IN ('starting', 'running');") || count=""
+        if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+          echo unreadable
+          return
+        fi
+        total=$((total + count))
+      done
+      echo "$total"
+    }
+  '';
   activationGuard = pkgs.writeShellApplication {
     name = "t3code-activation-guard";
     runtimeInputs = with pkgs; [
@@ -61,16 +107,22 @@ with lib; let
         fi
       fi
 
-      loaded_exec=""
-      if systemctl --user --quiet is-active t3code.service; then
-        loaded_exec=$(systemctl --user show t3code.service --property=ExecStart --value \
+      # Every running instance shares the managed executable, so each one's
+      # loaded version counts towards the downgrade check and the restart.
+      loaded_execs=()
+      for unit in ${unitArgs}; do
+        if ! systemctl --user --quiet is-active "$unit"; then
+          continue
+        fi
+        loaded_exec=$(systemctl --user show "$unit" --property=ExecStart --value \
           | sed -nE 's/^\{ path=([^ ;]+).*/\1/p')
+        loaded_execs+=("$loaded_exec")
         loaded_version=$(sed -nE 's#^/nix/store/[a-z0-9]+-t3code-([^/]+)/bin/t3$#\1#p' <<<"$loaded_exec")
         if [[ -n "$loaded_version" ]] \
           && { [[ -z "$accepted_version" ]] || version_is_older "$accepted_version" "$loaded_version"; }; then
           accepted_version=$loaded_version
         fi
-      fi
+      done
 
       accepted_channel=upstream
       if [[ -r "$channel_state" ]]; then
@@ -97,7 +149,7 @@ with lib; let
         echo "T3 Code downgrade from $accepted_version to $managed_version explicitly allowed." >&2
       fi
 
-      if ! systemctl --user --quiet is-active t3code.service; then
+      if ((''${#loaded_execs[@]} == 0)); then
         exit 0
       fi
 
@@ -108,17 +160,22 @@ with lib; let
 
       managed_exec=$(sed -nE 's/^ExecStart=([^ ]+).*/\1/p' "$managed_unit" | head -n1)
 
-      if [[ -z "$loaded_exec" || -z "$managed_exec" ]]; then
-        echo "Unable to compare the loaded and managed T3 Code executables; refusing a potentially disruptive restart." >&2
-        exit 75
-      fi
-
-      if [[ "$loaded_exec" == "$managed_exec" ]]; then
+      restart_needed=false
+      for loaded_exec in "''${loaded_execs[@]}"; do
+        if [[ -z "$loaded_exec" || -z "$managed_exec" ]]; then
+          echo "Unable to compare the loaded and managed T3 Code executables; refusing a potentially disruptive restart." >&2
+          exit 75
+        fi
+        if [[ "$loaded_exec" != "$managed_exec" ]]; then
+          restart_needed=true
+        fi
+      done
+      if [[ "$restart_needed" != true ]]; then
         exit 0
       fi
 
-      if grep -qE '(^|/)t3code\.service(/|$)' "$cgroup_file"; then
-        echo "Refusing to restart T3 Code from a process running inside t3code.service." >&2
+      if grep -qE ${escapeShellArg serviceCgroupPattern} "$cgroup_file"; then
+        echo "Refusing to restart T3 Code from a process running inside a T3 Code service." >&2
         echo "Run the activation through t3code-auto-update.service so it can finish independently." >&2
         exit 75
       fi
@@ -134,18 +191,7 @@ with lib; let
         exit 0
       fi
 
-      database=${escapeShellArg "${cfg.baseDir}/userdata/state.sqlite"}
-      if [[ ! -r "$database" ]]; then
-        echo "T3 Code executable is changing, but no readable state database exists; continuing."
-        allow_managed_restart
-        exit 0
-      fi
-
-      active_sessions() {
-        sqlite3 -readonly -cmd '.timeout 5000' "$database" \
-          "SELECT count(*) FROM projection_thread_sessions WHERE status IN ('starting', 'running');"
-      }
-
+      ${activeSessionsFunction}
       first_count=$(active_sessions)
       if [[ ! "$first_count" =~ ^[0-9]+$ ]]; then
         echo "Unable to read T3 Code session state; refusing a potentially disruptive restart." >&2
@@ -180,14 +226,7 @@ with lib; let
         echo "T3 Code active-session guard explicitly bypassed."
         exit 0
       fi
-      database="''${T3CODE_STATE_DATABASE:-${cfg.baseDir}/userdata/state.sqlite}"
-      if [[ ! -r "$database" ]]; then
-        exit 0
-      fi
-      active_sessions() {
-        sqlite3 -readonly -cmd '.timeout 5000' "$database" \
-          "SELECT count(*) FROM projection_thread_sessions WHERE status IN ('starting', 'running');"
-      }
+      ${activeSessionsFunction}
       count=$(active_sessions)
       if [[ "$count" == 0 ]]; then
         sleep "''${T3CODE_SETTLE_SECONDS:-${toString cfg.restartGuard.settleSeconds}}"
@@ -252,14 +291,15 @@ with lib; let
       fi
 
       t3_active=false
-      if systemctl --user --quiet is-active t3code.service; then
+      if systemctl --user --quiet is-active ${unitArgs}; then
         t3_active=true
         ${idleCheck}/bin/t3code-idle-check
       fi
       nix-env --profile "$profile" --set "$candidate"
       echo "Switched the AI stack to $summary."
       if [[ "$t3_active" == true ]]; then
-        systemctl --user restart t3code.service
+        # Instances share the profile; restart the running ones together.
+        systemctl --user try-restart ${unitArgs}
       fi
     '';
   };
@@ -331,6 +371,31 @@ in {
       description = "Base directory for t3code state (userdata, logs, settings).";
     };
 
+    instances = mkOption {
+      type = types.attrsOf (types.submodule ({name, ...}: {
+        options = {
+          port = mkOption {
+            type = types.port;
+            description = "Port this instance listens on.";
+          };
+          baseDir = mkOption {
+            type = types.str;
+            default = "${config.home.homeDirectory}/.t3-${name}";
+            defaultText = literalExpression ''"''${config.home.homeDirectory}/.t3-<name>"'';
+            description = "Base directory for this instance's state.";
+          };
+        };
+      }));
+      default = {};
+      example = literalExpression ''{ work.port = 3774; }'';
+      description = ''
+        Additional servers, each run as `t3code-<name>.service` with its own
+        port and state. They share the primary server's package, AI stack
+        profile, update timer and restart guards; a restart waits until every
+        instance is idle.
+      '';
+    };
+
     restartGuard = {
       enable = mkEnableOption "deferring T3 Code package restarts while turns are active" // {default = true;};
 
@@ -365,34 +430,74 @@ in {
   };
 
   config = mkIf cfg.enable {
-    assertions = optional cfg.autoUpdate.enable {
-      assertion = !hasInfix "#" cfg.autoUpdate.packageFlakeUri;
-      message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
-    };
+    assertions =
+      optional cfg.autoUpdate.enable {
+        assertion = !hasInfix "#" cfg.autoUpdate.packageFlakeUri;
+        message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
+      }
+      ++ [
+        {
+          assertion = all (name: builtins.match "[a-z0-9]+(-[a-z0-9]+)*" name != null && name != "auto-update") (attrNames cfg.instances);
+          message = "services.t3code.instances names must match [a-z0-9]+(-[a-z0-9]+)* and must not be auto-update.";
+        }
+        {
+          assertion = allUnique (map (instance: instance.port) instances);
+          message = "services.t3code instances must use distinct ports.";
+        }
+        {
+          assertion = allUnique (map (instance: instance.baseDir) instances);
+          message = "services.t3code instances must use distinct base directories.";
+        }
+      ];
 
-    systemd.user.services.t3code = {
-      Unit = {
-        Description = "t3code headless server";
-        After = ["network-online.target"];
-        Wants = ["network-online.target"];
-        # Home Manager's service switch must never restart T3 implicitly. The
-        # activation guard records an approved executable change and the
-        # post-reload activation step applies that restart explicitly.
-        X-RestartIfChanged = !cfg.restartGuard.enable;
-      };
-      Service = {
-        Type = "simple";
-        ExecStart = "${t3Executable} serve --host ${cfg.host} --port ${toString cfg.port} --base-dir ${cfg.baseDir}";
-        Environment = "SHELL=${pkgs.bash}/bin/bash";
-        # A clean provider/server exit is still unexpected for a persistent
-        # headless environment. Systemd stop operations suppress restarts.
-        Restart = "always";
-        RestartSec = "10s";
-        StandardOutput = "journal";
-        StandardError = "journal";
-      };
-      Install.WantedBy = ["default.target"];
-    };
+    systemd.user.services = mkMerge [
+      (listToAttrs (map (instance:
+        nameValuePair instance.unit {
+          Unit = {
+            Description = instance.description;
+            After = ["network-online.target"];
+            Wants = ["network-online.target"];
+            # Home Manager's service switch must never restart T3 implicitly. The
+            # activation guard records an approved executable change and the
+            # post-reload activation step applies that restart explicitly.
+            X-RestartIfChanged = !cfg.restartGuard.enable;
+          };
+          Service = {
+            Type = "simple";
+            ExecStart = "${t3Executable} serve --host ${cfg.host} --port ${toString instance.port} --base-dir ${instance.baseDir}";
+            Environment = "SHELL=${pkgs.bash}/bin/bash";
+            # A clean provider/server exit is still unexpected for a persistent
+            # headless environment. Systemd stop operations suppress restarts.
+            Restart = "always";
+            RestartSec = "10s";
+            StandardOutput = "journal";
+            StandardError = "journal";
+          };
+          Install.WantedBy = ["default.target"];
+        })
+      instances))
+      {
+        t3code-auto-update = mkIf cfg.autoUpdate.enable {
+          Unit = {
+            Description = "Refresh the T3 Code and AI provider profile";
+            After = ["network-online.target"];
+            Wants = ["network-online.target"];
+            # A Home Manager deploy must not kill an update midway through a
+            # profile switch or T3 restart.
+            X-RestartIfChanged = false;
+          };
+          Service = {
+            Type = "oneshot";
+            ExecStart = "${autoUpdate}/bin/t3code-auto-update";
+            TimeoutStartSec = "3h";
+            Restart = "on-failure";
+            RestartForceExitStatus = "75";
+            RestartPreventExitStatus = "76";
+            RestartSec = "15m";
+          };
+        };
+      }
+    ];
 
     home.sessionPath = mkIf profileMode ["${aiStackProfile}/bin"];
     home.packages = mkIf profileMode [aiStackSwitch];
@@ -409,12 +514,12 @@ in {
         current_channel=$(${pkgs.gnused}/bin/sed -nE 's#^/nix/store/[a-z0-9]+-ai-stack-(.+)$#\1#p' <<<"$current")
         if [[ -z "$current" || "$current_channel" != ${escapeShellArg managedChannel} ]]; then
           run ${pkgs.nix}/bin/nix-env --profile "$profile" --set ${seedBundle}
-          if ${pkgs.systemd}/bin/systemctl --user --quiet is-active t3code.service; then
+          if ${pkgs.systemd}/bin/systemctl --user --quiet is-active ${unitArgs}; then
             if ${idleCheck}/bin/t3code-idle-check; then
               run mkdir -p "$(dirname ${escapeShellArg restartMarker})"
               run touch ${escapeShellArg restartMarker}
             else
-              warnEcho "T3 Code is busy; restart t3code.service later to use the seeded AI stack."
+              warnEcho "T3 Code is busy; restart the running T3 Code services (${unitArgs}) later to use the seeded AI stack."
             fi
           fi
         fi
@@ -432,11 +537,12 @@ in {
         restart_marker=${escapeShellArg restartMarker}
         if [[ -e "$restart_marker" ]]; then
           cgroup_file="''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}"
-          if grep -qE '(^|/)t3code\.service(/|$)' "$cgroup_file"; then
+          if grep -qE ${escapeShellArg serviceCgroupPattern} "$cgroup_file"; then
             errorEcho "Refusing to restart T3 Code from inside its own service cgroup."
             exit 75
           fi
-          run ${pkgs.systemd}/bin/systemctl --user restart t3code.service
+          # Instances share the executable; restart the running ones together.
+          run ${pkgs.systemd}/bin/systemctl --user try-restart ${unitArgs}
           run rm -f "$restart_marker"
         fi
       ''
@@ -459,26 +565,6 @@ in {
         run mv -f "$channel_tmp" "$channel_state"
       ''
     );
-
-    systemd.user.services.t3code-auto-update = mkIf cfg.autoUpdate.enable {
-      Unit = {
-        Description = "Refresh the T3 Code and AI provider profile";
-        After = ["network-online.target"];
-        Wants = ["network-online.target"];
-        # A Home Manager deploy must not kill an update midway through a
-        # profile switch or T3 restart.
-        X-RestartIfChanged = false;
-      };
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${autoUpdate}/bin/t3code-auto-update";
-        TimeoutStartSec = "3h";
-        Restart = "on-failure";
-        RestartForceExitStatus = "75";
-        RestartPreventExitStatus = "76";
-        RestartSec = "15m";
-      };
-    };
 
     systemd.user.timers.t3code-auto-update = mkIf cfg.autoUpdate.enable {
       Unit.Description = "Scheduled AI stack profile update for T3 Code and its providers";

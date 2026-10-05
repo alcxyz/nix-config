@@ -40,9 +40,29 @@ nix-packages `promoted` branch, which moves only after local configuration
 validation (ADR-0080), and `t3code-ai-stack-switch` installs it, refusing same-channel downgrades and
 restarting T3 only when it is idle. Neither runs Home Manager activation. Roll
 back with `nix-env --profile ~/.local/state/nix/profiles/ai-stack --rollback`
-followed by `systemctl --user restart t3code`. A new fork revision must be
+followed by `systemctl --user restart t3code` (and `t3code-<name>` for each
+additional instance). A new fork revision must be
 promoted in `nix-packages` before that channel receives it. Returning to
 upstream is the same configuration change in the opposite direction.
+
+## Additional instances
+
+`services.t3code.instances.<name>` runs another server as
+`t3code-<name>.service` with its own port and state directory (default
+`~/.t3-<name>`), for example to keep one group of projects out of the primary
+sidebar:
+
+```nix
+services.t3code.instances.bn.port = 3774;
+```
+
+Instances share the primary server's package or AI stack profile, update timer
+and restart guards. A package or profile change restarts every running
+instance together, and only once none of them has an active turn; stopped
+instances stay stopped.
+Projects and threads do not move between instances, and T3's agent tools only
+reach projects in their own instance. Open each new port in the host firewall
+and give it its own edge route.
 
 Qualify patches against the selected upstream version before sharing state:
 start upstream, apply the fork, and reopen with upstream using disposable test

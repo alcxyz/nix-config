@@ -9,7 +9,19 @@
   configDir,
   lib,
   ...
-}: {
+}: let
+  # Keep in sync with services.t3code ports in users/alc/linux/xyz/t3code.nix.
+  t3codePorts = [3773 3774];
+  # k3s pods (the oauth2-proxy routes) and trusted LAN clients.
+  t3codeSources = [
+    "10.42.0.0/16"
+    "192.168.1.13"
+    "192.168.1.15"
+    "192.168.1.16"
+    "192.168.1.250"
+    "192.168.1.23"
+  ];
+in {
   imports = [
     ./hardware-configuration.nix
     ./storage.nix
@@ -195,16 +207,15 @@
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
-  # t3code server — reachable via Netbird and the k8s oauth2-proxy route.
-  networking.firewall.interfaces."wt0".allowedTCPPorts = [3773];
-  networking.firewall.extraCommands = lib.mkAfter ''
-    iptables -A nixos-fw -p tcp --dport 3773 -s 10.42.0.0/16 -j nixos-fw-accept
-    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.13 -j nixos-fw-accept
-    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.15 -j nixos-fw-accept
-    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.16 -j nixos-fw-accept
-    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.250 -j nixos-fw-accept
-    iptables -A nixos-fw -p tcp --dport 3773 -s 192.168.1.23 -j nixos-fw-accept
-  '';
+  # t3code servers (primary and bn-apps, see users/alc/linux/xyz/t3code.nix) —
+  # reachable via Netbird and the k8s oauth2-proxy routes.
+  networking.firewall.interfaces."wt0".allowedTCPPorts = t3codePorts;
+  networking.firewall.extraCommands = lib.mkAfter (lib.concatMapStrings (port:
+    lib.concatMapStrings (source: ''
+      iptables -A nixos-fw -p tcp --dport ${toString port} -s ${source} -j nixos-fw-accept
+    '')
+    t3codeSources)
+  t3codePorts);
 
   services.flatpak.managed = {
     enable = true;

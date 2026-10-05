@@ -7,7 +7,7 @@ import sys
 import tempfile
 
 
-def check(script, accepted_channel, accepted_version, expected, inside_service=False):
+def check(script, accepted_channel, accepted_version, expected, inside_service=None, active="*"):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         (root / "version").write_text(accepted_version + "\n")
@@ -25,12 +25,12 @@ def check(script, accepted_channel, accepted_version, expected, inside_service=F
         }
         if inside_service:
             (root / "unit").write_text("ExecStart=/nix/store/new-t3code/bin/t3 serve\n")
-            (root / "cgroup").write_text("0::/user.slice/t3code.service\n")
+            (root / "cgroup").write_text(f"0::/user.slice/{inside_service}\n")
             env.update({
                 "T3CODE_MANAGED_UNIT": str(root / "unit"),
                 "T3CODE_CGROUP_FILE": str(root / "cgroup"),
                 "BASH_FUNC_systemctl%%": (
-                    "() { if [[ $* == *is-active* ]]; then return 0; fi; "
+                    f"() {{ if [[ $* == *is-active* ]]; then [[ $* == *{active}* ]]; return; fi; "
                     "printf '%s\\n' '{ path=/nix/store/old-t3code/bin/t3 ; }'; }"
                 ),
             })
@@ -51,12 +51,16 @@ check(fork, "upstream", "9999.0.0", 0)
 check(upstream, "upstream", "0.0.1", 0)
 check(fork, "fork", "0.0.1", 0)
 check(upstream, "invalid", "0.0.1", 76)
-check(upstream, "fork", "9999.0.0", 75, inside_service=True)
-check(fork, "upstream", "9999.0.0", 75, inside_service=True)
+check(upstream, "fork", "9999.0.0", 75, inside_service="t3code.service")
+check(fork, "upstream", "9999.0.0", 75, inside_service="t3code.service")
 check(fork, "fork-nightly", "9999.0.0", 76)
 check(stable, "fork-stable", "9999.0.0", 76)
 check(stable, "fork-nightly", "9999.0.0", 0)
 check(stable, "fork", "9999.0.0", 0)
 check(fork, "fork-stable", "9999.0.0", 0)
-check(stable, "fork-nightly", "9999.0.0", 75, inside_service=True)
-print("T3 channel guard: 16 cases passed")
+check(stable, "fork-nightly", "9999.0.0", 75, inside_service="t3code.service")
+# Additional instances share the executable, so their cgroups are guarded too.
+check(fork, "upstream", "9999.0.0", 75, inside_service="t3code-bn.service")
+# A running additional instance needs the restart even if the primary is stopped.
+check(fork, "upstream", "9999.0.0", 75, inside_service="t3code-bn.service", active="t3code-bn.service")
+print("T3 channel guard: 18 cases passed")

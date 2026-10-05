@@ -494,6 +494,7 @@ in {
       modules = [{services.t3code.forkReleaseChannel = lib.mkForce "stable";}];
     };
     t3Unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code.Unit;
+    bnService = home.config.systemd.user.services.t3code-bn.Service;
     unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Unit;
     service = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code-auto-update.Service;
     timer = self.homeConfigurations.alc-xyz.config.systemd.user.timers.t3code-auto-update.Timer;
@@ -519,6 +520,7 @@ in {
     assert lib.hasPrefix "${home.config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/bin/t3 " (lib.head home.config.systemd.user.services.t3code.Service.ExecStart);
     assert !(home.config.home.activation ? t3codeRestartGuard);
     assert t3Unit.X-RestartIfChanged == false;
+    assert lib.hasSuffix " serve --host 0.0.0.0 --port 3774 --base-dir ${home.config.home.homeDirectory}/.t3-bn" (lib.head bnService.ExecStart);
     assert unit.X-RestartIfChanged == false;
     assert service.Restart == "on-failure";
     assert service.RestartForceExitStatus == "75";
@@ -562,9 +564,10 @@ in {
         switch "$stable" "$old"; expect 0 "would switch"
         grep -F "T3CODE_CGROUP_FILE" ${guard}
         grep -F "t3code\\.service" ${guard}
-        grep -F 'systemctl --user restart t3code.service' ${
+        grep -F 'systemctl --user try-restart t3code.service t3code-bn.service' ${
           pkgs.writeText "t3code-apply-managed-unit" applyManagedUnit
         }
+        grep -F "t3code-bn\\.service" ${guard}
         touch "$out"
       '';
 
