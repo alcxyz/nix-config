@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1791120362,
-        "narHash": "sha256-oPLaUl1CMUay4wkZFH03WMbVehEDuFk2YeUKZ/2gSKU=",
+        "lastModified": 1791184188,
+        "narHash": "sha256-ic+opeMw2ZlLzSHs37kGjc5TiFyHZ+jqDAU5T8gXdUI=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "386c097428aafa74e073119e3b886cd540fb889a",
+        "rev": "490d63b30ba984352c17152948d45e0019a1fbc1",
         "type": "github"
       },
       "original": {
@@ -69,11 +69,11 @@
     "bivrost": {
       "flake": false,
       "locked": {
-        "lastModified": 1790866567,
-        "narHash": "sha256-0GQ3jUsWJt30/AYEtGjajR8CVNCE+DuYQ7e0UfPohqc=",
+        "lastModified": 1791203100,
+        "narHash": "sha256-v291I7oFKouNeHDuLIm1rXP1aaF6A5/9r0gwLRYMBmg=",
         "owner": "alcxyz",
         "repo": "bivrost",
-        "rev": "497279f6cca5f0f182b7c770886685ae85e05f69",
+        "rev": "6981e843944e90c841f41d57122acc6cc4891b5a",
         "type": "github"
       },
       "original": {
