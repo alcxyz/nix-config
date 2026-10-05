@@ -300,6 +300,7 @@ in {
   services.devlog.enable = true;
   services.devlog.weekly.enable = true;
   services.devlog.forgejo.url = "https://git.alc.xyz";
+  services.devlog.repoUrl = "git@git-ssh.alc.xyz:alcxyz/devlog.git";
 
   programs.ai.enable = true;
   programs.ai.forgejoMcp.enable = true;

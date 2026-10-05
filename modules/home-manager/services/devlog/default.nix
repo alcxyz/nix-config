@@ -7,6 +7,28 @@
 }: let
   cfg = config.services.devlog;
   forgejoArgs = lib.optionalString (cfg.forgejo.url != null) " -forgejo-url ${cfg.forgejo.url} -forgejo-user ${cfg.forgejo.user}";
+  # Creates the dedicated clone on first run; an existing clone is left to devlog's own sync.
+  # Both units run this, so the lock makes a concurrent start wait for the first clone.
+  ensureClone = pkgs.writeShellScript "devlog-ensure-clone" ''
+    set -eu
+    repo=${lib.escapeShellArg cfg.repoPath}
+    repo=''${repo%/}
+    mkdir -p "$(dirname "$repo")"
+    exec 9>"$repo.lock"
+    ${pkgs.util-linux}/bin/flock 9
+    if [ -e "$repo/.git" ]; then
+      exit 0
+    fi
+    if [ -e "$repo" ]; then
+      echo "$repo exists but is not a git repository" >&2
+      exit 1
+    fi
+    tmp=$(mktemp -d "$repo.clone.XXXXXX")
+    trap 'rm -rf "$tmp"' EXIT
+    git clone ${lib.escapeShellArg cfg.repoUrl} "$tmp/repo"
+    mv "$tmp/repo" "$repo"
+  '';
+  execStartPre = lib.optional (cfg.repoUrl != null) "${ensureClone}";
 in {
   options.services.devlog = {
     enable = lib.mkEnableOption "Daily devlog generator";
@@ -19,8 +41,16 @@ in {
 
     repoPath = lib.mkOption {
       type = lib.types.str;
-      default = "${config.home.homeDirectory}/src/personal/journal";
-      description = "Path to the journal git repo.";
+      default = "${config.xdg.stateHome}/devlog";
+      defaultText = lib.literalExpression ''"''${config.xdg.stateHome}/devlog"'';
+      description = "Git checkout devlog writes entries into. Use a clone nobody edits by hand, since devlog refuses to run on a dirty tree.";
+    };
+
+    repoUrl = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "git@forgejo.example.com:user/devlog.git";
+      description = "Remote cloned into repoPath when the checkout is missing. Null expects repoPath to exist already.";
     };
 
     notifyOnFailure = lib.mkOption {
@@ -85,6 +115,7 @@ in {
           // lib.optionalAttrs cfg.notifyOnFailure {OnFailure = "devlog-failure@%n.service";};
         Service = {
           Type = "oneshot";
+          ExecStartPre = execStartPre;
           ExecStart = "${pkgs.devlog}/bin/devlog catch-up -repo ${cfg.repoPath} -days ${toString cfg.catchUpDays}${forgejoArgs}";
           StandardOutput = "journal";
           StandardError = "journal";
@@ -129,6 +160,7 @@ in {
           // lib.optionalAttrs cfg.notifyOnFailure {OnFailure = "devlog-failure@%n.service";};
         Service = {
           Type = "oneshot";
+          ExecStartPre = execStartPre;
           ExecStart = "${pkgs.devlog}/bin/devlog weekly -repo ${cfg.repoPath}";
           StandardOutput = "journal";
           StandardError = "journal";

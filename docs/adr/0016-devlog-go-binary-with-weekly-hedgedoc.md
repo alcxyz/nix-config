@@ -1,6 +1,6 @@
 # ADR-0016: Devlog as Go binary with weekly summaries
 
-**Status:** Accepted, amended 2026-08-24
+**Status:** Accepted, amended 2026-08-24 and 2026-10-05
 **Date:** 2026-04-25
 **Applies to:** `modules/home-manager/services/devlog/`, `nix-packages/tools/devlog/`
 
@@ -37,3 +37,9 @@ A weekly summary was requested to improve readability by synthesizing daily entr
 ## Amendment: retire HedgeDoc publishing
 
 The original implementation also posted each weekly file as a new HedgeDoc note. This was removed because the Git-backed weekly Markdown file is already the canonical, browsable artifact, no journal workflow links back to the generated HedgeDoc notes, and regenerated weeks could leave stale duplicate notes. HedgeDoc remains available for collaborative Markdown documents, but is no longer part of devlog delivery.
+
+## Amendment: activity sources and a dedicated repository (2026-10-05)
+
+- **Forgejo is the primary activity source.** Most work is Forgejo-first, and GitHub search missed most of it: forge squash merges carry an identity GitHub does not link to the account, and Forgejo pull requests and issues were never seen. devlog reads the user's Forgejo activity feed (`services.devlog.forgejo`, token through a `*_FILE` variable) and keeps GitHub for GitHub-native repositories, removing commits already seen through mirrors.
+- **All repositories the user works in are included.** The devlog is private and records the user's own work, so activity in repositories owned by others (forks, third-party projects, employers) is treated like any other and its diffs are summarised in full.
+- **Entries live in their own private repository.** devlog first wrote into the private journal checkout, which is edited by hand; since devlog refuses to run on a dirty tree, a run could fail just because someone was working there. Generated entries now live in a dedicated repository that devlog clones on first run (`services.devlog.repoUrl`) into a checkout under the XDG state directory that nobody edits by hand. The entries were moved with their history.
