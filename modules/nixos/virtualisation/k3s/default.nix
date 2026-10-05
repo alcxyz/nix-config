@@ -27,6 +27,22 @@ with lib; let
     then []
     else hostK8sRole.extraFlags or [];
   firewallDropGuard = config.networking.firewall.enable && !config.networking.nftables.enable;
+  peerIsIPv6 = peer: lib.hasInfix ":" peer;
+  peerIsAddress = peer:
+    builtins.match "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" peer
+    != null
+    || (peerIsIPv6 peer && builtins.match "[0-9a-fA-F:]+" peer != null);
+  selfFenceStatus = pkgs.writeShellApplication {
+    name = "node-self-fence-status";
+    runtimeInputs = [pkgs.systemd];
+    text = ''
+      export NODE_NAME=${escapeShellArg config.networking.hostName}
+      export PEERS=${escapeShellArg (concatStringsSep " " cfg.selfFence.peers)}
+      export STATE_PORT=${toString cfg.selfFence.statePort}
+      export STATE_KEY_FILE=${escapeShellArg (toString cfg.selfFence.keyFile)}
+      exec ${pkgs.python3}/bin/python3 ${./self-fence.py} --status "$@"
+    '';
+  };
   # Other k3s servers from the inventory, addressed by their LAN address.
   inventoryServerPeers =
     if inventory == null
@@ -161,9 +177,11 @@ in {
         type = types.bool;
         default = cfg.role == "server";
         description = ''
-          Reboot this server, and keep k3s from starting until the cluster has
-          released it, when it cannot confirm it is a healthy cluster member,
-          so its volumes can be released safely (gitops ADR-058).
+          Reboot this server when it cannot confirm it is a healthy cluster
+          member, so its volumes can be released safely (gitops ADR-058,
+          ADR-0082). Keep k3s from starting until the cluster has released it
+          or verified fenced peers rule out a quorum, including peers that
+          jointly released within 60 seconds and named this node.
         '';
       };
 
@@ -179,7 +197,37 @@ in {
       peers = mkOption {
         type = types.listOf types.str;
         default = inventoryServerPeers;
-        description = "Addresses of the other k3s servers.";
+        description = ''
+          IPv4 or IPv6 addresses of every other k3s server. Complete membership
+          is required for the fence-release quorum proof. These addresses also
+          scope state endpoint firewall access and source filtering in the agent.
+        '';
+      };
+
+      statePort = mkOption {
+        type = types.port;
+        default = 9097;
+        description = ''
+          TCP port for authenticated peer fence state, independent of k3s.
+          The host firewall allows this port from configured peer addresses;
+          the agent also filters sources to peers and loopback, including
+          traffic on trusted interfaces. Failed binds retry every 30 seconds.
+          Signed state includes the last release rule and counted peer names.
+        '';
+      };
+
+      keyFile = mkOption {
+        type = types.nullOr types.path;
+        default = cfg.tokenFile;
+        defaultText = literalExpression "config.k3s.tokenFile";
+        description = ''
+          Runtime file containing shared key material for peer authentication.
+          The agent and node-self-fence-status read this path as root and
+          derive a protocol-specific key from it on every request and probe, so
+          rotation or a file appearing after startup needs no agent restart.
+          Every server must use matching key material. Never put its contents
+          in the Nix store.
+        '';
       };
 
       fenceAfterSeconds = mkOption {
@@ -190,10 +238,15 @@ in {
           control plane looks down everywhere). The cluster-side out-of-service
           taint must wait longer than the worst case documented in
           self-fence.py: boot grace 150 s + ambiguous deadline 150 s + polls
-          ~22 s + a reboot attempt and retry ~65 s + systemd-shutdown killing
+          ~24 s + a reboot attempt and retry ~65 s + systemd-shutdown killing
           and unmounting up to ~90 s, about 480 s from failure to a fenced
           node. With rebootWatchdogSec = "0" the reboot may wedge after
           processes are gone: the node stays fenced but needs a power cycle.
+          Any API release evidence wins over other API answers; otherwise an
+          API answer holds the fence. With no API answers, verified fenced
+          peers or recent joint releases must rule out a quorum.
+          Fence release requires stable positive peer evidence followed by a
+          final check, rather than a fixed elapsed-time fallback (ADR-0082).
         '';
       };
     };
@@ -214,6 +267,16 @@ in {
         assertion = cfg.role == "server" && cfg.selfFence.peers != [];
         message = "k3s.selfFence on ${config.networking.hostName} needs a server role and at least one peer.";
       }
+      ++ optionals cfg.selfFence.enable [
+        {
+          assertion = cfg.selfFence.keyFile != null;
+          message = "k3s.selfFence.keyFile must be set when self-fencing is enabled.";
+        }
+        {
+          assertion = all peerIsAddress cfg.selfFence.peers;
+          message = "k3s.selfFence.peers must contain IPv4 or IPv6 addresses for source-scoped firewall rules.";
+        }
+      ]
       # A firewall that blocks cluster traffic isolates the node while it keeps
       # internet access, which leaves its cloudflared connector serving errors.
       # This checks declared openings only (exact entries, not port ranges);
@@ -246,6 +309,8 @@ in {
         PEERS = concatStringsSep " " cfg.selfFence.peers;
         FENCE_MODE = cfg.selfFence.mode;
         FENCE_AFTER = toString cfg.selfFence.fenceAfterSeconds;
+        STATE_PORT = toString cfg.selfFence.statePort;
+        STATE_KEY_FILE = toString cfg.selfFence.keyFile;
         K3S_BIN = "${k3sPackage}/bin/k3s";
         # Persistent, so the fence survives the reboot that enforces it.
         FENCE_MARKER = "/var/lib/node-self-fence/fenced";
@@ -420,7 +485,30 @@ in {
     networking.firewall.allowedUDPPorts = clusterUDPPorts;
     networking.firewall.trustedInterfaces = clusterInterfaces;
 
+    # Use the backend's input allowance hook. NixOS recreates nixos-fw on
+    # reload, so these iptables rules need no separate stop-time cleanup.
+    networking.firewall.extraCommands = mkIf (cfg.selfFence.enable && firewallDropGuard) (
+      concatMapStringsSep "\n" (peer: ''
+        ${
+          if peerIsIPv6 peer
+          then "ip6tables"
+          else "iptables"
+        } -w -A nixos-fw -p tcp -s ${escapeShellArg peer} --dport ${toString cfg.selfFence.statePort} -j nixos-fw-accept
+      '')
+      cfg.selfFence.peers
+    );
+    networking.firewall.extraInputRules = mkIf (cfg.selfFence.enable && firewall.enable && config.networking.nftables.enable) (
+      concatMapStringsSep "\n" (peer: ''
+        ${
+          if peerIsIPv6 peer
+          then "ip6"
+          else "ip"
+        } saddr ${peer} tcp dport ${toString cfg.selfFence.statePort} accept
+      '')
+      cfg.selfFence.peers
+    );
+
     # Ensure the k3s package is available in the system environment
-    environment.systemPackages = [k3sPackage];
+    environment.systemPackages = [k3sPackage] ++ optional cfg.selfFence.enable selfFenceStatus;
   };
 }

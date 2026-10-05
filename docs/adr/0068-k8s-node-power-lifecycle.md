@@ -124,6 +124,10 @@ Do not run a distribution-provided cluster kill-all script as a routine reboot
 step on a node with attached CSI storage. It is a recovery tool, not a storage
 drain mechanism.
 
+For a k3s server with a self-fence agent, ADR-0082 adds fence-state gates:
+before cordoning and again before the power action, after stopping the agent,
+and before uncordon.
+
 ## Consequences
 
 A maintenance operation stops safely and leaves the node cordoned when storage
