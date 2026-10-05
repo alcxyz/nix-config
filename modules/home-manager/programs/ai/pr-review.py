@@ -25,10 +25,9 @@ justified. Otherwise, or with --full, it reviews the whole PR.
 As a hook, Claude Code and Codex CLI pass the pending shell command as JSON on
 stdin (tool_input.command). Merges are recognised as `gh pr merge`, `gh api`
 calls to GitHub's pulls/N/merge endpoint, REST calls to a Forgejo/GitHub
-.../pulls/N/merge URL, and `fj pr merge`; `tea` merges are refused. Calls to Forgejo
-MCP tools (ADR-0081) are blocked unless the tool is in the agent allowlist
-named by AGENT_FORGEJO_MCP_TOOLS, which never includes merges. Exit code 2
-with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
+.../pulls/N/merge URL, `fj pr merge`, and the Forgejo MCP tool
+merge_pull_request (ADR-0081); `tea` merges are refused. Other Forgejo MCP
+tools pass. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
 instead of guessing. This is an accident guard for agent sessions, not a
 security boundary.
 """
@@ -1097,18 +1096,8 @@ def cli_merges(tokens):
 
 
 def mcp_check(tool, arguments):
-    """Return None when the Forgejo MCP call is allowed for agents, otherwise a reason to block."""
-    path = os.environ.get("AGENT_FORGEJO_MCP_TOOLS")
-    allowed = set()
-    if path:
-        with open(path, encoding="utf-8") as handle:
-            allowed = set(json.load(handle))
-    if tool not in allowed:
-        return (f"the Forgejo MCP tool {tool!r} is not enabled for agents (ADR-0081). Merge with `fj pr merge "
-                "owner/repo#N` or the REST API after the review, or ask the operator.")
-    if tool == MCP_MERGE:
-        return mcp_merge_check(arguments)
-    return None
+    """Return None when the Forgejo MCP call may run, otherwise a reason to block; only merges are checked."""
+    return mcp_merge_check(arguments) if tool == MCP_MERGE else None
 
 
 def managed_servers(path):

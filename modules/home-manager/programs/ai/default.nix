@@ -22,7 +22,7 @@ with lib; let
   prReviewGuard = pkgs.writeShellApplication {
     name = "agent-pr-review-guard";
     runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
-    text = ''AGENT_FORGEJO_MCP_TOOLS=${forgejoMcpTools} AGENT_FORGEJO_MCP_URL=${escapeShellArg mcp.url} AGENT_MCP_STATE_DIR=${escapeShellArg "${config.xdg.stateHome}/agent-mcp"} exec python3 ${./pr-review.py} guard'';
+    text = ''AGENT_FORGEJO_MCP_URL=${escapeShellArg mcp.url} AGENT_MCP_STATE_DIR=${escapeShellArg "${config.xdg.stateHome}/agent-mcp"} exec python3 ${./pr-review.py} guard'';
   };
   guardHook = matcher: {
     inherit matcher;
@@ -34,9 +34,7 @@ with lib; let
       }
     ];
   };
-  # The guard also holds Forgejo MCP calls to the allowlist (ADR-0081). Codex
-  # already hides other tools through enabled_tools; Claude Code has no
-  # per-server tool filter, and hooks still run when permissions are bypassed.
+  # The guard also checks Forgejo MCP merges (ADR-0081); other MCP tools pass.
   prReviewHooks = {
     PreToolUse = [(guardHook "Bash")] ++ optional mcp.enable (guardHook "mcp__forgejo__.*");
   };
@@ -44,11 +42,6 @@ with lib; let
   # Forgejo MCP client for agents (ADR-0081). The wrapper reads the token file
   # at start, so the token never appears in arguments or client configuration.
   mcp = cfg.forgejoMcp;
-  # The merge tool is checked by the guard like other merges (ADR-0078).
-  mcpTools = mcp.readTools ++ mcp.writeTools ++ optional mcp.merge "merge_pull_request";
-  forgejoMcpTools = pkgs.writeText "forgejo-mcp-tools.json" (builtins.toJSON (
-    optionals mcp.enable mcpTools
-  ));
   forgejoMcpAgent = pkgs.writeShellApplication {
     name = "forgejo-mcp-agent";
     runtimeInputs = [pkgs.forgejo-mcp];
@@ -63,15 +56,12 @@ with lib; let
       exec forgejo-mcp -t stdio -url ${escapeShellArg mcp.url}
     '';
   };
-  # Not on PATH: the wrapper serves every forgejo-mcp tool, so a shell could
-  # reach merges the clients' allowlist hides.
+  # Not on PATH: the guard sees MCP merges only as client tool calls, not when
+  # a shell drives the wrapper directly.
   forgejoMcpCommand = "${forgejoMcpAgent}/bin/forgejo-mcp-agent";
   codexMcpServers = pkgs.writeText "codex-mcp-servers.json" (builtins.toJSON (optionalAttrs mcp.enable {
     forgejo = {
       command = forgejoMcpCommand;
-      enabled_tools = mcpTools;
-      default_tools_approval_mode = "prompt";
-      tools = genAttrs mcp.readTools (_: {approval_mode = "approve";});
     };
   }));
   claudeMcpServers = pkgs.writeText "claude-mcp-servers.json" (builtins.toJSON (optionalAttrs mcp.enable {
@@ -95,8 +85,6 @@ with lib; let
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
       hooks = prReviewHooks;
-      # Reads run without a prompt; writes keep the client's approval.
-      permissions.allow = map (tool: "mcp__forgejo__${tool}") (optionals mcp.enable mcp.readTools);
       statusLine = {
         type = "command";
         command = "dankaiusage claude-statusline";
@@ -186,71 +174,6 @@ in {
         defaultText = literalExpression "config.home.sessionVariables.FORGEJO_API_TOKEN_FILE or null";
         description = "File holding the Forgejo API token, read when the server starts. Provisioned privately.";
       };
-      readTools = mkOption {
-        type = types.listOf types.str;
-        default = [
-          "get_issue_by_index"
-          "get_issue_comment"
-          "list_issue_comments"
-          "list_repo_issues"
-          "search_issues"
-          "list_issue_dependencies"
-          "list_issue_dependents"
-          "get_pull_request_by_index"
-          "get_pull_request_diff"
-          "list_pull_request_files"
-          "list_repo_pull_requests"
-          "list_pull_reviews"
-          "get_pull_review"
-          "list_pull_review_comments"
-          "get_repo"
-          "search_repos"
-          "list_my_repos"
-          "get_my_user_info"
-          "list_branches"
-          "list_repo_commits"
-          "get_file_content"
-          "list_repo_contents"
-          "get_repo_tree"
-          "list_repo_labels"
-          "list_repo_milestones"
-          "list_releases"
-          "get_latest_release"
-          "get_release_by_tag"
-          "list_workflow_runs"
-          "get_workflow_run"
-          "list_action_run_jobs"
-          "get_action_job_logs"
-        ];
-        description = "Read-only tools agents may call without a prompt.";
-      };
-      writeTools = mkOption {
-        type = types.listOf types.str;
-        default = [
-          "create_issue"
-          "update_issue"
-          "issue_state_change"
-          "create_issue_comment"
-          "edit_issue_comment"
-          "add_issue_labels"
-          "remove_issue_labels"
-          "add_issue_dependency"
-          "remove_issue_dependency"
-          "create_pull_request"
-          "update_pull_request"
-        ];
-        description = "Tools that change issues or PRs; they keep the client's approval. Enable merges with `merge` instead of listing merge_pull_request.";
-      };
-      merge = mkOption {
-        type = types.bool;
-        default = false;
-        description = ''
-          Expose merge_pull_request. The guard allows it only when a review
-          comment names the PR's current head, and refuses force and scheduled
-          merges (ADR-0078). Enable only where the guard runs as a hook in both
-          clients: on NixOS, Codex needs security.agentPrReviewGuard.
-        '';
-      };
     };
   };
 
@@ -259,8 +182,8 @@ in {
 
     assertions = [
       {
-        assertion = !mcp.enable || (mcp.tokenFile != null && !(elem "merge_pull_request" (mcp.readTools ++ mcp.writeTools)));
-        message = "programs.ai.forgejoMcp needs a tokenFile, and enables merge_pull_request only through its merge option (ADR-0081).";
+        assertion = !mcp.enable || mcp.tokenFile != null;
+        message = "programs.ai.forgejoMcp needs a tokenFile (ADR-0081).";
       }
       {
         assertion = let

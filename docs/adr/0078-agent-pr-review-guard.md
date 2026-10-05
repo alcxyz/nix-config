@@ -89,8 +89,8 @@ the guard does not check the chain of rounds, which `run` enforces from local
 state when it selects a follow-up. It also blocks when it
 cannot verify the comment, including when its lookups exceed a 90-second
 deadline inside the 120-second hook timeout. The hook also matches Forgejo MCP
-tools, blocks any outside the ADR-0081 allowlist, and checks an enabled
-`merge_pull_request` like other merges, from its structured arguments. The guard and `pr-review` share one script.
+tools and checks `merge_pull_request` like other merges, from its structured
+arguments (ADR-0081); other MCP tools pass. The guard and `pr-review` share one script.
 
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
@@ -136,8 +136,8 @@ and a trusted user hook exist, the guard runs twice per call, which is harmless.
 A host that enables `security.agentPrReviewGuard` for a user without
 `programs.ai` blocks that user's Codex shell and Forgejo MCP calls. The managed
 hook entry cannot be disabled by the user, but the guard it runs comes from the
-user's profile, which the user can replace. The managed hook also holds a
-hand-made Codex server named `forgejo` to the allowlist, and applies to
+user's profile, which the user can replace. The managed hook also checks merges
+through a hand-made Codex server named `forgejo`, and applies to
 `pr-review`'s own Codex reviewers, which cannot complete merge lookups without
 network access. The command is tracked in
 [#512](https://git.alc.xyz/alcxyz/nix-config/issues/512).

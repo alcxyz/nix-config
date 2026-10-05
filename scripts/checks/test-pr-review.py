@@ -144,7 +144,7 @@ assert not expect("tea pulls list --repo o/r", 0)[0]
 assert not expect("echo fj; tea issues ls", 0)[0]
 
 
-# Forgejo MCP calls are limited to the allowlist (ADR-0081), whatever their input.
+# Forgejo MCP tools other than merges pass without lookups (ADR-0081).
 def mcp_hook(tool, tool_input=None):
     tool_input = {"owner": "o", "repo": "r", "index": 7} if tool_input is None else tool_input
     sys.stdin = io.StringIO(json.dumps({"tool_name": tool, "tool_input": tool_input}))
@@ -155,23 +155,14 @@ def mcp_hook(tool, tool_input=None):
         sys.stdin, sys.stderr = sys.__stdin__, sys.__stderr__
 
 
-with tempfile.NamedTemporaryFile("w", suffix=".json") as tools:
-    json.dump(["get_issue_by_index", "create_issue_comment"], tools)
-    tools.flush()
-    os.environ["AGENT_FORGEJO_MCP_TOOLS"] = tools.name
-    assert mcp_hook("mcp__forgejo__get_issue_by_index")[0] == 0
-    assert mcp_hook("mcp__forgejo__create_issue_comment")[0] == 0
-    code, message = mcp_hook("mcp__forgejo__merge_pull_request")
-    assert code == 2 and "not enabled for agents" in message, message
-    assert mcp_hook("mcp__forgejo__delete_org")[0] == 2
-    assert mcp_hook("mcp__other__merge_pull_request")[0] == 0
-    del os.environ["AGENT_FORGEJO_MCP_TOOLS"]
+calls.clear()
+for tool in ("get_issue_by_index", "create_issue_comment", "dispatch_workflow", "delete_branch"):
+    assert mcp_hook(f"mcp__forgejo__{tool}") == (0, ""), tool
+assert mcp_hook("mcp__other__merge_pull_request")[0] == 0
+assert not calls, calls
 
-# An enabled MCP merge is verified like other merges, on the MCP server's instance.
-with tempfile.NamedTemporaryFile("w", suffix=".json") as tools, tempfile.TemporaryDirectory() as state:
-    json.dump(["get_issue_by_index", "merge_pull_request"], tools)
-    tools.flush()
-    os.environ["AGENT_FORGEJO_MCP_TOOLS"] = tools.name
+# An MCP merge is verified like other merges, on the MCP server's instance.
+with tempfile.TemporaryDirectory() as state:
     os.environ["AGENT_MCP_STATE_DIR"] = state
     for client in ("codex", "claude"):
         pathlib.Path(state, f"{client}-managed.json").write_text(json.dumps({"managed": ["forgejo"]}))
@@ -221,15 +212,10 @@ with tempfile.NamedTemporaryFile("w", suffix=".json") as tools, tempfile.Tempora
     code, message = mcp_hook(merge, reviewed)
     assert code == 2 and "only when the server uses" in message, message
     review.FORGEJO_MCP_URL = review.FORGEJO_URL
-    # Other allowed tools still pass without lookups or review guidance.
-    calls.clear()
-    assert mcp_hook("mcp__forgejo__get_issue_by_index") == (0, "") and not calls
-    del os.environ["AGENT_FORGEJO_MCP_TOOLS"], os.environ["AGENT_MCP_STATE_DIR"]
-assert mcp_hook("mcp__forgejo__get_issue_by_index")[0] == 2, "no allowlist blocks every tool"
-os.environ["AGENT_FORGEJO_MCP_TOOLS"] = "/nonexistent/tools.json"
-code, message = mcp_hook("mcp__forgejo__get_issue_by_index")
-assert code == 2 and "could not verify" in message, message
-del os.environ["AGENT_FORGEJO_MCP_TOOLS"]
+    del os.environ["AGENT_MCP_STATE_DIR"]
+# Without the registration state, MCP merges are refused.
+code, message = mcp_hook("mcp__forgejo__merge_pull_request", {"owner": "o", "repo": "r", "index": 7})
+assert code == 2 and "not the one programs.ai manages" in message, message
 
 # Unresolvable merge targets block with guidance.
 code, message = hook("curl -X POST https://git.example/api/v1/repos/o/r/pulls/$PR/merge")

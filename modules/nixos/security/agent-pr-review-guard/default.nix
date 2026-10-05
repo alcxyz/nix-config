@@ -14,7 +14,7 @@
   hooksDir = "/etc/codex/hooks";
   hookCommand = "${hooksDir}/agent-pr-review-guard";
   # Home Manager (programs.ai) builds the guard per user with the user's Forgejo
-  # MCP allowlist; this hook runs that guard. Users in cfg.users are blocked
+  # MCP settings; this hook runs that guard. Users in cfg.users are blocked
   # when it is missing, so a broken profile cannot silently disable the guard.
   hookScript = ''
     #!${pkgs.runtimeShell}

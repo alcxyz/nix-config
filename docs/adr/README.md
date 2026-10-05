@@ -85,7 +85,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Accepted | AI agents, pull requests, Home Manager |
 | [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Accepted | AI agents, Home Manager, Codex, Claude Code |
 | [ADR-0080](0080-promoted-package-ref.md) | Promote validated package revisions as a ref, lock them on demand | Accepted | package promotion, T3 Code, deploy |
-| [ADR-0081](0081-forgejo-mcp-for-agents.md) | Give agents a Forgejo MCP client with an allowlist | Accepted | AI agents, Forgejo, Home Manager, Codex, Claude Code |
+| [ADR-0081](0081-forgejo-mcp-for-agents.md) | Give agents a Forgejo MCP client and guard its merges | Accepted | AI agents, Forgejo, Home Manager, Codex, Claude Code |
 | [ADR-0082](0082-fence-release-on-peer-evidence.md) | Release a self-fence only on positive peer evidence | Accepted | k3s, self-fence, kreboot |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
