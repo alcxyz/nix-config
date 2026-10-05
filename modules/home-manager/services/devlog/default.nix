@@ -6,6 +6,7 @@
   ...
 }: let
   cfg = config.services.devlog;
+  forgejoArgs = lib.optionalString (cfg.forgejo.url != null) " -forgejo-url ${cfg.forgejo.url} -forgejo-user ${cfg.forgejo.user}";
 in {
   options.services.devlog = {
     enable = lib.mkEnableOption "Daily devlog generator";
@@ -28,6 +29,28 @@ in {
       description = "Show a desktop notification when a devlog run fails, so failures are not only visible in the journal.";
     };
 
+    forgejo = {
+      url = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "https://forgejo.example.com";
+        description = "Forgejo base URL read as the primary activity source. Null reads GitHub only.";
+      };
+
+      user = lib.mkOption {
+        type = lib.types.str;
+        default = "alcxyz";
+        description = "Forgejo user whose own activity is read.";
+      };
+
+      tokenFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = config.home.sessionVariables.FORGEJO_API_TOKEN_FILE or null;
+        defaultText = lib.literalExpression "config.home.sessionVariables.FORGEJO_API_TOKEN_FILE or null";
+        description = "File holding a Forgejo API token that can read the user's activity feed and repositories.";
+      };
+    };
+
     catchUpDays = lib.mkOption {
       type = lib.types.ints.positive;
       default = 30;
@@ -47,6 +70,13 @@ in {
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      assertions = [
+        {
+          assertion = cfg.forgejo.url == null || cfg.forgejo.tokenFile != null;
+          message = "services.devlog.forgejo.url needs services.devlog.forgejo.tokenFile.";
+        }
+      ];
+
       systemd.user.services.devlog = {
         Unit =
           {
@@ -55,14 +85,15 @@ in {
           // lib.optionalAttrs cfg.notifyOnFailure {OnFailure = "devlog-failure@%n.service";};
         Service = {
           Type = "oneshot";
-          ExecStart = "${pkgs.devlog}/bin/devlog catch-up -repo ${cfg.repoPath} -days ${toString cfg.catchUpDays}";
+          ExecStart = "${pkgs.devlog}/bin/devlog catch-up -repo ${cfg.repoPath} -days ${toString cfg.catchUpDays}${forgejoArgs}";
           StandardOutput = "journal";
           StandardError = "journal";
           Environment = [
             "PATH=${lib.makeBinPath [pkgs.git pkgs.gh pkgs.claude-code pkgs.codex-cli pkgs.forge-mirror pkgs.coreutils pkgs.bash pkgs.openssh]}"
             "HOME=${config.home.homeDirectory}"
             "SSH_AUTH_SOCK=%t/ssh-agent"
-          ];
+          ]
+          ++ lib.optional (cfg.forgejo.url != null) "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.tokenFile}";
         };
       };
 

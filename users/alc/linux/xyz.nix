@@ -299,6 +299,7 @@ in {
 
   services.devlog.enable = true;
   services.devlog.weekly.enable = true;
+  services.devlog.forgejo.url = "https://git.alc.xyz";
 
   programs.ai.enable = true;
   programs.ai.forgejoMcp.enable = true;
