@@ -28,7 +28,7 @@ in {
     triggerUsedPercent = lib.mkOption {
       type = lib.types.ints.between 1 99;
       default = 70;
-      description = "Run idle Podman cleanup when root filesystem usage reaches this percentage.";
+      description = "Run idle Podman cleanup when usage of the filesystem holding the Podman store reaches this percentage.";
     };
     imageMinAge = lib.mkOption {
       type = lib.types.strMatching "[1-9][0-9]*h";
@@ -53,7 +53,7 @@ in {
     ];
 
     systemd.services.forgejo-idle-podman-cleanup = {
-      description = "Prune leaked builders and old idle Podman CI artifacts under disk pressure";
+      description = "Remove leftover containers and old idle Podman CI artifacts under disk pressure";
       after = [
         "forgejo-runner-io-pressure-guard.service"
         "forgejo-runner-docker.service"
@@ -65,6 +65,7 @@ in {
         CRITICAL_FREE_BYTES = toString (cfg.ioPressureGuard.diskSpace.criticalFreeGiB * 1024 * 1024 * 1024);
         CRITICAL_FREE_PERCENT = toString cfg.ioPressureGuard.diskSpace.criticalFreePercent;
         DISK_PATH = cfg.ioPressureGuard.diskSpace.path;
+        STORE_PATH = cfg.podmanCanary.storageRoot;
         IMAGE_MIN_AGE = cleanup.imageMinAge;
       };
       serviceConfig = {

@@ -108,6 +108,13 @@
 in {
   options.services.forgejo-actions-runner.podmanCanary = {
     enable = lib.mkEnableOption "separate, qualified rootless Podman CI canary";
+    storageRoot = lib.mkOption {
+      type = lib.types.str;
+      default = "${builderState}/storage";
+      readOnly = true;
+      internal = true;
+      description = "Podman image and container store of the canary API service.";
+    };
     package = lib.mkOption {
       type = lib.types.package;
       default = cfg.package;
@@ -334,7 +341,7 @@ in {
         TimeoutStopSec = "90s";
         LimitCORE = 0;
         ExecCondition = "+${lib.getExe apiStartGate}";
-        ExecStart = "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay --root=${builderState}/storage --runroot=${builderRuntime}/storage system service --time=0";
+        ExecStart = "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay --root=${canary.storageRoot} --runroot=${builderRuntime}/storage system service --time=0";
       };
     };
 

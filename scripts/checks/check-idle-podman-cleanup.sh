@@ -30,7 +30,12 @@ fi
 SH
 cat >"$fixture/df" <<'SH'
 #!/usr/bin/env bash
-printf 'Size Avail\n100 %s\n' "${MOCK_AVAILABLE:-20}"
+if [[ ${*: -1} == "$STORE_PATH" ]]; then
+  available=${MOCK_STORE_AVAILABLE:-${MOCK_AVAILABLE:-20}}
+else
+  available=${MOCK_DISK_AVAILABLE:-${MOCK_AVAILABLE:-20}}
+fi
+printf 'Size Avail\n100 %s\n' "$available"
 SH
 cat >"$fixture/curl" <<'SH'
 #!/usr/bin/env bash
@@ -43,20 +48,22 @@ for arg in "$@"; do
   previous=$arg
 done
 [[ ${MOCK_API_FAILURE:-0} != 1 ]] || exit 7
+# Podman serves its native API only under a version prefix.
+[[ $args != *localhost/libpod/* ]] || exit 22
 if [[ $method == GET && $args == *'/containers/json?all=1'* ]]; then
   if [[ $args == *docker.sock* ]]; then
     printf '%s\n' "${MOCK_DOCKER_CONTAINERS:-[]}"
   elif [[ ${MOCK_RUNNING_AFTER_PRUNE:-0} == 1 ]] && rg --quiet --line-regexp containers "$MOCK_CALLS"; then
     printf '%s\n' '[{"State":"running","Names":["/job"]}]'
-  elif rg --quiet '^builder ' "$MOCK_CALLS"; then
+  elif rg --quiet '^leftover ' "$MOCK_CALLS"; then
     printf '%s\n' "${MOCK_PODMAN_AFTER_BUILDERS:-[]}"
   else
     printf '%s\n' "${MOCK_PODMAN_CONTAINERS:-[]}"
   fi
-elif [[ $method == DELETE && $args == *'/libpod/containers/'* ]]; then
+elif [[ $method == DELETE && $args == *'/v5.0.0/libpod/containers/'* ]]; then
   [[ ${MOCK_BUILDER_DELETE_FAILURE:-0} != 1 ]] || exit 22
-  name=${args##*/libpod/containers/}
-  printf 'builder %s\n' "${name%%\?*}" >> "$MOCK_CALLS"
+  id=${args##*/libpod/containers/}
+  printf 'leftover %s\n' "${id%%\?*}" >> "$MOCK_CALLS"
 elif [[ $method == GET && $args == *'/libpod/volumes/json'* ]]; then
   printf '%s\n' "${MOCK_VOLUMES:-[]}"
 elif [[ $method == DELETE && $args == *'/libpod/volumes/'* ]]; then
@@ -72,11 +79,23 @@ else
   exit 2
 fi
 SH
-chmod +x "$fixture/systemctl" "$fixture/df" "$fixture/curl"
+cat >"$fixture/df-store-fails" <<'SH'
+#!/usr/bin/env bash
+[[ ${*: -1} != "$STORE_PATH" ]] || exit 1
+printf 'Size Avail\n100 20\n'
+SH
+chmod +x "$fixture/systemctl" "$fixture/df" "$fixture/curl" "$fixture/df-store-fails"
 export STATE_DIR="$fixture/state" SYSTEMCTL_BIN="$fixture/systemctl"
 export CURL_BIN="$fixture/curl" DF_BIN="$fixture/df" JQ_BIN=jq
 export DOCKER_SOCKET="$fixture/docker.sock" PODMAN_SOCKET="$fixture/podman.sock"
 export MOCK_CALLS="$fixture/calls" MOCK_FILTERS="$fixture/filters" TRIGGER_USED_PERCENT=70
+export STORE_PATH="$fixture/store"
+a=$(printf 'a%.0s' {1..64})
+b=$(printf 'b%.0s' {1..64})
+c=$(printf 'c%.0s' {1..64})
+# Created times: long before the stale age, and far in the future.
+old=0
+new=4102444800
 run_cleanup() { bash "$source_file"; }
 expect_none() {
   : >"$MOCK_CALLS"
@@ -88,7 +107,7 @@ expect_none() {
 output=$(run_cleanup)
 [[ $(cat "$MOCK_CALLS") == $'containers\nimages' ]]
 [[ $(cat "$MOCK_FILTERS") == '%7B%22until%22%3A%5B%2248h%22%5D%2C%22dangling%22%3A%5B%22false%22%5D%7D' ]]
-[[ $output == *'pruned builders=0 builder_volumes=0 failed_builder_volumes=0 image_min_age=48h'* ]]
+[[ $output == *'pruned leftovers=0 builder_volumes=0 failed_builder_volumes=0 image_min_age=48h'* ]]
 : >"$MOCK_CALLS"
 IMAGE_MIN_AGE=72h run_cleanup >/dev/null
 [[ $(cat "$MOCK_FILTERS") == *72h* ]]
@@ -99,12 +118,37 @@ IMAGE_MIN_AGE=2d run_cleanup >/dev/null 2>&1 && exit 1
 # Leaked Buildx builders, running or stopped, are removed with their state
 # volumes before the ordinary prune.
 : >"$MOCK_CALLS"
-output=$(MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_app0"]},{"State":"exited","Names":["/buildx_buildkit_site0"]},{"State":"exited","Names":["/job"]}]' \
+output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$new"',"State":"running","Names":["/buildx_buildkit_app0"]},{"Id":"'"$b"'","Created":'"$new"',"State":"exited","Names":["/buildx_buildkit_site0"]},{"Id":"'"$c"'","Created":'"$old"',"State":"exited","Names":["/job"]}]' \
   MOCK_PODMAN_AFTER_BUILDERS='[{"State":"exited","Names":["/job"]}]' \
   MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"},{"Name":"buildx_buildkit_gone0_state"},{"Name":"other_state"},{"Name":"buildx_buildkit_x"}]' \
   run_cleanup)
-[[ $(cat "$MOCK_CALLS") == $'builder buildx_buildkit_app0\nbuilder buildx_buildkit_site0\nvolume buildx_buildkit_app0_state\nvolume buildx_buildkit_gone0_state\ncontainers\nimages' ]]
-[[ $output == *'pruned builders=2 builder_volumes=2'* ]]
+[[ $(cat "$MOCK_CALLS") == "leftover $a"$'\n'"leftover $b"$'\nvolume buildx_buildkit_app0_state\nvolume buildx_buildkit_gone0_state\ncontainers\nimages' ]]
+[[ $output == *'removed_leftover kind=builder name=buildx_buildkit_app0'* && $output == *'pruned leftovers=2 builder_volumes=2'* ]]
+# A live container older than the longest job, such as a test database whose
+# job was killed, is removed; a recent one or a runner job container is not.
+: >"$MOCK_CALLS"
+output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$old"',"State":"running","Names":["/docuflow-test-postgres-1-1"]},{"Id":"'"$b"'","Created":'"$old"',"State":"paused","Names":[]}]' \
+  run_cleanup)
+[[ $(cat "$MOCK_CALLS") == "leftover $a"$'\n'"leftover $b"$'\ncontainers\nimages' ]]
+[[ $output == *'removed_leftover kind=stale name=docuflow-test-postgres-1-1'* && $output == *'removed_leftover kind=stale name=-'* ]]
+: >"$MOCK_CALLS"
+[[ $(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$new"',"State":"running","Names":["/db"]}]' run_cleanup) == 'skipped reason=containers_live engine=podman' ]]
+[[ $(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$old"',"State":"running","Names":["/FORGEJO-ACTIONS-TASK-1_JOB-test"]}]' run_cleanup) == 'skipped reason=containers_live engine=podman' ]]
+[[ $(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":"0","State":"running","Names":["/db"]}]' run_cleanup) == 'skipped reason=containers_live engine=podman' ]]
+[[ $(STALE_AFTER_SECONDS=$new MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$old"',"State":"running","Names":["/db"]}]' run_cleanup) == 'skipped reason=containers_live engine=podman' ]]
+# Leftovers on the Docker engine are not this service's to remove.
+[[ $(MOCK_DOCKER_CONTAINERS='[{"Id":"'"$a"'","Created":'"$old"',"State":"running","Names":["/db"]}]' run_cleanup) == 'skipped reason=containers_live engine=docker' ]]
+STALE_AFTER_SECONDS=3h run_cleanup >/dev/null 2>&1 && exit 1
+# A leftover with an unexpected ID fails instead of being removed by name.
+: >"$MOCK_CALLS"
+if output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"../x","Created":'"$old"',"State":"running","Names":["/db"]}]' run_cleanup 2>&1 >/dev/null); then exit 1; fi
+[[ $output == 'failed step=remove_leftover id=invalid' && ! -s $MOCK_CALLS ]]
+# Usage of the Podman store's filesystem triggers the cleanup; the guard's
+# disk keeps only its critical floor.
+[[ $(MOCK_DISK_AVAILABLE=20 MOCK_STORE_AVAILABLE=31 run_cleanup) == 'skipped reason=below_trigger' ]]
+[[ $(MOCK_DISK_AVAILABLE=90 MOCK_STORE_AVAILABLE=20 run_cleanup) == *'pruned leftovers=0'* ]]
+[[ $(CRITICAL_FREE_PERCENT=10 MOCK_DISK_AVAILABLE=5 MOCK_STORE_AVAILABLE=20 run_cleanup) == 'skipped reason=below_critical_floor' ]]
+[[ $(DF_BIN="$fixture/df-store-fails" run_cleanup) == 'skipped reason=store_unreadable' ]]
 # A volume still in use is kept and the prune continues.
 : >"$MOCK_CALLS"
 output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_STATUS=409 run_cleanup)
@@ -118,8 +162,8 @@ if output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_S
 # Work under the lifecycle lock stops before a step that would outlast the
 # budget runner start gates allow for.
 : >"$MOCK_CALLS"
-output=$(MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_app0"]}]' LOCK_BUDGET_SECONDS=12 run_cleanup)
-[[ $output == 'skipped reason=lock_budget_exhausted step=remove_builder name=buildx_buildkit_app0' && ! -s $MOCK_CALLS ]]
+output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' LOCK_BUDGET_SECONDS=12 run_cleanup)
+[[ $output == 'skipped reason=lock_budget_exhausted step=remove_leftover name=buildx_buildkit_app0' && ! -s $MOCK_CALLS ]]
 output=$(LOCK_BUDGET_SECONDS=12 run_cleanup)
 [[ $output == 'skipped reason=lock_budget_exhausted step=prune_images' && $(cat "$MOCK_CALLS") == containers ]]
 LOCK_BUDGET_SECONDS=0 run_cleanup >/dev/null 2>&1 && exit 1
@@ -137,8 +181,8 @@ if output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_S
 [[ $(DF_BIN=false run_cleanup 2>&1) == 'skipped reason=disk_unreadable' ]]
 # A failed API call names its step.
 : >"$MOCK_CALLS"
-if output=$(MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_app0"]}]' MOCK_BUILDER_DELETE_FAILURE=1 run_cleanup 2>&1 >/dev/null); then exit 1; fi
-[[ $output == 'failed step=remove_builder name=buildx_buildkit_app0' ]]
+if output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' MOCK_BUILDER_DELETE_FAILURE=1 run_cleanup 2>&1 >/dev/null); then exit 1; fi
+[[ $output == 'failed step=remove_leftover name=buildx_buildkit_app0' ]]
 # The disk trigger is checked before waiting for the lifecycle lock.
 exec 8>"$fixture/state/lifecycle.lock"
 flock -x 8
@@ -152,9 +196,9 @@ MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_app0","/j
 MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":[]}]' expect_none
 MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_bad name"]}]' expect_none
 : >"$MOCK_CALLS"
-MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_app0"]}]' \
-  MOCK_PODMAN_AFTER_BUILDERS='[{"State":"running","Names":["/buildx_buildkit_app0"]}]' run_cleanup >/dev/null
-[[ $(cat "$MOCK_CALLS") == 'builder buildx_buildkit_app0' ]]
+MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' \
+  MOCK_PODMAN_AFTER_BUILDERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' run_cleanup >/dev/null
+[[ $(cat "$MOCK_CALLS") == "leftover $a" ]]
 MOCK_AVAILABLE=31 expect_none
 MOCK_RUNNER_STATE=activating expect_none
 MOCK_RUNNER_SUBSTATE=running expect_none
