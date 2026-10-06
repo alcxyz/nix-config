@@ -64,6 +64,11 @@ with lib; let
       command = forgejoMcpCommand;
     };
   }));
+  # A locked or restarted keyring blocks Codex session start indefinitely, so
+  # MCP OAuth tokens live in a private file beside auth.json (ADR-0084).
+  codexSettings = pkgs.writeText "codex-settings.json" (builtins.toJSON {
+    mcp_oauth_credentials_store = "file";
+  });
   claudeMcpServers = pkgs.writeText "claude-mcp-servers.json" (builtins.toJSON (optionalAttrs mcp.enable {
     forgejo = {
       type = "stdio";
@@ -224,6 +229,10 @@ in {
         "${config.home.homeDirectory}/.codex/config.toml" \
         "${config.xdg.stateHome}/agent-mcp/codex-managed.json" ${codexMcpServers} mcp_servers \
         || warnEcho "Codex MCP servers were not updated; see the message above."
+      run ${mergeCodexTables}/bin/merge-codex-tables \
+        "${config.home.homeDirectory}/.codex/config.toml" \
+        "${config.xdg.stateHome}/agent-mcp/codex-settings-managed.json" ${codexSettings} . \
+        || warnEcho "Codex settings were not updated; see the message above."
       run ${mergeClaudeMcp}/bin/merge-claude-mcp \
         "${config.home.homeDirectory}/.claude.json" \
         "${config.xdg.stateHome}/agent-mcp/claude-managed.json" ${claudeMcpServers} \

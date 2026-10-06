@@ -577,12 +577,14 @@ def reviewer_command(reviewer, tree, output):
 
     Neither client loads user MCP servers or app connectors. Claude's restricted
     mode also ignores user and project settings, so hooks in the PR head do not
-    run; Codex treats the temporary checkout as an untrusted project.
+    run; Codex treats the temporary checkout as an untrusted project. Codex
+    keeps MCP credentials in a file so a locked keyring cannot stall it (ADR-0084).
     """
     model, effort = reviewer["model"], reviewer["effort"]
     if reviewer["client"] == "codex":
         argv = [
             "codex", "exec", "-m", model, "-c", f"model_reasoning_effort={json.dumps(effort)}",
+            "-c", 'mcp_oauth_credentials_store="file"',
             "-s", "read-only", "-C", tree, "--skip-git-repo-check", "--ephemeral",
             "--ignore-user-config", "--ignore-rules", "--disable", "apps",
             "--color", "never", "-o", output, "-",

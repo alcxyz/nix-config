@@ -159,6 +159,45 @@ with tempfile.TemporaryDirectory() as tmp:
     assert result.returncode == 0, result.stderr
     assert tomllib.loads(config.read_text())["mcp_servers"] == {"mine": {"command": "mine"}}
 
+# Top-level settings use `.` and land before the first table (ADR-0084).
+with tempfile.TemporaryDirectory() as tmp:
+    root = pathlib.Path(tmp)
+    config = root / "codex" / "config.toml"
+    state = root / "state" / "codex-settings.json"
+    config.parent.mkdir()
+    config.write_text('model = "x"\n\n[projects."/src"]\ntrust_level = "trusted"\n\n[mcp_servers.mine]\ncommand = "mine"\n')
+    settings_file = root / "settings.json"
+
+    def merge_settings(settings):
+        settings_file.write_text(json.dumps(settings))
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), str(config), str(state), str(settings_file), "."],
+            capture_output=True, text=True,
+        )
+
+    result = merge_settings({"mcp_oauth_credentials_store": "file"})
+    assert result.returncode == 0, result.stderr
+    data = tomllib.loads(config.read_text())
+    assert data["mcp_oauth_credentials_store"] == "file", data
+    assert data["model"] == "x" and data["projects"]["/src"]["trust_level"] == "trusted", data
+    assert data["mcp_servers"] == {"mine": {"command": "mine"}}, data
+    assert json.loads(state.read_text()) == {"managed": ["mcp_oauth_credentials_store"]}
+    result = merge_settings({"mcp_oauth_credentials_store": "file"})
+    assert result.returncode == 0 and tomllib.loads(config.read_text())["mcp_oauth_credentials_store"] == "file", result
+
+    # A setting it managed before and no longer defines is removed; the rest stays.
+    result = merge_settings({})
+    assert result.returncode == 0, result.stderr
+    data = tomllib.loads(config.read_text())
+    assert "mcp_oauth_credentials_store" not in data and data["model"] == "x", data
+
+    # A value the user set by hand is never taken over.
+    config.write_text('mcp_oauth_credentials_store = "keyring"\n' + config.read_text())
+    result = merge_settings({"mcp_oauth_credentials_store": "file"})
+    assert result.returncode == 0 and "leaving it unmanaged" in result.stderr, result
+    assert tomllib.loads(config.read_text())["mcp_oauth_credentials_store"] == "keyring"
+    assert json.loads(state.read_text()) == {"managed": []}
+
 # A file Codex rewrote between reading and replacing it is never overwritten.
 import importlib.util
 spec = importlib.util.spec_from_file_location("codex_roles", SCRIPT)

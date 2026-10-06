@@ -467,7 +467,7 @@ with tempfile.TemporaryDirectory() as tmp:
     bin_dir = os.path.join(tmp, "bin")
     os.mkdir(bin_dir)
     scripts = {
-        "codex": 'cat >/dev/null; case "$*" in *"--ignore-user-config --ignore-rules --disable apps"*) ;; *) exit 3;; esac; '
+        "codex": 'cat >/dev/null; case "$*" in *"mcp_oauth_credentials_store=\\"file\\""*"--ignore-user-config --ignore-rules --disable apps"*) ;; *) exit 3;; esac; '
                  'test -z "$FORGEJO_API_TOKEN_FILE$GH_TOKEN" || exit 4; '
                  'printf "OpenAI Codex\\n--------\\nmodel: gpt-reported\\n--------\\nuser\\nmodel: gpt-spoofed\\n" >&2; '
                  'while [ "$1" != -o ]; do shift; done; test -f file && echo "Verdict: no findings" >"$2"',

@@ -5,12 +5,14 @@ Usage: codex-roles.py <config.toml> <state.json> <entries.json> [<table>]
 
 entries.json maps each name to the contents of its `[<table>.<name>]` table;
 <table> defaults to `agents`, where each role maps to {"description": ...,
-"config_file": ...}. `mcp_servers` registers MCP servers the same way.
+"config_file": ...}. `mcp_servers` registers MCP servers the same way, and
+`.` manages top-level settings such as `mcp_oauth_credentials_store`.
 Codex also writes config.toml (for example project trust), so only the
 `[<table>.<name>]` tables this script manages are touched. The state file
 records which names it manages, so a renamed or dropped entry's table is
 removed while tables the user added by hand stay, including a hand-made table
-that shares a managed name (it is left unmanaged with a warning).
+that shares a managed name (it is left unmanaged with a warning), and likewise
+for top-level settings. Once a name is managed, its value follows the entries.
 """
 
 import copy
@@ -83,11 +85,11 @@ def adopted(original_agents, roles, managed):
 def expected_result(original, roles, managed, names, table="agents"):
     """The parsed config the merge must produce: only managed tables change."""
     result = copy.deepcopy(original)
-    agents = result.setdefault(table, {})
+    agents = result if table == "." else result.setdefault(table, {})
     for name in managed - set(roles):
         agents.pop(name, None)
     agents.update({name: copy.deepcopy(roles[name]) for name in names})
-    if not agents:
+    if table != "." and not agents:
         del result[table]
     return result
 
@@ -124,7 +126,7 @@ def merge_once(config_path, state_path, roles, managed, table):
     except Exception as error:  # tomlkit raises several parse error types
         fail(config_path, f"invalid TOML ({error})")
 
-    agents = document.get(table)
+    agents = document if table == "." else document.get(table)
     if agents is None:
         agents = tomlkit.table(is_super_table=True)
         document[table] = agents
@@ -142,20 +144,27 @@ def merge_once(config_path, state_path, roles, managed, table):
         original = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
         fail(config_path, f"invalid TOML ({error})")
-    original_agents = original.get(table, {}) if isinstance(original.get(table), dict) else {}
+    if table == ".":
+        original_agents = original
+    else:
+        original_agents = original.get(table, {}) if isinstance(original.get(table), dict) else {}
     names = adopted(original_agents, roles, managed)
     for name in sorted(set(roles) - names):
-        print(f"Warning: {config_path} already has its own [{table}.{name}]; leaving it unmanaged.", file=sys.stderr)
+        label = name if table == "." else f"[{table}.{name}]"
+        print(f"Warning: {config_path} already has its own {label}; leaving it unmanaged.", file=sys.stderr)
 
     for name in sorted(managed - set(roles)):
         if name in agents:
             del agents[name]
     for name in sorted(names):
+        if table == ".":
+            agents[name] = roles[name]
+            continue
         entry = tomlkit.table()
         for key, value in roles[name].items():
             entry[key] = value
         agents[name] = entry
-    if len(agents) == 0:
+    if table != "." and len(agents) == 0:
         del document[table]
 
     rendered = tomlkit.dumps(document)
@@ -166,7 +175,8 @@ def merge_once(config_path, state_path, roles, managed, table):
     # Dotted keys and other layouts can make an edit land somewhere else, so
     # compare meanings rather than trusting the edit.
     if merged != expected_result(original, roles, managed, names, table):
-        fail(config_path, f"the merge would change unrelated settings; use standard [{table}.<name>] tables")
+        layout = "top-level keys" if table == "." else f"standard [{table}.<name>] tables"
+        fail(config_path, f"the merge would change unrelated settings; use {layout}")
     try:
         if rendered != text:
             write_atomic(config_path, rendered, mode, expected=text)
