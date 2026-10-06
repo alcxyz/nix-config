@@ -72,7 +72,7 @@ elif [[ $method == DELETE && $args == *'/libpod/volumes/'* ]]; then
   printf '%s' "$status"
 elif [[ $method == POST && $args == *'/libpod/containers/prune'* ]]; then
   printf 'containers\n' >> "$MOCK_CALLS"
-elif [[ $method == POST && $args == *'/libpod/images/prune?filters='* ]]; then
+elif [[ $method == POST && $args == *'/v5.0.0/libpod/images/prune?all=true&filters='* ]]; then
   printf 'images\n' >> "$MOCK_CALLS"
   printf '%s\n' "${args##*filters=}" > "$MOCK_FILTERS"
 else

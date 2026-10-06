@@ -217,7 +217,11 @@ api "$podman_socket" POST "$libpod/containers/prune" 10 >/dev/null || fail prune
 safe_to_prune
 image_filters=$("$jq_bin" -rn --arg age "$image_min_age" '{until: [$age], dangling: ["false"]} | tojson | @uri')
 require_budget 15 prune_images
-api "$podman_socket" POST "$libpod/images/prune?filters=$image_filters" 15 >/dev/null || fail prune_images
+# The native API needs all=true to include unused tagged images; dangling=false
+# alone does not enable that behavior. Keep the age filter and reference checks.
+# Age is image creation time, not pull or last-use time: under pressure this can
+# also reclaim newly pulled, unused images published upstream long ago.
+api "$podman_socket" POST "$libpod/images/prune?all=true&filters=$image_filters" 15 >/dev/null || fail prune_images
 
 if sample=$(available_bytes "$store_path"); then
   read -r _ available_after <<< "$sample"
