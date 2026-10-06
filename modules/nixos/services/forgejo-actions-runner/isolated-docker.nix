@@ -69,6 +69,11 @@
     runtimeInputs = with pkgs; [coreutils procps systemd util-linux];
     text = builtins.readFile ./runner-start-gate.sh;
   };
+  apiStartGate = pkgs.writeShellApplication {
+    name = "forgejo-docker-api-start-gate";
+    runtimeInputs = with pkgs; [coreutils systemd util-linux];
+    text = builtins.readFile ./podman-api-start-gate.sh;
+  };
   gameBypass = pkgs.writeShellApplication {
     name = "forgejo-runner-game-bypass";
     runtimeInputs = [pkgs.coreutils];
@@ -113,6 +118,7 @@ in {
       environment = {
         HOME = stateDir;
         XDG_RUNTIME_DIR = runtimeDir;
+        PODMAN_ADMISSION = "0";
       };
       serviceConfig = {
         Type = "notify";
@@ -123,6 +129,7 @@ in {
         RuntimeDirectory = "forgejo-docker";
         RuntimeDirectoryMode = "0750";
         ExecStart = "${pkgs.docker}/bin/dockerd-rootless --config-file=${daemonConfig}";
+        ExecCondition = "+${lib.getExe apiStartGate}";
         Slice = "forgejobuilds.slice";
         Delegate = true;
         NotifyAccess = "all";

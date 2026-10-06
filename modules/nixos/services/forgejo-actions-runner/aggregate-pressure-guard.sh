@@ -319,6 +319,12 @@ resume_admissions() {
     return 0
   fi
   lock_lifecycle
+  # Cleanup can outlive its client and lifecycle flock. Withhold admission
+  # without failing the guard or changing independent drain/freeze ownership.
+  if [[ -e $state_dir/cleanup-in-flight || -L $state_dir/cleanup-in-flight ]]; then
+    unlock_lifecycle
+    return 0
+  fi
   [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
 
   load_state=$(runner_property LoadState) || fail "cannot inspect runner load state"

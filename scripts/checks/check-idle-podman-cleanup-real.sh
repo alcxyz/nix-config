@@ -174,15 +174,18 @@ pause_state=captured
 export STATE_DIR="$fixture/state" SYSTEMCTL_BIN="$fixture/systemctl" DF_BIN="$fixture/df"
 # curl's first option disables curlrc; env -i also excludes proxy credentials.
 printf '#!/usr/bin/env bash\n' >"$fixture/curl"
-# Delay outside curl's API timeout, only for the lock-contention qualification.
-printf 'if [[ -e %q ]]; then rm -- %q; touch %q; sleep 10; fi\n' \
-  "$fixture/delay-docker" "$fixture/delay-docker" "$fixture/cleanup-holds-lock" >>"$fixture/curl"
+# A bounded handshake holds the lock until the contender has actually failed.
+# It stays outside curl's API timeout and inside cleanup's unchanged lock budget.
+# shellcheck disable=SC2016
+printf 'if [[ -e %q ]]; then rm -- %q; touch %q; deadline=$((SECONDS + 15)); while [[ ! -e %q ]]; do ((SECONDS < deadline)) || exit 1; sleep 0.02; done; fi\n' \
+  "$fixture/delay-docker" "$fixture/delay-docker" "$fixture/cleanup-holds-lock" "$fixture/release-cleanup" >>"$fixture/curl"
 printf 'exec env -i PATH=%q %q --disable "$@"\n' "$PATH" "$curl_bin" >>"$fixture/curl"
 chmod +x "$fixture/curl"
 export CURL_BIN="$fixture/curl" JQ_BIN=jq DOCKER_SOCKET="$fixture/docker.sock"
 export PODMAN_SOCKET="$fixture/podman.sock" STORE_PATH="$fixture/graph" DISK_PATH="$fixture"
 export TRIGGER_USED_PERCENT=70 CRITICAL_FREE_BYTES=0 CRITICAL_FREE_PERCENT=0
 export IMAGE_MIN_AGE=1h STALE_AFTER_SECONDS=10800 LOCK_BUDGET_SECONDS=40
+chmod 700 "$STATE_DIR"
 printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service >"$STATE_DIR/runner-units"
 cat >"$SYSTEMCTL_BIN" <<'MOCK'
 #!/usr/bin/env bash
@@ -190,6 +193,7 @@ set -eu
 case "$*" in
   'is-active --quiet '*) exit 0 ;;
   'show --property=FreezerState --value '*) echo running ;;
+  'show --property=ExecMainStartTimestampMonotonic --value '*) echo 12345 ;;
   'show --property=ActiveState --property=SubState --property=MainPID --property=ControlPID --property=Job '*)
     printf 'ActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\nJob=\n' ;;
   *) exit 2 ;;
@@ -228,6 +232,10 @@ done
   echo 'FAIL isolated API startup (logs withheld)' >&2
   exit 1
 }
+api http://localhost/version | jq -e '.Version == "5.8.7"' >/dev/null || {
+  echo 'FAIL this fixture requires Podman 5.8.7' >&2
+  exit 1
+}
 api http://localhost/version | jq -r '"Runtime=" + .Version + " Docker-compatible API=" + .ApiVersion'
 echo 'Native API exercised: /v5.0.0/libpod'
 # Fail closed if the real service does not use the requested isolated store.
@@ -261,6 +269,10 @@ assert_absent() {
     exit 1
   }
 }
+assert_complete() {
+  assert_output 'pruned leftovers='
+  [[ $output != *'skipped reason='* && $output != *'failed step='* ]]
+}
 assert_output() { [[ $output == *"$1"* ]] || {
   printf 'FAIL expected %s\n' "$1" >&2
   exit 1
@@ -268,24 +280,90 @@ assert_output() { [[ $output == *"$1"* ]] || {
 # Unique content produces independent images with genuine old/recent metadata.
 mkdir "$fixture/context"
 printf 'FROM %s\nCOPY payload /qualification-payload\n' "$base" >"$fixture/context/Containerfile"
-for name in old-unused old-referenced recent-unused; do
+for name in old-unused old-referenced old-multitag old-parent recent-unused; do
   printf '%s\n' "$name" >"$fixture/context/payload"
   stamp=1
   [[ $name != recent-unused ]] || stamp=$(date +%s)
   p build --pull=never --timestamp "$stamp" --layers=false --network none -t "localhost/qualification-$name:fixture" "$fixture/context" >"$fixture/build.log" 2>&1
 done
-# Check referenced-image protection against the exact native prune endpoint.
-# Cleanup prunes exited containers first; this separate assertion isolates the
-# API invariant while an unstarted container still holds the old image. The
-# native all=true parameter is required to include tagged images.
+# Direct DELETE refuses a referenced image without force. The production
+# snapshot also excludes it; no bulk prune (or Buildah cache cleanup) is called.
 p create --pull=never --network none --name base-reference "$base" true >/dev/null
 p create --pull=never --network none --name image-reference localhost/qualification-old-referenced:fixture true >/dev/null
-filters=$(jq -rn '{until:["1h"],dangling:["false"]}|tojson|@uri')
-api -X POST "http://localhost/v5.0.0/libpod/images/prune?all=true&filters=$filters" >"$fixture/prune.json"
+referenced_id=$(p image inspect --format '{{.Id}}' localhost/qualification-old-referenced:fixture)
+api 'http://localhost/images/json?all=true' | jq -e --arg id "sha256:$referenced_id" \
+  'any(.[]; .Id == $id and .Containers == 1 and (.RepoTags | type) == "array")' >/dev/null
+echo 'PASS compat referenced image shape: Containers=1 and RepoTags=array'
+status=$(api -X DELETE --output "$fixture/reference-delete.json" --write-out '%{http_code}' \
+  "http://localhost/images/$referenced_id?force=false&noprune=true" 2>/dev/null) || true
+[[ $status == 409 ]]
 p image exists localhost/qualification-old-referenced:fixture
-assert_absent image exists localhost/qualification-old-unused:fixture
+p image exists localhost/qualification-old-unused:fixture
 p image exists localhost/qualification-recent-unused:fixture
-echo 'PASS native image age filtering and referenced-image protection'
+p tag localhost/qualification-old-multitag:fixture localhost/qualification-old-multitag:second
+# Layered child exposes a genuine ParentId; noprune prevents recursion, and
+# the selection snapshot preserves a parent even if its child is deleted.
+printf 'FROM localhost/qualification-old-parent:fixture\nCOPY payload /child-payload\n' >"$fixture/context/Containerfile"
+printf 'child\n' >"$fixture/context/payload"
+p build --pull=never --timestamp 1 --layers=true --network none -t localhost/qualification-old-child:fixture "$fixture/context" >"$fixture/build.log" 2>&1
+parent_id=$(p image inspect --format '{{.Id}}' localhost/qualification-old-parent:fixture)
+api 'http://localhost/images/json?all=true' | jq -e --arg parent "$parent_id" \
+  'any(.[]; .ParentId == $parent)' >/dev/null
+# Untagged intermediate parents are the recursive-removal positive control:
+# a tagged parent would survive even if the server ignored noprune=true.
+# v5.8.7 compat/images.go:GetImages normalizes nil RepoTags to [], and
+# abi/images_list.go:List supplies Containers from len(img.Containers()).
+# compat/images_remove.go:RemoveImage and abi/images.go:Remove pass NoPrune
+# through to libimage/image.go:removeRecursive's explicit recursion guard.
+for noprune in true false; do
+  printf 'FROM %s\nCOPY payload /intermediate-payload\nCOPY leaf /leaf-payload\n' "$base" >"$fixture/context/Containerfile"
+  printf 'intermediate-%s\n' "$noprune" >"$fixture/context/payload"
+  printf 'leaf-%s\n' "$noprune" >"$fixture/context/leaf"
+  tag="localhost/qualification-recursion-$noprune:fixture"
+  p build --pull=never --timestamp 1 --layers=true --network none -t "$tag" "$fixture/context" >"$fixture/build.log" 2>&1
+  child_id=$(p image inspect --format '{{.Id}}' "$tag")
+  api 'http://localhost/images/json?all=true' >"$fixture/images.json"
+  intermediate=$(jq -er --arg child "sha256:$child_id" '.[] | select(.Id == $child) | .ParentId | select(length == 64)' "$fixture/images.json")
+  jq -e --arg parent "sha256:$intermediate" \
+    'any(.[]; .Id == $parent and .RepoTags == [] and .Containers == 0) and
+     all(.[]; (.RepoTags | type) == "array" and (.Containers | type) == "number")' "$fixture/images.json" >/dev/null
+  if [[ $noprune == true ]]; then
+    printf 'PASS compat dangling intermediate shape: '
+    jq -c --arg parent "sha256:$intermediate" '.[] | select(.Id == $parent) | {RepoTags, Containers, CreatedType:(.Created|type), ParentIdType:(.ParentId|type)}' "$fixture/images.json"
+  fi
+  api -X DELETE "http://localhost/images/$child_id?force=false&noprune=$noprune" >"$fixture/recursion-delete.json"
+  jq -e --arg child "$child_id" 'any(.[]; .Deleted == $child)' "$fixture/recursion-delete.json" >/dev/null
+  assert_absent image exists "$child_id"
+  if [[ $noprune == true ]]; then
+    p image exists "$intermediate"
+    api 'http://localhost/images/json?all=true' | jq -e --arg parent "sha256:$intermediate" \
+      'any(.[]; .Id == $parent and .RepoTags == [] and .Containers == 0 and .Dangling == true)' >/dev/null
+    jq -e --arg parent "$intermediate" 'all(.[]; .Deleted != $parent)' "$fixture/recursion-delete.json" >/dev/null
+    # Fixture-only control removal; avoid mixing it into the helper's selection.
+    p rmi --no-prune "$intermediate" >/dev/null
+  else
+    assert_absent image exists "$intermediate"
+    jq -e --arg parent "$intermediate" 'any(.[]; .Deleted == $parent)' "$fixture/recursion-delete.json" >/dev/null
+  fi
+done
+echo 'PASS noprune=true retains dangling intermediate; noprune=false recursively deletes positive control'
+# Make the old child the only eligible leaf for the first cleanup pass. This
+# proves actual child deletion and same-snapshot parent preservation without
+# relying on image ID ordering or the bounded pass reaching every image.
+for name in old-unused old-referenced; do
+  p tag "localhost/qualification-$name:fixture" "localhost/qualification-$name:protected"
+done
+# Buildah CacheParent is TMPDIR/buildah-cache-<rootless uid>; CleanCacheMount
+# recursively removes that whole directory. TMPDIR is fixture-owned even for
+# the API, so this sentinel exercises the actual cache cleanup target safely.
+# See Podman v5.8.7 vendor/github.com/containers/buildah/{internal,pkg}/volumes.
+cache_mounts="$fixture/tmp/buildah-cache-$(id -u)"
+p unshare mkdir -p "$cache_mounts"
+# The unshared child receives the fixture directory as its first argument.
+# shellcheck disable=SC2016
+p unshare sh -c 'printf "fixture-cache\n" > "$1/sentinel"' sh "$cache_mounts"
+p volume create qualification-unrelated >/dev/null
+echo 'PASS individual image DELETE reference protection; parent/multitag/cache preservation fixtures created'
 p rm image-reference base-reference >/dev/null
 # The live-job guard must prevent removal of an otherwise eligible builder.
 p run --pull=never -d --stop-signal SIGKILL --network none --cgroups=disabled --name FORGEJO-ACTIONS-TASK-qualification_JOB-test "$base" sleep 180 >/dev/null
@@ -314,14 +392,41 @@ assert_output 'removed_leftover kind=stale name=nested-database'
 assert_output 'removed_builder_volume name=buildx_buildkit_qualification0_state'
 assert_output 'kept_builder_volume name=buildx_buildkit_held0_state reason=in_use'
 assert_output 'failed_builder_volumes=0'
+assert_complete
+assert_output 'image_min_age=1h images=1 reclaimed_bytes='
+assert_absent image exists localhost/qualification-old-child:fixture
+p image exists localhost/qualification-old-parent:fixture
+p unshare test -f "$cache_mounts/sentinel"
+p volume exists qualification-unrelated
+[[ ! -e $STATE_DIR/cleanup-in-flight ]]
+echo 'PASS first cleanup retains parent, multitag image, Buildah cache sentinel and unrelated volume'
 assert_absent container exists buildx_buildkit_qualification0
 assert_absent container exists nested-database
 assert_absent volume exists buildx_buildkit_qualification0_state
 p volume exists buildx_buildkit_held0_state
 p image exists localhost/qualification-recent-unused:fixture
-# This run pruned the old image after its referencing container was removed.
+for name in old-unused old-referenced; do
+  p untag "localhost/qualification-$name:fixture" "localhost/qualification-$name:protected"
+done
+# Bounded work may leave older eligible images for a later pass. Every pass
+# must either finish its image phase or explicitly stop at the image budget;
+# a snapshot/schema skip cannot be counted as partial progress.
+for ((pass = 0; pass < 4; pass++)); do
+  if ! p image exists localhost/qualification-old-referenced:fixture && ! p image exists localhost/qualification-old-unused:fixture && ! p image exists localhost/qualification-old-parent:fixture; then break; fi
+  output=$(run_cleanup)
+  [[ $output == *'pruned leftovers='* || $output == *'skipped reason=lock_budget_exhausted step=remove_image'* ]]
+  [[ $output != *'engine_api_invalid'* && ! -e $STATE_DIR/cleanup-in-flight ]]
+done
 assert_absent image exists localhost/qualification-old-referenced:fixture
-echo 'PASS actual cleanup removes old unused tagged image'
+assert_absent image exists localhost/qualification-old-unused:fixture
+p image exists localhost/qualification-old-multitag:fixture
+p image exists localhost/qualification-old-multitag:second
+# Once its child was deleted, the tagged parent became eligible and was
+# removed by a later snapshot, rather than recursively in its child's DELETE.
+assert_absent image exists localhost/qualification-old-parent:fixture
+p unshare test -f "$cache_mounts/sentinel"
+p volume exists qualification-unrelated
+echo 'PASS bounded individual deletes remove old unused tagged images'
 echo 'PASS actual cleanup: builder/state removal, HTTP 409 preservation, stale nested removal, recent image retention'
 run_gate() {
   env -i PATH="$PATH" STATE_DIR="$STATE_DIR" SYSTEMCTL_BIN="$SYSTEMCTL_BIN" \
@@ -332,9 +437,17 @@ run_gate() {
     RUNNER_UNITS='forgejo-actions-runner.service forgejo-podman-runner.service' \
     timeout --kill-after=2s 10s bash -x "$repo/modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh"
 }
-# Five seconds allows admission before flock; a ten-second wrapper delay
-# leaves a five-second scheduling margin while staying within cleanup's budget.
-# The synthetic wrapper delay does not consume curl's five-second API timeout.
+# Earlier passes may have removed the formerly held volume after its container
+# was pruned. Recreate a known removable volume for this independent lock trial.
+p volume create buildx_buildkit_held0_state >/dev/null
+# One controlled eligible image makes full image completion fit after the
+# synthetic lock delay, without changing any production client/lock budget.
+printf 'FROM %s\nCOPY payload /lock-payload\n' "$base" >"$fixture/context/Containerfile"
+printf 'lock-leaf\n' >"$fixture/context/payload"
+p build --pull=never --timestamp 1 --layers=false --network none -t localhost/qualification-lock-leaf:fixture "$fixture/context" >"$fixture/build.log" 2>&1
+# The five-second contender must time out before we release the handshake.
+# Its fifteen-second ceiling preserves the helper's real forty-second budget
+# and leaves enough time for one image DELETE and the normal API requests.
 run_gate >"$fixture/gate-before.log" 2>&1
 touch "$fixture/delay-docker"
 # Track timeout directly so teardown terminates the helper's process group.
@@ -351,21 +464,28 @@ done
 ((locked))
 status=0
 run_gate >"$fixture/gate-held.log" 2>&1 || status=$?
-[[ $status == 1 ]]
+[[ $status == 1 ]] || {
+  printf 'FAIL runner exclusion status=%s\n' "$status" >&2
+  exit 1
+}
 # Trace only this synthetic gate: prove exclusion happened at lock acquisition.
 rg -q '^\+ flock -w [1-5] -x 9$' "$fixture/gate-held.log"
 if flock -n "$STATE_DIR/lifecycle.lock" true; then
   echo 'FAIL cleanup released lock before gate exclusion assertion' >&2
   exit 1
 fi
+touch "$fixture/release-cleanup"
 wait "$cleanup_pid"
 cleanup_pid=''
 output=$(cat "$fixture/cleanup.log")
-assert_output 'pruned leftovers=0 builder_volumes=1 failed_builder_volumes=0'
-[[ $output != *'skipped reason='* ]]
+assert_output 'removed_builder_volume name=buildx_buildkit_held0_state'
+assert_complete
+assert_output 'image_min_age=1h images=1 reclaimed_bytes='
+assert_absent image exists localhost/qualification-lock-leaf:fixture
+[[ ! -e $STATE_DIR/cleanup-in-flight ]]
 assert_absent volume exists buildx_buildkit_held0_state
 p image exists localhost/qualification-recent-unused:fixture
 run_gate >"$fixture/gate-after.log" 2>&1
 echo 'PASS actual runner gate admitted before/after and excluded at flock during cleanup'
-echo 'PASS lock-test cleanup completed and removed previously held builder volume'
+echo 'PASS lock-test cleanup completed image phase, deleted eligible leaf and removed previously held builder volume'
 echo 'Qualification complete (synthetic admission/systemd/other engine; isolated vfs, no production lifecycle qualification)'

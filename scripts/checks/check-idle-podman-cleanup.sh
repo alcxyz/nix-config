@@ -5,6 +5,7 @@ source_file=${1:?cleanup helper path required}
 fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/state/runners/forgejo-podman-runner.service"
+chmod 700 "$fixture/state"
 printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service >"$fixture/state/runner-units"
 python3 - "$fixture/docker.sock" "$fixture/podman.sock" <<'PY'
 import socket
@@ -21,6 +22,8 @@ if [[ $1 == is-active ]]; then
   [[ ${MOCK_SERVICES_ACTIVE:-1} == 1 ]]
 elif [[ $1 == show && $2 == --property=FreezerState ]]; then
   printf '%s\n' "${MOCK_FREEZER:-running}"
+elif [[ $1 == show && $2 == --property=ExecMainStartTimestampMonotonic ]]; then
+  printf '12345\n'
 elif [[ $1 == show ]]; then
   if [[ ${*: -1} == "${MOCK_RUNNER_UNIT:-forgejo-actions-runner.service}" ]]; then
     printf 'ActiveState=%s\nSubState=%s\nMainPID=%s\nControlPID=%s\n%s\n' \
@@ -49,8 +52,10 @@ args="$*"
 printf '%s\n' "$args" >> "$MOCK_REQUESTS"
 method=GET
 previous=
+output=
 for arg in "$@"; do
   [[ $previous != -X ]] || method=$arg
+  [[ $previous != --output ]] || output=$arg
   previous=$arg
 done
 [[ ${MOCK_API_FAILURE:-0} != 1 ]] || exit 7
@@ -70,17 +75,29 @@ elif [[ $method == DELETE && $args == *'/v5.0.0/libpod/containers/'* ]]; then
   [[ ${MOCK_BUILDER_DELETE_FAILURE:-0} != 1 ]] || exit 22
   id=${args##*/libpod/containers/}
   printf 'leftover %s\n' "${id%%\?*}" >> "$MOCK_CALLS"
+  printf '[{"Id":"%s"}]' "${id%%\?*}" > "$output"
+  printf 200
 elif [[ $method == GET && $args == *'/libpod/volumes/json'* ]]; then
   printf '%s\n' "${MOCK_VOLUMES:-[]}"
 elif [[ $method == DELETE && $args == *'/libpod/volumes/'* ]]; then
   status=${MOCK_VOLUME_STATUS:-204}
   [[ $status != 204 ]] || printf 'volume %s\n' "${args##*/libpod/volumes/}" >> "$MOCK_CALLS"
+  if [[ $status == 204 ]]; then : > "$output"; else
+    printf '{"cause":"conflict","message":"in use","response":%s}' "$status" > "$output"
+  fi
   printf '%s' "$status"
 elif [[ $method == POST && $args == *'/libpod/containers/prune'* ]]; then
   printf 'containers\n' >> "$MOCK_CALLS"
-elif [[ $method == POST && $args == *'/v5.0.0/libpod/images/prune?all=true&filters='* ]]; then
+  printf '[]' > "$output"
+  printf 200
+elif [[ $method == GET && $args == *'/images/json?all=true'* ]]; then
+  default_images='[{"Id":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","Created":0,"Containers":0,"RepoTags":["old:tag"],"ParentId":""}]'
+  printf '%s\n' "${MOCK_IMAGES:-$default_images}"
+elif [[ $method == DELETE && $args == *'/images/'* ]]; then
+  [[ $args == *'?force=false&noprune=true' ]]
   printf 'images\n' >> "$MOCK_CALLS"
-  printf '%s\n' "${args##*filters=}" > "$MOCK_FILTERS"
+  printf '[{"Deleted":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]' > "$output"
+  printf 200
 else
   exit 2
 fi
@@ -94,7 +111,7 @@ chmod +x "$fixture/systemctl" "$fixture/df" "$fixture/curl" "$fixture/df-store-f
 export STATE_DIR="$fixture/state" SYSTEMCTL_BIN="$fixture/systemctl"
 export CURL_BIN="$fixture/curl" DF_BIN="$fixture/df" JQ_BIN=jq
 export DOCKER_SOCKET="$fixture/docker.sock" PODMAN_SOCKET="$fixture/podman.sock"
-export MOCK_CALLS="$fixture/calls" MOCK_FILTERS="$fixture/filters" TRIGGER_USED_PERCENT=70
+export MOCK_CALLS="$fixture/calls" TRIGGER_USED_PERCENT=70
 export MOCK_REQUESTS="$fixture/requests"
 export STORE_PATH="$fixture/store"
 a=$(printf 'a%.0s' {1..64})
@@ -113,11 +130,11 @@ expect_none() {
 : >"$MOCK_CALLS"
 output=$(run_cleanup)
 [[ $(cat "$MOCK_CALLS") == $'containers\nimages' ]]
-[[ $(cat "$MOCK_FILTERS") == '%7B%22until%22%3A%5B%2248h%22%5D%2C%22dangling%22%3A%5B%22false%22%5D%7D' ]]
+[[ ! -e $STATE_DIR/cleanup-in-flight ]]
 [[ $output == *'pruned leftovers=0 builder_volumes=0 failed_builder_volumes=0 image_min_age=48h'* ]]
 : >"$MOCK_CALLS"
 IMAGE_MIN_AGE=72h run_cleanup >/dev/null
-[[ $(cat "$MOCK_FILTERS") == *72h* ]]
+[[ ! -e $STATE_DIR/cleanup-in-flight ]]
 IMAGE_MIN_AGE=2d run_cleanup >/dev/null 2>&1 && exit 1
 [[ $(MOCK_AVAILABLE=31 run_cleanup) == 'skipped reason=below_trigger' ]]
 [[ $(MOCK_RUNNER_STATE=active run_cleanup) == 'skipped reason=runner_active unit=forgejo-actions-runner.service' ]]
@@ -131,7 +148,7 @@ expect_runner_blocked() {
   [[ ! -s $MOCK_CALLS && ! -s $MOCK_REQUESTS ]]
 }
 for unit in forgejo-actions-runner.service forgejo-podman-runner.service; do
-  for job_field in Job=123 '' Job=invalid Job=0 'Job= '; do
+  for job_field in Job=123 '' Job=invalid Job=0 'Job= ' $'Job=\nJob=123'; do
     MOCK_RUNNER_UNIT=$unit MOCK_RUNNER_JOB_FIELD=$job_field expect_runner_blocked
   done
   for state in activating deactivating; do
@@ -180,24 +197,22 @@ if output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"../x","Created":'"$old"',"State":"ru
 : >"$MOCK_CALLS"
 output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_STATUS=409 run_cleanup)
 [[ $output == *'kept_builder_volume name=buildx_buildkit_app0_state reason=in_use'* && $(cat "$MOCK_CALLS") == $'containers\nimages' ]]
-# Any other volume failure is reported distinctly and fails the run after the
-# prune has still run.
+# An unexpected volume failure is uncertain; no later destructive request runs.
 : >"$MOCK_CALLS"
-if output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_STATUS=500 run_cleanup); then exit 1; fi
-[[ $output == *'failed_builder_volume name=buildx_buildkit_app0_state status=500'* ]]
-[[ $output == *'failed_builder_volumes=1'* && $(cat "$MOCK_CALLS") == $'containers\nimages' ]]
+if output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_STATUS=500 run_cleanup 2>&1); then exit 1; fi
+[[ $output == *'uncertain_status kind=volume status=500'* ]]
+[[ -d $STATE_DIR/cleanup-in-flight && ! -s $MOCK_CALLS ]]
+if output=$(run_cleanup 2>&1); then exit 1; fi
+[[ $output == 'failed step=cleanup_in_flight' ]]
+rm -r "$STATE_DIR/cleanup-in-flight"
 # Work under the lifecycle lock stops before a step that would outlast the
 # budget runner start gates allow for.
 : >"$MOCK_CALLS"
 output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' LOCK_BUDGET_SECONDS=12 run_cleanup)
 [[ $output == 'skipped reason=lock_budget_exhausted step=remove_leftover name=buildx_buildkit_app0' && ! -s $MOCK_CALLS ]]
 output=$(LOCK_BUDGET_SECONDS=12 run_cleanup)
-[[ $output == 'skipped reason=lock_budget_exhausted step=prune_images' && $(cat "$MOCK_CALLS") == containers ]]
+[[ $output == 'skipped reason=lock_budget_exhausted step=remove_image' && $(cat "$MOCK_CALLS") == containers ]]
 LOCK_BUDGET_SECONDS=0 run_cleanup >/dev/null 2>&1 && exit 1
-# Ending early after a failed volume removal still fails the run.
-: >"$MOCK_CALLS"
-if output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_STATUS=500 LOCK_BUDGET_SECONDS=12 run_cleanup); then exit 1; fi
-[[ $output == *$'skipped reason=lock_budget_exhausted step=prune_images\nfailed_builder_volumes=1' ]]
 # Unreadable or invalid engine responses are not reported as live containers.
 [[ $(MOCK_API_FAILURE=1 run_cleanup) == 'skipped reason=engine_api_unavailable engine=docker' ]]
 [[ $(MOCK_PODMAN_CONTAINERS='not-json' run_cleanup) == 'skipped reason=engine_api_invalid engine=podman' ]]
@@ -209,7 +224,9 @@ if output=$(MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"}]' MOCK_VOLUME_S
 # A failed API call names its step.
 : >"$MOCK_CALLS"
 if output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' MOCK_BUILDER_DELETE_FAILURE=1 run_cleanup 2>&1 >/dev/null); then exit 1; fi
-[[ $output == 'failed step=remove_leftover name=buildx_buildkit_app0' ]]
+[[ $output == 'failed step=uncertain_request kind=container' ]]
+[[ -d $STATE_DIR/cleanup-in-flight ]]
+rm -r "$STATE_DIR/cleanup-in-flight"
 # The disk trigger is checked before waiting for the lifecycle lock.
 exec 8>"$fixture/state/lifecycle.lock"
 flock -x 8
@@ -250,3 +267,7 @@ for marker in owned pending teardown-required drain-pending resume-pending drain
 done
 rm "$fixture/state/runner-units"
 expect_none
+
+# The companion uses real UNIX HTTP/curl for completion ambiguity and signals.
+python3 "$(dirname "${BASH_SOURCE[0]}")/test-idle-podman-cleanup-fence.py" "$source_file"
+python3 "$(dirname "${BASH_SOURCE[0]}")/test-cleanup-fence-recovery.py" "$(dirname "$source_file")"

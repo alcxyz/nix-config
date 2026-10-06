@@ -35,11 +35,17 @@ class GuardTests(unittest.TestCase):
                   second_marker='', runner_units=None, persisted_units=None,
                   unknown_state=False, game_states=None, game_times=None,
                   game_start_skipped=False, disk_start_skipped=False,
-                  disk_values=None):
+                  disk_values=None, cleanup_fence=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
             state.mkdir()
+            if cleanup_fence is not None:
+                fence = state / 'cleanup-in-flight'
+                if cleanup_fence == 'symlink':
+                    fence.symlink_to(state / 'missing')
+                else:
+                    fence.write_text(cleanup_fence)
             if owned:
                 (state / 'owned').touch()
             if pending:
@@ -226,6 +232,25 @@ esac
             self.game_start_skipped = (state / 'game-start-skipped').exists()
             self.disk_start_skipped = (state / 'disk-start-skipped').exists()
             return result.returncode, actions, (state / 'owned').exists(), (state / 'pending').exists()
+
+    def test_cleanup_fence_withholds_both_owned_resumes_and_keeps_guard_healthy(self):
+        for fence in ('malformed', 'symlink'):
+            self.assertEqual(self.run_guard(
+                [0, 0], admission=True, drain_owned=True, runner_state='inactive',
+                runner_generation='0', drain_generation='123', cleanup_fence=fence,
+                second_runner={'active': 'inactive', 'generation': '0'},
+                second_marker='drain-owned', runner_units=[PRIMARY, SECOND]),
+                (0, [], False, False))
+            self.assertEqual(self.runner_unit_actions, [])
+            self.assertTrue(self.drain_owned and self.second_drain_owned)
+
+    def test_cleanup_fence_preserves_owned_thaw_and_manual_stop(self):
+        self.assertEqual(self.run_guard(
+            [0, 0], initial='frozen', owned=True, admission=True,
+            cleanup_fence='malformed', runner_state='inactive'),
+            (0, ['thaw'], False, False))
+        self.assertEqual(self.runner_unit_actions, [])
+        self.assertFalse(self.drain_owned)
 
     def test_hysteresis_freezes_and_thaws_aggregate(self):
         self.assertEqual(self.run_guard([2500, 2500, 1000, 0, 0]), (0, ['freeze', 'thaw'], False, False))
@@ -880,6 +905,13 @@ exit 2
     def test_guard_can_clear_resume_intent_before_start_gate_observes_it(self):
         self.assertEqual(self.run_gate(marker='resume-pending', clear_under_lock=True),
                          (0, False))
+
+    def test_cleanup_fence_blocks_both_runner_starts(self):
+        for unit in (PRIMARY, SECOND):
+            self.assertEqual(self.run_gate(
+                marker='cleanup-in-flight', runner_unit=unit,
+                runner_units=[PRIMARY, SECOND], persisted_units=[PRIMARY, SECOND]),
+                (1, True))
 
     def test_owned_freeze_is_skipped(self):
         self.assertEqual(self.run_gate(marker='owned'), (1, True))

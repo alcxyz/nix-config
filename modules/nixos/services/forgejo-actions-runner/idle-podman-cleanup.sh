@@ -22,6 +22,10 @@ stale_after_seconds=${STALE_AFTER_SECONDS:-10800}
 # Runner start gates wait up to 60 s for the lifecycle lock, so API work under
 # the lock stops starting new steps after this many seconds.
 lock_budget_seconds=${LOCK_BUDGET_SECONDS:-40}
+# A pass may make partial progress; never turn selection into a bulk prune.
+image_limit=${IMAGE_DELETE_LIMIT:-8}
+fence=$state_dir/cleanup-in-flight
+umask 077
 runner_units=(forgejo-actions-runner.service forgejo-podman-runner.service)
 # Buildx docker-container builders run as buildx_buildkit_<node> and keep their
 # BuildKit state in buildx_buildkit_<node>_state.
@@ -30,26 +34,30 @@ builder_volume_pattern='^buildx_buildkit_[A-Za-z0-9][A-Za-z0-9_.-]*_state$'
 # Podman serves its native API only under a version prefix.
 libpod=/v5.0.0/libpod
 
-# Every skipped run logs its first failed guard so the journal shows whether
-# the cleanup ever reaches its idle window. A skip after a failed volume
-# removal still fails the run.
-failed_volumes=0
+# Every skipped run logs its first failed guard. Uncertain mutations fail
+# immediately and retain the fence rather than attempting later work.
 skip() {
   printf 'skipped reason=%s\n' "$*"
-  ((failed_volumes == 0)) || printf 'failed_builder_volumes=%s\n' "$failed_volumes"
-  exit $((failed_volumes > 0))
+  exit 0
 }
 fail() {
   printf 'failed step=%s\n' "$*" >&2
   exit 1
 }
 
+# A retained completion fence is a failure even outside a cleanup window.
+# Check again under the lock to exclude a concurrent cleanup creating one.
+[[ ! -e $fence && ! -L $fence ]] || fail cleanup_in_flight
+
 [[ $trigger_used_percent =~ ^[1-9][0-9]?$ ]] || exit 1
 [[ $critical_free_bytes =~ ^[0-9]+$ && $critical_free_percent =~ ^[0-9]+$ ]] || exit 1
 [[ $image_min_age =~ ^[1-9][0-9]*h$ ]] || exit 1
 [[ $stale_after_seconds =~ ^[1-9][0-9]*$ ]] || exit 1
-[[ $lock_budget_seconds =~ ^[1-9][0-9]*$ ]] || exit 1
+[[ $lock_budget_seconds =~ ^[1-9][0-9]*$ ]] && ((lock_budget_seconds <= 40)) || exit 1
+[[ $image_limit =~ ^[1-9][0-9]*$ ]] && ((image_limit <= 8)) || exit 1
 [[ -d $state_dir && ! -L $state_dir ]] || skip aggregate_state_missing
+# The service runs as root. Isolated unprivileged fixtures own their own state.
+[[ $(stat -c '%u:%a' -- "$state_dir") == "$EUID:700" ]] || skip aggregate_state_untrusted
 
 available_bytes() {
   local path=$1 sample total available
@@ -71,6 +79,7 @@ read -r total available <<< "$sample"
 exec 9>"$state_dir/lifecycle.lock"
 flock -w 5 -x 9 || skip lifecycle_locked
 lock_deadline=$((SECONDS + lock_budget_seconds))
+[[ ! -e $fence && ! -L $fence ]] || fail cleanup_in_flight
 
 # The guard's registry and transition markers are the authority for this
 # aggregate. A configuration switch or unfinished transition must not turn
@@ -100,6 +109,7 @@ query_unit is-active --quiet forgejo-runner-podman.service || skip engine_inacti
 for unit in "${runner_units[@]}"; do
   metadata=$(query_unit show --property=ActiveState --property=SubState \
     --property=MainPID --property=ControlPID --property=Job "$unit") || skip "runner_unreadable unit=$unit"
+  [[ $(printf '%s\n' "$metadata" | wc -l) == 5 ]] || skip "runner_active unit=$unit"
   # systemctl renders the absence of a pending job as an empty Job= field.
   for expected in ActiveState=inactive SubState=dead MainPID=0 ControlPID=0 Job=; do
     printf '%s\n' "$metadata" | rg --quiet --fixed-strings --line-regexp "$expected" || skip "runner_active unit=$unit"
@@ -107,6 +117,17 @@ for unit in "${runner_units[@]}"; do
 done
 
 [[ -S $docker_socket && -S $podman_socket ]] || skip engine_socket_missing
+
+# Bind uncertain completion to the executions which could own the storage
+# worker. Clean shutdown can reset systemd's current generation to zero;
+# recovery separately requires terminal executions and positive empty cgroups.
+# PID changes and successful GET requests are not completion evidence.
+api_generations=''
+for unit in forgejo-runner-docker.service forgejo-runner-podman.service; do
+  generation=$(query_unit show --property=ExecMainStartTimestampMonotonic --value "$unit") || skip api_generation_unreadable
+  [[ $generation =~ ^[1-9][0-9]*$ ]] || skip api_generation_invalid
+  api_generations+="$unit $generation"$'\n'
+done
 
 # Each step starts only with enough lock budget left for its own timeout.
 require_budget() {
@@ -127,6 +148,63 @@ request() {
 }
 api() {
   request "$1" "$2" "$3" "${4:-5}" --fail
+}
+# A client deadline bounds this helper, not server-side storage mutation.
+# The atomic directory is an independent fence, including if its record is
+# incomplete. No EXIT/signal trap clears it. Only this request's validated
+# acknowledgement permits removal while the lifecycle lock is still held.
+destructive_request() {
+  local method=$1 path=$2 max_time=$3 kind=$4 id=${5:-} record identity response filter=''
+  [[ ! -e $fence && ! -L $fence ]] || fail cleanup_in_flight
+  mkdir -m 0700 -- "$fence" || fail cleanup_in_flight
+  identity=$(stat -c '%d:%i:%u:%a' -- "$fence") || fail cleanup_fence_record
+  record="cleanup-v2 $$ $BASHPID $RANDOM $method $path"
+  printf '%s\n' "$record" > "$fence/owner" || fail cleanup_fence_record
+  printf '%s' "$api_generations" > "$fence/api-generations" || fail cleanup_fence_record
+  response=$fence/response
+  request_status=$(request "$podman_socket" "$method" "$path" "$max_time" \
+    --output "$response" --write-out '%{http_code}') || fail "uncertain_request kind=$kind"
+  [[ -f $response && ! -L $response ]] || fail "uncertain_response kind=$kind"
+  (( $(stat -c '%s' -- "$response") <= 8388608 )) || fail "oversized_response kind=$kind"
+  case "$kind:$request_status" in
+    volume:204) [[ ! -s $response ]] || fail "invalid_response kind=$kind" ;;
+    volume:409 | image:409)
+      filter='type == "object" and .response == 409 and
+        (.message | type == "string" and length > 0) and (.cause | type == "string")'
+      ;;
+    container:200)
+      filter='type == "array" and length == 1 and all(.[];
+        type == "object" and .Id == $id and (.Err == null or .Err == ""))'
+      ;;
+    prune:200)
+      filter='type == "array" and all(.[]; type == "object" and
+        (.Id | type == "string" and test("^[0-9a-f]{64}$")) and
+        (.Size | type == "number" and . >= 0 and floor == .) and
+        (.Err == null or .Err == ""))'
+      ;;
+    image:200)
+      filter='type == "array" and length > 0 and
+        all(.[]; type == "object" and length == 1 and
+          ((has("Deleted") and (.Deleted == $id or .Deleted == ("sha256:" + $id))) or
+           (has("Untagged") and (.Untagged | type == "string" and length > 0)))) and
+        any(.[]; .Deleted == $id or .Deleted == ("sha256:" + $id))'
+      ;;
+    *) fail "uncertain_status kind=$kind status=$request_status" ;;
+  esac
+  if [[ -n ${filter:-} ]]; then
+    "$jq_bin" -se --arg id "$id" "length == 1 and (.[0] | $filter)" "$response" \
+      >/dev/null 2>&1 || fail "invalid_response kind=$kind"
+  fi
+  [[ -d $fence && ! -L $fence && -f $fence/owner && ! -L $fence/owner ]] || fail cleanup_fence_ownership
+  [[ $(stat -c '%d:%i:%u:%a' -- "$fence") == "$identity" &&
+     $(stat -c '%u:%a' -- "$fence/owner") == "$EUID:600" &&
+     $(cat "$fence/owner") == "$record" ]] || fail cleanup_fence_ownership
+  # Remove only the known files, never recursively remove uncertain state.
+  [[ -f $fence/api-generations && ! -L $fence/api-generations &&
+     $(stat -c '%u:%a' -- "$fence/api-generations") == "$EUID:600" &&
+     $(cat "$fence/api-generations") == "${api_generations%$'\n'}" ]] || fail cleanup_fence_ownership
+  rm -- "$response" "$fence/owner" "$fence/api-generations" || fail cleanup_fence_clear
+  rmdir -- "$fence" || fail cleanup_fence_clear
 }
 # Exited and dead containers are safe to prune. With both runners inactive and
 # the lifecycle lock held, no job can own a container, so two kinds of live
@@ -177,16 +255,15 @@ while read -r id kind name; do
   [[ $id =~ ^[0-9a-f]{64}$ ]] || fail "remove_leftover id=invalid"
   name=${name//[^A-Za-z0-9_.-]/_}
   require_budget 15 "remove_leftover name=$name"
-  api "$podman_socket" DELETE "$libpod/containers/$id?force=true&timeout=10" 15 >/dev/null ||
-    fail "remove_leftover name=$name"
+  destructive_request DELETE "$libpod/containers/$id?force=true&timeout=10" 15 container "$id"
   printf 'removed_leftover kind=%s name=%s\n' "$kind" "$name"
   removed_leftovers=$((removed_leftovers + 1))
 done <<< "$leftovers"
 safe_to_prune
 
 # Podman refuses, with 409, to remove a volume that a container still uses;
-# such a volume is kept and reported instead of forced. Any other failure is
-# reported separately and fails the run after the prune.
+# such a volume is kept and reported instead of forced. Any other failure
+# retains the fence and ends the run before another mutation.
 volumes=$(api "$podman_socket" GET "$libpod/volumes/json" |
   "$jq_bin" -r --arg pattern "$builder_volume_pattern" \
     '.[] | .Name | select(type == "string" and test($pattern))') || skip "engine_api_unavailable engine=podman"
@@ -194,18 +271,13 @@ removed_volumes=0
 for volume in $volumes; do
   [[ $volume =~ $builder_volume_pattern ]] || exit 1
   require_budget 10 "remove_builder_volume name=$volume"
-  status=$(request "$podman_socket" DELETE "$libpod/volumes/$volume" 10 \
-    --output /dev/null --write-out '%{http_code}') || status=unavailable
-  case $status in
-    200 | 204)
+  destructive_request DELETE "$libpod/volumes/$volume" 10 volume
+  case $request_status in
+    204)
       printf 'removed_builder_volume name=%s\n' "$volume"
       removed_volumes=$((removed_volumes + 1))
       ;;
     409) printf 'kept_builder_volume name=%s reason=in_use\n' "$volume" ;;
-    *)
-      printf 'failed_builder_volume name=%s status=%s\n' "$volume" "$status"
-      failed_volumes=$((failed_volumes + 1))
-      ;;
   esac
 done
 
@@ -214,15 +286,42 @@ done
 # Buildx builder state, or the local Podman storage CLI.
 safe_to_prune
 require_budget 10 prune_containers
-api "$podman_socket" POST "$libpod/containers/prune" 10 >/dev/null || fail prune_containers
+destructive_request POST "$libpod/containers/prune" 10 prune
 safe_to_prune
-image_filters=$("$jq_bin" -rn --arg age "$image_min_age" '{until: [$age], dangling: ["false"]} | tojson | @uri')
-require_budget 15 prune_images
-# The native API needs all=true to include unused tagged images; dangling=false
-# alone does not enable that behavior. Keep the age filter and reference checks.
-# Age is image creation time, not pull or last-use time: under pressure this can
-# also reclaim newly pulled, unused images published upstream long ago.
-api "$podman_socket" POST "$libpod/images/prune?all=true&filters=$image_filters" 15 >/dev/null || fail prune_images
+require_budget 5 list_images
+images=$(api "$podman_socket" GET '/images/json?all=true') || skip "engine_api_unavailable engine=podman"
+# Creation age is not pull or last-use age. Validate the complete snapshot,
+# skip referenced images, multiple tags and parents, then sort oldest/ID for
+# stable capped work. force=false/noprune=true retain server conflict checks
+# and prohibit recursive parent deletion. No image-prune/cache-mount endpoint.
+image_ids=$("$jq_bin" -sr --arg age "${image_min_age%h}" --argjson cap "$image_limit" '
+  def id: sub("^sha256:"; "");
+  ($age | tonumber * 3600) as $age |
+  if length != 1 or (.[0] | type != "array") then error("not an image list") else .[0] end |
+  if all(.[]; type == "object" and
+      (.Id | type == "string" and (id | test("^[0-9a-f]{64}$"))) and
+      (.Created | type == "number" and . >= 0 and floor == .) and
+      (.Containers | type == "number" and . >= 0 and floor == .) and
+      (.RepoTags | type == "array" and all(.[]; type == "string")) and
+      (.ParentId | type == "string" and (. == "" or (id | test("^[0-9a-f]{64}$")))))
+    then . else error("invalid image list") end |
+  if ([.[] | .Id | id] | unique | length) == length then . else error("duplicate images") end |
+  [.[] | .ParentId | id | select(. != "")] as $parents |
+  map(select(.Containers == 0 and .Created <= now - $age and (.RepoTags | length) <= 1) |
+    select((.Id | id) as $i | $parents | index($i) == null)) |
+  sort_by(.Created, .Id) | .[:$cap][] | .Id | id
+' <<< "$images") || skip "engine_api_invalid engine=podman"
+removed_images=0
+while read -r id; do
+  [[ -n $id ]] || continue
+  require_budget 15 remove_image
+  destructive_request DELETE "/images/$id?force=false&noprune=true" 15 image "$id"
+  if [[ $request_status == 200 ]]; then
+    removed_images=$((removed_images + 1))
+  else
+    printf 'kept_image id=%s reason=conflict\n' "$id"
+  fi
+done <<< "$image_ids"
 
 if sample=$(available_bytes "$store_path"); then
   read -r _ available_after <<< "$sample"
@@ -230,6 +329,5 @@ if sample=$(available_bytes "$store_path"); then
 else
   reclaimed=unknown
 fi
-printf 'pruned leftovers=%s builder_volumes=%s failed_builder_volumes=%s image_min_age=%s reclaimed_bytes=%s\n' \
-  "$removed_leftovers" "$removed_volumes" "$failed_volumes" "$image_min_age" "$reclaimed"
-((failed_volumes == 0))
+printf 'pruned leftovers=%s builder_volumes=%s failed_builder_volumes=0 image_min_age=%s images=%s reclaimed_bytes=%s\n' \
+  "$removed_leftovers" "$removed_volumes" "$image_min_age" "$removed_images" "$reclaimed"

@@ -48,6 +48,7 @@ exec 9>"$state_dir/lifecycle.lock"
 remaining=$((deadline - SECONDS))
 ((remaining > 0)) || exit 1
 flock -w "$remaining" -x 9 || exit 1
+[[ ! -e $state_dir/cleanup-in-flight && ! -L $state_dir/cleanup-in-flight ]] || exit 1
 
 if [[ -e $state_dir/runner-units ]]; then
   [[ $(cat "$state_dir/runner-units") == "$(printf '%s\n' "${runner_units[@]}")" ]] || exit 1

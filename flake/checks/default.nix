@@ -111,6 +111,8 @@ in {
 
   forgejo-podman-canary-contract = import ./forgejo-podman-canary.nix {inherit lib pkgs;};
 
+  forgejo-cleanup-completion-fence-lifecycle = import ./forgejo-cleanup-fence-vm.nix {inherit pkgs;};
+
   forgejo-orphan-monitor-credential-isolation = import ./forgejo-orphan-monitor-vm.nix {inherit pkgs;};
 
   forgejo-runner-pool-contract = let

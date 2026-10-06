@@ -8,11 +8,12 @@ else let
   primary = "forgejo-actions-runner.service";
   canary = "forgejo-podman-runner.service";
   both = "${primary} ${canary}";
-  evaluate = enabled: labels:
+  evaluate = enabled: labels: extra:
     (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       system = pkgs.stdenv.hostPlatform.system;
       specialArgs.inputs = {};
       modules = [
+        {config = extra;}
         ../../modules/nixos/services/forgejo-actions-runner
         ({lib, ...}: {
           options.sops.secrets = lib.mkOption {
@@ -42,10 +43,40 @@ else let
       ];
     }).config;
   validLabels = ["podman-canary:docker://example.invalid/podman:latest"];
-  disabled = evaluate false validLabels;
-  enabled = evaluate true validLabels;
-  overlap = evaluate true ["docker-primary:docker://example.invalid/different-image:latest"];
-  hostLabel = evaluate true ["podman-canary:host"];
+  disabled = evaluate false validLabels {};
+  enabled = evaluate true validLabels {};
+  overlap = evaluate true ["docker-primary:docker://example.invalid/different-image:latest"] {};
+  hostLabel = evaluate true ["podman-canary:host"] {};
+  cleanupConfig = {
+    services.forgejo-actions-runner = {
+      idlePodmanCleanup.enable = true;
+      ioPressureGuard.diskSpace.enable = true;
+    };
+  };
+  cleanupOnly = evaluate true validLabels cleanupConfig;
+  monitoredCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
+    services.storage-health-monitor = {
+      enable = true;
+      pingBaseFile = "/run/fixture-unused-ping";
+    };
+  });
+  hourlyCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
+    services.forgejo-actions-runner.idlePodmanCleanup = {
+      interval = "1h";
+      healthMaximumAgeSeconds = 7200;
+    };
+    services.storage-health-monitor = {
+      enable = true;
+      pingBaseFile = "/run/fixture-unused-ping";
+    };
+  });
+  monitorOnly = evaluate true validLabels {
+    services.storage-health-monitor = {
+      enable = true;
+      pingBaseFile = "/run/fixture-unused-ping";
+    };
+  };
+  cleanupUnits = config: builtins.filter (unit: unit.name == "forgejo-idle-podman-cleanup.service") config.services.storage-health-monitor.units;
   unit = enabled.systemd.services.forgejo-podman-runner;
   api = enabled.systemd.services.forgejo-runner-podman;
   socket = enabled.systemd.sockets.forgejo-runner-podman;
@@ -56,6 +87,23 @@ else let
     lib.any (entry: !entry.assertion && entry.message == message) config.assertions;
   gateSource = ../../modules/nixos/services/forgejo-actions-runner/podman-api-start-gate.sh;
 in
+  assert cleanupUnits cleanupOnly == [];
+  assert cleanupUnits monitorOnly == [];
+  assert cleanupUnits monitoredCleanup
+  == [
+    {
+      name = "forgejo-idle-podman-cleanup.service";
+      mode = "recent-success";
+      maximumAgeSeconds = 1800;
+      allowPendingFirstTimer = true;
+    }
+  ];
+  assert builtins.length monitoredCleanup.systemd.services.forgejo-idle-podman-cleanup.serviceConfig.ExecStopPost == 1;
+  assert (lib.head (cleanupUnits hourlyCleanup)).maximumAgeSeconds == 7200;
+  assert hourlyCleanup.systemd.timers.forgejo-idle-podman-cleanup.timerConfig.OnUnitActiveSec == "1h";
+  assert !(cleanupOnly.systemd.services.forgejo-idle-podman-cleanup.serviceConfig ? ExecStopPost);
+  assert !failedAssertion monitoredCleanup "storage-health-monitor recent-success units must be root-run oneshot services that become inactive after completion";
+  assert !failedAssertion monitoredCleanup "Idle Podman cleanup requires the isolated Docker and Podman runners with disk-space admission control.";
   assert !(disabled.systemd.services ? forgejo-podman-runner);
   assert !(disabled.systemd.services ? forgejo-runner-podman);
   assert !(disabled.systemd.sockets ? forgejo-runner-podman);
@@ -84,6 +132,10 @@ in
   assert lib.hasPrefix "+" dockerRunner.serviceConfig.ExecCondition;
   assert lib.hasPrefix "+" unit.serviceConfig.ExecCondition;
   assert lib.hasPrefix "+" api.serviceConfig.ExecCondition;
+  assert lib.hasPrefix "+" enabled.systemd.services.forgejo-runner-docker.serviceConfig.ExecCondition;
+  assert lib.hasPrefix "+" disabled.systemd.services.forgejo-runner-docker.serviceConfig.ExecCondition;
+  assert disabled.systemd.services.forgejo-runner-docker.environment.PODMAN_ADMISSION == "0";
+  assert !(lib.elem "forgejo-runner-aggregate-lifecycle.service" disabled.systemd.services.forgejo-runner-docker.after);
   assert !enabled.virtualisation.podman.dockerSocket.enable;
   assert !(unit.environment ? FIXTURE_SECRET);
   assert !(lib.hasInfix "FIXTURE_SECRET" unit.preStart);
@@ -97,6 +149,7 @@ in
       trap 'rm -rf "$fixture"' EXIT
       state="$fixture/state"
       mkdir -p "$state/runners/${canary}"
+      chmod 700 "$state"
       printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} > "$state/runner-units"
       cat > "$fixture/systemctl" <<'SH'
       #!${pkgs.bash}/bin/bash
@@ -120,11 +173,14 @@ in
       printf '%s\n' ${lib.escapeShellArg primary} > "$state/runner-units"
       if run_gate; then exit 1; fi
       printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} > "$state/runner-units"
-      for marker in owned pending teardown-required; do
+      for marker in owned pending teardown-required cleanup-in-flight; do
         touch "$state/$marker"
         if run_gate; then exit 1; fi
         rm "$state/$marker"
       done
+      ln -s "$state/missing" "$state/cleanup-in-flight"
+      if run_gate; then exit 1; fi
+      rm "$state/cleanup-in-flight"
       if MOCK_GUARD_ACTIVE=0 run_gate; then exit 1; fi
       if MOCK_FREEZER=frozen run_gate; then exit 1; fi
       run_gate
