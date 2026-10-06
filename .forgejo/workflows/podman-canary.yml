@@ -17,6 +17,8 @@ jobs:
       web:
         image: docker.io/library/httpd:2.4-alpine
     steps:
+      - name: Install qualification tools
+        run: apk add --no-cache bash coreutils
       - name: Job API, service DNS and nested container
         run: |
           set -eu
@@ -33,21 +35,180 @@ jobs:
           set -eu
           builder="canary-${{ forgejo.run_id }}-${{ forgejo.run_attempt }}"
           image="podman-canary:${{ forgejo.run_id }}-${{ forgejo.run_attempt }}"
+          work=$(mktemp -d)
           cleanup() {
-            docker buildx rm --force "$builder" >/dev/null 2>&1 || true
-            docker image rm "$image" >/dev/null 2>&1 || true
+            status=$? cleanup_failed=0
+            timeout -k 2s 15s docker buildx rm --force "$builder" >/dev/null 2>&1 || cleanup_failed=1
+            timeout -k 2s 10s docker image rm "$image" >/dev/null 2>&1 || cleanup_failed=1
+            rm -rf "$work"
+            if [ "$cleanup_failed" -ne 0 ]; then
+              echo 'Fixture builder/image cleanup failed' >&2
+              if [ "$status" -eq 0 ]; then exit 1; fi
+            fi
           }
           trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
           docker buildx create --name "$builder" --driver docker-container \
             --driver-opt cgroup-parent=/forgejobuilds.slice/forgejo-runner-podman.service \
             --driver-opt image=docker.io/moby/buildkit:buildx-stable-1 \
             --driver-opt default-load=true
           export BUILDX_BUILDER="$builder"
           docker buildx inspect --bootstrap
-          mkdir -p /tmp/canary-build
-          printf 'FROM docker.io/library/alpine:3.21\nRUN echo canary-build-ok > /result\n' > /tmp/canary-build/Dockerfile
-          docker build --progress=plain -t "$image" /tmp/canary-build
+          printf 'FROM docker.io/library/alpine:3.21\nRUN echo canary-build-ok > /result\n' > "$work/Dockerfile"
+          docker buildx build --load --progress=plain -t "$image" "$work"
           test "$(docker run --rm "$image" cat /result)" = canary-build-ok
+      - name: Bounded live logs and exact container statuses
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="canary-logs-${{ forgejo.run_id }}-${{ forgejo.run_attempt }}"
+          image="docker.io/library/alpine:3.21"
+          work=$(mktemp -d)
+          follower_pid=
+          containers=()
+          cleanup() {
+            local status=$? cleanup_failed=0
+            if [ -n "$follower_pid" ]; then
+              kill -TERM "$follower_pid" 2>/dev/null || true
+              wait "$follower_pid" 2>/dev/null || true
+            fi
+            for container in "${containers[@]}"; do
+              # Kill first: Podman force-removal may spend the whole deadline
+              # waiting for a shell fixture to stop gracefully.
+              timeout -k 2s 10s docker kill "$container" >/dev/null 2>&1 || true
+              timeout -k 2s 10s docker rm -f "$container" >/dev/null 2>&1 || cleanup_failed=1
+            done
+            rm -rf "$work"
+            if [ "$cleanup_failed" -ne 0 ]; then
+              echo 'Fixture container cleanup failed' >&2
+              if [ "$status" -eq 0 ]; then exit 1; fi
+            fi
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          echo "Engine default log driver: $(timeout -k 2s 10s docker info --format '{{.LoggingDriver}}')"
+
+          has_marker() {
+            local line
+            while IFS= read -r line; do
+              if [ "$line" = "$2" ]; then return 0; fi
+            done < "$1"
+            return 1
+          }
+
+          finish_logs() {
+            local log=$1 follower_status forced=0
+            # Give post-exit records time to arrive before stopping a stream
+            # that Podman leaves open. Killing immediately can hide late logs.
+            for _ in {1..10}; do
+              if ! kill -0 "$follower_pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if kill -0 "$follower_pid" 2>/dev/null; then
+              forced=1
+              kill -TERM "$follower_pid" 2>/dev/null || true
+            fi
+            if wait "$follower_pid"; then follower_status=0; else follower_status=$?; fi
+            follower_pid=
+            cat "$log"
+            # timeout forwards TERM to its direct child and escalates after
+            # two seconds. Other follower failures must fail qualification.
+            if [ "$follower_status" -eq 0 ]; then return 0; fi
+            if [ "$forced" -eq 1 ]; then
+              case "$follower_status" in 143|137) return 0 ;; esac
+            fi
+            echo "Log follower failed: $follower_status" >&2
+            return 1
+          }
+
+          run_logged() {
+            local container=$1 budget=$2 release=$3 wait_status status
+            local log="$work/$container.log" result="$work/$container.status"
+            : > "$log"
+            # Generic application pattern: start without attaching, stream logs
+            # concurrently, bound wait, drain logs, then return container status.
+            echo "Starting log fixture $container"
+            timeout -k 2s 10s docker start "$container" >/dev/null || return 1
+            echo "Following logs for $container"
+            # timeout owns/reaps the Docker client directly. A killed shell
+            # pipeline can orphan its children under a container PID 1.
+            timeout --foreground -k 2s 90s docker logs -f "$container" > "$log" 2>&1 &
+            follower_pid=$!
+            for _ in {1..10}; do
+              if has_marker "$log" "early-$container"; then break; fi
+              sleep 1
+            done
+            if ! has_marker "$log" "early-$container"; then
+              echo "No early log record for $container" >&2
+              cat "$log" >&2
+              return 1
+            fi
+            cat "$log"
+            echo "Inspecting running log fixture $container"
+            test "$(timeout -k 2s 10s docker inspect --format '{{.State.Running}}' "$container")" = true || return 1
+            echo "Early output observed while $container is running"
+            if [ "$release" = yes ]; then
+              echo "Releasing log fixture $container"
+              timeout -k 2s 10s docker exec "$container" touch /release || return 1
+            fi
+            echo "Waiting up to $budget for $container"
+            if timeout -k 2s "$budget" docker wait "$container" > "$result"; then
+              status=$(cat "$result")
+              case "$status" in
+                ''|*[!0-9]*) echo 'Invalid container status' >&2; return 1 ;;
+              esac
+              test "$status" -le 255 || return 1
+            else
+              wait_status=$?
+              echo "Bounded container wait failed: $wait_status" >&2
+              timeout -k 2s 10s docker kill "$container" >/dev/null || return 1
+              finish_logs "$log" || return 1
+              has_marker "$log" "early-$container" || return 1
+              return "$wait_status"
+            fi
+            finish_logs "$log" || return 1
+            has_marker "$log" "late-$container" || return 1
+            has_marker "$log" "late-stderr-$container" || return 1
+            return "$status"
+          }
+
+          for status in 0 37; do
+            container="$prefix-exit-$status"
+            containers+=("$container")
+            # Positional arguments expand inside the fixture container.
+            echo "Creating log fixture $container"
+            # shellcheck disable=SC2016
+            # Select retrievable file logs explicitly for this test container.
+            # Podman accepts json-file as its Docker-compatible k8s-file alias.
+            timeout -k 2s 10s docker create --log-driver json-file --name "$container" "$image" sh -ec '
+              echo "early-$1"
+              while [ ! -e /release ]; do sleep 1; done
+              echo "late-$1"
+              echo "late-stderr-$1" >&2
+              exit "$2"
+            ' _ "$container" "$status" >/dev/null
+            if run_logged "$container" 20s yes; then actual=0; else actual=$?; fi
+            test "$actual" -eq "$status"
+            echo "Preserved container status $actual with complete late output"
+          done
+
+          container="$prefix-stuck"
+          containers+=("$container")
+          # Positional arguments expand inside the fixture container.
+          echo "Creating log fixture $container"
+          # shellcheck disable=SC2016
+          timeout -k 2s 10s docker create --log-driver json-file --name "$container" "$image" sh -ec '
+            echo "early-$1"
+            while :; do sleep 1; done
+          ' _ "$container" >/dev/null
+          started=$SECONDS
+          if run_logged "$container" 5s no; then actual=0; else actual=$?; fi
+          test "$actual" -eq 124
+          test "$((SECONDS - started))" -lt 60
+          echo "Stuck container returned bounded timeout 124 with visible logs"
       - name: Optional cancellation window
         env:
           HOLD_SECONDS: ${{ inputs.hold_seconds || '0' }}

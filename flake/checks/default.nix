@@ -413,6 +413,10 @@ in {
     python3 scripts/checks/test-lock-promoted-packages.py
   '';
 
+  podman-canary-log-contract = mkRepoCheck "podman-canary-log-contract" [pkgs.python3 pkgs.bash pkgs.coreutils] ''
+    python3 scripts/checks/test-podman-canary-logs.py
+  '';
+
   ai-package-stack-verifier-contract = mkRepoCheck "ai-package-stack-verifier-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.git pkgs.gnugrep pkgs.python3 pkgs.ripgrep] ''
     publisher=scripts/forgejo/publish-nix-packages-lock.sh
     bash scripts/checks/test-ai-package-stack-verifier.sh

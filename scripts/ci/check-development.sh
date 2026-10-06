@@ -40,6 +40,7 @@ python3 scripts/checks/test-commit-status.py
 python3 scripts/checks/test-publish-dms-plugins-lock.py
 python3 scripts/checks/test-merge-dms-plugins-lock.py
 python3 scripts/checks/test-development-ci.py
+python3 scripts/checks/test-podman-canary-logs.py
 python3 scripts/checks/test-local-package-promotion.py
 python3 scripts/checks/test-lock-promoted-packages.py
 python3 scripts/checks/test-wolf-context-package.py
