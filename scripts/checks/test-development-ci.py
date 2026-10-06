@@ -70,6 +70,11 @@ class DevelopmentCI(unittest.TestCase):
             '#!/bin/sh\n'
             'name=$(basename "$0")\n'
             'printf "%s:%s\\n" "$name" "$*" >> "$CALLS"\n'
+            'if [ "$name" = shellcheck ]; then\n'
+            '  for argument in "$@"; do\n'
+            '    if [ "$argument" = - ]; then cat > /dev/null; fi\n'
+            '  done\n'
+            'fi\n'
             'if [ "${FAIL_TOOL:-}" = "$name" ]; then exit 23; fi\n'
         )
         tool.chmod(0o755)
@@ -90,6 +95,7 @@ class DevelopmentCI(unittest.TestCase):
             },
             text=True,
             capture_output=True,
+            timeout=30,
         )
 
     def test_gate_runs_fixed_public_checks_without_nix(self):
@@ -108,6 +114,14 @@ class DevelopmentCI(unittest.TestCase):
         self.assertIn("python3:scripts/checks/test-merge-dms-plugins-lock.py", calls)
         self.assertIn("python3:scripts/checks/test-wolf-context-package.py", calls)
         self.assertFalse(any(call.startswith("nix:") for call in calls))
+
+    def test_shellcheck_stdin_larger_than_pipe_buffer_is_consumed(self):
+        # Exceed pipe capacity so an early-exiting stub reliably breaks the writer.
+        guard = self.repository / "users/alc/linux/xyz/desktop-scripts/game-window-geometry-guard.sh"
+        guard.write_text("# fixture\n" * (1024 * 1024))
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("shellcheck:--shell=bash -", self.calls.read_text().splitlines())
 
     def test_tool_failure_stops_later_checks(self):
         result = self.run_gate(FAIL_TOOL="shellcheck")
