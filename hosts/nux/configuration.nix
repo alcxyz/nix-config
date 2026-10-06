@@ -139,6 +139,9 @@ in {
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
       ];
+      # nux resolves through NetBird DNS, whose oversized UDP answers
+      # aardvark-dns cannot decode; jobs use the LAN resolvers instead.
+      dnsServers = ["192.168.1.3" "192.168.1.4"];
     };
     resourcePolicy.enable = true;
     name = "nux";

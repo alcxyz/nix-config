@@ -99,6 +99,10 @@
       exit 1
     '';
   };
+  containersConf = pkgs.writeText "forgejo-podman-containers.conf" ''
+    [containers]
+    dns_servers = [${lib.concatMapStringsSep ", " builtins.toJSON canary.dnsServers}]
+  '';
   literalEnvScript = lib.concatLines (
     lib.mapAttrsToList (name: value: ''
       printf '%s=%s\n' ${lib.escapeShellArg name} ${lib.escapeShellArg value} >> "$env_tmp"
@@ -159,6 +163,16 @@ in {
       type = lib.types.attrsOf lib.types.str;
       default = {};
       description = "Literal canary job environment. Existing runner job secrets are never inherited.";
+    };
+    dnsServers = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      example = ["192.0.2.53"];
+      description = ''
+        Upstream resolvers for job containers. Aardvark forwards container
+        lookups to these instead of the host's resolv.conf; empty keeps the
+        host's resolvers.
+      '';
     };
     extraPackages = lib.mkOption {
       type = lib.types.listOf lib.types.package;
@@ -309,6 +323,7 @@ in {
         HOME = builderState;
         XDG_RUNTIME_DIR = builderRuntime;
         RUNNER_UNITS = "forgejo-actions-runner.service ${runnerUnit}";
+        CONTAINERS_CONF_OVERRIDE = lib.mkIf (canary.dnsServers != []) "${containersConf}";
         # Netavark must spawn DNS inside this delegated service. systemd-run
         # would create a user scope outside the aggregate resource boundary.
         PATH = lib.mkForce (
