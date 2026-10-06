@@ -470,6 +470,9 @@ in {
             # headless environment. Systemd stop operations suppress restarts.
             Restart = "always";
             RestartSec = "10s";
+            # t3 serve exits 130 when systemd stops it with SIGTERM; a normal
+            # stop or restart must not leave the unit failed.
+            SuccessExitStatus = "130";
             StandardOutput = "journal";
             StandardError = "journal";
           };
