@@ -191,7 +191,7 @@ case "$*" in
   'is-active --quiet '*) exit 0 ;;
   'show --property=FreezerState --value '*) echo running ;;
   'show --property=ActiveState --property=SubState --property=MainPID --property=ControlPID --property=Job '*)
-    printf 'ActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\nJob=0\n' ;;
+    printf 'ActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\nJob=\n' ;;
   *) exit 2 ;;
 esac
 MOCK

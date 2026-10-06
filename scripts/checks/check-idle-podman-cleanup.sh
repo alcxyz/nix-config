@@ -22,8 +22,13 @@ if [[ $1 == is-active ]]; then
 elif [[ $1 == show && $2 == --property=FreezerState ]]; then
   printf '%s\n' "${MOCK_FREEZER:-running}"
 elif [[ $1 == show ]]; then
-  printf 'ActiveState=%s\nSubState=%s\nMainPID=%s\nControlPID=0\nJob=0\n' \
-    "${MOCK_RUNNER_STATE:-inactive}" "${MOCK_RUNNER_SUBSTATE:-dead}" "${MOCK_RUNNER_PID:-0}"
+  if [[ ${*: -1} == "${MOCK_RUNNER_UNIT:-forgejo-actions-runner.service}" ]]; then
+    printf 'ActiveState=%s\nSubState=%s\nMainPID=%s\nControlPID=%s\n%s\n' \
+      "${MOCK_RUNNER_STATE:-inactive}" "${MOCK_RUNNER_SUBSTATE:-dead}" \
+      "${MOCK_RUNNER_PID:-0}" "${MOCK_RUNNER_CONTROL_PID:-0}" "${MOCK_RUNNER_JOB_FIELD-Job=}"
+  else
+    printf 'ActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\nJob=\n'
+  fi
 else
   exit 2
 fi
@@ -41,6 +46,7 @@ cat >"$fixture/curl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 args="$*"
+printf '%s\n' "$args" >> "$MOCK_REQUESTS"
 method=GET
 previous=
 for arg in "$@"; do
@@ -89,6 +95,7 @@ export STATE_DIR="$fixture/state" SYSTEMCTL_BIN="$fixture/systemctl"
 export CURL_BIN="$fixture/curl" DF_BIN="$fixture/df" JQ_BIN=jq
 export DOCKER_SOCKET="$fixture/docker.sock" PODMAN_SOCKET="$fixture/podman.sock"
 export MOCK_CALLS="$fixture/calls" MOCK_FILTERS="$fixture/filters" TRIGGER_USED_PERCENT=70
+export MOCK_REQUESTS="$fixture/requests"
 export STORE_PATH="$fixture/store"
 a=$(printf 'a%.0s' {1..64})
 b=$(printf 'b%.0s' {1..64})
@@ -114,6 +121,26 @@ IMAGE_MIN_AGE=72h run_cleanup >/dev/null
 IMAGE_MIN_AGE=2d run_cleanup >/dev/null 2>&1 && exit 1
 [[ $(MOCK_AVAILABLE=31 run_cleanup) == 'skipped reason=below_trigger' ]]
 [[ $(MOCK_RUNNER_STATE=active run_cleanup) == 'skipped reason=runner_active unit=forgejo-actions-runner.service' ]]
+
+# Both runners must be fully stopped with an explicitly empty Job= field.
+# Reject pending, missing and malformed fields before even reading an engine API.
+expect_runner_blocked() {
+  : >"$MOCK_CALLS"
+  : >"$MOCK_REQUESTS"
+  [[ $(run_cleanup) == "skipped reason=runner_active unit=$MOCK_RUNNER_UNIT" ]]
+  [[ ! -s $MOCK_CALLS && ! -s $MOCK_REQUESTS ]]
+}
+for unit in forgejo-actions-runner.service forgejo-podman-runner.service; do
+  for job_field in Job=123 '' Job=invalid Job=0 'Job= '; do
+    MOCK_RUNNER_UNIT=$unit MOCK_RUNNER_JOB_FIELD=$job_field expect_runner_blocked
+  done
+  for state in activating deactivating; do
+    MOCK_RUNNER_UNIT=$unit MOCK_RUNNER_STATE=$state expect_runner_blocked
+  done
+  MOCK_RUNNER_UNIT=$unit MOCK_RUNNER_SUBSTATE=stop expect_runner_blocked
+  MOCK_RUNNER_UNIT=$unit MOCK_RUNNER_PID=42 expect_runner_blocked
+  MOCK_RUNNER_UNIT=$unit MOCK_RUNNER_CONTROL_PID=42 expect_runner_blocked
+done
 
 # Leaked Buildx builders, running or stopped, are removed with their state
 # volumes before the ordinary prune.

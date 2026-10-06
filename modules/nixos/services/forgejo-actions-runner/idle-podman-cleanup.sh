@@ -100,7 +100,8 @@ query_unit is-active --quiet forgejo-runner-podman.service || skip engine_inacti
 for unit in "${runner_units[@]}"; do
   metadata=$(query_unit show --property=ActiveState --property=SubState \
     --property=MainPID --property=ControlPID --property=Job "$unit") || skip "runner_unreadable unit=$unit"
-  for expected in ActiveState=inactive SubState=dead MainPID=0 ControlPID=0 Job=0; do
+  # systemctl renders the absence of a pending job as an empty Job= field.
+  for expected in ActiveState=inactive SubState=dead MainPID=0 ControlPID=0 Job=; do
     printf '%s\n' "$metadata" | rg --quiet --fixed-strings --line-regexp "$expected" || skip "runner_active unit=$unit"
   done
 done
