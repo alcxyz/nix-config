@@ -352,6 +352,12 @@ class ClassifyTests(unittest.TestCase):
             MODULE.kubectl_full(address, ["get", "node", MODULE.NODE])
         self.assertIn(f"https://[{address}]:6443", capture.call_args.args[0])
 
+    def test_kubectl_cache_stays_in_the_runtime_directory(self):
+        with mock.patch.object(MODULE, "capture_full", return_value=(0, "", "")) as capture:
+            MODULE.kubectl_full("192.0.2.1", ["get", "node", MODULE.NODE])
+        args = capture.call_args.args[0]
+        self.assertEqual(args[args.index("--cache-dir") + 1], os.path.join(MODULE.RUN_DIR, "kube-cache"))
+
     def test_classification(self):
         self.assertEqual(self.classify(probes(ready={"p2"})), MODULE.HEALTHY)
         self.assertEqual(self.classify(NOT_READY), MODULE.UNHEALTHY)

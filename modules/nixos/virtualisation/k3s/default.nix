@@ -190,7 +190,7 @@ in {
           "observe"
           "enforce"
         ];
-        default = "observe";
+        default = "enforce";
         description = "observe only logs fencing decisions; enforce acts on them.";
       };
 

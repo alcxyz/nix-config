@@ -140,6 +140,9 @@ K3S = os.environ.get("K3S_BIN", "k3s")
 RUN_DIR = os.environ.get("RUNTIME_DIRECTORY", "/run/node-self-fence")
 MARKER = os.environ.get("FENCE_MARKER", "/var/lib/node-self-fence/fenced")
 HISTORY = os.path.join(RUN_DIR, "history.json")
+# kubectl rewrites its HTTP cache on every call; keep it in tmpfs so polling
+# does not write to the disk every few seconds.
+KUBE_CACHE = os.path.join(RUN_DIR, "kube-cache")
 BOOT_ID = "/proc/sys/kernel/random/boot_id"
 PANIC = "/proc/sys/kernel/panic"
 SYSRQ = "/proc/sysrq-trigger"
@@ -209,7 +212,7 @@ def kubectl_full(server: str, args: list[str]) -> tuple[int, str, str]:
     host = f"[{server}]" if ":" in server else server
     return capture_full(
         [K3S, "kubectl", "--kubeconfig", KUBECONFIG, "--server", f"https://{host}:{API_PORT}",
-         "--request-timeout=3s", *args],
+         "--request-timeout=3s", "--cache-dir", KUBE_CACHE, *args],
         timeout=6,
     )
 
