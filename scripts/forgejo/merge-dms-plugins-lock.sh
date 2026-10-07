@@ -87,8 +87,10 @@ if [[ "$(jq -r '.head.sha' "$response")" != "$head_sha" ||
   exit 1
 fi
 
+# Retain the reusable candidate branch. Forgejo checks optional branch deletion
+# separately after merging, which can fail even when the guarded merge succeeds.
 jq -n --arg title "chore(dms): update verified plugin lock (#${pr_number})" --arg head "$head_sha" \
-  '{Do: "squash", MergeTitleField: $title, MergeMessageField: "Verified lock update and exact-head validation.", head_commit_id: $head, delete_branch_after_merge: true}' \
+  '{Do: "squash", MergeTitleField: $title, MergeMessageField: "Verified lock update and exact-head validation.", head_commit_id: $head, delete_branch_after_merge: false}' \
   >"$payload"
 status=$(curl -sS -K "$curl_config" -H 'Accept: application/json' -H 'Content-Type: application/json' \
   -o "$response" -w '%{http_code}' -X POST --data @"$payload" "${api_base}/pulls/${pr_number}/merge")

@@ -50,6 +50,7 @@ config = pathlib.Path(args[args.index("-K") + 1])
 assert config.stat().st_mode & 0o777 == 0o600
 assert os.environ["TEST_TOKEN"] in config.read_text()
 url = next(arg for arg in args if arg.startswith("https://"))
+http_status = "200"
 head = os.environ.get("TEST_PR_HEAD") or os.environ["TEST_HEAD"]
 base = os.environ.get("TEST_PR_BASE") or os.environ["TEST_BASE"]
 pr = {"number": 47, "mergeable": True, "merge_base": base,
@@ -78,12 +79,14 @@ elif url.endswith("/pulls/47/merge"):
     payload = json.loads(pathlib.Path(args[args.index("--data") + 1][1:]).read_text())
     assert payload["head_commit_id"] == os.environ["TEST_HEAD"]
     pathlib.Path(os.environ["TEST_MERGE_MARKER"]).touch()
+    if os.environ.get("TEST_REJECT_BRANCH_DELETION") == "1" and payload.get("delete_branch_after_merge"):
+        http_status = "403"
     body = {}
 else:
     raise AssertionError(url)
 pathlib.Path(args[args.index("-o") + 1]).write_text(json.dumps(body))
 if "-w" in args:
-    print("200")
+    print(http_status)
 ''')
         curl.chmod(0o700)
         self.marker = self.root / "merged"
@@ -127,6 +130,13 @@ if "-w" in args:
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertFalse(self.marker.exists())
                     self.env[key] = "success"
+
+    def test_merge_succeeds_without_optional_branch_deletion_permission(self):
+        self.env["TEST_REJECT_BRANCH_DELETION"] = "1"
+        result = self.run_queue()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.marker.exists())
+        self.assertIn("Merged verified DMS lock update PR", result.stdout)
 
     def test_failed_build_or_validation_never_merges(self):
         for key in ("TEST_BUILD_STATUS", "TEST_VALIDATION_STATUS"):
