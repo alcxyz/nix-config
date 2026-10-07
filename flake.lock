@@ -281,11 +281,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1791111670,
-        "narHash": "sha256-IDKnetqO5A2xqhFeFLDfGrJ59oDGfKuQWq6Syx4CnVA=",
+        "lastModified": 1791287536,
+        "narHash": "sha256-ILXjREHgmiNwdSzoKn81Ruys5YpyueZqDAkiGkckQSU=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "a77be7e70eda9d536b5ed17a37f8712e35c530e1",
+        "rev": "ec7cac972fe0623fe9d3e0fa651d26c8167b76b8",
         "type": "github"
       },
       "original": {
@@ -318,11 +318,11 @@
     "firstparty": {
       "flake": false,
       "locked": {
-        "lastModified": 1790186958,
-        "narHash": "sha256-92NjKVTslsbSVJMnxV4SaL7o0vZ1/mxaKdcRJr7EoqI=",
+        "lastModified": 1791214055,
+        "narHash": "sha256-3nHfkGzmmq8JpN7bmO8Z5zIumvx8dzwS1GtQ6V0XgMg=",
         "owner": "AvengeMedia",
         "repo": "dms-plugins",
-        "rev": "e774a9756f2a50499c37a5513f28bee4ebe81d73",
+        "rev": "a8a508bc371e7c3f2c7862d8840b88cf5c63978f",
         "type": "github"
       },
       "original": {
