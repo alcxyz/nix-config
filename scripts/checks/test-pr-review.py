@@ -537,7 +537,7 @@ with tempfile.TemporaryDirectory() as tmp:
     code, output = cli("run", "4")
     assert code == 0 and "already reviewed" in output, output
     code, output = cli("comment", "4", "no findings.")
-    assert code == 0 and posted[-1][1] == f"Automated read-only review ({head[:12]} on dev): full: no findings.", posted
+    assert code == 0 and posted[-1][1] == f"Automated read-only review ({head[:12]} on dev): full (deep): no findings.", posted
 
     # A reviewer that exits 0 without a valid verdict has not reviewed anything.
     pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\ncat >/dev/null\necho '{\"result\": \"Verdict: unable to review\"}'\n")
@@ -626,14 +626,16 @@ with tempfile.TemporaryDirectory() as tmp:
     def state_of(sha):
         return json.loads(pathlib.Path(rounds, sha, "status.json").read_text())
 
-    def review_round(sha, expected, *flags, base="dev"):
-        """Run on `sha` and return the mode its comment records."""
+    def review_round(sha, expected, *flags, base="dev", role="deep"):
+        """Run on `sha` and return the mode its comment records, after checking its role."""
         at(sha, base)
         code, output = cli("run", "4", *flags)
         assert code == 0 and expected in output, (expected, output)
         code, output = cli("comment", "4", "no findings.")
         assert code == 0, output
-        return posted[-1][1].split("): ", 1)[1].rsplit(": ", 1)[0]
+        mode = posted[-1][1].split("): ", 1)[1].rsplit(": ", 1)[0]
+        assert mode.endswith(f" ({role})"), posted[-1]
+        return mode.removesuffix(f" ({role})")
 
     # A round from before follow-ups lacks a merge base, so the next one is full.
     at(head)
@@ -741,5 +743,54 @@ with tempfile.TemporaryDirectory() as tmp:
     pathlib.Path(rounds, root, "status.json").write_text(json.dumps(status))
     fix = push("chain 3\n", fix)
     review_round(fix, "(full review: an earlier round's findings are missing since", base="main")
+
+    # Roles: small documentation-only changes get the light reviewers; agent
+    # rules, decisions, security-adjacent paths, code and large diffs get deep.
+    def diff_of(*paths, lines=1):
+        return "".join(f"diff --git a/{path} b/{path}\n@@ -1 +1 @@\n" + "+x\n" * lines for path in paths)
+
+    roles = dict(config, light_reviewers=[{"name": "gpt-light", "client": "codex", "model": "l", "effort": "medium"}])
+    assert review.choose_role(config, diff_of("README.md"))[0] == "deep", "without light reviewers"
+    assert review.choose_role(roles, diff_of("README.md", "docs/guide.mdx"))[0] == "light"
+    for path in ("AGENTS.md", "docs/adr/0001-x.md", "docs/secrets.md", "docs/repo-hosting-policy.md", "file", "a.py",
+                 "requirements.txt", ".claude/agents/reviewer.md", "skills/x/SKILL.md", ".github/copilot-instructions.md"):
+        assert review.choose_role(roles, diff_of("README.md", path))[0] == "deep", path
+    assert review.choose_role(roles, diff_of("README.md", lines=301))[0] == "deep"
+    assert review.choose_role(roles, 'diff --git "a/x y.md" "b/x y.md"\n')[0] == "deep", "unreadable paths"
+    assert review.choose_role(roles, "")[0] == "deep"
+    # Paths containing " b/" make the header ambiguous; renames are checked by their own lines.
+    assert review.choose_role(roles, "diff --git a/AGENTS.md b/archive.md b/README.md b/README.md\n")[0] == "deep"
+    renamed = "diff --git a/old.md b/new.md\nsimilarity index 100%\nrename from AGENTS.md\nrename to new.md\n"
+    assert review.choose_role(roles, renamed)[0] == "deep"
+
+    pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps(roles))
+    # The fake reviewers need `file`, so a docs-only PR changes only guide.md on a base that has it.
+    base = push("base\n", dev, ref="refs/heads/docs-base")
+    at(base, "docs-base")
+    guide = git_out("hash-object", "-w", "--stdin", stdin="guide\n")
+    light = push("base\n", base, extra=f"100644 blob {guide}\tguide.md\n")
+    assert review_round(light, "with the light reviewers gpt-light (documentation only", base="docs-base",
+                        role="light") == "full"
+    assert set(state_of(light)["reviewers"]) == {"gpt-light"}, state_of(light)
+    # A follow-up with the same role builds on the light round.
+    guide2 = git_out("hash-object", "-w", "--stdin", stdin="guide fixed\n")
+    fixed = push("base\n", light, extra=f"100644 blob {guide2}\tguide.md\n")
+    assert review_round(fixed, f"(follow-up to {light[:12]})", base="docs-base", role="light") \
+        == f"follow-up to {light[:12]}"
+    # A change of role since the last round needs a full review.
+    code_change = push("base\nmore\n", fixed, extra=f"100644 blob {guide2}\tguide.md\n")
+    review_round(code_change, f"(full review: the round at {fixed[:12]} had light reviewers)", base="docs-base")
+    # --role deep reviews a documentation-only change with the deep reviewers.
+    guide3 = git_out("hash-object", "-w", "--stdin", stdin="other guide\n")
+    other = push("base\n", base, extra=f"100644 blob {guide3}\tguide.md\n")
+    assert review_round(other, "with the deep reviewers gpt (--role was given)", "--role", "deep",
+                        base="docs-base") == "full"
+    # --role can only raise the role.
+    try:
+        cli("run", "4", "--role", "light")
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        raise AssertionError("--role light must be refused")
 
 print("pr-review tests passed")

@@ -13,6 +13,7 @@ with lib; let
   # with each generation. Reviewer clients (codex, claude) come from PATH.
   prReviewConfig = pkgs.writeText "pr-review.json" (builtins.toJSON {
     inherit (cfg.prReview) reviewers timeout;
+    light_reviewers = cfg.prReview.lightReviewers;
   });
   prReview = pkgs.writeShellApplication {
     name = "pr-review";
@@ -102,6 +103,35 @@ with lib; let
     runtimeInputs = [pkgs.coreutils pkgs.jq];
     text = builtins.readFile ./merge-settings.sh;
   };
+  reviewerType = types.submodule {
+    options = {
+      name = mkOption {
+        type = types.strMatching "[A-Za-z0-9_-]+";
+        description = "Short name for the reviewer's result files; not prompt, status or lock.";
+      };
+      client = mkOption {
+        type = types.enum ["codex" "claude"];
+        description = "CLI that runs the reviewer read-only.";
+      };
+      model = mkOption {type = types.str;};
+      effort = mkOption {
+        type = types.str;
+        default = "high";
+      };
+    };
+  };
+  lightReviewers = optionals (cfg.roles ? light) [
+    {
+      name = "gpt-light";
+      client = "codex";
+      inherit (cfg.roles.light.codex) model effort;
+    }
+    {
+      name = "claude-light";
+      client = "claude";
+      inherit (cfg.roles.light.claude) model effort;
+    }
+  ];
   deepReviewers = optionals (cfg.roles ? deep) [
     {
       name = "gpt";
@@ -123,23 +153,7 @@ in {
 
     prReview = {
       reviewers = mkOption {
-        type = types.listOf (types.submodule {
-          options = {
-            name = mkOption {
-              type = types.strMatching "[A-Za-z0-9_-]+";
-              description = "Short name for the reviewer's result files; not prompt, status or lock.";
-            };
-            client = mkOption {
-              type = types.enum ["codex" "claude"];
-              description = "CLI that runs the reviewer read-only.";
-            };
-            model = mkOption {type = types.str;};
-            effort = mkOption {
-              type = types.str;
-              default = "high";
-            };
-          };
-        });
+        type = types.listOf reviewerType;
         # ADR-0079: reviewers follow the `deep` agent role when it is defined.
         default =
           if cfg.roles ? deep
@@ -158,6 +172,13 @@ in {
           ];
         defaultText = literalExpression "the `deep` role's models and efforts from programs.ai.roles (set its efforts explicitly; roles default to medium), or gpt-6.1-sol and claude-opus-5-5 at high effort";
         description = "Read-only reviewers that `pr-review run` starts in parallel (ADR-0078).";
+      };
+      lightReviewers = mkOption {
+        type = types.listOf reviewerType;
+        # Small documentation-only changes get these instead (ADR-0078).
+        default = lightReviewers;
+        defaultText = literalExpression "the `light` role's models and efforts from programs.ai.roles, or none";
+        description = "Reviewers for small documentation-only PRs; when empty, every PR gets `reviewers`.";
       };
       timeout = mkOption {
         type = types.ints.positive;

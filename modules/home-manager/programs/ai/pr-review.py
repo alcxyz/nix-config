@@ -53,7 +53,7 @@ MARKER = "automated read-only review"
 PINNED = re.compile(r"automated read-only review \(([0-9a-f]{7,40}) on ([^\n]+?)\):", re.IGNORECASE)
 OUTCOME_PREFIX = re.compile(r"^automated read-only review(?: \([^)]*\))?:\s*", re.IGNORECASE)
 # The mode follows the pinned prefix, so guards that predate it still read the target.
-MODE_PREFIX = re.compile(r"^(?:full|follow-up to [0-9a-f]{7,40})\s*:\s*", re.IGNORECASE)
+MODE_PREFIX = re.compile(r"^(?:full|follow-up to [0-9a-f]{7,40})(?: \((?:light|deep)\))?\s*:\s*", re.IGNORECASE)
 FORGEJO_URL = os.environ.get("AGENT_PR_REVIEW_FORGEJO_URL", "https://git.alc.xyz").rstrip("/")
 # Git remote hosts that belong to FORGEJO_URL; other non-GitHub remotes are refused.
 FORGEJO_REMOTE_HOSTS = set(
@@ -64,6 +64,20 @@ MAX_DIFF_BYTES = 400_000
 FOLLOW_UP_SHARE = 0.4
 FOLLOW_UP_LINES = 40
 MAX_FOLLOW_UPS = 3
+# Reviewer roles (ADR-0079). Small documentation-only changes get the light
+# reviewers; everything else, and anything that cannot be classified, gets deep.
+LIGHT_MAX_LINES = 300
+LIGHT_SUFFIXES = (".md", ".mdx", ".rst")
+# Agent rules and instructions, tool directories such as .github or .claude,
+# decisions and security-adjacent documents always get deep reviewers.
+DEEP_NAMES = {"agents.md", "claude.md", "gemini.md", "skill.md", "security.md", "copilot-instructions.md"}
+DEEP_PATH = re.compile(
+    r"(?:^|/)(?:\.[^/]+|adrs?|decisions)/|secret|securi|credential|token|auth|sops|key|polic|prompt", re.IGNORECASE
+)
+DIFF_HEADER = re.compile(r"^diff --git (.*)$", re.MULTILINE)
+DIFF_PATHS = re.compile(r"^a/(.+) b/(.+)$")
+# Renames and copies name their paths again, unambiguously.
+DIFF_MOVES = re.compile(r"^(?:rename|copy) (?:from|to) (.*)$", re.MULTILINE)
 SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 REVIEWER_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 RESERVED_NAMES = {"prompt", "status", "lock"}
@@ -116,8 +130,10 @@ GUIDANCE = (
     "records their results for the PR's current head commit. It takes several "
     "minutes, so run it in the background. Address or justify "
     "the findings, then post the outcome with `pr-review comment <pr> \"<outcome>\"`, "
-    "for example \"no blocking findings.\" For a trivial PR, post "
-    "`pr-review comment <pr> \"skipped (<reason>)\"`. Pushing new commits needs a "
+    "for example \"no blocking findings.\" For a trivial PR, or a promotion whose "
+    "every commit was already reviewed on its own PR, post "
+    "`pr-review comment <pr> \"skipped (<reason>)\"`. Small documentation-only "
+    "changes get lighter reviewers; `--role deep` asks for the deep ones. Pushing new commits needs a "
     "new review; after small fixes, `pr-review run <pr> --response \"<what was "
     "fixed or justified>\"` reviews only the fixes. Low-severity findings may be "
     "justified or tracked in an issue instead of fixed with a new commit. Do not "
@@ -423,10 +439,67 @@ def load_config():
     names = [reviewer["name"] for reviewer in config["reviewers"]]
     if not names or len(set(names)) != len(names):
         raise ReviewError(f"{path} needs at least one reviewer and unique reviewer names")
-    for name in names:
+    light = [reviewer["name"] for reviewer in config.get("light_reviewers") or []]
+    if len(set(light)) != len(light):
+        raise ReviewError(f"{path} needs unique light reviewer names")
+    for name in names + light:
         if not REVIEWER_NAME.match(name) or name in RESERVED_NAMES:
             raise ReviewError(f"{path}: reviewer name {name!r} must match [A-Za-z0-9_-]+ and not be {sorted(RESERVED_NAMES)}")
     return config
+
+
+def role_config(config, role):
+    """Return `config` with the reviewers of `role`.
+
+    `deep` uses the configured reviewers. Without light reviewers, a light round
+    is checked against the deep ones, so it never counts as complete.
+    """
+    if role == "light" and config.get("light_reviewers"):
+        return dict(config, reviewers=config["light_reviewers"])
+    return config
+
+
+def round_role(status):
+    # Rounds from before roles were all deep.
+    return status.get("role", "deep")
+
+
+def complete(config, status, base):
+    """Whether every reviewer of the round's own role completed it on `base`."""
+    return not incomplete(role_config(config, round_role(status)), status, base)
+
+
+def choose_role(config, diff):
+    """Return (role, reason) for a PR's full diff.
+
+    Only small changes to documentation files get the light reviewers. Agent
+    rules, decisions, security-adjacent paths, binary files and anything whose
+    paths cannot be read get the deep ones.
+    """
+    if not config.get("light_reviewers"):
+        return "deep", "no light reviewers are configured"
+    if re.search(r"^Binary files ", diff, re.MULTILINE):
+        return "deep", "binary files changed"
+    headers = DIFF_HEADER.findall(diff)
+    if not headers:
+        return "deep", "no changed files were found"
+    paths = DIFF_MOVES.findall(diff)
+    for header in headers:
+        match = DIFF_PATHS.match(header)
+        # A path containing " b/" makes the header ambiguous.
+        if not match or header.count(" b/") != 1:
+            return "deep", f"cannot read the paths in `diff --git {header}`"
+        paths.extend(match.groups())
+    for path in paths:
+        name = path.rsplit("/", 1)[-1].lower()
+        if not name.endswith(LIGHT_SUFFIXES):
+            return "deep", f"{path} is not documentation"
+        if name in DEEP_NAMES or DEEP_PATH.search(path):
+            return "deep", f"{path} holds rules, instructions, decisions or security-adjacent text"
+    lines = changed_lines(diff)
+    if lines > LIGHT_MAX_LINES:
+        return "deep", f"{lines} changed lines"
+    return "light", f"documentation only, {lines} changed lines"
 
 
 def load_status(directory):
@@ -758,8 +831,8 @@ def terminate(signum, _frame):
 def last_round(config, pr, head, base):
     """Return (status, None) for the round a follow-up can build on, or (None, why not).
 
-    That is the last round on `base` that every configured reviewer, and only
-    they, completed (see incomplete). It must not end a run of MAX_FOLLOW_UPS follow-ups.
+    That is the last round on `base` that every configured reviewer of its
+    role, and only they, completed (see incomplete). It must not end a run of MAX_FOLLOW_UPS follow-ups.
     """
     parent = os.path.dirname(state_dir(pr, head))
     try:
@@ -770,7 +843,7 @@ def last_round(config, pr, head, base):
     for name in names:
         directory = os.path.join(parent, name)
         status = load_status(directory)
-        if name != head and SHA.match(name) and status.get("head") == name and not incomplete(config, status, base):
+        if name != head and SHA.match(name) and status.get("head") == name and complete(config, status, base):
             if "finished" not in status:
                 # Rounds from before follow-ups have no finish time; their status file's is close.
                 try:
@@ -819,7 +892,7 @@ def follow_up_problem(previous, merge_base, diff, interdiff):
 def recorded_round(config, pr, sha, base):
     """Return the completed round of `sha` on `base`, or None."""
     status = load_status(state_dir(pr, sha))
-    return status if status.get("head") == sha and not incomplete(config, status, base) else None
+    return status if status.get("head") == sha and complete(config, status, base) else None
 
 
 def previous_findings(config, pr, previous, base):
@@ -840,7 +913,7 @@ def previous_findings(config, pr, previous, base):
         sections.append(f"### Round at {status['head'][:12]} ({status.get('mode', 'full')})")
         if status.get("response"):
             sections.append(f"Author's response before this round:\n\n{status['response']}")
-        for reviewer in config["reviewers"]:
+        for reviewer in role_config(config, round_role(status))["reviewers"]:
             path = status.get("reviewers", {}).get(reviewer["name"], {}).get("output")
             try:
                 with open(path, encoding="utf-8") as handle:
@@ -858,7 +931,8 @@ def cmd_run(args):
     directory = state_dir(pr, head)
     status = load_status(directory)
     rerun = args.force or (args.full and status.get("mode", "full") != "full")
-    if status and not incomplete(config, status, base) and not rerun:
+    rerun = rerun or bool(status and args.role and args.role != round_role(status))
+    if status and complete(config, status, base) and not rerun:
         print(f"{pr} head {head[:12]} was already reviewed; pass --force to review again.")
         return print_results(status["reviewers"])
     if args.full:
@@ -895,7 +969,11 @@ def cmd_run(args):
             raise ReviewError(f"{pr} has an empty diff against {base}")
         if len(diff.encode()) > MAX_DIFF_BYTES:
             raise ReviewError(f"{pr} diff exceeds {MAX_DIFF_BYTES} bytes; split the PR or review it manually")
+        role, role_reason = (args.role, "--role was given") if args.role else choose_role(config, diff)
+        reviewers = role_config(config, role)
         findings = None
+        if previous and round_role(previous) != role:
+            reason, previous = f"the round at {previous['head'][:12]} had {round_role(previous)} reviewers", None
         if previous:
             reason = follow_up_problem(previous, merge_base, diff, interdiff)
             if not reason:
@@ -921,9 +999,10 @@ def cmd_run(args):
         prompt_path = os.path.join(directory, "prompt.md")
         with open(prompt_path, "w", encoding="utf-8") as handle:
             handle.write(prompt)
-        names = ", ".join(r["name"] for r in config["reviewers"])
-        print(f"Reviewing {pr} at {head[:12]} ({mode}) with {names}; results in {directory}", flush=True)
-        results = run_reviewers(config, prompt_path, tree, directory)
+        names = ", ".join(r["name"] for r in reviewers["reviewers"])
+        print(f"Reviewing {pr} at {head[:12]} ({mode}) with the {role} reviewers {names} ({role_reason}); "
+              f"results in {directory}", flush=True)
+        results = run_reviewers(reviewers, prompt_path, tree, directory)
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
     status = {
@@ -933,6 +1012,7 @@ def cmd_run(args):
         "root": previous.get("root", previous["head"]) if previous else head,
         "followups": previous.get("followups", 0) + 1 if previous else 0,
         "response": args.response or None, "finished": time.time(),
+        "role": role, "role_reason": role_reason,
         "reviewers": results,
     }
     with open(os.path.join(directory, "status.json"), "w", encoding="utf-8") as handle:
@@ -977,14 +1057,15 @@ def cmd_comment(args):
         print(f"Posted on {pr}: {prefix + outcome}")
         return 0
     status = load_status(state_dir(pr, head))
-    missing = incomplete(config, status, info["base"])
+    role = round_role(status)
+    missing = incomplete(role_config(config, role), status, info["base"])
     if missing:
         raise ReviewError(
             f"no completed review of {pr} at its current head {head[:12]} by "
             f"{', '.join(missing)}; run `pr-review run {args.pr}` first"
         )
     mode = f"follow-up to {status['previous'][:12]}" if status.get("mode") == "follow-up" else "full"
-    body = f"{prefix}{mode}: {outcome}"
+    body = f"{prefix}{mode} ({role}): {outcome}"
     post_comment(pr, body)
     print(f"Posted on {pr}: {body}")
     return 0
@@ -1272,6 +1353,9 @@ def main(argv=None):
             sub.add_argument("--force", action="store_true", help="review again even if a completed review exists")
             sub.add_argument("--full", action="store_true", help="review the whole PR, not only the fixes since the last round")
             sub.add_argument("--response", default="", help="what was fixed or justified since the last round")
+            # Only raising the role is offered: lowering it would cut review depth unnoticed.
+            sub.add_argument("--role", choices=["deep"],
+                             help="review with the deep reviewers even when light ones would be chosen")
         if name == "comment":
             sub.add_argument("outcome", help='for example "no blocking findings." or "skipped (<reason>)"')
     commands.add_parser("guard", help="PreToolUse hook for agent merges").set_defaults(handler=cmd_guard)

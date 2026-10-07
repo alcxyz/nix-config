@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -19,12 +19,16 @@ not mistake for a human review.
 
 Before an agent merges a PR it created, it obtains independent read-only
 reviews from a Codex and a Claude reviewer, by default the `deep` agent role
-(ADR-0079) on each client. Each runs sandboxed
+(ADR-0079) on each client, or the `light` role for small documentation-only
+changes. Each runs sandboxed
 without write or forge access and is given the diff and the PR description. The
 agent addresses or justifies the findings, then posts one PR comment whose first
 line is `Automated read-only review (<short head sha> on <target branch>):
-<mode>: <outcome>`, where the mode is `full` or `follow-up to <short sha>`. A
-trivial PR may record `skipped (<reason>)` as the outcome, without a mode.
+<mode> (<role>): <outcome>`, where the mode is `full` or `follow-up to <short
+sha>` and the role is `light` or `deep`. A trivial PR, or a promotion such as
+`dev` to `main` whose every commit was already reviewed on its own PR, may
+record `skipped (<reason>)` as the outcome, without a mode. Commits pushed
+directly to the source branch, and conflict resolutions, still need a review.
 Low-severity findings may be justified or tracked in an issue instead of fixed
 with a new commit. Comments name no models and carry no signatures.
 
@@ -58,7 +62,8 @@ hand or depend on which models their own client offers:
   blocking. Otherwise, or with `--full`, `run` reviews the whole PR and says
   why; a missing earlier round also forces a full review, and the response is
   still passed on. `--force` repeats the head's previous mode. A result from a
-  different reviewer set counts for no reviewer. Fix rounds then cost roughly what the fixes need, and fresh
+  different reviewer set counts for no reviewer, and a round with another role
+  forces a full review. Fix rounds then cost roughly what the fixes need, and fresh
   low-severity findings in unchanged code stop restarting the loop
   ([#524](https://git.alc.xyz/alcxyz/nix-config/issues/524)).
 - `pr-review comment <pr> "<outcome>"` posts the comment for the current head,
@@ -66,7 +71,22 @@ hand or depend on which models their own client offers:
 - `pr-review check <pr>` reports whether a comment names the current head.
 
 Reviewers are the `programs.ai.prReview.reviewers` option, which defaults to
-the `deep` role's resolved models and efforts. `pr-review` never loads a role
+the `deep` role's resolved models and efforts. `run` uses
+`programs.ai.prReview.lightReviewers` instead, by default the `light` role on
+both clients, when the PR's whole diff changes only documentation files
+(`.md`, `.mdx`, `.rst`) and at most 300 lines. Agent rules and
+instructions (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `SKILL.md`,
+`copilot-instructions.md`), files in dot-directories such as `.github` or
+`.claude`, `SECURITY.md`, decision records, paths naming secrets, security,
+credentials, tokens, authentication, SOPS, keys, policy or prompts, binary
+files and diffs whose paths cannot be read always get the deep reviewers, and
+so does every PR when no light reviewers are configured. `--role deep` raises
+the choice; nothing lowers it, so review depth cannot drop unnoticed. The
+comment records the role used. The QA data
+([#569](https://git.alc.xyz/alcxyz/nix-config/issues/569)) found that
+reviews of small documentation changes found only low-severity wording
+problems, and that re-reviewing promotions repeated their feature PRs'
+reviews. `pr-review` never loads a role
 profile, so its isolation is unchanged. A role can name a Claude alias, so each
 result records the model the client reports (Claude's JSON result, Codex's
 session header) alongside the configured one.
@@ -110,6 +130,11 @@ reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
   changed reviewers do, and they force a full review.
 - **Chaining follow-ups through posted comments, checked by the guard:** agents
   fix and push before commenting, so it would need a comment for every round.
+- **A light triage pass choosing the role:** adds a model call to every
+  review, and a misjudged triage would lower review depth unnoticed; path and
+  size rules are cheap, predictable and fail towards `deep`.
+- **One light reviewer for documentation:** cheaper still, but drops the
+  cross-model check this decision exists for.
 - **`pr-review` in nix-packages:** reusable tooling lives there, but the command
   is tied to this decision's comment format, guard and reviewer settings, so it
   stays next to the guard.
@@ -129,7 +154,10 @@ with guidance to use literal values. Forgejo lookups use
 `FORGEJO_API_TOKEN_FILE` when the session provides it, send the token only to
 the configured Forgejo URL, and do not follow redirects. Forge or network outages
 block agent merges until the operator merges or the outage ends. Each review
-adds model cost and latency to every agent PR. Comments in the earlier format
+adds model cost and latency to every agent PR, less for documentation-only
+PRs. The light classification goes by path, so documentation that defines
+policy without matching the deep patterns gets light reviewers unless the
+agent passes `--role deep`. Comments in the earlier format
 without a head SHA no longer satisfy the guard. Diffs over 400 kB are refused
 rather than truncated. Where both the managed
 and a trusted user hook exist, the guard runs twice per call, which is harmless.
