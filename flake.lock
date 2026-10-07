@@ -1097,11 +1097,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791311709,
-        "narHash": "sha256-0WpQQm1Sst/jGnvaf0285HvoAODTDNQicBKgvPzo6Mk=",
+        "lastModified": 1791326633,
+        "narHash": "sha256-wBY/zMiCYZEIlQ4b82LtJOnUklLoTKNBAxcPc4MYdqM=",
         "ref": "dev",
-        "rev": "9d22a340b8b95a99fb58c2129678f83b93c216ba",
-        "revCount": 59,
+        "rev": "408ba08a8b39d5994e8a0059b8e30bfd29dc06ff",
+        "revCount": 64,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       },
