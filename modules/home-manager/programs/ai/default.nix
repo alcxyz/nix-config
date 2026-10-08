@@ -88,9 +88,41 @@ with lib; let
     runtimeInputs = [pkgs.python3];
     text = ''exec python3 ${./claude-mcp.py} "$@"'';
   };
+  # A managed T3 Code restart kills the Claude Code process behind a thread.
+  # On resume the notice hook names the unit and time, for sessions running
+  # inside a T3 unit's cgroup only. The hook is always installed: a removed
+  # managed hook entry would otherwise keep pointing at a missing command.
+  t3Units =
+    ["t3code.service"]
+    ++ map (name: "t3code-${name}.service") (attrNames (config.services.t3code.instances or {}));
+  t3RestartLog = config.services.t3code.restartLog or "${config.xdg.stateHome}/t3code/managed-restarts.log";
+  t3RestartNotice = pkgs.writeShellApplication {
+    name = "t3code-restart-notice";
+    runtimeInputs = [pkgs.python3];
+    text = ''
+      exec python3 -I ${../../services/t3code/restart-notice.py} \
+        "''${T3CODE_RESTART_LOG:-${t3RestartLog}}" \
+        "''${T3CODE_NOTICE_STATE:-${config.xdg.stateHome}/t3code/notified}" \
+        "''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}" ${escapeShellArgs t3Units}
+    '';
+  };
+  t3RestartNoticeHooks = {
+    SessionStart = [
+      {
+        matcher = "startup|resume|compact";
+        hooks = [
+          {
+            type = "command";
+            command = "${config.home.profileDirectory}/bin/t3code-restart-notice";
+            timeout = 30;
+          }
+        ];
+      }
+    ];
+  };
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
-      hooks = prReviewHooks;
+      hooks = prReviewHooks // t3RestartNoticeHooks;
       statusLine = {
         type = "command";
         command = "dankaiusage claude-statusline";
@@ -231,7 +263,7 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [prReview prReviewGuard];
+    home.packages = [prReview prReviewGuard t3RestartNotice];
 
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file

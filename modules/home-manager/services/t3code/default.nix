@@ -48,28 +48,140 @@ with lib; let
   # Instance names are restricted to [a-z0-9-], so the list needs no quoting.
   unitArgs = concatStringsSep " " unitNames;
   serviceCgroupPattern = "(^|/)(${concatMapStringsSep "|" escapeRegex unitNames})(/|$)";
-  # Prints the starting or running turn count summed over every instance's
-  # state database. A missing database counts as idle; an unreadable one makes
-  # the result non-numeric, which callers treat as busy.
+  # Every managed restart of a running instance is appended here (time,
+  # trigger, restarted units, detail) so an agent whose background work died
+  # can learn which unit restarted and when; the t3code-restart-notice hook
+  # (programs.ai) reports it on session resume. `t3code-restart-units` lists
+  # the running instances before the restart; `t3code-record-restart` writes
+  # the record after it, so the time is later than anything the killed
+  # process wrote, and even when a unit failed to come back. Recording never
+  # blocks the restart: callers treat a failure as a warning.
+  restartLog = cfg.restartLog;
+  restartUnits = pkgs.writeShellApplication {
+    name = "t3code-restart-units";
+    runtimeInputs = with pkgs; [systemd];
+    text = ''
+      for unit in ${unitArgs}; do
+        if systemctl --user --quiet is-active "$unit"; then
+          echo "$unit"
+        fi
+      done
+    '';
+  };
+  recordRestart = pkgs.writeShellApplication {
+    name = "t3code-record-restart";
+    runtimeInputs = with pkgs; [coreutils];
+    text = ''
+      trigger=$1
+      detail=$2
+      units=$3
+      log="''${T3CODE_RESTART_LOG:-${restartLog}}"
+      if [[ -z "$units" ]]; then
+        exit 0
+      fi
+      if mkdir -p "$(dirname "$log")" \
+        && printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" "$trigger" "$units" "$detail" >> "$log"; then
+        echo "Restarted $units ($trigger: $detail); recorded in $log."
+      else
+        echo "Restarted $units ($trigger: $detail); could not record it in $log." >&2
+      fi
+    '';
+  };
+  # Prints the count of live work summed over every instance's state
+  # directory: turns that are preparing, starting, running or waiting, queued
+  # turns that are not held, and provider threads that are active or still own
+  # background work (background shells, monitors, subagents and tasks). A
+  # restart kills that work, so it counts as busy even between turns. Since
+  # upstream de34391427 T3 keeps this state in statev2.sqlite and leaves
+  # state.sqlite as a frozen copy; older builds (fork stable 0.0.45) still use
+  # state.sqlite. The running build writes its database on every event, so
+  # per directory the most recently written of the two (database or WAL,
+  # nanosecond mtime) is the live one; the other may hold stale rows from a
+  # crash and is ignored. When the two were written within an hour of each
+  # other, or the older one within the last hour (a tie, a channel switch,
+  # or something touching the frozen file), both count, so the guard fails
+  # closed during the transition. A write to the frozen file more than an
+  # hour after the live one was last written is taken as the live file. The
+  # choice is made on every sample, so a database created during the settle
+  # window is seen. A missing database counts as idle; one that exists but
+  # cannot be read makes the result non-numeric, which callers treat as busy.
+  # T3CODE_STATE_DATABASE may name one state directory or one database file.
   activeSessionsFunction = ''
-    state_databases=(${escapeShellArgs (map (instance: "${instance.baseDir}/userdata/state.sqlite") instances)})
-    if [[ -n "''${T3CODE_STATE_DATABASE:-}" ]]; then
-      state_databases=("$T3CODE_STATE_DATABASE")
+    state_directories=(${escapeShellArgs (map (instance: "${instance.baseDir}/userdata") instances)})
+    fixed_state_files=()
+    if [[ -d "''${T3CODE_STATE_DATABASE:-}" ]]; then
+      state_directories=("$T3CODE_STATE_DATABASE")
+    elif [[ -n "''${T3CODE_STATE_DATABASE:-}" ]]; then
+      state_directories=()
+      fixed_state_files=("$T3CODE_STATE_DATABASE")
     fi
+    # Latest write to the database or its WAL, in nanoseconds; 0 if absent.
+    # A read-only open (this guard's own) creates an empty WAL with a fresh
+    # mtime, so an empty WAL is not a write.
+    written_at() {
+      local newest=0 time file
+      for file in "$1" "$1-wal"; do
+        if [[ -e "$file" ]] && [[ "$file" == "$1" || -s "$file" ]]; then
+          time=$(stat -c %.9Y "$file" 2>/dev/null | tr -d .) || time=0
+          [[ "$time" =~ ^[0-9]+$ ]] || time=0
+          ((time > newest)) && newest=$time
+        fi
+      done
+      echo "$newest"
+    }
+    ambiguity_window=$((3600 * 1000000000))
+    live_state_files() {
+      local directory v2_time legacy_time older now
+      now=$(date +%s%N)
+      printf '%s\n' "''${fixed_state_files[@]}"
+      for directory in "''${state_directories[@]}"; do
+        v2_time=$(written_at "$directory/statev2.sqlite")
+        legacy_time=$(written_at "$directory/state.sqlite")
+        older=$((v2_time < legacy_time ? v2_time : legacy_time))
+        newer=$((v2_time < legacy_time ? legacy_time : v2_time))
+        if ((v2_time == 0 && legacy_time == 0)); then
+          continue
+        elif ((older > 0 && (newer - older < ambiguity_window || now - older < ambiguity_window))); then
+          printf '%s\n' "$directory/statev2.sqlite" "$directory/state.sqlite"
+        elif ((v2_time > legacy_time)); then
+          echo "$directory/statev2.sqlite"
+        else
+          echo "$directory/state.sqlite"
+        fi
+      done
+    }
+    t3_sql() {
+      sqlite3 -readonly -cmd '.timeout 5000' "$1" "$2"
+    }
+    live_work() {
+      local database=$1 has_v2
+      has_v2=$(t3_sql "$database" "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'orchestration_v2_projection_runs';") || return 1
+      if [[ "$has_v2" == 1 ]]; then
+        t3_sql "$database" "SELECT
+          (SELECT count(*) FROM orchestration_v2_projection_runs
+            WHERE status IN ('preparing', 'starting', 'running', 'waiting')
+              OR (status = 'queued'
+                AND (NOT json_valid(payload_json) OR json_extract(payload_json, '$.queueHeld') IS NOT 1)))
+          + (SELECT count(*) FROM orchestration_v2_projection_provider_threads
+            WHERE status = 'active'
+              OR (json_valid(payload_json) AND json_array_length(payload_json, '$.pendingBackgroundTasks') > 0));"
+      else
+        t3_sql "$database" "SELECT count(*) FROM projection_thread_sessions WHERE status IN ('starting', 'running');"
+      fi
+    }
     active_sessions() {
       local total=0 database count
-      for database in "''${state_databases[@]}"; do
-        if [[ ! -r "$database" ]]; then
+      while IFS= read -r database; do
+        if [[ -z "$database" || ! -e "$database" ]]; then
           continue
         fi
-        count=$(sqlite3 -readonly -cmd '.timeout 5000' "$database" \
-          "SELECT count(*) FROM projection_thread_sessions WHERE status IN ('starting', 'running');") || count=""
+        count=$(live_work "$database") || count=""
         if [[ ! "$count" =~ ^[0-9]+$ ]]; then
           echo unreadable
           return
         fi
         total=$((total + count))
-      done
+      done < <(live_state_files)
       echo "$total"
     }
   '';
@@ -89,7 +201,10 @@ with lib; let
       version_state="''${T3CODE_VERSION_STATE:-${managedVersionState}}"
       restart_marker="''${T3CODE_RESTART_MARKER:-${restartMarker}}"
       cgroup_file="''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}"
-      rm -f "$restart_marker"
+      # A marker left by an earlier activation whose restart was deferred or
+      # failed stays pending: after the unit reload the loaded ExecStart
+      # already matches the managed one, so only the marker remembers that
+      # the old process is still running. The apply step re-checks idle.
 
       version_is_older() {
         local candidate=$1
@@ -180,9 +295,11 @@ with lib; let
         exit 75
       fi
 
+      # An empty marker means every running instance; a list left by an
+      # earlier deferred restart is superseded by this executable change.
       allow_managed_restart() {
         mkdir -p "$(dirname "$restart_marker")"
-        touch "$restart_marker"
+        : > "$restart_marker"
       }
 
       if [[ "''${T3CODE_ALLOW_ACTIVE_RESTART:-0}" == "1" ]]; then
@@ -199,8 +316,8 @@ with lib; let
       fi
 
       if ((first_count > 0)); then
-        echo "T3 Code has $first_count active session(s); deferring the Home Manager activation." >&2
-        echo "Retry when the turns finish, or set T3CODE_ALLOW_ACTIVE_RESTART=1 for an intentional interruption." >&2
+        echo "T3 Code has $first_count active turn(s) or background task(s); deferring the Home Manager activation." >&2
+        echo "Retry when they finish, or set T3CODE_ALLOW_ACTIVE_RESTART=1 for an intentional interruption." >&2
         exit 75
       fi
 
@@ -216,8 +333,8 @@ with lib; let
     '';
   };
 
-  # Exits 0 once T3 has no starting or running turns for the settle window,
-  # 75 (retry later) otherwise.
+  # Exits 0 once T3 has had no live turns or background work for the settle
+  # window, 75 (retry later) otherwise.
   idleCheck = pkgs.writeShellApplication {
     name = "t3code-idle-check";
     runtimeInputs = with pkgs; [coreutils sqlite];
@@ -233,8 +350,8 @@ with lib; let
         count=$(active_sessions)
       fi
       if [[ "$count" != 0 ]]; then
-        echo "T3 Code is busy or its session state is unreadable ($count); deferring the restart." >&2
-        echo "Retry when the turns finish, or set T3CODE_ALLOW_ACTIVE_RESTART=1 for an intentional interruption." >&2
+        echo "T3 Code has live turns or background work, or its state is unreadable ($count); deferring the restart." >&2
+        echo "Retry when they finish, or set T3CODE_ALLOW_ACTIVE_RESTART=1 for an intentional interruption." >&2
         exit 75
       fi
     '';
@@ -299,7 +416,12 @@ with lib; let
       echo "Switched the AI stack to $summary."
       if [[ "$t3_active" == true ]]; then
         # Instances share the profile; restart the running ones together.
-        systemctl --user try-restart ${unitArgs}
+        running=$(${restartUnits}/bin/t3code-restart-units | tr '\n' ' ')
+        restart_status=0
+        systemctl --user try-restart ${unitArgs} || restart_status=$?
+        ${recordRestart}/bin/t3code-record-restart t3code-ai-stack-switch "T3 ''${old_version:-none} -> $new_version" "''${running% }" \
+          || echo "Could not record the restart." >&2
+        exit "$restart_status"
       fi
     '';
   };
@@ -396,13 +518,20 @@ in {
       '';
     };
 
+    restartLog = mkOption {
+      type = types.str;
+      default = "${config.xdg.stateHome}/t3code/managed-restarts.log";
+      defaultText = literalExpression ''"''${config.xdg.stateHome}/t3code/managed-restarts.log"'';
+      description = "File that records every managed restart of a running T3 Code instance (time, trigger, units, detail) for the t3code-restart-notice session hook.";
+    };
+
     restartGuard = {
-      enable = mkEnableOption "deferring T3 Code package restarts while turns are active" // {default = true;};
+      enable = mkEnableOption "deferring T3 Code package restarts while turns or background work are active" // {default = true;};
 
       settleSeconds = mkOption {
         type = types.ints.positive;
         default = 10;
-        description = "Seconds T3 Code must remain idle before Home Manager may restart it with a changed executable.";
+        description = "Seconds T3 Code must remain without live turns or background work before a managed restart may proceed.";
       };
     };
 
@@ -520,7 +649,7 @@ in {
           if ${pkgs.systemd}/bin/systemctl --user --quiet is-active ${unitArgs}; then
             if ${idleCheck}/bin/t3code-idle-check; then
               run mkdir -p "$(dirname ${escapeShellArg restartMarker})"
-              run touch ${escapeShellArg restartMarker}
+              run ${pkgs.coreutils}/bin/truncate -s 0 ${escapeShellArg restartMarker}
             else
               warnEcho "T3 Code is busy; restart the running T3 Code services (${unitArgs}) later to use the seeded AI stack."
             fi
@@ -539,14 +668,80 @@ in {
       lib.hm.dag.entryAfter ["reloadSystemd"] ''
         restart_marker=${escapeShellArg restartMarker}
         if [[ -e "$restart_marker" ]]; then
-          cgroup_file="''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}"
-          if grep -qE ${escapeShellArg serviceCgroupPattern} "$cgroup_file"; then
-            errorEcho "Refusing to restart T3 Code from inside its own service cgroup."
-            exit 75
+          # The marker names the units still to restart (empty: every running
+          # one). A unit that started after the marker was written has been
+          # restarted some other way, and a unit someone stopped after that
+          # stays stopped; both are dropped. A unit that failed earlier (also
+          # after reset-failed) is kept. Nothing left means the restart
+          # already happened.
+          marker_time=$(${pkgs.coreutils}/bin/stat -c %Y "$restart_marker")
+          pending=$(<"$restart_marker")
+          if [[ -z "$pending" ]]; then
+            pending=$(${restartUnits}/bin/t3code-restart-units | tr '\n' ' ')
           fi
-          # Instances share the executable; restart the running ones together.
-          run ${pkgs.systemd}/bin/systemctl --user try-restart ${unitArgs}
-          run rm -f "$restart_marker"
+          needed=""
+          for unit in $pending; do
+            # An instance removed or renamed since the marker was written.
+            case " ${unitArgs} " in
+              *" $unit "*) ;;
+              *) continue ;;
+            esac
+            state=$(${pkgs.systemd}/bin/systemctl --user show "$unit" --property=ActiveState --value)
+            entered=$(${pkgs.systemd}/bin/systemctl --user show --timestamp=unix "$unit" --property=ActiveEnterTimestamp --value)
+            stopped=$(${pkgs.systemd}/bin/systemctl --user show --timestamp=unix "$unit" --property=InactiveEnterTimestamp --value)
+            entered="''${entered#@}"
+            stopped="''${stopped#@}"
+            [[ "$entered" =~ ^[0-9]+$ ]] || entered=0
+            [[ "$stopped" =~ ^[0-9]+$ ]] || stopped=0
+            # Whole seconds: a stop in the marker's own second counts as
+            # later, so a failed restart waits a second before rewriting it.
+            if { [[ "$state" == active ]] && ((entered > marker_time)); } \
+              || { [[ "$state" == inactive ]] && ((stopped >= marker_time)); }; then
+              continue
+            fi
+            needed="$needed$unit "
+          done
+          needed="''${needed% }"
+          cgroup_file="''${T3CODE_CGROUP_FILE:-/proc/self/cgroup}"
+          if [[ -z "$needed" ]]; then
+            run rm -f "$restart_marker"
+          elif grep -qE ${escapeShellArg serviceCgroupPattern} "$cgroup_file"; then
+            # Restarting from inside T3 would kill this activation; keep the
+            # marker for one run from outside and finish the activation.
+            warnEcho "Not restarting T3 Code from inside its own service cgroup; the restart marker is kept."
+          elif ! ${idleCheck}/bin/t3code-idle-check; then
+            # A marker kept by an earlier deferred or failed restart must not
+            # interrupt live work on a later activation. Like `run`, a dry
+            # run leaves the marker alone.
+            if [[ -v DRY_RUN ]]; then
+              echo "printf '%s\n' \"$needed\" > $restart_marker"
+            else
+              printf '%s\n' "$needed" > "$restart_marker"
+            fi
+            warnEcho "T3 Code is busy; the restart marker is kept for a later activation."
+          else
+            # Instances share the executable; restart them together. `restart`
+            # also brings back a unit that an earlier attempt left stopped.
+            restart_status=0
+            # shellcheck disable=SC2086
+            run ${pkgs.systemd}/bin/systemctl --user restart $needed || restart_status=$?
+            run ${recordRestart}/bin/t3code-record-restart home-manager-activation "managed executable changed" "$needed" \
+              || warnEcho "Could not record the restart."
+            # A failed restart keeps the marker, naming only the units that
+            # did not come back, and fails the activation, as an aborted
+            # restart always did; the next activation retries those.
+            if ((restart_status != 0)); then
+              remaining=""
+              for unit in $needed; do
+                ${pkgs.systemd}/bin/systemctl --user --quiet is-active "$unit" || remaining="$remaining$unit "
+              done
+              sleep 1
+              printf '%s\n' "''${remaining:-$needed}" > "$restart_marker"
+              errorEcho "Restarting T3 Code failed (exit $restart_status); the restart marker is kept."
+              exit "$restart_status"
+            fi
+            run rm -f "$restart_marker"
+          fi
         fi
       ''
     );

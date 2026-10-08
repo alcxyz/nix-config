@@ -510,6 +510,8 @@ in {
     forkGuard = lib.removePrefix "run " forkHome.config.home.activation.t3codeRestartGuard.data;
     stableForkGuard = lib.removePrefix "run " stableForkHome.config.home.activation.t3codeRestartGuard.data;
     switcher = "${lib.head (lib.filter (p: lib.hasInfix "t3code-ai-stack-switch" (toString p)) home.config.home.packages)}/bin/t3code-ai-stack-switch";
+    restartNotice = "${lib.head (lib.filter (p: lib.hasInfix "t3code-restart-notice" (toString p)) home.config.home.packages)}/bin/t3code-restart-notice";
+    claudeSettingsActivation = pkgs.writeText "claude-statusline-activation" home.config.home.activation.claudeStatusline.data;
     fakeT3 = version:
       pkgs.runCommand "t3code-${version}" {} ''
         mkdir -p $out/bin
@@ -534,6 +536,15 @@ in {
     assert timer.Persistent;
       pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep pkgs.python3];} ''
         python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)} ${lib.escapeShellArg (lib.removeSuffix "\n" forkGuard)} ${lib.escapeShellArg (lib.removeSuffix "\n" stableForkGuard)}
+        # The restart guard counts live turns and background work in the V2
+        # database (#575); the switcher's idle check is the shared entry point.
+        idle_check=$(grep -oE '/nix/store/[^ ]+/bin/t3code-idle-check' ${switcher} | head -n1)
+        python3 ${../../modules/home-manager/services/t3code/test-restart-guard.py} "$idle_check" ${restartNotice}
+        grep -F "statev2.sqlite" "$idle_check"
+        grep -F "pendingBackgroundTasks" "$idle_check"
+        grep -F "t3code-record-restart" ${switcher}
+        grep -F "t3code-record-restart" ${pkgs.writeText "t3code-apply-managed-unit" applyManagedUnit}
+        grep -F "t3code-restart-notice" "$(grep -oE '/nix/store/[^ ]+claude-managed-settings.json' ${claudeSettingsActivation} | head -n1)"
         grep -F "package_flake_default='git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=promoted'" ${updater}
         grep -F 'nix flake metadata --refresh --json "''${T3CODE_PACKAGE_FLAKE:-$package_flake_default}"' ${updater}
         if grep -F ":-'git+" ${updater}; then
@@ -570,9 +581,10 @@ in {
         switch "$stable" "$old"; expect 0 "would switch"
         grep -F "T3CODE_CGROUP_FILE" ${guard}
         grep -F "t3code\\.service" ${guard}
-        grep -F 'systemctl --user try-restart t3code.service t3code-bn.service' ${
+        grep -F 'systemctl --user restart $needed' ${
           pkgs.writeText "t3code-apply-managed-unit" applyManagedUnit
         }
+        grep -F 'systemctl --user try-restart t3code.service t3code-bn.service' ${switcher}
         grep -F "t3code-bn\\.service" ${guard}
         touch "$out"
       '';
