@@ -69,11 +69,11 @@
     "bivrost": {
       "flake": false,
       "locked": {
-        "lastModified": 1791203100,
-        "narHash": "sha256-v291I7oFKouNeHDuLIm1rXP1aaF6A5/9r0gwLRYMBmg=",
+        "lastModified": 1791409570,
+        "narHash": "sha256-DKwiHJWYrV4lxWbylGdW7FxzmAjQHulqSkspY7UsbJ8=",
         "owner": "alcxyz",
         "repo": "bivrost",
-        "rev": "6981e843944e90c841f41d57122acc6cc4891b5a",
+        "rev": "f8d69a0fad5f10eccd7f8dd4882cde6ec22a12ba",
         "type": "github"
       },
       "original": {
