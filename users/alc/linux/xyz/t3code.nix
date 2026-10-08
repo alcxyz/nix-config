@@ -53,7 +53,7 @@ in {
 
   services.t3code = {
     enable = true;
-    channel = "fork"; # Select "upstream" to return to the upstream build.
+    channel = "upstream"; # Select "fork" to use the tested fork build.
     forkReleaseChannel = "nightly";
     port = 3773;
     # bn-apps work projects get their own server, so they never mix with
