@@ -81,7 +81,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0074](0074-phased-podman-coexistence.md) | Qualify Podman through staged Docker coexistence | Accepted, qualification in progress | containers, development, CI |
 | [ADR-0075](0075-agent-turn-efficiency-reporting.md) | Start with short model-usage summaries in T3 Code | Proposed | T3 Code, agent reporting, optional skills |
 | [ADR-0076](0076-dms-lock-exact-head-publication.md) | Validate and merge DMS lock updates at an exact head | Accepted | DMS lock, Forgejo Actions |
-| [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted | T3 Code, AI providers, Home Manager |
+| [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted, amended | T3 Code, AI providers, Home Manager |
 | [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Accepted, amended | AI agents, pull requests, Home Manager |
 | [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Accepted | AI agents, Home Manager, Codex, Claude Code |
 | [ADR-0080](0080-promoted-package-ref.md) | Promote validated package revisions as a ref, lock them on demand | Accepted | package promotion, T3 Code, deploy |

@@ -12,10 +12,10 @@
 with lib; let
   cfg = config.services.t3code;
   managedVersion = getVersion cfg.package;
-  managedChannel =
-    if cfg.channel == "fork"
-    then "fork-${cfg.forkReleaseChannel}"
-    else "upstream";
+  # Only the upstream nightly is managed. The channel state file and profile
+  # bundle name still record it, so hosts that ran the retired fork channels
+  # (fork, fork-nightly, fork-stable) are treated as switching channels.
+  managedChannel = "upstream";
   managedVersionState = "${cfg.baseDir}/userdata/managed-t3code-version";
   managedChannelState = "${cfg.baseDir}/userdata/managed-t3code-channel";
   restartMarker = "${cfg.baseDir}/userdata/managed-t3code-restart-required";
@@ -93,7 +93,7 @@ with lib; let
   # background work (background shells, monitors, subagents and tasks). A
   # restart kills that work, so it counts as busy even between turns. Since
   # upstream de34391427 T3 keeps this state in statev2.sqlite and leaves
-  # state.sqlite as a frozen copy; older builds (fork stable 0.0.45) still use
+  # state.sqlite as a frozen copy; older builds still use
   # state.sqlite. The running build writes its database on every event, so
   # per directory the most recently written of the two (database or WAL,
   # nanosecond mtime) is the live one; the other may hold stale rows from a
@@ -243,14 +243,11 @@ with lib; let
       if [[ -r "$channel_state" ]]; then
         read -r accepted_channel < "$channel_state" || true
       fi
+      # The retired fork channels remain valid state: moving off one is a
+      # channel change, not a downgrade.
       if [[ "$accepted_channel" != upstream && "$accepted_channel" != fork && "$accepted_channel" != fork-nightly && "$accepted_channel" != fork-stable ]]; then
         echo "Invalid managed T3 Code channel state at $channel_state." >&2
         exit 76
-      fi
-
-      # Legacy fork selection follows the nightly compatibility alias.
-      if [[ "$accepted_channel" == fork ]]; then
-        accepted_channel=fork-nightly
       fi
 
       # Selecting another channel is an intentional package change. Versions
@@ -448,30 +445,10 @@ in {
   options.services.t3code = {
     enable = mkEnableOption "t3code headless server";
 
-    channel = mkOption {
-      type = types.enum ["upstream" "fork"];
-      default = "upstream";
-      description = "Package channel for the existing service. Changing channels preserves its address and state directory.";
-    };
-
-    forkReleaseChannel = mkOption {
-      type = types.enum ["nightly" "stable"];
-      default = "nightly";
-      description = "Published upstream release channel used by the tested fork. Applies when channel is fork.";
-    };
-
     package = mkOption {
       type = types.package;
-      default =
-        if cfg.channel == "fork"
-        then
-          (
-            if cfg.forkReleaseChannel == "stable"
-            then pkgs.t3code-fork-stable
-            else pkgs.t3code-fork
-          )
-        else pkgs.t3code;
-      defaultText = literalExpression ''if config.services.t3code.channel == "fork" then (if config.services.t3code.forkReleaseChannel == "stable" then pkgs.t3code-fork-stable else pkgs.t3code-fork) else pkgs.t3code'';
+      default = pkgs.t3code;
+      defaultText = literalExpression "pkgs.t3code";
       description = "T3 Code package to run and protect from unintended downgrades.";
     };
 

@@ -479,25 +479,11 @@ in {
     upstreamHome = home.extendModules {
       modules = [
         {
-          services.t3code.channel = lib.mkForce "upstream";
           services.t3code.package = lib.mkForce home.config.services.t3code.package;
           # The legacy restart guard applies only without the ai-stack profile.
           services.t3code.autoUpdate.enable = lib.mkForce false;
         }
       ];
-    };
-    forkHome = home.extendModules {
-      modules = [
-        {
-          services.t3code.channel = lib.mkForce "fork";
-          # Exercise channel behavior independently of the producer lock.
-          services.t3code.package = lib.mkForce home.config.services.t3code.package;
-          services.t3code.autoUpdate.enable = lib.mkForce false;
-        }
-      ];
-    };
-    stableForkHome = forkHome.extendModules {
-      modules = [{services.t3code.forkReleaseChannel = lib.mkForce "stable";}];
     };
     t3Unit = self.homeConfigurations.alc-xyz.config.systemd.user.services.t3code.Unit;
     bnService = home.config.systemd.user.services.t3code-bn.Service;
@@ -507,8 +493,6 @@ in {
     updater = builtins.head service.ExecStart;
     guard = lib.removePrefix "run " upstreamHome.config.home.activation.t3codeRestartGuard.data;
     applyManagedUnit = self.homeConfigurations.alc-xyz.config.home.activation.t3codeApplyManagedUnit.data;
-    forkGuard = lib.removePrefix "run " forkHome.config.home.activation.t3codeRestartGuard.data;
-    stableForkGuard = lib.removePrefix "run " stableForkHome.config.home.activation.t3codeRestartGuard.data;
     switcher = "${lib.head (lib.filter (p: lib.hasInfix "t3code-ai-stack-switch" (toString p)) home.config.home.packages)}/bin/t3code-ai-stack-switch";
     restartNotice = "${lib.head (lib.filter (p: lib.hasInfix "t3code-restart-notice" (toString p)) home.config.home.packages)}/bin/t3code-restart-notice";
     claudeSettingsActivation = pkgs.writeText "claude-statusline-activation" home.config.home.activation.claudeStatusline.data;
@@ -523,8 +507,6 @@ in {
         ln -s ${fakeT3 version}/bin/t3 $out/bin/t3
       '';
   in
-    assert forkHome.config.services.t3code.baseDir == home.config.services.t3code.baseDir;
-    assert forkHome.config.systemd.user.services.t3code.Service.ExecStart == upstreamHome.config.systemd.user.services.t3code.Service.ExecStart;
     assert lib.hasPrefix "${home.config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/bin/t3 " (lib.head home.config.systemd.user.services.t3code.Service.ExecStart);
     assert !(home.config.home.activation ? t3codeRestartGuard);
     assert t3Unit.X-RestartIfChanged == false;
@@ -535,7 +517,7 @@ in {
     assert service.RestartPreventExitStatus == "76";
     assert timer.Persistent;
       pkgs.runCommand "t3code-auto-update-contract" {nativeBuildInputs = [pkgs.gnugrep pkgs.python3];} ''
-        python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)} ${lib.escapeShellArg (lib.removeSuffix "\n" forkGuard)} ${lib.escapeShellArg (lib.removeSuffix "\n" stableForkGuard)}
+        python3 ${../../modules/home-manager/services/t3code/test-channel-guard.py} ${lib.escapeShellArg (lib.removeSuffix "\n" guard)}
         # The restart guard counts live turns and background work in the V2
         # database (#575); the switcher's idle check is the shared entry point.
         idle_check=$(grep -oE '/nix/store/[^ ]+/bin/t3code-idle-check' ${switcher} | head -n1)
@@ -571,13 +553,16 @@ in {
             exit 1
           fi
         }
-        old=${fakeStack "fork-nightly" "0.0.45-nightly.2"}
-        new=${fakeStack "fork-nightly" "0.0.45-nightly.10"}
-        stable=${fakeStack "fork-stable" "0.0.44"}
+        old=${fakeStack "upstream" "0.0.45-nightly.2"}
+        new=${fakeStack "upstream" "0.0.45-nightly.10"}
+        # Profiles left on a retired fork bundle may hold a higher version.
+        fork=${fakeStack "fork-nightly" "0.0.46-nightly.1"}
+        stable=${fakeStack "fork-stable" "0.0.46"}
         switch "$new" "$new"; expect 0 "already current"
         switch "$old" "$new"; expect 0 "would switch"
         switch "" "$new"; expect 0 "T3 none -> 0.0.45-nightly.10"
         switch "$new" "$old"; expect 76 "Refusing to downgrade"
+        switch "$fork" "$old"; expect 0 "would switch"
         switch "$stable" "$old"; expect 0 "would switch"
         grep -F "T3CODE_CGROUP_FILE" ${guard}
         grep -F "t3code\\.service" ${guard}

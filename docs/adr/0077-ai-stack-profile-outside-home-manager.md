@@ -2,6 +2,7 @@
 
 **Status:** Accepted; the updater follows the nix-packages `promoted` branch since [ADR-0080](0080-promoted-package-ref.md)
 **Date:** 2026-09-30
+**Amended:** 2026-10-08, the T3 Code fork channels were retired (nix-packages ADR-0005)
 **Applies to:** `modules/home-manager/services/t3code/`, nix-packages `ai-stack-*` outputs
 
 ## Context
@@ -28,8 +29,7 @@ Deliver the AI stack through a dedicated Nix profile,
 `~/.local/state/nix/profiles/ai-stack`, that unattended updates can replace
 without running Home Manager activation.
 
-- nix-packages exports one bundle per T3 channel (`ai-stack-upstream`,
-  `ai-stack-fork-nightly`, `ai-stack-fork-stable`). Each contains the T3
+- nix-packages exports the `ai-stack-upstream` bundle. It contains the T3
   wrapper, which already pins its providers, plus `claude-code`, `codex-cli`
   and `codex-app-server` for interactive use.
 - `t3code-auto-update` resolves the promoted nix-packages revision as before,

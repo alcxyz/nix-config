@@ -42,25 +42,19 @@ def check(script, accepted_channel, accepted_version, expected, inside_service=N
         assert not (root / "restart").exists()
 
 
-upstream, fork, stable = sys.argv[1:]
-check(upstream, None, "9999.0.0", 76)  # Legacy state belongs to upstream.
-check(upstream, "upstream", "9999.0.0", 76)
-check(fork, "fork", "9999.0.0", 76)
-check(upstream, "fork", "9999.0.0", 0)
-check(fork, "upstream", "9999.0.0", 0)
-check(upstream, "upstream", "0.0.1", 0)
-check(fork, "fork", "0.0.1", 0)
-check(upstream, "invalid", "0.0.1", 76)
-check(upstream, "fork", "9999.0.0", 75, inside_service="t3code.service")
-check(fork, "upstream", "9999.0.0", 75, inside_service="t3code.service")
-check(fork, "fork-nightly", "9999.0.0", 76)
-check(stable, "fork-stable", "9999.0.0", 76)
-check(stable, "fork-nightly", "9999.0.0", 0)
-check(stable, "fork", "9999.0.0", 0)
-check(fork, "fork-stable", "9999.0.0", 0)
-check(stable, "fork-nightly", "9999.0.0", 75, inside_service="t3code.service")
+(guard,) = sys.argv[1:]
+check(guard, None, "9999.0.0", 76)  # Missing state belongs to upstream.
+check(guard, "upstream", "9999.0.0", 76)
+check(guard, "upstream", "0.0.1", 0)
+check(guard, "invalid", "0.0.1", 76)
+# State left by the retired fork channels is another channel, so moving to
+# upstream is not a downgrade.
+for legacy in ("fork", "fork-nightly", "fork-stable"):
+    check(guard, legacy, "9999.0.0", 0)
+check(guard, "fork", "9999.0.0", 75, inside_service="t3code.service")
+check(guard, "upstream", "0.0.1", 75, inside_service="t3code.service")
 # Additional instances share the executable, so their cgroups are guarded too.
-check(fork, "upstream", "9999.0.0", 75, inside_service="t3code-bn.service")
+check(guard, "fork-stable", "9999.0.0", 75, inside_service="t3code-bn.service")
 # A running additional instance needs the restart even if the primary is stopped.
-check(fork, "upstream", "9999.0.0", 75, inside_service="t3code-bn.service", active="t3code-bn.service")
-print("T3 channel guard: 18 cases passed")
+check(guard, "upstream", "0.0.1", 75, inside_service="t3code-bn.service", active="t3code-bn.service")
+print("T3 channel guard: 11 cases passed")
