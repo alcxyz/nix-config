@@ -1,6 +1,6 @@
 # ADR-0069: Maintained project development QA inputs
 
-**Status:** Accepted
+**Status:** Accepted, amended by [ADR-0086](0086-released-tool-inputs.md) (released tools use `tools-update`)
 **Date:** 2026-09-08
 **Applies to:** `flake.nix`, maintained project input updates
 

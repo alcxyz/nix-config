@@ -1191,6 +1191,27 @@
         "url": "https://git.outfoxxed.me/outfoxxed/quickshell"
       }
     },
+    "regnskap": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791524474,
+        "narHash": "sha256-5WzidPTB+YzzJ5Sn9lj7ULE1+Po+p/OXeiKKGWzfs30=",
+        "ref": "main",
+        "rev": "c2fa954c91d3ccb8ff7fad20e8fc7159818aab21",
+        "revCount": 587,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git"
+      }
+    },
     "reportcraft": {
       "inputs": {
         "nixpkgs": [
@@ -1200,13 +1221,14 @@
       "locked": {
         "lastModified": 1784665979,
         "narHash": "sha256-/0PUq07PnHiBg6tMEZDoD8p1bn04yEhN+xNt9v5PM8k=",
-        "ref": "refs/heads/main",
+        "ref": "main",
         "rev": "96981b650a0c88ea03e4cb4ccddd661d79568f07",
         "revCount": 2,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git"
       },
       "original": {
+        "ref": "main",
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git"
       }
@@ -1236,6 +1258,7 @@
         "paperless-tools": "paperless-tools",
         "paw": "paw",
         "quickshell": "quickshell",
+        "regnskap": "regnskap",
         "reportcraft": "reportcraft",
         "rustfs": "rustfs",
         "rustfs-app": "rustfs-app",
@@ -1394,13 +1417,14 @@
       "locked": {
         "lastModified": 1779323131,
         "narHash": "sha256-AzMZ7y0AyaOloxw9ZFwAhROxubxnyDpFuRwTKMxGZN0=",
-        "ref": "refs/heads/main",
+        "ref": "main",
         "rev": "ca43b6f21470ddb9af7e126957d4529a3373f4e5",
         "revCount": 5,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git"
       },
       "original": {
+        "ref": "main",
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git"
       }
@@ -1551,15 +1575,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1780621417,
-        "narHash": "sha256-gf11d4gwvnzBDgca3s3gREHPZP9eXkz2lBTjebZdh2g=",
-        "ref": "refs/heads/main",
-        "rev": "8fcb7b2fa103c1a94c2055d494ee491dbb03cb08",
-        "revCount": 6,
+        "lastModified": 1791169488,
+        "narHash": "sha256-jyK0WOZkhVuWBQ8f+mQpNe1rrXgpRi+BTtlBdXhyW24=",
+        "ref": "main",
+        "rev": "c3ea2da427f045bf3cb003089f0b1972c7a24335",
+        "revCount": 7,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git"
       },
       "original": {
+        "ref": "main",
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git"
       }

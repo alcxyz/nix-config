@@ -34,6 +34,7 @@ in
               "xonsh-with-direnv"
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
+            regnskap = inputs.regnskap.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
             videdupe = inputs.videdupe.packages.${system} or {};
@@ -52,6 +53,9 @@ in
             }
             // lib.optionalAttrs (videdupe ? default) {
               videdupe = videdupe.default;
+            }
+            // lib.optionalAttrs (regnskap ? bokfor) {
+              inherit (regnskap) bokfor;
             }
             // lib.optionalAttrs (stashdb-pop ? default) {
               stashdb-pop = stashdb-pop.default;

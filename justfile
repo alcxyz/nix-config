@@ -126,3 +126,8 @@ dms-update:
 # Compatibility with the former QA-specific name.
 [group("update")]
 qa-update: apps-update
+
+# Refresh released platform tools (main branches); inspect the lock diff before switching.
+[group("update")]
+tools-update:
+    bash scripts/update-inputs/update-tools.sh

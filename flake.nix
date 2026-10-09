@@ -31,7 +31,7 @@
     };
 
     reportcraft = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git?ref=main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -109,8 +109,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    regnskap = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git?ref=main";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     stashdb-pop = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git?ref=main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -120,7 +125,7 @@
     };
 
     videdupe = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git?ref=main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

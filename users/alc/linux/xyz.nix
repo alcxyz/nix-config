@@ -85,6 +85,7 @@ in {
       closeActiveWindow
       droptermToggle
       mailWorkspace
+      pkgs.bokfor
       pkgs.paperweight
     ];
 

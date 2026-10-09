@@ -73,7 +73,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0066](0066-direct-umu-launchers-with-heroic-qa-fallback.md) | Use direct UMU launchers with a Heroic QA fallback | Accepted | xyz, UMU, Proton, Battle.net, Heroic |
 | [ADR-0067](0067-explicit-consumer-and-platform-validation.md) | Explicit consumer and platform validation | Accepted, public automation implemented | flake checks, Forgejo, package promotion |
 | [ADR-0068](0068-k8s-node-power-lifecycle.md) | Kubernetes node power lifecycle (formerly the duplicate ADR-0036) | Accepted | k3s, node lifecycle, maintenance helpers |
-| [ADR-0069](0069-maintained-project-dev-qa.md) | Maintained project development QA inputs | Accepted | flake inputs, DMS, release workflow |
+| [ADR-0069](0069-maintained-project-dev-qa.md) | Maintained project development QA inputs | Accepted, amended | flake inputs, DMS, release workflow |
 | [ADR-0070](0070-action-bound-credential-consent.md) | Action-bound credential consent | Accepted | Polkit, DMS, credential brokers |
 | [ADR-0071](0071-shared-container-network-namespace-mount.md) | Establish the shared container network namespace mount before runtimes | Accepted | containers, k3s, systemd |
 | [ADR-0072](0072-isolated-runner-docker.md) | Isolate runner Docker execution in a bounded rootless service | Accepted, per-host qualification required | Forgejo runners, Docker, systemd |
@@ -90,6 +90,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0083](0083-podman-cleanup-completion-fence.md) | Fence admission until Podman cleanup completion is known | Accepted, qualification required | Forgejo runners, Podman cleanup |
 | [ADR-0084](0084-codex-mcp-credentials-in-file.md) | Keep Codex MCP OAuth credentials in a file, not the keyring | Accepted | AI agents, Codex, Home Manager |
 | [ADR-0085](0085-one-role-vocabulary.md) | One role vocabulary for agents and tools | Accepted | AI agents, local tooling, llm config |
+| [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools with tools-update | Accepted | flake inputs, release workflow |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

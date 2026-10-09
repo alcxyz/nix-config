@@ -37,6 +37,16 @@ forks, not maintained projects; they retain the bundle's main pins and are not
 explicitly refreshed by the QA command. See
 [ADR-0069](docs/adr/0069-maintained-project-dev-qa.md).
 
+## Released tools
+
+The owner's command-line tools follow their released `main` branches:
+paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop and
+videdupe. Run `tools-update` (or `just tools-update`) to refresh them, inspect
+the lockfile changes, then run `hmsw`. A new tool is added to
+`scripts/update-inputs/update-tools.sh` once its repository releases from `main`
+and has a flake package. See
+[ADR-0086](docs/adr/0086-released-tool-inputs.md).
+
 ## Hosts
 
 The host names, systems, and role identifiers below match
