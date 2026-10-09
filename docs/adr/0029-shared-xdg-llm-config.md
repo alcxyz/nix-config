@@ -3,7 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-05-02
 **Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
-**Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/leantime-tidy`, `tools/paperless-tools`
+**Amended:** 2026-10-09, `leantime-tidy` was deprecated and its repository archived; it no longer consumes the shared config.
+**Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/paperless-tools`
 
 ## Context
 
@@ -133,7 +134,6 @@ files remain valid fallback layers until all tools are updated.
 ## Tool mapping guidance
 
 - `paperless-tools` continues to use shared roles directly (`fast`, `strong`)
-- `leantime-tidy` should use `fast` by default
 - `devlog` should use `strong` by default unless a narrower role is introduced
   later
 
