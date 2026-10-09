@@ -125,6 +125,8 @@ in {
     users = {
       ${username} = {
         isNormalUser = true;
+        # Pinned so installer images that ship their own user cannot shift it.
+        uid = 1000;
         home = "/home/${username}";
         createHome = true;
         shell = shellPackages.${config.alc.shell.default};
