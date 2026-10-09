@@ -1,6 +1,6 @@
 # ADR-0086: Refresh released platform tools with tools-update
 
-**Status:** Accepted
+**Status:** Accepted, amended by [ADR-0087](0087-side-by-side-dev-tools.md) (dev builds side by side with `dev-tools-update`)
 **Date:** 2026-10-09
 **Applies to:** `flake.nix`, `scripts/update-inputs/update-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069
 
@@ -42,7 +42,7 @@ their own deployment paths.
 - **Keep running bokfor from the checkout:** its version then depends on
   whichever branch another task left checked out.
 - **Follow `dev` for the tools as well:** daily bookkeeping would run unreleased
-  code. Side-by-side dev builds are tracked separately (nix-config #582).
+  code. Dev builds are installed side by side instead (ADR-0087).
 
 A tool's flake must keep building at `main`. For Go tools, a stale `vendorHash`
 after a dependency change breaks the next build after `tools-update`; the

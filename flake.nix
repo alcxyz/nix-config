@@ -114,6 +114,17 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Dev builds next to the released tools (ADR-0087); refreshed by dev-tools-update.
+    paperless-tools-dev = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git?ref=dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    regnskap-dev = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git?ref=dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     stashdb-pop = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git?ref=main";
       inputs.nixpkgs.follows = "nixpkgs";

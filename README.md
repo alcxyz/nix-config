@@ -47,6 +47,12 @@ the lockfile changes, then run `hmsw`. A new tool is added to
 and has a flake package. See
 [ADR-0086](docs/adr/0086-released-tool-inputs.md).
 
+Dev builds of paperless-tools and regnskap sit next to the releases:
+`paperweight-dev` keeps its reports under `~/.local/state/paperweight-dev`, and
+the `bokfor-dev` launcher runs the regnskap dev build against the sandbox. Run
+`dev-tools-update` (or `just dev-tools-update`) to refresh them, then `hmsw`. See
+[ADR-0087](docs/adr/0087-side-by-side-dev-tools.md).
+
 ## Hosts
 
 The host names, systems, and role identifiers below match

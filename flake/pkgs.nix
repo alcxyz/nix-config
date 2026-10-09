@@ -35,6 +35,8 @@ in
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
             regnskap = inputs.regnskap.packages.${system} or {};
+            ptDev = inputs.paperless-tools-dev.packages.${system} or {};
+            regnskapDev = inputs.regnskap-dev.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
             videdupe = inputs.videdupe.packages.${system} or {};
@@ -56,6 +58,19 @@ in
             }
             // lib.optionalAttrs (regnskap ? bokfor) {
               inherit (regnskap) bokfor;
+            }
+            # Dev builds keep their own command name and paperweight state
+            # (ADR-0087). paperweight reads XDG_STATE_HOME only for its reports
+            # and does not pass it to the LLM CLIs. bokfor-dev is run by the
+            # nix-secrets launcher.
+            // lib.optionalAttrs (ptDev ? paperweight) {
+              paperweight-dev = _prev.writeShellScriptBin "paperweight-dev" ''
+                export XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}/paperweight-dev"
+                exec ${ptDev.paperweight}/bin/paperweight "$@"
+              '';
+            }
+            // lib.optionalAttrs (regnskapDev ? bokfor) {
+              bokfor-dev = regnskapDev.bokfor;
             }
             // lib.optionalAttrs (stashdb-pop ? default) {
               stashdb-pop = stashdb-pop.default;

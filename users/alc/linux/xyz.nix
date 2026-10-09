@@ -87,6 +87,7 @@ in {
       mailWorkspace
       pkgs.bokfor
       pkgs.paperweight
+      pkgs.paperweight-dev
     ];
 
   # Symlink configs directly to repo checkout for live editing

@@ -96,6 +96,7 @@ in
       dms-update = "bash scripts/update-inputs/update-maintained.sh --dms-only";
       apps-update = "bash scripts/update-inputs/update-maintained.sh";
       tools-update = "bash scripts/update-inputs/update-tools.sh";
+      dev-tools-update = "bash scripts/update-inputs/update-dev-tools.sh";
       # Compatibility with the former QA-specific name.
       qaup = "bash scripts/update-inputs/update-maintained.sh";
       hmsw = "home-manager switch --flake .#alc-${hostName}";

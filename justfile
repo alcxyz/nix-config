@@ -131,3 +131,8 @@ qa-update: apps-update
 [group("update")]
 tools-update:
     bash scripts/update-inputs/update-tools.sh
+
+# Refresh the dev builds of released tools (dev branches); inspect the lock diff before switching.
+[group("update")]
+dev-tools-update:
+    bash scripts/update-inputs/update-dev-tools.sh

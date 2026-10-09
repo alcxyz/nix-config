@@ -489,6 +489,24 @@
         "type": "github"
       }
     },
+    "flake-utils_7": {
+      "inputs": {
+        "systems": "systems_8"
+      },
+      "locked": {
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
     "grove": {
       "inputs": {
         "flake-utils": "flake-utils_3",
@@ -1111,6 +1129,28 @@
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       }
     },
+    "paperless-tools-dev": {
+      "inputs": {
+        "flake-utils": "flake-utils_7",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791531347,
+        "narHash": "sha256-IwlBsEMSKkmwa8CEmX89ctkapbXFo2sPx2XCwDED+ow=",
+        "ref": "dev",
+        "rev": "31d38787925b3d92c5b7c4d61e01d0c1630d1f2d",
+        "revCount": 83,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
+      },
+      "original": {
+        "ref": "dev",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
+      }
+    },
     "paw": {
       "inputs": {
         "nixpkgs": [
@@ -1212,6 +1252,27 @@
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git"
       }
     },
+    "regnskap-dev": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791524474,
+        "narHash": "sha256-5WzidPTB+YzzJ5Sn9lj7ULE1+Po+p/OXeiKKGWzfs30=",
+        "ref": "dev",
+        "rev": "c2fa954c91d3ccb8ff7fad20e8fc7159818aab21",
+        "revCount": 587,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git"
+      },
+      "original": {
+        "ref": "dev",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git"
+      }
+    },
     "reportcraft": {
       "inputs": {
         "nixpkgs": [
@@ -1256,9 +1317,11 @@
         "nixpkgs-openbao": "nixpkgs-openbao",
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",
+        "paperless-tools-dev": "paperless-tools-dev",
         "paw": "paw",
         "quickshell": "quickshell",
         "regnskap": "regnskap",
+        "regnskap-dev": "regnskap-dev",
         "reportcraft": "reportcraft",
         "rustfs": "rustfs",
         "rustfs-app": "rustfs-app",
@@ -1520,6 +1583,21 @@
       }
     },
     "systems_7": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
+    "systems_8": {
       "locked": {
         "lastModified": 1681028828,
         "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
