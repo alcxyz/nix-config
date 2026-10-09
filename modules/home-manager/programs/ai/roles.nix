@@ -104,10 +104,10 @@ in {
       type = types.attrsOf types.str;
       default = {};
       example = {
-        fast = "build";
-        strong = "build";
+        fast = "standard";
+        strong = "standard";
       };
-      description = "Shared LLM config roles (ADR-0029) mapped to agent roles; generates ~/.config/llm/config.toml when set.";
+      description = "Temporary extra names in ~/.config/llm/config.toml, each mapped to an agent role, for tools still moving to role names (ADR-0085).";
     };
   };
 
@@ -119,8 +119,6 @@ in {
           message = "programs.ai.roles names must be lowercase and must not shadow built-in agent types (${concatStringsSep ", " reservedNames}).";
         }
       ];
-
-      warnings = optional (cfg.llmConfigRoles == {}) "programs.ai.roles is set but programs.ai.llmConfigRoles is empty, so ~/.config/llm/config.toml is not generated.";
 
       # Invocations that skip user configuration resolve roles through
       # `agent-role` instead of profiles or agent definitions.
@@ -136,10 +134,9 @@ in {
         mapAttrs' (name: role: nameValuePair ".codex/${name}.config.toml" {source = codexRoleFile name role;}) roles
         // mapAttrs' (name: role: nameValuePair ".claude/agents/${name}.md" {text = claudeAgent name role;}) roles;
 
-      xdg.configFile."llm/config.toml" = mkIf (cfg.llmConfigRoles != {}) {
-        source = toml.generate "llm-config.toml" {
-          roles = mapAttrs (_: role: llmEntry roles.${role}) cfg.llmConfigRoles;
-        };
+      # Tools name the same roles as agents (ADR-0085).
+      xdg.configFile."llm/config.toml".source = toml.generate "llm-config.toml" {
+        roles = mapAttrs (_: llmEntry) roles // mapAttrs (_: role: llmEntry roles.${role}) cfg.llmConfigRoles;
       };
     })
     {
@@ -147,6 +144,10 @@ in {
         {
           assertion = all (role: hasAttr role roles) (attrValues cfg.llmConfigRoles);
           message = "programs.ai.llmConfigRoles must name roles defined in programs.ai.roles.";
+        }
+        {
+          assertion = all (name: !(hasAttr name roles)) (attrNames cfg.llmConfigRoles);
+          message = "programs.ai.llmConfigRoles names must not shadow roles in programs.ai.roles.";
         }
       ];
 

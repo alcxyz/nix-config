@@ -1,30 +1,17 @@
 # Shape of ~/.config/llm/config.toml (ADR-0029). The deployed file is generated
-# from the agent role table (ADR-0079, programs.ai.roles and llmConfigRoles);
-# the model values below are placeholders, not the current choice.
-[roles.fast]
+# from the agent role table (ADR-0079, ADR-0085): one entry per role, named
+# after it (`light`, `standard`, `deep`). The model values below are
+# placeholders, not the current choice.
+[roles.standard]
 provider    = "openai"
-model       = "<codex model of the mapped role>"
-effort      = "<codex effort of the mapped role>"
+model       = "<codex model of the role>"
+effort      = "<codex effort of the role>"
 transport   = "cli"
 api_key_env = "OPENAI_API_KEY"
 
-[roles.fast.backup]
+[roles.standard.backup]
 provider    = "anthropic"
-model       = "<Claude alias or model of the mapped role>"
-effort      = "<Claude effort of the mapped role>"
-transport   = "cli"
-api_key_env = "ANTHROPIC_API_KEY"
-
-[roles.strong]
-provider    = "openai"
-model       = "<codex model of the mapped role>"
-effort      = "<codex effort of the mapped role>"
-transport   = "cli"
-api_key_env = "OPENAI_API_KEY"
-
-[roles.strong.backup]
-provider    = "anthropic"
-model       = "<Claude alias or model of the mapped role>"
-effort      = "<Claude effort of the mapped role>"
+model       = "<Claude alias or model of the role>"
+effort      = "<Claude effort of the role>"
 transport   = "cli"
 api_key_env = "ANTHROPIC_API_KEY"

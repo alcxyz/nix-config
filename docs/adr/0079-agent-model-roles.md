@@ -2,6 +2,7 @@
 
 **Status:** Accepted (implemented 2026-10-02)
 **Date:** 2026-10-02
+**Amended:** 2026-10-09 by [ADR-0085](0085-one-role-vocabulary.md): `build` is renamed `standard`, and the shared LLM config uses the role names instead of `fast` and `strong`.
 **Applies to:** `modules/home-manager/programs/ai/`, `users/alc/common.nix`, `docs/llm-config.toml.example`, the retired `users/alc/configs/llm/config.toml`, `~/.codex/config.toml`, `~/.codex/<role>.config.toml`, `~/.claude/agents/`, `~/.config/llm/config.toml`, nix-secrets role table and agent instructions
 
 ## Context

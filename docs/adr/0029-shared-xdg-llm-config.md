@@ -4,6 +4,7 @@
 **Date:** 2026-05-02
 **Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
 **Amended:** 2026-10-09, `leantime-tidy` was deprecated and its repository archived; it no longer consumes the shared config.
+**Amended:** 2026-10-09 by [ADR-0085](0085-one-role-vocabulary.md): the config has one entry per agent role (`light`, `standard`, `deep`); `fast` and `strong` remain only as temporary aliases, and tools stop reading tool-local config files as they move to the role names.
 **Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/paperless-tools`
 
 ## Context
@@ -76,9 +77,9 @@ api_key_env = "ANTHROPIC_API_KEY"
 ```
 
 `docs/llm-config.toml.example` shows the shape with placeholder models.
-Since ADR-0079, Home Manager generates `~/.config/llm/config.toml` from
-`programs.ai.llmConfigRoles`, which maps `fast` and `strong` to agent roles; the
-values live in nix-secrets. The hand-maintained `users/alc/configs/llm/config.toml`
+Since ADR-0079, Home Manager generates `~/.config/llm/config.toml` from the
+agent role table in nix-secrets; since ADR-0085 it has one entry per role, named
+after it. The hand-maintained `users/alc/configs/llm/config.toml`
 and its live-edit link are retired.
 
 ### Fields
@@ -133,9 +134,8 @@ files remain valid fallback layers until all tools are updated.
 
 ## Tool mapping guidance
 
-- `paperless-tools` continues to use shared roles directly (`fast`, `strong`)
-- `devlog` should use `strong` by default unless a narrower role is introduced
-  later
+Since ADR-0085, tools name agent roles, starting with `standard` for what
+used `fast` or `strong`.
 
 This ADR does not require every tool to expose role names directly in its UI or
 CLI; it only standardizes the underlying source of provider policy.
