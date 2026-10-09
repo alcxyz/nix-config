@@ -99,16 +99,6 @@ in {
       default = {};
       description = "Agent model roles (ADR-0079), keyed by role name.";
     };
-
-    llmConfigRoles = mkOption {
-      type = types.attrsOf types.str;
-      default = {};
-      example = {
-        fast = "standard";
-        strong = "standard";
-      };
-      description = "Temporary extra names in ~/.config/llm/config.toml, each mapped to an agent role, for tools still moving to role names (ADR-0085).";
-    };
   };
 
   config = mkMerge [
@@ -136,21 +126,10 @@ in {
 
       # Tools name the same roles as agents (ADR-0085).
       xdg.configFile."llm/config.toml".source = toml.generate "llm-config.toml" {
-        roles = mapAttrs (_: llmEntry) roles // mapAttrs (_: role: llmEntry roles.${role}) cfg.llmConfigRoles;
+        roles = mapAttrs (_: llmEntry) roles;
       };
     })
     {
-      assertions = [
-        {
-          assertion = all (role: hasAttr role roles) (attrValues cfg.llmConfigRoles);
-          message = "programs.ai.llmConfigRoles must name roles defined in programs.ai.roles.";
-        }
-        {
-          assertion = all (name: !(hasAttr name roles)) (attrNames cfg.llmConfigRoles);
-          message = "programs.ai.llmConfigRoles names must not shadow roles in programs.ai.roles.";
-        }
-      ];
-
       # Runs even without roles, so registrations of removed roles are cleaned up.
       # A config the merge cannot safely change only loses subagent role
       # registrations (`codex exec -p <role>` keeps working), so warn rather

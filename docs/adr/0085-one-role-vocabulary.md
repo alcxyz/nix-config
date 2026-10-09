@@ -1,6 +1,6 @@
 # ADR-0085: One role vocabulary for agents and tools
 
-**Status:** Accepted
+**Status:** Accepted (implemented 2026-10-09)
 **Date:** 2026-10-09
 **Applies to:** `modules/home-manager/programs/ai/roles.nix`, `docs/llm-config.toml.example`, `~/.config/llm/config.toml`, nix-secrets role table and agent instructions, and the tools that read the shared LLM config: paperless-tools, mailweight, crm-ingest and devlog
 

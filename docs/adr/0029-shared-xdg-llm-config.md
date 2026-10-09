@@ -4,7 +4,7 @@
 **Date:** 2026-05-02
 **Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
 **Amended:** 2026-10-09, `leantime-tidy` was deprecated and its repository archived; it no longer consumes the shared config.
-**Amended:** 2026-10-09 by [ADR-0085](0085-one-role-vocabulary.md): the config has one entry per agent role (`light`, `standard`, `deep`); `fast` and `strong` remain only as temporary aliases, and tools stop reading tool-local config files as they move to the role names.
+**Amended:** 2026-10-09 by [ADR-0085](0085-one-role-vocabulary.md): the config has one entry per agent role (`light`, `standard`, `deep`) instead of `fast` and `strong`, and tools no longer read tool-local config files.
 **Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/paperless-tools`
 
 ## Context
@@ -45,36 +45,9 @@ than silently falling back to lower-precedence config.
 
 ## Shared config shape
 
-The shared config is role-based. Tools map their own tasks onto shared roles
-such as `fast` and `strong`.
-
-Example:
-
-```toml
-[roles.fast]
-provider    = "openai"
-model       = "gpt-5.4-mini"
-transport   = "cli"
-api_key_env = "OPENAI_API_KEY"
-
-[roles.fast.backup]
-provider    = "anthropic"
-model       = "claude-haiku-4-5-20251001"
-transport   = "cli"
-api_key_env = "ANTHROPIC_API_KEY"
-
-[roles.strong]
-provider    = "openai"
-model       = "gpt-5.4"
-transport   = "cli"
-api_key_env = "OPENAI_API_KEY"
-
-[roles.strong.backup]
-provider    = "anthropic"
-model       = "claude-sonnet-4-6-20250514"
-transport   = "cli"
-api_key_env = "ANTHROPIC_API_KEY"
-```
+The shared config is role-based. Tools map their own tasks onto shared roles,
+originally `fast` and `strong`; since ADR-0085 these are the agent roles
+`light`, `standard` and `deep`.
 
 `docs/llm-config.toml.example` shows the shape with placeholder models.
 Since ADR-0079, Home Manager generates `~/.config/llm/config.toml` from the

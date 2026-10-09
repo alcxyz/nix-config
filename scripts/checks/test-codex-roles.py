@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory() as tmp:
     config.write_text('agents.mine.description = "mine"\nagents.max_threads = 4\n')
     original = config.read_text()
     state.write_text('{"managed": []}')
-    result = merge(config, state, {"build": role("build"), "deep": role("deep"), "light": role("light")})
+    result = merge(config, state, {"deep": role("deep"), "light": role("light"), "standard": role("standard")})
     assert result.returncode == 1 and "unrelated settings" in result.stderr, result
     assert config.read_text() == original, "a refused merge leaves the file unchanged"
 
