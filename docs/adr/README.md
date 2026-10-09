@@ -93,7 +93,8 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools with tools-update | Accepted, amended | flake inputs, release workflow |
 | [ADR-0087](0087-side-by-side-dev-tools.md) | Install dev builds of released tools side by side | Accepted, amended | flake inputs, release workflow |
 | [ADR-0088](0088-tv-clients-share-one-appliance-profile.md) | TV clients share one appliance profile | Accepted | rpi0, rpi1, TV clients, Moonlight, Bluetooth audio |
-| [ADR-0089](0089-released-and-dev-app-inputs.md) | Released and dev app inputs | Accepted | flake inputs, release workflow |
+| [ADR-0089](0089-released-and-dev-app-inputs.md) | Released and dev app inputs | Accepted, amended | flake inputs, release workflow |
+| [ADR-0090](0090-install-bivrost-directly.md) | Install Bivrost directly, configured by bn-bootstrap | Accepted | Bivrost, bn-bootstrap, operator homes |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

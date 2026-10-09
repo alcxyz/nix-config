@@ -26,7 +26,7 @@ in {
     inputs.nix-secrets.homeManagerModules.darwinOperator
   ];
 
-  home.packages = pkgsets.home.${hostRole.homePackageSet};
+  home.packages = pkgsets.home.${hostRole.homePackageSet} ++ [pkgs.bivrost];
 
   programs.wezterm.enable = true;
   # Home Manager owns configuration; Homebrew owns the signed application.
@@ -38,6 +38,9 @@ in {
     ln -s /Applications/WezTerm.app/Contents/Resources/wezterm.sh "$out/etc/profile.d/wezterm.sh"
   '';
   programs.karabiner.managed.enable = true;
+  # Bivrost comes from its own flake; bn-bootstrap writes only its Bane NOR
+  # catalogue, profiles and sign-in rule (ADR-0090).
+  programs.bnBootstrap.bivrost.package = null;
   # Bane NOR Azure sign-in opens in Zen, which holds only the Bane NOR profile.
   programs.bnBootstrap.bivrost.authenticationBrowser = {
     executable = "/usr/bin/open";

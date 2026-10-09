@@ -844,6 +844,11 @@ in {
     assert lib.sort builtins.lessThan (operatorNames ++ nonOperatorNames)
     == lib.sort builtins.lessThan (builtins.attrNames self.homeConfigurations);
     assert lib.all (home: home.config.programs.bnBootstrap.bivrost.enable) operatorHomes;
+    assert lib.all (home:
+      home.config.programs.bnBootstrap.bivrost.package
+      == null
+      && builtins.elem home.pkgs.bivrost home.config.home.packages)
+    operatorHomes;
     assert lib.all (home: home.config.programs.bnBootstrap.boards.enable) operatorHomes;
     assert lib.all (home: !(home.options.programs.bnBootstrap ? bullet)) operatorHomes;
     assert lib.all (home: !(home.options.programs.bnBootstrap ? cli)) operatorHomes;

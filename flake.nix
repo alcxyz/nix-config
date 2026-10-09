@@ -35,17 +35,17 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # bn-bootstrap installs this one Bivrost, so it stays on dev until a
-    # release carries dev's route-scope hardening (ADR-0089).
+    # Installed from its own flake; bn-bootstrap supplies only its Bane NOR
+    # configuration (ADR-0090). It stays on dev until a release carries dev's
+    # route-scope hardening (ADR-0089).
     bivrost = {
       url = "github:alcxyz/bivrost/dev";
-      flake = false;
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     bn-bootstrap = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.bivrost.follows = "bivrost";
     };
 
     # color schemes, small extras

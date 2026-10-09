@@ -1,6 +1,6 @@
 # ADR-0089: Released and dev app inputs
 
-**Status:** Accepted
+**Status:** Accepted, amended by [ADR-0090](0090-install-bivrost-directly.md) (this flake installs Bivrost; bn-bootstrap configures it)
 **Date:** 2026-10-10
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-apps.sh`, `scripts/update-inputs/update-maintained.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069 and ADR-0087
 

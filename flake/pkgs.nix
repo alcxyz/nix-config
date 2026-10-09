@@ -37,6 +37,7 @@ in
             regnskap = inputs.regnskap.packages.${system} or {};
             ptDev = inputs.paperless-tools-dev.packages.${system} or {};
             regnskapDev = inputs.regnskap-dev.packages.${system} or {};
+            bivrost = inputs.bivrost.packages.${system} or {};
             groveDev = inputs.grove-dev.packages.${system} or {};
             canopyDev = inputs.canopy-dev.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
@@ -52,6 +53,9 @@ in
                   ]
               )
               pt)
+            // lib.optionalAttrs (bivrost ? default) {
+              bivrost = bivrost.default;
+            }
             // lib.optionalAttrs (vidown ? default) {
               vidown = vidown.default;
             }

@@ -28,8 +28,11 @@ under a `-dev` name. `paperweight-dev` keeps its reports under
 release's configuration and cache; the `bokfor-dev` launcher runs the regnskap
 dev build against the sandbox. Projects without versioned releases yet (paw and
 vidown) follow `dev` under their own names, and so do the apps that cannot run
-twice on one host (Paperflow, Bivrost, DankSession and the DMS plugins).
-bn-bootstrap is updated on its own and is in neither list.
+twice on one host (Paperflow, DankSession and the DMS plugins). Bivrost is
+installed from its own flake and stays on `dev` until its next release; its
+Bane NOR catalogue, profiles and sign-in rule come from bn-bootstrap, which is
+updated on its own and is in neither list
+([ADR-0090](docs/adr/0090-install-bivrost-directly.md)).
 
 A project joins `tools-update` or `apps-update` once it releases from `main`
 and has a flake package. The planned additions are tracked in
