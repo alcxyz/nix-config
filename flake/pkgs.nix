@@ -37,6 +37,8 @@ in
             regnskap = inputs.regnskap.packages.${system} or {};
             ptDev = inputs.paperless-tools-dev.packages.${system} or {};
             regnskapDev = inputs.regnskap-dev.packages.${system} or {};
+            groveDev = inputs.grove-dev.packages.${system} or {};
+            canopyDev = inputs.canopy-dev.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
             videdupe = inputs.videdupe.packages.${system} or {};
@@ -71,6 +73,19 @@ in
             }
             // lib.optionalAttrs (regnskapDev ? bokfor) {
               bokfor-dev = regnskapDev.bokfor;
+            }
+            # App dev builds only take a -dev command name (ADR-0089). They share
+            # the release's config, cache and log, because changing XDG paths
+            # would also move the state of the editors and git tools they open.
+            // lib.optionalAttrs (groveDev ? default) {
+              grove-dev = _prev.writeShellScriptBin "grove-dev" ''
+                exec ${groveDev.default}/bin/grove "$@"
+              '';
+            }
+            // lib.optionalAttrs (canopyDev ? default) {
+              canopy-dev = _prev.writeShellScriptBin "canopy-dev" ''
+                exec ${canopyDev.default}/bin/canopy "$@"
+              '';
             }
             // lib.optionalAttrs (stashdb-pop ? default) {
               stashdb-pop = stashdb-pop.default;

@@ -1,6 +1,6 @@
 # ADR-0087: Install dev builds of released tools side by side
 
-**Status:** Accepted
+**Status:** Accepted, amended by [ADR-0089](0089-released-and-dev-app-inputs.md) (apps get the same split)
 **Date:** 2026-10-09
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-dev-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0086
 
@@ -40,13 +40,12 @@ gets ahead of `main`.
   run unreleased code, which ADR-0086 rejected.
 - **Build dev versions from a checkout by hand:** the version then depends on
   which branch another task left checked out, as with the old launcher.
-- **Pair the maintained apps as well (`dev-apps-update`):** Grove, Canopy,
-  danksession and Bivrost do not promote to `main` or publish releases, so
-  `apps-update` (ADR-0069) already is their dev path. An app gains a released
-  pin when it starts versioned releases. Paperflow is a single-instance
-  folder-watching service, and two copies would compete for the same files. The
-  DMS plugins stay on `dms-update`, because two copies of one widget in one
-  shell make no sense.
+- **Pair the maintained apps as well (`dev-apps-update`):** left out here on
+  the claim that Grove, Canopy and Bivrost do not promote to `main` or publish
+  releases. That was wrong, since all three are tagged on `main`, and ADR-0089
+  pairs Grove and Canopy. Paperflow is a single-instance folder-watching service, and two
+  copies would compete for the same files. The DMS plugins stay on
+  `dms-update`, because two copies of one widget in one shell make no sense.
 
 Each dev input adds a build to every activation that installs it, and the dev
 flake must keep building. A broken dev build blocks `hmsw` until it is fixed or

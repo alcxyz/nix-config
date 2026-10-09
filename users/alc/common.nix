@@ -94,7 +94,8 @@ in
     # Update and switch aliases (run from the nix-config checkout).
     home.shellAliases = {
       dms-update = "bash scripts/update-inputs/update-maintained.sh --dms-only";
-      apps-update = "bash scripts/update-inputs/update-maintained.sh";
+      apps-update = "bash scripts/update-inputs/update-apps.sh";
+      dev-apps-update = "bash scripts/update-inputs/update-maintained.sh";
       tools-update = "bash scripts/update-inputs/update-tools.sh";
       dev-tools-update = "bash scripts/update-inputs/update-dev-tools.sh";
       # Compatibility with the former QA-specific name.

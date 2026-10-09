@@ -35,6 +35,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # bn-bootstrap installs this one Bivrost, so it stays on dev until a
+    # release carries dev's route-scope hardening (ADR-0089).
     bivrost = {
       url = "github:alcxyz/bivrost/dev";
       flake = false;
@@ -130,8 +132,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # No releases yet, so it follows dev under its own name (ADR-0089).
     vidown = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git";
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -140,18 +143,31 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Released apps follow main and are refreshed by apps-update; their dev
+    # builds sit next to them and are refreshed by dev-apps-update (ADR-0089).
     grove = {
+      url = "github:alcxyz/grove/main";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    grove-dev = {
       url = "github:alcxyz/grove/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    paw = {
-      url = "github:alcxyz/paw/dev";
+    canopy = {
+      url = "github:alcxyz/canopy/main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    canopy = {
+    canopy-dev = {
       url = "github:alcxyz/canopy/dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # No releases yet, so it follows dev under its own name (ADR-0089).
+    paw = {
+      url = "github:alcxyz/paw/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

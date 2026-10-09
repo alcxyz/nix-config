@@ -1,4 +1,4 @@
-"""Hermetic contracts for released and dev tool inputs and their lock updaters (ADR-0086, ADR-0087)."""
+"""Hermetic contracts for released and dev tool and app inputs and their lock updaters (ADR-0086, ADR-0087, ADR-0089)."""
 
 from __future__ import annotations
 
@@ -17,10 +17,14 @@ ROOT = Path(__file__).resolve().parents[2]
 UPDATE_TOOLS = ROOT / "scripts/update-inputs/update-tools.sh"
 UPDATE_DEV_TOOLS = ROOT / "scripts/update-inputs/update-dev-tools.sh"
 UPDATE_MAINTAINED = ROOT / "scripts/update-inputs/update-maintained.sh"
+UPDATE_APPS = ROOT / "scripts/update-inputs/update-apps.sh"
 
 TOOL_INPUTS = ["paperless-tools", "regnskap", "reportcraft", "stashdb-pop", "videdupe"]
 # Each dev input is the same repository as a released tool input, on `dev`.
 DEV_TOOL_INPUTS = {"paperless-tools-dev": "paperless-tools", "regnskap-dev": "regnskap"}
+APP_INPUTS = ["grove", "canopy"]
+# Dev builds of released apps; dev-apps-update (update-maintained.sh) refreshes them.
+DEV_APP_INPUTS = {"grove-dev": "grove", "canopy-dev": "canopy"}
 
 
 def list_inputs(script: Path) -> list[str]:
@@ -39,8 +43,16 @@ class ToolInputContracts(unittest.TestCase):
     def test_dev_inputs_pair_with_released_tools(self):
         self.assertLessEqual(set(DEV_TOOL_INPUTS.values()), set(TOOL_INPUTS))
 
+    def test_app_list_inventory_is_exact(self):
+        self.assertEqual(list_inputs(UPDATE_APPS), APP_INPUTS)
+
+    def test_dev_apps_pair_with_released_apps(self):
+        self.assertLessEqual(set(DEV_APP_INPUTS.values()), set(APP_INPUTS))
+        self.assertLessEqual(set(DEV_APP_INPUTS), set(list_inputs(UPDATE_MAINTAINED)))
+
     def test_update_lists_do_not_overlap(self):
-        lists = [set(list_inputs(script)) for script in (UPDATE_TOOLS, UPDATE_DEV_TOOLS, UPDATE_MAINTAINED)]
+        scripts = (UPDATE_TOOLS, UPDATE_DEV_TOOLS, UPDATE_MAINTAINED, UPDATE_APPS)
+        lists = [set(list_inputs(script)) for script in scripts]
         for i, first in enumerate(lists):
             for second in lists[i + 1 :]:
                 self.assertFalse(first & second)
@@ -65,6 +77,35 @@ class ToolInputContracts(unittest.TestCase):
             with self.subTest(input=name):
                 self.assert_follows(name, repository, "dev")
 
+    def assert_github_follows(self, name, repository, ref):
+        flake = (ROOT / "flake.nix").read_text()
+        lock = json.loads((ROOT / "flake.lock").read_text())
+        node = lock["nodes"][lock["nodes"]["root"]["inputs"][name]]
+        self.assertRegex(
+            flake,
+            rf'(?m)^\s*{re.escape(name)} = \{{\n\s*url = "github:alcxyz/{re.escape(repository)}/{ref}";$',
+        )
+        self.assertEqual(node["original"]["ref"], ref)
+
+    def test_each_app_follows_main(self):
+        for name in APP_INPUTS:
+            with self.subTest(input=name):
+                self.assert_github_follows(name, name, "main")
+
+    def test_each_dev_app_follows_dev(self):
+        for name, repository in DEV_APP_INPUTS.items():
+            with self.subTest(input=name):
+                self.assert_github_follows(name, repository, "dev")
+
+    def test_dev_apps_take_only_a_dev_name(self):
+        overlay = (ROOT / "flake/pkgs.nix").read_text()
+        for name, repository in DEV_APP_INPUTS.items():
+            with self.subTest(app=name):
+                self.assertRegex(
+                    overlay,
+                    rf'writeShellScriptBin "{name}" \'\'\n\s*exec \$\{{\w+\.default\}}/bin/{repository} "\$@"\n',
+                )
+
     def test_paperweight_dev_keeps_its_own_state(self):
         overlay = (ROOT / "flake/pkgs.nix").read_text()
         self.assertIn('writeShellScriptBin "paperweight-dev"', overlay)
@@ -72,7 +113,13 @@ class ToolInputContracts(unittest.TestCase):
 
     def test_shortcuts_call_the_updaters(self):
         common = (ROOT / "users/alc/common.nix").read_text()
-        for alias, script in (("tools-update", "update-tools"), ("dev-tools-update", "update-dev-tools")):
+        shortcuts = (
+            ("tools-update", "update-tools"),
+            ("dev-tools-update", "update-dev-tools"),
+            ("apps-update", "update-apps"),
+            ("dev-apps-update", "update-maintained"),
+        )
+        for alias, script in shortcuts:
             with self.subTest(alias=alias):
                 self.assertRegex(
                     common,
@@ -128,8 +175,13 @@ class ToolUpdaterTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.read_calls(), ["flake update " + " ".join(DEV_TOOL_INPUTS)])
 
+    def test_app_updater_updates_exactly_the_app_inputs(self):
+        result = self.run_script(script=UPDATE_APPS)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.read_calls(), ["flake update " + " ".join(APP_INPUTS)])
+
     def test_invalid_argument_does_not_execute_nix(self):
-        for script in (UPDATE_TOOLS, UPDATE_DEV_TOOLS):
+        for script in (UPDATE_TOOLS, UPDATE_DEV_TOOLS, UPDATE_APPS):
             with self.subTest(script=script.name):
                 result = self.run_script("--unknown", script=script)
                 self.assertEqual(result.returncode, 2)

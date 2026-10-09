@@ -2,56 +2,50 @@
 
 Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, servers, and a Mac across three architectures.
 
-## Maintainer QA
+## Maintained projects
 
-Paperflow, Grove, Canopy, DankSession, and the maintained DMS plugins use
-explicit `dev` inputs, pinned to exact commits in `flake.lock`. The DMS bundle
-stays the source interface; local input overrides select plugin development
-branches without changing the public bundle's release defaults. Widget files
-and their helpers use the same source revision. Bivrost tracks its canonical
-`main` branch through a separate source input consumed by the existing package
-integration; its exact revision is also recorded in the lockfile.
+The owner's own tools and apps are refreshed by four commands. Each one only
+updates `flake.lock` to the newest commit of its branches; inspect the lockfile
+changes, then run `hmsw` (or `nxsw` for system configuration). Rebuilds never
+fetch new branch heads, and no command promotes branches or creates releases.
 
-From this checkout, run `apps-update` to refresh all those projects, or
-`dms-update` for only the DMS bundle and maintained plugins. Inspect
-the lockfile changes, then use `nxsw` and/or `hmsw` for the relevant system or
-Home Manager configuration. Rebuild commands apply the lockfile; they do not
-fetch new branch heads automatically. Committing a lockfile records the exact
-combination under QA and keeps rollback reproducible.
+| Command | Branch | Refreshes |
+|---|---|---|
+| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, videdupe |
+| `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev` |
+| `apps-update` | `main` | Grove, Canopy |
+| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, paw, vidown, Paperflow, Bivrost, DankSession, the DMS bundle and its maintained plugins |
 
-These shell shortcuts need no flags or development shell. After first
-adding them to your configuration, run `hmsw` once and open a new terminal to load
-them. `just apps-update` and `just dms-update` are also available immediately
-from the checkout. `qaup` and `just qa-update` remain compatibility names for
-updating all maintained projects.
+`dms-update` refreshes only the DMS part of `dev-apps-update`. Each command is
+a shell alias and a `just` recipe of the same name; `qaup` and `just qa-update`
+remain old names for `dev-apps-update`. After first adding an alias, run `hmsw`
+once and open a new terminal to load it.
 
-Develop changes on feature branches, integrate them into `dev` for QA, and
-promote approved work to each project's `main` for official releases. Neither
-update command nor a rebuild promotes branches or creates releases. Uncommitted
-source edits are not fetched from GitHub: publish them to the configured branch
-first (`main` for Bivrost, `dev` for the projects listed above).
+Daily work runs the released builds. A project with a `dev` branch that gets
+ahead of `main` also gets a dev build on xyz, installed next to the release
+under a `-dev` name. `paperweight-dev` keeps its reports under
+`~/.local/state/paperweight-dev`; `grove-dev` and `canopy-dev` share the
+release's configuration and cache; the `bokfor-dev` launcher runs the regnskap
+dev build against the sandbox. Projects without versioned releases yet (paw and
+vidown) follow `dev` under their own names, and so do the apps that cannot run
+twice on one host (Paperflow, Bivrost, DankSession and the DMS plugins).
+bn-bootstrap is updated on its own and is in neither list.
 
-Upstream dependencies, including DMS itself and nixpkgs, keep their existing
-pinning policies. WorldClock, DankCalculator, and DMS-Screenshot are upstream
-forks, not maintained projects; they retain the bundle's main pins and are not
-explicitly refreshed by the QA command. See
-[ADR-0069](docs/adr/0069-maintained-project-dev-qa.md).
+A project joins `tools-update` or `apps-update` once it releases from `main`
+and has a flake package. The planned additions are tracked in
+[#591](https://git.alc.xyz/alcxyz/nix-config/issues/591). See
+[ADR-0069](docs/adr/0069-maintained-project-dev-qa.md),
+[ADR-0086](docs/adr/0086-released-tool-inputs.md),
+[ADR-0087](docs/adr/0087-side-by-side-dev-tools.md) and
+[ADR-0089](docs/adr/0089-released-and-dev-app-inputs.md).
 
-## Released tools
-
-The owner's command-line tools follow their released `main` branches:
-paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop and
-videdupe. Run `tools-update` (or `just tools-update`) to refresh them, inspect
-the lockfile changes, then run `hmsw`. A new tool is added to
-`scripts/update-inputs/update-tools.sh` once its repository releases from `main`
-and has a flake package. See
-[ADR-0086](docs/adr/0086-released-tool-inputs.md).
-
-Dev builds of paperless-tools and regnskap sit next to the releases:
-`paperweight-dev` keeps its reports under `~/.local/state/paperweight-dev`, and
-the `bokfor-dev` launcher runs the regnskap dev build against the sandbox. Run
-`dev-tools-update` (or `just dev-tools-update`) to refresh them, then `hmsw`. See
-[ADR-0087](docs/adr/0087-side-by-side-dev-tools.md).
+The DMS bundle stays the source interface: local input overrides select plugin
+development branches without changing the public bundle's release defaults, and
+widget files and their helpers use the same source revision. Upstream
+dependencies, including DMS itself and nixpkgs, keep their existing pinning
+policies. WorldClock, DankCalculator, and DMS-Screenshot are upstream forks,
+not maintained projects; they retain the bundle's main pins and no command
+refreshes them explicitly.
 
 ## Hosts
 

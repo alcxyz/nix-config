@@ -88,6 +88,8 @@ in {
       pkgs.bokfor
       pkgs.paperweight
       pkgs.paperweight-dev
+      pkgs.grove-dev
+      pkgs.canopy-dev
     ];
 
   # Symlink configs directly to repo checkout for live editing

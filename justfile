@@ -113,9 +113,14 @@ update *INPUTS:
 lock-packages:
     bash scripts/update-inputs/lock-promoted-packages.sh
 
-# Refresh maintained dev projects only; inspect the lock diff before switching.
+# Refresh released apps (main branches); inspect the lock diff before switching.
 [group("update")]
 apps-update:
+    bash scripts/update-inputs/update-apps.sh
+
+# Refresh maintained apps' dev builds (dev branches); inspect the lock diff before switching.
+[group("update")]
+dev-apps-update:
     bash scripts/update-inputs/update-maintained.sh
 
 # Refresh only the DMS bundle and maintained plugin inputs.
@@ -125,7 +130,7 @@ dms-update:
 
 # Compatibility with the former QA-specific name.
 [group("update")]
-qa-update: apps-update
+qa-update: dev-apps-update
 
 # Refresh released platform tools (main branches); inspect the lock diff before switching.
 [group("update")]

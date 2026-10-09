@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Keep upstream/platform inputs untouched. Nested overrides need explicit
-# updates even when the aggregate repository has not changed.
+# Refresh the maintained apps' dev builds (dev-apps-update, ADR-0089). Keep
+# upstream/platform inputs untouched. Nested overrides need explicit updates
+# even when the aggregate repository has not changed.
 dms_only=false
 list_only=false
 for option in "$@"; do
@@ -29,7 +30,7 @@ inputs=(
   dms-plugins/displaycontrol
 )
 if ! "$dms_only"; then
-  inputs+=(paperflow grove canopy bivrost)
+  inputs+=(paperflow grove-dev canopy-dev paw vidown bivrost)
 fi
 
 if "$list_only"; then
