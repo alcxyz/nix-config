@@ -32,7 +32,8 @@
       workspaceProfiles = [];
     };
 
-    embedded = {
+    # Single-board TV appliances built from the nixbox-direct-client profile.
+    tv-client = {
       homePackageSet = "embedded";
       systemPackageSet = "embedded";
       workspaceProfiles = [];
@@ -150,7 +151,7 @@
     rpi0 = {
       system = "aarch64-linux";
       platform = "nixos";
-      role = "embedded";
+      role = "tv-client";
       k8sRole = null;
       sshHostname = "192.168.1.3";
       configuration = ./hosts/rpi0/configuration.nix;
@@ -160,7 +161,7 @@
     rpi1 = {
       system = "aarch64-linux";
       platform = "nixos";
-      role = "embedded";
+      role = "tv-client";
       k8sRole = null;
       skipManagedUserSshSecrets = true;
       configuration = ./hosts/rpi1/configuration.nix;
@@ -170,7 +171,7 @@
     rpi2 = {
       system = "aarch64-linux";
       platform = "nixos";
-      role = "embedded";
+      role = "tv-client";
       k8sRole = null;
       deployAll = false;
       skipManagedUserSshSecrets = true;
@@ -181,7 +182,7 @@
     rpi3 = {
       system = "aarch64-linux";
       platform = "nixos";
-      role = "embedded";
+      role = "tv-client";
       k8sRole = null;
       deployAll = false;
       skipManagedUserSshSecrets = true;

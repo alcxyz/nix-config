@@ -48,7 +48,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Implemented | forgejo, runners, systemd, docker |
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Accepted | media, torrent, stash, xyz |
 | [ADR-0043](0043-selective-external-nix-config-pattern-adoption.md) | Selective external nix-config pattern adoption | Accepted, partially implemented | modules, hosts, checks, workflow |
-| [ADR-0044](0044-host-inventory-role-model-for-new-machines.md) | Host inventory role model for new machines | Accepted, partially implemented | inventory, hosts, roles |
+| [ADR-0044](0044-host-inventory-role-model-for-new-machines.md) | Host inventory role model for new machines | Accepted, partially implemented; amended by ADR-0088 | inventory, hosts, roles |
 | [ADR-0045](0045-xev-and-xps-kubernetes-node-onboarding.md) | xev and xps Kubernetes node onboarding | Accepted, xev promoted to k3s server; xps workstation-only | xev, xps, k3s, Longhorn, Forgejo |
 | [ADR-0046](0046-remotely-managed-family-gaming-laptop.md) | Remotely managed family gaming laptop | Accepted, prepared | remote support, Netbird, gaming |
 | [ADR-0047](0047-k8s-api-vip.md) | Kubernetes API floating VIP | Accepted | k3s, keepalived, hosts |
@@ -92,6 +92,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0085](0085-one-role-vocabulary.md) | One role vocabulary for agents and tools | Accepted | AI agents, local tooling, llm config |
 | [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools with tools-update | Accepted, amended | flake inputs, release workflow |
 | [ADR-0087](0087-side-by-side-dev-tools.md) | Install dev builds of released tools side by side | Accepted | flake inputs, release workflow |
+| [ADR-0088](0088-tv-clients-share-one-appliance-profile.md) | TV clients share one appliance profile | Accepted | rpi0, rpi1, TV clients, Moonlight, Bluetooth audio |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

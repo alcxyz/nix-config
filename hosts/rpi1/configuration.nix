@@ -11,8 +11,8 @@
     inputs.nix-secrets.nixosModules.rpi1Pihole
   ];
 
-  services.nixbox-direct-client.streamFps = 30;
-
-  # Static SD-card host: fewer rollback anchors are enough (ADR-0013).
-  alc.nix.keepGenerations = 3;
+  services.nixbox-direct-client = {
+    room = "Bedroom";
+    streamFps = 30;
+  };
 }

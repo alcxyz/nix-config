@@ -132,9 +132,12 @@ ssh rpi0 nixbox-mode direct-stream  # Steam
 ssh rpi0 nixbox-mode direct-private # protected browser selector
 ```
 
-The single-board appliances (`rpi0`–`rpi3`) use the direct-only
-`nixbox-direct-client` profile. They carry no composited session, Hyprland or
-DMS, so `couch` is not available there. Use SSH for recovery.
+The single-board appliances (`rpi0`–`rpi3`, inventory role `tv-client`) use
+the direct-only `nixbox-direct-client` profile (ADR-0088). They carry no
+composited session, Hyprland or DMS, so `couch` is not available there. Use SSH
+for recovery. Each names its TV output `<room> TV` and accepts Bluetooth audio
+as `Nixbox <room>`; open a pairing window with
+`systemctl --user start bluetooth-audio-pairing-window` on the appliance.
 
 `nixbox-mode` is the shared session command; it
 is also installed by compact clients. The `direct-private` mode opens the

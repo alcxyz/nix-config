@@ -756,11 +756,14 @@ in {
     test ! -e .gitmodules
   '';
 
-  rpi3-direct-client-contract = let
+  tv-client-contract = let
+    rpi0 = self.nixosConfigurations.rpi0.config;
     rpi1 = self.nixosConfigurations.rpi1.config;
     rpi2 = self.nixosConfigurations.rpi2.config;
     rpi3 = self.nixosConfigurations.rpi3.config;
-    directClients = [rpi1 rpi2 rpi3];
+    pi3Clients = [rpi1 rpi2 rpi3];
+    tvClients = [rpi0] ++ pi3Clients;
+    inventory = import ../../inventory.nix;
     hasPackage = name: client:
       lib.any (package: lib.getName package == name) client.environment.systemPackages;
     hasSudoCommand = name: client:
@@ -773,22 +776,29 @@ in {
         "steam-stop"
         "steam-wake"
       ];
+    tvAudioOutput = client: client.services.moonlight-client.directDrmAudioOutputByConnector."HDMI-A-1";
   in
+    assert lib.all (host: inventory.hosts.${host}.role == "tv-client") ["rpi0" "rpi1" "rpi2" "rpi3"];
     assert rpi1.services.nixbox-direct-client.streamFps == 30;
     assert rpi2.services.nixbox-direct-client.streamFps == 60;
     assert rpi3.services.nixbox-direct-client.streamFps == 60;
-    assert rpi1.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
-    assert rpi2.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
-    assert rpi3.services.nixbox-direct-client.package.pname == "moonlight-rpi3";
-    assert rpi1.services.moonlight-client.defaultSessionMode == "direct-browser";
-    assert lib.all hasSteamLifecycle directClients;
+    assert lib.all (client: client.services.nixbox-direct-client.package.pname == "moonlight-rpi3") pi3Clients;
+    assert lib.all (client: client.services.moonlight-client.defaultSessionMode == "direct-browser") tvClients;
+    assert lib.all hasSteamLifecycle tvClients;
+    # No TV client may depend on a source checkout or operator identity to
+    # start SteamHeadless; all use the forced dispatcher on xyz.
     assert lib.all
     (client: lib.hasInfix "/bin/steam-start" client.services.moonlight-client.streamHostStartCommand)
-    directClients;
+    tvClients;
+    assert lib.all (client: client.services.bluetooth-audio-receiver.enable) tvClients;
+    assert rpi0.services.bluetooth-audio-receiver.adapterName == "Nixbox Living room";
+    assert rpi1.services.bluetooth-audio-receiver.adapterName == "Nixbox Bedroom";
+    assert tvAudioOutput rpi0 == "Living room TV";
+    assert tvAudioOutput rpi1 == "Bedroom TV";
     assert rpi1.systemd.services.greetd.serviceConfig.Restart == "always";
     assert rpi1.security.sudo.wheelNeedsPassword;
     assert rpi1.users.users.alc.hashedPasswordFile != null;
-      pkgs.runCommand "rpi3-direct-client-contract" {} ''
+      pkgs.runCommand "tv-client-contract" {} ''
         touch "$out"
       '';
 

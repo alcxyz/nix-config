@@ -64,10 +64,10 @@ The host names, systems, and role identifiers below match
 | madsil | x86_64-linux | family-gaming |
 | nex | x86_64-linux | nuc |
 | nux | x86_64-linux | nuc |
-| rpi0 | aarch64-linux | embedded |
-| rpi1 | aarch64-linux | embedded |
-| rpi2 | aarch64-linux | embedded |
-| rpi3 | aarch64-linux | embedded |
+| rpi0 | aarch64-linux | tv-client |
+| rpi1 | aarch64-linux | tv-client |
+| rpi2 | aarch64-linux | tv-client |
+| rpi3 | aarch64-linux | tv-client |
 | xev | x86_64-linux | k8s-worker |
 | xps | x86_64-linux | laptop-workstation |
 | xyz | x86_64-linux | workstation |

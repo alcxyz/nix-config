@@ -7,19 +7,7 @@
   lib,
   configDir,
   ...
-}: let
-  steamHeadlessStartCommand = ''
-    ${
-      lib.escapeShellArgs [
-        "${pkgs.openssh}/bin/ssh"
-        "-o"
-        "BatchMode=yes"
-        "-o"
-        "ConnectTimeout=5"
-      ]
-    } -o "Hostname=$COUCH_STREAM_START_TARGET" -o HostKeyAlias=xyz xyz ${lib.escapeShellArg "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"}
-  '';
-in {
+}: {
   imports = [
     ./hardware-configuration.nix
     inputs.nix-secrets.nixosModules.rpi0Hardware
@@ -28,7 +16,6 @@ in {
     "${configDir}/modules/nixos/profiles/nixbox-direct-client/default.nix"
     "${configDir}/modules/nixos/services/pihole-native/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
-    "${configDir}/modules/nixos/services/bluetooth-audio-receiver/default.nix"
     inputs.nix-secrets.nixosModules.rpi0Private
   ];
 
@@ -40,44 +27,15 @@ in {
   # the preferred 4K30 timing for a 1080p stream.
   boot.kernelParams = ["video=HDMI-A-1:1920x1080@60e"];
 
-  nix.settings.require-sigs = false;
-  # The embedded client only substitutes or receives builds from xyz. Failing
-  # closed here prevents an unavailable builder from turning into a long,
-  # thermally constrained local compile on the SD-card-backed host.
-  nix.settings.max-jobs = 0;
   alc.distributedBuildClient = {
     enable = true;
     builders = ["xyz"];
   };
 
-  # Keep the embedded fallback host small enough for its SD-card root.
-  fonts.packages = lib.mkForce [];
-  programs.nix-ld.enable = lib.mkForce false;
-  programs.nix-ld.libraries = lib.mkForce [];
-  services.pcscd.enable = lib.mkForce false;
-  virtualisation.docker.enable = lib.mkForce false;
-  environment.variables = {
-    EDITOR = lib.mkForce "nano";
-    VISUAL = lib.mkForce "nano";
-  };
-
-  services.bluetooth-audio-receiver = {
-    enable = true;
-    user = username;
-    adapterName = "Nixbox";
-    outputSinkName = "alsa_output.platform-sound.stereo-fallback";
-  };
-
-  services.pipewire.wireplumber.extraConfig."52-rpi0-nixbox-outputs" = {
+  # The analog jack feeds the sound system, which also receives Bluetooth
+  # audio from phones (bluetoothAudio.outputSinkName below).
+  services.pipewire.wireplumber.extraConfig."52-rpi0-analog-output" = {
     "monitor.alsa.rules" = [
-      {
-        matches = [{"node.name" = "alsa_output.platform-hdmi-sound.stereo-fallback";}];
-        actions."update-props" = {
-          "node.description" = "Bedroom TV";
-          "node.nick" = "Bedroom TV";
-          "priority.session" = 1100;
-        };
-      }
       {
         matches = [{"node.name" = "alsa_output.platform-sound.stereo-fallback";}];
         actions."update-props" = {
@@ -96,24 +54,20 @@ in {
   services.nixbox-direct-client = {
     enable = true;
     user = username;
+    room = "Living room";
+    tvAudioNode = "alsa_output.platform-hdmi-sound.stereo-fallback";
+    bluetoothAudio.outputSinkName = "alsa_output.platform-sound.stereo-fallback";
   };
 
   services.moonlight-client = {
-    streamHost = "SteamHeadless";
-    streamApplication = "Steam Big Picture";
-    enableDirectDrmStream = true;
-    enableDirectModeInputShortcuts = true;
     directDrmFixedOutput = {
       device = "/dev/dri/card0";
       connector = "HDMI-A-1";
       mode = "1920x1080@60";
     };
-    directDrmAudioOutputByConnector."HDMI-A-1" = "Bedroom TV";
     # SteamHeadless renders at 1440p while the direct DRM client scales it onto
     # the RPi's fixed 1080p60 TV output.
     directDrmStreamArguments = ["--1440"];
-    streamHostStartCommand = steamHeadlessStartCommand;
-    streamReadinessHost = "xyz";
     streamArguments = [
       "--1080"
       "--fps"
@@ -135,17 +89,10 @@ in {
       "--no-background-gamepad"
     ];
 
-    browserStreamHost = "Wolf";
     # Join the single persistent cooperative Helium desktop. Wolf's producer
     # reset path recovers direct-DRM consumers across initial joins, reconnects,
     # and worker handoff without spawning a second browser runner.
     browserStreamApplication = "Helium";
-    browserAbsoluteMouseSensitivity = 2.0;
-    browserAbsoluteMousePollIntervalMs = 1;
-    browserStreamSelectorHost = "Wolf User";
-    browserStreamSelectorPort = 48989;
-    browserStreamSelectorApplication = "Wolf UI";
-    browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
     # Browser runners are resumable across clients. Keep rpi0's browser stream
     # at the same 1080p resolution as its fixed TV output.
     browserStreamArguments = [
@@ -155,12 +102,7 @@ in {
     ];
   };
 
-  services.journald.settings.Journal = {
-    Storage = "persistent";
-    SystemMaxUse = "200M";
-  };
-
-  zramSwap.enable = true;
+  services.journald.settings.Journal.SystemMaxUse = "200M";
 
   services.netbird.managed.enable = true;
 
@@ -265,7 +207,4 @@ in {
   };
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
-
-  # Static SD-card host: fewer rollback anchors are enough (ADR-0013).
-  alc.nix.keepGenerations = 3;
 }

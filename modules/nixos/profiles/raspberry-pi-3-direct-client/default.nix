@@ -34,25 +34,6 @@
       ${pkgs.raspberrypifw}/share/raspberrypi/boot/overlays/vc4-kms-v3d.dtbo \
       "$firmwareRoot/overlays/"
   '';
-  mkSteamCommand = name: action:
-    pkgs.writeShellApplication {
-      inherit name;
-      runtimeInputs = [pkgs.openssh];
-      text = ''
-        exec ssh \
-          -T \
-          -i /etc/ssh/ssh_host_ed25519_key \
-          -o IdentitiesOnly=yes \
-          -o BatchMode=yes \
-          -o ConnectTimeout=5 \
-          root@xyz \
-          ${lib.escapeShellArg action}
-      '';
-    };
-  steamStart = mkSteamCommand "steam-start" "start";
-  steamStop = mkSteamCommand "steam-stop" "stop";
-  # Keep the old name available while callers migrate to steam-start.
-  steamWake = mkSteamCommand "steam-wake" "wake";
 in {
   imports = [
     "${inputs.nixos-hardware}/raspberry-pi/common/default.nix"
@@ -99,62 +80,18 @@ in {
     "video=HDMI-A-1:1920x1080@60e"
   ];
 
-  # These appliances receive complete closures built on xyz or xev. Fail
-  # closed instead of falling back to slow, thermally constrained local builds.
-  nix.settings = {
-    max-jobs = 0;
-    require-sigs = false;
-  };
-
-  fonts.packages = lib.mkForce [];
-  programs.nix-ld.enable = lib.mkForce false;
-  programs.nix-ld.libraries = lib.mkForce [];
-  services.pcscd.enable = lib.mkForce false;
-  virtualisation.containers.enable = lib.mkForce false;
-  virtualisation.docker.enable = lib.mkForce false;
-
   environment.variables = {
-    EDITOR = lib.mkForce "nano";
-    VISUAL = lib.mkForce "nano";
     H264_DECODER_HINT = "h264_v4l2m2m";
     MOONLIGHT_DRM_USE_QT_MASTER_FD = "1";
   };
-
-  environment.systemPackages = [
-    steamStart
-    steamStop
-    steamWake
-  ];
 
   services.nixbox-direct-client = {
     enable = true;
     user = username;
     package = pkgs.moonlight-rpi3;
     enableKdeConnect = false;
+    tvAudioNode = "alsa_output.platform-3f902000.hdmi.hdmi-stereo";
   };
-
-  # The appliance user may authenticate with this machine's SSH host identity
-  # only to start or stop SteamHeadless on xyz. The corresponding key is bound
-  # to a forced dispatcher and cannot open a shell.
-  security.sudo.extraRules = [
-    {
-      users = [username];
-      commands = [
-        {
-          command = "${steamStart}/bin/steam-start";
-          options = ["NOPASSWD"];
-        }
-        {
-          command = "${steamStop}/bin/steam-stop";
-          options = ["NOPASSWD"];
-        }
-        {
-          command = "${steamWake}/bin/steam-wake";
-          options = ["NOPASSWD"];
-        }
-      ];
-    }
-  ];
 
   services.moonlight-client = {
     directDrmFixedOutput = {
@@ -162,29 +99,14 @@ in {
       connector = "HDMI-A-1";
       mode = "1920x1080@60";
     };
-    directDrmAudioOutputByConnector."HDMI-A-1" = "alsa_output.platform-3f902000.hdmi.hdmi-stereo";
     directDrmExtraEnvironment = ["MOONLIGHT_VIDEO_STATS_LOG_INTERVAL_MS=5000"];
     directDrmLogToJournal = true;
     audioOutputStartupVolumePercent = 80;
 
-    streamHost = "SteamHeadless";
-    streamApplication = "Steam Big Picture";
-    streamHostStartCommand = ''
-      /run/wrappers/bin/sudo -- ${steamStart}/bin/steam-start
-    '';
-    streamReadinessHost = "xyz";
-
-    browserStreamHost = "Wolf";
     browserStreamApplication = "Helium (Pi 3)";
-    browserStreamSelectorHost = "Wolf User";
-    browserStreamSelectorPort = 48989;
-    browserStreamSelectorApplication = "Wolf UI";
-    browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
     # Stream coordinators are managed centrally. These appliances do not carry
     # an outgoing operator SSH identity merely to invoke the rpi0 layout hook.
     browserStreamLayoutCommand = lib.mkForce "";
-    browserAbsoluteMouseSensitivity = 2.0;
-    browserAbsoluteMousePollIntervalMs = 1;
     browserShowLocalCursor = false;
 
     streamArguments = [
@@ -215,11 +137,4 @@ in {
       "--performance-overlay"
     ];
   };
-
-  services.journald.settings.Journal = {
-    Storage = "persistent";
-    SystemMaxUse = "100M";
-  };
-
-  zramSwap.enable = true;
 }

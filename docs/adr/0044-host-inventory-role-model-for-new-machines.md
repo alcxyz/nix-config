@@ -1,8 +1,10 @@
 # ADR-0044: Host inventory role model for new machines
 
-**Status:** Accepted (partially implemented 2026-05-12)
+**Status:** Accepted (partially implemented 2026-05-12), amended by ADR-0088
 **Date:** 2026-05-11
+**Amended:** 2026-10-09
 **Applies to:** `inventory.nix`, `flake/hosts/`, `modules/nixos/`, `modules/home-manager/`, `hosts/`, `users/alc/`
+**Amended by:** ADR-0088 (the `embedded` role is now `tv-client`)
 
 ## Context
 
