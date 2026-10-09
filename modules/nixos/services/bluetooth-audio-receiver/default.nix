@@ -90,6 +90,9 @@ in {
     hardware.bluetooth = {
       enable = true;
       powerOnBoot = true;
+      # The hostname plugin renames the adapter after the static hostname,
+      # overriding Name below.
+      disabledPlugins = ["hostname"];
       settings = {
         General = {
           Name = cfg.adapterName;

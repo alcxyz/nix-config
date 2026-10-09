@@ -793,6 +793,7 @@ in {
     assert lib.all (client: client.services.bluetooth-audio-receiver.enable) tvClients;
     assert rpi0.services.bluetooth-audio-receiver.adapterName == "Nixbox Living room";
     assert rpi1.services.bluetooth-audio-receiver.adapterName == "Nixbox Bedroom";
+    assert lib.all (client: builtins.elem "hostname" client.hardware.bluetooth.disabledPlugins) tvClients;
     assert tvAudioOutput rpi0 == "Living room TV";
     assert tvAudioOutput rpi1 == "Bedroom TV";
     assert rpi1.systemd.services.greetd.serviceConfig.Restart == "always";
