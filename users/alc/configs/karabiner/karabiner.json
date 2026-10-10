@@ -75,6 +75,32 @@
                         ]
                     },
                     {
+                        "description": "Right Cmd+Space opens Tinycast (Ctrl+Shift+Cmd+Space); left Cmd+Space stays Spotlight",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "spacebar",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "right_command"
+                                        ]
+                                    }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "spacebar",
+                                        "modifiers": [
+                                            "left_control",
+                                            "left_shift",
+                                            "left_command"
+                                        ]
+                                    }
+                                ],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
                         "description": "Caps Lock \u2192 Escape / Nav Layer",
                         "manipulators": [
                             {
