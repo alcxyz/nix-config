@@ -316,6 +316,7 @@ in {
       "t3-code@nightly"
       "thunderbird"
       "upscayl"
+      "vorssaint"
       "wezterm"
       "wispr-flow"
       "zen"
