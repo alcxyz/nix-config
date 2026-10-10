@@ -9,37 +9,11 @@
     if cfg.room == null
     then "TV"
     else "${cfg.room} TV";
-
-  # The appliance user may authenticate with this machine's SSH host identity
-  # only to start or stop SteamHeadless on xyz. The corresponding key is bound
-  # to a forced dispatcher there and cannot open a shell. TV clients are always
-  # at home: reach xyz on the LAN even when NetBird's DNS resolves its name to
-  # the overlay, and keep verifying xyz's host key.
-  xyzLanAddress = config.services.moonlight-client.streamLocalAddress;
-  mkSteamCommand = name: action:
-    pkgs.writeShellApplication {
-      inherit name;
-      runtimeInputs = [pkgs.openssh];
-      text = ''
-        exec ssh \
-          -T \
-          -i /etc/ssh/ssh_host_ed25519_key \
-          -o IdentitiesOnly=yes \
-          -o BatchMode=yes \
-          -o ConnectTimeout=5 \
-          ${lib.optionalString (xyzLanAddress != null) "-o HostKeyAlias=xyz -o Hostname=${lib.escapeShellArg xyzLanAddress}"} \
-          root@xyz \
-          ${lib.escapeShellArg action}
-      '';
-    };
-  steamStart = mkSteamCommand "steam-start" "start";
-  steamStop = mkSteamCommand "steam-stop" "stop";
-  # Keep the old name available while callers migrate to steam-start.
-  steamWake = mkSteamCommand "steam-wake" "wake";
 in {
   imports = [
     ../../services/moonlight-client/default.nix
     ../../services/bluetooth-audio-receiver/default.nix
+    ../../services/steam-headless-remote/default.nix
   ];
 
   options.services.nixbox-direct-client = {
@@ -160,31 +134,10 @@ in {
     # Static SD-card host: fewer rollback anchors are enough (ADR-0013).
     alc.nix.keepGenerations = 3;
 
-    environment.systemPackages = [
-      steamStart
-      steamStop
-      steamWake
-    ];
-
-    security.sudo.extraRules = [
-      {
-        users = [cfg.user];
-        commands = [
-          {
-            command = "${steamStart}/bin/steam-start";
-            options = ["NOPASSWD"];
-          }
-          {
-            command = "${steamStop}/bin/steam-stop";
-            options = ["NOPASSWD"];
-          }
-          {
-            command = "${steamWake}/bin/steam-wake";
-            options = ["NOPASSWD"];
-          }
-        ];
-      }
-    ];
+    services.steam-headless-remote = {
+      enable = true;
+      inherit (cfg) user;
+    };
 
     services.bluetooth-audio-receiver = lib.mkIf cfg.bluetoothAudio.enable {
       enable = true;
@@ -238,9 +191,6 @@ in {
 
       streamHost = "SteamHeadless";
       streamApplication = "Steam Big Picture";
-      streamHostStartCommand = ''
-        /run/wrappers/bin/sudo -- ${steamStart}/bin/steam-start
-      '';
       streamReadinessHost = "xyz";
 
       browserStreamHost = "Wolf";

@@ -766,6 +766,7 @@ in {
     rpi1 = self.nixosConfigurations.rpi1.config;
     rpi2 = self.nixosConfigurations.rpi2.config;
     rpi3 = self.nixosConfigurations.rpi3.config;
+    xps = self.nixosConfigurations.xps.config;
     pi3Clients = [rpi1 rpi2 rpi3];
     tvClients = [rpi0] ++ pi3Clients;
     inventory = import ../../inventory.nix;
@@ -790,11 +791,12 @@ in {
     assert lib.all (client: client.services.nixbox-direct-client.package.pname == "moonlight-rpi3") pi3Clients;
     assert lib.all (client: client.services.moonlight-client.defaultSessionMode == "direct-browser") tvClients;
     assert lib.all hasSteamLifecycle tvClients;
-    # No TV client may depend on a source checkout or operator identity to
+    # No media client may depend on a source checkout or operator identity to
     # start SteamHeadless; all use the forced dispatcher on xyz.
+    assert lib.all hasSteamLifecycle [xps];
     assert lib.all
     (client: lib.hasInfix "/bin/steam-start" client.services.moonlight-client.streamHostStartCommand)
-    tvClients;
+    (tvClients ++ [xps]);
     assert lib.all (client: client.services.bluetooth-audio-receiver.enable) tvClients;
     assert rpi0.services.bluetooth-audio-receiver.adapterName == "Nixbox Living room";
     assert rpi1.services.bluetooth-audio-receiver.adapterName == "Nixbox Bedroom";

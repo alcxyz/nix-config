@@ -12,17 +12,6 @@
   pkgsets = import "${configDir}/modules/shared/pkgsets.nix" {
     inherit pkgs inputs;
   };
-  steamHeadlessStartCommand = ''
-    ${
-      lib.escapeShellArgs [
-        "${pkgs.openssh}/bin/ssh"
-        "-o"
-        "BatchMode=yes"
-        "-o"
-        "ConnectTimeout=5"
-      ]
-    } -o "Hostname=$COUCH_STREAM_START_TARGET" -o HostKeyAlias=xyz xyz ${lib.escapeShellArg "bash -lc ${lib.escapeShellArg "cd /home/alc/src/infra/gitops/docker/xyz/steam && docker compose up -d"}"}
-  '';
 in {
   imports = [
     ./couch-audio.nix
@@ -31,9 +20,17 @@ in {
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/profiles/nixbox-session/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
+    "${configDir}/modules/nixos/services/steam-headless-remote/default.nix"
     "${configDir}/modules/nixos/security/agent-pr-review-guard/default.nix"
     inputs.nix-secrets.nixosModules.xpsPrivate
   ];
+
+  # Start SteamHeadless through xyz's forced dispatcher with the host key, not
+  # an operator login into a checkout there.
+  services.steam-headless-remote = {
+    enable = true;
+    user = username;
+  };
 
   security.agentPrReviewGuard = {
     enable = true;
@@ -267,7 +264,6 @@ in {
     browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";
     browserStreamSelectorProfileDirectory = "/home/${username}/.local/share/moonlight-client/private";
-    streamHostStartCommand = steamHeadlessStartCommand;
     streamReadinessHost = "xyz";
     streamArguments = [
       "--1440"
