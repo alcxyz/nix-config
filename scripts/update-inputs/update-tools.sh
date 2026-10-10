@@ -21,6 +21,7 @@ inputs=(
   stashdb-pop
   videdupe
   t3rry
+  hedgedoc
 )
 
 if "$list_only"; then

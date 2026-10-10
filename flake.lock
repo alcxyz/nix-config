@@ -685,6 +685,27 @@
         "type": "github"
       }
     },
+    "hedgedoc": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791626949,
+        "narHash": "sha256-A9/uLGbD5z2fNoC8q5wgy5Rf5TW4CsBpA8NScQk7dMo=",
+        "ref": "main",
+        "rev": "b06dec36e0f57ef56ae17b7989bfb041f858612b",
+        "revCount": 4,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/hedgedoc.git"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/hedgedoc.git"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -1465,6 +1486,7 @@
         "flake-parts": "flake-parts",
         "grove": "grove",
         "grove-dev": "grove-dev",
+        "hedgedoc": "hedgedoc",
         "home-manager": "home-manager",
         "hyprland": "hyprland",
         "hyprscratch": "hyprscratch",

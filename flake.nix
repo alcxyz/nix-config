@@ -147,6 +147,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    hedgedoc = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/hedgedoc.git?ref=main";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # No releases yet, so it follows dev under its own name (ADR-0089).
     vidown = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git?ref=dev";

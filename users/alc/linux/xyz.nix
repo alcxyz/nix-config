@@ -91,6 +91,7 @@ in {
       pkgs.paperweight-dev
       pkgs.grove-dev
       pkgs.t3rry
+      pkgs.hedgedoc-cli
       pkgs.t3rry-dev
       pkgs.canopy-dev
       pkgs.bivrost-dev

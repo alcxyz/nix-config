@@ -42,6 +42,7 @@ in
             groveDev = inputs.grove-dev.packages.${system} or {};
             canopyDev = inputs.canopy-dev.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
+            hedgedoc = inputs.hedgedoc.packages.${system} or {};
             t3rry = inputs.t3rry.packages.${system} or {};
             t3rryDev = inputs.t3rry-dev.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
@@ -64,6 +65,10 @@ in
             }
             // lib.optionalAttrs (videdupe ? default) {
               videdupe = videdupe.default;
+            }
+            # nixpkgs' hedgedoc is the server; this is the posting CLI.
+            // lib.optionalAttrs (hedgedoc ? default) {
+              hedgedoc-cli = hedgedoc.default;
             }
             // lib.optionalAttrs (regnskap ? bokfor) {
               inherit (regnskap) bokfor;

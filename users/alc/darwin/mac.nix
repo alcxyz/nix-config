@@ -27,7 +27,7 @@ in {
     inputs.nix-secrets.homeManagerModules.darwinOperator
   ];
 
-  home.packages = pkgsets.home.${hostRole.homePackageSet} ++ [pkgs.bivrost];
+  home.packages = pkgsets.home.${hostRole.homePackageSet} ++ [pkgs.bivrost pkgs.hedgedoc-cli];
 
   programs.wezterm.enable = true;
   # Home Manager owns configuration; Homebrew owns the signed application.

@@ -11,7 +11,7 @@ fetch new branch heads, and no command promotes branches or creates releases.
 
 | Command | Branch | Refreshes |
 |---|---|---|
-| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, videdupe, t3rry |
+| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, videdupe, t3rry, hedgedoc |
 | `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev`, `t3rry-dev` |
 | `apps-update` | `main` | Grove, Canopy, Bivrost |
 | `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, Paperflow, DankSession, the DMS bundle and its maintained plugins |
