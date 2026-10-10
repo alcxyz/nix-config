@@ -447,6 +447,11 @@ in {
     bash scripts/checks/test-agent-role.sh
   '';
 
+  check-t3-thread-inventory = mkRepoCheck "check-t3-thread-inventory" [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.jq pkgs.sqlite pkgs.shellcheck] ''
+    shellcheck modules/home-manager/programs/ai/t3-thread-inventory.sh scripts/checks/test-t3-thread-inventory.sh
+    bash scripts/checks/test-t3-thread-inventory.sh
+  '';
+
   check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.ripgrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
     shellcheck modules/home-manager/workspace/workspace-sync.sh
     bash scripts/checks/test-workspace-sync.sh

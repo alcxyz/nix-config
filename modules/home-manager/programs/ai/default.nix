@@ -120,6 +120,22 @@ with lib; let
       }
     ];
   };
+  # The T3 thread overview skill (ADR-0091) reads thread state through
+  # t3-thread-inventory, which tries every T3 instance's state database and
+  # keeps the one holding the calling thread.
+  t3StateDbs = map (dir: "${dir}/userdata/statev2.sqlite") (
+    [(config.services.t3code.baseDir or "${config.home.homeDirectory}/.t3")]
+    ++ map (instance: instance.baseDir) (attrValues (config.services.t3code.instances or {}))
+  );
+  t3ThreadInventory = pkgs.writeShellApplication {
+    name = "t3-thread-inventory";
+    runtimeInputs = [pkgs.sqlite pkgs.jq];
+    text = ''
+      inventory_sql=${./t3-thread-inventory.sql}
+      default_dbs=${escapeShellArg (concatStringsSep ":" t3StateDbs)}
+      ${builtins.readFile ./t3-thread-inventory.sh}
+    '';
+  };
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
       hooks = prReviewHooks // t3RestartNoticeHooks;
@@ -263,7 +279,11 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [prReview prReviewGuard t3RestartNotice];
+    home.packages = [prReview prReviewGuard t3RestartNotice t3ThreadInventory];
+
+    # Skills shared by both clients (ADR-0091).
+    home.file.".claude/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
+    home.file.".codex/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
 
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file

@@ -1,0 +1,192 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- T3 thread overview (ADR-0091). Replace only the JSON between the REPORT
+     markers; the page derives groups, counts and colours from it. -->
+<style>
+  body { font-family: var(--font-sans); color: var(--foreground); margin: 0; }
+  .wrap { display: flex; flex-direction: column; gap: 20px; padding: 4px 0 8px; }
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .kpi { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .kpi .n { font-size: 26px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 12px; color: var(--muted-foreground); margin-top: 4px; }
+  .kpi.warn .n { color: var(--warning); }
+  .kpi.ok .n { color: var(--success); }
+  .kpi.info .n { color: var(--info); }
+  .kpi.bad .n { color: var(--destructive); }
+  h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  h3 .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .phasebar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; }
+  .phasebar div { height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--muted-foreground); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .group { display: flex; flex-direction: column; gap: 8px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .top { display: flex; align-items: baseline; gap: 10px; }
+  .title { font-weight: 600; font-size: 14px; color: var(--foreground); text-decoration: none; flex: 1; min-width: 0; }
+  .title:hover { text-decoration: underline; }
+  .meta { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--secondary); color: var(--secondary-foreground); text-decoration: none; }
+  .chip.phase { color: var(--background); font-weight: 600; }
+  .chip.live { background: var(--info); color: var(--background); font-weight: 600; }
+  .prog { display: flex; align-items: center; gap: 10px; }
+  .track { flex: 1; height: 8px; border-radius: 4px; background: var(--muted); overflow: hidden; }
+  .fill { height: 100%; border-radius: 4px; }
+  .pct { font-size: 12px; font-variant-numeric: tabular-nums; width: 34px; text-align: right; color: var(--muted-foreground); }
+  .next { font-size: 13px; line-height: 1.45; }
+  .owner { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+  .owner.user { background: var(--warning-surface); color: var(--warning); }
+  .owner.agent { background: var(--accent-surface); color: var(--accent-surface-foreground); }
+  .blocker { font-size: 12.5px; color: var(--destructive); line-height: 1.4; }
+  .flag { font-size: 12.5px; color: var(--muted-foreground); line-height: 1.4; font-style: italic; }
+  details { font-size: 12.5px; color: var(--muted-foreground); }
+  summary { cursor: pointer; user-select: none; }
+  details ul { margin: 6px 0 2px; padding-left: 18px; line-height: 1.45; }
+  details .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  details .cols h4 { margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--foreground); }
+  .donelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .donelist li { display: flex; gap: 8px; align-items: baseline; }
+  .donelist a { color: var(--foreground); text-decoration: none; }
+  .donelist a:hover { text-decoration: underline; }
+  .donelist .why { color: var(--muted-foreground); font-size: 12px; }
+  .note { font-size: 11.5px; color: var(--muted-foreground); }
+  .empty { font-size: 13px; color: var(--muted-foreground); }
+  @media (max-width: 600px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    details .cols { grid-template-columns: 1fr; }
+    .top { flex-direction: column; gap: 2px; }
+  }
+</style></head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+const REPORT =
+/*REPORT-START*/
+{
+  "generatedAt": "2026-10-10T01:00:00Z",
+  "windowDays": 3,
+  "source": "sample data",
+  "readerModel": "light role",
+  "threads": [
+    {"threadId": "sample-1", "title": "Sample unsettled thread", "project": "example", "bucket": "unsettled",
+     "status": "completed", "updatedAt": "2026-10-09T16:00:00Z", "settledAt": null,
+     "prs": [{"url": "https://example.invalid/pulls/1", "state": "open"}],
+     "progressPct": 60, "phase": "awaiting-user", "owner": "user",
+     "nextAction": "Approve the pending change.", "blocker": "Needs your approval.", "flag": null,
+     "done": ["First half shipped"], "remaining": ["Second half"], "verdict": null, "verdictReason": null},
+    {"threadId": "sample-2", "title": "Sample settled thread", "project": "example", "bucket": "recently-settled",
+     "status": "completed", "updatedAt": "2026-10-09T10:00:00Z", "settledAt": "2026-10-09T10:00:00Z", "prs": [],
+     "progressPct": 80, "phase": "done-not-settled", "owner": "user",
+     "nextAction": "Reopen to finish the follow-up.", "blocker": null, "flag": null,
+     "done": ["Main change merged"], "remaining": ["Deploy"], "verdict": "follow-up", "verdictReason": "Merged but never deployed."}
+  ]
+}
+/*REPORT-END*/
+;
+const PHASES = {
+  "blocked":          { label: "Blocked",            color: "var(--destructive)" },
+  "awaiting-user":    { label: "Awaiting you",       color: "var(--warning)" },
+  "exploring":        { label: "Exploring",          color: "var(--chart-5)" },
+  "planning":         { label: "Planning",           color: "var(--chart-4)" },
+  "implementing":     { label: "Implementing",       color: "var(--info)" },
+  "reviewing":        { label: "Reviewing",          color: "var(--chart-2)" },
+  "done-not-settled": { label: "Done · not settled", color: "var(--success)" },
+};
+const LIVE = new Set(["running", "starting", "queued", "preparing", "waiting"]);
+const NOW = new Date(REPORT.generatedAt);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const link = t => `t3-thread://v1/${t.threadId}`;
+const phaseOf = t => PHASES[t.phase] || { label: t.phase || "unknown", color: "var(--muted-foreground)" };
+function ago(iso) {
+  if (!iso) return "";
+  const h = (NOW - new Date(iso)) / 3.6e6;
+  if (h < 1) return Math.max(1, Math.round(h * 60)) + "m ago";
+  if (h < 24) return Math.round(h) + "h ago";
+  return Math.round(h / 24) + "d ago";
+}
+function groupOf(t) {
+  if (t.bucket === "recently-settled") return t.verdict === "done" ? "settled-done" : "settled-open";
+  if (t.phase === "done-not-settled") return "settle";
+  return t.owner === "agent" ? "agent" : "user";
+}
+// Reader output is untrusted: numbers are forced to numbers, text goes through esc().
+const pctOf = v => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(0, Math.min(100, Math.round(Number(v)))) : null);
+const DAYS = Number.isFinite(Number(REPORT.windowDays)) ? Number(REPORT.windowDays) : "?";
+const threads = REPORT.threads.map(t => ({ ...t, progressPct: pctOf(t.progressPct), group: groupOf(t) }));
+const by = g => threads.filter(t => t.group === g);
+const unsettled = threads.filter(t => t.bucket !== "recently-settled");
+const app = document.getElementById("app");
+
+app.insertAdjacentHTML("beforeend", `
+  <div class="kpis">
+    <div class="kpi"><div class="n">${unsettled.length}</div><div class="l">unsettled threads</div></div>
+    <div class="kpi warn"><div class="n">${by("user").length}</div><div class="l">waiting on you</div></div>
+    <div class="kpi info"><div class="n">${by("agent").length}</div><div class="l">agent can continue</div></div>
+    <div class="kpi ok"><div class="n">${by("settle").length}</div><div class="l">ready to settle</div></div>
+    <div class="kpi bad"><div class="n">${by("settled-open").length}</div><div class="l">settled, maybe not done</div></div>
+  </div>`);
+
+if (unsettled.length) {
+  const avg = Math.round(unsettled.reduce((a, t) => a + (t.progressPct || 0), 0) / unsettled.length);
+  const counts = Object.keys(PHASES).map(p => [p, unsettled.filter(t => t.phase === p).length]).filter(([, c]) => c);
+  app.insertAdjacentHTML("beforeend", `
+    <div>
+      <h3>Unsettled phase mix · avg ${avg}% complete</h3>
+      <div class="phasebar">${counts.map(([p, c]) => `<div title="${PHASES[p].label}: ${c}" style="flex:${c};background:${PHASES[p].color}"></div>`).join("")}</div>
+      <div class="legend">${counts.map(([p, c]) => `<span><i style="background:${PHASES[p].color}"></i>${PHASES[p].label} ${c}</span>`).join("")}</div>
+    </div>`);
+}
+
+function card(t) {
+  const ph = phaseOf(t);
+  const prs = (t.prs || []).filter(p => p.state === "open");
+  const bits = [
+    `<span class="chip phase" style="background:${ph.color}">${esc(ph.label)}</span>`,
+    LIVE.has(t.status) ? `<span class="chip live">${esc(t.status)}</span>` : "",
+    `<span class="chip">${esc(t.project)}</span>`,
+    ...prs.map(p => `<a class="chip" href="${esc(p.url)}">open PR ${esc(String(p.url || "").split("/").pop())}</a>`),
+  ].join("");
+  const when = t.bucket === "recently-settled" ? `settled ${ago(t.settledAt)}` : `updated ${ago(t.updatedAt)}`;
+  const list = xs => (xs && xs.length ? `<ul>${xs.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : `<ul><li>Nothing</li></ul>`);
+  return `<div class="card">
+    <div class="top"><a class="title" href="${link(t)}">${esc(t.title)}</a><span class="meta">${when}</span></div>
+    <div class="chips">${bits}</div>
+    <div class="prog">
+      <div class="track"><div class="fill" style="width:${t.progressPct || 0}%;background:${ph.color}"></div></div>
+      <span class="pct">${t.progressPct ?? "?"}%</span>
+    </div>
+    ${t.verdictReason ? `<div class="blocker">↺ ${esc(t.verdictReason)}</div>` : ""}
+    <div class="next"><span class="owner ${t.owner === "agent" ? "agent" : "user"}">${t.owner === "agent" ? "Agent" : "You"}</span>${esc(t.nextAction)}</div>
+    ${t.blocker ? `<div class="blocker">⚠ ${esc(t.blocker)}</div>` : ""}
+    ${t.flag ? `<div class="flag">${esc(t.flag)}</div>` : ""}
+    <details><summary>Done / remaining</summary>
+      <div class="cols"><div><h4>Done</h4>${list(t.done)}</div><div><h4>Remaining</h4>${list(t.remaining)}</div></div>
+    </details>
+  </div>`;
+}
+
+const GROUPS = [
+  ["user", "Waiting on you", "var(--warning)"],
+  ["agent", "Agent can continue · needs a nudge", "var(--info)"],
+  ["settle", "Ready to settle", "var(--success)"],
+  ["settled-open", `Settled in the last ${DAYS} days · maybe not done`, "var(--destructive)"],
+];
+const order = t => (t.phase === "blocked" ? 0 : 1) * 1000 - (t.progressPct || 0);
+for (const [key, label, color] of GROUPS) {
+  const items = by(key).sort((a, b) => order(a) - order(b));
+  if (!items.length) continue;
+  app.insertAdjacentHTML("beforeend",
+    `<div class="group"><h3><span class="dot" style="background:${color}"></span>${esc(label)} · ${items.length}</h3>${items.map(card).join("")}</div>`);
+}
+const settledDone = by("settled-done");
+if (settledDone.length) {
+  app.insertAdjacentHTML("beforeend", `<div class="group">
+    <h3><span class="dot" style="background:var(--muted-foreground)"></span>Settled in the last ${DAYS} days · confirmed done · ${settledDone.length}</h3>
+    <ul class="donelist">${settledDone.map(t => `<li><a href="${link(t)}">${esc(t.title)}</a><span class="why">${esc(t.project)} · settled ${ago(t.settledAt)}${t.verdictReason ? " · " + esc(t.verdictReason) : ""}</span></li>`).join("")}</ul>
+  </div>`);
+}
+if (!threads.length) app.insertAdjacentHTML("beforeend", `<div class="empty">No unsettled or recently settled threads.</div>`);
+app.insertAdjacentHTML("beforeend", `<div class="note">Inventory: ${esc(REPORT.source)}. Progress and verdicts are estimates by ${esc(REPORT.readerModel)} readers from each thread's opening and latest messages. Generated ${esc(REPORT.generatedAt.slice(0, 16).replace("T", " "))} UTC.</div>`);
+</script>
+</body></html>
