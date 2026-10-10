@@ -32,6 +32,9 @@ twice on one host (Paperflow, DankSession and the DMS plugins). Bivrost is
 installed from its own flake; its Bane NOR catalogue, profiles and sign-in
 rule come from bn-bootstrap, which is updated on its own and is in neither list
 ([ADR-0090](docs/adr/0090-install-bivrost-directly.md)).
+Grove, Canopy and paw are installed only on xyz and the mac
+(`users/alc/workstation-apps.nix`), together with the Git `ext::` transport
+that paw workspaces need.
 
 A project joins `tools-update` or `apps-update` once it releases from `main`
 and has a flake package. The planned additions are tracked in

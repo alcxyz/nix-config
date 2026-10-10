@@ -104,13 +104,8 @@ in
     };
 
     # ==================== Packages ====================
-    home.packages =
-      pkgsets.hm.base
-      ++ [
-        inputs.grove.packages.${pkgs.stdenv.hostPlatform.system}.default
-        inputs.canopy.packages.${pkgs.stdenv.hostPlatform.system}.default
-        inputs.paw.packages.${pkgs.stdenv.hostPlatform.system}.paw
-      ];
+    # Grove, Canopy and paw come from workstation-apps.nix (xyz and mac only).
+    home.packages = pkgsets.hm.base;
 
     # ==================== Symlinked configs (live editing, all hosts) ====================
     xdg.configFile."television".source =
@@ -142,9 +137,6 @@ in
     programs.ssh.enable = true;
 
     programs.git.managed.enable = true;
-    # PAW workspaces are reached as Git remotes through the ext:: transport
-    # (paw workspace repository remote), which Git disables unless allowed.
-    programs.git.settings.protocol.ext.allow = "user";
     # Only roles used for development opt in; servers are managed remotely.
     programs.workspace.enable = hostRole.sourceWorkspace or false;
 

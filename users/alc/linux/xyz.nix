@@ -46,6 +46,7 @@ in {
   # Import the common Linux configuration
   imports = [
     "${configDir}/users/alc/linux/operator.nix"
+    "${configDir}/users/alc/workstation-apps.nix"
 
     "${configDir}/modules/home-manager/programs/wayland-common/default.nix"
     "${configDir}/modules/home-manager/programs/hyprland/default.nix"

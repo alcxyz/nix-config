@@ -884,4 +884,31 @@ in {
       pkgs.runCommand "operator-home-composition-contract" {} ''
         touch "$out"
       '';
+
+  # Grove, Canopy and paw, and the Git ext:: transport paw needs, are only on
+  # the owner's workstations (users/alc/workstation-apps.nix).
+  workstation-apps-contract = let
+    inventory = import ../../inventory.nix;
+    workstationNames =
+      ["alc-xyz" "alc-mac"]
+      ++ map (alias: "alc-${alias}") (inventory.hosts.mac.aliases or []);
+    otherNames = lib.subtractLists workstationNames (builtins.attrNames self.homeConfigurations);
+    appNames = ["grove" "canopy" "paw"];
+    installedNames = home: map (p: (builtins.parseDrvName p.name).name) home.config.home.packages;
+    extAllow = home: home.config.programs.git.settings.protocol.ext.allow or null;
+  in
+    assert lib.all (name: builtins.hasAttr name self.homeConfigurations) workstationNames;
+    assert lib.all (name: let
+      home = self.homeConfigurations.${name};
+    in
+      lib.all (app: builtins.elem app (installedNames home)) appNames && extAllow home == "user")
+    workstationNames;
+    assert lib.all (name: let
+      home = self.homeConfigurations.${name};
+    in
+      !(lib.any (app: builtins.elem app (installedNames home)) appNames) && extAllow home == null)
+    otherNames;
+      pkgs.runCommand "workstation-apps-contract" {} ''
+        touch "$out"
+      '';
 }
