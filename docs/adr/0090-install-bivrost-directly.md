@@ -28,7 +28,9 @@ locked Bivrost source is then unused while the package option is unset.
 Bivrost stays on `dev` in `dev-apps-update` until a release carries the
 route-scope hardening and the configuration catalogue. It then moves to
 `apps-update` on `main`, and a `bivrost-dev` build can sit beside it, since
-both read the same configuration.
+both read the same configuration. Bivrost v0.3.0 carried both changes, so
+on 2026-10-10 `bivrost` moved to `apps-update` on `main` and `bivrost-dev` was
+installed on xyz.
 
 ## Alternatives and consequences
 

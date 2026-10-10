@@ -19,12 +19,18 @@ UPDATE_DEV_TOOLS = ROOT / "scripts/update-inputs/update-dev-tools.sh"
 UPDATE_MAINTAINED = ROOT / "scripts/update-inputs/update-maintained.sh"
 UPDATE_APPS = ROOT / "scripts/update-inputs/update-apps.sh"
 
-TOOL_INPUTS = ["paperless-tools", "regnskap", "reportcraft", "stashdb-pop", "videdupe"]
+TOOL_INPUTS = ["paperless-tools", "regnskap", "reportcraft", "stashdb-pop", "videdupe", "t3rry"]
+# Tools whose canonical repository is on GitHub rather than Forgejo.
+GITHUB_TOOLS = {"t3rry"}
 # Each dev input is the same repository as a released tool input, on `dev`.
-DEV_TOOL_INPUTS = {"paperless-tools-dev": "paperless-tools", "regnskap-dev": "regnskap"}
-APP_INPUTS = ["grove", "canopy"]
+DEV_TOOL_INPUTS = {
+    "paperless-tools-dev": "paperless-tools",
+    "regnskap-dev": "regnskap",
+    "t3rry-dev": "t3rry",
+}
+APP_INPUTS = ["grove", "canopy", "bivrost"]
 # Dev builds of released apps; dev-apps-update (update-maintained.sh) refreshes them.
-DEV_APP_INPUTS = {"grove-dev": "grove", "canopy-dev": "canopy"}
+DEV_APP_INPUTS = {"grove-dev": "grove", "canopy-dev": "canopy", "bivrost-dev": "bivrost"}
 
 
 def list_inputs(script: Path) -> list[str]:
@@ -67,15 +73,21 @@ class ToolInputContracts(unittest.TestCase):
         )
         self.assertEqual(node["original"]["ref"], ref)
 
+    def assert_tool_follows(self, name, repository, ref):
+        if repository in GITHUB_TOOLS:
+            self.assert_github_follows(name, repository, ref)
+        else:
+            self.assert_follows(name, repository, ref)
+
     def test_each_tool_follows_main(self):
         for name in TOOL_INPUTS:
             with self.subTest(input=name):
-                self.assert_follows(name, name, "main")
+                self.assert_tool_follows(name, name, "main")
 
     def test_each_dev_tool_follows_dev(self):
         for name, repository in DEV_TOOL_INPUTS.items():
             with self.subTest(input=name):
-                self.assert_follows(name, repository, "dev")
+                self.assert_tool_follows(name, repository, "dev")
 
     def assert_github_follows(self, name, repository, ref):
         flake = (ROOT / "flake.nix").read_text()
@@ -97,9 +109,10 @@ class ToolInputContracts(unittest.TestCase):
             with self.subTest(input=name):
                 self.assert_github_follows(name, repository, "dev")
 
-    def test_dev_apps_take_only_a_dev_name(self):
+    def test_dev_builds_take_only_a_dev_name(self):
         overlay = (ROOT / "flake/pkgs.nix").read_text()
-        for name, repository in DEV_APP_INPUTS.items():
+        renamed = {**DEV_APP_INPUTS, "t3rry-dev": "t3rry"}
+        for name, repository in renamed.items():
             with self.subTest(app=name):
                 self.assertRegex(
                     overlay,

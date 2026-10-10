@@ -1,6 +1,6 @@
 # ADR-0086: Refresh released platform tools with tools-update
 
-**Status:** Accepted, amended by [ADR-0087](0087-side-by-side-dev-tools.md) (dev builds side by side with `dev-tools-update`)
+**Status:** Accepted, amended by [ADR-0087](0087-side-by-side-dev-tools.md) (dev builds side by side with `dev-tools-update`). Tools hosted on GitHub, such as t3rry, pin `github:alcxyz/<repo>/main` instead of a Forgejo `?ref=main` URL
 **Date:** 2026-10-09
 **Applies to:** `flake.nix`, `scripts/update-inputs/update-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069
 

@@ -36,9 +36,14 @@
     };
 
     # Installed from its own flake; bn-bootstrap supplies only its Bane NOR
-    # configuration (ADR-0090). It stays on dev until a release carries dev's
-    # route-scope hardening (ADR-0089).
+    # configuration (ADR-0090). Released app, refreshed by apps-update; its dev
+    # build is refreshed by dev-apps-update (ADR-0089).
     bivrost = {
+      url = "github:alcxyz/bivrost/main";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    bivrost-dev = {
       url = "github:alcxyz/bivrost/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
@@ -124,6 +129,16 @@
 
     regnskap-dev = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git?ref=dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    t3rry = {
+      url = "github:alcxyz/t3rry/main";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    t3rry-dev = {
+      url = "github:alcxyz/t3rry/dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

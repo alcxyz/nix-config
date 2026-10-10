@@ -29,14 +29,14 @@ DMS_INPUTS = [
     "dms-plugins/aiusage",
     "dms-plugins/displaycontrol",
 ]
-APP_INPUTS = ["paperflow", "grove-dev", "canopy-dev", "paw", "vidown", "bivrost"]
+APP_INPUTS = ["paperflow", "grove-dev", "canopy-dev", "bivrost-dev", "paw", "vidown"]
 
 DEV_URLS = {
     "paperflow": "github:alcxyz/paperflow/dev",
     "grove-dev": "github:alcxyz/grove/dev",
     "canopy-dev": "github:alcxyz/canopy/dev",
     "paw": "github:alcxyz/paw/dev",
-    "bivrost": "github:alcxyz/bivrost/dev",
+    "bivrost-dev": "github:alcxyz/bivrost/dev",
     "vidown": "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git?ref=dev",
     "dms-plugins": "github:alcxyz/dms-plugins/dev",
     "quicksearch": "github:alcxyz/DankQuickSearch/dev",

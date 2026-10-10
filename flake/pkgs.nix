@@ -38,9 +38,12 @@ in
             ptDev = inputs.paperless-tools-dev.packages.${system} or {};
             regnskapDev = inputs.regnskap-dev.packages.${system} or {};
             bivrost = inputs.bivrost.packages.${system} or {};
+            bivrostDev = inputs.bivrost-dev.packages.${system} or {};
             groveDev = inputs.grove-dev.packages.${system} or {};
             canopyDev = inputs.canopy-dev.packages.${system} or {};
             stashdb-pop = inputs.stashdb-pop.packages.${system} or {};
+            t3rry = inputs.t3rry.packages.${system} or {};
+            t3rryDev = inputs.t3rry-dev.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
             videdupe = inputs.videdupe.packages.${system} or {};
           in
@@ -86,6 +89,11 @@ in
                 exec ${groveDev.default}/bin/grove "$@"
               '';
             }
+            // lib.optionalAttrs (bivrostDev ? default) {
+              bivrost-dev = _prev.writeShellScriptBin "bivrost-dev" ''
+                exec ${bivrostDev.default}/bin/bivrost "$@"
+              '';
+            }
             // lib.optionalAttrs (canopyDev ? default) {
               canopy-dev = _prev.writeShellScriptBin "canopy-dev" ''
                 exec ${canopyDev.default}/bin/canopy "$@"
@@ -93,6 +101,14 @@ in
             }
             // lib.optionalAttrs (stashdb-pop ? default) {
               stashdb-pop = stashdb-pop.default;
+            }
+            // lib.optionalAttrs (t3rry ? default) {
+              t3rry = t3rry.default;
+            }
+            // lib.optionalAttrs (t3rryDev ? default) {
+              t3rry-dev = _prev.writeShellScriptBin "t3rry-dev" ''
+                exec ${t3rryDev.default}/bin/t3rry "$@"
+              '';
             }
             // {
               k3s-flannel-node-source = _prev.callPackage "${nix-packages}/pkgs/k3s-flannel-node-source" {};

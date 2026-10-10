@@ -11,10 +11,10 @@ fetch new branch heads, and no command promotes branches or creates releases.
 
 | Command | Branch | Refreshes |
 |---|---|---|
-| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, videdupe |
-| `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev` |
-| `apps-update` | `main` | Grove, Canopy |
-| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, paw, vidown, Paperflow, Bivrost, DankSession, the DMS bundle and its maintained plugins |
+| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, videdupe, t3rry |
+| `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev`, `t3rry-dev` |
+| `apps-update` | `main` | Grove, Canopy, Bivrost |
+| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, Paperflow, DankSession, the DMS bundle and its maintained plugins |
 
 `dms-update` refreshes only the DMS part of `dev-apps-update`. Each command is
 a shell alias and a `just` recipe of the same name; `qaup` and `just qa-update`
@@ -24,14 +24,13 @@ once and open a new terminal to load it.
 Daily work runs the released builds. A project with a `dev` branch that gets
 ahead of `main` also gets a dev build on xyz, installed next to the release
 under a `-dev` name. `paperweight-dev` keeps its reports under
-`~/.local/state/paperweight-dev`; `grove-dev` and `canopy-dev` share the
-release's configuration and cache; the `bokfor-dev` launcher runs the regnskap
-dev build against the sandbox. Projects without versioned releases yet (paw and
+`~/.local/state/paperweight-dev`; `grove-dev`, `canopy-dev`, `bivrost-dev` and
+`t3rry-dev` share the release's configuration; the `bokfor-dev` launcher runs
+the regnskap dev build against the sandbox, with its own ledgers. Projects without versioned releases yet (paw and
 vidown) follow `dev` under their own names, and so do the apps that cannot run
 twice on one host (Paperflow, DankSession and the DMS plugins). Bivrost is
-installed from its own flake and stays on `dev` until its next release; its
-Bane NOR catalogue, profiles and sign-in rule come from bn-bootstrap, which is
-updated on its own and is in neither list
+installed from its own flake; its Bane NOR catalogue, profiles and sign-in
+rule come from bn-bootstrap, which is updated on its own and is in neither list
 ([ADR-0090](docs/adr/0090-install-bivrost-directly.md)).
 
 A project joins `tools-update` or `apps-update` once it releases from `main`

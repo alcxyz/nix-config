@@ -17,6 +17,7 @@ done
 inputs=(
   paperless-tools-dev
   regnskap-dev
+  t3rry-dev
 )
 
 if "$list_only"; then

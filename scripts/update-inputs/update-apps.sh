@@ -17,6 +17,7 @@ done
 inputs=(
   grove
   canopy
+  bivrost
 )
 
 if "$list_only"; then

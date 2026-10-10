@@ -1,6 +1,6 @@
 # ADR-0087: Install dev builds of released tools side by side
 
-**Status:** Accepted, amended by [ADR-0089](0089-released-and-dev-app-inputs.md) (apps get the same split)
+**Status:** Accepted, amended by [ADR-0089](0089-released-and-dev-app-inputs.md) (apps get the same split). Later tools gain a dev pair under the same rule; `t3rry-dev` was added on 2026-10-10
 **Date:** 2026-10-09
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-dev-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0086
 

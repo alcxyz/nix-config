@@ -89,7 +89,10 @@ in {
       pkgs.paperweight
       pkgs.paperweight-dev
       pkgs.grove-dev
+      pkgs.t3rry
+      pkgs.t3rry-dev
       pkgs.canopy-dev
+      pkgs.bivrost-dev
     ];
 
   # Symlink configs directly to repo checkout for live editing

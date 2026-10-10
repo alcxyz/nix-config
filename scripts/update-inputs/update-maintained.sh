@@ -30,7 +30,7 @@ inputs=(
   dms-plugins/displaycontrol
 )
 if ! "$dms_only"; then
-  inputs+=(paperflow grove-dev canopy-dev paw vidown bivrost)
+  inputs+=(paperflow grove-dev canopy-dev bivrost-dev paw vidown)
 fi
 
 if "$list_only"; then

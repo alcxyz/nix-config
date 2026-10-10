@@ -20,6 +20,7 @@ inputs=(
   reportcraft
   stashdb-pop
   videdupe
+  t3rry
 )
 
 if "$list_only"; then
