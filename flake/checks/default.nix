@@ -452,6 +452,11 @@ in {
     bash scripts/checks/test-t3-thread-inventory.sh
   '';
 
+  check-t3code-preview-browser-link = mkRepoCheck "check-t3code-preview-browser-link" [pkgs.bash pkgs.coreutils pkgs.shellcheck] ''
+    shellcheck modules/home-manager/services/t3code/link-preview-browser.sh scripts/checks/test-t3code-preview-browser-link.sh
+    bash scripts/checks/test-t3code-preview-browser-link.sh
+  '';
+
   check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.ripgrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
     shellcheck modules/home-manager/workspace/workspace-sync.sh
     bash scripts/checks/test-workspace-sync.sh
@@ -517,6 +522,25 @@ in {
     assert !(home.config.home.activation ? t3codeRestartGuard);
     assert t3Unit.X-RestartIfChanged == false;
     assert lib.hasSuffix " serve --host 0.0.0.0 --port 3774 --base-dir ${home.config.home.homeDirectory}/.t3-bn" (lib.head bnService.ExecStart);
+    # Every instance links the profile's preview browser into its own base
+    # directory, and a failing link step never blocks the instance (ADR-0092).
+    assert lib.all ({
+      unit,
+      baseDir,
+    }: let
+      pre = home.config.systemd.user.services.${unit}.Service.ExecStartPre;
+    in
+      lib.hasPrefix "-/nix/store/" pre
+      && lib.hasSuffix "/bin/t3code-link-preview-browser ${home.config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/libexec/t3code/preview-browser ${baseDir}" pre) [
+      {
+        unit = "t3code";
+        baseDir = "${home.config.home.homeDirectory}/.t3";
+      }
+      {
+        unit = "t3code-bn";
+        baseDir = "${home.config.home.homeDirectory}/.t3-bn";
+      }
+    ];
     assert unit.X-RestartIfChanged == false;
     assert service.Restart == "on-failure";
     assert service.RestartForceExitStatus == "75";

@@ -97,3 +97,13 @@ instances stay stopped.
 Projects and threads do not move between instances, and T3's agent tools only
 reach projects in their own instance. Open each new port in the host firewall
 and give it its own edge route.
+
+## Preview browser
+
+T3 renders previews with a pinned Chrome headless shell that it downloads into
+each base directory, and that download cannot find its libraries on NixOS.
+The nix-packages T3 package bundles the same build with its libraries linked
+from the store. Before each instance starts, `t3code-link-preview-browser`
+links that build into the instance's `tools/chrome-headless-shell` directory,
+where T3 treats it as installed ([ADR-0092](../../../../docs/adr/0092-t3-preview-browser-from-nix.md)).
+A T3 package without the bundle leaves T3's own download in place.

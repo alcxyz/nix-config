@@ -28,6 +28,20 @@ with lib; let
     if profileMode
     then "${aiStackProfile}/bin/t3"
     else "${cfg.package}/bin/t3";
+  # The package bundles T3's pinned preview browser with its libraries from the
+  # store; each instance links it into its base directory before starting
+  # (ADR-0092). Through the profile, the links follow unattended updates.
+  previewBrowserBundle =
+    if profileMode
+    then "${aiStackProfile}/libexec/t3code/preview-browser"
+    else "${cfg.package}/libexec/t3code/preview-browser";
+  linkPreviewBrowser = pkgs.writeShellApplication {
+    name = "t3code-link-preview-browser";
+    runtimeInputs = with pkgs; [coreutils];
+    # The script sets its own shell options.
+    bashOptions = [];
+    text = builtins.readFile ./link-preview-browser.sh;
+  };
   # The primary server keeps the historical unit name and state. Additional
   # instances share its executable, so the guards below cover all of them.
   instances =
@@ -570,6 +584,8 @@ in {
           };
           Service = {
             Type = "simple";
+            # A missing preview browser must never keep T3 from starting.
+            ExecStartPre = "-${linkPreviewBrowser}/bin/t3code-link-preview-browser ${previewBrowserBundle} ${instance.baseDir}";
             ExecStart = "${t3Executable} serve --host ${cfg.host} --port ${toString instance.port} --base-dir ${instance.baseDir}";
             Environment = "SHELL=${pkgs.bash}/bin/bash";
             # A clean provider/server exit is still unexpected for a persistent
