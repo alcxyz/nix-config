@@ -1,7 +1,8 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- T3 thread overview (ADR-0091). Replace only the JSON between the REPORT
-     markers; the page derives groups, counts and colours from it. -->
+<!-- T3 thread overview (ADR-0091). t3-thread-overview-render replaces the
+     JSON between the REPORT markers; the page derives groups, counts and
+     colours from it. -->
 <style>
   body { font-family: var(--font-sans); color: var(--foreground); margin: 0; }
   .wrap { display: flex; flex-direction: column; gap: 20px; padding: 4px 0 8px; }
@@ -25,6 +26,7 @@
   .top { display: flex; align-items: baseline; gap: 10px; }
   .title { font-weight: 600; font-size: 14px; color: var(--foreground); text-decoration: none; flex: 1; min-width: 0; }
   .title:hover { text-decoration: underline; }
+  .goal { font-size: 12.5px; color: var(--muted-foreground); line-height: 1.4; margin-top: -4px; }
   .meta { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--secondary); color: var(--secondary-foreground); text-decoration: none; }
@@ -72,7 +74,7 @@ const REPORT =
     {"threadId": "sample-1", "title": "Sample unsettled thread", "project": "example", "bucket": "unsettled",
      "status": "completed", "updatedAt": "2026-10-09T16:00:00Z", "settledAt": null,
      "prs": [{"url": "https://example.invalid/pulls/1", "state": "open"}],
-     "progressPct": 60, "phase": "awaiting-user", "owner": "user",
+     "progressPct": 60, "phase": "awaiting-user", "owner": "user", "goal": "Ship the sample change.",
      "nextAction": "Approve the pending change.", "blocker": "Needs your approval.", "flag": null,
      "done": ["First half shipped"], "remaining": ["Second half"], "verdict": null, "verdictReason": null},
     {"threadId": "sample-2", "title": "Sample settled thread", "project": "example", "bucket": "recently-settled",
@@ -151,6 +153,7 @@ function card(t) {
   const list = xs => (xs && xs.length ? `<ul>${xs.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : `<ul><li>Nothing</li></ul>`);
   return `<div class="card">
     <div class="top"><a class="title" href="${link(t)}">${esc(t.title)}</a><span class="meta">${when}</span></div>
+    ${t.goal ? `<div class="goal">${esc(t.goal)}</div>` : ""}
     <div class="chips">${bits}</div>
     <div class="prog">
       <div class="track"><div class="fill" style="width:${t.progressPct || 0}%;background:${ph.color}"></div></div>

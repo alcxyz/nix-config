@@ -77,21 +77,29 @@ messages. Do not repeat the readers' work.
 
 ## 4. Render
 
-Copy `template.html` (next to this file) and replace only the JSON between
-`/*REPORT-START*/` and `/*REPORT-END*/` with:
+Write the merged report to a file in a temporary directory:
 
 ```json
 {"generatedAt": "<ISO now>", "windowDays": 3, "source": "t3-thread-inventory (SQLite)", "readerModel": "<model> (light role)", "threads": [<merged rows>]}
 ```
 
-Set `source` to `MCP fallback` if step 1 fell back. Thread titles and reader
-summaries can contain `</script>` or other markup, so never paste the JSON by
-hand: write it to a file and insert the output of
-`jq -c . report.json | sed 's/</\\u003c/g'`, which writes every `<` as
-`\u003c`. The page escapes everything else. Check the page with
-`html_preview`. If the preview browser is unavailable, run the script through
-`node --check` (`nix-shell -p nodejs`) and continue. Publish it with
-`html_render` at height `min(contentHeight, 2000)`, or 2000 without a preview.
+Set `source` to `MCP fallback` if step 1 fell back. Then render the page with
+the bundled template:
+
+```sh
+t3-thread-overview-render report.json overview.html
+```
+
+Thread titles and reader summaries are untrusted text, so never paste the
+report into the page by hand. The command rejects anything but one report
+with a `generatedAt` string and a `threads` array of objects with a `threadId`,
+whose `prs`, `done` and `remaining` are lists or null (exit 65). It escapes the
+JSON so no title can close the page's script; the page escapes everything it
+shows. Check the page with `html_preview`, then publish it with `html_render`
+at height `min(contentHeight, 2000)`. If the preview browser is unavailable,
+say so in the reply, check the page's script with `node --check`
+(`nix-shell -p nodejs`) and publish at 2000. Remove the temporary directory
+afterwards.
 
 ## 5. Reply
 

@@ -136,6 +136,14 @@ with lib; let
       ${builtins.readFile ./t3-thread-inventory.sh}
     '';
   };
+  t3ThreadOverviewRender = pkgs.writeShellApplication {
+    name = "t3-thread-overview-render";
+    runtimeInputs = [pkgs.jq];
+    text = ''
+      overview_template=${./skills/t3-thread-overview/template.html}
+      ${builtins.readFile ./t3-thread-overview-render.sh}
+    '';
+  };
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
       hooks = prReviewHooks // t3RestartNoticeHooks;
@@ -279,7 +287,7 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [prReview prReviewGuard t3RestartNotice t3ThreadInventory];
+    home.packages = [prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender];
 
     # Skills shared by both clients (ADR-0091).
     home.file.".claude/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
