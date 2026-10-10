@@ -285,7 +285,10 @@ in {
   # Homebrew supplies macOS tools and native integrations such as Podman's VM.
   homebrew = {
     enable = true;
-    taps = ["netbirdio/tap"];
+    taps = [
+      "abue-ammar/tinycast"
+      "netbirdio/tap"
+    ];
     brews = [
       "libfido2"
       "netbirdio/tap/netbird"
@@ -312,9 +315,9 @@ in {
       "obsidian"
       "omniwm"
       "freelens"
-      "raycast"
       "t3-code@nightly"
       "thunderbird"
+      "abue-ammar/tinycast/tinycast"
       "upscayl"
       "vorssaint"
       "wezterm"
@@ -440,14 +443,20 @@ in {
       };
       */
 
-      # Your existing Finder preferences (consider merging into the main `finder` block above)
-      # Disable Spotlight keyboard shortcut so Raycast can use Cmd+Space
+      # Restore Spotlight's default Cmd+Space shortcut, which was disabled for
+      # Raycast. Parameters are (character, key code, modifier mask) for Space.
       "com.apple.symbolichotkeys" = {
         AppleSymbolicHotKeys = {
-          # 64 = Spotlight search, 65 = Finder search window (Cmd+Option+Space)
+          # 64 = Spotlight search (Cmd+Space)
           "64" = {
-            enabled = false;
+            enabled = true;
+            value = {
+              parameters = [32 49 1048576];
+              type = "standard";
+            };
           };
+          # 65 = Finder search window (Cmd+Option+Space). Karabiner's
+          # Option+Space WezTerm toggle accepts any extra modifier and owns it.
           "65" = {
             enabled = false;
           };
@@ -529,9 +538,10 @@ in {
   # ============================================================================
   # Spotlight
   # ============================================================================
-  # Disable Spotlight entirely — using Raycast as a replacement.
+  # Keep Spotlight indexing on: Spotlight and Tinycast's file search rely on it.
+  # It was once disabled for Raycast, and that state persists until reversed.
   system.activationScripts.postActivation.text = ''
-    mdutil -a -i off 2>/dev/null || true
+    mdutil -a -i on 2>/dev/null || true
   '';
 
   # ============================================================================
