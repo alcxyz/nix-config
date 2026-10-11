@@ -618,8 +618,8 @@
 
   browserPackage = lib.mkOption {
     type = lib.types.package;
-    default = pkgs.helium;
-    defaultText = lib.literalExpression "pkgs.helium";
+    default = pkgs.brave-origin;
+    defaultText = lib.literalExpression "pkgs.brave-origin";
     description = "Browser package used by the couch browser launcher.";
   };
 
@@ -659,7 +659,7 @@
 
   browserProfileDirectory = lib.mkOption {
     type = lib.types.str;
-    default = "helium-couch";
+    default = "brave-origin-couch";
     description = "Directory below ~/.local/share used for the couch browser profile.";
   };
 

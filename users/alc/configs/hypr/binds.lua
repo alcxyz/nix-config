@@ -14,7 +14,6 @@ hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
 hl.bind("ALT + RETURN", hl.dsp.exec_cmd(term))
 hl.bind("SUPER + B", hl.dsp.exec_cmd("zen --no-remote -profile /home/alc/.zen/alcxyz"))
 hl.bind("SUPER + V", hl.dsp.exec_cmd('brave-origin --profile-directory="Default" --remote-debugging-port=9223'))
-hl.bind("SUPER + X", hl.dsp.exec_cmd('helium --profile-directory="Profile 1" --remote-debugging-port=9222'))
 hl.bind("SUPER + Z", hl.dsp.exec_cmd('brave-origin --profile-directory="Profile 2" --remote-debugging-port=9223'))
 hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))
 hl.bind("SUPER + E", hl.dsp.focus({ workspace = 7 }))
@@ -203,12 +202,7 @@ hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "r-1" }))
 -- Window rules.
 hl.window_rule({ name = "foot-opacity", match = { class = "^(foot)$" }, opacity = 0.98 })
 hl.window_rule({ name = "dropterm-opacity", match = { class = "^(dropterm)$" }, opacity = 0.90 })
-hl.window_rule({
-	name = "helium-opaque",
-	match = { class = "^(helium)$" },
-	opacity = "1.0 override 1.0 override 1.0 override",
-})
--- Media plays in Brave Origin; keep video fully opaque like Helium.
+-- Media plays in Brave Origin; keep video fully opaque.
 hl.window_rule({
 	name = "brave-origin-opaque",
 	match = { class = "^(brave-origin)$" },

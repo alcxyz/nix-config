@@ -276,7 +276,6 @@ in rec {
 
     # Linux-only (or strongly Linux-oriented) desktop apps
     desktopLinuxOnly = with pkgs; [
-      helium
       vlc
       obs-studio
       kdePackages.kdenlive

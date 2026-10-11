@@ -44,10 +44,10 @@
     ${lib.optionalString cfg.enableLocalBrowser ''
       cat > "$out/share/applications/couch-browser.desktop" <<EOF
       [Desktop Entry]
-      Name=Helium (Couch)
+      Name=Browser (Couch)
       Comment=Open the couch web browser
       Exec=${lib.getExe couchBrowser}
-      Icon=helium
+      Icon=${lib.getName cfg.browserPackage}
       Terminal=false
       Type=Application
       Categories=Network;WebBrowser;
