@@ -113,7 +113,7 @@ with lib; let
       },
     })
   '';
-  immutableLuaConfig = pkgs.linkFarm "hyprland-lua-config" [
+  immutableLuaFiles = pkgs.linkFarm "hyprland-lua-files" [
     {
       name = "hyprland.lua";
       path = "${configSourceDir}/users/${username}/configs/hypr/hyprland.lua";
@@ -155,10 +155,36 @@ with lib; let
       path = "${configSourceDir}/users/${username}/configs/dms/windowrules.lua";
     }
   ];
+  # Hyprland compiles only its entry file before clearing the running
+  # configuration, and the session entry below hides even that check. Reject
+  # syntax errors in every file before a deploy can reload them.
+  immutableLuaConfig = pkgs.runCommandLocal "hyprland-lua-config" {nativeBuildInputs = [pkgs.lua5_5];} ''
+    find -L ${immutableLuaFiles} -name '*.lua' -print0 | xargs -0 luac -p
+    ln -s ${immutableLuaFiles} $out
+  '';
+  # Immutable sessions start from a stable link to the current generation's
+  # tree. Activation swaps the link and reloads the compositor explicitly, so
+  # deploys apply without a new session while workspace edits still cannot.
+  immutableLuaConfigLink = "${config.xdg.stateHome}/hyprland/config";
+  # Hyprland canonicalizes --config at startup and rereads that resolved file
+  # on reload, so a link alone would pin the main file to the first
+  # generation. This entry loads it through the link on each reload; toFile
+  # keeps its path constant across nixpkgs updates for session matching.
+  immutableLuaEntry = builtins.toFile "hyprland-session-entry.lua" ''
+    dofile(os.getenv("HYPRLAND_CONFIG_DIR") .. "/hyprland.lua")
+  '';
   luaConfigDir =
     if cfg.liveConfigEditing
     then "${config.home.homeDirectory}/.config/hypr"
-    else immutableLuaConfig;
+    else immutableLuaConfigLink;
+  luaConfigEntry =
+    if cfg.liveConfigEditing
+    then "${luaConfigDir}/hyprland.lua"
+    else immutableLuaEntry;
+  # A reload resets the keyboard layout to the configured default.
+  reapplyInputDefaults =
+    optionalString (cfg.inputLayouts != null)
+    ''HYPRLAND_INSTANCE_SIGNATURE="$instance" ${inputDefaultsScript} || true'';
   laptopDisplayScript = pkgs.writeShellScript "hypr-laptop-display-autoswitch" ''
     set -eu
 
@@ -393,9 +419,10 @@ in {
       default = true;
       description = ''
         Link shared Hyprland and DMS configuration directly to the mutable
-        workspace checkout. When disabled, the session starts directly from a
-        complete immutable Nix-store tree and configuration updates take effect
-        only when a new compositor session starts.
+        workspace checkout. When disabled, the session starts from a stable
+        link to a complete immutable Nix-store tree, and Home Manager
+        activation repoints that link and reloads running sessions that use
+        it, so only deployed configuration reaches the compositor.
       '';
     };
 
@@ -430,7 +457,7 @@ in {
         [Desktop Entry]
         Name=Hyprland
         Comment=An intelligent dynamic tiling Wayland compositor
-        Exec=${pkgs.coreutils}/bin/env HYPRLAND_CONFIG_DIR=${luaConfigDir} ${pkgs.hyprland}/bin/start-hyprland --path ${pkgs.hyprland}/bin/Hyprland -- --config ${luaConfigDir}/hyprland.lua
+        Exec=${pkgs.coreutils}/bin/env HYPRLAND_CONFIG_DIR=${luaConfigDir} ${pkgs.hyprland}/bin/start-hyprland --path ${pkgs.hyprland}/bin/Hyprland -- --config ${luaConfigEntry}
         Type=Application
         DesktopNames=Hyprland
         Keywords=tiling;wayland;compositor;
@@ -496,10 +523,44 @@ in {
       ''
     );
 
-    # Live-editing profiles retain atomic workspace links. Immutable profiles
-    # deliberately leave ~/.config/hypr untouched: their desktop entry starts
-    # directly from immutableLuaConfig, so activation cannot reload a running
-    # compositor by changing a watched path.
+    # Immutable profiles leave ~/.config/hypr untouched. Their sessions read
+    # the generation's complete tree through one link, swapped atomically, and
+    # are reloaded explicitly instead of through Hyprland's file watcher.
+    # Sessions started from another configuration are left alone.
+    home.activation.hyprlandImmutableLuaConfig = mkIf (cfg.manageLuaConfig && !cfg.liveConfigEditing) (
+      lib.hm.dag.entryAfter ["linkGeneration"] ''
+        config_link=${escapeShellArg immutableLuaConfigLink}
+        config_tree=${escapeShellArg immutableLuaConfig}
+
+        if [ "$(readlink "$config_link" 2>/dev/null || true)" = "$config_tree" ]; then
+          :
+        elif [[ -v DRY_RUN ]]; then
+          echo "Would link $config_link to $config_tree and reload its Hyprland sessions"
+        else
+          mkdir -p "$(dirname "$config_link")"
+          rm -f "$config_link.home-manager-new"
+          ln -s "$config_tree" "$config_link.home-manager-new"
+          mv -Tf "$config_link.home-manager-new" "$config_link"
+
+          # No running compositor is normal, for example a deploy while logged
+          # out, and must not fail activation.
+          {
+            ${pkgs.hyprland}/bin/hyprctl instances -j 2>/dev/null \
+              | ${pkgs.jq}/bin/jq -r '.[] | "\(.instance) \(.pid)"' 2>/dev/null \
+              | while read -r instance pid; do
+                  if tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null \
+                    | ${pkgs.gnugrep}/bin/grep -qxF ${escapeShellArg immutableLuaEntry}; then
+                    ${pkgs.hyprland}/bin/hyprctl -i "$instance" reload >/dev/null \
+                      || echo "Could not reload Hyprland instance $instance; run hyprctl reload" >&2
+                    ${reapplyInputDefaults}
+                  fi
+                done
+          } || true
+        fi
+      ''
+    );
+
+    # Live-editing profiles retain atomic workspace links.
     home.activation.hyprlandLuaConfig = mkIf (cfg.manageLuaConfig && cfg.liveConfigEditing) (
       lib.hm.dag.entryAfter ["linkGeneration"] ''
         hypr_dir=${escapeShellArg "${config.home.homeDirectory}/.config/hypr"}
