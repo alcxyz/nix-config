@@ -269,6 +269,21 @@ assert "inside other text" in message, message
 calls.clear()
 code, message = hook("""bash -c 'gh api -X PUT repos/o/r/pulls/9/mer"ge"'""")
 assert code == 2 and calls, message
+# A path built entirely from variables still has its pulls segment checked.
+code, message = hook('curl -X POST "$API/pulls/$N/$ACTION" -d @body.json')
+assert code == 2 and "built at run time" in message, message
+# A comment the stripper misreads inside "$(...)" cannot hide a later merge.
+for command in ('gh pr comment 5 --body "$(printf "Fixes #12")"; gh pr merge 9 --repo o/r --squash',
+                'echo "$(echo "a #1")" && tea pulls merge 12'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2, (command, message)
+# Repeated slashes in a merge path are collapsed before matching.
+for command in ("""tea api -X POST /repos/o/r/pulls/9//merge -d '{"Do":"squash"}'""",
+                """tea api -X POST /repos/o/r/pulls//9/merge -d '{"Do":"squash"}'"""):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and calls, (command, message)
 # Reading with a variable path, or a variable path to a file named merge, is not a merge.
 assert not expect("tea api /repos/$R/issues/5", 0)[0]
 assert not expect('bash "$PWD/modules/home-manager/programs/ai/merge-settings.sh"', 0)[0]

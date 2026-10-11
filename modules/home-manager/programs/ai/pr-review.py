@@ -92,7 +92,7 @@ HEREDOC = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 # A command or process substitution anywhere in the text.
 SUBSTITUTION = re.compile(r"`|\$\(|[<>]\(")
 # Words that make a command worth parsing further.
-GATE_WORDS = ("merge", "tea", "repos/")
+GATE_WORDS = ("merge", "tea", "repos/", "pulls")
 # Options that make an API request write, so it could merge.
 # Short options may be grouped or carry an attached value (`-sX POST`, `-d'{...}'`);
 # matching more than writes only refuses more.
@@ -1191,16 +1191,17 @@ def strip_comments(command):
     return "".join(out)
 
 
-def split_command(command):
+def split_command(command, comments=True):
     """Return the words and separators of a command, or None when it does not parse.
 
     Newlines outside quotes separate commands, and descriptor duplications such
     as `2>&1` stay words instead of reading as separators. Comments are dropped
-    as bash drops them, and each heredoc body follows as one quoted word, so
-    apostrophes in either do not break parsing.
+    as bash drops them (unless comments is False), and each heredoc body
+    follows as one quoted word, so apostrophes in either do not break parsing.
     """
     command, bodies = extract_heredocs(command)
-    command = strip_comments(command)
+    if comments:
+        command = strip_comments(command)
     # An attached `&>file` redirects; a spaced `& >file` runs in the background
     # and separates. Mark the attached form so the lexer keeps it in one word.
     command = strip_trailing_redirections(command).replace("\\\n", "").replace("&>", ATTACHED_REDIRECTION + ">")
@@ -1496,9 +1497,24 @@ def mcp_merge_check(arguments):
 
 
 def guard_check(command, cwd):
-    """Return None when the command may run, otherwise a reason to block."""
-    tokens = split_command(command)
+    """Return None when the command may run, otherwise a reason to block.
+
+    Comment stripping does not follow every shell quoting context (quotes
+    inside `"$(...)"`), so when it changes the command, the command is also
+    checked as parsed without it, and either reading can block.
+    """
+    problem = guard_check_parsed(command, cwd, comments=True)
+    if problem or strip_comments(command) == command:
+        return problem
+    return guard_check_parsed(command, cwd, comments=False)
+
+
+def guard_check_parsed(command, cwd, comments):
+    """Return None when the command, parsed with or without comment stripping, may run."""
+    tokens = split_command(command, comments)
     if tokens is None:
+        if not comments:
+            return None
         # Without its quoting, a merge's arguments cannot be told apart.
         if MERGE_MENTION.search(command):
             return ("cannot verify the command: it does not parse, for example because of an unclosed quote; "
@@ -1569,7 +1585,9 @@ def guard_check(command, cwd):
     # The raw text and the parsed words are both searched: quoting or a line
     # continuation inside a path hides it from the raw text.
     seen = set()
-    for match in [*API_MERGE.finditer(command), *API_MERGE.finditer(text)]:
+    # Repeated slashes, which servers may collapse, are collapsed here too.
+    collapsed = re.sub(r"(?<!:)/{2,}", "/", command + "\n" + text)
+    for match in [*API_MERGE.finditer(command), *API_MERGE.finditer(text), *API_MERGE.finditer(collapsed)]:
         key = (match["host"], match["owner"], match["repo"], match["number"])
         if key in seen:
             continue
