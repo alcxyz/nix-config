@@ -1274,6 +1274,9 @@ def gh_pr_merges(tokens, cwd):
         if os.path.basename(token) != "gh" or "://" in token:
             continue
         selector, repo, problem, sources, position, stage = None, None, None, [], index + 1, 0
+        # gh's parser assumes an option it does not know before the subcommand
+        # takes a value, so `gh pr --squash 9 merge` still merges #9.
+        early_option = False
         while position < len(tokens):
             word = tokens[position]
             position += 1
@@ -1291,9 +1294,10 @@ def gh_pr_merges(tokens, cwd):
                 continue
             name, has_value, value = word.partition("=")
             if stage < 2 and not word.startswith("-"):
-                if word != ("pr", "merge")[stage]:
+                if word == ("pr", "merge")[stage]:
+                    stage += 1
+                elif not early_option:
                     break
-                stage += 1
             elif name in ("-R", "--repo") or (word[:2] == "-R" and len(word) > 2):
                 sources.append((position - 1, "word"))
                 if has_value or word[:2] == "-R" and len(word) > 2:
@@ -1311,10 +1315,13 @@ def gh_pr_merges(tokens, cwd):
                 sources.append((position - 1, "short"))
             else:
                 sources.append((position - 1, "word"))
+                early_option = early_option or stage < 2
                 if stage == 2 and not word.startswith("-") and selector is None:
                     selector = word
         if stage < 2:
             continue
+        if problem is None and early_option:
+            problem = "put options after merge, as in `gh pr merge N --repo owner/repo --squash`"
 
         # Without both, gh picks the PR or repository from the directory it
         # runs in, which cd, env -C, eval or GIT_DIR can change unseen.

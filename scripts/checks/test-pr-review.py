@@ -347,6 +347,12 @@ for command in ("gh pr merge 7 --repo o/r --squash; gh 2>&1 pr merge 9 --repo o/
     seen, _ = expect(command, 2)
     assert [call[0][3] for call in seen] == ["7", "9"], (command, seen)
 expect("""gh pr merge 7 --repo o/r --squash --subject="fix: don't drop the cache" --body='Closes "x"'""", 0)
+# An option gh does not know before the subcommand may swallow a word, so it is refused.
+for command in ("gh pr merge 7 --repo o/r --squash; gh pr --squash 9 merge --repo o/r",
+                "gh pr -s 9 merge --repo o/r", "gh pr --admin 9 merge --repo o/r"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "put options after merge" in message, (command, message)
 # A quote in a merge message does not matter.
 expect("""gh pr merge 7 --repo o/r --squash --subject "fix: don't drop the cache" --body 'Closes "x"'""", 0)
 # A client name that is not a command, and an option value for an api body, are not run-time commands.
