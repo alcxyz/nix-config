@@ -182,7 +182,9 @@ _, message = hook("tea api --login=synthetic-login -X POST /repos/o/r/pulls/7/me
 assert "`--login`" in message and "synthetic-login" not in message, message
 # Quoted text such as a merge title is not read as tea options.
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash","MergeTitleField":"Fix login -r redirect"}'""", 0)
-expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"MergeTitleField":"Fix tea login -r redirect"}'""", 0)
+# Quoted text that mentions tea is scanned like a command and fails closed.
+_, message = hook("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"MergeTitleField":"Fix tea login -r redirect"}'""")
+assert "`login` could point tea" in message, message
 # Backticks, a spaced background `&` or a tea word anywhere keep the Forgejo check.
 for command in ("gh api -X GET `tea api --login other -X POST /repos/o/r/pulls/7/merge -d '{}'`",
                 "gh api user & >/dev/null tea api --login other -X POST /repos/o/r/pulls/7/merge"):
@@ -197,16 +199,23 @@ assert forges(seen) == {"github", "forgejo"}, seen
 for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"',
                 'bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"',
                 'bash -c "env tea api --login other -X POST /repos/o/r/pulls/7/merge"',
-                'bash -c "cd ~/src/r && tea api --login other -X POST /repos/o/r/pulls/7/merge"'):
+                'bash -c "cd ~/src/r && tea api --login other -X POST /repos/o/r/pulls/7/merge"',
+                'bash -c "timeout 60 tea api --login other -X POST /repos/o/r/pulls/7/merge"',
+                'bash -c "/usr/bin/env -u X tea api --login other -X POST /repos/o/r/pulls/7/merge"',
+                """bash -c "bash -c 'tea api --login other -X POST /repos/o/r/pulls/7/merge'\"""",
+                """bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge # don't squash\""""):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "`--login`" in message, (command, message)
 _, message = hook('bash -c "GITEA_SERVER_URL=https://x tea api -X POST /repos/o/r/pulls/7/merge"')
 assert "the GITEA_SERVER_URL assignment" in message, message
 # An attached &> redirects and does not end a gh merge's arguments.
-for command in ("gh pr merge &>/dev/null 9 --squash --repo o/r", "gh pr merge 2> err 9 --squash --repo o/r"):
-    seen, _ = expect(command, 2)
-    assert seen[0][0][3:6] == ["9", "--repo", "o/r"], (command, seen)
+# A redirection, or a quoted selector that looks like one, among gh merge arguments is refused.
+for command in ("gh pr merge &>/dev/null 9 --squash --repo o/r", "gh pr merge 2> err 9 --squash --repo o/r",
+                'gh pr merge "9>fix" --squash --repo o/r'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "redirections at the end" in message and not calls, (command, message)
 # A gh word that is not a command, such as an option value, still adds the GitHub check.
 seen, _ = expect('curl -o gh api -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen

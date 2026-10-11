@@ -88,8 +88,8 @@ SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "\n"}
 PUNCTUATION = ";&|()\n"
 # Stands in for the `&` of an attached `&>` redirection while lexing.
 ATTACHED_REDIRECTION = "\ue000"
-# A word that starts with a redirection operator; a bare operator takes the next word as its target.
-REDIRECTION = re.compile(r"\d*(?:>>?|<)&?|&>>?")
+# A word that starts with a redirection operator.
+REDIRECTION = re.compile(r"\d*(?:>>?|<)|&>")
 # Simple redirections such as `2>&1` or `>/dev/null`, optionally piped to tail or
 # head, at the end of a command. Without quotes, escapes or other commands, removing
 # them cannot hide a merge.
@@ -1153,15 +1153,15 @@ def gh_pr_merges(tokens, cwd):
             if tokens[position] == "cd" and position + 1 < index and tokens[position + 1] not in SEPARATORS:
                 merge_cwd = os.path.join(merge_cwd, os.path.expanduser(tokens[position + 1]))
 
-        selector, repo, args = None, None, iter(tokens[index + 3:])
+        selector, repo, args, unverifiable = None, None, iter(tokens[index + 3:]), False
         for token in args:
             if token in SEPARATORS:
                 break
-            redirection = REDIRECTION.match(token)
-            if redirection:
-                if redirection.end() == len(token):
-                    next(args, None)
-                continue
+            # Quoting is not kept, so a redirection here could also be a quoted
+            # selector such as a branch named `9>fix`; neither can be verified.
+            if REDIRECTION.match(token):
+                unverifiable = True
+                break
             name = token.split("=", 1)[0]
             if name in ("-R", "--repo"):
                 repo = token.split("=", 1)[1] if "=" in token else next(args, None)
@@ -1170,7 +1170,8 @@ def gh_pr_merges(tokens, cwd):
             elif not token.startswith("-") and selector is None:
                 selector = token
 
-        yield [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else []), merge_cwd
+        view = [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else [])
+        yield (None if unverifiable else view), merge_cwd
 
 
 def cli_calls(tokens, program, value_flags):
@@ -1205,21 +1206,20 @@ def cli_merges(tokens):
             yield "the PR (fj pr merge)", f"fj merges are not verified; use {TEA_API_MERGE}"
 
 
-def shell_words(tokens, depth=0):
+def shell_words(tokens):
     """Return the tokens and the words of commands nested in them, such as `$(tea ...)` or `bash -c "tea ..."`.
 
-    A quoted token is read as shell code and expanded when tea starts a
-    command in it, so other quoted text, such as a JSON body or a merge title
-    that mentions tea, stays one word.
+    Nested shell code is not parsed: a token with a command substitution, or
+    with a tea word anywhere in it, is split into all its words. Quoted text
+    without tea, such as a JSON body, stays one word; text that mentions tea
+    is scanned like a command, which fails closed.
     """
     words = list(tokens)
     for token in tokens:
-        if "$(" in token or "`" in token:
-            words.extend(word.strip("\"'") for word in re.split(r"[\s;&|()`$]+", token) if word.strip("\"'"))
-        elif depth < 3 and any(character.isspace() for character in token):
-            inner = split_command(token) or []
-            if any(os.path.basename(word) == "tea" and command_position(inner, index) for index, word in enumerate(inner)):
-                words.extend(shell_words(inner, depth + 1))
+        inner = [word.strip("\"'{}") for word in re.split(r"[\s;&|()`$]+", token)]
+        inner = [word for word in inner if word]
+        if "$(" in token or "`" in token or (len(inner) > 1 and "tea" in map(os.path.basename, inner)):
+            words.extend(inner)
     return words
 
 
@@ -1393,6 +1393,9 @@ def guard_check(command, cwd):
 
     # Every merge in the command must pass on its own.
     for view, view_cwd in gh_pr_merges(tokens, cwd):
+        if view is None:
+            return ("cannot verify the PR (gh pr merge): put redirections at the end of the command, and do not "
+                    "name a branch that starts like one.")
         ref = "the PR (gh pr merge " + " ".join(view) + ")"
         # The hook's lookup does not see inline assignments, so they could point
         # the merge at another host or repository than the one checked.
