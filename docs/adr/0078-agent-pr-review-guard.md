@@ -105,9 +105,11 @@ guard. For the module's `users`, a missing guard blocks every hooked call.
 Other hosts keep the user `~/.codex/hooks.json`, which must be trusted once
 per change to take effect. The guard recognises `gh pr merge`, GitHub `pulls/N/merge` API calls, Forgejo
 REST merges, including `tea api` calls, and refuses `tea` and `fj` merge commands.
-It checks each merge in a command on its own. A GET exempts a REST merge path
-only when the command holds no other command, and any `tea` call in the
-command that could pick another login blocks a Forgejo REST merge. It blocks them unless a review comment names the PR's current head
+It checks each merge in a command on its own and does not read the HTTP
+method, so any request to a merge path is checked, a GET included. A path
+without a host is checked on GitHub when the command calls `gh api`, and on the
+Forgejo `url` when it calls `tea` or no `gh api`; any `tea` call in the command
+that could pick another login blocks it. It blocks them unless a review comment names the PR's current head
 commit and target branch, so new commits or a retargeted PR need a new review.
 The comment's mode follows the pinned prefix, so older guards still accept it;
 the guard does not check the chain of rounds, which `run` enforces from local

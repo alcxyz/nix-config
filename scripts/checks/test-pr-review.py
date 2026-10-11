@@ -95,14 +95,17 @@ seen, _ = expect("curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merg
 assert seen[0][0].host == "https://git.example", seen
 expect("curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge", 2)
 expect('curl -X POST "$FORGEJO/api/v1/repos/o/r/pulls/8/merge"', 2)
-expect("curl --request GET https://git.example/api/v1/repos/o/r/pulls/8/merge", 0)
+# The method is not read: any request to a merge path is checked as a merge.
+expect("curl --request GET https://git.example/api/v1/repos/o/r/pulls/8/merge", 2)
 
 # tea api merges are REST merges, checked on the configured instance (#616).
 seen, _ = expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do": "squash"}'""", 0)
 assert (seen[0][0].host, seen[0][0].owner, seen[0][0].repo, seen[0][0].number) == (review.FORGEJO_URL, "o", "r", "7"), seen
 expect("tea api -X POST repos/o/r/pulls/9/merge 2>&1 | tail -5", 2)
 expect("cd x && tea api --method POST /repos/o/r/pulls/7/merge -d @- < body.json", 0)
-assert not expect("tea api /repos/o/r/pulls/8/merge -X GET", 0)[0]
+expect("tea api /repos/o/r/pulls/8/merge -X GET", 2)
+expect("tea api -X POST -H 'X-Note: --method GET' /repos/o/r/pulls/8/merge -d '{}'", 2)
+expect("""tea api -X POST /repos/o/r/pulls/9/merge -d "{\\"head_commit_id\\":\\"$(tea api -X GET /repos/o/r/pulls/9)\\"}" """, 2)
 seen, _ = expect("gh pr merge 9 --squash 2>&1 | tail -3", 2)
 assert seen[0][0][3] == "9", seen
 expect("gh pr merge 7 --squash >/dev/null", 0)
@@ -125,6 +128,8 @@ for command, hint in (
     ("""tea api -X POST /repos/o/r/pulls/7/merge 2>&1 --login other -d '{"Do":"squash"}'""", "without --login"),
     ('P=/repos/o/r/pulls/7/merge; tea api --login other -X POST "$P"', "without --login"),
     ("echo /repos/o/r/pulls/7/merge | xargs tea api -l other -X POST", "without --login"),
+    ("tea 2>&1 api --login other -X POST /repos/o/r/pulls/7/merge", "without --login"),
+    ("gh api user && tea api --login other -X POST /repos/o/r/pulls/7/merge", "without --login"),
 ):
     calls.clear()
     code, message = hook(command)
@@ -148,6 +153,10 @@ expect("""tea api -X GET /repos/o/r/pulls/9; tea api -X POST /repos/o/r/pulls/9/
 # A newline ends a gh merge's options, so a later --repo is not read as its own.
 seen, _ = expect("gh pr merge 5 --repo o/a --squash\ngh pr merge --repo o/reviewed --squash", 2)
 assert seen[0][0][3:6] == ["5", "--repo", "o/a"], seen
+# A path without a host is checked on GitHub and on Forgejo when both clients are in the command.
+seen, _ = expect("gh api user && tea api -X POST /repos/o/r/pulls/7/merge", 0)
+assert any(isinstance(call[0], review.PR) and call[0].forge == "forgejo" for call in seen), seen
+assert any(isinstance(call[0], list) and call[0][:2] == ["gh", "api"] for call in seen), seen
 # tea settings do not affect merges through other clients.
 expect("GITEA_TOKEN=x curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge", 0)
 assert not expect("fj pr view o/r#7", 0)[0]
