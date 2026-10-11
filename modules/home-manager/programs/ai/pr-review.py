@@ -100,6 +100,8 @@ WRITE_OPTION = re.compile(
     r"^(?:--(?:method|request|data[\w-]*|field|Field|raw-field|input|upload-file|json|form[\w-]*)(?:=|$)"
     r"|-[A-Za-z]*[XdFfT])"
 )
+# A `pulls` or `merge` path segment, as opposed to a file such as merge-settings.sh.
+PR_PATH_SEGMENT = re.compile(r"(?:^|/)(?:pulls|merge)(?:$|[/?#])")
 # An API path with a variable or substitution after `repos/`.
 DYNAMIC_API_PATH = re.compile(r"repos/\S*[$`]")
 # A complete literal pulls path that is not a merge, such as `pulls/7/reviews`.
@@ -1502,9 +1504,11 @@ def guard_check(command, cwd):
             return ("cannot verify the command: it does not parse, for example because of an unclosed quote; "
                     "fix it, or pass long text from a file.")
         tokens = command.split()
-    # The parsed words are read too: quotes or a line continuation can split
-    # `merge` in the raw text.
-    # Nested text is read too, after its own quote removal.
+    # Quotes left inside words only matter to a nested shell (eval, bash -c,
+    # xargs), which removes them again; read the words without them.
+    tokens = [re.sub(r"[\"'\\]", "", token) for token in tokens]
+    # The parsed and nested words are read too: quotes or a line continuation
+    # can split `merge` in the raw text.
     text = " ".join(shell_words(tokens))
     if not any(word in command or word in text for word in GATE_WORDS) and not SUBSTITUTION.search(command):
         return None
@@ -1512,16 +1516,25 @@ def guard_check(command, cwd):
     # `7$(printf 9)` or `pulls/$(echo 9)/merge`. The raw text is searched, since
     # lexing splits unquoted `$(` apart.
     if SUBSTITUTION.search(command) and (
-        any(not LITERAL_PULLS_PATH.match(command, match.start()) for match in re.finditer(r"pulls/", command))
+        "/merge" in text
+        or any(not LITERAL_PULLS_PATH.match(command, match.start()) for match in re.finditer(r"pulls/", command))
         or any(True for _ in gh_pr_merges(tokens, cwd))
         or any(pr_subcommand_unknown(call) for client in ("gh", "tea", "fj")
                for call, _flags in cli_calls(shell_words(tokens), client, set()))
     ):
         return ("cannot verify the merge: its command contains a command substitution, which can change the "
                 "target; use literal values, and pass long text from a file.")
-    # A write request whose API path is built at run time could be a merge
-    # the guard cannot see, such as /repos/$R/pulls/7/merge or pulls/7/$M.
+    # A pull request path built at run time could be a merge the guard cannot
+    # see, whatever client or method sends it: $api/$n/merge, pulls/7/$M. A
+    # variable host before repos/ is fine.
     words = shell_words(tokens)
+    for word in words:
+        path = word.split("repos/", 1)[1] if "repos/" in word else word
+        if PR_PATH_SEGMENT.search(path) and re.search(r"[$`]", path):
+            return ("cannot verify the request: its pull request path is built at run time; use a literal owner, "
+                    "repository and PR number, as in /repos/owner/repo/pulls/N/merge.")
+    # A write request whose API path is built at run time could be a merge
+    # the guard cannot see, such as /repos/o/r/$(printf pulls)/7/merge.
     if any(WRITE_OPTION.match(word) for word in words) and (
         DYNAMIC_API_PATH.search(command) or DYNAMIC_API_PATH.search(" ".join(words))
     ):

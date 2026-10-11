@@ -245,6 +245,24 @@ for command in ("tea api --Field Do=squash /repos/$R/pulls/9/merge",
     calls.clear()
     code, message = hook(command)
     assert code == 2 and not calls, (command, message)
+# Method words, other clients and grouped options do not matter for a run-time path.
+for command in ("http POST https://git.example/api/v1/repos/$R/pulls/9/merge Do=squash",
+                'xh POST "$F/api/v1/repos/$R/pulls/7/merge" Do=squash',
+                """wget --post-data='{"Do":"squash"}' "$F/api/v1/repos/$R/pulls/7/merge\"""",
+                """curl -4d'{"Do":"squash"}' https://git.example/api/v1/repos/$R/pulls/9/merge""",
+                """api=/repos/o/r/pulls; for n in 620 621; do tea api -X POST "$api/$n/merge" -d '{}'; done""",
+                """x=pos; tea api -X POST "/re${x}/o/r/pulls/9/merge" -d '{}'"""):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
+# Quotes for a nested shell (eval, xargs) are removed before reading.
+code, message = hook("""eval gh pr mer"''"ge 9 --repo o/r""")
+assert code == 2, message
+for command in ("""eval tea api -X POST /repos/o/r/pulls/9/mer"''"ge -d '{}'""",
+                """echo "/repos/o/r/pulls/9/mer''ge" | xargs tea api -X POST -d '{}'"""):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2, (command, message)
 # Text handed to another shell is read after its own quote removal.
 _, message = hook('bash -c "gh pr mer\'\'ge 9 --repo o/r"')
 assert "inside other text" in message, message
