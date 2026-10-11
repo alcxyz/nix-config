@@ -1259,14 +1259,20 @@ def tokenize(command):
 
 
 def gh_pr_merges(tokens, cwd):
-    """Yield (selector args, cwd, problem) for each `gh pr merge`; problem is None when it can be looked up."""
+    """Yield (selector args, cwd, problem, sources) for each `gh pr merge`.
+
+    problem is None when it can be looked up; sources lists the positions of
+    the words that hold the selector and repository.
+    """
     for index in range(len(tokens) - 2):
         if os.path.basename(tokens[index]) != "gh" or tokens[index + 1:index + 3] != ["pr", "merge"]:
             continue
         merge_cwd = cwd
 
-        selector, repo, args, problem = None, None, iter(tokens[index + 3:]), None
-        for token in args:
+        selector, repo, problem, sources, position = None, None, None, [], index + 3
+        while position < len(tokens):
+            token = tokens[position]
+            position += 1
             if token in SEPARATORS:
                 break
             redirection = REDIRECTION.match(token)
@@ -1277,22 +1283,29 @@ def gh_pr_merges(tokens, cwd):
                     problem = ("name the PR before any redirection, put redirections at the end of the command, "
                                "and do not name a branch that starts like one")
                     break
-                if redirection.end() == len(token):
-                    next(args, None)
+                position += redirection.end() == len(token)
                 continue
             name = token.split("=", 1)[0]
             if name in ("-R", "--repo"):
-                repo = token.split("=", 1)[1] if "=" in token else next(args, None)
+                if "=" in token:
+                    repo = token.split("=", 1)[1]
+                    sources.append(position - 1)
+                elif position < len(tokens):
+                    repo = tokens[position]
+                    sources.append(position)
+                    position += 1
             elif token in GH_MERGE_VALUE_FLAGS:
-                next(args, None)
+                position += 1
             elif not token.startswith("-") and selector is None:
                 selector = token
+                sources.append(position - 1)
 
         # Without both, gh picks the PR or repository from the directory it
         # runs in, which cd, env -C, eval or GIT_DIR can change unseen.
         if problem is None and not (selector and repo):
             problem = "name the PR and its repository, as in `gh pr merge N --repo owner/repo`"
-        yield [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else []), merge_cwd, problem
+        view = [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else [])
+        yield view, merge_cwd, problem, sources
 
 
 def cli_calls(tokens, program, value_flags):
@@ -1640,7 +1653,7 @@ def guard_check_parsed(command, cwd, comments):
         tokens = command.split()
     # Quotes left inside words only matter to a nested shell (eval, bash -c,
     # xargs), which removes them again; read the words without them.
-    parsed = set(tokens) | {token.split("=", 1)[1] for token in tokens if "=" in token}
+    parsed = list(tokens)
     tokens = [re.sub(r"[\"'\\]", "", token) for token in tokens]
     # A pull request subcommand from a variable could be merge: gh pr "$a" 9.
     words = shell_words(tokens)
@@ -1695,13 +1708,13 @@ def guard_check_parsed(command, cwd, comments):
                 "only quotes it, as in a commit message or PR body, pass that text from a file.")
 
     # Every merge in the command must pass on its own.
-    for view, view_cwd, problem in gh_pr_merges(tokens, cwd):
+    for view, view_cwd, problem, sources in gh_pr_merges(tokens, cwd):
         ref = "the PR (gh pr merge " + " ".join(view) + ")"
         if problem:
             return f"cannot verify {ref}: {problem}."
         # Removing leftover quotes is for detection only; a selector or
         # repository it changed would be looked up as another PR.
-        if any(word not in parsed for word in view if word != "--repo"):
+        if any(tokens[position] != parsed[position] for position in sources):
             return f"cannot verify {ref}: a quote inside the PR or repository name cannot be checked."
         # The hook's lookup does not see inline assignments, so they could point
         # the merge at another host or repository than the one checked.

@@ -331,8 +331,12 @@ for command in ("bash -c 'gh api -X PUT \"$EP\" --input body.json'", 'gh >out ap
     code, message = hook(command)
     assert code == 2 and not calls, (command, message)
 # A quote inside a selector cannot be checked; each spelling of a merge path is attributed to its client.
-code, message = hook("""gh pr merge "feature's-fix" --repo owner/repo --squash""")
-assert code == 2 and "quote inside" in message, message
+for command in ("""gh pr merge "feature's-fix" --repo owner/repo --squash""",
+                """gh pr merge "feature's-fix" --repo owner/repo --squash --subject features-fix""",
+                """gh pr merge "feature's-fix" --repo o/r --squash && echo features-fix"""):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "quote inside" in message and not calls, (command, message)
 seen, _ = expect('gh api -X PUT /api/v1/repos/o/r/pulls/7/merge; curl -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen
 # A client name that is not a command, and an option value for an api body, are not run-time commands.
