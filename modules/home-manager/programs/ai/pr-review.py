@@ -1468,7 +1468,11 @@ def command_calls(tokens):
     cut says whether a backtick ended them.
     """
     for index, token in enumerate(tokens):
-        if token in SEPARATORS or not command_position(tokens, index):
+        # A client word counts wherever it is, since wrappers with arguments
+        # (timeout 60, env -u X), leading redirections and nested text hide
+        # command positions; a URL ending in a client name does not.
+        client = os.path.basename(token) in NESTED_CLIENTS and "://" not in token
+        if token in SEPARATORS or not (client or command_position(tokens, index)):
             continue
         arguments, position, cut = [], index + 1, False
         while position < len(tokens) and tokens[position] not in SEPARATORS:
@@ -1526,6 +1530,9 @@ def dynamic_pr_command(tokens):
 def dynamic_api_endpoint(tokens):
     """Return whether a `tea api` or `gh api` request takes its endpoint from a variable or substitution."""
     for token, arguments, cut in command_calls(tokens):
+        # Global options such as `tea --debug` may come before api.
+        while arguments and arguments[0].startswith("-"):
+            arguments = arguments[1:]
         if os.path.basename(token) not in ("tea", "gh") or arguments[:1] != ["api"]:
             continue
         positional, words = [], iter(arguments[1:])
@@ -1535,7 +1542,8 @@ def dynamic_api_endpoint(tokens):
             elif not word.startswith("-"):
                 positional.append(word)
         # A variable host before a literal repos/ path is checked as a path.
-        if any(dynamic(word) and "repos/" not in word for word in positional) or (cut and not positional):
+        # A backtick right after a literal prefix (/`cat ep.txt`) joins it in bash.
+        if any(dynamic(word) and "repos/" not in word for word in positional) or cut:
             return True
     return False
 
@@ -1630,9 +1638,16 @@ def guard_check_parsed(command, cwd, comments):
     # xargs), which removes them again; read the words without them.
     tokens = [re.sub(r"[\"'\\]", "", token) for token in tokens]
     # A pull request subcommand from a variable could be merge: gh pr "$a" 9.
-    if dynamic_pr_command(shell_words(tokens)):
+    words = shell_words(tokens)
+    if dynamic_pr_command(words):
         return ("cannot verify the command: its pull request subcommand is built at run time; "
                 "name it literally.")
+    # A write request whose whole endpoint is a variable or substitution
+    # could be a merge: tea api -X POST "$(cat ep.txt)". Its text may name
+    # nothing the gate looks for.
+    if any(WRITE_OPTION.match(word) for word in words) and dynamic_api_endpoint(words):
+        return ("cannot verify the request: its endpoint is built at run time; use a literal owner, repository "
+                "and PR number, as in /repos/owner/repo/pulls/N/merge.")
     # The parsed and nested words are read too: quotes or a line continuation
     # can split `merge` in the raw text.
     text = " ".join(shell_words(tokens))
@@ -1659,11 +1674,6 @@ def guard_check_parsed(command, cwd, comments):
         if PR_PATH_SEGMENT.search(path) and re.search(r"[$`]", path):
             return ("cannot verify the request: its pull request path is built at run time; use a literal owner, "
                     "repository and PR number, as in /repos/owner/repo/pulls/N/merge.")
-    # A write request whose whole endpoint is a variable or substitution
-    # could be a merge: tea api -X POST "$(cat ep.txt)".
-    if any(WRITE_OPTION.match(word) for word in words) and dynamic_api_endpoint(words):
-        return ("cannot verify the request: its endpoint is built at run time; use a literal owner, repository "
-                "and PR number, as in /repos/owner/repo/pulls/N/merge.")
     # A write request whose API path is built at run time could be a merge
     # the guard cannot see, such as /repos/o/r/$(printf pulls)/7/merge.
     if any(WRITE_OPTION.match(word) for word in words) and (

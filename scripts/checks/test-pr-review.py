@@ -190,7 +190,8 @@ for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api -X POST /repos/o/r
                 "gh pr merge 7 --repo o/r $(echo --repo o/x)"):
     calls.clear()
     code, message = hook(command)
-    assert code == 2 and "command substitution" in message and not calls, (command, message)
+    refused = "command substitution" in message or "built at run time" in message
+    assert code == 2 and refused and not calls, (command, message)
 # A substitution that may build a merge path or subcommand is refused too.
 for command in ("""tea api -X POST "/repos/o/r/pulls/9/$(printf merge)" -d '{"Do":"squash"}'""",
                 """tea api -X POST /repos/o/r/pulls/7/`echo merge` -d '{"Do":"squash"}'""",
@@ -309,6 +310,20 @@ for command in ('for op in merge; do tea pulls --repo view "$op" 9; done',
                 "$GH pr merge 9 --repo o/r", "$(which gh) pr merge 9 --repo o/r",
                 """tea api -X POST `cat ep.txt` -d '{"Do":"squash"}'""", 'tea api -X POST "/$EP"',
                 'tea 2>&1 api -X POST "$EP"', "bash -c 'tea api -X POST \"$EP\" -d @body.json'"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
+# Wrappers, leading redirections, global options, nested separators and quoted substitutions do not hide a client.
+for command in ("bash -c 'gh api -X PUT \"$EP\" --input body.json'", 'gh >out api -X PUT "$EP"',
+                '</dev/null tea api -X POST "$EP" -d @body.json', 'env -u UNUSED tea api -X POST "$EP" -d @body.json',
+                'timeout 60 tea api -X POST "$EP" -d @body.json',
+                'for op in merge; do timeout 60 tea pulls --repo o/r "$op" 9; done',
+                'for action in "pr ready" "pr merge"; do timeout 60 gh $action 9 --repo o/r; done',
+                "bash -c 'echo start; tea api -X POST \"$EP\" -d @body.json'",
+                "bash -c 'echo start; gh $action 9 --repo o/r'",
+                'tea --debug api -X POST "$EP" -d @body.json',
+                """tea api -X POST /`cat ep.txt` -d '{"Do":"squash"}'""",
+                'echo "$(tea api -X POST "$EP" -d @body.json)"'):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and not calls, (command, message)
