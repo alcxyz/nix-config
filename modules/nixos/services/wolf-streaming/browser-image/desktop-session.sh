@@ -9,12 +9,12 @@ if [[ -n "${NIXBOX_KDECONNECT_EXECUTABLE:-}" ]]; then
   config_file="${HOME}/.config/kdeconnect/config"
   if [[ -e "${config_file}" ]]; then
     if grep -q '^name=' "${config_file}"; then
-      sed -i 's/^name=.*/name=Helium/' "${config_file}"
+      sed -i 's/^name=.*/name=Browser/' "${config_file}"
     else
-      printf '\nname=Helium\n' >>"${config_file}"
+      printf '\nname=Browser\n' >>"${config_file}"
     fi
   else
-    printf 'name=Helium\n' >"${config_file}"
+    printf 'name=Browser\n' >"${config_file}"
     chmod 0600 "${config_file}"
   fi
 

@@ -56,6 +56,7 @@
     url = "https://github.com/imputnet/helium-linux/releases/download/${heliumVersion}/helium-bin_${heliumVersion}-1_amd64.deb";
     hash = "sha256-FSSqAA2q64ubpGTBcd6l2VGK4DmSY0FVRNRhu4ZOfIc=";
   };
+  kdeConnectDesktopPackage = "kdeconnect=24.12.3-0ubuntu2.1";
   mkBrowserContext = {
     name,
     deb,
@@ -102,7 +103,7 @@
       executable = "/usr/bin/helium";
       family = "chromium";
       source = "https://github.com/imputnet/helium-linux";
-      desktopPackages = lib.optional browserCfg.helium.kdeConnect.enable "kdeconnect=24.12.3-0ubuntu2.1";
+      desktopPackages = lib.optional browserCfg.helium.kdeConnect.enable kdeConnectDesktopPackage;
       context = mkBrowserContext {
         name = "helium";
         deb = heliumDeb;
@@ -126,7 +127,9 @@
       # Brave without Leo, Rewards, Wallet and VPN. It keeps Brave's profile
       # layout under BraveSoftware/Brave-Origin in the same application home.
       # Published as an image product only; the Kubernetes private browser
-      # selects it, so host modules declare no option for it.
+      # selects it, so host modules declare no option for it. It ships KDE
+      # Connect so it can replace Helium as the cooperative public browser;
+      # the session starts KDE Connect only when the app enables it.
       enable = browserCfg.braveOrigin.enable or false;
       name = "brave-origin";
       image = browserCfg.braveOrigin.image or null;
@@ -134,7 +137,7 @@
       executable = "/usr/bin/brave-origin-stable";
       family = "chromium";
       source = "https://github.com/brave/brave-browser";
-      desktopPackages = [];
+      desktopPackages = [kdeConnectDesktopPackage];
       context = mkBrowserContext {
         name = "brave-origin";
         deb = pkgs.brave-origin.src;
