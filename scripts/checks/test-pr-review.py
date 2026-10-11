@@ -122,6 +122,9 @@ for command, hint in (
     ("XDG_CONFIG_HOME=/tmp/c tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
     ("HOME=/tmp/h tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
     ("tea login default other && tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
+    ("""tea api -X POST /repos/o/r/pulls/7/merge 2>&1 --login other -d '{"Do":"squash"}'""", "without --login"),
+    ('P=/repos/o/r/pulls/7/merge; tea api --login other -X POST "$P"', "without --login"),
+    ("echo /repos/o/r/pulls/7/merge | xargs tea api -l other -X POST", "without --login"),
 ):
     calls.clear()
     code, message = hook(command)
@@ -140,6 +143,11 @@ expect("gh pr merge 7 --squash; gh pr merge 9 --squash", 2)
 _, message = expect("gh pr merge 7 --squash; tea api --login other -X POST /repos/o/r/pulls/7/merge", 2)
 assert "without --login" in message, message
 expect("tea api -X POST /repos/o/r/pulls/7/merge \\\n  -d '{}'", 0)
+expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{\n  "Do": "squash"\n}' >&2""", 0)
+expect("""tea api -X GET /repos/o/r/pulls/9; tea api -X POST /repos/o/r/pulls/9/merge -d '{\n  "Do": "squash"\n}'""", 2)
+# A newline ends a gh merge's options, so a later --repo is not read as its own.
+seen, _ = expect("gh pr merge 5 --repo o/a --squash\ngh pr merge --repo o/reviewed --squash", 2)
+assert seen[0][0][3:6] == ["5", "--repo", "o/a"], seen
 # tea settings do not affect merges through other clients.
 expect("GITEA_TOKEN=x curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge", 0)
 assert not expect("fj pr view o/r#7", 0)[0]
