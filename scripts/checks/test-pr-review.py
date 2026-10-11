@@ -153,14 +153,29 @@ expect("""tea api -X GET /repos/o/r/pulls/9; tea api -X POST /repos/o/r/pulls/9/
 # A newline ends a gh merge's options, so a later --repo is not read as its own.
 seen, _ = expect("gh pr merge 5 --repo o/a --squash\ngh pr merge --repo o/reviewed --squash", 2)
 assert seen[0][0][3:6] == ["5", "--repo", "o/a"], seen
-# A path is checked on GitHub only when it is an argument of `gh api`; an
-# unrelated gh api call does not move another client's merge to GitHub.
+# Which call sends a path is not traced, so the check fails closed: GitHub when
+# the command calls gh api, and Forgejo unless only gh api arguments hold the path.
+def forges(seen):
+    return {"forgejo" if isinstance(call[0], review.PR) else "github" for call in seen}
+
+
 seen, _ = expect("gh api user && tea api -X POST /repos/o/r/pulls/7/merge", 0)
-assert any(isinstance(call[0], review.PR) and call[0].forge == "forgejo" for call in seen), seen
+assert forges(seen) == {"github", "forgejo"}, seen
 seen, _ = expect('gh api user && curl -X POST "$FORGEJO/api/v1/repos/o/r/pulls/9/merge"', 2)
-assert any(isinstance(call[0], review.PR) and call[0].forge == "forgejo" for call in seen), seen
 seen, _ = expect("gh api user; gh api -X PUT repos/o/r/pulls/7/merge", 0)
-assert not any(isinstance(call[0], review.PR) for call in seen), seen
+assert forges(seen) == {"github"}, seen
+seen, _ = expect("gh api user && curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge", 0)
+assert forges(seen) == {"forgejo"}, seen
+seen, _ = expect("gh 2>&1 api -X PUT repos/o/r/pulls/7/merge -f merge_method=squash", 0)
+assert forges(seen) == {"github"}, seen
+for command in ("P=repos/o/r/pulls/7/merge; gh api -X PUT \"$P\"",
+                "echo repos/o/r/pulls/7/merge | xargs gh api -X PUT",
+                "gh api -X GET /repos/o/r/pulls/7/merge; curl -X POST \"$F/repos/o/r/pulls/7/merge\""):
+    seen, _ = expect(command, 0)
+    assert forges(seen) == {"github", "forgejo"}, (command, seen)
+calls.clear()
+code, message = hook("gh api -X GET /repos/o/r/pulls/7/merge; tea api --login other -X POST /repos/o/r/pulls/7/merge")
+assert code == 2 and "without --login" in message, message
 # tea settings do not affect merges through other clients.
 expect("GITEA_TOKEN=x curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge", 0)
 assert not expect("fj pr view o/r#7", 0)[0]
