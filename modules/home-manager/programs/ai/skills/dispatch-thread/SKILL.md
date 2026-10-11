@@ -1,6 +1,6 @@
 ---
 name: dispatch-thread
-description: Hand a piece of work to a new top-level T3 Code thread in its own worktree, for an existing issue, a new issue or ad hoc without one. Use when the user asks to dispatch, hand off or spin off work, to start a separate thread, worktree or agent for it, or to dispatch an issue (for example "dispatch nix-config #596").
+description: Hand a piece of work to a new top-level T3 Code thread in its own worktree, for an existing issue, a new issue or ad hoc without one, on this thread's model or one the user names (a model, provider, effort or role). Use when the user asks to dispatch, hand off or spin off work, to start a separate thread, worktree or agent for it, or to dispatch an issue (for example "dispatch nix-config #596").
 ---
 
 # Dispatch thread
@@ -56,6 +56,23 @@ Call `t3_thread_launch` with:
 - `title`: a short imperative, such as "Evaluate fj vs tea for agents".
 - `message`: one of the briefs below.
 - Leave model and modes to inherit unless the user names them.
+- `modelSelection` only when the user names a model, provider, effort or
+  role: `{"instanceId":"<provider instance>","model":"<model id>","options":[{"id":"<option id>","value":"<value>"}]}`.
+  Resolve it with `orchestrator_capabilities`, which lists the enabled
+  provider instances, their model IDs and each model's option IDs and values
+  (`effort` on Claude, `reasoningEffort` on Codex), plus this thread's
+  `inheritedProviderInstanceId` and `inheritedModel`:
+  - A model: its exact ID, the newest matching one for a family name such as
+    "Sonnet".
+  - Only an effort: this thread's instance and model with that effort.
+  - Only a provider: the `standard` role's model on that client, resolved as
+    below.
+  - A role (`agent-role list` shows them): `agent-role <role> <claude|codex>
+    model` and `... effort`, on the client the user names or this thread's
+    client by default, then match that model in the catalog.
+
+  Ask the user instead of guessing when a name matches nothing enabled, is
+  ambiguous, or the effort is not among the model's offered values.
 
 Issue brief:
 
@@ -104,6 +121,6 @@ before launching again; the list is newest first.
 
 Give the user the thread as `[title](t3-thread://v1/<threadId>)`, using the
 `threadId` exactly as returned, and the issue link when there is one. Say what
-the thread will do and which decisions it will bring back. Do not poll or
-monitor it; the user follows it in T3, and the issue, or for ad hoc work the
-thread, records the outcome.
+the thread will do, which model it runs on, and which decisions it will bring
+back. Do not poll or monitor it; the user follows it in T3, and the issue, or
+for ad hoc work the thread, records the outcome.
