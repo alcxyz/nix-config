@@ -37,6 +37,7 @@ jobs:
           - product: wolf
           - product: helium
           - product: brave
+          - product: brave-origin
           - product: zen
     steps:
       - name: Prepare action copy paths

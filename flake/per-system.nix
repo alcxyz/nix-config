@@ -52,6 +52,7 @@
             "wolf"
             "helium"
             "brave"
+            "brave-origin"
             "zen"
           ];
         };
@@ -69,6 +70,10 @@
         wolf-brave-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
           inherit lib pkgs;
           productNames = ["brave"];
+        };
+        wolf-brave-origin-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
+          inherit lib pkgs;
+          productNames = ["brave-origin"];
         };
         wolf-chromium-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
           inherit lib pkgs;

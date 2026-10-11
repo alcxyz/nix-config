@@ -5,6 +5,7 @@
     "wolf"
     "helium"
     "brave"
+    "brave-origin"
     "chromium"
     "firefox"
     "zen"
@@ -23,6 +24,10 @@
     brave = {
       enable = true;
       image = "nixbox/wolf-brave:export";
+    };
+    braveOrigin = {
+      enable = true;
+      image = "nixbox/wolf-brave-origin:export";
     };
     chromium = {
       enable = true;

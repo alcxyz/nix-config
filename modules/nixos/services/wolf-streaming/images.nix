@@ -123,6 +123,24 @@
       };
     }
     {
+      # Brave without Leo, Rewards, Wallet and VPN. It keeps Brave's profile
+      # layout under BraveSoftware/Brave-Origin in the same application home.
+      # Published as an image product only; the Kubernetes private browser
+      # selects it, so host modules declare no option for it.
+      enable = browserCfg.braveOrigin.enable or false;
+      name = "brave-origin";
+      image = browserCfg.braveOrigin.image or null;
+      version = pkgs.brave-origin.version;
+      executable = "/usr/bin/brave-origin-stable";
+      family = "chromium";
+      source = "https://github.com/brave/brave-browser";
+      desktopPackages = [];
+      context = mkBrowserContext {
+        name = "brave-origin";
+        deb = pkgs.brave-origin.src;
+      };
+    }
+    {
       enable = browserCfg.chromium.enable;
       name = "chromium";
       image = browserCfg.chromium.image;

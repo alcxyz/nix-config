@@ -50,7 +50,7 @@ class HandoffTests(unittest.TestCase):
                  mock.patch.object(module, "request", side_effect=request):
                 module.upload(self.args(root))
             uploaded = [path.rsplit("/", 1)[-1] for method, path in calls if method == "PUT"]
-            self.assertEqual(uploaded, ["helium.tar.zst", "brave.tar.zst", "zen.tar.zst", "complete.json"])
+            self.assertEqual(uploaded, ["helium.tar.zst", "brave.tar.zst", "brave-origin.tar.zst", "zen.tar.zst", "complete.json"])
 
     def test_partial_upload_rejects_conflicting_archive(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -216,7 +216,7 @@ class HandoffTests(unittest.TestCase):
         products = [{"name": name, "context": f"/nix/store/{name}-context",
                      "buildArgs": {"RUNTIME_IMAGE": "runtime:1"},
                      "labels": {"io.nixbox.wolf-browser.context": f"/nix/store/{name}-context"}}
-                    for name in ("wolf", "helium", "brave", "zen")]
+                    for name in ("wolf", "helium", "brave", "brave-origin", "zen")]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
@@ -296,7 +296,7 @@ if action == "dispatch" and os.path.exists(os.environ["MOCK_ROOT"] + "/fail-disp
     sys.exit(1)
 """)
             products = [{"name": name, "context": str(context), "buildArgs": {}, "labels": {}}
-                        for name in ("wolf", "helium", "brave", "zen")]
+                        for name in ("wolf", "helium", "brave", "brave-origin", "zen")]
 
             def commit(lock, items=products):
                 (source / "flake.lock").write_text(lock)
