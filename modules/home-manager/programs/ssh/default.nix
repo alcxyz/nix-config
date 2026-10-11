@@ -84,8 +84,11 @@ in {
     }
 
     # User-level ssh-agent only on Linux; macOS uses its own agent. This is
-    # defined directly instead of services.ssh-agent because that module also
-    # injects Nushell init code that assumes XDG_RUNTIME_DIR always exists.
+    # defined directly instead of services.ssh-agent because that module
+    # overrides any SSH_AUTH_SOCK that is not forwarded, in shells and in the
+    # systemd and D-Bus environment. Desktop sessions keep their keys in GNOME's
+    # gcr agent, so the shell init in users/alc/linux/common.nix only falls
+    # back to this agent when SSH_AUTH_SOCK is unset.
     (mkIf pkgs.stdenv.hostPlatform.isLinux {
       systemd.user.services.ssh-agent = {
         Install.WantedBy = ["default.target"];

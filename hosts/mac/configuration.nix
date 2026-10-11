@@ -41,7 +41,6 @@
   xyzLanAddress = "192.168.1.10";
   shellPackages = {
     bash = pkgs.bashInteractive;
-    xonsh = pkgs.xonsh-with-direnv or pkgs.xonsh;
     zsh = pkgs.zsh;
   };
   nixGenerationRetention = pkgs.writeShellScript "nix-generation-retention" ''
@@ -271,7 +270,6 @@ in {
       ];
     shells = with pkgs; [
       bash
-      (pkgs.xonsh-with-direnv or pkgs.xonsh)
       zsh
     ];
     variables = {

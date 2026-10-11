@@ -8,11 +8,7 @@
 }: let
   cfg = config.alc.shell;
   enableBash = cfg.enableBash;
-  enableXonsh = cfg.enableXonsh;
-  enableXonshCarapace = cfg.enableXonshCarapace;
   enableZsh = cfg.enableZsh;
-  xonshPackage = pkgs.xonsh-with-direnv or pkgs.xonsh;
-  xonshDirenvIntegration = pkgs ? xonsh-with-direnv;
 
   shellAliases = {
     tf = "terraform";
@@ -38,61 +34,29 @@
     t = "tmux";
     ta = "tmux a";
   };
-  xonshOnlyAliases = {
-    # Keep this out of Bash/Zsh: ':' is a POSIX no-op builtin used by prompt
-    # init scripts, and aliasing it corrupts Starship/Atuin Bash startup.
-    ":" = "nix-shell -p";
-  };
-
-  xonshAliases =
-    lib.concatStringsSep "\n"
-    (lib.mapAttrsToList (
-        name: value: "aliases[${builtins.toJSON name}] = ${builtins.toJSON value}"
-      )
-      (shellAliases // xonshOnlyAliases));
-
-  xonshSessionVariables =
-    lib.concatStringsSep "\n"
-    (lib.mapAttrsToList (
-        name: value: "__xonsh__.env[${builtins.toJSON name}] = ${builtins.toJSON value}"
-      )
-      (lib.filterAttrs (
-          _name: value: builtins.isString value && ! lib.hasInfix "$" value
-        )
-        config.home.sessionVariables));
-
-  xonshSessionPath =
-    lib.concatMapStringsSep "\n"
-    (path: ''
-      if os.path.isdir(${builtins.toJSON path}) and ${builtins.toJSON path} not in $PATH:
-          $PATH.append(${builtins.toJSON path})
-    '')
-    config.home.sessionPath;
 in {
   imports = [
     ../../shared/shell.nix
   ];
 
-  home.packages = with pkgs;
-    [
-      bashInteractive
-      eza
-      sesh
-      television
-      carapace-bridge
-      zsh
-      # nixd is the only LSP not in Mason's registry
-      nixd
+  home.packages = with pkgs; [
+    bashInteractive
+    eza
+    sesh
+    television
+    carapace-bridge
+    zsh
+    # nixd is the only LSP not in Mason's registry
+    nixd
 
-      # Formatters/linters on PATH for CLI, CI, and Claude Code
-      nixfmt
-      shellcheck
-      prettier
-      shfmt
-      ruff
-      stylua
-    ]
-    ++ lib.optionals enableXonsh [xonshPackage];
+    # Formatters/linters on PATH for CLI, CI, and Claude Code
+    nixfmt
+    shellcheck
+    prettier
+    shfmt
+    ruff
+    stylua
+  ];
 
   home.sessionPath = [
     "${config.home.homeDirectory}/.cargo/bin"
@@ -164,34 +128,6 @@ in {
     template = builtins.readFile ./starship.toml;
   in
     lib.replaceStrings ["@osIcon@"] [osIcon] template;
-
-  xdg.configFile."xonsh/rc.xsh" = lib.mkIf enableXonsh {
-    text = ''
-      import os
-
-      $VI_MODE = True
-
-      ${xonshSessionVariables}
-
-      ${xonshSessionPath}
-
-      if "XDG_RUNTIME_DIR" in __xonsh__.env:
-          __xonsh__.env["SSH_AUTH_SOCK"] = os.path.join($XDG_RUNTIME_DIR, "ssh-agent")
-
-      ${xonshAliases}
-
-      execx($(${pkgs.starship}/bin/starship init xonsh --print-full-init))
-      execx($(${pkgs.zoxide}/bin/zoxide init xonsh))
-      execx($(${pkgs.atuin}/bin/atuin init xonsh))
-      ${lib.optionalString enableXonshCarapace ''
-        if __xonsh__.env.get("XONSH_INTERACTIVE"):
-            execx($(${pkgs.carapace}/bin/carapace _carapace xonsh))
-      ''}
-      ${lib.optionalString xonshDirenvIntegration ''
-        xontrib load direnv
-      ''}
-    '';
-  };
 
   home.shellAliases = shellAliases;
 }

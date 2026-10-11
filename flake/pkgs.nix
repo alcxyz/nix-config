@@ -31,7 +31,6 @@ in
               "nix-deploy"
               "k8s-node-reboot"
               "nix-gc-maintenance"
-              "xonsh-with-direnv"
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
             regnskap = inputs.regnskap.packages.${system} or {};

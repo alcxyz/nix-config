@@ -17,7 +17,6 @@
 
   shellPackages = {
     bash = pkgs.bashInteractive;
-    xonsh = pkgs.xonsh-with-direnv or pkgs.xonsh;
     zsh = pkgs.zsh;
   };
   nixGenerationRetention = pkgs.writeShellScript "nix-generation-retention" ''
@@ -149,7 +148,6 @@ in {
 
   environment.shells = with pkgs; [
     bashInteractive
-    (pkgs.xonsh-with-direnv or pkgs.xonsh)
     zsh
   ];
 

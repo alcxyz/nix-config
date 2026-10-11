@@ -10,11 +10,9 @@ with lib; let
   cfg = config.programs.wezterm; # Use the built-in module's enable option
   colorscheme = inputs.nix-colors.colorschemes.${config.colorscheme.name};
   colors = colorscheme.palette;
-  xonshPackage = pkgs.xonsh-with-direnv or pkgs.xonsh;
   defaultShellProgram =
     {
       bash = "${pkgs.bashInteractive}/bin/bash";
-      xonsh = "${xonshPackage}/bin/xonsh";
       zsh = "${pkgs.zsh}/bin/zsh";
     }.${
       config.alc.shell.default
