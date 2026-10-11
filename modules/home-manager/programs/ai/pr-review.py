@@ -106,8 +106,12 @@ TEA_API_MERGE = "`tea api -X POST /repos/owner/repo/pulls/N/merge` with a litera
 # tea api options that choose the login or repository, so the instance a merge
 # goes to could differ from the one the guard checks.
 TEA_TARGET_FLAGS = {"-l", "--login", "-R", "--remote", "-r", "--repo"}
-# Inline assignments that give tea another login or configuration.
-TEA_ASSIGNMENT = re.compile(r"^(?:GITEA_\w*|XDG_CONFIG_HOME)=")
+# Assignments that give tea another login or configuration, and environment
+# variables that do so when the session already sets them.
+TEA_ASSIGNMENT = re.compile(r"^(?:GITEA_\w*|XDG_CONFIG_HOME|HOME)=")
+TEA_ENVIRONMENT = ("GITEA_SERVER_URL", "GITEA_INSTANCE_URL")
+# tea commands that change its stored logins or default login.
+TEA_LOGIN_COMMANDS = {"login", "logins", "logout"}
 MCP_PREFIX = "mcp__forgejo__"
 MCP_MERGE = "merge_pull_request"
 # Arguments an agent's MCP merge may set; force and scheduled merges only as false.
@@ -1104,32 +1108,41 @@ def tokenize(command):
         return command.split()
 
 
-def gh_pr_merge(tokens, cwd):
-    """Return (selector args, cwd) for the first `gh pr merge`, or None."""
+def gh_pr_merges(tokens, cwd):
+    """Yield (selector args, cwd) for each `gh pr merge`."""
     for index in range(len(tokens) - 2):
-        if os.path.basename(tokens[index]) == "gh" and tokens[index + 1:index + 3] == ["pr", "merge"]:
-            break
-    else:
-        return None
+        if os.path.basename(tokens[index]) != "gh" or tokens[index + 1:index + 3] != ["pr", "merge"]:
+            continue
+        merge_cwd = cwd
+        for position in range(index):
+            if tokens[position] == "cd" and position + 1 < index and tokens[position + 1] not in SEPARATORS:
+                merge_cwd = os.path.join(merge_cwd, os.path.expanduser(tokens[position + 1]))
 
-    for position in range(index):
-        if tokens[position] == "cd" and position + 1 < index and tokens[position + 1] not in SEPARATORS:
-            cwd = os.path.join(cwd, os.path.expanduser(tokens[position + 1]))
+        selector, repo, args = None, None, iter(tokens[index + 3:])
+        for token in args:
+            if token in SEPARATORS:
+                break
+            name = token.split("=", 1)[0]
+            if name in ("-R", "--repo"):
+                repo = token.split("=", 1)[1] if "=" in token else next(args, None)
+            elif token in GH_MERGE_VALUE_FLAGS:
+                next(args, None)
+            elif not token.startswith("-") and selector is None:
+                selector = token
 
-    selector, repo, args = None, None, iter(tokens[index + 3:])
-    for token in args:
-        if token in SEPARATORS:
-            break
-        name = token.split("=", 1)[0]
-        if name in ("-R", "--repo"):
-            repo = token.split("=", 1)[1] if "=" in token else next(args, None)
-        elif token in GH_MERGE_VALUE_FLAGS:
-            next(args, None)
-        elif not token.startswith("-") and selector is None:
-            selector = token
+        yield [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else []), merge_cwd
 
-    view = [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else [])
-    return view, cwd
+
+def simple_commands(command):
+    """Yield the tokens of each simple command: each line, split at shell separators."""
+    for line in command.replace("\\\n", " ").splitlines():
+        part = []
+        for token in tokenize(line) + [";"]:
+            if token not in SEPARATORS:
+                part.append(token)
+            elif part:
+                yield part
+                part = []
 
 
 def cli_calls(tokens, program, value_flags):
@@ -1164,11 +1177,57 @@ def cli_merges(tokens):
             yield "the PR (fj pr merge)", f"fj merges are not verified; use {TEA_API_MERGE}"
 
 
-def tea_retargeted(tokens):
-    """Return whether tea may use another login or instance than its default for a `tea api` call."""
+def tea_retargeted(segment, tokens):
+    """Return whether tea may use another login than its default for a `tea api` call in segment."""
+    if any(os.environ.get(name) for name in TEA_ENVIRONMENT):
+        return True
     if any(TEA_ASSIGNMENT.match(token) for token in tokens):
         return True
-    return any(words[:1] == ["api"] and flags for words, flags in cli_calls(tokens, "tea", TEA_TARGET_FLAGS))
+    if any(words[:1] and words[0] in TEA_LOGIN_COMMANDS for words, _flags in cli_calls(tokens, "tea", set())):
+        return True
+    return any(words[:1] == ["api"] and flags for words, flags in cli_calls(segment, "tea", TEA_TARGET_FLAGS))
+
+
+def rest_merge_problem(segment, tokens):
+    """Return None when every REST merge in one simple command targets a reviewed PR, otherwise a reason to block."""
+    text = " ".join(segment)
+    if READ_ONLY_METHOD.search(text):
+        return None
+    for match in API_MERGE.finditer(text):
+        owner, repo, number = match["owner"], match["repo"], match["number"]
+        if not all(LITERAL.match(part) for part in (owner, repo, number)) or not number.isdigit():
+            return (f"cannot verify {owner}/{repo}#{number}: use a literal owner, repository and PR number "
+                    "in the merge call.")
+        host = match["host"]
+        is_gh_api = any(
+            os.path.basename(segment[i]) == "gh" and segment[i + 1] == "api" for i in range(len(segment) - 1)
+        )
+        if is_gh_api or host == "api.github.com":
+            # Only github.com is supported: refuse any other host, however it is given.
+            hosts = {os.environ.get("GH_HOST", "github.com")}
+            for index, token in enumerate(tokens):
+                if token.startswith("GH_HOST="):
+                    hosts.add(token.split("=", 1)[1])
+                elif token.startswith("--hostname="):
+                    hosts.add(token.split("=", 1)[1])
+                elif token == "--hostname":
+                    hosts.add(tokens[index + 1] if index + 1 < len(tokens) else "")
+            if host and host != "api.github.com":
+                hosts.add(host)
+            if hosts != {"github.com"}:
+                return f"cannot verify {owner}/{repo}#{number}: only github.com is supported for GitHub merges."
+            pr = PR("github", "github.com", owner, repo, number)
+        else:
+            # A path without a host is checked on FORGEJO_URL, which matches tea's default login only.
+            if any(os.path.basename(token) == "tea" for token in segment) and tea_retargeted(segment, tokens):
+                return (f"cannot verify {owner}/{repo}#{number}: give `tea api` a literal path, without "
+                        "--login, --remote, --repo, `tea login` or GITEA_*, HOME or XDG_CONFIG_HOME settings.")
+            pr = PR("forgejo", (f"https://{host}" if host else FORGEJO_URL).rstrip("/"), owner, repo, number)
+        info = pr_info(pr)
+        problem = review_problem(comment_bodies(pr), info["head"], info["base"])
+        if problem:
+            return f"{pr} {problem}."
+    return None
 
 
 def mcp_check(tool, arguments):
@@ -1229,9 +1288,8 @@ def guard_check(command, cwd):
     for ref, problem in cli_merges(tokens):
         return f"cannot verify {ref}: {problem}."
 
-    found = gh_pr_merge(tokens, cwd)
-    if found:
-        view, view_cwd = found
+    # Every merge in the command must pass on its own.
+    for view, view_cwd in gh_pr_merges(tokens, cwd):
         ref = "the PR (gh pr merge " + " ".join(view) + ")"
         # The hook's lookup does not see inline assignments, so they could point
         # the merge at another host or repository than the one checked.
@@ -1243,43 +1301,16 @@ def guard_check(command, cwd):
         if not data["url"].startswith("https://github.com/"):
             return f"cannot verify {ref}: only github.com is supported for GitHub merges, not {data['url']}."
         problem = review_problem(data["bodies"], data["head"], data["base"])
-        return f"{ref} {problem}." if problem else None
+        if problem:
+            return f"{ref} {problem}."
 
-    match = API_MERGE.search(command)
-    if not match or READ_ONLY_METHOD.search(command):
-        return None
-    owner, repo, number = match["owner"], match["repo"], match["number"]
-    if not all(LITERAL.match(part) for part in (owner, repo, number)) or not number.isdigit():
-        return f"cannot verify {owner}/{repo}#{number}: use a literal owner, repository and PR number in the merge call."
-    # A path without a host is checked on FORGEJO_URL, which matches tea's default login only.
-    if tea_retargeted(tokens):
-        return (f"cannot verify {owner}/{repo}#{number}: give `tea api` a literal path, without "
-                "--login, --remote, --repo or GITEA_*/XDG_CONFIG_HOME assignments.")
-
-    host = match["host"]
-    is_gh_api = any(
-        os.path.basename(tokens[i]) == "gh" and tokens[i + 1] == "api" for i in range(len(tokens) - 1)
-    )
-    if is_gh_api or host == "api.github.com":
-        # Only github.com is supported: refuse any other host, however it is given.
-        hosts = {os.environ.get("GH_HOST", "github.com")}
-        for index, token in enumerate(tokens):
-            if token.startswith("GH_HOST="):
-                hosts.add(token.split("=", 1)[1])
-            elif token.startswith("--hostname="):
-                hosts.add(token.split("=", 1)[1])
-            elif token == "--hostname":
-                hosts.add(tokens[index + 1] if index + 1 < len(tokens) else "")
-        if host and host != "api.github.com":
-            hosts.add(host)
-        if hosts != {"github.com"}:
-            return f"cannot verify {owner}/{repo}#{number}: only github.com is supported for GitHub merges."
-        pr = PR("github", "github.com", owner, repo, number)
-    else:
-        pr = PR("forgejo", (f"https://{host}" if host else FORGEJO_URL).rstrip("/"), owner, repo, number)
-    info = pr_info(pr)
-    problem = review_problem(comment_bodies(pr), info["head"], info["base"])
-    return f"{pr} {problem}." if problem else None
+    # Methods and options belong to their own simple command, so a GET or a
+    # reviewed merge elsewhere in the command does not exempt another merge.
+    for segment in simple_commands(command):
+        problem = rest_merge_problem(segment, tokens)
+        if problem:
+            return problem
+    return None
 
 
 def guard_deadline(_signum, _frame):

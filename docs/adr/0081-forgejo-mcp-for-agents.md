@@ -52,8 +52,10 @@ request bodies from stdin, and typed `tea` commands with `-o json` serve reads.
 
 Shell merges stay available as `tea api -X POST /repos/owner/repo/pulls/N/merge`,
 which the guard checks as a REST merge on its `url`. It needs a literal path,
-and refuses the call when `--login`, `--remote`, `--repo` or an inline
-`GITEA_*` or `XDG_CONFIG_HOME` assignment could point tea at another login.
+and refuses the call when `--login`, `--remote`, `--repo`, a `tea login`
+command, a `GITEA_*`, `HOME` or `XDG_CONFIG_HOME` assignment, or a
+`GITEA_SERVER_URL` or `GITEA_INSTANCE_URL` in the guard's environment could
+point tea at another login.
 The guard refuses `tea pulls merge`, because `tea --repo` is read as a local
 checkout when such a path exists, and `fj pr merge`.
 

@@ -120,6 +120,8 @@ for command, hint in (
     ("tea api --repo o/r -X POST /repos/o/r/pulls/7/merge", "without --login"),
     ("GITEA_SERVER_URL=https://x tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
     ("XDG_CONFIG_HOME=/tmp/c tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
+    ("HOME=/tmp/h tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
+    ("tea login default other && tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
 ):
     calls.clear()
     code, message = hook(command)
@@ -128,6 +130,18 @@ for command, hint in (
 expect("tea api -X POST /repos/o/r/pulls/7/merge && gh pr merge 9", 2)
 expect("gh pr merge 7 --squash; tea pulls merge --repo o/r 7", 2)
 expect("fj pr merge o/r#7 && tea api -X POST /repos/o/r/pulls/7/merge", 2)
+# Each merge is checked on its own: a reviewed merge or a GET elsewhere in the
+# command, on another line or after a gh merge, does not exempt it.
+expect("tea api -X POST /repos/o/r/pulls/7/merge && tea api -X POST /repos/o/r/pulls/8/merge", 2)
+expect("tea api -X GET /repos/o/r/pulls/7; tea api -X POST /repos/o/r/pulls/9/merge", 2)
+expect("""tea api -X POST /repos/o/r/pulls/8/merge -d '{"Do":"squash"}' && tea api --method GET /repos/o/r/pulls/8""", 2)
+expect("tea api -X GET /repos/o/r/pulls/7\ntea api -X POST /repos/o/r/pulls/9/merge", 2)
+expect("gh pr merge 7 --squash; gh pr merge 9 --squash", 2)
+_, message = expect("gh pr merge 7 --squash; tea api --login other -X POST /repos/o/r/pulls/7/merge", 2)
+assert "without --login" in message, message
+expect("tea api -X POST /repos/o/r/pulls/7/merge \\\n  -d '{}'", 0)
+# tea settings do not affect merges through other clients.
+expect("GITEA_TOKEN=x curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge", 0)
 assert not expect("fj pr view o/r#7", 0)[0]
 assert not expect("tea pulls list --repo o/r", 0)[0]
 assert not expect("echo fj; tea issues ls", 0)[0]
