@@ -87,6 +87,10 @@ GUARD_DEADLINE = 90
 # A backtick outside quotes starts or ends a substituted command.
 SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "`", "\n"}
 PUNCTUATION = ";&|()`\n"
+# A heredoc start such as `<<EOF`, `<<-'EOF'` or `<< "EOF"`, but not a `<<<` here-string.
+HEREDOC = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+# Text that marks a command as possibly merging: refused when it does not parse.
+MERGE_MENTION = re.compile(r"\bmerge\b|\btea\b|\bfj\b|pulls/")
 # Stands in for the `&` of an attached `&>` redirection while lexing.
 ATTACHED_REDIRECTION = "\ue000"
 # A word that starts with a redirection operator.
@@ -1107,12 +1111,59 @@ def strip_trailing_redirections(command):
     return command[:match.start()]
 
 
+def extract_heredocs(command):
+    """Return the command without its heredoc bodies, and the bodies."""
+    lines, kept, bodies, index = command.split("\n"), [], [], 0
+    while index < len(lines):
+        kept.append(lines[index])
+        index += 1
+        for match in HEREDOC.finditer(kept[-1]):
+            body = []
+            while index < len(lines) and lines[index].strip("\t") != match[2]:
+                body.append(lines[index])
+                index += 1
+            index += 1
+            bodies.append("\n".join(body))
+    return "\n".join(kept), bodies
+
+
+def strip_comments(command):
+    """Drop `#` comments outside quotes, keeping the newline that ends each one."""
+    out, quote, index = [], None, 0
+    while index < len(command):
+        character = command[index]
+        if quote:
+            if character == "\\" and quote == '"' and index + 1 < len(command):
+                out.append(command[index:index + 2])
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character == "\\" and index + 1 < len(command):
+            out.append(command[index:index + 2])
+            index += 2
+            continue
+        elif character in "'\"":
+            quote = character
+        elif character == "#" and (not out or out[-1][-1:] in (" ", "\t", "\n", ";", "&", "|", "(", ")")):
+            end = command.find("\n", index)
+            index = len(command) if end < 0 else end
+            continue
+        out.append(character)
+        index += 1
+    return "".join(out)
+
+
 def split_command(command):
     """Return the words and separators of a command, or None when it does not parse.
 
     Newlines outside quotes separate commands, and descriptor duplications such
-    as `2>&1` stay words instead of reading as separators.
+    as `2>&1` stay words instead of reading as separators. Comments are dropped
+    as bash drops them, and each heredoc body follows as one quoted word, so
+    apostrophes in either do not break parsing.
     """
+    command, bodies = extract_heredocs(command)
+    command = strip_comments(command)
     # An attached `&>file` redirects; a spaced `& >file` runs in the background
     # and separates. Mark the attached form so the lexer keeps it in one word.
     command = strip_trailing_redirections(command).replace("\\\n", " ").replace("&>", ATTACHED_REDIRECTION + ">")
@@ -1124,6 +1175,8 @@ def split_command(command):
         raw = list(lexer)
     except ValueError:
         return None
+    for body in bodies:
+        raw += [";", body]
     raw = [token.replace(ATTACHED_REDIRECTION, "&") for token in raw]
     tokens, index = [], 0
     while index < len(raw):
@@ -1404,10 +1457,16 @@ def guard_check(command, cwd):
     tokens = split_command(command)
     if tokens is None:
         # Without its quoting, a merge's arguments cannot be told apart.
-        if "merge" in command:
-            return ("cannot verify the command: it does not parse, for example because of an apostrophe in a "
-                    "comment; remove it and run the merge again.")
+        if MERGE_MENTION.search(command):
+            return ("cannot verify the command: it does not parse, for example because of an unclosed quote; "
+                    "fix it, or pass long text from a file.")
         tokens = command.split()
+    # A substitution can build a merge target the guard does not see, such as `7`printf 9``.
+    if any("`" in token or "$(" in token or "<(" in token for token in tokens) and (
+        "pulls/" in command or any(True for _ in gh_pr_merges(tokens, cwd))
+    ):
+        return ("cannot verify the merge: its command contains a command substitution, which can change the "
+                "target; use literal values, and pass long text from a file.")
 
     words = shell_words(tokens)
     for ref, problem in cli_merges(words):

@@ -176,9 +176,24 @@ seen, _ = expect("gh 2>&1 api -X PUT repos/o/r/pulls/7/merge -f merge_method=squ
 assert forges(seen) == {"github"}, seen
 seen, _ = expect("cd x && env GH_TOKEN_FILE=f gh api -X PUT repos/o/r/pulls/7/merge", 0)
 assert forges(seen) == {"github"}, seen
-# A command substitution inside a gh api argument is checked on Forgejo too.
-seen, _ = expect('gh api -X GET "repos/o/r/pulls/7?x=$(tea api -X POST /repos/o/r/pulls/7/merge)"', 0)
-assert forges(seen) == {"github", "forgejo"}, seen
+# A command substitution in a merge command can build a target the guard does not see.
+for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api -X POST /repos/o/r/pulls/7/merge)"',
+                "gh pr merge --repo o/r 7`printf 9` --squash",
+                "gh pr merge --repo o/r --subject `cat subj.txt` 9",
+                'gh pr merge 7 --repo o/r --subject "$(git log -1 --format=%s)"',
+                "gh api -X GET `tea api --login other -X POST /repos/o/r/pulls/7/merge -d '{}'`",
+                'gh api -X GET `curl -X POST "$F/repos/o/r/pulls/7/merge"`',
+                'gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "command substitution" in message and not calls, (command, message)
+# Comments and heredoc bodies with apostrophes still parse; an unparsable command that may merge is refused.
+assert not expect("cat > /tmp/msg <<'EOF'\nfix: guard merges\nIt's needed\nEOF", 0)[0]
+expect("gh pr merge 7 --repo o/r --squash  # don't delete the branch", 0)
+for command in ("out=`tea pr m 12 # don't delete the branch\n`; echo \"$out\"", "tea pr m 12 'unclosed"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
 # A refusal names what may retarget tea, without an assignment's value.
 _, message = hook("tea api -X POST /repos/o/r/pulls/7/merge && git branch -r")
 assert "`-r` could point tea" in message, message
@@ -192,26 +207,23 @@ for command in ("out=`gh pr merge 12 --squash`; echo $out", "echo `tea pr merge 
     code, message = hook(command)
     assert code == 2 and not calls, (command, message)
 # A command that does not parse cannot be checked when it mentions a merge.
-_, message = hook("gh pr merge 7 --repo o/a --squash  # don't delete the branch\ngh pr merge 9 --repo o/b --squash")
-assert "does not parse" in message, message
+# The comment no longer swallows the next line: each merge is checked with its own repository.
+seen, _ = expect("gh pr merge 7 --repo o/a --squash  # don't delete the branch\ngh pr merge 9 --repo o/b --squash", 2)
+assert [call[0][3:6] for call in seen] == [["7", "--repo", "o/a"], ["9", "--repo", "o/b"]], seen
 # Quoted text such as a merge title is not read as tea options.
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash","MergeTitleField":"Fix login -r redirect"}'""", 0)
 # Quoted text that mentions tea is scanned like a command and fails closed.
 _, message = hook("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"MergeTitleField":"Fix tea login -r redirect"}'""")
 assert "`login` could point tea" in message, message
 # Backticks, a spaced background `&` or a tea word anywhere keep the Forgejo check.
-for command in ("gh api -X GET `tea api --login other -X POST /repos/o/r/pulls/7/merge -d '{}'`",
-                "gh api user & >/dev/null tea api --login other -X POST /repos/o/r/pulls/7/merge"):
+for command in ("gh api user & >/dev/null tea api --login other -X POST /repos/o/r/pulls/7/merge",):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "`--login`" in message, (command, message)
-seen, _ = expect('gh api -X GET `curl -X POST "$F/repos/o/r/pulls/7/merge"`', 0)
-assert forges(seen) == {"github", "forgejo"}, seen
 seen, _ = expect('gh api user & >/dev/null curl -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen
 # tea and its options inside a quoted or substituted command are seen too.
-for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"',
-                'bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"',
+for command in ('bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"',
                 'bash -c "env tea api --login other -X POST /repos/o/r/pulls/7/merge"',
                 'bash -c "cd ~/src/r && tea api --login other -X POST /repos/o/r/pulls/7/merge"',
                 'bash -c "timeout 60 tea api --login other -X POST /repos/o/r/pulls/7/merge"',
@@ -243,8 +255,7 @@ assert seen[0][0][3:6] == ["9", "--repo", "o/r"], seen
 for command in ("(cd /reviewed && gh pr merge 7 --squash); gh pr merge 7 --squash",
                 "cd /unreviewed && (cd /work); gh pr merge 7 --squash",
                 "cd /reviewed | cat; gh pr merge 7 --squash",
-                "cd /reviewed & gh pr merge 7 --squash",
-                "echo ` cd /reviewed `; gh pr merge 7 --squash"):
+                "cd /reviewed & gh pr merge 7 --squash"):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "--repo owner/repo" in message and not calls, (command, message)
