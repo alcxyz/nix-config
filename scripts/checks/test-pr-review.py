@@ -182,6 +182,17 @@ _, message = hook("tea api --login=synthetic-login -X POST /repos/o/r/pulls/7/me
 assert "`--login`" in message and "synthetic-login" not in message, message
 # Quoted text such as a merge title is not read as tea options.
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash","MergeTitleField":"Fix login -r redirect"}'""", 0)
+expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"MergeTitleField":"Fix tea login -r redirect"}'""", 0)
+# Backticks, a spaced background `&` or a tea word anywhere keep the Forgejo check.
+for command in ("gh api -X GET `tea api --login other -X POST /repos/o/r/pulls/7/merge -d '{}'`",
+                "gh api user & >/dev/null tea api --login other -X POST /repos/o/r/pulls/7/merge"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "`--login`" in message, (command, message)
+seen, _ = expect('gh api -X GET `curl -X POST "$F/repos/o/r/pulls/7/merge"`', 0)
+assert forges(seen) == {"github", "forgejo"}, seen
+seen, _ = expect('gh api user & >/dev/null curl -X POST "$F/repos/o/r/pulls/7/merge"', 0)
+assert forges(seen) == {"github", "forgejo"}, seen
 # tea and its options inside a quoted or substituted command are seen too.
 for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"',
                 'bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"'):

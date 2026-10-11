@@ -1103,8 +1103,8 @@ def strip_trailing_redirections(command):
 def split_command(command):
     """Return the words and separators of a command, or None when it does not parse.
 
-    Newlines outside quotes separate commands, and descriptor redirections such
-    as `2>&1` or `&>log` stay words instead of reading as separators.
+    Newlines outside quotes separate commands, and descriptor duplications such
+    as `2>&1` stay words instead of reading as separators.
     """
     command = strip_trailing_redirections(command).replace("\\\n", " ")
     lexer = shlex.shlex(command, posix=True, punctuation_chars=PUNCTUATION)
@@ -1118,11 +1118,9 @@ def split_command(command):
     tokens, index = [], 0
     while index < len(raw):
         token, following = raw[index], raw[index + 1] if index + 1 < len(raw) else ""
+        # `2>&1` and `>&-` keep their `&`; a lone `&`, even before `>file`, separates.
         if token == "&" and tokens and tokens[-1].endswith((">", "<")) and (following.isdigit() or following == "-"):
             tokens[-1] += "&" + following
-            index += 2
-        elif token == "&" and following.startswith(">"):
-            tokens.append("&" + following)
             index += 2
         else:
             # Runs of separators such as `;\n` or `\n\n` separate like `;`.
@@ -1203,9 +1201,10 @@ def shell_words(tokens):
     words = list(tokens)
     for token in tokens:
         inner = [word.strip("\"'") for word in re.split(r"[\s;&|()`$]+", token)]
-        if "$(" in token or "`" in token or (len(inner) > 1 and "tea" in map(os.path.basename, inner)):
+        inner = [word for word in inner if word]
+        if "$(" in token or "`" in token or (len(inner) > 1 and os.path.basename(inner[0]) == "tea"):
             words.extend(inner)
-    return [word for word in words if word]
+    return words
 
 
 def tea_retarget(tokens):
@@ -1290,8 +1289,10 @@ def rest_merge_problem(match, tokens):
     gh_api = gh_api_positions(tokens, strict=False)
     gh_api_calls = gh_api_positions(tokens, strict=True)
     path = {index for index, token in enumerate(tokens) if match.group(0) in token}
-    # A command substitution inside a gh argument runs another command.
-    substituted = any("$(" in tokens[index] or "`" in tokens[index] for index in path)
+    tea = any(os.path.basename(word) == "tea" for word in shell_words(tokens))
+    # Only a plain gh command may skip the Forgejo check: no tea anywhere, and
+    # no command substitution that could run another client.
+    gh_only = path and path <= gh_api_calls and not tea and not any("$(" in t or "`" in t for t in tokens)
     prs = []
     # A path on another named host goes to GitHub only as a gh api argument.
     if host == "api.github.com" or (gh_api and (not host or path & gh_api)):
@@ -1299,9 +1300,8 @@ def rest_merge_problem(match, tokens):
         if problem:
             return problem
         prs.append(PR("github", "github.com", owner, repo, number))
-    if host != "api.github.com" and not (path and path <= gh_api_calls and not substituted):
+    if host != "api.github.com" and not gh_only:
         # FORGEJO_URL matches tea's default login only.
-        tea = any(os.path.basename(word) == "tea" for word in shell_words(tokens))
         retarget = tea_retarget(tokens) if tea else None
         if retarget:
             return (f"cannot verify {owner}/{repo}#{number}: {retarget} could point tea at another login; give "
