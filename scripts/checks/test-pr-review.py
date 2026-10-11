@@ -278,6 +278,17 @@ for command in ('gh pr comment 5 --body "$(printf "Fixes #12")"; gh pr merge 9 -
     calls.clear()
     code, message = hook(command)
     assert code == 2, (command, message)
+# A misread comment that hides a merge is refused even when the unstripped reading does not parse.
+for command in ('gh pr comment 5 --body "$(printf "Fixes #12, don\'t merge yet")"; gh pr merge 9 --repo o/r --squash',
+                'gh pr comment 5 --body "$(printf "Fixes #12")"; gh pr merge 9 --repo o/r --squash # don\'t delete'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2, (command, message)
+# An ordinary comment is not read as part of the command.
+expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash"}'  # retry with -r if it fails""", 0)
+# A gh api path with repeated slashes stays a GitHub-only check.
+seen, _ = expect("gh api -X PUT repos/o/r/pulls/7//merge -f merge_method=squash", 0)
+assert forges(seen) == {"github"}, seen
 # Repeated slashes in a merge path are collapsed before matching.
 for command in ("""tea api -X POST /repos/o/r/pulls/9//merge -d '{"Do":"squash"}'""",
                 """tea api -X POST /repos/o/r/pulls//9/merge -d '{"Do":"squash"}'"""):

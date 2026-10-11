@@ -112,6 +112,8 @@ PR_SUBCOMMANDS = {
     "review", "close", "reopen", "checkout", "co", "ready", "approve", "reject", "clean", "browse",
     "assign", "unassign",
 }
+# Removed comment text that may hide a merge, so the command is also read without stripping.
+COMMENT_MERGE_HINT = re.compile(r"\bmerge\b|\btea\b|\bfj\b|\bgh\b|pulls/")
 # Text that marks a command as possibly merging: refused when it does not parse.
 MERGE_MENTION = re.compile(r"\bmerge\b|\btea\b|\bfj\b|pulls/")
 # Stands in for the `&` of an attached `&>` redirection while lexing.
@@ -1150,7 +1152,14 @@ def extract_heredocs(command):
     return "\n".join(kept), bodies
 
 
-def strip_comments(command):
+def comment_text(command):
+    """Return the comments that strip_comments removes from command."""
+    removed = []
+    strip_comments(command, removed)
+    return "\n".join(removed)
+
+
+def strip_comments(command, removed=None):
     """Drop `#` comments outside quotes, keeping the newline that ends each one.
 
     Only a `#` that starts a word starts a comment: after an escaped character
@@ -1176,7 +1185,10 @@ def strip_comments(command):
             quote = character
         elif character == "#" and word_start:
             end = command.find("\n", index)
-            index = len(command) if end < 0 else end
+            end = len(command) if end < 0 else end
+            if removed is not None:
+                removed.append(command[index:end])
+            index = end
             continue
         if not quote:
             if character == "(" and out and out[-1] == "$":
@@ -1411,7 +1423,8 @@ def rest_merge_problem(match, tokens):
     gh_api_calls = gh_api_positions(tokens, strict=True)
     # A gh api call nested in another command also needs the GitHub check.
     gh_api_anywhere = gh_api or gh_api_positions(shell_words(tokens), strict=False)
-    path = {index for index, token in enumerate(tokens) if match.group(0) in token}
+    path = {index for index, token in enumerate(tokens)
+            if match.group(0) in token or match.group(0) in re.sub(r"(?<!:)/{2,}", "/", token)}
     tea = any(os.path.basename(word) == "tea" for word in shell_words(tokens))
     # Only a plain gh command may skip the Forgejo check: no tea anywhere, and
     # no command substitution that could run another client.
@@ -1504,7 +1517,9 @@ def guard_check(command, cwd):
     checked as parsed without it, and either reading can block.
     """
     problem = guard_check_parsed(command, cwd, comments=True)
-    if problem or strip_comments(command) == command:
+    # Ordinary comments stay comments; only removed text that could hold a
+    # merge is read again.
+    if problem or not COMMENT_MERGE_HINT.search(comment_text(command)):
         return problem
     return guard_check_parsed(command, cwd, comments=False)
 
@@ -1513,9 +1528,8 @@ def guard_check_parsed(command, cwd, comments):
     """Return None when the command, parsed with or without comment stripping, may run."""
     tokens = split_command(command, comments)
     if tokens is None:
-        if not comments:
-            return None
-        # Without its quoting, a merge's arguments cannot be told apart.
+        # Without its quoting, a merge's arguments cannot be told apart; the
+        # reading without stripping only runs when removed text may merge.
         if MERGE_MENTION.search(command):
             return ("cannot verify the command: it does not parse, for example because of an unclosed quote; "
                     "fix it, or pass long text from a file.")
