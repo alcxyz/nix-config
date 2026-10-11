@@ -1,6 +1,6 @@
 ---
 name: long-running-jobs
-description: Start, watch and resume unattended work that must survive the agent session, such as model batches, long builds, migrations or release waits, and get notified when it ends. Use before starting a command that may run long enough for the thread to settle or T3 to restart, or when asked to monitor a job, CI run or deployment.
+description: Start, watch and resume unattended work that must survive the agent session, such as model batches, long builds, migrations or release waits, and get notified when it ends. Use before starting a command that may run long enough for the thread to settle or T3 to restart, before starting a server or watcher to test it, or when asked to monitor a job, CI run or deployment.
 ---
 
 # Long-running jobs
@@ -15,6 +15,13 @@ running on its own; the session only waits for it. Tracking: nix-config #612.
 
 - **Work you wait on in this session**, such as a test run or `pr-review run`:
   run it normally, or as an ordinary background command.
+- **A server or watcher you start only to test it**: bound it with
+  `timeout -k 5 <duration> <command>`, which also kills it if it ignores
+  SIGTERM, and keep the duration under your tool's own command limit. To send
+  it requests, start it and the client in the same command, for example
+  `timeout -k 5 60 <server> & pid=$!; <wait for the port>; curl ...; kill $pid; wait`.
+  Do not start it in one command and kill it in a later one: a missed kill
+  leaves an orphan holding ports or connections.
 - **Unattended local work that must survive the session**, such as long
   batches, builds or release waits: `agent-job`, below.
 - **Outside state** such as PR checks, CI runs or deployments: do not start a
