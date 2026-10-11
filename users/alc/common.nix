@@ -86,11 +86,6 @@ in
         "${pkgs.glibcLocales}/lib/locale/locale-archive";
     };
 
-    programs.nushell.environmentVariables = lib.mkIf (accountUsername == username) {
-      LC_ALL = lib.mkForce "";
-      LC_TIME = config.home.language.time;
-    };
-
     # Update and switch aliases (run from the nix-config checkout).
     home.shellAliases = {
       dms-update = "bash scripts/update-inputs/update-maintained.sh --dms-only";

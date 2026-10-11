@@ -28,10 +28,7 @@ in {
 
   hardware.enableRedistributableFirmware = true;
 
-  alc.shell = {
-    default = "bash";
-    enableNushell = false;
-  };
+  alc.shell.default = "bash";
 
   users.users.madsil = {
     isNormalUser = true;

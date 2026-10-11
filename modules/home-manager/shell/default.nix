@@ -8,7 +8,6 @@
 }: let
   cfg = config.alc.shell;
   enableBash = cfg.enableBash;
-  enableNushell = cfg.enableNushell;
   enableXonsh = cfg.enableXonsh;
   enableXonshCarapace = cfg.enableXonshCarapace;
   enableZsh = cfg.enableZsh;
@@ -39,7 +38,7 @@
     t = "tmux";
     ta = "tmux a";
   };
-  nushellAliases = {
+  xonshOnlyAliases = {
     # Keep this out of Bash/Zsh: ':' is a POSIX no-op builtin used by prompt
     # init scripts, and aliasing it corrupts Starship/Atuin Bash startup.
     ":" = "nix-shell -p";
@@ -50,7 +49,7 @@
     (lib.mapAttrsToList (
         name: value: "aliases[${builtins.toJSON name}] = ${builtins.toJSON value}"
       )
-      (shellAliases // nushellAliases));
+      (shellAliases // xonshOnlyAliases));
 
   xonshSessionVariables =
     lib.concatStringsSep "\n"
@@ -69,20 +68,6 @@
           $PATH.append(${builtins.toJSON path})
     '')
     config.home.sessionPath;
-
-  # Patch atuin's nushell integration: fixes the e>| stdout-drop bug introduced
-  # in 18.13.0 (atuinsh/atuin PR#3358, merged but unreleased as of 18.13.6).
-  # e>| redirects only stderr into the pipe, so ATUIN_HISTORY_ID is always empty
-  # and interactive search returns no selected command. Replace e>| with | to
-  # restore correct behaviour.
-  atuinNuFixed = pkgs.runCommand "atuin-nushell-config-fixed.nu" {} ''
-    export HOME=$(mktemp -d)
-    ${pkgs.atuin}/bin/atuin init nu \
-      | ${pkgs.gnused}/bin/sed 's/e>|/|/g' \
-      | ${pkgs.gnused}/bin/sed 's/job spawn -t/job spawn -d/g' \
-      > $out
-  '';
-  nushellSessionPath = builtins.toJSON config.home.sessionPath;
 in {
   imports = [
     ../../shared/shell.nix
@@ -107,7 +92,6 @@ in {
       ruff
       stylua
     ]
-    ++ lib.optionals enableNushell [nushell]
     ++ lib.optionals enableXonsh [xonshPackage];
 
   home.sessionPath = [
@@ -149,25 +133,21 @@ in {
     starship = {
       enable = true;
       enableBashIntegration = enableBash;
-      enableNushellIntegration = enableNushell;
       enableZshIntegration = enableZsh;
     };
     zoxide = {
       enable = true;
       enableBashIntegration = enableBash;
-      enableNushellIntegration = enableNushell;
       enableZshIntegration = enableZsh;
     };
     carapace = {
       enable = true;
       enableBashIntegration = enableBash;
-      enableNushellIntegration = enableNushell;
       enableZshIntegration = enableZsh;
     };
     atuin = {
       enable = true;
       enableBashIntegration = enableBash;
-      enableNushellIntegration = false; # sourced manually below with patch applied
       enableZshIntegration = enableZsh;
       # daemon.enable = true;
     };
@@ -175,47 +155,7 @@ in {
       enable = true;
       nix-direnv.enable = true;
       enableBashIntegration = enableBash;
-      enableNushellIntegration = enableNushell;
       enableZshIntegration = enableZsh;
-    };
-
-    nushell = {
-      enable = enableNushell;
-      shellAliases = nushellAliases;
-
-      environmentVariables = {
-        CARAPACE_BRIDGES = "zsh,bash,fish,powershell,inshellisense,cobra,argcomplete,clap";
-        EDITOR = "nvim";
-        LANG = "en_US.UTF-8";
-        LC_ALL = "en_US.UTF-8";
-      };
-
-      extraEnv = ''
-        let hm_session_path = ${nushellSessionPath}
-        let inherited_path = (
-          if (($env.PATH? | default []) | describe) == "string" {
-            $env.PATH | split row (char esep)
-          } else {
-            $env.PATH? | default []
-          }
-        )
-        $env.PATH = ($hm_session_path | append $inherited_path | flatten | uniq)
-      '';
-
-      extraConfig = ''
-        # --- Common Nushell Configuration (Part 1) ---
-        $env.config = {
-            show_banner: false,
-            edit_mode: vi,
-            table: { mode: rounded, index_mode: always, trim: { methodology: wrapping, wrapping_try_keep_words: true } },
-            ls: { use_ls_colors: true, clickable_links: true },
-            rm: { always_trash: false },
-            history: { max_size: 10000, sync_on_enter: true, file_format: "plaintext" },
-            completions: { case_sensitive: false, quick: true, partial: true, algorithm: "prefix" },
-        }
-
-        source ${atuinNuFixed}
-      '';
     };
   };
 

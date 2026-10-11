@@ -155,11 +155,6 @@ in
                   };
               });
             }
-            # SentinelOne kills freshly-built binaries during test phase on macOS.
-            # Skip nushell tests to avoid build failure on managed Macs.
-            // lib.optionalAttrs (system == "aarch64-darwin") {
-              nushell = _prev.nushell.overrideAttrs {doCheck = false;};
-            }
             # Raspberry Pi kernels omit modules that the generic NixOS module
             # closure expects. Apply nixos-hardware's allow-missing workaround
             # here because NixOS receives this package set as read-only.

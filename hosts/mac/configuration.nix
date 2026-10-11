@@ -41,8 +41,6 @@
   xyzLanAddress = "192.168.1.10";
   shellPackages = {
     bash = pkgs.bashInteractive;
-    nu = pkgs.nushell;
-    nushell = pkgs.nushell;
     xonsh = pkgs.xonsh-with-direnv or pkgs.xonsh;
     zsh = pkgs.zsh;
   };
@@ -273,7 +271,6 @@ in {
       ];
     shells = with pkgs; [
       bash
-      nushell
       (pkgs.xonsh-with-direnv or pkgs.xonsh)
       zsh
     ];

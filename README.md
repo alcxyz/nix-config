@@ -146,7 +146,7 @@ modules/
         default.nix                # Base KVM/libvirtd
         gpu-passthrough.nix        # Dynamic GPU passthrough hooks
   home-manager/
-    shell/                         # Nushell, zsh, bash, starship
+    shell/                         # zsh, bash, xonsh, starship
     programs/
       ai/                          # AI tools (claude-code, opencode, etc.)
       git/                         # Git config + SSH signing

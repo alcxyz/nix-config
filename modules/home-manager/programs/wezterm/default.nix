@@ -14,8 +14,6 @@ with lib; let
   defaultShellProgram =
     {
       bash = "${pkgs.bashInteractive}/bin/bash";
-      nu = "${pkgs.nushell}/bin/nu";
-      nushell = "${pkgs.nushell}/bin/nu";
       xonsh = "${xonshPackage}/bin/xonsh";
       zsh = "${pkgs.zsh}/bin/zsh";
     }.${
