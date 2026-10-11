@@ -80,17 +80,18 @@ assert not expect("echo hello", 0)[0]
 # gh pr merge resolves selector, repository and cwd for gh pr view.
 seen, _ = expect("gh pr merge 5 --squash --body 'x y' -R owner/repo", 2)
 assert seen[0][0][:6] == ["gh", "pr", "view", "5", "--repo", "owner/repo"], seen
-# A directory change needs --repo; with it, the directory does not matter.
-for command in ("cd sub && gh pr merge 7 --squash", "true || cd /reviewed; gh pr merge 7 --squash",
-                "pushd /reviewed; gh pr merge 7 --squash", "env -C /reviewed gh pr merge 7 --squash"):
+# A gh merge must name the PR and --repo, so the directory it runs in does not matter.
+for command in ("gh pr merge 7 --squash", "gh pr merge --squash --repo o/r", "cd sub && gh pr merge 7 --squash",
+                "env -C/reviewed gh pr merge 7 --squash", 'eval "cd /reviewed"; gh pr merge 7 --squash',
+                "GIT_DIR=/reviewed/.git gh pr merge 7 --squash"):
     calls.clear()
     code, message = hook(command)
-    assert code == 2 and "name the repository with --repo" in message and not calls, (command, message)
+    assert code == 2 and "--repo owner/repo" in message and not calls, (command, message)
 expect("cd sub && gh pr merge 7 --squash --repo o/r | tail -5", 0)
-expect("gh pr merge --repo=owner/reviewed --squash", 0)
+expect("gh pr merge 7 --repo=owner/reviewed --squash", 0)
 
 # A review of an earlier head does not count.
-_, message = expect("gh pr merge 9 --squash", 2)
+_, message = expect("gh pr merge 9 --squash --repo o/r", 2)
 assert f"current head {HEAD[:12]}" in message, message
 
 # GitHub API and Forgejo REST merges.
@@ -111,9 +112,9 @@ expect("cd x && tea api --method POST /repos/o/r/pulls/7/merge -d @- < body.json
 expect("tea api /repos/o/r/pulls/8/merge -X GET", 2)
 expect("tea api -X POST -H 'X-Note: --method GET' /repos/o/r/pulls/8/merge -d '{}'", 2)
 expect("""tea api -X POST /repos/o/r/pulls/9/merge -d "{\\"head_commit_id\\":\\"$(tea api -X GET /repos/o/r/pulls/9)\\"}" """, 2)
-seen, _ = expect("gh pr merge 9 --squash 2>&1 | tail -3", 2)
+seen, _ = expect("gh pr merge 9 --squash --repo o/r 2>&1 | tail -3", 2)
 assert seen[0][0][3] == "9", seen
-expect("gh pr merge 7 --squash >/dev/null", 0)
+expect("gh pr merge 7 --squash --repo o/r >/dev/null", 0)
 # tea and fj merge commands are refused, as are tea api merges that may pick another
 # login or instance than the one the guard checks.
 for command, hint in (
@@ -149,8 +150,8 @@ expect("tea api -X POST /repos/o/r/pulls/7/merge && tea api -X POST /repos/o/r/p
 expect("tea api -X GET /repos/o/r/pulls/7; tea api -X POST /repos/o/r/pulls/9/merge", 2)
 expect("""tea api -X POST /repos/o/r/pulls/8/merge -d '{"Do":"squash"}' && tea api --method GET /repos/o/r/pulls/8""", 2)
 expect("tea api -X GET /repos/o/r/pulls/7\ntea api -X POST /repos/o/r/pulls/9/merge", 2)
-expect("gh pr merge 7 --squash; gh pr merge 9 --squash", 2)
-_, message = expect("gh pr merge 7 --squash; tea api --login other -X POST /repos/o/r/pulls/7/merge", 2)
+expect("gh pr merge 7 --squash --repo o/r; gh pr merge 9 --squash --repo o/r", 2)
+_, message = expect("gh pr merge 7 --squash --repo o/r; tea api --login other -X POST /repos/o/r/pulls/7/merge", 2)
 assert "without --login" in message, message
 expect("tea api -X POST /repos/o/r/pulls/7/merge \\\n  -d '{}'", 0)
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{\n  "Do": "squash"\n}' >&2""", 0)
@@ -226,8 +227,8 @@ for command in ("gh pr merge &>/dev/null 9 --squash --repo o/r", "gh pr merge 2>
     code, message = hook(command)
     assert code == 2 and "redirections at the end" in message and not calls, (command, message)
 # After the selector, redirections in a chain are skipped.
-expect("gh pr merge 7 --squash >/dev/null && git checkout dev", 0)
-expect("gh pr merge 7 --squash 2>&1; git pull", 0)
+expect("gh pr merge 7 --squash --repo o/r >/dev/null && git checkout dev", 0)
+expect("gh pr merge 7 --squash --repo o/r 2>&1; git pull", 0)
 seen, _ = expect("gh pr merge 9 2> err --repo o/r && git pull", 2)
 assert seen[0][0][3:6] == ["9", "--repo", "o/r"], seen
 # Subshells, pipelines, background jobs and substitutions are covered the same way.
@@ -238,7 +239,7 @@ for command in ("(cd /reviewed && gh pr merge 7 --squash); gh pr merge 7 --squas
                 "echo ` cd /reviewed `; gh pr merge 7 --squash"):
     calls.clear()
     code, message = hook(command)
-    assert code == 2 and "name the repository with --repo" in message and not calls, (command, message)
+    assert code == 2 and "--repo owner/repo" in message and not calls, (command, message)
 expect("(cd x && gh pr merge 7 --squash --repo o/r)", 0)
 # Quoted text that mentions a merge command is read as one, however it reaches a shell;
 # text that only quotes it must come from a file.
@@ -380,10 +381,10 @@ def crashing_run(argv, cwd=None, stdin=None, timeout=None):
 
 
 review.run = failing_run
-code, message = hook("gh pr merge 5")
+code, message = hook("gh pr merge 5 --repo o/r")
 assert code == 2 and "could not verify" in message, message
 review.run = crashing_run
-code, message = hook("gh pr merge 5")
+code, message = hook("gh pr merge 5 --repo o/r")
 assert code == 2 and "read timed out" in message, message
 
 
@@ -393,7 +394,7 @@ def slow_run(argv, cwd=None, stdin=None, timeout=None):
 
 review.GUARD_DEADLINE = 1
 review.run = slow_run
-code, message = hook("gh pr merge 5")
+code, message = hook("gh pr merge 5 --repo o/r")
 assert code == 2 and "longer than 1 seconds" in message, message
 review.GUARD_DEADLINE = 90
 
@@ -403,7 +404,7 @@ assert code == 2 and "only github.com" in message, message
 review.run = fake_run
 for command in (
     "GH_HOST=ghe.example gh pr merge 7 --repo o/r",
-    "GH_REPO=other/repo gh pr merge 7",
+    "GH_REPO=other/repo gh pr merge 7 --repo o/r",
     "gh pr merge 7 --repo ghe.example/o/r",
     "gh api --hostname=ghe.example -X PUT repos/o/r/pulls/7/merge",
     "gh api --hostname ghe.example -X PUT repos/o/r/pulls/7/merge",
@@ -426,7 +427,7 @@ def late_alarm(command, cwd):
 
 real_guard_check = review.guard_check
 review.guard_check = late_alarm
-code, message = hook("gh pr merge 5")
+code, message = hook("gh pr merge 5 --repo o/r")
 assert code == 2 and "deadline fired late" in message, message
 review.guard_check = real_guard_check
 review.run = fake_run

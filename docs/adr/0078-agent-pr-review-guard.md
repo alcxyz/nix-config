@@ -112,8 +112,8 @@ trace which call sends a path, so it fails closed: a path is checked on GitHub
 when the command calls `gh api` (a path on another host only when `gh api`
 receives it), and on its own host or the Forgejo `url` unless only `gh api`
 arguments contain it and the command has no `tea` and no command substitution. A `tea` option or login command anywhere in the
-command that could pick another login blocks a Forgejo check. A `gh pr merge` needs `--repo` when the command
-changes directory, and quoted or substituted text that mentions `gh`, `fj` or
+command that could pick another login blocks a Forgejo check. A `gh pr merge` must name the PR and `--repo`,
+so the directory it runs in does not matter, and quoted or substituted text that mentions `gh`, `fj` or
 `tea` is read as a command, so a commit message or PR body that quotes a merge
 command must come from a file. The parser keeps no quoting, so a quoted
 separator reads as a real one; the checks lean towards blocking where that

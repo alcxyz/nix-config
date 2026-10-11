@@ -119,8 +119,6 @@ TEA_ENVIRONMENT = ("GITEA_SERVER_URL", "GITEA_INSTANCE_URL")
 TEA_LOGIN_COMMANDS = {"login", "logins", "logout"}
 # Clients whose words inside quoted text are read as a nested command.
 NESTED_CLIENTS = {"tea", "gh", "fj"}
-# Words that change the directory a later gh command picks its repository from.
-DIRECTORY_CHANGES = {"cd", "pushd", "popd", "-C", "--chdir"}
 # Words that may come between a separator and the command they run.
 COMMAND_PREFIXES = {"env", "command", "exec", "xargs", "sudo", "time", "nice", "nohup"}
 MCP_PREFIX = "mcp__forgejo__"
@@ -1177,12 +1175,10 @@ def gh_pr_merges(tokens, cwd):
             elif not token.startswith("-") and selector is None:
                 selector = token
 
-        # Whether a directory change reaches the merge depends on subshells,
-        # conditions and pipelines, which are not traced: name the repository.
-        if problem is None and not repo and any(
-            token.partition("=")[0] in DIRECTORY_CHANGES for token in shell_words(tokens)
-        ):
-            problem = "the command changes directory; name the repository with --repo"
+        # Without both, gh picks the PR or repository from the directory it
+        # runs in, which cd, env -C, eval or GIT_DIR can change unseen.
+        if problem is None and not (selector and repo):
+            problem = "name the PR and its repository, as in `gh pr merge N --repo owner/repo`"
         yield [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else []), merge_cwd, problem
 
 
