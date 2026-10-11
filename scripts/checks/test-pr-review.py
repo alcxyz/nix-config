@@ -173,9 +173,13 @@ for command in ("P=repos/o/r/pulls/7/merge; gh api -X PUT \"$P\"",
                 "gh api -X GET /repos/o/r/pulls/7/merge; curl -X POST \"$F/repos/o/r/pulls/7/merge\""):
     seen, _ = expect(command, 0)
     assert forges(seen) == {"github", "forgejo"}, (command, seen)
-calls.clear()
-code, message = hook("gh api -X GET /repos/o/r/pulls/7/merge; tea api --login other -X POST /repos/o/r/pulls/7/merge")
-assert code == 2 and "without --login" in message, message
+for command in ("gh api -X GET /repos/o/r/pulls/7/merge; tea api --login other -X POST /repos/o/r/pulls/7/merge",
+                "gh 2> gh api -X GET /repos/o/r/pulls/7/merge; tea api --login other -X POST /repos/o/r/pulls/7/merge",
+                "GH_CONFIG_DIR=~/.config/gh gh api -X GET repos/o/r/pulls/7/merge; "
+                "tea api --login other -X POST repos/o/r/pulls/7/merge"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "without --login" in message, (command, message)
 # tea settings do not affect merges through other clients.
 expect("GITEA_TOKEN=x curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge", 0)
 assert not expect("fj pr view o/r#7", 0)[0]

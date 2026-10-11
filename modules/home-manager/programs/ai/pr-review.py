@@ -1205,6 +1205,18 @@ def tea_retargeted(tokens):
     return any(flags or TEA_LOGIN_COMMANDS & set(words) for words, flags in cli_calls(tokens, "tea", TEA_TARGET_FLAGS))
 
 
+def gh_api_positions(tokens):
+    """Return the token positions of the arguments of gh calls that have an `api` word."""
+    positions = set()
+    for index, token in enumerate(tokens):
+        if "=" in token or os.path.basename(token) != "gh":
+            continue
+        end = next((j for j in range(index + 1, len(tokens)) if tokens[j] in SEPARATORS), len(tokens))
+        if "api" in tokens[index + 1:end]:
+            positions.update(range(index + 1, end))
+    return positions
+
+
 def github_merge_problem(owner, repo, number, host, tokens):
     """Return a reason to refuse a GitHub REST merge on another host than github.com, or None."""
     hosts = {os.environ.get("GH_HOST", "github.com")}
@@ -1236,19 +1248,18 @@ def rest_merge_problem(match, tokens):
     if not all(LITERAL.match(part) for part in (owner, repo, number)) or not number.isdigit():
         return f"cannot verify {owner}/{repo}#{number}: use a literal owner, repository and PR number in the merge call."
     host = match["host"]
-    path = match.group(0)
-    # Arguments of gh calls with an `api` word, wherever redirections put it.
-    gh_api_arguments = [word for words, _flags in cli_calls(tokens, "gh", set()) if "api" in words for word in words]
-    occurrences = sum(path in token for token in tokens)
-    in_gh_api = sum(path in word for word in gh_api_arguments)
+    # Positions, not counts, so overlapping or repeated gh calls cannot cover
+    # an occurrence that another client sends.
+    gh_api = gh_api_positions(tokens)
+    path = {index for index, token in enumerate(tokens) if match.group(0) in token}
     prs = []
     # A path on another named host goes to GitHub only as a gh api argument.
-    if host == "api.github.com" or (gh_api_arguments and (not host or in_gh_api)):
+    if host == "api.github.com" or (gh_api and (not host or path & gh_api)):
         problem = github_merge_problem(owner, repo, number, host, tokens)
         if problem:
             return problem
         prs.append(PR("github", "github.com", owner, repo, number))
-    if host != "api.github.com" and not (occurrences and occurrences == in_gh_api):
+    if host != "api.github.com" and not (path and path <= gh_api):
         # FORGEJO_URL matches tea's default login only.
         if any(os.path.basename(token) == "tea" for token in tokens) and tea_retargeted(tokens):
             return (f"cannot verify {owner}/{repo}#{number}: give `tea api` a literal path, without "
