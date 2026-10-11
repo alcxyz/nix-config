@@ -1,7 +1,7 @@
 # ADR-0091: Deploy a T3 thread overview skill that reads T3 state directly
 
 **Status:** Accepted
-**Date:** 2026-10-10
+**Date:** 2026-10-10 (amended 2026-10-11 for #631)
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`
 
 ## Context
@@ -47,3 +47,32 @@ A T3 update that renames these fields breaks the fast path loudly rather than
 silently, and costs only the fallback's extra calls until the query is
 updated. The skill is the first one this repository deploys; skills that do
 not need packaging can follow the same `home.file` pattern.
+
+## Amendment: shared thread facts (#631)
+
+Users kept asking threads whether they were done, each agent rebuilt the
+answer by hand, and threads that stalled before a handoff could not answer at
+all. `programs.ai` therefore also installs `t3-thread-status`, a
+`t3-thread-status` skill for both clients, and `t3-thread-status-render`.
+
+- **One fact source.** `t3-thread-status` reports, for one or more threads,
+  the latest run, idle time, held background work, linked pull requests, the
+  worktree's uncommitted and unpushed work (read-only git, no fetch) and the
+  thread's own `Settle:` line, plus pass/fail checks and a verdict: `waiting`,
+  `ready`, `not-yet` or `stalled`. The inventory and the status command share
+  the database selection and schema checks (`t3-state-db.sh`) and the
+  background-work rules, as temporary views over the read-only connection
+  (`t3-thread-common.sql`), so the two cannot drift apart.
+- **Threads report on themselves.** At a handoff an agent runs the command on
+  its own thread and ends with `**Settle:** ready.` or `**Settle:** not yet:
+  <what remains, owner>`. Agents never settle threads; the user decides.
+- **The overview prefers those facts.** It runs the command for every
+  unsettled thread; a thread's own current `Settle:` line beats the reader's
+  guess, and threads that never handed off are flagged as stalled.
+- **Cards are rendered, not written.** Like the overview, the status card is a
+  fixed template filled by a script that escapes the JSON, so no thread text is
+  pasted into a page by hand.
+
+The status command depends on the same T3 internals, plus each thread's
+`worktreePath`, `branch` and message text, and checks them the same way: a
+missing field fails loudly (exit 3) and the skill falls back to T3's MCP tools.

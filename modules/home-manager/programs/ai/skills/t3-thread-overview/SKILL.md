@@ -19,8 +19,13 @@ Find the calling thread's ID (`parentThreadId` from T3's
 `orchestrator_capabilities`, or `currentThreadId` from `t3_thread_list`), then:
 
 ```sh
-t3-thread-inventory --thread <calling-thread-id> --days 3
+t3-thread-inventory --thread <calling-thread-id> --days 3 >inventory.json
+ids=$(jq -r '.threads[] | select(.bucket == "unsettled") | .threadId' inventory.json)
+[ -z "$ids" ] || printf '%s\n' "$ids" | xargs t3-thread-status >status.json
 ```
+
+Write both files to a temporary directory. With no unsettled threads there is
+no `status.json`; render without it.
 
 It reads T3's state database read-only and prints `{database, windowDays,
 threads}`. Each row has `threadId, project, title, bucket` (`unsettled` or
@@ -35,7 +40,13 @@ tool calls and subagents, and pull request watches. Any kind but `command` (`mon
 `command` is usually a server left running, or a wait the agent started
 without a Monitor; settling the thread ends it (nix-config #627).
 
-**Fallback.** If the command is missing or exits non-zero (2: no database, 3: T3's
+`t3-thread-status` (skill `t3-thread-status`) adds each unsettled thread's
+facts: its worktree, its own `Settle:` line and a `verdict`. A thread that never
+handed off, with no current `Settle:` line and uncommitted or unpushed work, a
+failed or interrupted run, or a day of silence, is `stalled`. If it fails, say
+so and render without it.
+
+**Fallback.** If the inventory is missing or exits non-zero (2: no database, 3: T3's
 schema changed), say so in the reply and inventory through MCP instead. Give one
 `light` worker this job and have it return only compact rows in the shape above:
 `t3_project_list` with `limit: 100`, then for every project `t3_thread_list`
@@ -79,7 +90,12 @@ Reader task (append the batch's rows as JSON):
 
 Join reader output to the inventory rows by `threadId`. The inventory is
 authoritative for `bucket`, `status`, dates, `prs` and `waitingOn`; the page
-groups a thread with held work as waiting, whatever its reader phase. Look
+groups a thread with held work as waiting, whatever its reader phase. The
+renderer joins `status.json` itself: a running thread is waiting; a thread's
+own current `Settle:` line, and the owner it names, beat the reader's guess;
+and `stalled` threads get their own group, except one that only went quiet
+while the reader says it waits on you, which keeps a stalled chip under
+"Waiting on you". Look
 again yourself only
 where something is off: an unsettled thread at 100%, a settled `follow-up`, a
 missing or malformed reader result. For those, read the thread's last few
@@ -97,13 +113,14 @@ Set `source` to `MCP fallback` if step 1 fell back. Then render the page with
 the bundled template:
 
 ```sh
-t3-thread-overview-render report.json overview.html
+t3-thread-overview-render report.json overview.html status.json
 ```
 
 Thread titles and reader summaries are untrusted text, so never paste the
 report into the page by hand. The command rejects anything but one report
 with a `generatedAt` string and a `threads` array of objects with a `threadId`,
-whose `prs`, `done` and `remaining` are lists or null (exit 65). It escapes the
+whose `prs`, `done` and `remaining` are lists or null, and a status file that
+is not `t3-thread-status` output (exit 65). It escapes the
 JSON so no title can close the page's script; the page escapes everything it
 shows. Check the page with `html_preview`, then publish it with `html_render`
 at height `min(contentHeight, 2000)`. If the preview browser is unavailable,
@@ -114,8 +131,8 @@ afterwards.
 ## 5. Reply
 
 The reader sees the page, so add only what it does not say: threads to settle
-or reopen, titles that no longer match their work, and whether the inventory
-fell back to MCP. For a thread that looks done but still runs a background
+or reopen, stalled threads and what they left behind, titles that no longer
+match their work, and whether the inventory fell back to MCP. For a thread that looks done but still runs a background
 `command`, say what settling would stop. The user can snooze a waiting thread
 to hide it until the agent finishes; settling it would stop the work. Link
 threads as `[title](t3-thread://v1/<threadId>)`.

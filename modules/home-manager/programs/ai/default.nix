@@ -120,9 +120,9 @@ with lib; let
       }
     ];
   };
-  # The T3 thread overview skill (ADR-0091) reads thread state through
-  # t3-thread-inventory, which tries every T3 instance's state database and
-  # keeps the one holding the calling thread.
+  # The T3 thread overview and status skills (ADR-0091) read thread state
+  # through t3-thread-inventory and t3-thread-status, which try every T3
+  # instance's state database and keep the one holding the thread asked about.
   t3StateDbs = map (dir: "${dir}/userdata/statev2.sqlite") (
     [(config.services.t3code.baseDir or "${config.home.homeDirectory}/.t3")]
     ++ map (instance: instance.baseDir) (attrValues (config.services.t3code.instances or {}))
@@ -131,9 +131,22 @@ with lib; let
     name = "t3-thread-inventory";
     runtimeInputs = [pkgs.sqlite pkgs.jq];
     text = ''
+      common_sql=${./t3-thread-common.sql}
       inventory_sql=${./t3-thread-inventory.sql}
       default_dbs=${escapeShellArg (concatStringsSep ":" t3StateDbs)}
+      ${builtins.readFile ./t3-state-db.sh}
       ${builtins.readFile ./t3-thread-inventory.sh}
+    '';
+  };
+  t3ThreadStatus = pkgs.writeShellApplication {
+    name = "t3-thread-status";
+    runtimeInputs = [pkgs.sqlite pkgs.jq pkgs.git];
+    text = ''
+      common_sql=${./t3-thread-common.sql}
+      status_sql=${./t3-thread-status.sql}
+      default_dbs=${escapeShellArg (concatStringsSep ":" t3StateDbs)}
+      ${builtins.readFile ./t3-state-db.sh}
+      ${builtins.readFile ./t3-thread-status.sh}
     '';
   };
   t3ThreadOverviewRender = pkgs.writeShellApplication {
@@ -141,7 +154,17 @@ with lib; let
     runtimeInputs = [pkgs.jq];
     text = ''
       overview_template=${./skills/t3-thread-overview/template.html}
+      ${builtins.readFile ./t3-page.sh}
       ${builtins.readFile ./t3-thread-overview-render.sh}
+    '';
+  };
+  t3ThreadStatusRender = pkgs.writeShellApplication {
+    name = "t3-thread-status-render";
+    runtimeInputs = [pkgs.jq];
+    text = ''
+      status_card=${./skills/t3-thread-status/card.html}
+      ${builtins.readFile ./t3-page.sh}
+      ${builtins.readFile ./t3-thread-status-render.sh}
     '';
   };
   # Runs work that must outlive an agent session as a transient systemd user
@@ -297,11 +320,13 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [agentJob prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender];
+    home.packages = [agentJob prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender];
 
     # Skills shared by both clients (ADR-0091).
     home.file.".claude/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
     home.file.".codex/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
+    home.file.".claude/skills/t3-thread-status".source = ./skills/t3-thread-status;
+    home.file.".codex/skills/t3-thread-status".source = ./skills/t3-thread-status;
     home.file.".claude/skills/long-running-jobs".source = ./skills/long-running-jobs;
     home.file.".codex/skills/long-running-jobs".source = ./skills/long-running-jobs;
     home.file.".claude/skills/dispatch-thread".source = ./skills/dispatch-thread;

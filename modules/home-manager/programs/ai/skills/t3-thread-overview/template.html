@@ -2,11 +2,11 @@
 <html><head><meta charset="utf-8">
 <!-- T3 thread overview (ADR-0091). t3-thread-overview-render replaces the
      JSON between the REPORT markers; the page derives groups, counts and
-     colours from it. -->
+     colours from it, preferring each thread's facts from t3-thread-status. -->
 <style>
   body { font-family: var(--font-sans); color: var(--foreground); margin: 0; }
   .wrap { display: flex; flex-direction: column; gap: 20px; padding: 4px 0 8px; }
-  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
   .kpi { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
   .kpi .n { font-size: 26px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .kpi .l { font-size: 12px; color: var(--muted-foreground); margin-top: 4px; }
@@ -32,6 +32,9 @@
   .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--secondary); color: var(--secondary-foreground); text-decoration: none; }
   .chip.phase { color: var(--background); font-weight: 600; }
   .chip.live { background: var(--info); color: var(--background); font-weight: 600; }
+  .chip.ready { background: var(--success); color: var(--background); font-weight: 600; }
+  .chip.stalled { background: var(--destructive); color: var(--background); font-weight: 600; }
+  .settle { font-size: 12.5px; color: var(--muted-foreground); line-height: 1.4; }
   .prog { display: flex; align-items: center; gap: 10px; }
   .track { flex: 1; height: 8px; border-radius: 4px; background: var(--muted); overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; }
@@ -77,7 +80,8 @@ const REPORT =
      "progressPct": 60, "phase": "awaiting-user", "owner": "user", "goal": "Ship the sample change.",
      "nextAction": "Approve the pending change.", "blocker": "Needs your approval.", "flag": null,
      "done": ["First half shipped"], "remaining": ["Second half"], "verdict": null, "verdictReason": null,
-     "waitingOn": [{"kind": "command", "description": "Local preview server"}]},
+     "waitingOn": [{"kind": "command", "description": "Local preview server"}],
+     "facts": {"verdict": "stalled", "stallReasons": ["uncommitted changes"], "settle": null}},
     {"threadId": "sample-2", "title": "Sample settled thread", "project": "example", "bucket": "recently-settled",
      "status": "completed", "updatedAt": "2026-10-09T10:00:00Z", "settledAt": "2026-10-09T10:00:00Z", "prs": [],
      "progressPct": 80, "phase": "done-not-settled", "owner": "user",
@@ -100,11 +104,16 @@ const LIVE = new Set(["running", "starting", "queued", "preparing", "waiting"]);
 // Like T3, only a background `command` (a server, or a wait outside a Monitor)
 // lets the thread count as done; every other kind wakes the agent (#627).
 // Settled threads lost their session, so their work is not shown.
+// facts come from t3-thread-status: a thread's own current Settle: line beats
+// the reader's guess, and a thread that never handed off may be stalled.
 const pendingOf = t => (t.bucket === "recently-settled" ? [] : (t.waitingOn || []).filter(w => w && typeof w.kind === "string"));
 const holds = t => pendingOf(t).some(w => w.kind !== "command");
 const NOW = new Date(REPORT.generatedAt);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const link = t => `t3-thread://v1/${t.threadId}`;
+const settleOf = t => (t.facts?.settle && !t.facts.settle.stale ? t.facts.settle : null);
+// The owner a thread names in its own "not yet: ..., <owner>" beats the reader's.
+const ownerOf = t => (settleOf(t)?.verdict === "not-yet" && settleOf(t).owner ? settleOf(t).owner : t.owner) === "agent" ? "agent" : "user";
 const phaseOf = t => PHASES[t.phase] || { label: t.phase || "unknown", color: "var(--muted-foreground)" };
 function ago(iso) {
   if (!iso) return "";
@@ -115,9 +124,16 @@ function ago(iso) {
 }
 function groupOf(t) {
   if (t.bucket === "recently-settled") return t.verdict === "done" ? "settled-done" : "settled-open";
-  if (holds(t)) return "waiting";
+  const f = t.facts || {};
+  if (holds(t) || f.verdict === "waiting") return "waiting";
+  if (f.verdict === "ready") return "settle";
+  // A thread that only went quiet while the reader says it waits on you
+  // stays there, with a stalled chip; anything it left behind moves it.
+  const quietOnly = (f.stallReasons || []).every(r => String(r).startsWith("idle"));
+  if (f.verdict === "stalled") return quietOnly && ownerOf(t) === "user" ? "user" : "stalled";
+  if (f.verdict === "not-yet" && settleOf(t)) return ownerOf(t);
   if (t.phase === "done-not-settled") return "settle";
-  return t.owner === "agent" ? "agent" : "user";
+  return ownerOf(t);
 }
 // Reader output is untrusted: numbers are forced to numbers, text goes through esc().
 const pctOf = v => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(0, Math.min(100, Math.round(Number(v)))) : null);
@@ -132,6 +148,7 @@ app.insertAdjacentHTML("beforeend", `
     <div class="kpi"><div class="n">${unsettled.length}</div><div class="l">unsettled threads</div></div>
     <div class="kpi warn"><div class="n">${by("user").length}</div><div class="l">waiting on you</div></div>
     <div class="kpi info"><div class="n">${by("agent").length + by("waiting").length}</div><div class="l">agent waiting or can continue</div></div>
+    <div class="kpi bad"><div class="n">${by("stalled").length}</div><div class="l">stalled, check</div></div>
     <div class="kpi ok"><div class="n">${by("settle").length}</div><div class="l">ready to settle</div></div>
     <div class="kpi bad"><div class="n">${by("settled-open").length}</div><div class="l">settled, maybe not done</div></div>
   </div>`);
@@ -156,7 +173,10 @@ function card(t) {
     `<span class="chip">${esc(t.project)}</span>`,
     ...pendingOf(t).map(w => `<span class="chip${w.kind === "command" ? "" : " live"}">${w.kind === "command" ? "background" : "waiting"}: ${esc(w.description || w.kind)}</span>`),
     ...prs.map(p => `<a class="chip" href="${esc(p.url)}">open PR ${esc(String(p.url || "").split("/").pop())}</a>`),
+    settleOf(t)?.verdict === "ready" ? `<span class="chip ready">Settle: ready</span>` : "",
+    t.facts?.verdict === "stalled" ? `<span class="chip stalled">stalled: ${esc((t.facts.stallReasons || []).join(", ") || "check")}</span>` : "",
   ].join("");
+  const said = settleOf(t);
   const when = t.bucket === "recently-settled" ? `settled ${ago(t.settledAt)}` : `updated ${ago(t.updatedAt)}`;
   const list = xs => (xs && xs.length ? `<ul>${xs.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : `<ul><li>Nothing</li></ul>`);
   return `<div class="card">
@@ -168,7 +188,8 @@ function card(t) {
       <span class="pct">${t.progressPct ?? "?"}%</span>
     </div>
     ${t.verdictReason ? `<div class="blocker">↺ ${esc(t.verdictReason)}</div>` : ""}
-    <div class="next"><span class="owner ${t.owner === "agent" ? "agent" : "user"}">${t.owner === "agent" ? "Agent" : "You"}</span>${esc(t.nextAction)}</div>
+    <div class="next"><span class="owner ${ownerOf(t)}">${ownerOf(t) === "agent" ? "Agent" : "You"}</span>${esc(t.nextAction)}</div>
+    ${said ? `<div class="settle">Thread says: Settle: ${esc(said.line)}</div>` : ""}
     ${t.blocker ? `<div class="blocker">⚠ ${esc(t.blocker)}</div>` : ""}
     ${t.flag ? `<div class="flag">${esc(t.flag)}</div>` : ""}
     <details><summary>Done / remaining</summary>
@@ -179,8 +200,9 @@ function card(t) {
 
 const GROUPS = [
   ["user", "Waiting on you", "var(--warning)"],
+  ["stalled", "Stalled · no handoff, check", "var(--destructive)"],
   ["agent", "Agent can continue · needs a nudge", "var(--info)"],
-  ["waiting", "Agent waiting on background work · do not settle", "var(--info)"],
+  ["waiting", "Agent working or waiting on background work · do not settle", "var(--info)"],
   ["settle", "Ready to settle", "var(--success)"],
   ["settled-open", `Settled in the last ${DAYS} days · maybe not done`, "var(--destructive)"],
 ];
@@ -199,6 +221,6 @@ if (settledDone.length) {
   </div>`);
 }
 if (!threads.length) app.insertAdjacentHTML("beforeend", `<div class="empty">No unsettled or recently settled threads.</div>`);
-app.insertAdjacentHTML("beforeend", `<div class="note">Inventory: ${esc(REPORT.source)}. Progress and verdicts are estimates by ${esc(REPORT.readerModel)} readers from each thread's opening and latest messages. Generated ${esc(REPORT.generatedAt.slice(0, 16).replace("T", " "))} UTC.</div>`);
+app.insertAdjacentHTML("beforeend", `<div class="note">Inventory: ${esc(REPORT.source)}. Progress and verdicts are estimates by ${esc(REPORT.readerModel)} readers from each thread's opening and latest messages; a thread's own Settle: line and t3-thread-status facts take precedence. Generated ${esc(REPORT.generatedAt.slice(0, 16).replace("T", " "))} UTC.</div>`);
 </script>
 </body></html>

@@ -9,9 +9,10 @@ trap 'rm -rf -- "$tmp"' EXIT
 # The Nix wrapper prepends these settings; do the same here.
 {
   echo 'set -euo pipefail'
+  echo "common_sql=$PWD/$dir/t3-thread-common.sql"
   echo "inventory_sql=$PWD/$dir/t3-thread-inventory.sql"
   echo "default_dbs=$tmp/missing.sqlite:$tmp/state.sqlite"
-  cat "$dir/t3-thread-inventory.sh"
+  cat "$dir/t3-state-db.sh" "$dir/t3-thread-inventory.sh"
 } >"$tmp/inventory"
 
 recent=$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%S.000Z)
@@ -88,7 +89,7 @@ bash "$tmp/inventory" --thread caller >/dev/null
 for payload in '{}' 'not json'; do
   sqlite3 "$tmp/state.sqlite" "INSERT OR REPLACE INTO orchestration_v2_projection_provider_threads VALUES ('pt-new', 'open', 'idle', '$payload');"
   if bash "$tmp/inventory" --thread caller 2>"$tmp/err"; then exit 1; else test $? = 3; fi
-  grep -q "background task list; T3's schema has changed" "$tmp/err"
+  grep -q "lack a background task list in .*; T3's schema has changed" "$tmp/err"
 done
 sqlite3 "$tmp/empty.sqlite" 'CREATE TABLE unrelated (a);'
 if bash "$tmp/inventory" --db "$tmp/empty.sqlite" 2>/dev/null; then exit 1; else test $? = 3; fi
