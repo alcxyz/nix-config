@@ -170,6 +170,12 @@ seen, _ = expect("gh 2>&1 api -X PUT repos/o/r/pulls/7/merge -f merge_method=squ
 assert forges(seen) == {"github"}, seen
 seen, _ = expect("cd x && env GH_TOKEN_FILE=f gh api -X PUT repos/o/r/pulls/7/merge", 0)
 assert forges(seen) == {"github"}, seen
+# A command substitution inside a gh api argument is checked on Forgejo too.
+seen, _ = expect('gh api -X GET "repos/o/r/pulls/7?x=$(tea api -X POST /repos/o/r/pulls/7/merge)"', 0)
+assert forges(seen) == {"github", "forgejo"}, seen
+# A refusal names the token that may retarget tea.
+_, message = hook("tea api -X POST /repos/o/r/pulls/7/merge && git branch -r")
+assert "`-r` could point tea" in message, message
 # A gh word that is not a command, such as an option value, still adds the GitHub check.
 seen, _ = expect('curl -o gh api -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen

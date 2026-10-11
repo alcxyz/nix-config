@@ -1195,20 +1195,19 @@ def cli_merges(tokens):
             yield "the PR (fj pr merge)", f"fj merges are not verified; use {TEA_API_MERGE}"
 
 
-def tea_retargeted(tokens):
-    """Return whether any tea call in the command may use another login than its default."""
-    if any(os.environ.get(name) for name in TEA_ENVIRONMENT):
-        return True
-    if any(TEA_ASSIGNMENT.match(token) for token in tokens):
-        return True
+def tea_retarget(tokens):
+    """Return what may make tea use another login than its default, or None."""
+    for name in TEA_ENVIRONMENT:
+        if os.environ.get(name):
+            return f"{name} in the environment"
     # Which call uses a merge path is not traced, and a quoted separator reads
     # as a real one, so the options are looked for in the whole command.
     for token in tokens:
         name = token.partition("=")[0]
         attached = not token.startswith("--") and len(token) > 2 and token[:2] in TEA_TARGET_FLAGS
-        if name in TEA_TARGET_FLAGS or attached or token in TEA_LOGIN_COMMANDS:
-            return True
-    return False
+        if TEA_ASSIGNMENT.match(token) or name in TEA_TARGET_FLAGS or attached or token in TEA_LOGIN_COMMANDS:
+            return f"`{token}`"
+    return None
 
 
 def command_position(tokens, index):
@@ -1272,6 +1271,8 @@ def rest_merge_problem(match, tokens):
     gh_api = gh_api_positions(tokens, strict=False)
     gh_api_calls = gh_api_positions(tokens, strict=True)
     path = {index for index, token in enumerate(tokens) if match.group(0) in token}
+    # A command substitution inside a gh argument runs another command.
+    substituted = any("$(" in tokens[index] or "`" in tokens[index] for index in path)
     prs = []
     # A path on another named host goes to GitHub only as a gh api argument.
     if host == "api.github.com" or (gh_api and (not host or path & gh_api)):
@@ -1279,11 +1280,13 @@ def rest_merge_problem(match, tokens):
         if problem:
             return problem
         prs.append(PR("github", "github.com", owner, repo, number))
-    if host != "api.github.com" and not (path and path <= gh_api_calls):
+    if host != "api.github.com" and not (path and path <= gh_api_calls and not substituted):
         # FORGEJO_URL matches tea's default login only.
-        if any(os.path.basename(token) == "tea" for token in tokens) and tea_retargeted(tokens):
-            return (f"cannot verify {owner}/{repo}#{number}: give `tea api` a literal path, without "
-                    "--login, --remote, --repo, `tea login` or GITEA_*, HOME or XDG_CONFIG_HOME settings.")
+        retarget = tea_retarget(tokens) if any(os.path.basename(token) == "tea" for token in tokens) else None
+        if retarget:
+            return (f"cannot verify {owner}/{repo}#{number}: {retarget} could point tea at another login; give "
+                    "`tea api` a literal path, without --login, --remote, --repo, `tea login` or GITEA_*, HOME "
+                    "or XDG_CONFIG_HOME settings, in a command without other -l, -r or -R options.")
         prs.append(PR("forgejo", (f"https://{host}" if host else FORGEJO_URL).rstrip("/"), owner, repo, number))
     for pr in prs:
         info = pr_info(pr)
