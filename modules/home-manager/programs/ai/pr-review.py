@@ -91,6 +91,14 @@ PUNCTUATION = ";&|()`\n"
 HEREDOC = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 # A command or process substitution anywhere in the text.
 SUBSTITUTION = re.compile(r"`|\$\(|[<>]\(")
+# A complete literal pulls path that is not a merge, such as `pulls/7/reviews`.
+LITERAL_PULLS_PATH = re.compile(r"pulls/\d+(?:/(?!merge\b)[A-Za-z_]+)*(?=[\s\"'?]|$)")
+# Pull request subcommands of gh, tea and fj that do not merge.
+PR_SUBCOMMANDS = {
+    "create", "c", "view", "list", "ls", "search", "status", "checks", "diff", "edit", "e", "comment",
+    "review", "close", "reopen", "checkout", "co", "ready", "approve", "reject", "clean", "browse",
+    "assign", "unassign",
+}
 # Text that marks a command as possibly merging: refused when it does not parse.
 MERGE_MENTION = re.compile(r"\bmerge\b|\btea\b|\bfj\b|pulls/")
 # Stands in for the `&` of an attached `&>` redirection while lexing.
@@ -1130,8 +1138,13 @@ def extract_heredocs(command):
 
 
 def strip_comments(command):
-    """Drop `#` comments outside quotes, keeping the newline that ends each one."""
-    out, quote, index = [], None, 0
+    """Drop `#` comments outside quotes, keeping the newline that ends each one.
+
+    Only a `#` that starts a word starts a comment: after an escaped character
+    or the `)` that closes a `$(` it continues the word, while after a space,
+    an operator or a subshell's `)` it starts one.
+    """
+    out, quote, index, word_start, depth = [], None, 0, True, 0
     while index < len(command):
         character = command[index]
         if quote:
@@ -1144,15 +1157,22 @@ def strip_comments(command):
         elif character == "\\" and index + 1 < len(command):
             out.append(command[index:index + 2])
             index += 2
+            word_start = False
             continue
         elif character in "'\"":
             quote = character
-        # Only a `#` that starts a word starts a comment: after an escaped
-        # character or a closing `)` it continues the word.
-        elif character == "#" and (not out or out[-1] in (" ", "\t", "\n", ";", "&", "|", "(")):
+        elif character == "#" and word_start:
             end = command.find("\n", index)
             index = len(command) if end < 0 else end
             continue
+        if not quote:
+            if character == "(" and out and out[-1] == "$":
+                depth += 1
+            if character == ")" and depth:
+                depth -= 1
+                word_start = False
+            else:
+                word_start = character in " \t\n;&|()"
         out.append(character)
         index += 1
     return "".join(out)
@@ -1170,7 +1190,7 @@ def split_command(command):
     command = strip_comments(command)
     # An attached `&>file` redirects; a spaced `& >file` runs in the background
     # and separates. Mark the attached form so the lexer keeps it in one word.
-    command = strip_trailing_redirections(command).replace("\\\n", " ").replace("&>", ATTACHED_REDIRECTION + ">")
+    command = strip_trailing_redirections(command).replace("\\\n", "").replace("&>", ATTACHED_REDIRECTION + ">")
     lexer = shlex.shlex(command, posix=True, punctuation_chars=PUNCTUATION)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
@@ -1405,6 +1425,14 @@ def rest_merge_problem(match, tokens):
     return None
 
 
+def pr_subcommand_unknown(words):
+    """Return whether a call's word after `pr`/`pulls` is not a known subcommand that does not merge."""
+    for index, word in enumerate(words):
+        if word in ("pr", "pull", "pulls"):
+            return index + 1 >= len(words) or words[index + 1] not in PR_SUBCOMMANDS
+    return False
+
+
 def mcp_check(tool, arguments):
     """Return None when the Forgejo MCP call may run, otherwise a reason to block; only merges are checked."""
     return mcp_merge_check(arguments) if tool == MCP_MERGE else None
@@ -1468,7 +1496,12 @@ def guard_check(command, cwd):
     # A substitution can build a merge target the guard does not see, such as
     # `7$(printf 9)` or `pulls/$(echo 9)/merge`. The raw text is searched, since
     # lexing splits unquoted `$(` apart.
-    if SUBSTITUTION.search(command) and ("/merge" in command or any(True for _ in gh_pr_merges(tokens, cwd))):
+    if SUBSTITUTION.search(command) and (
+        any(not LITERAL_PULLS_PATH.match(command, match.start()) for match in re.finditer(r"pulls/", command))
+        or any(True for _ in gh_pr_merges(tokens, cwd))
+        or any(pr_subcommand_unknown(call) for client in ("gh", "tea", "fj")
+               for call, _flags in cli_calls(shell_words(tokens), client, set()))
+    ):
         return ("cannot verify the merge: its command contains a command substitution, which can change the "
                 "target; use literal values, and pass long text from a file.")
 
