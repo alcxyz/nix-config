@@ -89,6 +89,8 @@ SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "`", "\n"}
 PUNCTUATION = ";&|()`\n"
 # A heredoc start such as `<<EOF`, `<<-'EOF'` or `<< "EOF"`, but not a `<<<` here-string.
 HEREDOC = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+# A command or process substitution anywhere in the text.
+SUBSTITUTION = re.compile(r"`|\$\(|[<>]\(")
 # Text that marks a command as possibly merging: refused when it does not parse.
 MERGE_MENTION = re.compile(r"\bmerge\b|\btea\b|\bfj\b|pulls/")
 # Stands in for the `&` of an attached `&>` redirection while lexing.
@@ -1145,7 +1147,9 @@ def strip_comments(command):
             continue
         elif character in "'\"":
             quote = character
-        elif character == "#" and (not out or out[-1][-1:] in (" ", "\t", "\n", ";", "&", "|", "(", ")")):
+        # Only a `#` that starts a word starts a comment: after an escaped
+        # character or a closing `)` it continues the word.
+        elif character == "#" and (not out or out[-1] in (" ", "\t", "\n", ";", "&", "|", "(")):
             end = command.find("\n", index)
             index = len(command) if end < 0 else end
             continue
@@ -1461,10 +1465,10 @@ def guard_check(command, cwd):
             return ("cannot verify the command: it does not parse, for example because of an unclosed quote; "
                     "fix it, or pass long text from a file.")
         tokens = command.split()
-    # A substitution can build a merge target the guard does not see, such as `7`printf 9``.
-    if any("`" in token or "$(" in token or "<(" in token for token in tokens) and (
-        "pulls/" in command or any(True for _ in gh_pr_merges(tokens, cwd))
-    ):
+    # A substitution can build a merge target the guard does not see, such as
+    # `7$(printf 9)` or `pulls/$(echo 9)/merge`. The raw text is searched, since
+    # lexing splits unquoted `$(` apart.
+    if SUBSTITUTION.search(command) and ("/merge" in command or any(True for _ in gh_pr_merges(tokens, cwd))):
         return ("cannot verify the merge: its command contains a command substitution, which can change the "
                 "target; use literal values, and pass long text from a file.")
 

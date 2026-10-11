@@ -183,10 +183,22 @@ for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api -X POST /repos/o/r
                 'gh pr merge 7 --repo o/r --subject "$(git log -1 --format=%s)"',
                 "gh api -X GET `tea api --login other -X POST /repos/o/r/pulls/7/merge -d '{}'`",
                 'gh api -X GET `curl -X POST "$F/repos/o/r/pulls/7/merge"`',
-                'gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"'):
+                'gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"',
+                "gh pr merge --repo o/r 7$(printf 9) --squash",
+                """tea api -X POST /repos/o/r/pulls/$(echo 9)/merge -d '{"Do":"squash"}'""",
+                "gh pr merge --repo o/r 7`(printf 9)` --squash",
+                "gh pr merge 7 --repo o/r $(echo --repo o/x)"):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "command substitution" in message and not calls, (command, message)
+# A substitution in a request that is not a merge is left alone.
+assert not expect("""tea api -X POST /repos/o/r/pulls/7/reviews -d "$(jq -n '{event: 1}')\"""", 0)[0]
+# A `#` inside a word is not a comment, so the rest of the line is still checked.
+for command in ("gh pr merge 7 --repo o/r --squash --subject title\\;#tag; gh pr merge 9 --repo o/r --squash",
+                "echo $(date)#; tea pr merge 12", "echo x\\ #; tea pr merge 12"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2, (command, message)
 # Comments and heredoc bodies with apostrophes still parse; an unparsable command that may merge is refused.
 assert not expect("cat > /tmp/msg <<'EOF'\nfix: guard merges\nIt's needed\nEOF", 0)[0]
 expect("gh pr merge 7 --repo o/r --squash  # don't delete the branch", 0)
