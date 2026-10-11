@@ -180,6 +180,8 @@ _, message = hook("GITEA_TOKEN=synthetic-value tea api -X POST /repos/o/r/pulls/
 assert "the GITEA_TOKEN assignment could point tea" in message and "synthetic-value" not in message, message
 _, message = hook("tea api --login=synthetic-login -X POST /repos/o/r/pulls/7/merge")
 assert "`--login`" in message and "synthetic-login" not in message, message
+# Quoted text such as a merge title is not read as tea options.
+expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash","MergeTitleField":"Fix login -r redirect"}'""", 0)
 # tea and its options inside a quoted or substituted command are seen too.
 for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"',
                 'bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"'):

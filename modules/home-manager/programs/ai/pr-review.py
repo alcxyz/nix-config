@@ -1196,11 +1196,15 @@ def cli_merges(tokens):
 
 
 def shell_words(tokens):
-    """Return the tokens and the words inside them, so quoted or substituted commands are seen too."""
+    """Return the tokens and the words of commands nested in them, such as `$(tea ...)` or `bash -c "tea ..."`.
+
+    Other quoted text, such as a JSON body or a merge title, stays one word.
+    """
     words = list(tokens)
     for token in tokens:
-        if any(character.isspace() or character in "$`" for character in token):
-            words.extend(word.strip("\"'") for word in re.split(r"[\s;&|()`$]+", token))
+        inner = [word.strip("\"'") for word in re.split(r"[\s;&|()`$]+", token)]
+        if "$(" in token or "`" in token or (len(inner) > 1 and "tea" in map(os.path.basename, inner)):
+            words.extend(inner)
     return [word for word in words if word]
 
 
