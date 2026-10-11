@@ -59,6 +59,8 @@ in {
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
 
     "${configDir}/modules/home-manager/programs/ai/default.nix"
+    # Skills that call programs.ai's commands (nix-secrets ADR-0016).
+    inputs.nix-secrets.homeManagerModules.agentSkills
     "${configDir}/modules/home-manager/programs/moonlight-wolf-client/default.nix"
     "${configDir}/modules/home-manager/programs/umu-apps/default.nix"
     "${configDir}/modules/home-manager/programs/stashdb-pop/default.nix"

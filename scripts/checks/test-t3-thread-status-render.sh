@@ -14,7 +14,7 @@ fail() {
 # The Nix wrapper prepends these settings; do the same here.
 {
   echo 'set -euo pipefail'
-  echo "status_card=$PWD/$dir/skills/t3-thread-status/card.html"
+  echo "status_card=$PWD/$dir/t3-thread-status-card.html"
   cat "$dir/t3-page.sh" "$dir/t3-thread-status-render.sh"
 } >"$tmp/render"
 render() { bash "$tmp/render" "$@"; }

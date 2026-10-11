@@ -12,6 +12,10 @@ secret wiring details, and sensitive implementation notes in the private
 
 Do not move sensitive material to `nix-packages`; that repository is public too.
 
+Agent skills (`SKILL.md` files) live in the private nix-secrets
+`shared/skills/` (nix-secrets ADR-0016), not here; this repository keeps the
+commands they call, their bundled assets and checks (ADR-0091).
+
 ## Hosts and deploys
 
 Work on repositories and manage every host from `xyz` (or the Mac). The servers

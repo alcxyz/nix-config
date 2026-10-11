@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -114,14 +114,15 @@ deadline inside the 120-second hook timeout. The hook also matches Forgejo MCP
 tools and checks `merge_pull_request` like other merges, from its structured
 arguments (ADR-0081); other MCP tools pass. The guard and `pr-review` share one script.
 
-`programs.ai` also installs a `pr-review` skill for both clients, as ADR-0091
-deploys skills. It is the one full copy of the agent procedure: running,
-reviewer depth, findings, fix rounds with `--response`, outcomes, skips and
-failures. The global agent rules keep only the requirement and point to the
-skill, and the guard's message is a self-sufficient summary that also points
-to it. The procedure had drifted across the rules, a workflow guide and the
-guard's message, for example on low-severity findings, while the rules alone
-cost every session in both clients its full text.
+A `pr-review` skill for both clients, held in nix-secrets `shared/skills/`
+since 2026-10-11 (ADR-0091's last amendment), is the one full copy of the
+agent procedure: running, reviewer depth, findings, fix rounds with
+`--response`, outcomes, skips and failures. The global agent rules keep only
+the requirement and point to the skill, and the guard's message is a
+self-sufficient summary that also points to it. The procedure had drifted
+across the rules, a workflow guide and the guard's message, for example on
+low-severity findings, while the rules alone cost every session in both
+clients its full text.
 
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).

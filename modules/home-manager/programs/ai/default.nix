@@ -153,7 +153,7 @@ with lib; let
     name = "t3-thread-overview-render";
     runtimeInputs = [pkgs.jq];
     text = ''
-      overview_template=${./skills/t3-thread-overview/template.html}
+      overview_template=${./t3-thread-overview.html}
       ${builtins.readFile ./t3-page.sh}
       ${builtins.readFile ./t3-thread-overview-render.sh}
     '';
@@ -162,7 +162,7 @@ with lib; let
     name = "t3-thread-status-render";
     runtimeInputs = [pkgs.jq];
     text = ''
-      status_card=${./skills/t3-thread-status/card.html}
+      status_card=${./t3-thread-status-card.html}
       ${builtins.readFile ./t3-page.sh}
       ${builtins.readFile ./t3-thread-status-render.sh}
     '';
@@ -322,17 +322,9 @@ in {
 
     home.packages = [agentJob prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender];
 
-    # Skills shared by both clients (ADR-0091).
-    home.file.".claude/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
-    home.file.".codex/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
-    home.file.".claude/skills/t3-thread-status".source = ./skills/t3-thread-status;
-    home.file.".codex/skills/t3-thread-status".source = ./skills/t3-thread-status;
-    home.file.".claude/skills/long-running-jobs".source = ./skills/long-running-jobs;
-    home.file.".codex/skills/long-running-jobs".source = ./skills/long-running-jobs;
-    home.file.".claude/skills/dispatch-thread".source = ./skills/dispatch-thread;
-    home.file.".codex/skills/dispatch-thread".source = ./skills/dispatch-thread;
-    home.file.".claude/skills/pr-review".source = ./skills/pr-review;
-    home.file.".codex/skills/pr-review".source = ./skills/pr-review;
+    # The agent skills that call these commands live in nix-secrets
+    # shared/skills and are linked by its agentSkills module (nix-secrets
+    # ADR-0016, amended 2026-10-11).
 
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file

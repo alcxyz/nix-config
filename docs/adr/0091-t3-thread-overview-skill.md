@@ -1,8 +1,9 @@
 # ADR-0091: Deploy a T3 thread overview skill that reads T3 state directly
 
 **Status:** Accepted
-**Date:** 2026-10-10 (amended 2026-10-11 for #631)
-**Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`
+**Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets)
+**Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
+the user modules that enable `programs.ai`
 
 ## Context
 
@@ -45,8 +46,8 @@ against a fixture database.
 
 A T3 update that renames these fields breaks the fast path loudly rather than
 silently, and costs only the fallback's extra calls until the query is
-updated. The skill is the first one this repository deploys; skills that do
-not need packaging can follow the same `home.file` pattern.
+updated. The skill was the first one this repository deployed; skills now live
+in nix-secrets (see the last amendment).
 
 ## Amendment: shared thread facts (#631)
 
@@ -76,3 +77,24 @@ all. `programs.ai` therefore also installs `t3-thread-status`, a
 The status command depends on the same T3 internals, plus each thread's
 `worktreePath`, `branch` and message text, and checks them the same way: a
 missing field fails loudly (exit 3) and the skill falls back to T3's MCP tools.
+
+## Amendment: skills live in nix-secrets
+
+The skills this ADR introduced (`t3-thread-overview`, `t3-thread-status`) and
+the others that followed its `home.file` pattern (`long-running-jobs`,
+`dispatch-thread`, `pr-review`) move to the private nix-secrets
+`shared/skills/`, under nix-secrets ADR-0016's 2026-10-11 amendment. The owner
+prefers not to publish agent procedures while they change daily, and keeping
+them private removes the need to vet every edit for private detail.
+
+- nix-secrets' `agentSkills` Home Manager module links each skill for both
+  clients from the local checkout, like `~/AGENTS.md`. The user modules that
+  enable `programs.ai` (xyz and xps) import it beside `programs.ai`, so skills
+  reach only hosts that have the commands they call, as before.
+  `programs.ai` no longer installs skills.
+- The commands, their SQL, the HTML templates they bundle and their checks stay
+  here. The templates move out of the skill directories, to
+  `t3-thread-overview.html` and `t3-thread-status-card.html` beside their
+  render scripts.
+- New skills start in nix-secrets. Earlier versions remain in this repository's
+  history; they hold generic procedures, so no history rewrite is planned.

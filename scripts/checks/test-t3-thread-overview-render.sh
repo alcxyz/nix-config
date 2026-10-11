@@ -19,7 +19,7 @@ render_with() {
     cat "$dir/t3-page.sh" "$dir/t3-thread-overview-render.sh"
   } >"$tmp/render"
 }
-render_with "$PWD/$dir/skills/t3-thread-overview/template.html"
+render_with "$PWD/$dir/t3-thread-overview.html"
 
 # Hostile text in titles and summaries must not close the script element.
 cat >"$tmp/report.json" <<'JSON'
@@ -136,7 +136,7 @@ for template in '/*REPORT-START*/{}/*REPORT-END*//*REPORT-END*/' '/*REPORT-END*/
   bash "$tmp/render" "$tmp/report.json" "$tmp/out.html" 2>/dev/null || status=$?
   [[ "$status" == 70 ]] || fail "template $template exited $status"
 done
-render_with "$PWD/$dir/skills/t3-thread-overview/template.html"
+render_with "$PWD/$dir/t3-thread-overview.html"
 
 # Usage errors exit 64.
 status=0
