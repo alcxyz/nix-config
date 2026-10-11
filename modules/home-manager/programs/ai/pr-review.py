@@ -25,9 +25,9 @@ justified. Otherwise, or with --full, it reviews the whole PR.
 As a hook, Claude Code and Codex CLI pass the pending shell command as JSON on
 stdin (tool_input.command). Merges are recognised as `gh pr merge`, `gh api`
 calls to GitHub's pulls/N/merge endpoint, REST calls to a Forgejo/GitHub
-.../pulls/N/merge URL, `fj pr merge`, and the Forgejo MCP tool
-merge_pull_request (ADR-0081); `tea` merges are refused. Other Forgejo MCP
-tools pass. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
+.../pulls/N/merge URL (including `tea api`), and the Forgejo MCP tool
+merge_pull_request (ADR-0081); `tea` and `fj` merge commands are refused. Other
+Forgejo MCP tools pass. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
 instead of guessing. This is an accident guard for agent sessions, not a
 security boundary.
 """
@@ -101,12 +101,13 @@ API_MERGE = re.compile(
     r"(?:https?://(?P<host>[^/\s\"']+))?/*(?:api/v\d+/)?repos/"
     r"(?P<owner>[^/\s\"']+)/(?P<repo>[^/\s\"']+)/pulls/(?P<number>[^/\s\"']+)/merge\b"
 )
-# fj merges: flags that take a value, and accepted PR references.
-FJ_VALUE_FLAGS = {"-H", "--host", "-C", "--cwd", "--style", "-R", "--remote", "-M", "--method",
-                  "-t", "--title", "-m", "--message"}
-FJ_PR = re.compile(
-    r"^(?:(?P<owner>[A-Za-z0-9][A-Za-z0-9_.-]*)/(?P<repo>[A-Za-z0-9][A-Za-z0-9_.-]*))?#?(?P<number>\d+)$"
-)
+# The shell merge agents are pointed to: a REST merge through tea's stored login.
+TEA_API_MERGE = "`tea api -X POST /repos/owner/repo/pulls/N/merge` with a literal path"
+# tea api options that choose the login or repository, so the instance a merge
+# goes to could differ from the one the guard checks.
+TEA_TARGET_FLAGS = {"-l", "--login", "-R", "--remote", "-r", "--repo"}
+# Inline assignments that give tea another login or configuration.
+TEA_ASSIGNMENT = re.compile(r"^(?:GITEA_\w*|XDG_CONFIG_HOME)=")
 MCP_PREFIX = "mcp__forgejo__"
 MCP_MERGE = "merge_pull_request"
 # Arguments an agent's MCP merge may set; force and scheduled merges only as false.
@@ -1151,33 +1152,23 @@ def cli_calls(tokens, program, value_flags):
 
 
 def cli_merges(tokens):
-    """Yield (description, PR or None, problem) for each `fj` or `tea` merge."""
-    # A call that mentions a merge in a shape the parser does not expect (an
-    # unknown option with a value, extra arguments) is blocked, not let through.
-    for words, flags in cli_calls(tokens, "fj", FJ_VALUE_FLAGS):
-        if "pr" not in words or "merge" not in words:
-            continue
-        ref = "the PR (fj pr merge " + " ".join(words[2:3]) + ")"
-        if words[:2] != ["pr", "merge"] or len(words) > 3:
-            problem = "use the form `fj pr merge owner/repo#N` with only the options it documents"
-            if words[:2] == ["pr", "merge"]:
-                problem += f" (it read the arguments as: {' '.join(words[2:])})"
-            yield ref, None, problem
-            continue
-        host = (flags.get("-H") or flags.get("--host") or "").removeprefix("https://").rstrip("/")
-        match = FJ_PR.match(words[2]) if len(words) > 2 else None
-        if host and host not in FORGEJO_REMOTE_HOSTS:
-            yield ref, None, f"only {FORGEJO_URL} is supported for Forgejo merges"
-        elif not match or not match["owner"] or "-R" in flags or "--remote" in flags:
-            yield ref, None, "name the PR as a literal owner/repo#N, without --remote"
-        else:
-            yield ref, PR("forgejo", FORGEJO_URL, match["owner"], match["repo"], match["number"]), None
-
+    """Yield (description, problem) for each `tea` or `fj` merge command; all are refused."""
     # tea resolves --repo as a local checkout when such a path exists, so the
-    # guard cannot know which repository it merges; its merges are refused.
+    # guard cannot know which repository it merges.
     for words, _flags in cli_calls(tokens, "tea", set()):
         if {"pulls", "pull", "pr"} & set(words) and {"merge", "m"} & set(words):
-            yield "the PR (tea pulls merge)", None, "tea merges are not verified; use `fj pr merge owner/repo#N`"
+            yield "the PR (tea pulls merge)", f"tea merge commands are not verified; use {TEA_API_MERGE}"
+    # fj is no longer an agent client (#616), so its merges are refused rather than parsed.
+    for words, _flags in cli_calls(tokens, "fj", set()):
+        if "pr" in words and "merge" in words:
+            yield "the PR (fj pr merge)", f"fj merges are not verified; use {TEA_API_MERGE}"
+
+
+def tea_retargeted(tokens):
+    """Return whether tea may use another login or instance than its default for a `tea api` call."""
+    if any(TEA_ASSIGNMENT.match(token) for token in tokens):
+        return True
+    return any(words[:1] == ["api"] and flags for words, flags in cli_calls(tokens, "tea", TEA_TARGET_FLAGS))
 
 
 def mcp_check(tool, arguments):
@@ -1216,7 +1207,7 @@ def mcp_merge_check(arguments):
         path = os.path.join(state, f"{client}-managed.json")
         if not state or "forgejo" not in managed_servers(path):
             return (f"the `forgejo` MCP server for {client} is not the one programs.ai manages ({path}), so the "
-                    "merge target cannot be verified; merge with `fj pr merge owner/repo#N`.")
+                    f"merge target cannot be verified; merge with {TEA_API_MERGE}.")
     owner, repo, index = arguments.get("owner"), arguments.get("repo"), arguments.get("index")
     if isinstance(index, float) and index.is_integer():
         index = int(index)
@@ -1235,14 +1226,8 @@ def guard_check(command, cwd):
         return None
     tokens = tokenize(command)
 
-    # Every fj/tea merge must pass, and does not exempt a gh or REST merge in the same command.
-    for ref, pr, problem in cli_merges(tokens):
-        if pr is None:
-            return f"cannot verify {ref}: {problem}."
-        info = pr_info(pr)
-        problem = review_problem(comment_bodies(pr), info["head"], info["base"])
-        if problem:
-            return f"{pr} {problem}."
+    for ref, problem in cli_merges(tokens):
+        return f"cannot verify {ref}: {problem}."
 
     found = gh_pr_merge(tokens, cwd)
     if found:
@@ -1266,6 +1251,10 @@ def guard_check(command, cwd):
     owner, repo, number = match["owner"], match["repo"], match["number"]
     if not all(LITERAL.match(part) for part in (owner, repo, number)) or not number.isdigit():
         return f"cannot verify {owner}/{repo}#{number}: use a literal owner, repository and PR number in the merge call."
+    # A path without a host is checked on FORGEJO_URL, which matches tea's default login only.
+    if tea_retargeted(tokens):
+        return (f"cannot verify {owner}/{repo}#{number}: give `tea api` a literal path, without "
+                "--login, --remote, --repo or GITEA_*/XDG_CONFIG_HOME assignments.")
 
     host = match["host"]
     is_gh_api = any(

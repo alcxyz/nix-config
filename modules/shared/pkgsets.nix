@@ -154,7 +154,6 @@ in rec {
       git
       git-remote-gcrypt
       forge-mirror
-      forgejo-cli
       tea
       gh
       gh-dash
