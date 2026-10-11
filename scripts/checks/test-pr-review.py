@@ -153,10 +153,14 @@ expect("""tea api -X GET /repos/o/r/pulls/9; tea api -X POST /repos/o/r/pulls/9/
 # A newline ends a gh merge's options, so a later --repo is not read as its own.
 seen, _ = expect("gh pr merge 5 --repo o/a --squash\ngh pr merge --repo o/reviewed --squash", 2)
 assert seen[0][0][3:6] == ["5", "--repo", "o/a"], seen
-# A path without a host is checked on GitHub and on Forgejo when both clients are in the command.
+# A path is checked on GitHub only when it is an argument of `gh api`; an
+# unrelated gh api call does not move another client's merge to GitHub.
 seen, _ = expect("gh api user && tea api -X POST /repos/o/r/pulls/7/merge", 0)
 assert any(isinstance(call[0], review.PR) and call[0].forge == "forgejo" for call in seen), seen
-assert any(isinstance(call[0], list) and call[0][:2] == ["gh", "api"] for call in seen), seen
+seen, _ = expect('gh api user && curl -X POST "$FORGEJO/api/v1/repos/o/r/pulls/9/merge"', 2)
+assert any(isinstance(call[0], review.PR) and call[0].forge == "forgejo" for call in seen), seen
+seen, _ = expect("gh api user; gh api -X PUT repos/o/r/pulls/7/merge", 0)
+assert not any(isinstance(call[0], review.PR) for call in seen), seen
 # tea settings do not affect merges through other clients.
 expect("GITEA_TOKEN=x curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge", 0)
 assert not expect("fj pr view o/r#7", 0)[0]

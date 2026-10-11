@@ -107,9 +107,9 @@ per change to take effect. The guard recognises `gh pr merge`, GitHub `pulls/N/m
 REST merges, including `tea api` calls, and refuses `tea` and `fj` merge commands.
 It checks each merge in a command on its own and does not read the HTTP
 method, so any request to a merge path is checked, a GET included. A path
-without a host is checked on GitHub when the command calls `gh api`, and on the
-Forgejo `url` when it calls `tea` or no `gh api`; any `tea` call in the command
-that could pick another login blocks it. It blocks them unless a review comment names the PR's current head
+given to `gh api` is checked on GitHub, and any other path on its own host or,
+without one, on the Forgejo `url`; any `tea` call in the command that could
+pick another login blocks a Forgejo check. It blocks them unless a review comment names the PR's current head
 commit and target branch, so new commits or a retargeted PR need a new review.
 The comment's mode follows the pinned prefix, so older guards still accept it;
 the guard does not check the chain of rounds, which `run` enforces from local

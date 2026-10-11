@@ -1226,34 +1226,30 @@ def rest_merge_problem(match, tokens):
     """Return None when the REST merge path at match targets a reviewed PR, otherwise a reason to block.
 
     The HTTP method is not read: a request to a merge path is checked as a merge.
-    A path without a host is checked on every forge a client in the command
-    could send it to: GitHub when the command calls `gh api`, and FORGEJO_URL
-    unless `gh api` is its only client (a call to tea counts as another).
+    A path that is an argument of `gh api`, or on api.github.com, is checked on
+    GitHub; any other path on its own host, or FORGEJO_URL without one.
     """
     owner, repo, number = match["owner"], match["repo"], match["number"]
     if not all(LITERAL.match(part) for part in (owner, repo, number)) or not number.isdigit():
         return f"cannot verify {owner}/{repo}#{number}: use a literal owner, repository and PR number in the merge call."
     host = match["host"]
-    gh_api = any(os.path.basename(tokens[i]) == "gh" and tokens[i + 1] == "api" for i in range(len(tokens) - 1))
-    tea = any(os.path.basename(token) == "tea" for token in tokens)
-    prs = []
-    if host == "api.github.com" or gh_api:
+    gh_api_arguments = [
+        word for words, _flags in cli_calls(tokens, "gh", set()) if words[:1] == ["api"] for word in words[1:]
+    ]
+    if host == "api.github.com" or any(match.group(0) in word for word in gh_api_arguments):
         problem = github_merge_problem(owner, repo, number, host, tokens)
         if problem:
             return problem
-        prs.append(PR("github", "github.com", owner, repo, number))
-    if host != "api.github.com" and (not gh_api or tea):
+        pr = PR("github", "github.com", owner, repo, number)
+    else:
         # FORGEJO_URL matches tea's default login only.
-        if tea and tea_retargeted(tokens):
+        if any(os.path.basename(token) == "tea" for token in tokens) and tea_retargeted(tokens):
             return (f"cannot verify {owner}/{repo}#{number}: give `tea api` a literal path, without "
                     "--login, --remote, --repo, `tea login` or GITEA_*, HOME or XDG_CONFIG_HOME settings.")
-        prs.append(PR("forgejo", (f"https://{host}" if host else FORGEJO_URL).rstrip("/"), owner, repo, number))
-    for pr in prs:
-        info = pr_info(pr)
-        problem = review_problem(comment_bodies(pr), info["head"], info["base"])
-        if problem:
-            return f"{pr} {problem}."
-    return None
+        pr = PR("forgejo", (f"https://{host}" if host else FORGEJO_URL).rstrip("/"), owner, repo, number)
+    info = pr_info(pr)
+    problem = review_problem(comment_bodies(pr), info["head"], info["base"])
+    return f"{pr} {problem}." if problem else None
 
 
 def mcp_check(tool, arguments):
