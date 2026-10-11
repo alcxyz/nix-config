@@ -173,9 +173,19 @@ assert forges(seen) == {"github"}, seen
 # A command substitution inside a gh api argument is checked on Forgejo too.
 seen, _ = expect('gh api -X GET "repos/o/r/pulls/7?x=$(tea api -X POST /repos/o/r/pulls/7/merge)"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen
-# A refusal names the token that may retarget tea.
+# A refusal names what may retarget tea, without an assignment's value.
 _, message = hook("tea api -X POST /repos/o/r/pulls/7/merge && git branch -r")
 assert "`-r` could point tea" in message, message
+_, message = hook("GITEA_TOKEN=synthetic-value tea api -X POST /repos/o/r/pulls/7/merge")
+assert "the GITEA_TOKEN assignment could point tea" in message and "synthetic-value" not in message, message
+_, message = hook("tea api --login=synthetic-login -X POST /repos/o/r/pulls/7/merge")
+assert "`--login`" in message and "synthetic-login" not in message, message
+# tea and its options inside a quoted or substituted command are seen too.
+for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"',
+                'bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "`--login`" in message, (command, message)
 # A gh word that is not a command, such as an option value, still adds the GitHub check.
 seen, _ = expect('curl -o gh api -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen

@@ -1195,18 +1195,33 @@ def cli_merges(tokens):
             yield "the PR (fj pr merge)", f"fj merges are not verified; use {TEA_API_MERGE}"
 
 
+def shell_words(tokens):
+    """Return the tokens and the words inside them, so quoted or substituted commands are seen too."""
+    words = list(tokens)
+    for token in tokens:
+        if any(character.isspace() or character in "$`" for character in token):
+            words.extend(word.strip("\"'") for word in re.split(r"[\s;&|()`$]+", token))
+    return [word for word in words if word]
+
+
 def tea_retarget(tokens):
-    """Return what may make tea use another login than its default, or None."""
+    """Return the name of what may make tea use another login than its default, or None.
+
+    Only names are returned, never values: an assignment may hold a token.
+    """
     for name in TEA_ENVIRONMENT:
         if os.environ.get(name):
             return f"{name} in the environment"
     # Which call uses a merge path is not traced, and a quoted separator reads
     # as a real one, so the options are looked for in the whole command.
-    for token in tokens:
-        name = token.partition("=")[0]
-        attached = not token.startswith("--") and len(token) > 2 and token[:2] in TEA_TARGET_FLAGS
-        if TEA_ASSIGNMENT.match(token) or name in TEA_TARGET_FLAGS or attached or token in TEA_LOGIN_COMMANDS:
-            return f"`{token}`"
+    for word in shell_words(tokens):
+        name = word.partition("=")[0]
+        if TEA_ASSIGNMENT.match(word):
+            return f"the {name} assignment"
+        if name in TEA_TARGET_FLAGS or word in TEA_LOGIN_COMMANDS:
+            return f"`{name}`"
+        if not word.startswith("--") and len(word) > 2 and word[:2] in TEA_TARGET_FLAGS:
+            return f"`{word[:2]}`"
     return None
 
 
@@ -1282,7 +1297,8 @@ def rest_merge_problem(match, tokens):
         prs.append(PR("github", "github.com", owner, repo, number))
     if host != "api.github.com" and not (path and path <= gh_api_calls and not substituted):
         # FORGEJO_URL matches tea's default login only.
-        retarget = tea_retarget(tokens) if any(os.path.basename(token) == "tea" for token in tokens) else None
+        tea = any(os.path.basename(word) == "tea" for word in shell_words(tokens))
+        retarget = tea_retarget(tokens) if tea else None
         if retarget:
             return (f"cannot verify {owner}/{repo}#{number}: {retarget} could point tea at another login; give "
                     "`tea api` a literal path, without --login, --remote, --repo, `tea login` or GITEA_*, HOME "
