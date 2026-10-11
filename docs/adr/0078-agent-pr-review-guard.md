@@ -117,8 +117,9 @@ so the directory it runs in does not matter. A command with a command
 substitution is refused when it merges, has a `pulls/` path that is not a
 complete literal non-merge path, or has a `gh`, `tea` or `fj` pull request
 call whose subcommand is not a known non-merging one, because the substitution
-can build the target; a command that does not parse is refused when it may
-merge. Quoted or substituted text that mentions `gh`, `fj` or
+can build the target. A write request (`-X`, `-d`, `-f` and similar options)
+whose API path after `repos/` holds a variable or substitution is refused, and
+a command that does not parse is refused when it may merge. Quoted or substituted text that mentions `gh`, `fj` or
 `tea` is read as a command, so a commit message or PR body that quotes a merge
 command must come from a file. The parser keeps no quoting, so a quoted
 separator reads as a real one; the checks lean towards blocking where that

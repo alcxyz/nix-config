@@ -222,6 +222,23 @@ for command in ('R=alcxyz/nix-config; tea api -X POST "/repos/$R/pulls/622/merge
     calls.clear()
     code, message = hook(command)
     assert code == 2 and not calls, (command, message)
+# Quoting or a line continuation that splits `merge` does not skip the guard.
+for command in ("gh api -X PUT repos/o/r/pulls/9/mer''ge", 'gh pr mer"ge" 9 --repo o/r',
+                "curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/mer\\\nge"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2, (command, message)
+# A write request with a path built at run time is refused, wherever the variable sits.
+for command in ("M=merge; tea api -X POST /repos/o/r/pulls/7/$M -d '{}'",
+                "for a in merge; do tea api -X POST /repos/o/r/pulls/7/$a; done",
+                "tea api -X POST /repos/o/r/$(printf pu%s lls)/9/merge",
+                "export R=o/r\nbash -c 'tea api -X POST /repos/o/r/pulls/7/merge; tea api -X POST /repos/$R/pulls/9/merge'"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
+# Reading with a variable path, or a variable path to a file named merge, is not a merge.
+assert not expect("tea api /repos/$R/issues/5", 0)[0]
+assert not expect('bash "$PWD/modules/home-manager/programs/ai/merge-settings.sh"', 0)[0]
 # A substitution in a request that is not a merge is left alone.
 assert not expect("""tea api -X POST /repos/o/r/pulls/7/reviews -d "$(jq -n '{event: 1}')\"""", 0)[0]
 # A `#` inside a word is not a comment, so the rest of the line is still checked.

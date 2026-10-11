@@ -91,9 +91,14 @@ PUNCTUATION = ";&|()`\n"
 HEREDOC = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 # A command or process substitution anywhere in the text.
 SUBSTITUTION = re.compile(r"`|\$\(|[<>]\(")
-# A `/merge` path segment, and the signs that a word holding one is built at run time.
-MERGE_SEGMENT = re.compile(r"/merge\b")
-NON_LITERAL_HINT = re.compile(r"pulls|[$`]")
+# Words that make a command worth parsing further.
+GATE_WORDS = ("merge", "tea", "repos/")
+# Options that make an API request write, so it could merge.
+WRITE_OPTION = re.compile(
+    r"^(?:-X|--method|--request|-d|--data[\w-]*|-f|-F|--field|--raw-field|--input|-T|--upload-file)(?:=|$)|^-X\S"
+)
+# An API path with a variable or substitution after `repos/`.
+DYNAMIC_API_PATH = re.compile(r"repos/[^\s'\"]*[$`]")
 # A complete literal pulls path that is not a merge, such as `pulls/7/reviews`.
 LITERAL_PULLS_PATH = re.compile(r"pulls/\d+(?:/(?!merge\b)[A-Za-z_]+)*(?=[\s\"'?]|$)")
 # Pull request subcommands of gh, tea and fj that do not merge.
@@ -1487,8 +1492,6 @@ def mcp_merge_check(arguments):
 
 def guard_check(command, cwd):
     """Return None when the command may run, otherwise a reason to block."""
-    if "merge" not in command and "tea" not in command and not SUBSTITUTION.search(command):
-        return None
     tokens = split_command(command)
     if tokens is None:
         # Without its quoting, a merge's arguments cannot be told apart.
@@ -1496,6 +1499,11 @@ def guard_check(command, cwd):
             return ("cannot verify the command: it does not parse, for example because of an unclosed quote; "
                     "fix it, or pass long text from a file.")
         tokens = command.split()
+    # The parsed words are read too: quotes or a line continuation can split
+    # `merge` in the raw text.
+    text = " ".join(tokens)
+    if not any(word in command or word in text for word in GATE_WORDS) and not SUBSTITUTION.search(command):
+        return None
     # A substitution can build a merge target the guard does not see, such as
     # `7$(printf 9)` or `pulls/$(echo 9)/merge`. The raw text is searched, since
     # lexing splits unquoted `$(` apart.
@@ -1507,15 +1515,15 @@ def guard_check(command, cwd):
     ):
         return ("cannot verify the merge: its command contains a command substitution, which can change the "
                 "target; use literal values, and pass long text from a file.")
-    # A merge path built from variables or split by quoting cannot be checked.
-    for token in tokens:
-        if MERGE_SEGMENT.search(token) and NON_LITERAL_HINT.search(token):
-            match = API_MERGE.search(token)
-            if not match or not all(LITERAL.match(part) for part in (match["owner"], match["repo"], match["number"])):
-                return ("cannot verify the merge: its path is not literal; use a literal owner, repository and "
-                        "PR number, as in /repos/owner/repo/pulls/N/merge.")
-
+    # A write request whose API path is built at run time could be a merge
+    # the guard cannot see, such as /repos/$R/pulls/7/merge or pulls/7/$M.
     words = shell_words(tokens)
+    if any(WRITE_OPTION.match(word) for word in words) and (
+        DYNAMIC_API_PATH.search(command) or DYNAMIC_API_PATH.search(" ".join(words))
+    ):
+        return ("cannot verify the request: its API path is built at run time; use a literal owner, repository "
+                "and PR number, as in /repos/owner/repo/pulls/N/merge.")
+
     for ref, problem in cli_merges(words):
         return f"cannot verify {ref}: {problem}."
     nested = words[len(tokens):]
