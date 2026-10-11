@@ -144,6 +144,16 @@ with lib; let
       ${builtins.readFile ./t3-thread-overview-render.sh}
     '';
   };
+  # Runs work that must outlive an agent session as a transient systemd user
+  # unit (nix-config #612). No runtimeInputs: the job inherits the caller's
+  # PATH unchanged, and systemd-run must match the running user manager.
+  agentJob = pkgs.writeShellApplication {
+    name = "agent-job";
+    text = ''
+      record_path=${pkgs.coreutils}/bin
+      ${builtins.readFile ./agent-job.sh}
+    '';
+  };
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
       hooks = prReviewHooks // t3RestartNoticeHooks;
@@ -287,11 +297,13 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender];
+    home.packages = [agentJob prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender];
 
     # Skills shared by both clients (ADR-0091).
     home.file.".claude/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
     home.file.".codex/skills/t3-thread-overview".source = ./skills/t3-thread-overview;
+    home.file.".claude/skills/long-running-jobs".source = ./skills/long-running-jobs;
+    home.file.".codex/skills/long-running-jobs".source = ./skills/long-running-jobs;
 
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file
