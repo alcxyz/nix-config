@@ -1262,7 +1262,8 @@ def gh_pr_merges(tokens, cwd):
     """Yield (selector args, cwd, problem, sources) for each `gh pr merge`.
 
     problem is None when it can be looked up; sources lists the positions of
-    its argument words, up to the next separator.
+    the words it reads as the selector, repository and options, not the
+    message values those options take.
     """
     for index in range(len(tokens) - 2):
         if os.path.basename(tokens[index]) != "gh" or tokens[index + 1:index + 3] != ["pr", "merge"]:
@@ -1275,6 +1276,9 @@ def gh_pr_merges(tokens, cwd):
             position += 1
             if token in SEPARATORS:
                 break
+            # Every word the parser reads as a word counts; values it skips as
+            # a message (--subject, --body) do not steer the target.
+            sources.append(position - 1)
             redirection = REDIRECTION.match(token)
             if redirection:
                 # Quoting is not kept, so before the selector this could also be
@@ -1291,6 +1295,7 @@ def gh_pr_merges(tokens, cwd):
                     repo = token.split("=", 1)[1]
                 elif position < len(tokens):
                     repo = tokens[position]
+                    sources.append(position)
                     position += 1
             elif token in GH_MERGE_VALUE_FLAGS:
                 position += 1
@@ -1302,10 +1307,6 @@ def gh_pr_merges(tokens, cwd):
         if problem is None and not (selector and repo):
             problem = "name the PR and its repository, as in `gh pr merge N --repo owner/repo`"
         view = [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else [])
-        for position in range(index + 3, len(tokens)):
-            if tokens[position] in SEPARATORS:
-                break
-            sources.append(position)
         yield view, merge_cwd, problem, sources
 
 
@@ -1716,7 +1717,8 @@ def guard_check_parsed(command, cwd, comments):
         # Removing leftover quotes is for detection only; a word it changed
         # could be read as another selector, repository or option.
         if any(tokens[position] != parsed[position] for position in sources):
-            return f"cannot verify {ref}: a quote inside one of the merge's arguments cannot be checked."
+            return (f"cannot verify {ref}: a quote inside its PR, repository or option words cannot be checked; "
+                    "quotes in --subject or --body values are fine.")
         # The hook's lookup does not see inline assignments, so they could point
         # the merge at another host or repository than the one checked.
         if any(token.startswith(("GH_HOST=", "GH_REPO=")) for token in tokens):

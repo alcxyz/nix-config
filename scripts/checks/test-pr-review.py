@@ -334,12 +334,15 @@ for command in ("bash -c 'gh api -X PUT \"$EP\" --input body.json'", 'gh >out ap
 for command in ("""gh pr merge "feature's-fix" --repo owner/repo --squash""",
                 """gh pr merge "feature's-fix" --repo owner/repo --squash --subject features-fix""",
                 """gh pr merge "feature's-fix" --repo o/r --squash && echo features-fix""",
-                """gh pr merge "'-t" -b 9 --repo o/r --squash"""):
+                """gh pr merge "'-t" -b 9 --repo o/r --squash""",
+                """gh pr merge --subject ";" "feature's-fix" --repo o/r --squash"""):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "quote inside" in message and not calls, (command, message)
 seen, _ = expect('gh api -X PUT /api/v1/repos/o/r/pulls/7/merge; curl -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen
+# A quote in a merge message does not matter.
+expect("""gh pr merge 7 --repo o/r --squash --subject "fix: don't drop the cache" --body 'Closes "x"'""", 0)
 # A client name that is not a command, and an option value for an api body, are not run-time commands.
 assert not expect('git clone https://github.com/cli/gh "$HOME/src/gh" && echo merge', 0)[0]
 assert not expect('gh api -X POST /repos/o/r/issues/5/comments --raw-field "$BODY"', 0)[0]
