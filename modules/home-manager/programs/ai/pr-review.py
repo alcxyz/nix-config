@@ -1640,6 +1640,7 @@ def guard_check_parsed(command, cwd, comments):
         tokens = command.split()
     # Quotes left inside words only matter to a nested shell (eval, bash -c,
     # xargs), which removes them again; read the words without them.
+    parsed = set(tokens) | {token.split("=", 1)[1] for token in tokens if "=" in token}
     tokens = [re.sub(r"[\"'\\]", "", token) for token in tokens]
     # A pull request subcommand from a variable could be merge: gh pr "$a" 9.
     words = shell_words(tokens)
@@ -1698,6 +1699,10 @@ def guard_check_parsed(command, cwd, comments):
         ref = "the PR (gh pr merge " + " ".join(view) + ")"
         if problem:
             return f"cannot verify {ref}: {problem}."
+        # Removing leftover quotes is for detection only; a selector or
+        # repository it changed would be looked up as another PR.
+        if any(word not in parsed for word in view if word != "--repo"):
+            return f"cannot verify {ref}: a quote inside the PR or repository name cannot be checked."
         # The hook's lookup does not see inline assignments, so they could point
         # the merge at another host or repository than the one checked.
         if any(token.startswith(("GH_HOST=", "GH_REPO=")) for token in tokens):
@@ -1717,7 +1722,9 @@ def guard_check_parsed(command, cwd, comments):
     # Repeated slashes, which servers may collapse, are collapsed here too.
     collapsed = re.sub(r"(?<!:)/{2,}", "/", command + "\n" + text)
     for match in [*API_MERGE.finditer(command), *API_MERGE.finditer(text), *API_MERGE.finditer(collapsed)]:
-        key = (match["host"], match["owner"], match["repo"], match["number"])
+        # Each spelling of a path is checked, so a later, shorter form of the
+        # same PR is attributed to its own client.
+        key = (match["host"], match["owner"], match["repo"], match["number"], match.group(0))
         if key in seen:
             continue
         seen.add(key)
