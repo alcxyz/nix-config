@@ -29,7 +29,8 @@ cat >"$tmp/report.json" <<'JSON'
    "prs": [{"url": "https://forge.invalid/pulls/1", "state": "merged"}, {"url": "https://forge.invalid/pulls/2", "state": "open"}],
    "progressPct": 40, "phase": "implementing", "owner": "agent", "goal": "Goal with <b>markup</b>",
    "nextAction": "Continue", "done": [], "remaining": [], "blocker": null, "flag": null,
-   "verdict": null, "verdictReason": null}]}
+   "verdict": null, "verdictReason": null,
+   "waitingOn": [{"kind": "monitor", "description": "pr-review run 1"}]}]}
 JSON
 bash "$tmp/render" "$tmp/report.json" "$tmp/page.html"
 [[ $(grep -c '</script>' "$tmp/page.html") == 1 ]] || fail "report text closed the script element"
@@ -73,6 +74,7 @@ bad_report "$(cat "$tmp/report.json" "$tmp/report.json")" "concatenated reports"
 bad_report '{"threads": []}' "missing generatedAt"
 bad_report '{"generatedAt": "x", "threads": [{"threadId": "a", "done": "one item"}]}' "string done list"
 bad_report '{"generatedAt": "x", "threads": [{"threadId": "a", "prs": {}}]}' "object prs"
+bad_report '{"generatedAt": "x", "threads": [{"threadId": "a", "waitingOn": "monitor"}]}' "string waitingOn"
 
 # A template without exactly one marker block, in order, is refused.
 printf '<script>/*REPORT-START*/{}/*REPORT-END*/ /*REPORT-START*/</script>\n' >"$tmp/twice.html"

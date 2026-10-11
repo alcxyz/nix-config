@@ -14,17 +14,28 @@ full procedure; the global rules keep only the requirement.
 
 ## 1. Run
 
-Once the PR is ready, start the review as an ordinary background command from
-any clone of the PR's repository:
+Once the PR is ready, start the review from any clone of the PR's
+repository:
 
 ```sh
 pr-review run <pr>
 ```
 
+In Claude Code, when you end your turn to wait for it, wait through the
+Monitor tool so T3 shows the thread as Waiting and does not settle it, as
+`long-running-jobs` describes under "Wait across a turn end". Start
+`pr-review run <pr> >"<log>" 2>&1; echo "exit $?" >"<log>.done"` as a
+background command with a `timeout` of 3600000, with `<log>` from `mktemp`.
+Then wait until `<log>.done` is non-empty with a Monitor and read the log. Do not run
+`pr-review` inside the Monitor itself: one that expires kills the run and loses
+the round. Otherwise run it in the foreground, or as a background command
+while you keep working in the same turn.
+
 - `<pr>` is a PR number, resolved through `origin` (`--remote <name>` for
   another remote), or a GitHub or Forgejo PR URL.
-- It takes several minutes. Do not use `agent-job` for it: you wait on it in
-  this session.
+- It takes several minutes. Each reviewer stops after 30 minutes, counted
+  from after the checkout, so a whole run can take longer. Do not use
+  `agent-job` for it: you wait on it in this session.
 - It picks the reviewers from the diff: a PR that only changes documentation
   files (`.md`, `.mdx`, `.rst`), at most 300 lines, gets the `light`
   reviewers; agent instructions, decision records and security-sensitive paths

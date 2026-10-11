@@ -99,13 +99,22 @@ if [ -z "$selected" ]; then
 fi
 
 # Every thread payload must carry the fields the query relies on; a missing
-# key would otherwise make settled threads look unsettled.
-if ! drift=$(run_sql "$selected" "SELECT count(*) FROM orchestration_v2_projection_threads WHERE json_type(payload_json, '\$.settledOverride') IS NULL OR json_type(payload_json, '\$.settledAt') IS NULL OR json_type(payload_json, '\$.lineage') IS NULL;"); then
+# key would otherwise make settled threads look unsettled, or waiting threads
+# look done.
+if ! drift=$(run_sql "$selected" "SELECT count(*) FROM orchestration_v2_projection_threads WHERE json_type(payload_json, '\$.settledOverride') IS NULL OR json_type(payload_json, '\$.settledAt') IS NULL OR json_type(payload_json, '\$.lineage') IS NULL OR json_type(payload_json, '\$.activeProviderThreadId') IS NULL;"); then
   echo "t3-thread-inventory: schema check failed on $selected" >&2
   exit 3
 fi
 if [ "$drift" != 0 ]; then
-  echo "t3-thread-inventory: $drift threads in $selected lack settlement or lineage fields; T3's schema has changed" >&2
+  echo "t3-thread-inventory: $drift threads in $selected lack settlement, lineage or provider fields; T3's schema has changed" >&2
+  exit 3
+fi
+if ! drift=$(run_sql "$selected" "SELECT count(*) FROM orchestration_v2_projection_provider_threads WHERE CASE WHEN json_valid(payload_json) THEN coalesce(json_type(payload_json, '\$.pendingBackgroundTasks'), '') <> 'array' ELSE 1 END;"); then
+  echo "t3-thread-inventory: schema check failed on $selected" >&2
+  exit 3
+fi
+if [ "$drift" != 0 ]; then
+  echo "t3-thread-inventory: $drift provider threads in $selected lack a background task list; T3's schema has changed" >&2
   exit 3
 fi
 
@@ -114,4 +123,4 @@ if ! rows=$(run_sql "$selected" -json <"$inventory_sql"); then
   exit 3
 fi
 jq --arg db "$selected" --argjson days "$days" \
-  '{database: $db, windowDays: $days, threads: map(.prs |= fromjson)}' <<<"${rows:-[]}"
+  '{database: $db, windowDays: $days, threads: map(.prs |= fromjson | .waitingOn |= fromjson)}' <<<"${rows:-[]}"

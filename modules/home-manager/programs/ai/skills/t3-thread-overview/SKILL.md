@@ -24,9 +24,16 @@ t3-thread-inventory --thread <calling-thread-id> --days 3
 
 It reads T3's state database read-only and prints `{database, windowDays,
 threads}`. Each row has `threadId, project, title, bucket` (`unsettled` or
-`recently-settled`), `settledAt, status, snoozedUntil, prs, createdAt,
-updatedAt`. Subagent, archived and deleted threads and the calling thread are
-left out. Use the user's window if they give one.
+`recently-settled`), `settledAt, status, snoozedUntil, prs, waitingOn,
+createdAt, updatedAt`. Subagent, archived and deleted threads and the calling
+thread are left out. Use the user's window if they give one.
+
+`waitingOn` lists the background work T3 counts for the thread, as
+`{kind, description}`: the provider's background tasks, running background
+tool calls and subagents, and pull request watches. Any kind but `command` (`monitor`, `subagent`,
+`background_task`) will wake the agent, so the thread is waiting, not done. A
+`command` is usually a server left running, or a wait the agent started
+without a Monitor; settling the thread ends it (nix-config #627).
 
 **Fallback.** If the command is missing or exits non-zero (2: no database, 3: T3's
 schema changed), say so in the reply and inventory through MCP instead. Give one
@@ -34,7 +41,8 @@ schema changed), say so in the reply and inventory through MCP instead. Give one
 `t3_project_list` with `limit: 100`, then for every project `t3_thread_list`
 with `{projectId, settled: false, includeSubagents: false, limit: 100}` and
 `{projectId, settled: true, includeSubagents: false, limit: 100}`, keeping
-settled threads whose `settledAt` falls inside the window. Every one of these
+settled threads whose `settledAt` falls inside the window, with `waitingOn`
+null since MCP does not show it. Every one of these
 calls pages: follow `nextCursor` until it is null. Settled lists are newest
 first, so a page whose threads were all updated before the window can end that
 project. Never load full list output into your own context.
@@ -70,7 +78,9 @@ Reader task (append the batch's rows as JSON):
 ## 3. Merge and check
 
 Join reader output to the inventory rows by `threadId`. The inventory is
-authoritative for `bucket`, `status`, dates and `prs`. Look again yourself only
+authoritative for `bucket`, `status`, dates, `prs` and `waitingOn`; the page
+groups a thread with held work as waiting, whatever its reader phase. Look
+again yourself only
 where something is off: an unsettled thread at 100%, a settled `follow-up`, a
 missing or malformed reader result. For those, read the thread's last few
 messages. Do not repeat the readers' work.
@@ -105,4 +115,7 @@ afterwards.
 
 The reader sees the page, so add only what it does not say: threads to settle
 or reopen, titles that no longer match their work, and whether the inventory
-fell back to MCP. Link threads as `[title](t3-thread://v1/<threadId>)`.
+fell back to MCP. For a thread that looks done but still runs a background
+`command`, say what settling would stop. The user can snooze a waiting thread
+to hide it until the agent finishes; settling it would stop the work. Link
+threads as `[title](t3-thread://v1/<threadId>)`.

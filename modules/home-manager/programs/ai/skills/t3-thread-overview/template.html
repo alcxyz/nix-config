@@ -76,7 +76,8 @@ const REPORT =
      "prs": [{"url": "https://example.invalid/pulls/1", "state": "open"}],
      "progressPct": 60, "phase": "awaiting-user", "owner": "user", "goal": "Ship the sample change.",
      "nextAction": "Approve the pending change.", "blocker": "Needs your approval.", "flag": null,
-     "done": ["First half shipped"], "remaining": ["Second half"], "verdict": null, "verdictReason": null},
+     "done": ["First half shipped"], "remaining": ["Second half"], "verdict": null, "verdictReason": null,
+     "waitingOn": [{"kind": "command", "description": "Local preview server"}]},
     {"threadId": "sample-2", "title": "Sample settled thread", "project": "example", "bucket": "recently-settled",
      "status": "completed", "updatedAt": "2026-10-09T10:00:00Z", "settledAt": "2026-10-09T10:00:00Z", "prs": [],
      "progressPct": 80, "phase": "done-not-settled", "owner": "user",
@@ -96,6 +97,11 @@ const PHASES = {
   "done-not-settled": { label: "Done · not settled", color: "var(--success)" },
 };
 const LIVE = new Set(["running", "starting", "queued", "preparing", "waiting"]);
+// Like T3, only a background `command` (a server, or a wait outside a Monitor)
+// lets the thread count as done; every other kind wakes the agent (#627).
+// Settled threads lost their session, so their work is not shown.
+const pendingOf = t => (t.bucket === "recently-settled" ? [] : (t.waitingOn || []).filter(w => w && typeof w.kind === "string"));
+const holds = t => pendingOf(t).some(w => w.kind !== "command");
 const NOW = new Date(REPORT.generatedAt);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const link = t => `t3-thread://v1/${t.threadId}`;
@@ -109,6 +115,7 @@ function ago(iso) {
 }
 function groupOf(t) {
   if (t.bucket === "recently-settled") return t.verdict === "done" ? "settled-done" : "settled-open";
+  if (holds(t)) return "waiting";
   if (t.phase === "done-not-settled") return "settle";
   return t.owner === "agent" ? "agent" : "user";
 }
@@ -124,7 +131,7 @@ app.insertAdjacentHTML("beforeend", `
   <div class="kpis">
     <div class="kpi"><div class="n">${unsettled.length}</div><div class="l">unsettled threads</div></div>
     <div class="kpi warn"><div class="n">${by("user").length}</div><div class="l">waiting on you</div></div>
-    <div class="kpi info"><div class="n">${by("agent").length}</div><div class="l">agent can continue</div></div>
+    <div class="kpi info"><div class="n">${by("agent").length + by("waiting").length}</div><div class="l">agent waiting or can continue</div></div>
     <div class="kpi ok"><div class="n">${by("settle").length}</div><div class="l">ready to settle</div></div>
     <div class="kpi bad"><div class="n">${by("settled-open").length}</div><div class="l">settled, maybe not done</div></div>
   </div>`);
@@ -147,6 +154,7 @@ function card(t) {
     `<span class="chip phase" style="background:${ph.color}">${esc(ph.label)}</span>`,
     LIVE.has(t.status) ? `<span class="chip live">${esc(t.status)}</span>` : "",
     `<span class="chip">${esc(t.project)}</span>`,
+    ...pendingOf(t).map(w => `<span class="chip${w.kind === "command" ? "" : " live"}">${w.kind === "command" ? "background" : "waiting"}: ${esc(w.description || w.kind)}</span>`),
     ...prs.map(p => `<a class="chip" href="${esc(p.url)}">open PR ${esc(String(p.url || "").split("/").pop())}</a>`),
   ].join("");
   const when = t.bucket === "recently-settled" ? `settled ${ago(t.settledAt)}` : `updated ${ago(t.updatedAt)}`;
@@ -172,6 +180,7 @@ function card(t) {
 const GROUPS = [
   ["user", "Waiting on you", "var(--warning)"],
   ["agent", "Agent can continue · needs a nudge", "var(--info)"],
+  ["waiting", "Agent waiting on background work · do not settle", "var(--info)"],
   ["settle", "Ready to settle", "var(--success)"],
   ["settled-open", `Settled in the last ${DAYS} days · maybe not done`, "var(--destructive)"],
 ];

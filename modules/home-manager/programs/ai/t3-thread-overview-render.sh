@@ -26,7 +26,7 @@ if ! json=$(jq -cs '
     and (.generatedAt | type) == "string"
     and (.threads | type) == "array"
     and all(.threads[]; type == "object" and (.threadId | type) == "string"
-      and (.prs | list) and (.done | list) and (.remaining | list)))
+      and (.prs | list) and (.done | list) and (.remaining | list) and (.waitingOn | list)))
   then .[0] else error("expected one {generatedAt, threads: [{threadId, ...}]} report") end
   # The page is passed to the preview and render tools whole, so drop what it
   # never shows: inventory timestamps and PRs that are no longer open.
