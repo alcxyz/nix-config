@@ -106,6 +106,12 @@ PR_PATH_SEGMENT = re.compile(r"(?:^|/)(?:pulls|merge)(?:$|[/?#])")
 DYNAMIC_API_PATH = re.compile(r"repos/\S*[$`]")
 # A complete literal pulls path that is not a merge, such as `pulls/7/reviews`.
 LITERAL_PULLS_PATH = re.compile(r"pulls/\d+(?:/(?!merge\b)[A-Za-z_]+)*(?=[\s\"'?]|$)")
+# Options of `tea api` and `gh api` that take a value, so the endpoint can be told from them.
+API_VALUE_FLAGS = {
+    "-X", "--method", "-d", "--data", "-f", "--field", "-F", "--Field", "-H", "--header", "-o", "--output",
+    "-l", "--login", "-r", "--repo", "-R", "--remote", "-q", "--jq", "-t", "--template", "--hostname",
+    "--input", "-p", "--preview", "--cache",
+}
 # Pull request subcommands of gh, tea and fj that do not merge.
 PR_SUBCOMMANDS = {
     "create", "c", "view", "list", "ls", "search", "status", "checks", "diff", "edit", "e", "comment",
@@ -1453,10 +1459,34 @@ def rest_merge_problem(match, tokens):
 
 
 def nonliteral_pr_subcommand(words):
-    """Return whether a call's word after `pr`/`pulls` holds a variable or substitution."""
+    """Return whether a call's command could be a pull request merge chosen at run time.
+
+    That is a first word with a variable or substitution (`gh $action 9`), or
+    one after `pr`/`pull`/`pulls` that comes before any literal known
+    subcommand (`tea pulls --repo o/r "$op" 9`).
+    """
+    if words and re.search(r"[$`]", words[0]):
+        return True
     for index, word in enumerate(words):
         if word in ("pr", "pull", "pulls"):
-            return index + 1 < len(words) and bool(re.search(r"[$`]", words[index + 1]))
+            for following in words[index + 1:]:
+                if following in PR_SUBCOMMANDS or following in ("merge", "m"):
+                    return False
+                if re.search(r"[$`]", following):
+                    return True
+            return False
+    return False
+
+
+def dynamic_api_endpoint(tokens):
+    """Return whether a `tea api` or `gh api` write request takes its endpoint from a variable or substitution."""
+    for client in ("tea", "gh"):
+        for words, _flags in cli_calls(tokens, client, API_VALUE_FLAGS):
+            # A variable host before a literal repos/ path is checked as a path.
+            if words[:1] == ["api"] and any(
+                re.search(r"^[$`]|\$\(", word) and "repos/" not in word for word in words[1:]
+            ):
+                return True
     return False
 
 
@@ -1580,6 +1610,11 @@ def guard_check_parsed(command, cwd, comments):
         if PR_PATH_SEGMENT.search(path) and re.search(r"[$`]", path):
             return ("cannot verify the request: its pull request path is built at run time; use a literal owner, "
                     "repository and PR number, as in /repos/owner/repo/pulls/N/merge.")
+    # A write request whose whole endpoint is a variable or substitution
+    # could be a merge: tea api -X POST "$(cat ep.txt)".
+    if any(WRITE_OPTION.match(word) for word in words) and dynamic_api_endpoint(tokens):
+        return ("cannot verify the request: its endpoint is built at run time; use a literal owner, repository "
+                "and PR number, as in /repos/owner/repo/pulls/N/merge.")
     # A write request whose API path is built at run time could be a merge
     # the guard cannot see, such as /repos/o/r/$(printf pulls)/7/merge.
     if any(WRITE_OPTION.match(word) for word in words) and (

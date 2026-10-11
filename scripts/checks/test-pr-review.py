@@ -132,7 +132,7 @@ for command, hint in (
     ("HOME=/tmp/h tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
     ("tea login default other && tea api -X POST /repos/o/r/pulls/7/merge", "without --login"),
     ("""tea api -X POST /repos/o/r/pulls/7/merge 2>&1 --login other -d '{"Do":"squash"}'""", "without --login"),
-    ('P=/repos/o/r/pulls/7/merge; tea api --login other -X POST "$P"', "without --login"),
+    ('P=/repos/o/r/pulls/7/merge; tea api --login other -X POST "$P"', "built at run time"),
     ("echo /repos/o/r/pulls/7/merge | xargs tea api -l other -X POST", "without --login"),
     ("tea 2>&1 api --login other -X POST /repos/o/r/pulls/7/merge", "without --login"),
     ("gh api user && tea api --login other -X POST /repos/o/r/pulls/7/merge", "without --login"),
@@ -297,10 +297,19 @@ code, message = hook('gh pr comment 5 --body "$(printf "Fixes #12, don\'t")";g"h
 assert code == 2, message
 # A pull request subcommand from a variable is refused.
 for command in ('for a in ready merge; do gh pr "$a" 9 --repo o/r; done', 'gh pr "$ACTION" 9 --repo o/r --squash',
-                "tea pulls $op 12"):
+                "tea pulls $op 12", 'for op in merge; do tea pulls --repo o/r "$op" 9; done',
+                'for action in "pr ready" "pr merge"; do gh $action 9 --repo o/r; done', "tea $X 12"):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "subcommand is built at run time" in message and not calls, (command, message)
+# A literal subcommand before a variable is fine.
+assert not expect('gh pr view $n --repo o/r && echo merge', 0)[0]
+# A write request whose whole endpoint is a variable or substitution is refused.
+for command in ("""tea api -X POST "$(cat ep.txt)" -d '{"Do":"squash"}'""", 'tea api -X POST "$EP"'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
+assert not expect("""tea api -X POST /repos/o/r/issues -d "$JSON\"""", 0)[0]
 # An ordinary comment is not read as part of the command.
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash"}'  # retry with -r if it fails""", 0)
 # A gh api path with repeated slashes stays a GitHub-only check.
@@ -427,8 +436,10 @@ assert "github" in forges(seen), seen
 # A gh word that is not a command, such as an option value, still adds the GitHub check.
 seen, _ = expect('curl -o gh api -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen
-for command in ("P=repos/o/r/pulls/7/merge; gh api -X PUT \"$P\"",
-                "echo repos/o/r/pulls/7/merge | xargs gh api -X PUT",
+calls.clear()
+code, message = hook("P=repos/o/r/pulls/7/merge; gh api -X PUT \"$P\"")
+assert code == 2 and "endpoint is built at run time" in message and not calls, message
+for command in ("echo repos/o/r/pulls/7/merge | xargs gh api -X PUT",
                 "gh api -X GET /repos/o/r/pulls/7/merge; curl -X POST \"$F/repos/o/r/pulls/7/merge\""):
     seen, _ = expect(command, 0)
     assert forges(seen) == {"github", "forgejo"}, (command, seen)
