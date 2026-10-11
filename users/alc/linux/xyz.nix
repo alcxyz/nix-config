@@ -95,6 +95,9 @@ in {
       pkgs.t3rry-dev
       pkgs.canopy-dev
       pkgs.bivrost-dev
+      # Trial of Brave Origin beside the existing browsers (#628). It keeps
+      # its own profile data, so current Brave profiles are untouched.
+      pkgs.brave-origin
     ];
 
   # Symlink configs directly to repo checkout for live editing
