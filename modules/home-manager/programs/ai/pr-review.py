@@ -138,6 +138,8 @@ GH_MERGE_VALUE_FLAGS = {
     "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
     "-A", "--author-email", "--match-head-commit",
 }
+# The ones whose value is a message or similar text rather than the target.
+GH_MERGE_MESSAGE_FLAGS = GH_MERGE_VALUE_FLAGS - {"-R", "--repo"}
 API_MERGE = re.compile(
     r"(?:https?://(?P<host>[^/\s\"']+))?/*(?:api/v\d+/)?repos/"
     r"(?P<owner>[^/\s\"']+)/(?P<repo>[^/\s\"']+)/pulls/(?P<number>[^/\s\"']+)/merge\b"
@@ -1261,53 +1263,72 @@ def tokenize(command):
 def gh_pr_merges(tokens, cwd):
     """Yield (selector args, cwd, problem, sources) for each `gh pr merge`.
 
-    problem is None when it can be looked up; sources lists the positions of
-    the words it reads as the selector, repository and options, not the
-    message values those options take.
+    `pr` and `merge` are found past redirections and options, such as
+    `gh 2>&1 pr merge` or `gh pr --repo o/r merge`. problem is None when the
+    merge can be looked up; sources lists (position, part) for the words read
+    as the selector, repository and options, where part says how much of the
+    word steers the target: all of it, or only the option name in front of a
+    message value (`--subject=...`, `-t...`).
     """
-    for index in range(len(tokens) - 2):
-        if os.path.basename(tokens[index]) != "gh" or tokens[index + 1:index + 3] != ["pr", "merge"]:
+    for index, token in enumerate(tokens):
+        if os.path.basename(token) != "gh" or "://" in token:
             continue
-        merge_cwd = cwd
-
-        selector, repo, problem, sources, position = None, None, None, [], index + 3
+        selector, repo, problem, sources, position, stage = None, None, None, [], index + 1, 0
         while position < len(tokens):
-            token = tokens[position]
+            word = tokens[position]
             position += 1
-            if token in SEPARATORS:
+            if word in SEPARATORS:
                 break
-            # Every word the parser reads as a word counts; values it skips as
-            # a message (--subject, --body) do not steer the target.
-            sources.append(position - 1)
-            redirection = REDIRECTION.match(token)
+            redirection = REDIRECTION.match(word)
             if redirection:
                 # Quoting is not kept, so before the selector this could also be
                 # a quoted selector such as a branch named `9>fix`.
-                if selector is None:
+                if stage == 2 and selector is None:
                     problem = ("name the PR before any redirection, put redirections at the end of the command, "
                                "and do not name a branch that starts like one")
                     break
-                position += redirection.end() == len(token)
+                position += redirection.end() == len(word)
                 continue
-            name = token.split("=", 1)[0]
-            if name in ("-R", "--repo"):
-                if "=" in token:
-                    repo = token.split("=", 1)[1]
+            name, has_value, value = word.partition("=")
+            if stage < 2 and not word.startswith("-"):
+                if word != ("pr", "merge")[stage]:
+                    break
+                stage += 1
+            elif name in ("-R", "--repo") or (word[:2] == "-R" and len(word) > 2):
+                sources.append((position - 1, "word"))
+                if has_value or word[:2] == "-R" and len(word) > 2:
+                    repo = value if has_value else word[2:]
                 elif position < len(tokens):
                     repo = tokens[position]
-                    sources.append(position)
+                    sources.append((position, "word"))
                     position += 1
-            elif token in GH_MERGE_VALUE_FLAGS:
-                position += 1
-            elif not token.startswith("-") and selector is None:
-                selector = token
+            elif name in GH_MERGE_MESSAGE_FLAGS:
+                # A message value, separate or attached, does not steer the
+                # target; the option word in front of it does.
+                sources.append((position - 1, "name"))
+                position += not has_value
+            elif word[:2] in GH_MERGE_MESSAGE_FLAGS and len(word) > 2 and not word.startswith("--"):
+                sources.append((position - 1, "short"))
+            else:
+                sources.append((position - 1, "word"))
+                if stage == 2 and not word.startswith("-") and selector is None:
+                    selector = word
+        if stage < 2:
+            continue
 
         # Without both, gh picks the PR or repository from the directory it
         # runs in, which cd, env -C, eval or GIT_DIR can change unseen.
         if problem is None and not (selector and repo):
             problem = "name the PR and its repository, as in `gh pr merge N --repo owner/repo`"
         view = [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else [])
-        yield view, merge_cwd, problem, sources
+        yield view, cwd, problem, sources
+
+
+def steering_part(word, part):
+    """Return the part of a gh merge word that steers the target (see gh_pr_merges)."""
+    if part == "name":
+        return word.partition("=")[0]
+    return word[:2] if part == "short" else word
 
 
 def cli_calls(tokens, program, value_flags):
@@ -1716,7 +1737,8 @@ def guard_check_parsed(command, cwd, comments):
             return f"cannot verify {ref}: {problem}."
         # Removing leftover quotes is for detection only; a word it changed
         # could be read as another selector, repository or option.
-        if any(tokens[position] != parsed[position] for position in sources):
+        if any(steering_part(tokens[position], part) != steering_part(parsed[position], part)
+               for position, part in sources):
             return (f"cannot verify {ref}: a quote inside its PR, repository or option words cannot be checked; "
                     "quotes in --subject or --body values are fine.")
         # The hook's lookup does not see inline assignments, so they could point

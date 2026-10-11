@@ -341,6 +341,12 @@ for command in ("""gh pr merge "feature's-fix" --repo owner/repo --squash""",
     assert code == 2 and "quote inside" in message and not calls, (command, message)
 seen, _ = expect('gh api -X PUT /api/v1/repos/o/r/pulls/7/merge; curl -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen
+# Redirections and options between gh, pr and merge do not hide the merge.
+for command in ("gh pr merge 7 --repo o/r --squash; gh 2>&1 pr merge 9 --repo o/r --squash",
+                "gh pr merge 7 --repo o/r --squash; gh pr --repo o/r merge 9 --squash"):
+    seen, _ = expect(command, 2)
+    assert [call[0][3] for call in seen] == ["7", "9"], (command, seen)
+expect("""gh pr merge 7 --repo o/r --squash --subject="fix: don't drop the cache" --body='Closes "x"'""", 0)
 # A quote in a merge message does not matter.
 expect("""gh pr merge 7 --repo o/r --squash --subject "fix: don't drop the cache" --body 'Closes "x"'""", 0)
 # A client name that is not a command, and an option value for an api body, are not run-time commands.
