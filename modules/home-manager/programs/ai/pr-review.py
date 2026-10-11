@@ -1216,7 +1216,8 @@ def shell_words(tokens):
     """
     words = list(tokens)
     for token in tokens:
-        inner = [word.strip("\"'{}") for word in re.split(r"[\s;&|()`$]+", token)]
+        # The nested shell removes quotes and backslashes anywhere in a word.
+        inner = [re.sub(r"[\"'\\]", "", word).strip("{}") for word in re.split(r"[\s;&|()`$]+", token)]
         inner = [word for word in inner if word]
         if "$(" in token or "`" in token or (len(inner) > 1 and "tea" in map(os.path.basename, inner)):
             words.extend(inner)

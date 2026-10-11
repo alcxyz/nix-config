@@ -203,7 +203,11 @@ for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X P
                 'bash -c "timeout 60 tea api --login other -X POST /repos/o/r/pulls/7/merge"',
                 'bash -c "/usr/bin/env -u X tea api --login other -X POST /repos/o/r/pulls/7/merge"',
                 """bash -c "bash -c 'tea api --login other -X POST /repos/o/r/pulls/7/merge'\"""",
-                """bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge # don't squash\""""):
+                """bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge # don't squash\"""",
+                """bash -c 'tea api --"login" other -X POST /repos/o/r/pulls/7/merge'""",
+                """bash -c "/usr/bin/\\"tea\\" api --login other -X POST /repos/o/r/pulls/7/merge\"""",
+                """bash -c "t''ea api --log'in' other -X POST /repos/o/r/pulls/7/merge\"""",
+                """bash -c "\\\\tea api --login other -X POST /repos/o/r/pulls/7/merge\""""):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "`--login`" in message, (command, message)
