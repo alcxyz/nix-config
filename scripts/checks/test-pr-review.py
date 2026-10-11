@@ -214,12 +214,28 @@ for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X P
 _, message = hook('bash -c "GITEA_SERVER_URL=https://x tea api -X POST /repos/o/r/pulls/7/merge"')
 assert "the GITEA_SERVER_URL assignment" in message, message
 # An attached &> redirects and does not end a gh merge's arguments.
-# A redirection, or a quoted selector that looks like one, among gh merge arguments is refused.
+# A redirection, or a quoted selector that looks like one, before the gh merge selector is refused.
 for command in ("gh pr merge &>/dev/null 9 --squash --repo o/r", "gh pr merge 2> err 9 --squash --repo o/r",
                 'gh pr merge "9>fix" --squash --repo o/r'):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "redirections at the end" in message and not calls, (command, message)
+# After the selector, redirections in a chain are skipped.
+expect("gh pr merge 7 --squash >/dev/null && git checkout dev", 0)
+expect("gh pr merge 7 --squash 2>&1; git pull", 0)
+seen, _ = expect("gh pr merge 9 2> err --repo o/r && git pull", 2)
+assert seen[0][0][3:6] == ["9", "--repo", "o/r"], seen
+# A cd next to a subshell leaves the repository unclear unless --repo names it.
+_, message = hook("(cd /reviewed && gh pr merge 7 --squash); gh pr merge 7 --squash")
+assert "name it with --repo" in message, message
+expect("(cd x && gh pr merge 7 --squash --repo o/r)", 0)
+# Merges nested in another command are refused or checked like top-level ones.
+_, message = hook('bash -c "gh pr merge 9 --squash"')
+assert "inside another command" in message, message
+_, message = hook('bash -c "fj pr merge o/r#7"')
+assert "fj merges are not verified" in message, message
+seen, _ = expect('bash -c "gh api -X PUT repos/o/r/pulls/7/merge"', 0)
+assert "github" in forges(seen), seen
 # A gh word that is not a command, such as an option value, still adds the GitHub check.
 seen, _ = expect('curl -o gh api -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen

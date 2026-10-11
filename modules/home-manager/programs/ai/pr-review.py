@@ -117,6 +117,8 @@ TEA_ASSIGNMENT = re.compile(r"^(?:GITEA_\w*|XDG_CONFIG_HOME|HOME)=")
 TEA_ENVIRONMENT = ("GITEA_SERVER_URL", "GITEA_INSTANCE_URL")
 # tea commands that change its stored logins or default login.
 TEA_LOGIN_COMMANDS = {"login", "logins", "logout"}
+# Clients whose words inside quoted text are read as a nested command.
+NESTED_CLIENTS = {"tea", "gh", "fj"}
 # Words that may come between a separator and the command they run.
 COMMAND_PREFIXES = {"env", "command", "exec", "xargs", "sudo", "time", "nice", "nohup"}
 MCP_PREFIX = "mcp__forgejo__"
@@ -1144,24 +1146,31 @@ def tokenize(command):
 
 
 def gh_pr_merges(tokens, cwd):
-    """Yield (selector args, cwd) for each `gh pr merge`."""
+    """Yield (selector args, cwd, problem) for each `gh pr merge`; problem is None when it can be looked up."""
     for index in range(len(tokens) - 2):
         if os.path.basename(tokens[index]) != "gh" or tokens[index + 1:index + 3] != ["pr", "merge"]:
             continue
-        merge_cwd = cwd
+        merge_cwd, subshell = cwd, False
         for position in range(index):
+            subshell = subshell or tokens[position] in ("(", ")")
             if tokens[position] == "cd" and position + 1 < index and tokens[position + 1] not in SEPARATORS:
                 merge_cwd = os.path.join(merge_cwd, os.path.expanduser(tokens[position + 1]))
 
-        selector, repo, args, unverifiable = None, None, iter(tokens[index + 3:]), False
+        selector, repo, args, problem = None, None, iter(tokens[index + 3:]), None
         for token in args:
             if token in SEPARATORS:
                 break
-            # Quoting is not kept, so a redirection here could also be a quoted
-            # selector such as a branch named `9>fix`; neither can be verified.
-            if REDIRECTION.match(token):
-                unverifiable = True
-                break
+            redirection = REDIRECTION.match(token)
+            if redirection:
+                # Quoting is not kept, so before the selector this could also be
+                # a quoted selector such as a branch named `9>fix`.
+                if selector is None:
+                    problem = ("name the PR before any redirection, put redirections at the end of the command, "
+                               "and do not name a branch that starts like one")
+                    break
+                if redirection.end() == len(token):
+                    next(args, None)
+                continue
             name = token.split("=", 1)[0]
             if name in ("-R", "--repo"):
                 repo = token.split("=", 1)[1] if "=" in token else next(args, None)
@@ -1170,8 +1179,11 @@ def gh_pr_merges(tokens, cwd):
             elif not token.startswith("-") and selector is None:
                 selector = token
 
-        view = [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else [])
-        yield (None if unverifiable else view), merge_cwd
+        # A cd inside a subshell does not reach later commands, so the
+        # directory that picks the repository is unclear.
+        if problem is None and subshell and merge_cwd != cwd and not repo:
+            problem = "a cd next to a subshell makes the repository unclear; name it with --repo"
+        yield [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else []), merge_cwd, problem
 
 
 def cli_calls(tokens, program, value_flags):
@@ -1210,17 +1222,18 @@ def shell_words(tokens):
     """Return the tokens and the words of commands nested in them, such as `$(tea ...)` or `bash -c "tea ..."`.
 
     Nested shell code is not parsed: a token with a command substitution, or
-    with a tea word anywhere in it, is split into all its words. Quoted text
-    without tea, such as a JSON body, stays one word; text that mentions tea
-    is scanned like a command, which fails closed.
+    with a tea, gh or fj word anywhere in it, is split into all its words.
+    Other quoted text, such as a JSON body, stays one word; text that mentions
+    one of them is scanned like a command, which fails closed.
     """
     words = list(tokens)
     for token in tokens:
         # The nested shell removes quotes and backslashes anywhere in a word.
         inner = [re.sub(r"[\"'\\]", "", word).strip("{}") for word in re.split(r"[\s;&|()`$]+", token)]
         inner = [word for word in inner if word]
-        if "$(" in token or "`" in token or (len(inner) > 1 and "tea" in map(os.path.basename, inner)):
-            words.extend(inner)
+        if "$(" in token or "`" in token or (len(inner) > 1 and NESTED_CLIENTS & set(map(os.path.basename, inner))):
+            # A separator keeps nested words out of the previous call's arguments.
+            words.extend([";", *inner])
     return words
 
 
@@ -1306,6 +1319,8 @@ def rest_merge_problem(match, tokens):
     # check; only a gh at a command position can remove the Forgejo one.
     gh_api = gh_api_positions(tokens, strict=False)
     gh_api_calls = gh_api_positions(tokens, strict=True)
+    # A gh api call nested in another command also needs the GitHub check.
+    gh_api_anywhere = gh_api or gh_api_positions(shell_words(tokens), strict=False)
     path = {index for index, token in enumerate(tokens) if match.group(0) in token}
     tea = any(os.path.basename(word) == "tea" for word in shell_words(tokens))
     # Only a plain gh command may skip the Forgejo check: no tea anywhere, and
@@ -1313,7 +1328,7 @@ def rest_merge_problem(match, tokens):
     gh_only = path and path <= gh_api_calls and not tea and not any("$(" in t or "`" in t for t in tokens)
     prs = []
     # A path on another named host goes to GitHub only as a gh api argument.
-    if host == "api.github.com" or (gh_api and (not host or path & gh_api)):
+    if host == "api.github.com" or (gh_api_anywhere and (not host or path & gh_api)):
         problem = github_merge_problem(owner, repo, number, host, tokens)
         if problem:
             return problem
@@ -1389,15 +1404,18 @@ def guard_check(command, cwd):
         return None
     tokens = tokenize(command)
 
-    for ref, problem in cli_merges(tokens):
+    words = shell_words(tokens)
+    for ref, problem in cli_merges(words):
         return f"cannot verify {ref}: {problem}."
+    nested = words[len(tokens):]
+    if any("pr" in call and "merge" in call for call, _flags in cli_calls(nested, "gh", set())):
+        return "cannot verify the PR (gh pr merge inside another command): run gh pr merge directly."
 
     # Every merge in the command must pass on its own.
-    for view, view_cwd in gh_pr_merges(tokens, cwd):
-        if view is None:
-            return ("cannot verify the PR (gh pr merge): put redirections at the end of the command, and do not "
-                    "name a branch that starts like one.")
+    for view, view_cwd, problem in gh_pr_merges(tokens, cwd):
         ref = "the PR (gh pr merge " + " ".join(view) + ")"
+        if problem:
+            return f"cannot verify {ref}: {problem}."
         # The hook's lookup does not see inline assignments, so they could point
         # the merge at another host or repository than the one checked.
         if any(token.startswith(("GH_HOST=", "GH_REPO=")) for token in tokens):
