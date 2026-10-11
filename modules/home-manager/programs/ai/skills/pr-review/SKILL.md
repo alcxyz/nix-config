@@ -91,9 +91,11 @@ pr-review comment <pr> "<outcome>"
   that carries direct pushes or a conflict resolution needs a review.
 - Name no models and add no signatures.
 
-Then merge with `gh pr merge`, `fj pr merge owner/repo#N` or the Forgejo MCP
-`merge_pull_request`, using literal repository and PR values. The guard
-refuses `tea` merges.
+Then merge with `gh pr merge` or the Forgejo MCP `merge_pull_request`, or
+where the MCP is unavailable with
+`tea api -X POST /repos/owner/repo/pulls/N/merge -d '{"Do": "squash"}'`,
+using literal repository and PR values. The guard refuses `tea pulls merge`
+and `fj` merges.
 
 ## 5. Failures
 

@@ -97,51 +97,24 @@ expect("curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge", 2)
 expect('curl -X POST "$FORGEJO/api/v1/repos/o/r/pulls/8/merge"', 2)
 expect("curl --request GET https://git.example/api/v1/repos/o/r/pulls/8/merge", 0)
 
-# fj merges are verified like REST merges and need literal targets; tea merges are refused.
-seen, _ = expect("fj pr merge o/r#7 -M squash -d", 0)
-assert (seen[0][0].host, seen[0][0].owner, seen[0][0].repo, seen[0][0].number) == (review.FORGEJO_URL, "o", "r", "7"), seen
-expect("fj -H git.alc.xyz pr merge --method=squash o/r#9", 2)
-expect("cd x && fj pr merge -m 'body' o/r#7", 0)
-# Simple redirections at the end of a one-line merge are not arguments.
-expect("fj pr merge o/r#7 --method squash -t 'x' -m 'y z' 2>&1 | tail -5", 0)
-expect("fj pr merge o/r#7 >/dev/null 2>&1", 0)
-expect("fj pr merge o/r#7 &>>log |& head -n 20\n", 0)
-expect("fj pr merge o/r#7 -m 'a 2>&1'", 0)
-expect("fj pr merge o/r#9 2>&1 | tail -5", 2)
+# tea and fj merge commands are refused and point to the MCP tool or tea api (#616).
 seen, _ = expect("gh pr merge 9 --squash 2>&1 | tail -3", 2)
 assert seen[0][0][3] == "9", seen
 expect("gh pr merge 7 --squash >/dev/null", 0)
-for command, hint in (
-    ("fj pr merge 7", "owner/repo#N"),
-    ("fj pr merge -R origin o/r#7", "owner/repo#N"),
-    ("fj --host codeberg.org pr merge o/r#7", "only https://git.alc.xyz"),
-    ("fj -Hcodeberg.org pr merge o/r#7", "only https://git.alc.xyz"),
-    ("fj --ssh x pr merge o/r#7", "fj pr merge owner/repo#N"),
-    ("fj pr merge o/r#7\necho --help", "fj pr merge owner/repo#N"),
-    ("fj pr merge o/r#7 extra", "arguments as: o/r#7 extra"),
-    # Other redirections are still read as arguments, so the merge is refused.
-    ("fj pr merge 2>/dev/null o/r#7", "arguments as: 2>/dev/null o/r#7"),
-    ("fj pr merge o/r#7 \\ >x", "fj pr merge owner/repo#N"),
-    ("fj pr merge o/r#7 2>&1\necho", "fj pr merge owner/repo#N"),
-    ("fj pr merge o/r#7 2>&1 | fj pr merge o/r#8", "fj pr merge owner/repo#N"),
-    ("fj pr merge o/r#7\r2>&1", "fj pr merge owner/repo#N"),
-    ("fj pr merge o/r#7 \u0663>x", "arguments as: o/r#7 \u0663>x"),
-    ("fj pr merge o/r#7 '>' x", "arguments as: o/r#7 > x"),
-    ("tea pulls merge --repo o/r 7", "use `fj pr merge"),
-    ("tea pr m -r o/r 7", "use `fj pr merge"),
-    ("tea pulls --fields index merge --repo o/r 7", "use `fj pr merge"),
-):
+for command in ("tea pulls merge --repo o/r 7", "tea pr m -r o/r 7", "tea pulls --fields index merge --repo o/r 7",
+                "fj pr merge o/r#7", "fj -H git.alc.xyz pr merge --method=squash o/r#7"):
     calls.clear()
     code, message = hook(command)
-    assert code == 2 and hint in message and not calls, (command, message)
-# A reviewed fj merge does not let another merge in the same command through.
-expect("fj pr merge o/r#7 && gh pr merge 9", 2)
-expect("fj pr merge o/r#7; curl -X POST https://git.example/api/v1/repos/o/r/pulls/8/merge", 2)
-expect("fj pr merge o/r#7; fj pr merge o/r#8", 2)
-expect("fj pr merge o/r#7 && tea pulls merge --repo o/r 7", 2)
+    assert code == 2 and "merge_pull_request" in message and not calls, (command, message)
+# A refused merge blocks the whole command, and reads are not merges.
+expect("gh pr merge 7 --squash && tea pulls merge --repo o/r 7", 2)
 assert not expect("fj pr view o/r#7", 0)[0]
 assert not expect("tea pulls list --repo o/r", 0)[0]
 assert not expect("echo fj; tea issues ls", 0)[0]
+# tea api merges are REST merges, checked on the configured instance.
+seen, _ = expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do": "squash"}'""", 0)
+assert seen[0][0].host == review.FORGEJO_URL, seen
+expect("tea api -X POST /repos/o/r/pulls/9/merge", 2)
 
 
 # Forgejo MCP tools other than merges pass without lookups (ADR-0081).

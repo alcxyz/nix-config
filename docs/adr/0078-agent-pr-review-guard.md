@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -104,7 +104,7 @@ and installs a script under its `managed_dir` that runs the calling user's
 guard. For the module's `users`, a missing guard blocks every hooked call.
 Other hosts keep the user `~/.codex/hooks.json`, which must be trusted once
 per change to take effect. The guard recognises `gh pr merge`, GitHub `pulls/N/merge` API calls, Forgejo
-REST merges and `fj pr merge`, and refuses `tea` merges. It blocks them unless a review comment names the PR's current head
+REST merges (including `tea api`), and refuses `tea` and `fj` merge commands. It blocks them unless a review comment names the PR's current head
 commit and target branch, so new commits or a retargeted PR need a new review.
 The comment's mode follows the pinned prefix, so older guards still accept it;
 the guard does not check the chain of rounds, which `run` enforces from local
@@ -159,15 +159,18 @@ reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
 ## Consequences
 
 The guard targets agent sessions on hosts with `programs.ai`. It is an accident
-guard, not a security boundary. An agent can still post a review comment by
+guard, not a security boundary: it catches an agent that forgets the review
+and merges with an ordinary command. Commands built to get past it, such as
+merge targets assembled at run time, quoting tricks or aliases, are out of
+scope; stopping them would need a forge-side control (see Alternatives). An
+agent can still post a review comment by
 hand, and web merges, other merge tools, indirect commands and
 non-literal targets are not verified, GitHub Enterprise merges are blocked
 because only github.com is supported, and a push between the guard's
 lookup and the merge itself is not caught. Reviewers read the repository's
 agent instructions from the PR head, so a PR that edits them can steer its own
 review; such edits appear in the reviewed diff. Non-literal
-targets, including `fj` merges without an explicit repository, are blocked
-with guidance to use literal values. Forgejo lookups use
+targets are blocked with guidance to use literal values. Forgejo lookups use
 `FORGEJO_API_TOKEN_FILE` when the session provides it, send the token only to
 the configured Forgejo URL, and do not follow redirects. Forge or network outages
 block agent merges until the operator merges or the outage ends. Each review
