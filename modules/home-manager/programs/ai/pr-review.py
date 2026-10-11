@@ -1339,7 +1339,8 @@ def shell_words(tokens):
     words = list(tokens)
     for token in tokens:
         # The nested shell removes quotes and backslashes anywhere in a word.
-        inner = [re.sub(r"[\"'\\]", "", word).strip("{}") for word in re.split(r"[\s;&|()`]+", token)]
+        # A backtick stays as a separator word, so a call it cuts off is seen.
+        inner = [re.sub(r"[\"'\\]", "", word).strip("{}") for word in re.split(r"(`)|[\s;&|()]+", token) if word]
         inner = [word for word in inner if word]
         substituted = "$(" in token or "`" in token
         if (substituted and inner) or (len(inner) > 1 and NESTED_CLIENTS & set(map(os.path.basename, inner))):
@@ -1502,6 +1503,9 @@ def dynamic_pr_command(tokens):
     after it (`tea pulls --fields diff "$op" 9`).
     """
     for token, arguments, _cut in command_calls(tokens):
+        # Global options such as `tea --debug` may come first.
+        while arguments and arguments[0].startswith("-"):
+            arguments = arguments[1:]
         if dynamic(token):
             if arguments[:1] and arguments[0] in ("pr", "pull", "pulls", "api"):
                 return True

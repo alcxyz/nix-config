@@ -323,7 +323,10 @@ for command in ("bash -c 'gh api -X PUT \"$EP\" --input body.json'", 'gh >out ap
                 "bash -c 'echo start; gh $action 9 --repo o/r'",
                 'tea --debug api -X POST "$EP" -d @body.json',
                 """tea api -X POST /`cat ep.txt` -d '{"Do":"squash"}'""",
-                'echo "$(tea api -X POST "$EP" -d @body.json)"'):
+                'echo "$(tea api -X POST "$EP" -d @body.json)"',
+                "bash -c 'tea api -X POST /`cat ep.txt` -d @body.json'",
+                'for X in "pulls merge"; do tea --debug $X --repo o/r 9; done',
+                "$T --debug pulls merge --repo o/r 9"):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and not calls, (command, message)
