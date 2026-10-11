@@ -302,6 +302,19 @@ for command in ('for a in ready merge; do gh pr "$a" 9 --repo o/r; done', 'gh pr
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "subcommand is built at run time" in message and not calls, (command, message)
+# Option values, redirections and nesting do not hide a run-time subcommand or endpoint.
+for command in ('for op in merge; do tea pulls --repo view "$op" 9; done',
+                'for op in merge; do tea pulls --fields diff "$op" 9 --repo o/r; done',
+                'for action in "pr ready" "pr merge"; do gh 2>&1 $action 9 --repo o/r; done',
+                "$GH pr merge 9 --repo o/r", "$(which gh) pr merge 9 --repo o/r",
+                """tea api -X POST `cat ep.txt` -d '{"Do":"squash"}'""", 'tea api -X POST "/$EP"',
+                'tea 2>&1 api -X POST "$EP"', "bash -c 'tea api -X POST \"$EP\" -d @body.json'"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
+# A client name that is not a command, and an option value for an api body, are not run-time commands.
+assert not expect('git clone https://github.com/cli/gh "$HOME/src/gh" && echo merge', 0)[0]
+assert not expect('gh api -X POST /repos/o/r/issues/5/comments --raw-field "$BODY"', 0)[0]
 # A literal subcommand before a variable is fine.
 assert not expect('gh pr view $n --repo o/r && echo merge', 0)[0]
 # A write request whose whole endpoint is a variable or substitution is refused.

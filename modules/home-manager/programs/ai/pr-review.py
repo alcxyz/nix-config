@@ -109,7 +109,7 @@ LITERAL_PULLS_PATH = re.compile(r"pulls/\d+(?:/(?!merge\b)[A-Za-z_]+)*(?=[\s\"'?
 # Options of `tea api` and `gh api` that take a value, so the endpoint can be told from them.
 API_VALUE_FLAGS = {
     "-X", "--method", "-d", "--data", "-f", "--field", "-F", "--Field", "-H", "--header", "-o", "--output",
-    "-l", "--login", "-r", "--repo", "-R", "--remote", "-q", "--jq", "-t", "--template", "--hostname",
+    "-l", "--login", "-r", "--repo", "-R", "--remote", "-q", "--jq", "-t", "--template", "--hostname", "--raw-field",
     "--input", "-p", "--preview", "--cache",
 }
 # Pull request subcommands of gh, tea and fj that do not merge.
@@ -156,7 +156,10 @@ TEA_LOGIN_COMMANDS = {"login", "logins", "logout"}
 # Clients whose words inside quoted text are read as a nested command.
 NESTED_CLIENTS = {"tea", "gh", "fj"}
 # Words that may come between a separator and the command they run.
-COMMAND_PREFIXES = {"env", "command", "exec", "xargs", "sudo", "time", "nice", "nohup"}
+COMMAND_PREFIXES = {
+    "env", "command", "exec", "xargs", "sudo", "time", "nice", "nohup",
+    "do", "then", "else", "elif", "if", "while", "until", "!", "{",
+}
 MCP_PREFIX = "mcp__forgejo__"
 MCP_MERGE = "merge_pull_request"
 # Arguments an agent's MCP merge may set; force and scheduled merges only as false.
@@ -1336,7 +1339,7 @@ def shell_words(tokens):
     words = list(tokens)
     for token in tokens:
         # The nested shell removes quotes and backslashes anywhere in a word.
-        inner = [re.sub(r"[\"'\\]", "", word).strip("{}") for word in re.split(r"[\s;&|()`$]+", token)]
+        inner = [re.sub(r"[\"'\\]", "", word).strip("{}") for word in re.split(r"[\s;&|()`]+", token)]
         inner = [word for word in inner if word]
         substituted = "$(" in token or "`" in token
         if (substituted and inner) or (len(inner) > 1 and NESTED_CLIENTS & set(map(os.path.basename, inner))):
@@ -1458,35 +1461,82 @@ def rest_merge_problem(match, tokens):
     return None
 
 
-def nonliteral_pr_subcommand(words):
-    """Return whether a call's command could be a pull request merge chosen at run time.
+def command_calls(tokens):
+    """Yield (command word, arguments, cut) for each command at a command position.
 
-    That is a first word with a variable or substitution (`gh $action 9`), or
-    one after `pr`/`pull`/`pulls` that comes before any literal known
-    subcommand (`tea pulls --repo o/r "$op" 9`).
+    Arguments stop at a separator and skip redirections with their targets;
+    cut says whether a backtick ended them.
     """
-    if words and re.search(r"[$`]", words[0]):
-        return True
-    for index, word in enumerate(words):
-        if word in ("pr", "pull", "pulls"):
-            for following in words[index + 1:]:
+    for index, token in enumerate(tokens):
+        if token in SEPARATORS or not command_position(tokens, index):
+            continue
+        arguments, position, cut = [], index + 1, False
+        while position < len(tokens) and tokens[position] not in SEPARATORS:
+            word = tokens[position]
+            position += 1
+            redirection = REDIRECTION.match(word)
+            if redirection:
+                position += redirection.end() == len(word)
+                continue
+            arguments.append(word)
+        cut = position < len(tokens) and tokens[position] == "`"
+        yield token, arguments, cut
+
+
+def dynamic(word):
+    """Return whether a word holds a variable or substitution."""
+    return bool(re.search(r"[$`]", word))
+
+
+def dynamic_pr_command(tokens):
+    """Return whether a pull request command could be a merge chosen at run time.
+
+    That is a client from a variable before `pr`/`pulls`/`api` (`$GH pr merge`),
+    a client-less `pr merge` after a substitution (`$(which gh) pr merge`), a
+    dynamic first argument (`gh $action 9`), or a dynamic word after
+    `pr`/`pulls` that is not preceded by a literal known subcommand right
+    after it (`tea pulls --fields diff "$op" 9`).
+    """
+    for token, arguments, _cut in command_calls(tokens):
+        if dynamic(token):
+            if arguments[:1] and arguments[0] in ("pr", "pull", "pulls", "api"):
+                return True
+            continue
+        name = os.path.basename(token)
+        if name in ("pr", "pull", "pulls") and arguments[:1] and arguments[0] in ("merge", "m"):
+            return True
+        if name not in NESTED_CLIENTS:
+            continue
+        if arguments and dynamic(arguments[0]):
+            return True
+        for index, word in enumerate(arguments):
+            if word in ("pr", "pull", "pulls"):
+                following = arguments[index + 1] if index + 1 < len(arguments) else ""
                 if following in PR_SUBCOMMANDS or following in ("merge", "m"):
-                    return False
-                if re.search(r"[$`]", following):
-                    return True
-            return False
+                    break
+                # Options before the subcommand: their values are not known, so
+                # any later dynamic word could be the subcommand.
+                if following.startswith("-") or dynamic(following):
+                    if any(dynamic(later) for later in arguments[index + 1:]):
+                        return True
+                break
     return False
 
 
 def dynamic_api_endpoint(tokens):
-    """Return whether a `tea api` or `gh api` write request takes its endpoint from a variable or substitution."""
-    for client in ("tea", "gh"):
-        for words, _flags in cli_calls(tokens, client, API_VALUE_FLAGS):
-            # A variable host before a literal repos/ path is checked as a path.
-            if words[:1] == ["api"] and any(
-                re.search(r"^[$`]|\$\(", word) and "repos/" not in word for word in words[1:]
-            ):
-                return True
+    """Return whether a `tea api` or `gh api` request takes its endpoint from a variable or substitution."""
+    for token, arguments, cut in command_calls(tokens):
+        if os.path.basename(token) not in ("tea", "gh") or arguments[:1] != ["api"]:
+            continue
+        positional, words = [], iter(arguments[1:])
+        for word in words:
+            if word.partition("=")[0] in API_VALUE_FLAGS and "=" not in word:
+                next(words, None)
+            elif not word.startswith("-"):
+                positional.append(word)
+        # A variable host before a literal repos/ path is checked as a path.
+        if any(dynamic(word) and "repos/" not in word for word in positional) or (cut and not positional):
+            return True
     return False
 
 
@@ -1580,8 +1630,7 @@ def guard_check_parsed(command, cwd, comments):
     # xargs), which removes them again; read the words without them.
     tokens = [re.sub(r"[\"'\\]", "", token) for token in tokens]
     # A pull request subcommand from a variable could be merge: gh pr "$a" 9.
-    if any(nonliteral_pr_subcommand(call) for client in ("gh", "tea", "fj")
-           for call, _flags in cli_calls(shell_words(tokens), client, set())):
+    if dynamic_pr_command(shell_words(tokens)):
         return ("cannot verify the command: its pull request subcommand is built at run time; "
                 "name it literally.")
     # The parsed and nested words are read too: quotes or a line continuation
@@ -1612,7 +1661,7 @@ def guard_check_parsed(command, cwd, comments):
                     "repository and PR number, as in /repos/owner/repo/pulls/N/merge.")
     # A write request whose whole endpoint is a variable or substitution
     # could be a merge: tea api -X POST "$(cat ep.txt)".
-    if any(WRITE_OPTION.match(word) for word in words) and dynamic_api_endpoint(tokens):
+    if any(WRITE_OPTION.match(word) for word in words) and dynamic_api_endpoint(words):
         return ("cannot verify the request: its endpoint is built at run time; use a literal owner, repository "
                 "and PR number, as in /repos/owner/repo/pulls/N/merge.")
     # A write request whose API path is built at run time could be a merge
