@@ -94,11 +94,14 @@ SUBSTITUTION = re.compile(r"`|\$\(|[<>]\(")
 # Words that make a command worth parsing further.
 GATE_WORDS = ("merge", "tea", "repos/")
 # Options that make an API request write, so it could merge.
+# Short options may be grouped or carry an attached value (`-sX POST`, `-d'{...}'`);
+# matching more than writes only refuses more.
 WRITE_OPTION = re.compile(
-    r"^(?:-X|--method|--request|-d|--data[\w-]*|-f|-F|--field|--raw-field|--input|-T|--upload-file)(?:=|$)|^-X\S"
+    r"^(?:--(?:method|request|data[\w-]*|field|Field|raw-field|input|upload-file|json|form[\w-]*)(?:=|$)"
+    r"|-[A-Za-z]*[XdFfT])"
 )
 # An API path with a variable or substitution after `repos/`.
-DYNAMIC_API_PATH = re.compile(r"repos/[^\s'\"]*[$`]")
+DYNAMIC_API_PATH = re.compile(r"repos/\S*[$`]")
 # A complete literal pulls path that is not a merge, such as `pulls/7/reviews`.
 LITERAL_PULLS_PATH = re.compile(r"pulls/\d+(?:/(?!merge\b)[A-Za-z_]+)*(?=[\s\"'?]|$)")
 # Pull request subcommands of gh, tea and fj that do not merge.
@@ -1501,7 +1504,8 @@ def guard_check(command, cwd):
         tokens = command.split()
     # The parsed words are read too: quotes or a line continuation can split
     # `merge` in the raw text.
-    text = " ".join(tokens)
+    # Nested text is read too, after its own quote removal.
+    text = " ".join(shell_words(tokens))
     if not any(word in command or word in text for word in GATE_WORDS) and not SUBSTITUTION.search(command):
         return None
     # A substitution can build a merge target the guard does not see, such as
@@ -1552,7 +1556,7 @@ def guard_check(command, cwd):
     # The raw text and the parsed words are both searched: quoting or a line
     # continuation inside a path hides it from the raw text.
     seen = set()
-    for match in [*API_MERGE.finditer(command), *API_MERGE.finditer(" ".join(tokens))]:
+    for match in [*API_MERGE.finditer(command), *API_MERGE.finditer(text)]:
         key = (match["host"], match["owner"], match["repo"], match["number"])
         if key in seen:
             continue

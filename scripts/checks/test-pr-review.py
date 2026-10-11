@@ -236,6 +236,21 @@ for command in ("M=merge; tea api -X POST /repos/o/r/pulls/7/$M -d '{}'",
     calls.clear()
     code, message = hook(command)
     assert code == 2 and not calls, (command, message)
+# Grouped, attached and long write options count, and quotes around the variable do not hide it.
+for command in ("tea api --Field Do=squash /repos/$R/pulls/9/merge",
+                """curl -d'{"Do":"squash"}' https://git.example/api/v1/repos/$R/pulls/9/merge""",
+                'curl -sX POST "$F/api/v1/repos/$R/pulls/7/merge"',
+                """curl --json '{"Do":"squash"}' "https://git.example/api/v1/repos/$R/pulls/7/merge\"""",
+                """bash -c 'tea api -X POST /repos/"$R"/pulls/9/merge'"""):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
+# Text handed to another shell is read after its own quote removal.
+_, message = hook('bash -c "gh pr mer\'\'ge 9 --repo o/r"')
+assert "inside other text" in message, message
+calls.clear()
+code, message = hook("""bash -c 'gh api -X PUT repos/o/r/pulls/9/mer"ge"'""")
+assert code == 2 and calls, message
 # Reading with a variable path, or a variable path to a file named merge, is not a merge.
 assert not expect("tea api /repos/$R/issues/5", 0)[0]
 assert not expect('bash "$PWD/modules/home-manager/programs/ai/merge-settings.sh"', 0)[0]
