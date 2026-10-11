@@ -1452,6 +1452,14 @@ def rest_merge_problem(match, tokens):
     return None
 
 
+def nonliteral_pr_subcommand(words):
+    """Return whether a call's word after `pr`/`pulls` holds a variable or substitution."""
+    for index, word in enumerate(words):
+        if word in ("pr", "pull", "pulls"):
+            return index + 1 < len(words) and bool(re.search(r"[$`]", words[index + 1]))
+    return False
+
+
 def pr_subcommand_unknown(words):
     """Return whether a call's word after `pr`/`pulls` is not a known subcommand that does not merge."""
     for index, word in enumerate(words):
@@ -1531,15 +1539,21 @@ def guard_check_parsed(command, cwd, comments):
     """Return None when the command, parsed with or without comment stripping, may run."""
     tokens = split_command(command, comments)
     if tokens is None:
-        # Without its quoting, a merge's arguments cannot be told apart; the
-        # reading without stripping only runs when removed text may merge.
-        if MERGE_MENTION.search(command):
+        # Without its quoting, a merge's arguments cannot be told apart. The
+        # reading without stripping only runs when removed text may merge, and
+        # quotes can split the words the mention check looks for.
+        if not comments or MERGE_MENTION.search(re.sub(r"[\"'\\]", "", command)):
             return ("cannot verify the command: it does not parse, for example because of an unclosed quote; "
                     "fix it, or pass long text from a file.")
         tokens = command.split()
     # Quotes left inside words only matter to a nested shell (eval, bash -c,
     # xargs), which removes them again; read the words without them.
     tokens = [re.sub(r"[\"'\\]", "", token) for token in tokens]
+    # A pull request subcommand from a variable could be merge: gh pr "$a" 9.
+    if any(nonliteral_pr_subcommand(call) for client in ("gh", "tea", "fj")
+           for call, _flags in cli_calls(shell_words(tokens), client, set())):
+        return ("cannot verify the command: its pull request subcommand is built at run time; "
+                "name it literally.")
     # The parsed and nested words are read too: quotes or a line continuation
     # can split `merge` in the raw text.
     text = " ".join(shell_words(tokens))

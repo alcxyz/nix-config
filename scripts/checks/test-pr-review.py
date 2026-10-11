@@ -197,7 +197,8 @@ for command in ("""tea api -X POST "/repos/o/r/pulls/9/$(printf merge)" -d '{"Do
                 "gh pr $(echo merge) 7 --repo o/r", "tea pr $(echo m) 12"):
     calls.clear()
     code, message = hook(command)
-    assert code == 2 and "command substitution" in message and not calls, (command, message)
+    refused = "command substitution" in message or "built at run time" in message
+    assert code == 2 and refused and not calls, (command, message)
 assert not expect('gh pr create --title "tea fallback" --body "$(cat body.md)"', 0)[0]
 # A line continuation joins words without a space, as bash does.
 seen, _ = expect("gh pr merge 7\\\n9 --repo o/r --squash", 2)
@@ -208,7 +209,8 @@ expect("(gh pr merge 7 --repo o/r --squash)# don't delete the branch", 0)
 for command in ("gh pr $(cat subcommand.txt) 9 --repo o/r", 'gh api -X PUT "repos/o/r/pulls/9/$(cat action.txt)"'):
     calls.clear()
     code, message = hook(command)
-    assert code == 2 and "command substitution" in message and not calls, (command, message)
+    refused = "command substitution" in message or "built at run time" in message
+    assert code == 2 and refused and not calls, (command, message)
 # Paths split by quoting or a line continuation are found in the parsed words.
 for command in ("""tea api -X POST /repos/o/r/pulls/"9"/merge -d '{"Do":"squash"}'""",
                 "tea api -X POST /repos/o/r/pulls/9/mer\\\nge -d '{}'"):
@@ -290,6 +292,15 @@ for command in ('g""h pr comment 5 --body "$(printf "Fixes #12")"; g""h pr mer""
     calls.clear()
     code, message = hook(command)
     assert code == 2, (command, message)
+# Quotes that split merge do not let an unparsable command through.
+code, message = hook('gh pr comment 5 --body "$(printf "Fixes #12, don\'t")";g"h" pr mer"ge" 9 --repo o/r --squash')
+assert code == 2, message
+# A pull request subcommand from a variable is refused.
+for command in ('for a in ready merge; do gh pr "$a" 9 --repo o/r; done', 'gh pr "$ACTION" 9 --repo o/r --squash',
+                "tea pulls $op 12"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "subcommand is built at run time" in message and not calls, (command, message)
 # An ordinary comment is not read as part of the command.
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash"}'  # retry with -r if it fails""", 0)
 # A gh api path with repeated slashes stays a GitHub-only check.
