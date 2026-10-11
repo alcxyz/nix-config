@@ -84,8 +84,9 @@ RESERVED_NAMES = {"prompt", "status", "lock"}
 # Repository hooks come from the PR head and must not run outside the reviewers' sandbox.
 GIT = ["git", "-c", "core.hooksPath=/dev/null"]
 GUARD_DEADLINE = 90
-SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "\n"}
-PUNCTUATION = ";&|()\n"
+# A backtick outside quotes starts or ends a substituted command.
+SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "`", "\n"}
+PUNCTUATION = ";&|()`\n"
 # Stands in for the `&` of an attached `&>` redirection while lexing.
 ATTACHED_REDIRECTION = "\ue000"
 # A word that starts with a redirection operator.
@@ -1400,7 +1401,13 @@ def guard_check(command, cwd):
     """Return None when the command may run, otherwise a reason to block."""
     if "merge" not in command and "tea" not in command:
         return None
-    tokens = tokenize(command)
+    tokens = split_command(command)
+    if tokens is None:
+        # Without its quoting, a merge's arguments cannot be told apart.
+        if "merge" in command:
+            return ("cannot verify the command: it does not parse, for example because of an apostrophe in a "
+                    "comment; remove it and run the merge again.")
+        tokens = command.split()
 
     words = shell_words(tokens)
     for ref, problem in cli_merges(words):

@@ -186,6 +186,14 @@ _, message = hook("GITEA_TOKEN=synthetic-value tea api -X POST /repos/o/r/pulls/
 assert "the GITEA_TOKEN assignment could point tea" in message and "synthetic-value" not in message, message
 _, message = hook("tea api --login=synthetic-login -X POST /repos/o/r/pulls/7/merge")
 assert "`--login`" in message and "synthetic-login" not in message, message
+# Unquoted backticks run their command like any other.
+for command in ("out=`gh pr merge 12 --squash`; echo $out", "echo `tea pr merge 12`"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
+# A command that does not parse cannot be checked when it mentions a merge.
+_, message = hook("gh pr merge 7 --repo o/a --squash  # don't delete the branch\ngh pr merge 9 --repo o/b --squash")
+assert "does not parse" in message, message
 # Quoted text such as a merge title is not read as tea options.
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash","MergeTitleField":"Fix login -r redirect"}'""", 0)
 # Quoted text that mentions tea is scanned like a command and fails closed.
