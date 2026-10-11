@@ -91,6 +91,9 @@ PUNCTUATION = ";&|()`\n"
 HEREDOC = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 # A command or process substitution anywhere in the text.
 SUBSTITUTION = re.compile(r"`|\$\(|[<>]\(")
+# A `/merge` path segment, and the signs that a word holding one is built at run time.
+MERGE_SEGMENT = re.compile(r"/merge\b")
+NON_LITERAL_HINT = re.compile(r"pulls|[$`]")
 # A complete literal pulls path that is not a merge, such as `pulls/7/reviews`.
 LITERAL_PULLS_PATH = re.compile(r"pulls/\d+(?:/(?!merge\b)[A-Za-z_]+)*(?=[\s\"'?]|$)")
 # Pull request subcommands of gh, tea and fj that do not merge.
@@ -1484,7 +1487,7 @@ def mcp_merge_check(arguments):
 
 def guard_check(command, cwd):
     """Return None when the command may run, otherwise a reason to block."""
-    if "merge" not in command and "tea" not in command:
+    if "merge" not in command and "tea" not in command and not SUBSTITUTION.search(command):
         return None
     tokens = split_command(command)
     if tokens is None:
@@ -1504,6 +1507,13 @@ def guard_check(command, cwd):
     ):
         return ("cannot verify the merge: its command contains a command substitution, which can change the "
                 "target; use literal values, and pass long text from a file.")
+    # A merge path built from variables or split by quoting cannot be checked.
+    for token in tokens:
+        if MERGE_SEGMENT.search(token) and NON_LITERAL_HINT.search(token):
+            match = API_MERGE.search(token)
+            if not match or not all(LITERAL.match(part) for part in (match["owner"], match["repo"], match["number"])):
+                return ("cannot verify the merge: its path is not literal; use a literal owner, repository and "
+                        "PR number, as in /repos/owner/repo/pulls/N/merge.")
 
     words = shell_words(tokens)
     for ref, problem in cli_merges(words):
@@ -1531,7 +1541,14 @@ def guard_check(command, cwd):
         if problem:
             return f"{ref} {problem}."
 
-    for match in API_MERGE.finditer(command):
+    # The raw text and the parsed words are both searched: quoting or a line
+    # continuation inside a path hides it from the raw text.
+    seen = set()
+    for match in [*API_MERGE.finditer(command), *API_MERGE.finditer(" ".join(tokens))]:
+        key = (match["host"], match["owner"], match["repo"], match["number"])
+        if key in seen:
+            continue
+        seen.add(key)
         problem = rest_merge_problem(match, tokens)
         if problem:
             return problem

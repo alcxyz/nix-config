@@ -204,6 +204,24 @@ seen, _ = expect("gh pr merge 7\\\n9 --repo o/r --squash", 2)
 assert seen[0][0][3] == "79", seen
 # A comment after a subshell's closing parenthesis is a comment.
 expect("(gh pr merge 7 --repo o/r --squash)# don't delete the branch", 0)
+# Substitutions are checked even when the text names no merge.
+for command in ("gh pr $(cat subcommand.txt) 9 --repo o/r", 'gh api -X PUT "repos/o/r/pulls/9/$(cat action.txt)"'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "command substitution" in message and not calls, (command, message)
+# Paths split by quoting or a line continuation are found in the parsed words.
+for command in ("""tea api -X POST /repos/o/r/pulls/"9"/merge -d '{"Do":"squash"}'""",
+                "tea api -X POST /repos/o/r/pulls/9/mer\\\nge -d '{}'"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and calls, (command, message)
+# A merge path built from variables is refused.
+for command in ('R=alcxyz/nix-config; tea api -X POST "/repos/$R/pulls/622/merge" -d \'{"Do":"squash"}\'',
+                "for n in 620 621; do tea api -X POST /repos/o/r/pulls/$n/merge; done",
+                'tea api -X POST "/repos/o/r/$(echo pulls)/7/merge"'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and not calls, (command, message)
 # A substitution in a request that is not a merge is left alone.
 assert not expect("""tea api -X POST /repos/o/r/pulls/7/reviews -d "$(jq -n '{event: 1}')\"""", 0)[0]
 # A `#` inside a word is not a comment, so the rest of the line is still checked.
