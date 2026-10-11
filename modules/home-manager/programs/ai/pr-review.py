@@ -117,10 +117,10 @@ TEA_ASSIGNMENT = re.compile(r"^(?:GITEA_\w*|XDG_CONFIG_HOME|HOME)=")
 TEA_ENVIRONMENT = ("GITEA_SERVER_URL", "GITEA_INSTANCE_URL")
 # tea commands that change its stored logins or default login.
 TEA_LOGIN_COMMANDS = {"login", "logins", "logout"}
-# Separators after which a cd may not reach a later command.
-SUBSHELL_TOKENS = {"(", ")", "|", "|&", "&"}
-# The word before quoted text that runs it as a command, such as `bash -c` or `eval`.
-NESTED_COMMAND = re.compile(r"^(?:-[A-Za-z]*c|eval)$")
+# Clients whose words inside quoted text are read as a nested command.
+NESTED_CLIENTS = {"tea", "gh", "fj"}
+# Words that change the directory a later gh command picks its repository from.
+DIRECTORY_CHANGES = {"cd", "pushd", "popd", "-C", "--chdir"}
 # Words that may come between a separator and the command they run.
 COMMAND_PREFIXES = {"env", "command", "exec", "xargs", "sudo", "time", "nice", "nohup"}
 MCP_PREFIX = "mcp__forgejo__"
@@ -1152,11 +1152,7 @@ def gh_pr_merges(tokens, cwd):
     for index in range(len(tokens) - 2):
         if os.path.basename(tokens[index]) != "gh" or tokens[index + 1:index + 3] != ["pr", "merge"]:
             continue
-        merge_cwd, changes_directory = cwd, False
-        for position in range(index):
-            if tokens[position] == "cd" and position + 1 < index and tokens[position + 1] not in SEPARATORS:
-                changes_directory = True
-                merge_cwd = os.path.join(merge_cwd, os.path.expanduser(tokens[position + 1]))
+        merge_cwd = cwd
 
         selector, repo, args, problem = None, None, iter(tokens[index + 3:]), None
         for token in args:
@@ -1181,14 +1177,12 @@ def gh_pr_merges(tokens, cwd):
             elif not token.startswith("-") and selector is None:
                 selector = token
 
-        # A cd is followed only through a plain `&&` or `;` chain: in a
-        # subshell, pipeline, background job or substitution it does not reach
-        # later commands, so the directory that picks the repository is unclear.
-        if problem is None and changes_directory and not repo and (
-            SUBSHELL_TOKENS & set(tokens) or any("$(" in token or "`" in token for token in tokens)
+        # Whether a directory change reaches the merge depends on subshells,
+        # conditions and pipelines, which are not traced: name the repository.
+        if problem is None and not repo and any(
+            token.partition("=")[0] in DIRECTORY_CHANGES for token in shell_words(tokens)
         ):
-            problem = ("the command changes directory in a subshell, pipeline or background job; "
-                       "name the repository with --repo")
+            problem = "the command changes directory; name the repository with --repo"
         yield [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else []), merge_cwd, problem
 
 
@@ -1227,19 +1221,19 @@ def cli_merges(tokens):
 def shell_words(tokens):
     """Return the tokens and the words of commands nested in them, such as `$(tea ...)` or `bash -c "tea ..."`.
 
-    Nested shell code is not parsed: a token with a command substitution, one
-    given to `-c` or `eval`, or one with a tea word anywhere in it, is split
-    into all its words. Other quoted text, such as a JSON body or a commit
-    message, stays one word; text that mentions tea is scanned like a command,
-    which fails closed.
+    Nested shell code is not parsed, and how quoted text reaches a shell (`-c`,
+    `eval`, a pipe, a here-string) is not traced: a token with a command
+    substitution, or with a tea, gh or fj word anywhere in it, is split into
+    all its words and read like a command, which fails closed. Other quoted
+    text, such as a JSON body, stays one word.
     """
     words = list(tokens)
-    for index, token in enumerate(tokens):
+    for token in tokens:
         # The nested shell removes quotes and backslashes anywhere in a word.
         inner = [re.sub(r"[\"'\\]", "", word).strip("{}") for word in re.split(r"[\s;&|()`$]+", token)]
         inner = [word for word in inner if word]
-        nested = "$(" in token or "`" in token or (index > 0 and NESTED_COMMAND.match(tokens[index - 1]))
-        if (nested and inner) or (len(inner) > 1 and "tea" in map(os.path.basename, inner)):
+        substituted = "$(" in token or "`" in token
+        if (substituted and inner) or (len(inner) > 1 and NESTED_CLIENTS & set(map(os.path.basename, inner))):
             # A separator keeps nested words out of the previous call's arguments.
             words.extend([";", *inner])
     return words
@@ -1417,7 +1411,8 @@ def guard_check(command, cwd):
         return f"cannot verify {ref}: {problem}."
     nested = words[len(tokens):]
     if any("pr" in call and "merge" in call for call, _flags in cli_calls(nested, "gh", set())):
-        return "cannot verify the PR (gh pr merge inside another command): run gh pr merge directly."
+        return ("cannot verify the PR (gh pr merge inside other text): run gh pr merge directly; if the text "
+                "only quotes it, as in a commit message or PR body, pass that text from a file.")
 
     # Every merge in the command must pass on its own.
     for view, view_cwd, problem in gh_pr_merges(tokens, cwd):

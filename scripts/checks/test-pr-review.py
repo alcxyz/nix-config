@@ -80,8 +80,13 @@ assert not expect("echo hello", 0)[0]
 # gh pr merge resolves selector, repository and cwd for gh pr view.
 seen, _ = expect("gh pr merge 5 --squash --body 'x y' -R owner/repo", 2)
 assert seen[0][0][:6] == ["gh", "pr", "view", "5", "--repo", "owner/repo"], seen
-seen, _ = expect("cd sub && gh pr merge 7 --squash", 0)
-assert seen[0][1] == "/work/sub", seen
+# A directory change needs --repo; with it, the directory does not matter.
+for command in ("cd sub && gh pr merge 7 --squash", "true || cd /reviewed; gh pr merge 7 --squash",
+                "pushd /reviewed; gh pr merge 7 --squash", "env -C /reviewed gh pr merge 7 --squash"):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "name the repository with --repo" in message and not calls, (command, message)
+expect("cd sub && gh pr merge 7 --squash --repo o/r | tail -5", 0)
 expect("gh pr merge --repo=owner/reviewed --squash", 0)
 
 # A review of an earlier head does not count.
@@ -225,8 +230,7 @@ expect("gh pr merge 7 --squash >/dev/null && git checkout dev", 0)
 expect("gh pr merge 7 --squash 2>&1; git pull", 0)
 seen, _ = expect("gh pr merge 9 2> err --repo o/r && git pull", 2)
 assert seen[0][0][3:6] == ["9", "--repo", "o/r"], seen
-# A cd in a subshell, pipeline, background job or substitution leaves the
-# repository unclear unless --repo names it.
+# Subshells, pipelines, background jobs and substitutions are covered the same way.
 for command in ("(cd /reviewed && gh pr merge 7 --squash); gh pr merge 7 --squash",
                 "cd /unreviewed && (cd /work); gh pr merge 7 --squash",
                 "cd /reviewed | cat; gh pr merge 7 --squash",
@@ -236,9 +240,21 @@ for command in ("(cd /reviewed && gh pr merge 7 --squash); gh pr merge 7 --squas
     code, message = hook(command)
     assert code == 2 and "name the repository with --repo" in message and not calls, (command, message)
 expect("(cd x && gh pr merge 7 --squash --repo o/r)", 0)
-# Quoted text that only mentions a merge, outside -c, eval or a substitution, is not a nested command.
-assert not expect('gh pr create --title t --body "Run gh pr merge after review"', 0)[0]
-assert not expect('git commit -m "guard: refuse nested gh pr merge and fj pr merge"', 0)[0]
+# Quoted text that mentions a merge command is read as one, however it reaches a shell;
+# text that only quotes it must come from a file.
+for command in ('bash -c -- "gh pr merge 9 --squash"', 'bash -c >/dev/null "gh pr merge 9 --squash"',
+                "echo 'gh pr merge 9 --squash' | bash", 'bash <<< "gh pr merge 9 --squash"',
+                'gh pr create --title t --body "Run gh pr merge after review"'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "from a file" in message and not calls, (command, message)
+assert not expect('gh pr create --title t --body-file body.md', 0)[0]
+for command in ('bash -c -- "gh api --hostname ghe.example -X PUT repos/o/r/pulls/7/merge"',):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2 and "only github.com" in message, (command, message)
+seen, _ = expect('bash <<< "gh api -X PUT repos/o/r/pulls/7/merge"', 0)
+assert forges(seen) == {"github", "forgejo"}, seen
 # Host overrides in a nested gh api call are seen.
 for command in ('bash -c "gh api --hostname ghe.example -X PUT repos/o/r/pulls/7/merge"',
                 'bash -c "env GH_HOST=ghe.example gh api -X PUT repos/o/r/pulls/7/merge"'):
@@ -247,7 +263,7 @@ for command in ('bash -c "gh api --hostname ghe.example -X PUT repos/o/r/pulls/7
     assert code == 2 and "only github.com" in message, (command, message)
 # Merges nested in another command are refused or checked like top-level ones.
 _, message = hook('bash -c "gh pr merge 9 --squash"')
-assert "inside another command" in message, message
+assert "inside other text" in message, message
 _, message = hook('bash -c "fj pr merge o/r#7"')
 assert "fj merges are not verified" in message, message
 seen, _ = expect('bash -c "gh api -X PUT repos/o/r/pulls/7/merge"', 0)
