@@ -123,8 +123,9 @@ or method sends it, as is a write request (`-X`, `-d`, `-f` and similar
 options) with one anywhere after `repos/`; a command that does not parse is
 refused when it may merge. Quoted or substituted text that mentions `gh`, `fj` or
 `tea` is read as a command, so a commit message or PR body that quotes a merge
-command must come from a file. The parser keeps no quoting, so a quoted
-separator reads as a real one; the checks lean towards blocking where that
+command must come from a file. A comment that mentions a merge, `gh`,
+`tea`, `fj` or a `pulls/` path is also read as part of the command. The parser
+keeps no quoting, so a quoted separator reads as a real one; the checks lean towards blocking where that
 matters, but a crafted command can still mislead them.
 The comment's mode follows the pinned prefix, so older guards still accept it;
 the guard does not check the chain of rounds, which `run` enforces from local

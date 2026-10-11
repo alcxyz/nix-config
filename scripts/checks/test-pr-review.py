@@ -284,6 +284,12 @@ for command in ('gh pr comment 5 --body "$(printf "Fixes #12, don\'t merge yet")
     calls.clear()
     code, message = hook(command)
     assert code == 2, (command, message)
+for command in ('g""h pr comment 5 --body "$(printf "Fixes #12")"; g""h pr mer""ge 9 --repo o/r --squash',
+                'gh pr comment 5 --body "$(printf "Fixes #12")"; g"h" pr mer"ge" 9 --repo o/r --squash',
+                'gh pr comment 5 --body "$(printf "Fixes #12")"; g\\\nh pr merge 9 --repo o/r'):
+    calls.clear()
+    code, message = hook(command)
+    assert code == 2, (command, message)
 # An ordinary comment is not read as part of the command.
 expect("""tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash"}'  # retry with -r if it fails""", 0)
 # A gh api path with repeated slashes stays a GitHub-only check.

@@ -1518,8 +1518,11 @@ def guard_check(command, cwd):
     """
     problem = guard_check_parsed(command, cwd, comments=True)
     # Ordinary comments stay comments; only removed text that could hold a
-    # merge is read again.
-    if problem or not COMMENT_MERGE_HINT.search(comment_text(command)):
+    # merge is read again, judged after quote removal, and so is a comment
+    # that ends in a line continuation.
+    removed = comment_text(command)
+    hint = COMMENT_MERGE_HINT.search(re.sub(r"[\"'\\]", "", removed)) or re.search(r"\\(\n|$)", removed)
+    if problem or not hint:
         return problem
     return guard_check_parsed(command, cwd, comments=False)
 
