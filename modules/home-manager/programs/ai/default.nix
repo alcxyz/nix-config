@@ -306,6 +306,8 @@ in {
     home.file.".codex/skills/long-running-jobs".source = ./skills/long-running-jobs;
     home.file.".claude/skills/dispatch-thread".source = ./skills/dispatch-thread;
     home.file.".codex/skills/dispatch-thread".source = ./skills/dispatch-thread;
+    home.file.".claude/skills/pr-review".source = ./skills/pr-review;
+    home.file.".codex/skills/pr-review".source = ./skills/pr-review;
 
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file

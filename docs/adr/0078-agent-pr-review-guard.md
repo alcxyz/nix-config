@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -28,9 +28,11 @@ line is `Automated read-only review (<short head sha> on <target branch>):
 sha>` and the role is `light` or `deep`. A trivial PR, or a promotion such as
 `dev` to `main` whose every commit was already reviewed on its own PR, may
 record `skipped (<reason>)` as the outcome, without a mode. Commits pushed
-directly to the source branch, and conflict resolutions, still need a review.
-Low-severity findings may be justified or tracked in an issue instead of fixed
-with a new commit. Comments name no models and carry no signatures.
+directly to the source branch, and conflict resolutions, still need a review,
+and a failed or unavailable reviewer is never a reason to skip. Low-severity
+findings and small cleanups are fixed in the PR before merging; an issue tracks
+one only when it needs a real decision or substantial work. Comments name no
+models and carry no signatures.
 
 `programs.ai` installs `pr-review`, so agents do not assemble the reviews by
 hand or depend on which models their own client offers:
@@ -112,6 +114,15 @@ deadline inside the 120-second hook timeout. The hook also matches Forgejo MCP
 tools and checks `merge_pull_request` like other merges, from its structured
 arguments (ADR-0081); other MCP tools pass. The guard and `pr-review` share one script.
 
+`programs.ai` also installs a `pr-review` skill for both clients, as ADR-0091
+deploys skills. It is the one full copy of the agent procedure: running,
+reviewer depth, findings, fix rounds with `--response`, outcomes, skips and
+failures. The global agent rules keep only the requirement and point to the
+skill, and the guard's message is a self-sufficient summary that also points
+to it. The procedure had drifted across the rules, a workflow guide and the
+guard's message, for example on low-severity findings, while the rules alone
+cost every session in both clients its full text.
+
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
 
@@ -135,6 +146,12 @@ reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
   size rules are cheap, predictable and fail towards `deep`.
 - **One light reviewer for documentation:** cheaper still, but drops the
   cross-model check this decision exists for.
+- **The procedure in the global rules only:** always loaded, but kept in step
+  with the guard's message and guides by hand, which drifted.
+- **The guard's message only:** arrives only when a merge is blocked, too late
+  to start the review early, and not at all where an untrusted Codex hook is
+  skipped. The always-on requirement stays in the rules; a skill that fails to
+  load costs one blocked merge, not a missed review.
 - **`pr-review` in nix-packages:** reusable tooling lives there, but the command
   is tied to this decision's comment format, guard and reviewer settings, so it
   stays next to the guard.

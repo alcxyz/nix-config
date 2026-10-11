@@ -125,19 +125,21 @@ REMOTE_URL = re.compile(
 )
 
 GUIDANCE = (
-    "Before merging a PR you created, run `pr-review run <pr>`: it gives the diff "
-    "and PR description to the configured read-only cross-model reviewers and "
-    "records their results for the PR's current head commit. It takes several "
-    "minutes, so run it in the background. Address or justify "
-    "the findings, then post the outcome with `pr-review comment <pr> \"<outcome>\"`, "
-    "for example \"no blocking findings.\" For a trivial PR, or a promotion whose "
-    "every commit was already reviewed on its own PR, post "
-    "`pr-review comment <pr> \"skipped (<reason>)\"`. Small documentation-only "
-    "changes get lighter reviewers; `--role deep` asks for the deep ones. Pushing new commits needs a "
-    "new review; after small fixes, `pr-review run <pr> --response \"<what was "
-    "fixed or justified>\"` reviews only the fixes. Low-severity findings may be "
-    "justified or tracked in an issue instead of fixed with a new commit. Do not "
-    "name models or add signatures. If the review cannot be verified, ask the operator."
+    "Before merging a PR you created, run `pr-review run <pr>` in the background "
+    "from a clone of its repository: it gives the diff and PR description to the "
+    "configured read-only cross-model reviewers and records their results for the "
+    "PR's current head commit, which takes several minutes. Address or justify every "
+    "finding, fixing low-severity findings and small cleanups in the PR unless one "
+    "needs a real decision or substantial work, then post the outcome with "
+    "`pr-review comment <pr> \"<outcome>\"`, for example \"no blocking findings.\" "
+    "Every new head needs a new review, including direct pushes, conflict "
+    "resolutions and a retarget; after small fixes, `pr-review run <pr> --response "
+    "\"<what was fixed or justified>\"` reviews only the fixes. Post "
+    "`pr-review comment <pr> \"skipped (<reason>)\"` only for a trivial PR, or a "
+    "promotion whose every commit was already reviewed on its own PR; a failed "
+    "reviewer is never a reason to skip, so run it again once it recovers. Do not "
+    "name models or add signatures. If the review cannot be verified, ask the "
+    "operator. The `pr-review` skill has the full procedure."
 )
 
 PROMPT = """You are an independent, read-only reviewer of pull request {ref} ({url}).
