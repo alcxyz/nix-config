@@ -86,6 +86,10 @@ GIT = ["git", "-c", "core.hooksPath=/dev/null"]
 GUARD_DEADLINE = 90
 SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "\n"}
 PUNCTUATION = ";&|()\n"
+# Stands in for the `&` of an attached `&>` redirection while lexing.
+ATTACHED_REDIRECTION = "\ue000"
+# A word that starts with a redirection operator; a bare operator takes the next word as its target.
+REDIRECTION = re.compile(r"\d*(?:>>?|<)&?|&>>?")
 # Simple redirections such as `2>&1` or `>/dev/null`, optionally piped to tail or
 # head, at the end of a command. Without quotes, escapes or other commands, removing
 # them cannot hide a merge.
@@ -1106,7 +1110,9 @@ def split_command(command):
     Newlines outside quotes separate commands, and descriptor duplications such
     as `2>&1` stay words instead of reading as separators.
     """
-    command = strip_trailing_redirections(command).replace("\\\n", " ")
+    # An attached `&>file` redirects; a spaced `& >file` runs in the background
+    # and separates. Mark the attached form so the lexer keeps it in one word.
+    command = strip_trailing_redirections(command).replace("\\\n", " ").replace("&>", ATTACHED_REDIRECTION + ">")
     lexer = shlex.shlex(command, posix=True, punctuation_chars=PUNCTUATION)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
@@ -1115,6 +1121,7 @@ def split_command(command):
         raw = list(lexer)
     except ValueError:
         return None
+    raw = [token.replace(ATTACHED_REDIRECTION, "&") for token in raw]
     tokens, index = [], 0
     while index < len(raw):
         token, following = raw[index], raw[index + 1] if index + 1 < len(raw) else ""
@@ -1150,6 +1157,11 @@ def gh_pr_merges(tokens, cwd):
         for token in args:
             if token in SEPARATORS:
                 break
+            redirection = REDIRECTION.match(token)
+            if redirection:
+                if redirection.end() == len(token):
+                    next(args, None)
+                continue
             name = token.split("=", 1)[0]
             if name in ("-R", "--repo"):
                 repo = token.split("=", 1)[1] if "=" in token else next(args, None)
@@ -1193,17 +1205,21 @@ def cli_merges(tokens):
             yield "the PR (fj pr merge)", f"fj merges are not verified; use {TEA_API_MERGE}"
 
 
-def shell_words(tokens):
+def shell_words(tokens, depth=0):
     """Return the tokens and the words of commands nested in them, such as `$(tea ...)` or `bash -c "tea ..."`.
 
-    Other quoted text, such as a JSON body or a merge title, stays one word.
+    A quoted token is read as shell code and expanded when tea starts a
+    command in it, so other quoted text, such as a JSON body or a merge title
+    that mentions tea, stays one word.
     """
     words = list(tokens)
     for token in tokens:
-        inner = [word.strip("\"'") for word in re.split(r"[\s;&|()`$]+", token)]
-        inner = [word for word in inner if word]
-        if "$(" in token or "`" in token or (len(inner) > 1 and os.path.basename(inner[0]) == "tea"):
-            words.extend(inner)
+        if "$(" in token or "`" in token:
+            words.extend(word.strip("\"'") for word in re.split(r"[\s;&|()`$]+", token) if word.strip("\"'"))
+        elif depth < 3 and any(character.isspace() for character in token):
+            inner = split_command(token) or []
+            if any(os.path.basename(word) == "tea" and command_position(inner, index) for index, word in enumerate(inner)):
+                words.extend(shell_words(inner, depth + 1))
     return words
 
 
@@ -1277,7 +1293,8 @@ def rest_merge_problem(match, tokens):
     checked on GitHub when it is on api.github.com or the command calls
     `gh ... api` (for a path on another host, only when gh api receives it),
     and on its own host or FORGEJO_URL unless every occurrence of it is an
-    argument of such a call.
+    argument of a gh api command and the command has no tea word and no
+    command substitution.
     """
     owner, repo, number = match["owner"], match["repo"], match["number"]
     if not all(LITERAL.match(part) for part in (owner, repo, number)) or not number.isdigit():

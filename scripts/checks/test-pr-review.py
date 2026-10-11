@@ -195,10 +195,18 @@ seen, _ = expect('gh api user & >/dev/null curl -X POST "$F/repos/o/r/pulls/7/me
 assert forges(seen) == {"github", "forgejo"}, seen
 # tea and its options inside a quoted or substituted command are seen too.
 for command in ('gh api -X GET "repos/o/r/pulls/7?x=$(tea api --login other -X POST /repos/o/r/pulls/7/merge)"',
-                'bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"'):
+                'bash -c "tea api --login other -X POST /repos/o/r/pulls/7/merge"',
+                'bash -c "env tea api --login other -X POST /repos/o/r/pulls/7/merge"',
+                'bash -c "cd ~/src/r && tea api --login other -X POST /repos/o/r/pulls/7/merge"'):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "`--login`" in message, (command, message)
+_, message = hook('bash -c "GITEA_SERVER_URL=https://x tea api -X POST /repos/o/r/pulls/7/merge"')
+assert "the GITEA_SERVER_URL assignment" in message, message
+# An attached &> redirects and does not end a gh merge's arguments.
+for command in ("gh pr merge &>/dev/null 9 --squash --repo o/r", "gh pr merge 2> err 9 --squash --repo o/r"):
+    seen, _ = expect(command, 2)
+    assert seen[0][0][3:6] == ["9", "--repo", "o/r"], (command, seen)
 # A gh word that is not a command, such as an option value, still adds the GitHub check.
 seen, _ = expect('curl -o gh api -X POST "$F/repos/o/r/pulls/7/merge"', 0)
 assert forges(seen) == {"github", "forgejo"}, seen
