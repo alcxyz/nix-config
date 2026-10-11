@@ -1,13 +1,14 @@
 ---
 name: long-running-jobs
-description: Start, watch and resume unattended work that must survive the agent session, such as model batches, long builds, migrations or release waits, and get notified when it ends. Use before starting a command that may run long enough for the thread to settle or T3 to restart, before starting a server or watcher to test it, or when asked to monitor a job, CI run or deployment.
+description: Start, watch and resume unattended work that must survive the agent session, such as model batches, long builds, migrations or release waits, and get notified when it ends. Use before starting a command that may run long enough for the thread to settle or T3 to restart, before starting a server or watcher to test it, when asked to monitor a job, or when waiting on a CI run, deployment or PR check, even one you started yourself.
 ---
 
 # Long-running jobs
 
 T3 runs each agent session in its own systemd scope. Settling a thread, a T3
 restart or a crashed session ends everything the session started, including
-its background commands. A 200-document batch was killed at 195/200 this way.
+its background commands. A 200-document batch was killed at 195/200 this way,
+and a CI build finished unnoticed after the session sleeping on it ended.
 `agent-job` runs the work as a transient systemd user unit instead, which keeps
 running on its own; the session only waits for it. Tracking: nix-config #612.
 
@@ -25,10 +26,13 @@ running on its own; the session only waits for it. Tracking: nix-config #612.
 - **Unattended local work that must survive the session**, such as long
   batches, builds or release waits: `agent-job`, below.
 - **Outside state** such as PR checks, CI runs or deployments: do not start a
-  local poller. In T3, use `watch_pull_request` for a PR (T3 wakes the thread
-  when checks finish, someone comments or the branch conflicts) and
-  `schedule_task` for other periodic checks. Elsewhere, check again on the next
-  turn.
+  local poller or use a `sleep` in the session as a reminder, since it dies
+  with the session and nothing wakes the thread. In T3, use
+  `watch_pull_request` for a PR (T3 wakes the thread when checks finish,
+  someone comments or the branch conflicts) and `schedule_task` for other
+  checks, with an interval matched to the expected duration. Scheduled tasks
+  recur, so delete yours with `delete_scheduled_task` once the wait is over.
+  Elsewhere, check again on the next turn.
 
 ## Start
 
