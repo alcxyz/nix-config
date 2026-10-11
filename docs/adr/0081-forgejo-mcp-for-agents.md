@@ -50,8 +50,9 @@ request bodies from stdin, and typed `tea` commands with `-o json` serve reads.
 `fj` is no longer installed: it has no raw API or JSON output, and on Forgejo
 15 it crashed on `pr status` and opened an editor when a body was missing.
 
-Shell merges stay available as `tea api -X POST /repos/owner/repo/pulls/N/merge`,
-which the guard checks as a REST merge on its `url`. It needs a literal path,
+Shell merges stay available as
+`tea api -X POST /repos/owner/repo/pulls/N/merge -d '{"Do": "squash"}'`, which
+the guard checks as a REST merge on its `url`. It needs a literal path,
 and refuses the call when `--login`, `--remote`, `--repo`, a `tea login`
 command, a `GITEA_*`, `HOME` or `XDG_CONFIG_HOME` assignment, or a
 `GITEA_SERVER_URL` or `GITEA_INSTANCE_URL` in the guard's environment could

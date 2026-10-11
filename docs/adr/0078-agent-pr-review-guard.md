@@ -111,8 +111,10 @@ method, so any request to a merge path is checked, a GET included. It does not
 trace which call sends a path, so it fails closed: a path is checked on GitHub
 when the command calls `gh api` (a path on another host only when `gh api`
 receives it), and on its own host or the Forgejo `url` unless only `gh api`
-arguments contain it. Any `tea` call in the command that could pick another
-login blocks a Forgejo check.
+arguments contain it. A `tea` option or login command anywhere in the
+command that could pick another login blocks a Forgejo check. The parser keeps
+no quoting, so a quoted separator reads as a real one; the checks lean towards
+blocking where that matters, but a crafted command can still mislead them.
 The comment's mode follows the pinned prefix, so older guards still accept it;
 the guard does not check the chain of rounds, which `run` enforces from local
 state when it selects a follow-up. It also blocks when it

@@ -168,6 +168,11 @@ seen, _ = expect("gh api user && curl -X POST https://git.example/api/v1/repos/o
 assert forges(seen) == {"forgejo"}, seen
 seen, _ = expect("gh 2>&1 api -X PUT repos/o/r/pulls/7/merge -f merge_method=squash", 0)
 assert forges(seen) == {"github"}, seen
+seen, _ = expect("cd x && env GH_TOKEN_FILE=f gh api -X PUT repos/o/r/pulls/7/merge", 0)
+assert forges(seen) == {"github"}, seen
+# A gh word that is not a command, such as an option value, still adds the GitHub check.
+seen, _ = expect('curl -o gh api -X POST "$F/repos/o/r/pulls/7/merge"', 0)
+assert forges(seen) == {"github", "forgejo"}, seen
 for command in ("P=repos/o/r/pulls/7/merge; gh api -X PUT \"$P\"",
                 "echo repos/o/r/pulls/7/merge | xargs gh api -X PUT",
                 "gh api -X GET /repos/o/r/pulls/7/merge; curl -X POST \"$F/repos/o/r/pulls/7/merge\""):
@@ -176,7 +181,9 @@ for command in ("P=repos/o/r/pulls/7/merge; gh api -X PUT \"$P\"",
 for command in ("gh api -X GET /repos/o/r/pulls/7/merge; tea api --login other -X POST /repos/o/r/pulls/7/merge",
                 "gh 2> gh api -X GET /repos/o/r/pulls/7/merge; tea api --login other -X POST /repos/o/r/pulls/7/merge",
                 "GH_CONFIG_DIR=~/.config/gh gh api -X GET repos/o/r/pulls/7/merge; "
-                "tea api --login other -X POST repos/o/r/pulls/7/merge"):
+                "tea api --login other -X POST repos/o/r/pulls/7/merge",
+                "tea api -o gh --login api -X POST /repos/o/r/pulls/7/merge -d @body.json",
+                """tea api -o ";" --login other -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash"}'"""):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "without --login" in message, (command, message)

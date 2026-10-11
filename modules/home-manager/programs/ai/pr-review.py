@@ -103,7 +103,7 @@ API_MERGE = re.compile(
     r"(?P<owner>[^/\s\"']+)/(?P<repo>[^/\s\"']+)/pulls/(?P<number>[^/\s\"']+)/merge\b"
 )
 # The shell merge agents are pointed to: a REST merge through tea's stored login.
-TEA_API_MERGE = "`tea api -X POST /repos/owner/repo/pulls/N/merge` with a literal path"
+TEA_API_MERGE = "`tea api -X POST /repos/owner/repo/pulls/N/merge -d '{\"Do\": \"squash\"}'` with a literal path"
 # tea api options that choose the login or repository, so the instance a merge
 # goes to could differ from the one the guard checks.
 TEA_TARGET_FLAGS = {"-l", "--login", "-R", "--remote", "-r", "--repo"}
@@ -113,6 +113,8 @@ TEA_ASSIGNMENT = re.compile(r"^(?:GITEA_\w*|XDG_CONFIG_HOME|HOME)=")
 TEA_ENVIRONMENT = ("GITEA_SERVER_URL", "GITEA_INSTANCE_URL")
 # tea commands that change its stored logins or default login.
 TEA_LOGIN_COMMANDS = {"login", "logins", "logout"}
+# Words that may come between a separator and the command they run.
+COMMAND_PREFIXES = {"env", "command", "exec", "xargs", "sudo", "time", "nice", "nohup"}
 MCP_PREFIX = "mcp__forgejo__"
 MCP_MERGE = "merge_pull_request"
 # Arguments an agent's MCP merge may set; force and scheduled merges only as false.
@@ -1199,17 +1201,33 @@ def tea_retargeted(tokens):
         return True
     if any(TEA_ASSIGNMENT.match(token) for token in tokens):
         return True
-    # Which call uses a merge path, and where its subcommand starts, is not
-    # traced: any tea call that picks a login or repository, or changes the
-    # stored logins, counts.
-    return any(flags or TEA_LOGIN_COMMANDS & set(words) for words, flags in cli_calls(tokens, "tea", TEA_TARGET_FLAGS))
+    # Which call uses a merge path is not traced, and a quoted separator reads
+    # as a real one, so the options are looked for in the whole command.
+    for token in tokens:
+        name = token.partition("=")[0]
+        attached = not token.startswith("--") and len(token) > 2 and token[:2] in TEA_TARGET_FLAGS
+        if name in TEA_TARGET_FLAGS or attached or token in TEA_LOGIN_COMMANDS:
+            return True
+    return False
 
 
-def gh_api_positions(tokens):
-    """Return the token positions of the arguments of gh calls that have an `api` word."""
+def command_position(tokens, index):
+    """Return whether tokens[index] is where a command starts, after assignments or a prefix such as env."""
+    index -= 1
+    while index >= 0 and (tokens[index] in COMMAND_PREFIXES or ("=" in tokens[index] and not tokens[index].startswith("-"))):
+        index -= 1
+    return index < 0 or tokens[index] in SEPARATORS
+
+
+def gh_api_positions(tokens, strict):
+    """Return the token positions of the arguments of gh calls that have an `api` word.
+
+    With strict, only a gh at a command position counts, so an option value
+    named gh does not start a call; otherwise every gh word does.
+    """
     positions = set()
     for index, token in enumerate(tokens):
-        if "=" in token or os.path.basename(token) != "gh":
+        if "=" in token or os.path.basename(token) != "gh" or (strict and not command_position(tokens, index)):
             continue
         end = next((j for j in range(index + 1, len(tokens)) if tokens[j] in SEPARATORS), len(tokens))
         if "api" in tokens[index + 1:end]:
@@ -1249,8 +1267,10 @@ def rest_merge_problem(match, tokens):
         return f"cannot verify {owner}/{repo}#{number}: use a literal owner, repository and PR number in the merge call."
     host = match["host"]
     # Positions, not counts, so overlapping or repeated gh calls cannot cover
-    # an occurrence that another client sends.
-    gh_api = gh_api_positions(tokens)
+    # an occurrence that another client sends. Any gh word adds the GitHub
+    # check; only a gh at a command position can remove the Forgejo one.
+    gh_api = gh_api_positions(tokens, strict=False)
+    gh_api_calls = gh_api_positions(tokens, strict=True)
     path = {index for index, token in enumerate(tokens) if match.group(0) in token}
     prs = []
     # A path on another named host goes to GitHub only as a gh api argument.
@@ -1259,7 +1279,7 @@ def rest_merge_problem(match, tokens):
         if problem:
             return problem
         prs.append(PR("github", "github.com", owner, repo, number))
-    if host != "api.github.com" and not (path and path <= gh_api):
+    if host != "api.github.com" and not (path and path <= gh_api_calls):
         # FORGEJO_URL matches tea's default login only.
         if any(os.path.basename(token) == "tea" for token in tokens) and tea_retargeted(tokens):
             return (f"cannot verify {owner}/{repo}#{number}: give `tea api` a literal path, without "
