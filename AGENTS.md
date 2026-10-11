@@ -12,6 +12,36 @@ secret wiring details, and sensitive implementation notes in the private
 
 Do not move sensitive material to `nix-packages`; that repository is public too.
 
+## Hosts and deploys
+
+Work on repositories and manage every host from `xyz` (or the Mac). The servers
+`xev`, `nex` and `nux` and the Pis hold no repository clones; do not clone or
+edit there.
+
+Switch with `deploy`, which resolves the host and checks the package lock:
+`deploy --hm` or `deploy --nixos` for the current machine, `deploy <host>` for
+one remote host. Do not type `home-manager switch --flake .#alc-<host>` by
+hand, since a wrong host name breaks that host's desktop. The user's `hmsw`
+and `nxsw` shell aliases are interactive shortcuts that agent shells do not
+have.
+
+For changes that affect several hosts, recommend `deploy --all` from `xyz`:
+the flake is meant to converge the whole fleet, so touching unaffected hosts is
+not a risk. Do flag what breaks that, such as uncommitted or unpushed changes
+in the tree being deployed, and units with `restartIfChanged = false` that need
+a restart or reboot.
+
+`rpi0` and `rpi1` serve DNS to the whole network; never have both down at once.
+`deploy --all` switches them in parallel (nix-packages#504), so when a change
+touches them, deploy `rpi0`, check DNS, then deploy `rpi1` before any
+`deploy --all`; the later run finds them already converged.
+
+`xps` is a battery-less laptop that stays docked in the living room. In
+network and secret designs, group it with the stationary Pis rather than with
+mobile clients. Its planned direction (media modes and an isolated agent mode,
+no operator workstation) is tracked in #548; until then its current
+configuration still includes a source workspace.
+
 ## Wolf browser input changes
 
 Any change to the Wolf browser image's KDE Connect input path or process
