@@ -1262,7 +1262,7 @@ def gh_pr_merges(tokens, cwd):
     """Yield (selector args, cwd, problem, sources) for each `gh pr merge`.
 
     problem is None when it can be looked up; sources lists the positions of
-    the words that hold the selector and repository.
+    its argument words, up to the next separator.
     """
     for index in range(len(tokens) - 2):
         if os.path.basename(tokens[index]) != "gh" or tokens[index + 1:index + 3] != ["pr", "merge"]:
@@ -1289,22 +1289,23 @@ def gh_pr_merges(tokens, cwd):
             if name in ("-R", "--repo"):
                 if "=" in token:
                     repo = token.split("=", 1)[1]
-                    sources.append(position - 1)
                 elif position < len(tokens):
                     repo = tokens[position]
-                    sources.append(position)
                     position += 1
             elif token in GH_MERGE_VALUE_FLAGS:
                 position += 1
             elif not token.startswith("-") and selector is None:
                 selector = token
-                sources.append(position - 1)
 
         # Without both, gh picks the PR or repository from the directory it
         # runs in, which cd, env -C, eval or GIT_DIR can change unseen.
         if problem is None and not (selector and repo):
             problem = "name the PR and its repository, as in `gh pr merge N --repo owner/repo`"
         view = [arg for arg in (selector,) if arg] + (["--repo", repo] if repo else [])
+        for position in range(index + 3, len(tokens)):
+            if tokens[position] in SEPARATORS:
+                break
+            sources.append(position)
         yield view, merge_cwd, problem, sources
 
 
@@ -1712,10 +1713,10 @@ def guard_check_parsed(command, cwd, comments):
         ref = "the PR (gh pr merge " + " ".join(view) + ")"
         if problem:
             return f"cannot verify {ref}: {problem}."
-        # Removing leftover quotes is for detection only; a selector or
-        # repository it changed would be looked up as another PR.
+        # Removing leftover quotes is for detection only; a word it changed
+        # could be read as another selector, repository or option.
         if any(tokens[position] != parsed[position] for position in sources):
-            return f"cannot verify {ref}: a quote inside the PR or repository name cannot be checked."
+            return f"cannot verify {ref}: a quote inside one of the merge's arguments cannot be checked."
         # The hook's lookup does not see inline assignments, so they could point
         # the merge at another host or repository than the one checked.
         if any(token.startswith(("GH_HOST=", "GH_REPO=")) for token in tokens):

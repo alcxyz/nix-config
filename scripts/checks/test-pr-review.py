@@ -333,7 +333,8 @@ for command in ("bash -c 'gh api -X PUT \"$EP\" --input body.json'", 'gh >out ap
 # A quote inside a selector cannot be checked; each spelling of a merge path is attributed to its client.
 for command in ("""gh pr merge "feature's-fix" --repo owner/repo --squash""",
                 """gh pr merge "feature's-fix" --repo owner/repo --squash --subject features-fix""",
-                """gh pr merge "feature's-fix" --repo o/r --squash && echo features-fix"""):
+                """gh pr merge "feature's-fix" --repo o/r --squash && echo features-fix""",
+                """gh pr merge "'-t" -b 9 --repo o/r --squash"""):
     calls.clear()
     code, message = hook(command)
     assert code == 2 and "quote inside" in message and not calls, (command, message)
