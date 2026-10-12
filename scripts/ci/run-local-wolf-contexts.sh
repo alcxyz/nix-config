@@ -72,7 +72,7 @@ if [[ -f $checkpoint ]]; then
   previous=$(<"$checkpoint")
   if [[ $previous =~ ^[0-9a-f]{40}$ ]] && git -C "$checkout" cat-file -e "$previous^{commit}"; then
     git -C "$checkout" diff --name-only "$previous" "$revision" >"$work/changed"
-    if ! rg -q '^(\.forgejo/workflows/publish-wolf-images\.yml|flake\.lock|flake/per-system\.nix|modules/nixos/services/wolf-streaming/(browser-image|wolf-image)/.+|modules/nixos/services/wolf-streaming/(image-products|images)\.nix|scripts/ci/(publish-wolf-images|wolf-context-package|run-local-wolf-contexts)\.(sh|py))$' "$work/changed"; then
+    if ! rg -q '^(\.forgejo/workflows/publish-wolf-images\.yml|flake\.lock|flake/(per-system|wolf-image-products)\.nix|modules/nixos/services/wolf-streaming/(browser-image|wolf-image)/.+|modules/nixos/services/wolf-streaming/(image-products|images)\.nix|scripts/ci/(publish-wolf-images|wolf-context-package|run-local-wolf-contexts)\.(sh|py))$' "$work/changed"; then
       python3 "$checkout/scripts/ci/wolf-context-package.py" prune \
         --url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --channel "$CONFIG_BRANCH" \
         --sha "$revision" --token-file "$PACKAGE_TOKEN_FILE" --user "$FORGEJO_USER"
