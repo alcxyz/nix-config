@@ -50,12 +50,6 @@
   browserBaseImage = "ghcr.io/games-on-whales/base-app@sha256:1d7b61da242e767bc5c80c5fe897392b6a9e6854345d3dea6d2f799e7ea98a14";
   wolfUiImage = "ghcr.io/games-on-whales/wolf-ui@sha256:f483f79fcc5f39294067a5029f8de55e5867f74c709a3d55cd6163e4a5f0cf6b";
   browserImageBuildContextLabel = "io.nixbox.wolf-browser.context";
-  heliumVersion = "0.14.7.1";
-  heliumImageTag = "${heliumVersion}-pointer-v2";
-  heliumDeb = pkgs.fetchurl {
-    url = "https://github.com/imputnet/helium-linux/releases/download/${heliumVersion}/helium-bin_${heliumVersion}-1_amd64.deb";
-    hash = "sha256-FSSqAA2q64ubpGTBcd6l2VGK4DmSY0FVRNRhu4ZOfIc=";
-  };
   kdeConnectDesktopPackage = "kdeconnect=24.12.3-0ubuntu2.1";
   mkBrowserContext = {
     name,
@@ -95,22 +89,6 @@
         --files-from=${closure}/store-paths
     '';
   allBrowserImages = [
-    {
-      # Published as an image product only while it is retired (#628); no
-      # host or Kubernetes catalog selects it any more.
-      enable = browserCfg.helium.enable or false;
-      name = "helium";
-      image = browserCfg.helium.image or null;
-      version = heliumVersion;
-      executable = "/usr/bin/helium";
-      family = "chromium";
-      source = "https://github.com/imputnet/helium-linux";
-      desktopPackages = [kdeConnectDesktopPackage];
-      context = mkBrowserContext {
-        name = "helium";
-        deb = heliumDeb;
-      };
-    }
     {
       enable = browserCfg.brave.enable;
       name = "brave";
@@ -197,7 +175,6 @@ in {
     browserBaseImage
     wolfUiImage
     browserImageBuildContextLabel
-    heliumImageTag
     allBrowserImages
     browserImages
     ;

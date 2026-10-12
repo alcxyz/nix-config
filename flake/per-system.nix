@@ -50,7 +50,6 @@
           inherit lib pkgs;
           productNames = [
             "wolf"
-            "helium"
             "brave"
             "brave-origin"
             "zen"
@@ -62,10 +61,6 @@
         wolf-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
           inherit lib pkgs;
           productNames = ["wolf"];
-        };
-        wolf-helium-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
-          inherit lib pkgs;
-          productNames = ["helium"];
         };
         wolf-brave-image-product = import ../modules/nixos/services/wolf-streaming/image-products.nix {
           inherit lib pkgs;

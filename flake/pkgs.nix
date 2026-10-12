@@ -17,7 +17,6 @@ in
               "git-identity-guard"
               "ndrop"
               "zfs-auto-unlock"
-              "helium"
               "ghostty"
               "kdash"
               "t3code"

@@ -93,7 +93,7 @@ if [[ $state == missing ]]; then
     exit 1
   }
   manifest="$work/product/manifest.json"
-  jq -e '.schemaVersion == 1 and ([.products[].name] | sort) == ["brave","brave-origin","helium","wolf","zen"]' "$manifest" >/dev/null
+  jq -e '.schemaVersion == 1 and ([.products[].name] | sort) == ["brave","brave-origin","wolf","zen"]' "$manifest" >/dev/null
 
   # flake.lock bumps (for example unrelated nix-packages updates) usually leave
   # every image input unchanged. Skip when the products match the last
@@ -121,7 +121,7 @@ if [[ $state == missing ]]; then
 
   mkdir "$work/archives"
   products='{}'
-  for name in wolf helium brave brave-origin zen; do
+  for name in wolf brave brave-origin zen; do
     context=$(jq -er --arg name "$name" '.products[] | select(.name == $name) | .context' "$manifest")
     [[ $context == /nix/store/* && -d $context ]] || {
       echo "Invalid Nix context for $name" >&2

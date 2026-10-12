@@ -3,7 +3,6 @@
   pkgs,
   productNames ? [
     "wolf"
-    "helium"
     "brave"
     "brave-origin"
     "chromium"
@@ -14,10 +13,6 @@
   # This generic configuration selects every reusable image definition without
   # importing a host configuration or the private nix-secrets input.
   browserCfg = {
-    helium = {
-      enable = true;
-      image = "nixbox/wolf-helium:export";
-    };
     brave = {
       enable = true;
       image = "nixbox/wolf-brave:export";

@@ -35,7 +35,6 @@ jobs:
       matrix:
         include:
           - product: wolf
-          - product: helium
           - product: brave
           - product: brave-origin
           - product: zen
