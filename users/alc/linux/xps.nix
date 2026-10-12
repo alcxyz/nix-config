@@ -30,10 +30,9 @@ in {
     inputs.hyprscratch.homeModules.default
   ];
 
-  # XPS exposes Brave only through the password-gated couch launcher. The
-  # browser package remains in that launcher's closure, but its unrestricted
-  # executable and desktop entries are not placed in the user profile.
-  home.packages = lib.remove pkgs.brave pkgsets.home.${hostRole.homePackageSet};
+  # XPS exposes regular Brave only through the password-gated couch launcher,
+  # so the shared package sets do not place it in the user profile.
+  home.packages = pkgsets.home.${hostRole.homePackageSet};
 
   xdg.configFile."ncspot/config.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/ncspot/config.toml";

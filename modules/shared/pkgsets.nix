@@ -271,7 +271,6 @@ in rec {
     desktopCommon = with pkgs; [
       obsidian
       thunderbird
-      brave
     ];
 
     # Linux-only (or strongly Linux-oriented) desktop apps
