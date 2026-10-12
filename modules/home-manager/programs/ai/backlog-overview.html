@@ -1,0 +1,219 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Backlog overview (ADR-0093). backlog-overview-render replaces the JSON
+     between the REPORT markers with slimmed backlog-inventory output and the
+     skill's picks and verdicts; the page derives groups and counts from it. -->
+<style>
+  body { font-family: var(--font-sans); color: var(--foreground); margin: 0; }
+  a { color: inherit; }
+  .wrap { display: flex; flex-direction: column; gap: 22px; padding: 4px 0 8px; }
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .kpi { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .kpi .n { font-size: 26px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 12px; color: var(--muted-foreground); margin-top: 4px; }
+  .kpi.warn .n { color: var(--warning); }
+  .kpi.ok .n { color: var(--success); }
+  .kpi.info .n { color: var(--info); }
+  .kpi.bad .n { color: var(--destructive); }
+  h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  h3 .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .group { display: flex; flex-direction: column; }
+  .picks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: pick; }
+  .picks li { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px 10px 44px; position: relative; counter-increment: pick; }
+  .picks li::before { content: counter(pick); position: absolute; left: 14px; top: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-surface); color: var(--accent-surface-foreground); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .picks .why { font-size: 12.5px; color: var(--muted-foreground); margin-top: 3px; line-height: 1.4; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-foreground); padding: 0 8px 6px; }
+  td { padding: 6px 8px; border-top: 1px solid var(--border); vertical-align: middle; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 1px; min-width: 90px; background: var(--muted); }
+  .bar div { height: 100%; }
+  .rows { display: flex; flex-direction: column; }
+  .row { display: flex; gap: 10px; align-items: baseline; padding: 6px 2px; border-top: 1px solid var(--border); font-size: 13px; }
+  .row:first-child { border-top: 0; }
+  .ref { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+  .title { flex: 1; min-width: 0; text-decoration: none; }
+  .title:hover { text-decoration: underline; }
+  .sub { font-size: 12px; color: var(--muted-foreground); line-height: 1.4; margin-top: 2px; }
+  .meta { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+  .chips { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 4px; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--secondary); color: var(--secondary-foreground); text-decoration: none; white-space: nowrap; }
+  .chip.bad { background: var(--destructive-surface); color: var(--destructive); }
+  .chip.warn { background: var(--warning-surface); color: var(--warning); }
+  .chip.ok { background: var(--success); color: var(--background); }
+  .chip.info { background: var(--info); color: var(--background); }
+  .chip.gh { background: var(--muted); color: var(--muted-foreground); }
+  details summary { cursor: pointer; user-select: none; font-size: 12.5px; color: var(--muted-foreground); padding: 6px 2px; }
+  .note { font-size: 11.5px; color: var(--muted-foreground); line-height: 1.5; }
+  .empty { font-size: 13px; color: var(--muted-foreground); }
+  @media (max-width: 600px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .hide-sm { display: none; }
+    .row { flex-wrap: wrap; }
+  }
+</style></head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+const REPORT =
+/*REPORT-START*/
+{
+  "generatedAt": "2026-10-12T12:00:00Z", "staleDays": 45,
+  "sources": {"forgejo": "https://forge.invalid", "github": "ok", "threads": "ok"},
+  "totals": {"repos": 1, "issues": 3, "prs": 2, "issueLanes": {"active": 1, "stale": 1, "close": 1}, "prLanes": {"ready": 1, "renovate": 1}},
+  "repos": [{"forge": "forgejo", "repo": "sample/app", "openIssues": 3, "openPrs": 2, "actionable": 3,
+             "issues": {"active": 1, "stale": 1, "close": 1}, "prs": {"ready": 1, "renovate": 1}, "lastActivity": "2026-10-11T12:00:00Z"}],
+  "readerModel": "light role", "focus": null,
+  "picks": [{"ref": "sample/app#2", "why": "Every box is ticked; close it with the merged PR as evidence.", "title": "Sample finished issue"}],
+  "prs": [{"ref": "sample/app#5", "title": "Sample ready PR", "lane": "ready", "flags": ["orphan"], "kind": "own", "ci": "success", "idleDays": 1}],
+  "issues": [{"ref": "sample/app#2", "title": "Sample finished issue", "lane": "close", "idleDays": 3, "checks": {"done": 2, "total": 2},
+              "mergedPrs": ["sample/app#4"], "judged": {"verdict": "close", "reason": "Both criteria met."}}],
+  "staleHidden": 0
+}
+/*REPORT-END*/
+;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// Only http(s) links are followed; anything else in untrusted data becomes inert.
+const href = u => (/^https?:\/\//.test(String(u || "")) ? esc(u) : "#");
+const num = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const NOW = new Date(REPORT.generatedAt);
+const S = REPORT.sources || {};
+// Rows carry only a ref ("owner/repo#n", or "gh:owner/repo#n" on GitHub); links are built here.
+const repoOf = ref => String(ref).replace(/^gh:/, "").split("#")[0];
+const forgeBase = ref => (String(ref).startsWith("gh:") ? "https://github.com" : String(S.forgejo || ""));
+const urlOf = (ref, pr) => `${forgeBase(ref)}/${repoOf(ref)}/${pr ? (String(ref).startsWith("gh:") ? "pull" : "pulls") : "issues"}/${String(ref).split("#")[1]}`;
+const repoUrl = r => `${r.forge === "github" ? "https://github.com" : String(S.forgejo || "")}/${r.repo}`;
+function ago(iso) {
+  if (!iso) return "never";
+  const d = (NOW - new Date(iso)) / 864e5;
+  return d < 1 ? "today" : Math.round(d) + "d ago";
+}
+const app = document.getElementById("app");
+const add = html => app.insertAdjacentHTML("beforeend", html);
+const prs = REPORT.prs || [], issues = REPORT.issues || [], repos = REPORT.repos || [];
+const T = REPORT.totals || {}, IL = T.issueLanes || {}, PL = T.prLanes || {};
+const has = (x, f) => (x.flags || []).includes(f);
+
+const ISSUE_LANES = {
+  close:    ["Maybe done", "var(--success)"],
+  inflight: ["PR open", "var(--info)"],
+  active:   ["Active", "var(--chart-4)"],
+  stale:    ["Stale", "var(--warning)"],
+  dashboard:["Dashboard", "var(--muted-foreground)"],
+};
+const PR_LANES = [
+  ["ready", "Ready to merge", "var(--success)", "CI green, mergeable, reviewed at this head (or approved upstream)."],
+  ["blocked", "Blocked · conflict, failed CI or changes requested", "var(--destructive)", ""],
+  ["review", "Waiting for your review", "var(--warning)", ""],
+  ["renovate", "Dependency updates", "var(--chart-5)", ""],
+  ["inflight", "Held by a live T3 thread", "var(--info)", ""],
+  ["open", "Open · draft or unreviewed", "var(--chart-4)", ""],
+  ["waiting", "Waiting on others upstream", "var(--muted-foreground)", ""],
+  ["stale", "Stale", "var(--warning)", ""],
+];
+const VERDICT = { close: "ok", dispatch: "info", refresh: "warn", drop: "bad", keep: "", unclear: "" };
+
+add(`<div class="kpis">
+  <div class="kpi"><div class="n">${num(T.issues)}</div><div class="l">open issues · ${num(T.repos)} repos</div></div>
+  <div class="kpi"><div class="n">${num(T.prs)}</div><div class="l">open PRs</div></div>
+  <div class="kpi ok"><div class="n">${num(PL.ready) + num(PL.review)}</div><div class="l">PRs ready or awaiting your review</div></div>
+  <div class="kpi bad"><div class="n">${num(PL.blocked)}</div><div class="l">PRs blocked</div></div>
+  <div class="kpi info"><div class="n">${issues.filter(i => i.lane === "close" || has(i, "untouched-since-merge")).length}</div><div class="l">issues that may be done</div></div>
+  <div class="kpi warn"><div class="n">${num(IL.stale)}</div><div class="l">issues idle ${num(REPORT.staleDays)}+ days</div></div>
+</div>`);
+
+if ((REPORT.picks || []).length) {
+  add(`<div class="group"><h3><span class="dot" style="background:var(--accent)"></span>Next up${REPORT.focus ? " in " + esc(REPORT.focus) : ""}</h3>
+    <ol class="picks">${REPORT.picks.map(p => `<li>
+      <div><span class="ref">${esc(p.ref)}</span> ${p.title ? `<a class="title" href="${href(urlOf(p.ref, p.pr === true))}">${esc(p.title)}</a>` : ""}</div>
+      <div class="why">${esc(p.why)}</div></li>`).join("")}</ol></div>`);
+}
+
+function repoRow(r) {
+  const total = Math.max(1, num(r.openIssues));
+  const bar = Object.entries(ISSUE_LANES).map(([k, [label, color]]) => {
+    const n = num((r.issues || {})[k]);
+    return n ? `<div title="${label}: ${n}" style="flex:${n / total};background:${color}"></div>` : "";
+  }).join("");
+  const prBits = Object.entries(r.prs || {}).map(([k, n]) => `${num(n)} ${esc(k)}`).join(", ");
+  return `<tr>
+    <td><a class="title" href="${href(repoUrl(r))}">${esc(r.repo)}</a>${r.forge === "github" ? ` <span class="chip gh">GitHub</span>` : ""}</td>
+    <td class="num">${num(r.openIssues)}</td>
+    <td class="hide-sm"><div class="bar">${bar}</div></td>
+    <td class="num" title="${esc(prBits)}">${num(r.openPrs)}</td>
+    <td class="num">${num(r.actionable) || ""}</td>
+    <td class="num hide-sm">${ago(r.lastActivity)}</td></tr>`;
+}
+if (repos.length) {
+  const head = `<tr><th>Repository</th><th class="num">Issues</th><th class="hide-sm">Issue lanes</th><th class="num">PRs</th><th class="num" title="Maybe-done issues plus PRs ready, blocked, stale or from Renovate">Decide</th><th class="num hide-sm">Activity</th></tr>`;
+  const top = repos.slice(0, 10), rest = repos.slice(10), hidden = num(REPORT.reposHidden);
+  add(`<div class="group"><h3><span class="dot" style="background:var(--chart-1)"></span>Repositories · ordered by decisions waiting</h3>
+    <table>${head}${top.map(repoRow).join("")}</table>
+    ${rest.length ? `<details><summary>${rest.length} more repositories</summary><table>${head}${rest.map(repoRow).join("")}</table></details>` : ""}
+    ${hidden ? `<div class="note">${hidden} quieter repositories with open work are not shown.</div>` : ""}
+    <div class="legend note">${Object.values(ISSUE_LANES).map(([l, c]) => `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px"><i style="width:9px;height:9px;border-radius:2px;background:${c};display:inline-block"></i>${l}</span>`).join("")}</div></div>`);
+}
+
+const FLAG_CLASS = { "ci-failed": "bad", conflict: "bad", "changes-requested": "bad", "review-missing": "warn", "review-outdated": "warn",
+  orphan: "warn", "thread-settled": "warn", "untouched-since-merge": "ok", blocked: "bad", "partly-done": "", "validation-needed": "warn" };
+const flagChips = x => (x.flags || []).filter(f => f !== "ci-failed").map(f => `<span class="chip ${FLAG_CLASS[f] || ""}">${esc(f)}</span>`).join("");
+const judged = x => (x.judged ? `<span class="chip ${VERDICT[x.judged.verdict] || ""}">${esc(x.judged.verdict)}</span>` : "");
+const judgedWhy = x => (x.judged && x.judged.reason ? `<div class="sub">${esc(x.judged.reason)}</div>` : "");
+
+function prRow(p) {
+  const ci = { success: "ok", failure: "bad", pending: "warn" }[p.ci];
+  const thread = p.thread ? `<a class="chip ${p.thread.bucket === "unsettled" ? "info" : "warn"}" href="${/^[\w:.-]+$/.test(String(p.thread.threadId)) ? "t3-thread://v1/" + p.thread.threadId : "#"}">thread: ${esc(p.thread.title)}</a>` : "";
+  return `<div class="row"><span class="ref">${esc(p.ref)}</span>
+    <div style="flex:1;min-width:0"><a class="title" href="${href(urlOf(p.ref, true))}">${esc(p.title)}</a>
+      <span class="chips">${p.ci && p.ci !== "none" ? `<span class="chip ${ci || ""}">CI ${esc(p.ci)}</span>` : ""}${p.kind !== "own" ? `<span class="chip">${esc(p.kind === "bot" ? p.author : p.kind)}</span>` : ""}${flagChips(p)}${judged(p)}${thread}</span>
+      ${p.issues && p.issues.length ? `<div class="sub">for ${p.issues.map(esc).join(", ")}</div>` : ""}${judgedWhy(p)}</div>
+    <span class="meta">${num(p.idleDays)}d idle</span></div>`;
+}
+const PH = REPORT.prsHidden || {};
+const prGroups = PR_LANES.map(([lane, label, color]) => [label + (num(PH[lane]) ? ` · ${num(PH[lane])} more not shown` : ""), color, prs.filter(p => p.lane === lane)]).filter(g => g[2].length);
+if (prGroups.length) {
+  add(`<div class="group"><h3><span class="dot" style="background:var(--chart-2)"></span>Pull requests · ${num(T.prs)}</h3>
+    ${prGroups.map(([label, color, xs], i) => `<details ${i < 3 ? "open" : ""}><summary><span style="color:${color}">●</span> ${esc(label)}</summary>
+      <div class="rows">${xs.sort((a, b) => num(b.idleDays) - num(a.idleDays)).map(prRow).join("")}</div></details>`).join("")}</div>`);
+}
+
+function issueRow(i) {
+  const checks = i.checks ? `<span class="chip">${num(i.checks.done)}/${num(i.checks.total)} done</span>` : "";
+  const via = [...(i.openPrs || []).map(r => "open " + r), ...(i.mergedPrs || []).map(r => "merged " + r)].map(esc).join(", ")
+    + (num(i.mergedCount) > (i.mergedPrs || []).length ? ` and ${num(i.mergedCount) - i.mergedPrs.length} more merged` : "");
+  return `<div class="row"><span class="ref">${esc(i.ref)}</span>
+    <div style="flex:1;min-width:0"><a class="title" href="${href(urlOf(i.ref, false))}">${esc(i.title)}</a>
+      <span class="chips">${checks}${flagChips(i)}${judged(i)}</span>
+      ${i.next ? `<div class="sub">Next: ${esc(i.next)}</div>` : ""}${via ? `<div class="sub">${via}</div>` : ""}${judgedWhy(i)}</div>
+    <span class="meta">${num(i.idleDays)}d idle</span></div>`;
+}
+// A reader's verdict decides an issue's group; unjudged issues fall back to their flags.
+const V = i => (i.judged ? i.judged.verdict : null);
+const flagged = i => i.lane === "close" || has(i, "untouched-since-merge");
+const ISSUE_GROUPS = [
+  ["Close · readers found it done or obsolete", "var(--success)", issues.filter(i => V(i) === "close" || V(i) === "drop")],
+  ["Ready to dispatch", "var(--info)", issues.filter(i => V(i) === "dispatch")],
+  ["Needs your decision or a body refresh", "var(--warning)", issues.filter(i => V(i) === "refresh" || V(i) === "unclear")],
+  ["Maybe done · not yet judged", "var(--success)", issues.filter(i => !V(i) && flagged(i))],
+  ["PR open", "var(--info)", issues.filter(i => !V(i) && !flagged(i) && i.lane === "inflight")],
+  ["Blocked or awaiting validation", "var(--destructive)", issues.filter(i => !V(i) && !flagged(i) && i.lane !== "inflight" && (has(i, "blocked") || has(i, "validation-needed")))],
+  ["Keep · waiting on something real", "var(--muted-foreground)", issues.filter(i => V(i) === "keep")],
+];
+if (REPORT.focus) {
+  const shown = new Set(ISSUE_GROUPS.flatMap(g => g[2]));
+  ISSUE_GROUPS.push([`Other open issues in ${REPORT.focus}`, "var(--chart-4)", issues.filter(i => repoOf(i.ref) === REPORT.focus && !shown.has(i) && i.lane !== "stale")]);
+}
+const shownAll = new Set(ISSUE_GROUPS.flatMap(g => g[2]));
+const stale = issues.filter(i => i.lane === "stale" && !shownAll.has(i));
+ISSUE_GROUPS.push([`Longest idle${num(REPORT.staleHidden) ? ` · ${num(REPORT.staleHidden)} more not shown` : ""}`, "var(--warning)", stale]);
+const issueGroups = ISSUE_GROUPS.filter(g => g[2].length);
+if (issueGroups.length) {
+  add(`<div class="group"><h3><span class="dot" style="background:var(--chart-3)"></span>Issues needing a decision</h3>
+    ${issueGroups.map(([label, color, xs], i) => `<details ${i < 3 ? "open" : ""}><summary><span style="color:${color}">●</span> ${esc(label)} · ${xs.length}</summary>
+      <div class="rows">${xs.sort((a, b) => num(b.idleDays) - num(a.idleDays)).map(issueRow).join("")}</div></details>`).join("")}</div>`);
+}
+if (!repos.length) add(`<div class="empty">No open issues or pull requests.</div>`);
+
+add(`<div class="note">Sources: Forgejo ${esc(S.forgejo)} · GitHub ${esc(S.github)} · T3 threads ${esc(S.threads)}. Lanes are computed by backlog-inventory; "maybe done" means every checkbox is ticked, a merged PR closed it, or nobody touched it in the three days after a PR naming it merged.${REPORT.readerModel ? ` Picks and verdicts by ${esc(REPORT.readerModel)} readers; check before acting.` : ""} Generated ${esc(String(REPORT.generatedAt).slice(0, 16).replace("T", " "))} UTC.</div>`);
+</script>
+</body></html>

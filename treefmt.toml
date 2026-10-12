@@ -10,6 +10,7 @@ options = ["-w", "-i", "2", "-ci"]
 includes = [
   "scripts/checks/*.sh",
   "modules/home-manager/programs/ai/agent-job.sh",
+  "modules/home-manager/programs/ai/backlog-overview-render.sh",
   "modules/home-manager/programs/ai/merge-settings.sh",
   "modules/home-manager/programs/ai/t3-page.sh",
   "modules/home-manager/programs/ai/t3-state-db.sh",

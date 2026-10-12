@@ -167,6 +167,29 @@ with lib; let
       ${builtins.readFile ./t3-thread-status-render.sh}
     '';
   };
+  # The backlog overview skill (ADR-0093) lists open issues and PRs across
+  # Forgejo and the user's GitHub repositories. The Forgejo token is read from
+  # its file inside the process; gh keeps its own credentials.
+  backlogInventory = pkgs.writeShellApplication {
+    name = "backlog-inventory";
+    runtimeInputs = [pkgs.python3 pkgs.gh];
+    text = ''
+      ${optionalString (mcp.tokenFile != null) ''
+        FORGEJO_API_TOKEN_FILE=''${FORGEJO_API_TOKEN_FILE:-${escapeShellArg (toString mcp.tokenFile)}}
+        export FORGEJO_API_TOKEN_FILE
+      ''}
+      BACKLOG_FORGEJO_URL=${escapeShellArg mcp.url} exec python3 -I ${./backlog-inventory.py} "$@"
+    '';
+  };
+  backlogOverviewRender = pkgs.writeShellApplication {
+    name = "backlog-overview-render";
+    runtimeInputs = [pkgs.jq];
+    text = ''
+      backlog_template=${./backlog-overview.html}
+      ${builtins.readFile ./t3-page.sh}
+      ${builtins.readFile ./backlog-overview-render.sh}
+    '';
+  };
   # Runs work that must outlive an agent session as a transient systemd user
   # unit (nix-config #612). No runtimeInputs: the job inherits the caller's
   # PATH unchanged, and systemd-run must match the running user manager.
@@ -320,7 +343,7 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [agentJob prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender];
+    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender];
 
     # The agent skills that call these commands live in nix-secrets
     # shared/skills and are linked by its agentSkills module (nix-secrets

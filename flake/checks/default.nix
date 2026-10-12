@@ -486,6 +486,12 @@ in {
     bash scripts/checks/test-t3-thread-status-render.sh
   '';
 
+  check-backlog-overview = mkRepoCheck "check-backlog-overview" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.nodejs pkgs.shellcheck] ''
+    python3 scripts/checks/test-backlog-inventory.py
+    shellcheck modules/home-manager/programs/ai/backlog-overview-render.sh scripts/checks/test-backlog-overview-render.sh
+    bash scripts/checks/test-backlog-overview-render.sh
+  '';
+
   check-t3code-preview-browser-link = mkRepoCheck "check-t3code-preview-browser-link" [pkgs.bash pkgs.coreutils pkgs.shellcheck] ''
     shellcheck modules/home-manager/services/t3code/link-preview-browser.sh scripts/checks/test-t3code-preview-browser-link.sh
     bash scripts/checks/test-t3code-preview-browser-link.sh

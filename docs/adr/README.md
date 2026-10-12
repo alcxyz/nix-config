@@ -97,6 +97,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0090](0090-install-bivrost-directly.md) | Install Bivrost directly, configured by bn-bootstrap | Accepted | Bivrost, bn-bootstrap, operator homes |
 | [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Accepted | T3 Code, agent skills, `programs.ai` |
 | [ADR-0092](0092-t3-preview-browser-from-nix.md) | Provide T3's preview browser from the Nix package | Accepted | T3 Code, previews, nix-packages |
+| [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Accepted | agent skills, `programs.ai`, Forgejo, GitHub |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the
