@@ -313,7 +313,7 @@ if action == "dispatch" and os.path.exists(os.environ["MOCK_ROOT"] + "/fail-disp
                 env = dict(os.environ, PATH=f"{shims}:{os.environ['PATH']}", MOCK_ROOT=str(root),
                            MOCK_LOG=str(log), CONFIG_REMOTE=str(remote), CONFIG_BRANCH="dev",
                            FORGEJO_URL="https://forge.invalid", FORGEJO_OWNER="o", FORGEJO_REPO="r",
-                           FORGEJO_API_TOKEN_FILE=str(token), DOCKER_CONFIG_FILE=str(token),
+                           FORGEJO_API_TOKEN_FILE=str(token), PACKAGE_TOKEN_FILE=str(token), FORGEJO_USER="u",
                            WOLF_CONTEXT_STATE_DIRECTORY=str(state), XDG_RUNTIME_DIR=str(root))
                 result = subprocess.run(["bash", str(PRODUCER)], env=env, capture_output=True, text=True)
                 return result.returncode, log.read_text().split()

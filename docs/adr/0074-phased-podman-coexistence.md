@@ -141,3 +141,27 @@ the newest two versions and versions younger than 24 hours; it removes only
 older versions in its own channel namespace. Failed partial versions can be
 resumed by matching file checksums and age out under the same policy. No CI
 runner receives host store access or a host daemon mount.
+
+## Wolf context producer on xev (2026-10-12)
+
+The context producer moves from the `xyz` operator session to a system service
+on `xev` (#646). On 2026-10-12 the `xyz` producer was skipped for more than two
+hours because its admission condition followed the local runner, which an I/O
+pressure drain had stopped. The publisher was not the constraint: every
+Podman runner host already carries its label. `xev` is always on and has no
+desktop or game admission signal.
+
+The service runs as a dynamic system user with its own state directory and Nix
+GC root, fetches the committed `dev` head into a temporary directory, and keeps
+the existing exact-commit package handoff, checksum receipt and dispatch. It
+holds no repository clone or operator session. One token, limited to package
+writes and workflow dispatch for the configuration repository's owner, is
+provisioned privately for `xev`. The `xyz` timer and its home-manager options
+are retired; at most one producer exists. The first run on `xev` may dispatch
+one redundant publish for a commit `xyz` already published, because it starts
+without the previous producer's checkpoint.
+
+Context derivations build through the host's Nix daemon, outside the service's
+own limits. On `xev` the daemon therefore runs with a low CPU and I/O weight
+beside `k3s.service`, which contains the public browser and other pods. The
+service itself also runs with a low weight and `Nice=10`.

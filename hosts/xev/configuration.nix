@@ -21,6 +21,8 @@
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
+    "${configDir}/modules/nixos/services/wolf-context-producer/default.nix"
+    inputs.nix-secrets.nixosModules.wolfContextProducerPolicy
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/hardware/zfs-latest-kernel.nix"
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
@@ -208,4 +210,10 @@
   system.stateVersion = lib.mkForce "25.11";
 
   nix.settings.max-jobs = 12;
+  # Kubernetes pods run below k3s.service, a sibling in system.slice. Local
+  # builds, including Wolf context preparation, yield to them under contention.
+  systemd.services.nix-daemon.serviceConfig = {
+    CPUWeight = 20;
+    IOWeight = 20;
+  };
 }

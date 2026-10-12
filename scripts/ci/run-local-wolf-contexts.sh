@@ -25,7 +25,7 @@ if [[ ${1:-} == --same-products ]]; then
 fi
 
 for variable in CONFIG_REMOTE CONFIG_BRANCH FORGEJO_URL FORGEJO_OWNER FORGEJO_REPO \
-  FORGEJO_API_TOKEN_FILE DOCKER_CONFIG_FILE WOLF_CONTEXT_STATE_DIRECTORY; do
+  FORGEJO_USER FORGEJO_API_TOKEN_FILE PACKAGE_TOKEN_FILE WOLF_CONTEXT_STATE_DIRECTORY; do
   [[ -n ${!variable:-} ]] || {
     echo "${variable} is required" >&2
     exit 2
@@ -75,7 +75,7 @@ if [[ -f $checkpoint ]]; then
     if ! rg -q '^(\.forgejo/workflows/publish-wolf-images\.yml|flake\.lock|flake/per-system\.nix|modules/nixos/services/wolf-streaming/(browser-image|wolf-image)/.+|modules/nixos/services/wolf-streaming/(image-products|images)\.nix|scripts/ci/(publish-wolf-images|wolf-context-package|run-local-wolf-contexts)\.(sh|py))$' "$work/changed"; then
       python3 "$checkout/scripts/ci/wolf-context-package.py" prune \
         --url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --channel "$CONFIG_BRANCH" \
-        --sha "$revision" --docker-config "$DOCKER_CONFIG_FILE"
+        --sha "$revision" --token-file "$PACKAGE_TOKEN_FILE" --user "$FORGEJO_USER"
       echo 'Wolf image inputs have not changed.'
       exit 0
     fi
@@ -83,7 +83,7 @@ if [[ -f $checkpoint ]]; then
 fi
 
 package=(--url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --channel "$CONFIG_BRANCH"
-  --sha "$revision" --docker-config "$DOCKER_CONFIG_FILE")
+  --sha "$revision" --token-file "$PACKAGE_TOKEN_FILE" --user "$FORGEJO_USER")
 client="$checkout/scripts/ci/wolf-context-package.py"
 state=$(python3 "$client" exists "${package[@]}")
 if [[ $state == missing ]]; then
