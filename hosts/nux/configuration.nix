@@ -76,7 +76,7 @@ in {
       key = "flux_age_key";
     };
     k3s_server_token = {
-      sopsFile = "${inputs.nix-secrets}/cluster-bootstrap/secrets.yaml";
+      sopsFile = inputs.nix-secrets.secrets.files.clusterBootstrap.secrets;
       key = "k3s_server_token";
       owner = "root";
       group = "root";

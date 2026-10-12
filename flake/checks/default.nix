@@ -62,6 +62,23 @@ in {
       touch "$out"
     '';
 
+  secrets-source-isolation = assert import ./secrets-source-isolation.nix {
+    inherit lib;
+    secretsSource = inputs.nix-secrets.outPath;
+    configurations = {
+      nixos = self.nixosConfigurations;
+      home = self.homeConfigurations;
+      darwin = self.darwinConfigurations;
+    };
+  };
+    pkgs.runCommand "secrets-source-isolation" {} ''
+      touch "$out"
+    '';
+  secrets-source-isolation-contract = assert import ./secrets-source-isolation-test.nix {inherit lib;};
+    pkgs.runCommand "secrets-source-isolation-contract" {} ''
+      touch "$out"
+    '';
+
   forge-mirror-audit-contract = assert import ./forge-mirror-audit-test.nix {inherit lib;};
     pkgs.runCommand "forge-mirror-audit-contract" {} ''
       touch "$out"

@@ -108,7 +108,7 @@
 
   sops.secrets = {
     pihole_secret_key = {
-      sopsFile = "${inputs.nix-secrets}/apps/secrets.yaml";
+      sopsFile = inputs.nix-secrets.secrets.files.apps;
       owner = "pihole";
       group = "pihole";
     };

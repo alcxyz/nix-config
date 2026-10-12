@@ -59,7 +59,7 @@ in {
     services.netbird.clients.default.environment.NB_HOSTNAME = cfg.hostname;
 
     sops.secrets.netbird_setup_key = mkIf (cfg.setupKeyFile == null) {
-      sopsFile = "${inputs.nix-secrets}/operators/secrets.yaml";
+      sopsFile = inputs.nix-secrets.secrets.files.operators.secrets;
       key = "netbird_setup_key";
       owner = "root";
       group = "root";
