@@ -2,9 +2,9 @@
 #
 # Prepares the committed Wolf image build contexts on this host's Nix store and
 # hands them to the Podman/Buildx publisher (ADR-0074, Wolf image build
-# placement). Runs as a dedicated system user, so it needs no repository clone
-# or operator session on the host. Evaluating the image products does not read
-# the private nix-secrets input, which Nix fetches lazily.
+# placement). Runs as a dedicated system user, so it needs no repository clone,
+# operator session, git credential or SSH key: it evaluates the products through
+# the public-only flake/wolf-image-products.nix.
 {
   config,
   lib,
@@ -37,6 +37,17 @@
     '';
   };
   stateDirectory = "/var/lib/wolf-context-producer";
+  cacheDirectory = "/var/cache/wolf-context-producer";
+  # Only one run exists at a time. A killed run skips its own cleanup, so the
+  # next one removes leftover workspaces and their temporary GC roots.
+  clearWorkspaces = pkgs.writeShellScript "wolf-context-producer-clear" ''
+    set -eu
+    # Copied store contexts are read-only; links are removed, never followed.
+    ${pkgs.findutils}/bin/find ${cacheDirectory} -mindepth 1 -type d \
+      -exec ${pkgs.coreutils}/bin/chmod u+w {} +
+    ${pkgs.findutils}/bin/find ${cacheDirectory} -mindepth 1 -maxdepth 1 \
+      -exec ${pkgs.coreutils}/bin/rm -rf {} +
+  '';
 in {
   options.services.wolfContextProducer = {
     enable = lib.mkEnableOption "native Wolf image context preparation and publisher dispatch";
@@ -132,6 +143,7 @@ in {
       # workloads; the Nix daemon carries most of its work (see the host).
       serviceConfig = {
         Type = "oneshot";
+        ExecStartPre = clearWorkspaces;
         ExecStart = lib.getExe producer;
         User = "wolf-context-producer";
         Group = "wolf-context-producer";
@@ -162,7 +174,7 @@ in {
       environment = {
         HOME = stateDirectory;
         XDG_RUNTIME_DIR = "/run/wolf-context-producer";
-        TMPDIR = "/var/cache/wolf-context-producer";
+        TMPDIR = cacheDirectory;
         GIT_TERMINAL_PROMPT = "0";
         CONFIG_REMOTE = requiredScalar "configRemote" cfg.configRemote;
         CONFIG_BRANCH = cfg.configBranch;

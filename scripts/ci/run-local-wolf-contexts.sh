@@ -87,7 +87,14 @@ package=(--url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --channel "$CONFIG_BRANCH
 client="$checkout/scripts/ci/wolf-context-package.py"
 state=$(python3 "$client" exists "${package[@]}")
 if [[ $state == missing ]]; then
-  (cd "$checkout" && nix build --no-update-lock-file --out-link "$work/product" .#wolf-deployed-image-products)
+  # Evaluate only the public Wolf entry point: the flake's package set reads
+  # private inputs, and this producer holds no git or SSH credentials.
+  products_expr="let flake = builtins.getFlake \"git+file://$checkout?rev=$revision\"; in
+    (import (flake.outPath + \"/flake/wolf-image-products.nix\") {
+      inherit (flake.inputs) nixpkgs nix-packages;
+      system = \"x86_64-linux\";
+    }).deployed"
+  (cd "$checkout" && nix build --out-link "$work/product" --expr "$products_expr")
   [[ -z $(git -C "$checkout" status --porcelain) ]] || {
     echo 'Wolf build changed the committed tree.' >&2
     exit 1
