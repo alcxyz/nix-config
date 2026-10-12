@@ -37,10 +37,11 @@
 in {
   inherit (hyprlandContract) assertions;
 
-  # Bane NOR Azure sign-in opens in the dedicated Brave profile.
+  # Bane NOR Azure sign-in opens in the dedicated Brave Origin profile. The
+  # profiles were copied from Brave with new directory names; this is banenor.
   programs.bnBootstrap.bivrost.authenticationBrowser = {
-    executable = "brave";
-    arguments = ["--profile-directory=Profile 5" "{url}"];
+    executable = "brave-origin";
+    arguments = ["--profile-directory=Profile 4" "{url}"];
   };
 
   # Import the common Linux configuration
