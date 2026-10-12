@@ -3,6 +3,7 @@ set -euo pipefail
 
 state_dir=${STATE_DIR:-/run/forgejo-runner-aggregate-pressure}
 pressure_file=${PRESSURE_FILE:-/proc/pressure/io}
+slice_pressure_file=${SLICE_PRESSURE_FILE:-/sys/fs/cgroup/forgejobuilds.slice/io.pressure}
 systemctl_bin=${SYSTEMCTL_BIN:-systemctl}
 notify_bin=${SYSTEMD_NOTIFY_BIN:-systemd-notify}
 logger_bin=${LOGGER_BIN:-logger}
@@ -11,6 +12,8 @@ high_threshold=${HIGH_THRESHOLD_HUNDREDTHS:-2000}
 low_threshold=${LOW_THRESHOLD_HUNDREDTHS:-500}
 high_required=${HIGH_SAMPLES_REQUIRED:-5}
 low_required=${LOW_SAMPLES_REQUIRED:-13}
+settled_required=${SETTLED_SAMPLES_REQUIRED:-61}
+prolonged_required=${PROLONGED_DRAIN_SAMPLES:-360}
 admission_control=${ADMISSION_CONTROL_ENABLED:-0}
 # shellcheck disable=SC1090
 source "${GAME_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/game-admission.sh}"
@@ -177,22 +180,38 @@ for runner_unit in "${runner_units[@]}"; do
 done
 flock -u 9
 
+full_avg10_hundredths() {
+  awk '
+    $1 == "full" {
+      for (i = 2; i <= NF; i++) {
+        if ($i ~ /^avg10=[0-9]+([.][0-9]+)?$/) {
+          split($i, part, "="); printf "%.0f\n", part[2] * 100; found = 1
+        }
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "$1"
+}
 read_pressure() {
   if [[ -n ${PRESSURE_VALUES_FILE:-} ]]; then
     IFS= read -r pressure <&8 || return 1
     [[ $pressure =~ ^[0-9]+$ ]] || return 1
   else
-    pressure=$(awk '
-      $1 == "full" {
-        for (i = 2; i <= NF; i++) {
-          if ($i ~ /^avg10=[0-9]+([.][0-9]+)?$/) {
-            split($i, part, "="); printf "%.0f\n", part[2] * 100; found = 1
-          }
-        }
-      }
-      END { if (!found) exit 1 }
-    ' "$pressure_file") || return 1
+    pressure=$(full_avg10_hundredths "$pressure_file") || return 1
   fi
+}
+# The aggregate's own stall time is a weak hint that CI is not the cause:
+# buffered ZFS writeback is not charged to it. It only gates the settled resume
+# path, so an unreadable sample withholds that path instead of failing the
+# guard.
+read_slice_pressure() {
+  slice_pressure=unknown
+  if [[ -n ${SLICE_PRESSURE_VALUES_FILE:-} ]]; then
+    IFS= read -r slice_pressure <&6 || slice_pressure=unknown
+  else
+    slice_pressure=$(full_avg10_hundredths "$slice_pressure_file" 2>/dev/null) || slice_pressure=unknown
+  fi
+  [[ $slice_pressure =~ ^[0-9]+$ ]] || slice_pressure=unknown
 }
 
 freeze_owned() {
@@ -274,6 +293,7 @@ request_admission_drain() {
     fail "runner admission drain failed; ownership requires recovery"
   fi
   mv "$runner_state/drain-pending" "$runner_state/drain-owned"
+  drain_reason=$reason
   locked_metadata_deadline=$((SECONDS + 45))
   active=$(runner_property ActiveState) || fail "cannot inspect draining runner state"
   report_transition admission_draining "runner_unit=$runner_unit active_state=$active"
@@ -307,6 +327,7 @@ validate_drain_ownership() {
 }
 
 resume_admissions() {
+  local path=${1:-low}
   local active load_state unit_file_state result marker
   [[ $admission_control == 1 ]] || return 0
   if [[ -e $runner_state/drain-owned ]]; then
@@ -350,13 +371,24 @@ resume_admissions() {
 
   mv "$runner_state/$marker" "$runner_state/resume-pending"
   rm -f "$runner_state/resume-blocked-reported"
-  report_transition admission_resume_requested "runner_unit=$runner_unit active_state=$active reason=$marker"
+  report_transition admission_resume_requested \
+    "runner_unit=$runner_unit active_state=$active reason=$marker resume_path=$path sampled_slice_full_avg10_hundredths=$slice_pressure"
   if ! metadata --no-block start "$runner_unit"; then
     fail "runner admission resume failed; ownership requires recovery"
   fi
   rm "$runner_state/resume-pending"
   report_transition admission_start_queued "runner_unit=$runner_unit"
   unlock_lifecycle
+}
+
+# Succeeds when no runner with an owned drain is still finishing admitted jobs.
+drained_runners_idle() {
+  local unit active
+  for unit in "${runner_units[@]}"; do
+    [[ -e $(runner_state_dir "$unit")/drain-owned ]] || continue
+    active=$(metadata show --property=ActiveState --value "$unit") || return 1
+    [[ $active == inactive ]] || return 1
+  done
 }
 
 actual=$(freezer_state) || fail "cannot inspect build aggregate at startup"
@@ -370,6 +402,7 @@ for runner_unit in "${runner_units[@]}"; do
   validate_drain_ownership
 done
 if [[ -n ${PRESSURE_VALUES_FILE:-} ]]; then exec 8<"$PRESSURE_VALUES_FILE"; fi
+if [[ -n ${SLICE_PRESSURE_VALUES_FILE:-} ]]; then exec 6<"$SLICE_PRESSURE_VALUES_FILE"; fi
 if [[ ${DISK_SPACE_ENABLED:-0} == 1 && -n ${DISK_SPACE_VALUES_FILE:-} ]]; then
   exec 7<"$DISK_SPACE_VALUES_FILE"
   # The sourced disk helper consumes this stream flag.
@@ -377,11 +410,17 @@ if [[ ${DISK_SPACE_ENABLED:-0} == 1 && -n ${DISK_SPACE_VALUES_FILE:-} ]]; then
   DISK_SPACE_STREAM=1
 fi
 read_pressure || fail "I/O pressure is unreadable at startup"
+read_slice_pressure
 "$notify_bin" --ready --status="monitoring dedicated CI aggregate" || true
 high=0
 severe=0
 low=0
 recovered=0
+settled=0
+drained=0
+prolonged_reported=0
+# A drain restored from persistent state has no recorded cause.
+drain_reason=unknown
 iteration=0
 while ((max_iterations == 0 || iteration < max_iterations)); do
   iteration=$((iteration + 1))
@@ -428,6 +467,20 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
   else
     recovered=0
   fi
+  # A drain must not outlast its cause. Unrelated load that stays between the
+  # resume and drain thresholds would otherwise withhold admission
+  # indefinitely, so the drain also recovers after a longer settled interval
+  # below the drain threshold. The interval starts only once every drained
+  # runner has finished its admitted jobs, so load that CI writeback leaves
+  # behind is not mistaken for unrelated load. An owned freeze keeps the
+  # stricter path: frozen workers report no stall time.
+  if ((pressure < high_threshold && disk_status == 0)) &&
+    [[ $slice_pressure != unknown && ! -e $state_dir/owned ]] &&
+    ((slice_pressure <= low_threshold)) && drained_runners_idle; then
+    settled=$((settled + 1))
+  else
+    settled=0
+  fi
   if ((pressure >= severe_threshold)); then
     severe=$((severe + 1))
   else
@@ -453,15 +506,35 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
     severe=0
     if [[ $admission_control == 0 ]]; then high=0; fi
   fi
-  if ((recovered >= low_required && game_status == 1)); then
+  if ((recovered >= low_required || settled >= settled_required)) && ((game_status == 1)); then
     # Recovery always thaws the aggregate before asking the runner to poll
     # again. If jobs are still draining, resume_admissions keeps waiting for a
     # fully inactive unit while the low-pressure streak continues.
+    if ((recovered >= low_required)); then resume_path=low; else resume_path=settled; fi
     for runner_unit in "${runner_units[@]}"; do
       runner_state=$(runner_state_dir "$runner_unit")
-      resume_admissions
+      resume_admissions "$resume_path"
     done
-    recovered=$low_required
+    ((recovered < low_required)) || recovered=$low_required
+    ((settled < settled_required)) || settled=$settled_required
+  fi
+  # Report, once per episode, a drain that has withheld admission for longer
+  # than expected so it can be noticed before it blocks dependent work. A
+  # detected game is an intended hold and restarts the count; detector faults
+  # do not, since they hold admission without a game.
+  owned_drains=0
+  for runner_unit in "${runner_units[@]}"; do
+    [[ ! -e $(runner_state_dir "$runner_unit")/drain-owned ]] || owned_drains=$((owned_drains + 1))
+  done
+  if ((owned_drains == 0)); then
+    drained=0
+    prolonged_reported=0
+  elif [[ $game_reason == game_present || $game_reason == game_cooldown ]]; then
+    drained=0
+  elif ((drained++ == prolonged_required && prolonged_reported == 0)); then
+    prolonged_reported=1
+    report_transition admission_drain_prolonged \
+      "drained_samples=$prolonged_required owned_drains=$owned_drains reason=$drain_reason sampled_slice_full_avg10_hundredths=$slice_pressure"
   fi
   if ((max_iterations != 0 && iteration >= max_iterations)); then break; fi
   sleep "$sample_seconds"
@@ -469,4 +542,5 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
     freeze_owned
     fail "I/O pressure became unreadable; leaving owned aggregate frozen"
   fi
+  read_slice_pressure
 done

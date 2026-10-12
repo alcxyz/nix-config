@@ -1,6 +1,6 @@
 # ADR-0072: Isolate runner Docker execution in a bounded rootless service
 
-- Status: Accepted; amended 2026-09-27; per-host rollout requires qualification
+- Status: Accepted; amended 2026-09-27 and 2026-10-12; per-host rollout requires qualification
 - Date: 2026-09-10
 - Area: Forgejo runners, Docker, systemd
 
@@ -48,6 +48,24 @@ Recovery thaws an owned freeze before it restarts a runner it previously
 drained, and only after pressure stays low and the runner is fully inactive.
 The graceful service stop signals the runner's main process first and retains
 the existing service timeout as the eventual whole-cgroup termination boundary.
+
+A drain must not outlast its cause (amended 2026-10-12, #646). Host-wide PSI
+does not attribute pressure: unrelated load that stays between the resume and
+drain thresholds once held both runners drained for hours with no CI job
+running. Owned drains therefore also resume after a longer settled interval
+(5 minutes by default) in which host pressure stays below the drain threshold
+and the aggregate's own full I/O PSI stays at or below the resume threshold.
+Buffered ZFS writeback from CI is not charged to the aggregate, so its PSI is
+only a weak hint; the interval therefore counts only once every drained runner
+has finished its admitted jobs, and work they leave behind must also settle.
+The faster low-pressure path is unchanged, and the drain rule still uses
+host-wide pressure. Sustained load at or above the drain threshold still
+withholds admission. The settled path never applies while the guard owns a
+freeze, since frozen workers report no stall time; owned thaw keeps its
+existing rule. An unreadable aggregate sample disables only the settled path. A
+drain held for longer than a bound (30 minutes by default) without a detected
+game logs one `admission_drain_prolonged` event naming the cause that claimed
+it, or `unknown` for a drain restored after a guard restart.
 
 An optional game-process signal can request the same admission drain before
 resource pressure rises. Match configured game executable names for a configured

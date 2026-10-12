@@ -284,6 +284,11 @@ in {
     assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") guards;
     assert lib.all (guard: guard.environment.LOW_SAMPLES_REQUIRED == "13") guards;
     assert lib.all (guard: guard.environment.TRANSITION_TIMEOUT_SECONDS == "120") guards;
+    # A drain held by unrelated load in the hysteresis band resumes once the
+    # aggregate is idle (#646).
+    assert lib.all (guard: guard.environment.SETTLED_SAMPLES_REQUIRED == "61") guards;
+    assert lib.all (guard: guard.environment.PROLONGED_DRAIN_SAMPLES == "360") guards;
+    assert lib.all (guard: guard.environment.SLICE_PRESSURE_FILE == "/sys/fs/cgroup/forgejobuilds.slice/io.pressure") guards;
     assert lib.all (runner: builtins.elem "forgejo-runner-io-pressure-guard.service" runner.requires) runners;
     assert lib.all (runner: runner.bindsTo == ["forgejo-runner-io-pressure-guard.service"]) runners;
       pkgs.runCommand "forgejo-runner-io-pressure-guard-contract" {

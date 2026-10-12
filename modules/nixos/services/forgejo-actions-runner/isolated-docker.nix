@@ -196,6 +196,9 @@ in {
           LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
           SEVERE_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.admissionControl.severePercent * 100);
           SEVERE_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.admissionControl.severeDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+          SETTLED_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.admissionControl.settledResumeSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
+          PROLONGED_DRAIN_SAMPLES = toString (cfg.ioPressureGuard.admissionControl.prolongedDrainSeconds / cfg.ioPressureGuard.sampleSeconds);
+          SLICE_PRESSURE_FILE = "/sys/fs/cgroup/forgejobuilds.slice/io.pressure";
           SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
           TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.transitionTimeoutSeconds;
         };

@@ -406,6 +406,24 @@ in {
           default = 30;
           description = "Sustained severe-pressure duration before the aggregate is frozen.";
         };
+
+        settledResumeSeconds = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 300;
+          description = ''
+            Duration after which owned drains also resume while host pressure
+            stays below highPercent and the aggregate's own full I/O PSI stays
+            at or below lowPercent, counted once every drained runner has
+            finished its admitted jobs. Unrelated host load can then not hold a
+            drain indefinitely; the faster lowPercent recovery still applies.
+          '';
+        };
+
+        prolongedDrainSeconds = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 1800;
+          description = "Drain duration without a detected game after which the guard logs one admission_drain_prolonged event.";
+        };
       };
     };
 
@@ -571,6 +589,24 @@ in {
           !cfg.ioPressureGuard.admissionControl.enable
           || lib.mod cfg.ioPressureGuard.admissionControl.severeDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
         message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.severeDurationSeconds must be divisible by sampleSeconds.";
+      }
+      {
+        assertion =
+          !cfg.ioPressureGuard.admissionControl.enable
+          || lib.mod cfg.ioPressureGuard.admissionControl.settledResumeSeconds cfg.ioPressureGuard.sampleSeconds == 0;
+        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.settledResumeSeconds must be divisible by sampleSeconds.";
+      }
+      {
+        assertion =
+          !cfg.ioPressureGuard.admissionControl.enable
+          || cfg.ioPressureGuard.admissionControl.settledResumeSeconds > cfg.ioPressureGuard.lowDurationSeconds;
+        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.settledResumeSeconds must exceed lowDurationSeconds.";
+      }
+      {
+        assertion =
+          !cfg.ioPressureGuard.admissionControl.enable
+          || lib.mod cfg.ioPressureGuard.admissionControl.prolongedDrainSeconds cfg.ioPressureGuard.sampleSeconds == 0;
+        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.prolongedDrainSeconds must be divisible by sampleSeconds.";
       }
     ];
 

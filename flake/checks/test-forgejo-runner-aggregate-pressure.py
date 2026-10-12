@@ -35,7 +35,8 @@ class GuardTests(unittest.TestCase):
                   second_marker='', runner_units=None, persisted_units=None,
                   unknown_state=False, game_states=None, game_times=None,
                   game_start_skipped=False, disk_start_skipped=False,
-                  disk_values=None, cleanup_fence=None):
+                  disk_values=None, cleanup_fence=None, slice_values=None,
+                  prolonged='100', inactive_after=''):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -88,6 +89,8 @@ class GuardTests(unittest.TestCase):
             (root / 'pressure').write_text('\n'.join(map(str, values)) + '\n')
             if disk_values is not None:
                 (root / 'disk-space').write_text('\n'.join(disk_values) + '\n')
+            if slice_values is not None:
+                (root / 'slice-pressure').write_text('\n'.join(map(str, slice_values)) + '\n')
             (root / 'game-states').write_text('\n'.join(game_states or []) + '\n')
             (root / 'game-times').write_text('\n'.join(map(str, game_times or [])) + '\n')
             (root / 'proc' / '123').mkdir(parents=True)
@@ -134,7 +137,18 @@ if [[ $1 == show ]]; then
     *:UnitFileState) cat "${runner_file}-enabled" ;;
     *:LoadState) cat "${runner_file}-load" ;;
     *:Result) cat "${runner_file}-result" ;;
-    *:ExecMainStartTimestampMonotonic) cat "${runner_file}-generation" ;;
+    *:ExecMainStartTimestampMonotonic)
+      # A draining job finishes after a fixed number of guard samples.
+      if [[ $4 == forgejo-actions-runner.service && -e $FIXTURE/inactive-after ]]; then
+        remaining=$(($(cat "$FIXTURE/inactive-after") - 1))
+        if ((remaining <= 0)); then
+          printf inactive > "${runner_file}-active"
+          rm "$FIXTURE/inactive-after"
+        else
+          printf '%s' "$remaining" > "$FIXTURE/inactive-after"
+        fi
+      fi
+      cat "${runner_file}-generation" ;;
     *) exit 2 ;;
   esac
   exit
@@ -153,6 +167,7 @@ if [[ $1 == --no-block ]]; then
       if [[ $3 == forgejo-actions-runner.service ]]; then
         printf '%s' "$STOP_STATE" > "${runner_file}-active"
         printf '%s' "$STOP_GENERATION" > "${runner_file}-generation"
+        [[ -z $INACTIVE_AFTER ]] || printf '%s' "$INACTIVE_AFTER" > "$FIXTURE/inactive-after"
       else
         printf '%s' "${SECOND_STOP_STATE:-inactive}" > "${runner_file}-active"
         printf '0' > "${runner_file}-generation"
@@ -197,7 +212,13 @@ esac
                    'LIFECYCLE_ACTIVE': '1' if lifecycle_active else '0',
                    'SHOW_FAIL_COUNT': show_fail_count,
                    'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY]),
-                   'SECOND_STOP_STATE': (second_runner or {}).get('stop_state', 'inactive')}
+                   'SECOND_STOP_STATE': (second_runner or {}).get('stop_state', 'inactive'),
+                   'SETTLED_SAMPLES_REQUIRED': '4', 'PROLONGED_DRAIN_SAMPLES': prolonged,
+                   'INACTIVE_AFTER': inactive_after,
+                   # Never sample the host's real aggregate.
+                   'SLICE_PRESSURE_FILE': str(root / 'missing-slice-pressure')}
+            if slice_values is not None:
+                env['SLICE_PRESSURE_VALUES_FILE'] = str(root / 'slice-pressure')
             if game_states is not None:
                 env.update({'GAME_ADMISSION_ENABLED': '1', 'GAME_USER': 'alc',
                             'GAME_ARGV0_BASENAMES': 'HeroesOfTheStorm_x64.exe',
@@ -389,6 +410,117 @@ esac
         self.assertTrue(self.drain_owned)
         self.assertEqual([line.split()[0] for line in self.events],
                          ['event=admission_drain_requested', 'event=admission_draining'])
+
+    def test_settled_band_resumes_drain_when_aggregate_is_idle(self):
+        # Unrelated load between the resume and drain thresholds must not
+        # hold a drain indefinitely once the aggregate itself is idle.
+        values = [2500, 2500] + [1000] * 5
+        self.assertEqual(self.run_guard(values, admission=True,
+                                        slice_values=[0] * len(values)),
+                         (0, [], False, False))
+        self.assertEqual(self.runner_actions, ['stop', 'start'])
+        self.assertFalse(self.drain_owned)
+        resume = [line for line in self.events
+                  if line.startswith('event=admission_resume_requested')]
+        self.assertEqual(len(resume), 1)
+        self.assertIn('resume_path=settled', resume[0])
+
+    def test_band_keeps_drain_without_a_slice_sample(self):
+        self.assertEqual(self.run_guard([2500, 2500] + [1000] * 6, admission=True),
+                         (0, [], False, False))
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+
+    def test_busy_aggregate_keeps_drain_in_band(self):
+        values = [2500, 2500] + [1000] * 6
+        self.run_guard(values, admission=True,
+                       slice_values=[0, 0, 0, 1000, 0, 0, 1000, 0])
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+
+    def test_settled_streak_resets_at_drain_threshold(self):
+        values = [2500, 2500, 1900, 1900, 1900, 2000, 1900, 1900, 1900]
+        self.run_guard(values, admission=True, slice_values=[0] * len(values))
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+
+    def test_settled_path_never_resumes_into_owned_freeze(self):
+        self.assertEqual(self.run_guard([1000] * 6, initial='frozen', owned=True,
+                                        admission=True, drain_owned=True,
+                                        runner_state='inactive',
+                                        slice_values=[0] * 6),
+                         (0, [], True, False))
+        self.assertEqual(self.runner_actions, [])
+        self.assertTrue(self.drain_owned)
+
+    def test_settled_path_waits_for_game_cooldown(self):
+        values = [1000] * 5
+        self.run_guard(values, admission=True, slice_values=[0] * 5,
+                       game_states=['present'] + ['absent'] * 4,
+                       game_times=[100, 101, 102, 103, 104])
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+
+    def test_settled_interval_starts_after_admitted_jobs_finish(self):
+        # A draining job's writeback may hold host pressure in the band while
+        # the slice reports no stall; that is not unrelated load. The job ends
+        # on the third sample after the drain, so counting from the drain would
+        # resume one sample later, while counting from the job's end needs four.
+        values = [2500, 2500] + [1000] * 5
+        self.run_guard(values, admission=True, stop_state='deactivating',
+                       inactive_after='3', slice_values=[0] * len(values))
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+        values.append(1000)
+        self.run_guard(values, admission=True, stop_state='deactivating',
+                       inactive_after='3', slice_values=[0] * len(values))
+        self.assertEqual(self.runner_actions, ['stop', 'start'])
+
+    def test_game_hold_is_not_reported_as_prolonged(self):
+        self.run_guard([0] * 6, admission=True, prolonged='2',
+                       game_states=['present'] * 6, game_times=list(range(100, 106)))
+        self.assertTrue(self.drain_owned)
+        self.assertFalse(any(line.startswith('event=admission_drain_prolonged')
+                             for line in self.events))
+
+    def test_game_interruption_does_not_repeat_prolonged_event(self):
+        states = ['absent'] * 4 + ['present'] + ['absent'] * 8
+        self.run_guard([2500, 2500] + [1000] * 11, admission=True, prolonged='2',
+                       game_states=states,
+                       game_times=list(range(100, 105)) + list(range(200, 208)))
+        prolonged = [line for line in self.events
+                     if line.startswith('event=admission_drain_prolonged')]
+        self.assertEqual(len(prolonged), 1)
+
+    def test_detector_fault_hold_is_reported_as_prolonged(self):
+        self.run_guard([0] * 5, admission=True, prolonged='2',
+                       game_states=['error'] * 5, game_times=list(range(100, 105)))
+        prolonged = [line for line in self.events
+                     if line.startswith('event=admission_drain_prolonged')]
+        self.assertEqual(len(prolonged), 1)
+        self.assertIn('reason=scan_error', prolonged[0])
+
+    def test_restored_drain_reports_unknown_reason(self):
+        self.run_guard([1000] * 4, admission=True, drain_owned=True,
+                       runner_state='inactive', runner_generation='0',
+                       drain_generation='123', prolonged='2')
+        prolonged = [line for line in self.events
+                     if line.startswith('event=admission_drain_prolonged')]
+        self.assertEqual(len(prolonged), 1)
+        self.assertIn('reason=unknown', prolonged[0])
+
+    def test_prolonged_drain_is_reported_once(self):
+        self.run_guard([2500, 2500] + [1000] * 8, admission=True, prolonged='4')
+        prolonged = [line for line in self.events
+                     if line.startswith('event=admission_drain_prolonged')]
+        self.assertEqual(len(prolonged), 1)
+        self.assertIn('owned_drains=1 reason=pressure', prolonged[0])
+
+    def test_short_drain_is_not_reported_as_prolonged(self):
+        self.run_guard([2500, 2500, 0, 0, 0], admission=True, prolonged='4')
+        self.assertEqual(self.runner_actions, ['stop', 'start'])
+        self.assertFalse(any(line.startswith('event=admission_drain_prolonged')
+                             for line in self.events))
 
     def test_admission_mode_freezes_only_after_severe_pressure(self):
         self.assertEqual(self.run_guard([6500, 6500, 6500], admission=True),

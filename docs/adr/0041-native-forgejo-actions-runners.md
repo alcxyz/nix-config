@@ -1,6 +1,6 @@
 # ADR-0041: Native Forgejo Actions runners
 
-**Status:** Implemented (amended 2026-09-11: shared runner lifecycle and resource policy)
+**Status:** Implemented (amended 2026-09-11: shared runner lifecycle and resource policy; 2026-10-12: settled drain recovery)
 **Date:** 2026-05-07
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -160,7 +160,11 @@ limit across the containers Forgejo Runner creates.
 - I/O PSI is a host-wide congestion signal, not attribution of pressure to the
   runner. The guard is an emergency circuit breaker scoped to labeled runner
   containers; it does not guarantee an I/O rate, and workflow wall-clock
-  timeouts continue while a container is paused.
+  timeouts continue while a container is paused. Because unrelated host load
+  can hold host-wide PSI between the drain and resume thresholds indefinitely,
+  the isolated aggregate's admission drain also recovers after its drained
+  jobs have finished, its own I/O PSI stays quiet and host pressure stays below
+  the drain threshold for a settled interval (ADR-0072, amended 2026-10-12).
 - Containers started through a job's mounted Docker socket do not automatically
   inherit the runner label and remain outside the pressure guard. Workflows that
   use nested Docker must bound their own resource use.

@@ -60,6 +60,8 @@ in
             transitionTimeoutSeconds = 20;
             admissionControl.severePercent = 80;
             admissionControl.severeDurationSeconds = 1;
+            admissionControl.settledResumeSeconds = 8;
+            admissionControl.prolongedDrainSeconds = 4;
             admissionControl.gameProcess = {
               enable = true;
               user = "game-fixture";
@@ -166,6 +168,22 @@ in
       machine.wait_until_succeeds("systemctl is-active --quiet forgejo-actions-runner.service", timeout=60)
       machine.wait_until_succeeds("systemctl is-active --quiet forgejo-podman-runner.service", timeout=60)
       machine.wait_until_succeeds("test ! -e /run/forgejo-runner-aggregate-pressure/drain-owned && test ! -e /run/forgejo-runner-aggregate-pressure/runners/forgejo-podman-runner.service/drain-owned")
+
+      # Unrelated load between the resume and drain thresholds cannot hold a
+      # drain: once the drained runners are inactive and the aggregate stays
+      # quiet for the settled interval, both resume, and a long drain is
+      # reported once (#646).
+      machine.succeed(pressure(30, 2))
+      machine.wait_until_succeeds("test -e /run/forgejo-runner-aggregate-pressure/drain-owned && test -e /run/forgejo-runner-aggregate-pressure/runners/forgejo-podman-runner.service/drain-owned")
+      machine.succeed(pressure(10, 2))
+      machine.succeed("sleep 3")
+      machine.succeed("test -e /run/forgejo-runner-aggregate-pressure/drain-owned")
+      machine.wait_until_succeeds("systemctl is-active --quiet forgejo-actions-runner.service", timeout=60)
+      machine.wait_until_succeeds("systemctl is-active --quiet forgejo-podman-runner.service", timeout=60)
+      machine.wait_until_succeeds("test ! -e /run/forgejo-runner-aggregate-pressure/drain-owned && test ! -e /run/forgejo-runner-aggregate-pressure/runners/forgejo-podman-runner.service/drain-owned")
+      machine.succeed("journalctl -u forgejo-runner-io-pressure-guard.service | grep -q 'event=admission_drain_prolonged'")
+      machine.succeed("journalctl -u forgejo-runner-io-pressure-guard.service | grep -q 'resume_path=settled'")
+      machine.succeed(pressure(0, 2))
 
       # Severe pressure freezes both backends under the same aggregate; recovery
       # thaws the aggregate before either runner is admitted again.
