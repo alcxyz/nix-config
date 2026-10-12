@@ -210,9 +210,11 @@ in {
     };
     directDrmAudioOutputByConnector."DP-3" = "alsa_output.pci-0000_00_1f.3.playback.3.0";
     fallbackBrowserPackage = null;
-    protectedBrowserPackage = pkgs.brave;
+    # Brave Origin opens the existing encrypted Brave profile in place: the
+    # mount is its user data directory and both use the basic password store.
+    protectedBrowserPackage = pkgs.brave-origin;
     protectedBrowserName = "Brave (Private)";
-    protectedBrowserIcon = "${pkgs.brave}/opt/brave.com/brave/product_logo_256.png";
+    protectedBrowserIcon = "${pkgs.brave-origin}/opt/brave.com/brave-origin/product_logo_256.png";
     protectedBrowserCommandName = "brave";
     protectedBrowserEncryptedDirectory = "brave-couch-private";
     protectedBrowserLegacyProfileDirectory = "/run/moonlight-client/dms-merged/BraveSoftware/Brave-Browser";

@@ -30,8 +30,6 @@ in {
     inputs.hyprscratch.homeModules.default
   ];
 
-  # XPS exposes regular Brave only through the password-gated couch launcher,
-  # so the shared package sets do not place it in the user profile.
   home.packages = pkgsets.home.${hostRole.homePackageSet};
 
   xdg.configFile."ncspot/config.toml".source =

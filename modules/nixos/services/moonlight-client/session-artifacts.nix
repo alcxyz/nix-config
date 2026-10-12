@@ -57,10 +57,10 @@
     ${lib.optionalString (cfg.enableLocalBrowser && cfg.fallbackBrowserPackage != null) ''
       cat > "$out/share/applications/couch-browser-fallback.desktop" <<EOF
       [Desktop Entry]
-      Name=Brave (Couch fallback)
+      Name=Browser (Couch fallback)
       Comment=Open the compatibility web browser
       Exec=${lib.getExe couchFallbackBrowser.package}
-      Icon=brave-browser
+      Icon=web-browser
       Terminal=false
       Type=Application
       Categories=Network;WebBrowser;

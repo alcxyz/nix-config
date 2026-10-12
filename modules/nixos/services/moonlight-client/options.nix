@@ -665,8 +665,7 @@
 
   fallbackBrowserPackage = lib.mkOption {
     type = lib.types.nullOr lib.types.package;
-    default = pkgs.brave;
-    defaultText = lib.literalExpression "pkgs.brave";
+    default = null;
     description = "Optional compatibility browser package used by the couch session.";
   };
 
