@@ -92,7 +92,7 @@ in {
       tokenKey = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Sops key of a Forgejo token limited to package writes and workflow dispatch.";
+        description = "Sops key of a Forgejo token with the write:package and write:repository scopes, used for context packages and publisher dispatch.";
       };
     };
   };
@@ -138,6 +138,10 @@ in {
         StateDirectory = "wolf-context-producer";
         StateDirectoryMode = "0700";
         RuntimeDirectory = "wolf-context-producer";
+        # The build's out-link is an indirect GC root that the Nix daemon must
+        # resolve, so working files cannot live in a private /tmp.
+        CacheDirectory = "wolf-context-producer";
+        CacheDirectoryMode = "0700";
         LoadCredential = ["forgejo-token:${config.sops.secrets.wolf_context_producer_token.path}"];
         TimeoutStartSec = "8h";
         SuccessExitStatus = "75";
@@ -158,6 +162,7 @@ in {
       environment = {
         HOME = stateDirectory;
         XDG_RUNTIME_DIR = "/run/wolf-context-producer";
+        TMPDIR = "/var/cache/wolf-context-producer";
         GIT_TERMINAL_PROMPT = "0";
         CONFIG_REMOTE = requiredScalar "configRemote" cfg.configRemote;
         CONFIG_BRANCH = cfg.configBranch;

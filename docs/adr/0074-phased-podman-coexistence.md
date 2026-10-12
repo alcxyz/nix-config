@@ -151,15 +151,20 @@ pressure drain had stopped. The publisher was not the constraint: every
 Podman runner host already carries its label. `xev` is always on and has no
 desktop or game admission signal.
 
-The service runs as a dynamic system user with its own state directory and Nix
+The service runs as a dedicated system user with its own state directory and Nix
 GC root, fetches the committed `dev` head into a temporary directory, and keeps
 the existing exact-commit package handoff, checksum receipt and dispatch. It
-holds no repository clone or operator session. One token, limited to package
-writes and workflow dispatch for the configuration repository's owner, is
-provisioned privately for `xev`. The `xyz` timer and its home-manager options
-are retired; at most one producer exists. The first run on `xev` may dispatch
-one redundant publish for a commit `xyz` already published, because it starts
-without the previous producer's checkpoint.
+holds no repository clone, operator session, git credential or SSH key:
+evaluating the image products reads no private flake input, and Nix fetches
+inputs lazily. One token for the configuration repository's owner, with only the
+`write:package` and `write:repository` scopes, is provisioned privately for
+`xev`. Forgejo has no dispatch-only scope, so the token can also push to the
+owner's repositories; it is a repository write credential on a host that also
+runs public workloads, accepted to remove the publishing dependency on `xyz`.
+The `xyz` timer and its home-manager options are retired; at most one producer
+exists. The first run on `xev` may dispatch one redundant publish for a commit
+`xyz` already published, because it starts without the previous producer's
+checkpoint.
 
 Context derivations build through the host's Nix daemon, outside the service's
 own limits. On `xev` the daemon therefore runs with a low CPU and I/O weight
