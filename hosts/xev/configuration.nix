@@ -78,9 +78,11 @@
         pi3Compatibility = true;
         kdeConnect.enable = true;
       };
+      # The Brave app slot runs Brave Origin, as in the Kubernetes private
+      # browser; reusing the public image keeps one pinned pull.
       brave = {
         enable = true;
-        image = "git.alc.xyz/alcxyz/wolf-brave:dev-20260911t113232z-71617994ca93@sha256:3f061998f9ad7081c6ad4fa474706b6469559dee9c410d2309763d7a1a454aa1";
+        image = "git.alc.xyz/alcxyz/wolf-brave-origin:dev-20261012t000409z-2f433d8c2536@sha256:b00bc3f1235b4e0e8e67f5f9bedfc2296899260d845aafc991a804cb0a86e842";
       };
       zen = {
         enable = true;

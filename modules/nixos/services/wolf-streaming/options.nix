@@ -223,7 +223,7 @@ in {
     };
 
     brave = {
-      enable = lib.mkEnableOption "the Brave Wolf application image";
+      enable = lib.mkEnableOption "the Brave Wolf application image (Brave Origin since #628)";
       publish = lib.mkOption {
         type = lib.types.bool;
         default = false;
@@ -231,7 +231,7 @@ in {
       };
       image = lib.mkOption {
         type = registryImage;
-        description = "Immutable registry image reference used by the Brave Wolf application.";
+        description = "Immutable registry image reference used by the Brave Wolf application; the published Brave image product is Brave Origin.";
       };
     };
 

@@ -4,7 +4,7 @@ set -euo pipefail
 publisher=${1:-scripts/ci/publish-wolf-images.sh}
 test_root=$(mktemp -d)
 trap 'rm -rf "$test_root"' EXIT
-mkdir -p "$test_root/bin" "$test_root/wolf-context" "$test_root/brave-context"
+mkdir -p "$test_root/bin" "$test_root/wolf-context" "$test_root/zen-context"
 
 cat >"$test_root/manifest.json" <<EOF
 {
@@ -17,8 +17,8 @@ cat >"$test_root/manifest.json" <<EOF
       "labels": {}
     },
     {
-      "name": "brave",
-      "context": "$test_root/brave-context",
+      "name": "zen",
+      "context": "$test_root/zen-context",
       "buildArgs": {"BASE_APP_IMAGE": "upstream.example/base@sha256:base", "IMAGE_VERSION": "1.2.3"},
       "labels": {"org.nixbox.wolf-browser": "true"}
     }
@@ -70,7 +70,7 @@ jq -e '
   and .revision == "0123456789abcdef0123456789abcdef01234567"
   and (.products | length == 2)
   and .products[0].name == "wolf"
-  and .products[1].name == "brave"
+  and .products[1].name == "zen"
 ' "$test_root/local.json" >/dev/null
 rg --fixed-strings --quiet -- '--build-arg RUNTIME_IMAGE=upstream.example/wolf@sha256:base' "$DOCKER_CALLS"
 rg --fixed-strings --quiet -- '--label org.nixbox.wolf-browser=true' "$DOCKER_CALLS"
@@ -96,7 +96,7 @@ jq -e '
   and (.products | length == 2)
   and .products[0].imageId == "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   and .products[0].reference == "registry.example/owner/wolf:main-20260911t120000z-0123456789ab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-  and .products[1].reference == "registry.example/owner/wolf-brave:main-20260911t120000z-0123456789ab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  and .products[1].reference == "registry.example/owner/wolf-zen:main-20260911t120000z-0123456789ab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 ' "$test_root/published.json" >/dev/null
 rg --fixed-strings --quiet 'buildx imagetools inspect --raw registry.example/owner/wolf:main-20260911t120000z-0123456789ab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$DOCKER_CALLS"
 [[ $(rg --count '^push ' "$DOCKER_CALLS") == 3 ]]

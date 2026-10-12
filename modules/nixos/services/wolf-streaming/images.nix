@@ -90,25 +90,11 @@
     '';
   allBrowserImages = [
     {
-      enable = browserCfg.brave.enable;
-      name = "brave";
-      image = browserCfg.brave.image;
-      version = pkgs.brave.version;
-      executable = "/usr/bin/brave-browser-stable";
-      family = "chromium";
-      source = "https://github.com/brave/brave-browser";
-      desktopPackages = [];
-      context = mkBrowserContext {
-        name = "brave";
-        deb = pkgs.brave.src;
-      };
-    }
-    {
       # Brave without Leo, Rewards, Wallet and VPN. It keeps Brave's profile
       # layout under BraveSoftware/Brave-Origin in the same application home.
-      # Host modules select it through browserImages.public.image and the
-      # Kubernetes private browser by reference, so neither declares an
-      # option for it. It ships KDE Connect for the cooperative public
+      # Host modules select it through browserImages.public.image or the
+      # Brave app slot (browserImages.brave.image), and the Kubernetes private
+      # browser by reference. It ships KDE Connect for the cooperative public
       # browser; the session starts KDE Connect only when the app enables it.
       enable = browserCfg.braveOrigin.enable or false;
       name = "brave-origin";

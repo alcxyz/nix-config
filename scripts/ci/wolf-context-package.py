@@ -17,7 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-PRODUCTS = ("wolf", "brave", "brave-origin", "zen")
+PRODUCTS = ("wolf", "brave-origin", "zen")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 
 
