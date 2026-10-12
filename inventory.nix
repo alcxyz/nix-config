@@ -154,6 +154,9 @@
       role = "tv-client";
       k8sRole = null;
       sshHostname = "192.168.1.3";
+      # One of the network's two DNS servers, at this address; deploy switches
+      # them one at a time behind a DNS check.
+      dnsAddress = "192.168.1.3";
       configuration = ./hosts/rpi0/configuration.nix;
       osIcon = "";
     };
@@ -164,6 +167,9 @@
       role = "tv-client";
       k8sRole = null;
       skipManagedUserSshSecrets = true;
+      # One of the network's two DNS servers, at this address; deploy switches
+      # them one at a time behind a DNS check.
+      dnsAddress = "192.168.1.4";
       configuration = ./hosts/rpi1/configuration.nix;
       osIcon = "";
     };

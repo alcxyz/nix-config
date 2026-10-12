@@ -36,9 +36,10 @@ in the tree being deployed, and units with `restartIfChanged = false` that need
 a restart or reboot.
 
 `rpi0` and `rpi1` serve DNS to the whole network; never have both down at once.
-`deploy --all` switches them in parallel (nix-packages#504), so when a change
-touches them, deploy `rpi0`, check DNS, then deploy `rpi1` before any
-`deploy --all`; the later run finds them already converged.
+They form a serial group in the deploy inventory (`dnsAddress` in
+`inventory.nix`), so `deploy --all` switches them one at a time and waits until
+each answers locally and resolves a fresh public name before the next
+(nix-packages#504). Do not deploy them in parallel by other means.
 
 `xps` is a battery-less laptop that stays docked in the living room. In
 network and secret designs, group it with the stationary Pis rather than with

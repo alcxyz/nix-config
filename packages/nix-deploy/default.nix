@@ -1,11 +1,14 @@
 {
   lib,
   coreutils,
+  dnsutils,
   gawk,
   git,
+  gnugrep,
   jq,
   nixDeploy,
   writeShellApplication,
+  writeShellScript,
   writeShellScriptBin,
   writeText,
 }: let
@@ -25,6 +28,28 @@
         role != null && inventory.k8sRoles.${role}.role == "server"
     )
     nixosHostNames;
+
+  # The network's DNS servers must never be down together, so they form their
+  # own serial group, gated by DNS answers rather than the cluster check.
+  dnsServerHostNames = lib.filter (host: inventory.hosts.${host} ? dnsAddress) nixosHostNames;
+  # A server is ready when Pi-hole answers pi.hole itself with an address and
+  # gets an authoritative answer for a random name under a public domain,
+  # which no cache can hold, so its upstream resolver must answer fresh. dig
+  # reports failures on stdout too, so its status and the answer are both
+  # checked. Without upstream connectivity the gate fails, which keeps the
+  # second server up.
+  dnsReady = writeShellScript "deploy-dns-ready" ''
+    set -o pipefail
+    case "$1" in
+    ${lib.concatMapStringsSep "\n" (host: "  ${host}) server=${inventory.hosts.${host}.dnsAddress} ;;") dnsServerHostNames}
+      *) echo "deploy-dns-ready: unknown DNS server $1" >&2; exit 2 ;;
+    esac
+    local_answer=$(${dnsutils}/bin/dig +time=2 +tries=1 +short "@$server" pi.hole) || exit 1
+    ${gnugrep}/bin/grep -Eqx '[0-9.]+|[0-9a-fA-F:]+' <<<"$local_answer" || exit 1
+    probe="deploy-ready-$RANDOM$RANDOM.nixos.org"
+    upstream=$(${dnsutils}/bin/dig +time=3 +tries=1 "@$server" "$probe" A) || exit 1
+    ${gnugrep}/bin/grep -Eq 'status: (NOERROR|NXDOMAIN)' <<<"$upstream"
+  '';
 
   deployAllHostNames =
     lib.optional (builtins.elem "xyz" nixosHostNames && deployableInAll "xyz") "xyz"
@@ -81,6 +106,11 @@
     # switched kubectx cannot point the gate at another cluster.
     serialReadyCommand = "kubectl --context funhouse --request-timeout=10s --server https://{host}:6443 get --raw=/readyz >/dev/null && kubectl --context funhouse wait --for=condition=Ready node/{host} --timeout=30s";
     serialReadyTimeoutSeconds = 600;
+    serialGroups = lib.optional (dnsServerHostNames != []) {
+      hosts = dnsServerHostNames;
+      readyCommand = "${dnsReady} {host}";
+      readyTimeoutSeconds = 300;
+    };
     hostColors = {
       xyz = "137;180;250";
       nux = "166;227;161";
