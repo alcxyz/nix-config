@@ -104,8 +104,8 @@ bounded service-stop fallback remains the final recovery boundary.
 
 ## Switching and recovery workflow
 
-Use the normal public browser, protected-user, and Steam launchers when DMS or Synergy
-input is needed during the stream. Host-local KDE Connect remains available in
+Use the normal Public Browser, Private Browser, and Steam launchers when DMS or
+Synergy input is needed during the stream. Host-local KDE Connect remains available in
 both composited and direct-display modes. The corresponding
 direct-display launchers are one-shot sessions: they save the current
 compositor mode and keyboard layout, restart the greetd session with Moonlight

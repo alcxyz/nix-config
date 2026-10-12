@@ -52,6 +52,7 @@ in {
     {
       hostname = "Wolf User";
       application = "Wolf UI";
+      displayName = "Private Browser";
       arguments = [
         "--absolute-mouse"
         "--display-mode"
@@ -67,7 +68,7 @@ in {
     {
       hostname = "Wolf";
       application = "Browser";
-      displayName = "Browser";
+      displayName = "Public Browser";
       arguments = [
         "--absolute-mouse"
         "--display-mode"

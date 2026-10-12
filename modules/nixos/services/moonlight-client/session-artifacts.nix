@@ -70,7 +70,7 @@
     ${lib.optionalString browserStreamEnabled ''
       cat > "$out/share/applications/couch-remote-browser.desktop" <<EOF
       [Desktop Entry]
-      Name=Browser (Remote)
+      Name=Public Browser (Stream)
       Comment=Stream the shared public browser through Moonlight and Wolf
       Exec=${lib.getExe couchStreamControl} remote-browser
       Icon=web-browser
@@ -83,8 +83,8 @@
     ${lib.optionalString browserSelectorEnabled ''
       cat > "$out/share/applications/couch-private-browser.desktop" <<EOF
       [Desktop Entry]
-      Name=User (Remote)
-      Comment=Open the PIN-protected remote user profile
+      Name=Private Browser (Stream)
+      Comment=Open the PIN-protected private browser through Wolf UI
       Exec=${lib.getExe couchStreamControl} private-browser
       Icon=system-users
       Terminal=false
@@ -96,7 +96,7 @@
     ${lib.optionalString directDrmBrowserEnabled ''
       cat > "$out/share/applications/couch-direct-drm-browser.desktop" <<EOF
       [Desktop Entry]
-      Name=Browser (Direct display)
+      Name=Public Browser (Direct display)
       Comment=Stream the public browser with Moonlight owning the display
       Exec=${lib.getExe sessionMode} direct-browser
       Icon=web-browser
@@ -108,8 +108,8 @@
       ${lib.optionalString browserSelectorEnabled ''
         cat > "$out/share/applications/couch-direct-drm-private.desktop" <<EOF
         [Desktop Entry]
-        Name=User (Direct display)
-        Comment=Open the protected remote user profile with Moonlight owning the display
+        Name=Private Browser (Direct display)
+        Comment=Open the PIN-protected private browser with Moonlight owning the display
         Exec=${lib.getExe sessionMode} direct-private
         Icon=system-users
         Terminal=false

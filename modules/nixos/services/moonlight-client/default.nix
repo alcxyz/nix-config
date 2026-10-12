@@ -97,7 +97,7 @@
           }
           {
             key = "Home X";
-            desc = "Remote browser";
+            desc = "Public browser";
           }
           {
             key = "L3 R3";
@@ -127,7 +127,7 @@
           }
           {
             key = "◆ R";
-            desc = "Remote browser";
+            desc = "Public browser";
           }
           {
             key = "◆ B";

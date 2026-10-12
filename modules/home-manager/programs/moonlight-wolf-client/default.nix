@@ -115,7 +115,7 @@
   desktopItem = pkgs.makeDesktopItem {
     name = cfg.commandName;
     desktopName = cfg.desktopName;
-    comment = "Open the protected Wolf browser selector over the local network";
+    comment = "Open the private browser through Wolf UI over the local network";
     exec = lib.getExe launcher;
     icon = "moonlight";
     categories = [
@@ -162,7 +162,7 @@
   publicDesktopItem = pkgs.makeDesktopItem {
     name = cfg.public.commandName;
     desktopName = cfg.public.desktopName;
-    comment = "Open the shared public browser stream through Moonlight";
+    comment = "Open the shared public browser through Moonlight";
     exec = lib.getExe publicLauncher;
     icon = "web-browser";
     categories = [
@@ -263,20 +263,20 @@ in {
 
     commandName = lib.mkOption {
       type = lib.types.nonEmptyStr;
-      default = "moonlight-wolf-ui-lan";
-      description = "Command installed for launching Wolf UI.";
+      default = "private-browser-stream";
+      description = "Command installed for launching the private browser through Wolf UI.";
     };
 
     pairCommandName = lib.mkOption {
       type = lib.types.nonEmptyStr;
-      default = "moonlight-wolf-ui-pair";
-      description = "Command installed for pairing the isolated Moonlight profile.";
+      default = "private-browser-pair";
+      description = "Command installed for pairing the private Moonlight profile.";
     };
 
     desktopName = lib.mkOption {
       type = lib.types.nonEmptyStr;
-      default = "Wolf UI (LAN)";
-      description = "Desktop launcher name.";
+      default = "Private Browser (Stream)";
+      description = "Desktop launcher name for the private browser.";
     };
 
     public = {
@@ -353,19 +353,19 @@ in {
 
       commandName = lib.mkOption {
         type = lib.types.nonEmptyStr;
-        default = "browser-stream";
+        default = "public-browser-stream";
         description = "Command installed for launching the public browser.";
       };
 
       pairCommandName = lib.mkOption {
         type = lib.types.nonEmptyStr;
-        default = "browser-pair";
+        default = "public-browser-pair";
         description = "Command installed for pairing the public Moonlight profile.";
       };
 
       desktopName = lib.mkOption {
         type = lib.types.nonEmptyStr;
-        default = "Browser (Stream)";
+        default = "Public Browser (Stream)";
         description = "Desktop launcher name for the public browser.";
       };
     };

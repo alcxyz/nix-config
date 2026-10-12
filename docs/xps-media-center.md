@@ -232,10 +232,11 @@ store; the reconciler preserves Wolf's pairings and any applications it does
 not own.
 
 Launch the public browser directly with `Home+X`, `Super+R`, or the
-`Browser (Remote)` menu entry. The neutral `User (Remote)` menu entry and
-`Super+Shift+R` open Wolf UI, which exposes only the PIN-protected user profile
-and its browser choices. The private shortcut is deliberately omitted from the on-screen
-guide. Wolf UI can also be restored from a running Wolf application with
+`Public Browser (Stream)` menu entry. The `Private Browser (Stream)` menu entry
+and `Super+Shift+R` open Wolf UI, which exposes only the PIN-protected user
+profile and its browser choices. The private shortcut is omitted from the
+on-screen guide. The same two names, with a suffix for the route or display
+mode, are used on xyz and the Mac. Wolf UI can also be restored from a running Wolf application with
 `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
 The merged couch session starts the public remote browser by default. At login
@@ -328,8 +329,9 @@ Both browser and Steam streams on XPS are LAN-only. Immediately before launch,
 the endpoint reconciler pins Moonlight's local, manual, and remote address
 fields to the configured LAN endpoint, and readiness checks probe only LAN.
 XPS therefore fails locally instead of silently streaming over VPN. The Mac
-instead exposes separate `Wolf (LAN)` and `Wolf (VPN)` application bundles for
-the protected selector. Each launcher pins both the selected address and the
+instead exposes separate `(LAN)` and `(VPN)` application bundles for each
+browser, such as `Private Browser (LAN)` and `Private Browser (VPN)`. Each
+launcher pins both the selected address and the
 coordinator's HTTP base port, so neither route falls back to the other or to
 the public coordinator. Synergy input sharing is likewise LAN-only and
 disconnects rather than crossing the VPN.

@@ -179,7 +179,7 @@ in {
 
       ${gamingDesktop.luaRules}
 
-      hl.bind("CTRL + SHIFT + R", hl.dsp.exec_cmd("moonlight-wolf-ui-lan"))
+      hl.bind("CTRL + SHIFT + R", hl.dsp.exec_cmd("private-browser-stream"))
     '';
   };
   programs.niri.managed.enable = true;
