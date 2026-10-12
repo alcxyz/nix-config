@@ -162,9 +162,9 @@
   publicDesktopItem = pkgs.makeDesktopItem {
     name = cfg.public.commandName;
     desktopName = cfg.public.desktopName;
-    comment = "Open the shared Helium stream through Moonlight";
+    comment = "Open the shared public browser stream through Moonlight";
     exec = lib.getExe publicLauncher;
-    icon = "helium";
+    icon = "web-browser";
     categories = [
       "Network"
       "WebBrowser"
@@ -280,7 +280,7 @@ in {
     };
 
     public = {
-      enable = lib.mkEnableOption "an isolated public Helium launcher";
+      enable = lib.mkEnableOption "an isolated public browser launcher";
 
       address = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -303,7 +303,7 @@ in {
 
       application = lib.mkOption {
         type = lib.types.nonEmptyStr;
-        default = "Helium";
+        default = "Browser";
         description = "Public Wolf application selected by the launcher.";
       };
 
@@ -353,20 +353,20 @@ in {
 
       commandName = lib.mkOption {
         type = lib.types.nonEmptyStr;
-        default = "helium-stream";
-        description = "Command installed for launching public Helium.";
+        default = "browser-stream";
+        description = "Command installed for launching the public browser.";
       };
 
       pairCommandName = lib.mkOption {
         type = lib.types.nonEmptyStr;
-        default = "helium-pair";
+        default = "browser-pair";
         description = "Command installed for pairing the public Moonlight profile.";
       };
 
       desktopName = lib.mkOption {
         type = lib.types.nonEmptyStr;
-        default = "Helium (Stream)";
-        description = "Desktop launcher name for public Helium.";
+        default = "Browser (Stream)";
+        description = "Desktop launcher name for the public browser.";
       };
     };
   };

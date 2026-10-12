@@ -12,14 +12,11 @@
   ],
 }: let
   # This generic configuration selects every reusable image definition without
-  # importing a host configuration or the private nix-secrets input. KDE
-  # Connect remains part of Helium because it is part of the deployed image's
-  # established runtime and input contract.
+  # importing a host configuration or the private nix-secrets input.
   browserCfg = {
     helium = {
       enable = true;
       image = "nixbox/wolf-helium:export";
-      kdeConnect.enable = true;
     };
     brave = {
       enable = true;

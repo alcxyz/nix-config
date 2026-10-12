@@ -103,7 +103,7 @@ in {
     directDrmLogToJournal = true;
     audioOutputStartupVolumePercent = 80;
 
-    browserStreamApplication = "Helium (Pi 3)";
+    browserStreamApplication = "Browser (Pi 3)";
     # Stream coordinators are managed centrally. These appliances do not carry
     # an outgoing operator SSH identity merely to invoke the rpi0 layout hook.
     browserStreamLayoutCommand = lib.mkForce "";

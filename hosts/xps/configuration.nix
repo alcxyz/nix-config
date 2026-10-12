@@ -194,7 +194,7 @@ in {
     preferRemoteBrowserAtStartup = true;
     autoStartStream = false;
     # Keep the composited session as the default, but offer one-at-a-time
-    # direct Helium, protected-browser, and Steam modes on the qualified
+    # direct public-browser, protected-browser, and Steam modes on the qualified
     # primary TV. EGLFS selects Intel KMS and turns off the other connected
     # outputs for the duration of the stream.
     enableDirectDrmStream = true;
@@ -257,9 +257,9 @@ in {
     # XPS is a fixed LAN client. Pin every Moonlight endpoint field to LAN so
     # host discovery cannot silently move latency-sensitive streams onto VPN.
     browserStreamHost = "Wolf";
-    # Join the same persistent cooperative Helium desktop as the direct-DRM
+    # Join the same persistent cooperative browser desktop as the direct-DRM
     # appliance instead of spawning an independent browser runner.
-    browserStreamApplication = "Helium";
+    browserStreamApplication = "Browser";
     browserStreamSelectorHost = "Wolf User";
     browserStreamSelectorPort = 48989;
     browserStreamSelectorApplication = "Wolf UI";

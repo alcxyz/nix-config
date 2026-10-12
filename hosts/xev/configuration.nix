@@ -69,11 +69,12 @@
     ];
     browserImages = {
       enable = true;
-      helium = {
+      # Brave Origin replaced Helium as the shared public browser (#628).
+      public = {
         enable = true;
-        image = "git.alc.xyz/alcxyz/wolf-helium:dev-20260911t113411z-71617994ca93@sha256:c7fac96c3a43a79cbce720585f95227a14457da65ffa26666153ca0e3bff5f89";
-        publish = true;
-        cooperativeDefault = true;
+        image = "git.alc.xyz/alcxyz/wolf-brave-origin:dev-20261012t000409z-2f433d8c2536@sha256:b00bc3f1235b4e0e8e67f5f9bedfc2296899260d845aafc991a804cb0a86e842";
+        icon = "https://brave.com/static-assets/images/brave-logo-sans-text.svg";
+        cooperative = true;
         pi3Compatibility = true;
         kdeConnect.enable = true;
       };

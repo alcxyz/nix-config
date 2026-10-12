@@ -73,8 +73,8 @@ Hold each combination until the action triggers.
 | Controller | Action |
 |---|---|
 | `Home+A` | Start the remote Steam session and Moonlight |
-| `Home+X` | Open the remote Helium browser on XEV |
-| `L3+R3` | Open or return to remote Helium on workspace 2 |
+| `Home+X` | Open the remote public browser on XEV |
+| `L3+R3` | Open or return to the remote browser on workspace 2 |
 | `Minus+Plus` | Toggle display mirroring |
 | `Minus+X` | Cycle display layouts |
 | `Minus+Y` | Cycle audio outputs |
@@ -88,8 +88,8 @@ input.
 
 | Keyboard | Action |
 |---|---|
-| `Super+M` / `Super+B` | Open Steam on workspace 1 / Helium on workspace 2 |
-| `Super+R` | Open the remote Helium browser on XEV |
+| `Super+M` / `Super+B` | Open Steam on workspace 1 / the browser on workspace 2 |
+| `Super+R` | Open the remote public browser on XEV |
 | `Super+Shift+R` | Open the PIN-protected remote `User` selector |
 | `Super+Shift+M` | Toggle display mirroring |
 | `Super+Shift+D` | Cycle display layouts |
@@ -155,7 +155,8 @@ complete frame.
 
 ### Browser playback matrix
 
-Measurements use the logged-in Helium couch profile and the same 60 fps YouTube
+Measurements used the logged-in Helium couch profile, before Brave Origin
+replaced Helium (#628), and the same 60 fps YouTube
 wildlife video. A 500 ms in-page sampler discards intervals containing ads,
 pauses, resolution changes, or frame-counter resets. Each table row therefore
 reports one uninterrupted playback segment.
@@ -215,10 +216,11 @@ device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 ### Remote browser streaming
 
 XEV also provides on-demand browser sessions through two independent Wolf
-coordinators and Moonlight. The public coordinator exposes only Helium. The
-protected coordinator exposes Wolf UI, whose protected profile offers isolated
-Helium, Brave, Chromium, Firefox, and Zen homes for private use and comparative
-testing. Each launch creates a disposable application container and virtual
+coordinators and Moonlight. The public coordinator exposes one shared
+`Browser` entry, which runs Brave Origin. The protected coordinator exposes
+Wolf UI, whose protected profile offers isolated Brave and Zen homes for
+private use; the Kubernetes private browser runs Brave Origin in its Brave
+entry. Each launch creates a disposable application container and virtual
 display. A client disconnect leaves the container resumable for 30 minutes;
 its owning coordinator removes it after that idle deadline while retaining the
 browser's isolated home. The browsers are not installed globally on XEV; their
@@ -229,17 +231,18 @@ identity and PIN remain in the private configuration and out of the public Nix
 store; the reconciler preserves Wolf's pairings and any applications it does
 not own.
 
-Launch public Helium directly with `Home+X`, `Super+R`, or the
-`Helium (Remote)` menu entry. The neutral `User (Remote)` menu entry and
+Launch the public browser directly with `Home+X`, `Super+R`, or the
+`Browser (Remote)` menu entry. The neutral `User (Remote)` menu entry and
 `Super+Shift+R` open Wolf UI, which exposes only the PIN-protected user profile
-and its five browser choices. The private shortcut is deliberately omitted from the on-screen
+and its browser choices. The private shortcut is deliberately omitted from the on-screen
 guide. Wolf UI can also be restored from a running Wolf application with
 `Start+Up+RB` on the controller or `Ctrl+Alt+Shift+W` on a keyboard.
 
-The merged couch session starts public remote Helium by default. At login it
-checks the direct LAN Wolf endpoint briefly; if it is not ready it opens local
-Helium instead, so XPS still boots into a usable browser when XEV is unavailable.
-`Super+B` normally returns to remote Helium; the boot fallback does not turn XEV
+The merged couch session starts the public remote browser by default. At login
+it checks the direct LAN Wolf endpoint briefly; if it is not ready it opens the
+local Brave Origin couch browser instead, so XPS still boots into a usable
+browser when XEV is unavailable. `Super+B` normally returns to the remote
+browser; the boot fallback does not turn XEV
 into a login dependency.
 
 Steam is available through `Home+A`, `Super+M`, and the `Steam Stream` menu
@@ -262,8 +265,8 @@ the local process so the same launcher can reconnect on the next attempt.
 Browser launchers intentionally omit Moonlight's `--quit-after`: closing the
 local client pauses the remote application instead of destroying it.
 
-Steam, public Helium, and the protected Wolf selector use independent Moonlight
-processes on workspaces 1, 2, and 3 respectively. Public Helium and the
+Steam, the public browser, and the protected Wolf selector use independent Moonlight
+processes on workspaces 1, 2, and 3 respectively. The public browser and the
 protected selector also use separate Wolf coordinators, state trees, runtime
 sockets, ports, cleanup scopes, and watchdogs on XEV. They can remain open and
 be switched with the ordinary workspace shortcuts; launching, restarting, or
@@ -314,8 +317,9 @@ workspace.
 The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 40 Mbit/s
 client bitrate. Helium, Brave, Chromium, Firefox, and Zen each completed the
 same sustained 1440p playback test without a browser crash, Wolf encoder error,
-Moonlight decoder error, or abnormal XPS resource growth. Helium remains the
-default because it also gave the cleanest observed rendering. Brave's stream
+Moonlight decoder error, or abnormal XPS resource growth. Helium was then the
+default because it also gave the cleanest observed rendering; Brave Origin
+replaced it in October 2026 because Helium cannot play Widevine media (#628). Brave's stream
 telemetry was healthy but visible site/UI glitches remained; the other private
 choices are useful compatibility fallbacks. Local XPS browsers remain
 available as an independent fallback.
@@ -338,7 +342,7 @@ can keep the laptop keyboard marked as main; otherwise Norwegian keyboards
 start Norwegian and the currently selected US layout starts US.
 Press `Alt+Shift` inside the session to cycle the exposed layouts. The launch
 hook supplies the state that Moonlight's scan-code protocol does not transport;
-one Helium entry is retained so every layout uses the same persistent profile.
+one browser entry is retained so every layout uses the same persistent profile.
 Right Alt remains the LevelThree modifier, so Norwegian combinations such as
 `AltGr+2` reach the browser as `@`.
 
@@ -350,7 +354,7 @@ than changing the couch configuration.
 
 ## Direct-display sessions
 
-XPS also exposes one-at-a-time direct-display sessions for public Helium, the
+XPS also exposes one-at-a-time direct-display sessions for the public browser, the
 protected browser selector, and Steam. These reuse the shared Nixbox
 session/recovery lifecycle with a fixed Qt KMS configuration for the primary TV
 on the Intel DRM device at 1440p60. The other connected outputs remain off until
@@ -366,11 +370,11 @@ Direct mode is an alternative presentation path, not another concurrent local
 window. Entering it saves the originating composited profile and restarts the
 graphical session, which closes the local composited Moonlight clients. Remote
 browser capsules and persistent profiles remain server-side. A normal direct
-exit returns to that saved profile; when it is `merged`, public Helium relaunches
+exit returns to that saved profile; when it is `merged`, the public browser relaunches
 automatically while the protected client is reopened explicitly.
 
 Host-local DMS, KDE Connect, and Waynergy are compositor-bound and intentionally
-stop during direct display. KDE Connect running inside the remote Helium
+stop during direct display. KDE Connect running inside the remote browser
 capsule remains available through the stream. Physical keyboard, pointer, and
 controller input also continue to reach Moonlight directly. The normal
 `merged` path remains the choice for host-local phone or Synergy input.
@@ -392,7 +396,7 @@ saved originating profile.
 
 ### Resource comparison
 
-A matched 30-second sample compared one public Helium client on the primary TV
+A matched 30-second sample compared one public Helium client (before #628) on the primary TV
 at 1440p60. Both samples used the same persistent remote session after a settle
 period; the local protected-selector client was stopped. Overall CPU is the
 fraction of total logical-CPU capacity, process CPU uses the conventional

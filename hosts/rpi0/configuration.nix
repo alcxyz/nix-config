@@ -89,10 +89,10 @@
       "--no-background-gamepad"
     ];
 
-    # Join the single persistent cooperative Helium desktop. Wolf's producer
+    # Join the single persistent cooperative browser desktop. Wolf's producer
     # reset path recovers direct-DRM consumers across initial joins, reconnects,
     # and worker handoff without spawning a second browser runner.
-    browserStreamApplication = "Helium";
+    browserStreamApplication = "Browser";
     # Browser runners are resumable across clients. Keep rpi0's browser stream
     # at the same 1080p resolution as its fixed TV output.
     browserStreamArguments = [

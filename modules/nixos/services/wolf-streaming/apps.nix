@@ -93,36 +93,36 @@
           "XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle,lv3:ralt_switch"
         ]
         ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_EXECUTABLE=${kdeConnectExecutable}"
-        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_SENSITIVITY=${toString browserCfg.helium.kdeConnect.pointerSensitivity}"
-        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_PRECISION_SENSITIVITY=${toString browserCfg.helium.kdeConnect.pointerPrecisionSensitivity}"
-        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_ACCELERATION_START=${toString browserCfg.helium.kdeConnect.pointerAccelerationStart}"
-        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_ACCELERATION_FULL=${toString browserCfg.helium.kdeConnect.pointerAccelerationFull}"
-        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_SCROLL_INTERVAL_MS=${toString browserCfg.helium.kdeConnect.scrollIntervalMs}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_SENSITIVITY=${toString browserCfg.public.kdeConnect.pointerSensitivity}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_PRECISION_SENSITIVITY=${toString browserCfg.public.kdeConnect.pointerPrecisionSensitivity}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_ACCELERATION_START=${toString browserCfg.public.kdeConnect.pointerAccelerationStart}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_POINTER_ACCELERATION_FULL=${toString browserCfg.public.kdeConnect.pointerAccelerationFull}"
+        ++ lib.optional kdeConnect "NIXBOX_KDECONNECT_SCROLL_INTERVAL_MS=${toString browserCfg.public.kdeConnect.scrollIntervalMs}"
         ++ lib.optional restoreSession "NIXBOX_RESTORE_LAST_SESSION=1";
       devices = [];
       ports = [];
       base_create_json = browserHostConfig;
     };
   };
-  heliumIndividualApp = mkMoonlightBrowserApp {
+  publicIndividualApp = mkMoonlightBrowserApp {
     title =
-      if browserCfg.helium.cooperativeDefault
-      then "Helium (Individual)"
-      else "Helium";
-    runnerName = "WolfHelium";
-    image = browserCfg.helium.image;
-    icon = "https://helium.computer/favicon.png";
-    kdeConnect = browserCfg.helium.kdeConnect.enable;
+      if browserCfg.public.cooperative
+      then "Browser (Individual)"
+      else "Browser";
+    runnerName = "WolfBrowser";
+    image = browserCfg.public.image;
+    icon = browserCfg.public.icon;
+    kdeConnect = browserCfg.public.kdeConnect.enable;
     restoreSession = true;
   };
-  heliumCooperativeEntryApp = {
-    title = "Helium";
-    icon_png_path = "https://helium.computer/favicon.png";
+  publicCooperativeEntryApp = {
+    title = "Browser";
+    icon_png_path = browserCfg.public.icon;
     start_virtual_compositor = true;
     start_audio_server = true;
     # The cold catalog producer exists only until the cooperative lobby is
     # ready. Keeping its frames in CUDA memory makes cudaconvertscale reject
-    # the initial BGRA caps and Moonlight remains on "Starting Helium" before
+    # the initial BGRA caps and Moonlight remains on "Starting Browser" before
     # the lobby can take over. Normalize the temporary and lobby producers in
     # system memory, then upload NV12 for the normal NVENC pipeline.
     video = {
@@ -155,12 +155,12 @@
   # bcm2835-codec rejects the low-latency NVENC H.264 bitstream even though it
   # accepts equivalent 1080p streams from x264. Keep the shared lobby and
   # publish a conservative software-encoded entry only for Pi 3 clients.
-  heliumPi3CooperativeEntryApp =
-    heliumCooperativeEntryApp
+  publicPi3CooperativeEntryApp =
+    publicCooperativeEntryApp
     // {
-      title = "Helium (Pi 3)";
+      title = "Browser (Pi 3)";
       video =
-        heliumCooperativeEntryApp.video
+        publicCooperativeEntryApp.video
         // {
           video_params = ''
             videoconvertscale add-borders=false !
@@ -202,13 +202,13 @@
   };
   managedMoonlightApps =
     lib.optional (!isolatedProtectedBackend) (mkWolfUiApp publicRuntimeDirectory)
-    ++ lib.optionals browserCfg.helium.publish (
-      if browserCfg.helium.cooperativeDefault
+    ++ lib.optionals browserCfg.public.enable (
+      if browserCfg.public.cooperative
       then
-        [heliumCooperativeEntryApp]
-        ++ lib.optional browserCfg.helium.pi3Compatibility heliumPi3CooperativeEntryApp
-        ++ [heliumIndividualApp]
-      else [heliumIndividualApp]
+        [publicCooperativeEntryApp]
+        ++ lib.optional browserCfg.public.pi3Compatibility publicPi3CooperativeEntryApp
+        ++ [publicIndividualApp]
+      else [publicIndividualApp]
     )
     ++ lib.optional browserCfg.brave.publish (mkMoonlightBrowserApp {
       title = "Brave";
@@ -221,11 +221,17 @@
   );
   managedMoonlightAppsFile = pkgs.writeText "wolf-managed-moonlight-apps.json" (
     builtins.toJSON {
+      # The Helium titles stay managed so reconciliation prunes the entries
+      # the public browser had before it moved to the neutral Browser title.
       managedTitles =
         [
           "Wolf UI"
+          "Browser"
+          "Browser (Pi 3)"
+          "Browser (Individual)"
           "Helium"
           "Helium (Pi 3)"
+          "Helium (Individual)"
           "Brave"
           "Chromium"
           "Firefox"
@@ -262,14 +268,7 @@
         "Zen"
       ];
       apps =
-        lib.optional browserCfg.helium.enable (mkMoonlightBrowserApp {
-          title = "Helium";
-          runnerName = "WolfHeliumPrivate";
-          image = browserCfg.helium.image;
-          icon = "https://helium.computer/favicon.png";
-          kdeConnect = browserCfg.helium.kdeConnect.enable;
-        })
-        ++ lib.optional browserCfg.brave.enable (mkMoonlightBrowserApp {
+        lib.optional browserCfg.brave.enable (mkMoonlightBrowserApp {
           title = "Brave";
           runnerName = "WolfBrave";
           image = browserCfg.brave.image;

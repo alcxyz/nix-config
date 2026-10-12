@@ -70,10 +70,10 @@
     ${lib.optionalString browserStreamEnabled ''
       cat > "$out/share/applications/couch-remote-browser.desktop" <<EOF
       [Desktop Entry]
-      Name=Helium (Remote)
-      Comment=Stream the public Helium browser through Moonlight and Wolf
+      Name=Browser (Remote)
+      Comment=Stream the shared public browser through Moonlight and Wolf
       Exec=${lib.getExe couchStreamControl} remote-browser
-      Icon=helium
+      Icon=web-browser
       Terminal=false
       Type=Application
       Categories=Network;WebBrowser;
@@ -96,10 +96,10 @@
     ${lib.optionalString directDrmBrowserEnabled ''
       cat > "$out/share/applications/couch-direct-drm-browser.desktop" <<EOF
       [Desktop Entry]
-      Name=Helium (Direct display)
-      Comment=Stream Helium with Moonlight owning the display
+      Name=Browser (Direct display)
+      Comment=Stream the public browser with Moonlight owning the display
       Exec=${lib.getExe sessionMode} direct-browser
-      Icon=helium
+      Icon=web-browser
       Terminal=false
       Type=Application
       Categories=Network;WebBrowser;

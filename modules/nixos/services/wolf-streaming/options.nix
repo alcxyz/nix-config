@@ -142,28 +142,39 @@ in {
       description = "Ordered XKB layouts exposed inside each streamed browser; Alt+Shift cycles them.";
     };
 
-    helium = {
-      enable = lib.mkEnableOption "the Helium Wolf application image";
-      publish = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Publish Helium directly in the Moonlight application list.";
+    public = {
+      enable = lib.mkEnableOption ''
+        the shared public browser in the Moonlight application list. Its
+        catalog title is "Browser" whichever engine the image runs, so
+        clients do not change when the engine does
+      '';
+      image = lib.mkOption {
+        type = registryImage;
+        description = ''
+          Immutable registry image reference used by the public browser.
+          The image must ship KDE Connect when kdeConnect.enable is set.
+        '';
       };
-      cooperativeDefault = lib.mkOption {
+      icon = lib.mkOption {
+        type = lib.types.nonEmptyStr;
+        description = "Icon URL shown for the public browser in Moonlight.";
+      };
+      cooperative = lib.mkOption {
         type = lib.types.bool;
         default = false;
         description = ''
-          Route the Helium catalog entry into one persistent multi-user
-          lobby and publish Helium (Individual) as the opt-in isolated
+          Route the Browser catalog entry into one persistent multi-user
+          lobby and publish Browser (Individual) as the opt-in isolated
           session.
         '';
       };
       pi3Compatibility = lib.mkEnableOption ''
-        a software-encoded Helium catalog entry for Raspberry Pi 3 clients
+        a software-encoded public browser catalog entry for Raspberry Pi 3
+        clients
       '';
       kdeConnect = {
         enable = lib.mkEnableOption ''
-          KDE Connect inside the shared Helium desktop session. The single
+          KDE Connect inside the shared public browser session. The single
           cooperative runner uses host networking so KDE Connect receives the
           original LAN peer address.
         '';
@@ -172,7 +183,7 @@ in {
           default = kdeConnectInputDefaults.pointerSensitivity;
           description = ''
             Maximum relative KDE Connect pointer gain inside the cooperative
-            Helium desktop, reached during fast motion. The hidden X pointer
+            browser desktop, reached during fast motion. The hidden X pointer
             and Sway cursor are moved together so clicks remain aligned.
           '';
         };
@@ -181,7 +192,7 @@ in {
           default = kdeConnectInputDefaults.pointerPrecisionSensitivity;
           description = ''
             Relative KDE Connect pointer gain for slow, precise motion inside
-            the cooperative Helium desktop.
+            the cooperative browser desktop.
           '';
         };
         pointerAccelerationStart = lib.mkOption {
@@ -204,14 +215,10 @@ in {
           type = lib.types.ints.between 0 1000;
           default = kdeConnectInputDefaults.scrollIntervalMs;
           description = ''
-            Minimum interval between KDE Connect XTest wheel steps inside
-            Helium. Zero preserves upstream packet-for-packet scrolling.
+            Minimum interval between KDE Connect XTest wheel steps inside the
+            browser. Zero preserves upstream packet-for-packet scrolling.
           '';
         };
-      };
-      image = lib.mkOption {
-        type = registryImage;
-        description = "Immutable registry image reference used by the Helium Wolf application.";
       };
     };
 

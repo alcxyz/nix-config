@@ -108,12 +108,12 @@ def cooperative_runner(individual_app, runner_name, kdeconnect_executable):
     if kdeconnect_executable:
         # Kubernetes must preserve the LAN peer address, and KDE Connect must
         # see that address rather than docker-proxy's bridge gateway. The
-        # cooperative Helium runner is a singleton, so host networking is a
+        # cooperative browser runner is a singleton, so host networking is a
         # deliberate fit and does not create duplicate port ownership.
         create_options.setdefault("HostConfig", {})["NetworkMode"] = "host"
         create_options.pop("Hostname", None)
     else:
-        create_options["Hostname"] = "helium"
+        create_options["Hostname"] = "browser"
     runner["base_create_json"] = json.dumps(
         create_options, separators=(",", ":"), sort_keys=True
     )
@@ -284,7 +284,7 @@ def parse_args():
     parser.add_argument("--poll-seconds", type=float, default=0.5)
     # The runner container can exist before its first producer caps are
     # stable. Switching the live Moonlight pipeline during that window leaves
-    # the catalog producer attached permanently on "Starting Helium".
+    # the catalog producer attached permanently on "Starting Browser".
     parser.add_argument("--initial-join-delay", type=float, default=15.0)
     parser.add_argument("--existing-join-delay", type=float, default=1.0)
     return parser.parse_args()

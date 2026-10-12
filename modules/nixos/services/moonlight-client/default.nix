@@ -97,11 +97,11 @@
           }
           {
             key = "Home X";
-            desc = "Remote Helium";
+            desc = "Remote browser";
           }
           {
             key = "L3 R3";
-            desc = "Back to Helium";
+            desc = "Back to browser";
           }
           {
             key = "Minus Plus";
@@ -127,11 +127,11 @@
           }
           {
             key = "◆ R";
-            desc = "Remote Helium";
+            desc = "Remote browser";
           }
           {
             key = "◆ B";
-            desc = "Back to Helium";
+            desc = "Back to browser";
           }
           {
             key = "◆ ⇧ M";
@@ -147,7 +147,7 @@
           }
           {
             key = "◆ V";
-            desc = "New Helium";
+            desc = "New browser window";
           }
           {
             key = "Alt Enter";

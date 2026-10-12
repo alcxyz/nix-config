@@ -104,7 +104,7 @@ bounded service-stop fallback remains the final recovery boundary.
 
 ## Switching and recovery workflow
 
-Use the normal Helium, protected-user, and Steam launchers when DMS or Synergy
+Use the normal public browser, protected-user, and Steam launchers when DMS or Synergy
 input is needed during the stream. Host-local KDE Connect remains available in
 both composited and direct-display modes. The corresponding
 direct-display launchers are one-shot sessions: they save the current
@@ -112,12 +112,12 @@ compositor mode and keyboard layout, restart the greetd session with Moonlight
 owning DRM, and return to the saved mode when Moonlight exits. A direct-display
 request is scoped to the current boot, so a reboot with a stale request returns
 to the configured default instead of reopening the stale request. Hosts that
-set `defaultSessionMode = "direct-browser"` deliberately initialize public
-Helium on DRM at activation and every boot; `couch` remains their explicit
+set `defaultSessionMode = "direct-browser"` deliberately initialize the public
+browser on DRM at activation and every boot; `couch` remains their explicit
 maintenance and recovery mode until the next activation or boot.
 
 The application menu is the normal switching interface from a composited couch
-session. A compact client that already runs public Helium directly on DRM has no
+session. A compact client that already runs the public browser directly on DRM has no
 local application menu. On such a client, the session command is currently both
 the mode-selection and recovery interface and should normally be invoked over
 SSH:
@@ -127,7 +127,7 @@ SSH:
 ssh rpi0 nixbox-mode
 
 # Select the local direct-display client.
-ssh rpi0 nixbox-mode direct-browser # public Helium
+ssh rpi0 nixbox-mode direct-browser # public browser
 ssh rpi0 nixbox-mode direct-stream  # Steam
 ssh rpi0 nixbox-mode direct-private # protected browser selector
 ```
@@ -166,14 +166,14 @@ Moonlight itself provides two exit combinations:
 These combinations exit the current Moonlight client; they do not select
 another direct-display application. On a compact client whose default is
 `direct-browser`, exiting a one-shot Steam or protected-browser session returns
-to public Helium. Exiting the default Helium client relaunches it.
+to the public browser. Exiting the default browser client relaunches it.
 
 RPi0 runs a persistent, non-grabbing input listener outside the greetd display
 session. It sleeps outside direct-display modes, survives local Moonlight and
 greetd replacement, and rediscovers a Bluetooth keyboard after disconnects.
 The active keyboard mappings are:
 
-- `Super+R`: public Helium
+- `Super+R`: public browser
 - `Super+M`: Steam
 - `Super+Shift+R`: protected browser selector
 

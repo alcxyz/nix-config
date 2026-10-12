@@ -96,14 +96,16 @@
     '';
   allBrowserImages = [
     {
-      enable = browserCfg.helium.enable;
+      # Published as an image product only while it is retired (#628); no
+      # host or Kubernetes catalog selects it any more.
+      enable = browserCfg.helium.enable or false;
       name = "helium";
-      image = browserCfg.helium.image;
+      image = browserCfg.helium.image or null;
       version = heliumVersion;
       executable = "/usr/bin/helium";
       family = "chromium";
       source = "https://github.com/imputnet/helium-linux";
-      desktopPackages = lib.optional browserCfg.helium.kdeConnect.enable kdeConnectDesktopPackage;
+      desktopPackages = [kdeConnectDesktopPackage];
       context = mkBrowserContext {
         name = "helium";
         deb = heliumDeb;
@@ -126,10 +128,10 @@
     {
       # Brave without Leo, Rewards, Wallet and VPN. It keeps Brave's profile
       # layout under BraveSoftware/Brave-Origin in the same application home.
-      # Published as an image product only; the Kubernetes private browser
-      # selects it, so host modules declare no option for it. It ships KDE
-      # Connect so it can replace Helium as the cooperative public browser;
-      # the session starts KDE Connect only when the app enables it.
+      # Host modules select it through browserImages.public.image and the
+      # Kubernetes private browser by reference, so neither declares an
+      # option for it. It ships KDE Connect for the cooperative public
+      # browser; the session starts KDE Connect only when the app enables it.
       enable = browserCfg.braveOrigin.enable or false;
       name = "brave-origin";
       image = browserCfg.braveOrigin.image or null;

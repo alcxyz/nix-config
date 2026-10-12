@@ -23,17 +23,25 @@
   };
   inherit (imageAssembly) wolfUiImage;
   browserImages = map (name: browserCfg.${name}) (
-    lib.filter (name: browserCfg.${name}.enable) ["helium" "brave" "chromium" "firefox" "zen"]
+    lib.filter (name: browserCfg.${name}.enable) ["brave" "chromium" "firefox" "zen"]
   );
-  publicRunnerNames = lib.optionals browserCfg.helium.enable [
-    "WolfHelium"
-    "WolfHeliumCoop"
-  ];
+  # The WolfHelium* runners predate Brave Origin replacing Helium (#628).
+  # Each coordinator still removes its own retired runner so a container that
+  # outlived a coordinator crash across the upgrade is not left unmanaged.
+  publicRunnerNames =
+    lib.optionals browserCfg.public.enable [
+      "WolfBrowser"
+      "WolfBrowserCoop"
+    ]
+    ++ [
+      "WolfHelium"
+      "WolfHeliumCoop"
+    ];
   protectedRunnerNames =
     [
       "Wolf-UI"
+      "WolfHeliumPrivate"
     ]
-    ++ lib.optional browserCfg.helium.enable "WolfHeliumPrivate"
     ++ lib.optional browserCfg.brave.enable "WolfBrave"
     ++ lib.optional browserCfg.chromium.enable "WolfChromium"
     ++ lib.optional browserCfg.firefox.enable "WolfFirefox"
@@ -76,16 +84,16 @@
     text = ''
       exec python3 ${./wolf-coop-manager.py} \
         --socket ${lib.escapeShellArg "${publicRuntimeDirectory}/wolf.sock"} \
-        --entry-title Helium \
-        ${lib.optionalString browserCfg.helium.pi3Compatibility "--entry-title ${lib.escapeShellArg "Helium (Pi 3)"} \\"}
-        --individual-title ${lib.escapeShellArg "Helium (Individual)"} \
-        --lobby-name Helium \
-        --runner-name WolfHeliumCoop \
-        --runner-state-folder ${lib.escapeShellArg "profile-data/moonlight-profile-id/WolfHeliumCoop"} \
+        --entry-title Browser \
+        ${lib.optionalString browserCfg.public.pi3Compatibility "--entry-title ${lib.escapeShellArg "Browser (Pi 3)"} \\"}
+        --individual-title ${lib.escapeShellArg "Browser (Individual)"} \
+        --lobby-name Browser \
+        --runner-name WolfBrowserCoop \
+        --runner-state-folder ${lib.escapeShellArg "profile-data/moonlight-profile-id/WolfBrowserCoop"} \
         --video-producer-buffer-caps ${lib.escapeShellArg "video/x-raw, pixel-aspect-ratio=1/1"} \
         --kdeconnect-executable ${
         lib.escapeShellArg (
-          if browserCfg.helium.kdeConnect.enable
+          if browserCfg.public.kdeConnect.enable
           then kdeConnectExecutable
           else ""
         )
@@ -95,10 +103,16 @@
   pullRuntimeImages = pkgs.writeShellApplication {
     name = "pull-wolf-runtime-images";
     runtimeInputs = [pkgs.docker];
-    text = lib.concatMapStringsSep "\n" (image: ''
-      docker image inspect ${lib.escapeShellArg image} >/dev/null 2>&1 \
-        || docker pull ${lib.escapeShellArg image}
-    '') ([cfg.image] ++ lib.optional browserCfg.enable wolfUiImage ++ map (image: image.image) browserImages);
+    text =
+      lib.concatMapStringsSep "\n" (image: ''
+        docker image inspect ${lib.escapeShellArg image} >/dev/null 2>&1 \
+          || docker pull ${lib.escapeShellArg image}
+      '') (
+        [cfg.image]
+        ++ lib.optional browserCfg.enable wolfUiImage
+        ++ lib.optional browserCfg.public.enable browserCfg.public.image
+        ++ map (image: image.image) browserImages
+      );
   };
   readPythonSource = name: source:
     pkgs.writeText name (
@@ -184,28 +198,27 @@ in {
         message = "services.wolf-streaming.renderNode must name a DRM render node";
       }
       {
-        assertion = !browserCfg.enable || browserImages != [];
+        assertion = !browserCfg.enable || browserCfg.public.enable || browserImages != [];
         message = "services.wolf-streaming.browserImages requires at least one browser image";
       }
       {
-        assertion =
-          !browserCfg.helium.cooperativeDefault || (browserCfg.helium.enable && browserCfg.helium.publish);
-        message = "cooperative Helium requires the enabled, published Helium image";
+        assertion = !browserCfg.public.cooperative || browserCfg.public.enable;
+        message = "the cooperative public browser requires the enabled public browser";
       }
       {
-        assertion = !browserCfg.helium.kdeConnect.enable || browserCfg.helium.cooperativeDefault;
-        message = "in-session KDE Connect requires cooperative Helium";
+        assertion = !browserCfg.public.kdeConnect.enable || browserCfg.public.cooperative;
+        message = "in-session KDE Connect requires the cooperative public browser";
       }
       {
         assertion =
-          browserCfg.helium.kdeConnect.pointerPrecisionSensitivity
-          <= browserCfg.helium.kdeConnect.pointerSensitivity;
+          browserCfg.public.kdeConnect.pointerPrecisionSensitivity
+          <= browserCfg.public.kdeConnect.pointerSensitivity;
         message = "KDE Connect precision pointer gain must not exceed its maximum gain";
       }
       {
         assertion =
-          browserCfg.helium.kdeConnect.pointerAccelerationStart
-          < browserCfg.helium.kdeConnect.pointerAccelerationFull;
+          browserCfg.public.kdeConnect.pointerAccelerationStart
+          < browserCfg.public.kdeConnect.pointerAccelerationFull;
         message = "KDE Connect pointer acceleration full speed must exceed its start speed";
       }
       {
@@ -217,7 +230,6 @@ in {
         assertion =
           cfg.protectedProfile.definitionFile
           == null
-          || browserCfg.helium.enable
           || browserCfg.brave.enable
           || browserCfg.chromium.enable
           || browserCfg.firefox.enable
@@ -419,9 +431,9 @@ in {
     };
 
     systemd.services.wolf-coop-manager =
-      lib.mkIf (browserCfg.helium.publish && browserCfg.helium.cooperativeDefault)
+      lib.mkIf (browserCfg.public.enable && browserCfg.public.cooperative)
       {
-        description = "Route Helium Moonlight sessions into the shared lobby";
+        description = "Route public browser Moonlight sessions into the shared lobby";
         wantedBy = ["multi-user.target"];
         after =
           if hostPublicCoordinator
@@ -534,7 +546,7 @@ in {
           47989
           48010
         ]
-        ++ lib.optional browserCfg.helium.kdeConnect.enable 1716
+        ++ lib.optional browserCfg.public.kdeConnect.enable 1716
         ++ lib.optionals isolatedProtectedBackend [
           (protectedPort 47984)
           (protectedPort 47989)
@@ -546,7 +558,7 @@ in {
           48100
           48200
         ]
-        ++ lib.optional browserCfg.helium.kdeConnect.enable 1716
+        ++ lib.optional browserCfg.public.kdeConnect.enable 1716
         ++ lib.optionals isolatedProtectedBackend [
           (protectedPort 47999)
           (protectedPort 48100)

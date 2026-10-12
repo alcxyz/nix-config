@@ -66,8 +66,8 @@ in {
     }
     {
       hostname = "Wolf";
-      application = "Helium";
-      displayName = "Helium";
+      application = "Browser";
+      displayName = "Browser";
       arguments = [
         "--absolute-mouse"
         "--display-mode"
