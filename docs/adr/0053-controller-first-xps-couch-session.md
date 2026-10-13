@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-16
+**Amended:** 2026-10-13 by [ADR-0094](0094-browser-roles.md): the public and local couch browsers named Helium here are now Brave Origin.
 **Applies to:** `hosts/xps`, `modules/nixos/services/moonlight-client`, SteamHeadless integration
 
 ## Context

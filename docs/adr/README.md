@@ -57,7 +57,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted, amended | xyz, ZFS, backups |
 | [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) | xev replaces rpi0 as a k3s server | Accepted, amended | k3s, xev, rpi0, etcd |
 | [ADR-0052](0052-xev-primary-k8s-backup-target.md) | xev primary Kubernetes backup target with xyz ZFS replica | Accepted, amended | xev, xyz, k3s backups |
-| [ADR-0053](0053-controller-first-xps-couch-session.md) | Controller-first XPS couch session | Accepted | xps, couch, Moonlight, SteamHeadless |
+| [ADR-0053](0053-controller-first-xps-couch-session.md) | Controller-first XPS couch session | Accepted, amended | xps, couch, Moonlight, SteamHeadless |
 | [ADR-0054](0054-mac-hosted-synergy1-with-waynergy-clients.md) | Mac-hosted Synergy 1 with Waynergy clients | Accepted | mac, xps, xyz, Synergy, Waynergy |
 | [ADR-0055](0055-nixbox-session-and-system-splash-boundary.md) | Stage the NIXBOX splash across boot and graphical session | Accepted | xps, couch, Plymouth, Quickshell |
 | [ADR-0056](0056-containerized-remote-browser-streaming.md) | Containerized remote browser streaming | Accepted, implemented | xev, xps, Wolf, Moonlight, browsers |
@@ -98,6 +98,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Accepted | T3 Code, agent skills, `programs.ai` |
 | [ADR-0092](0092-t3-preview-browser-from-nix.md) | Provide T3's preview browser from the Nix package | Accepted | T3 Code, previews, nix-packages |
 | [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Accepted | agent skills, `programs.ai`, Forgejo, GitHub |
+| [ADR-0094](0094-browser-roles.md) | One Chromium browser (Brave Origin), Zen provisional | Accepted, Zen provisional | browsers, xyz, xps, mac, Wolf |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the
