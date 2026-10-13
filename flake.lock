@@ -297,11 +297,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791854830,
-        "narHash": "sha256-TrMpE27v2MTLAphTL7NGY5w9+I7OLuZ3ME1L7INU+28=",
+        "lastModified": 1791900682,
+        "narHash": "sha256-2HSRZvWUV6zcx97tecFzhnPMBn+Jkj98jmZM3ozVfDc=",
         "ref": "main",
-        "rev": "5c90f238e8430f7068a0c392c8bb4da6105ff143",
-        "revCount": 10,
+        "rev": "c6e85dc7f398180203cef819e60b0e630274a5fc",
+        "revCount": 14,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/devstats.git"
       },
