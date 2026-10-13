@@ -98,3 +98,25 @@ them private removes the need to vet every edit for private detail.
   render scripts.
 - New skills start in nix-secrets. Earlier versions remain in this repository's
   history; they hold generic procedures, so no history rewrite is planned.
+
+## Amendment: settled threads judged from facts (#639)
+
+Every recently settled thread cost the overview a reader, and settling runs at
+several threads a day, so a week's window held about 50 of them. With shared
+facts (#631) most can be judged without one.
+
+- `t3-thread-status` gives a settled thread its own verdict: `done` when its
+  current `Settle: ready` line and every other check agree, `left-for-you`
+  when that line comes with steps for the user, and `check` otherwise. A git
+  check may go unanswered only where there is nothing to read: no worktree,
+  or a removed one or deleted branch whose work a merged pull request vouches
+  for. `waiting` and `stalled` describe live threads only, since every
+  settled thread goes idle. It reports the steps as `settle.leftForYou`, from
+  the same message's `Left for you:` label or the list below it; a mention it
+  cannot read makes the thread `check`.
+- The overview runs the command for settled threads too and sends only those
+  marked `check` to readers. The page lists `done` threads as confirmed done
+  and keeps `left-for-you` threads in view with their steps.
+- Only threads that handed off since #631 have a `Settle:` line, so threads
+  without one still get a reader. Steps left for the user are shown, not
+  checked: the facts cannot tell whether a deploy happened.

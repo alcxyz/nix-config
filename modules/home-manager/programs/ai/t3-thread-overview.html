@@ -86,7 +86,11 @@ const REPORT =
      "status": "completed", "updatedAt": "2026-10-09T10:00:00Z", "settledAt": "2026-10-09T10:00:00Z", "prs": [],
      "progressPct": 80, "phase": "done-not-settled", "owner": "user",
      "nextAction": "Reopen to finish the follow-up.", "blocker": null, "flag": null,
-     "done": ["Main change merged"], "remaining": ["Deploy"], "verdict": "follow-up", "verdictReason": "Merged but never deployed."}
+     "done": ["Main change merged"], "remaining": ["Deploy"], "verdict": "follow-up", "verdictReason": "Merged but never deployed."},
+    {"threadId": "sample-3", "title": "Sample settled thread judged from facts", "project": "example", "bucket": "recently-settled",
+     "status": "completed", "updatedAt": "2026-10-09T12:00:00Z", "settledAt": "2026-10-09T12:00:00Z", "prs": [],
+     "facts": {"verdict": "left-for-you", "stallReasons": [],
+               "settle": {"verdict": "ready", "line": "ready.", "owner": null, "stale": false, "leftForYou": "Deploy the change."}}}
   ]
 }
 /*REPORT-END*/
@@ -122,7 +126,11 @@ function ago(iso) {
   if (h < 24) return Math.round(h) + "h ago";
   return Math.round(h / 24) + "d ago";
 }
+// A settled thread whose facts and own Settle: ready line agree needs no
+// reader; one that left steps for the user stays in view until they are done.
+const factsSettled = t => t.bucket === "recently-settled" && ["done", "left-for-you"].includes(t.facts?.verdict);
 function groupOf(t) {
+  if (factsSettled(t)) return t.facts.verdict === "done" ? "settled-done" : "settled-open";
   if (t.bucket === "recently-settled") return t.verdict === "done" ? "settled-done" : "settled-open";
   const f = t.facts || {};
   if (holds(t) || f.verdict === "waiting") return "waiting";
@@ -138,7 +146,11 @@ function groupOf(t) {
 // Reader output is untrusted: numbers are forced to numbers, text goes through esc().
 const pctOf = v => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(0, Math.min(100, Math.round(Number(v)))) : null);
 const DAYS = Number.isFinite(Number(REPORT.windowDays)) ? Number(REPORT.windowDays) : "?";
-const threads = REPORT.threads.map(t => ({ ...t, progressPct: pctOf(t.progressPct), group: groupOf(t) }));
+const leftOf = t => t.facts?.settle?.leftForYou || null;
+// Without reader output, the thread's own Left for you: line is the next step.
+const fromFacts = t => (factsSettled(t) && t.phase == null
+  ? { phase: leftOf(t) ? "awaiting-user" : "done-not-settled", progressPct: 100, owner: "user", nextAction: leftOf(t) } : {});
+const threads = REPORT.threads.map(t => ({ ...t, ...fromFacts(t) })).map(t => ({ ...t, progressPct: pctOf(t.progressPct), group: groupOf(t) }));
 const by = g => threads.filter(t => t.group === g);
 const unsettled = threads.filter(t => t.bucket !== "recently-settled");
 const app = document.getElementById("app");
@@ -190,6 +202,7 @@ function card(t) {
     ${t.verdictReason ? `<div class="blocker">↺ ${esc(t.verdictReason)}</div>` : ""}
     <div class="next"><span class="owner ${ownerOf(t)}">${ownerOf(t) === "agent" ? "Agent" : "You"}</span>${esc(t.nextAction)}</div>
     ${said ? `<div class="settle">Thread says: Settle: ${esc(said.line)}</div>` : ""}
+    ${said && leftOf(t) && leftOf(t) !== t.nextAction ? `<div class="settle">Left for you: ${esc(leftOf(t))}</div>` : ""}
     ${t.blocker ? `<div class="blocker">⚠ ${esc(t.blocker)}</div>` : ""}
     ${t.flag ? `<div class="flag">${esc(t.flag)}</div>` : ""}
     <details><summary>Done / remaining</summary>
@@ -217,7 +230,7 @@ const settledDone = by("settled-done");
 if (settledDone.length) {
   app.insertAdjacentHTML("beforeend", `<div class="group">
     <h3><span class="dot" style="background:var(--muted-foreground)"></span>Settled in the last ${DAYS} days · confirmed done · ${settledDone.length}</h3>
-    <ul class="donelist">${settledDone.map(t => `<li><a href="${link(t)}">${esc(t.title)}</a><span class="why">${esc(t.project)} · settled ${ago(t.settledAt)}${t.verdictReason ? " · " + esc(t.verdictReason) : ""}</span></li>`).join("")}</ul>
+    <ul class="donelist">${settledDone.map(t => `<li><a href="${link(t)}">${esc(t.title)}</a><span class="why">${esc(t.project)} · settled ${ago(t.settledAt)}${t.verdictReason ? " · " + esc(t.verdictReason) : factsSettled(t) ? " · facts agree with its Settle: ready" : ""}</span></li>`).join("")}</ul>
   </div>`);
 }
 if (!threads.length) app.insertAdjacentHTML("beforeend", `<div class="empty">No unsettled or recently settled threads.</div>`);

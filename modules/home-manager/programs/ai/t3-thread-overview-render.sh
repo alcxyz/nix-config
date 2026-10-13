@@ -6,9 +6,9 @@
 # The Nix wrapper sets overview_template and t3-page.sh's function. Reader
 # summaries and thread titles are untrusted text, so the report is never
 # pasted into the page by hand: this checks its shape and writes the page with
-# t3_page_write. STATUS.json is t3-thread-status output for the unsettled
-# threads; each thread it covers gets its verdict, Settle: line and stall
-# reasons as `facts`.
+# t3_page_write. STATUS.json is t3-thread-status output for the threads; each
+# thread it covers gets its verdict, Settle: line, steps left for the user and
+# stall reasons as `facts`.
 : "${overview_template:?}"
 
 if (($# != 2 && $# != 3)); then
@@ -27,7 +27,7 @@ if [ -n "$status_file" ]; then
         and (.verdict | . == null or type == "string") and (.stallReasons | type) == "array")
     then .[0].threads else error("expected t3-thread-status output") end
     | map({key: .threadId, value: {verdict, stallReasons,
-        settle: (.settle | if . == null then null else {verdict, line, owner, stale} end)}})
+        settle: (.settle | if . == null then null else {verdict, line, owner, stale, leftForYou} end)}})
     | from_entries' "$status_file"); then
     echo "t3-thread-overview-render: $status_file is not t3-thread-status output." >&2
     exit 65

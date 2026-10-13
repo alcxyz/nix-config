@@ -307,7 +307,23 @@ def name: .name // "HEAD";
      (if $pushed == false then "unpushed commits" else empty end),
      (if $run == "failed" or $run == "interrupted" or $run == "cancelled" then "run \($run)" else empty end),
      (if $idle != null and $idle >= $stale * 60 then "idle \($idle / 60 | floor)h" else empty end) ]) as $stallReasons
-| (if $self == 1 then null
+# A settled thread is done once its own current Settle: ready line and every
+# fact agree; one that leaves steps for the user says so, and any other needs
+# a closer look. A git check may go unanswered only where there is nothing to
+# read: no worktree, or a removed one or deleted branch whose work a merged
+# pull request vouches for. Steps that could not be read need a look too.
+# Waiting and stalled describe live threads only.
+| ($checks | map({key: .id, value: .pass}) | from_entries) as $pass
+| ($w == null) as $noWorktree
+| ($pass.run == true and $pass.background and $pass.prs and $pass.settle == true
+   and ($pass.clean == true or $noWorktree or ($w.exists | not))
+   and ($pass.pushed == true or $noWorktree or $pass.landed == true)
+   and ($pass.landed == true or $noWorktree)
+   and ($settle.leftForYouUnread | not)) as $agree
+| (if $t.state == "settled" then
+     (if $agree then (if $settle.leftForYou != null then "left-for-you" else "done" end)
+      else "check" end)
+   elif $self == 1 then null
    elif $t.run.active or $run == "queued" or ($holding | length) > 0 then "waiting"
    elif $claim != null then $claim
    elif ($stallReasons | length) > 0 then "stalled"
@@ -319,20 +335,52 @@ def name: .name // "HEAD";
 # The Settle: line must be the last non-empty line of the newest finished
 # assistant message, as the skill asks; it is stale once a user message has
 # come after it. A --self report leaves it out: this reply will replace it.
+# The user's steps are the text and list after the message's last Left for
+# you: label outside code blocks, up to the Settle: line, which may carry them
+# itself. Steps that cannot be read whole, and any other mention, are unread.
 # shellcheck disable=SC2016 # a jq program
 settle='
+# A line, bullet or heading that starts with the label, colon optional only
+# when nothing follows; list items, and lines indented to continue one.
+def heading: "^[\\s#*+-]*Left for you[*_]*\\s*(:[*_]*\\s*|$)";
+def item: "^\\s*([-*+]|[0-9]+[.)])\\s+";
+def trim: sub("^\\s+"; "") | sub("\\s+$"; "");
+def none: test("^(nothing|none|n/?a)\\W*$"; "i");
 (.lastAssistant | if . == null then null else fromjson end) as $a
 | .lastUserAt as $user
-| ($a.text // "" | [splits("\n") | select(test("\\S"))] | last // "") as $last
+| ($a.text // "" | [splits("\n") | select(test("\\S"))]) as $lines
+| ($lines | last // "") as $last
+| ([foreach $lines[] as $l ({fence: false};
+     if ($l | test("^\\s*(```|~~~)")) then {fence: (.fence | not), code: true}
+     else {fence, code: .fence} end;
+     .code)]) as $code
+| ([range(0; $lines | length) | select(($code[.] | not) and ($lines[.] | test(heading; "i")))] | last) as $at
 | (if $self == 0 and ($last | test("^\\s*(\\*\\*)?Settle:(\\*\\*)?\\s")) then $last else null end) as $line
 | . + {settle: (if $line == null then null else
     ($line | sub("^\\s*(\\*\\*)?Settle:(\\*\\*)?\\s*"; "") | sub("\\s+$"; "")) as $rest
+    # Some put them on the Settle: line itself, with or without a label.
+    | ($rest | capture("\\bLeft for you[*_]*\\s*:[*_]*\\s*(?<x>\\S.*)"; "i").x // "" | trim) as $inline
+    | (if $at == null then {text: "", items: [], whole: true}
+      else
+        ($lines[$at + 1:-1]) as $section
+        | {text: ($lines[$at] | sub(heading; ""; "i") | trim),
+           items: (reduce $section[] as $l ([];
+             if ($l | test(item)) then . + [$l | sub(item; "") | trim]
+             else .[:-1] + [((.[-1] // "") + " " + ($l | trim)) | trim] end)),
+           whole: all($section[]; test(item) or test("^\\s+\\S"))}
+      end) as $p
+    | ([$p.text, $p.items[], $inline | select(. != "" and (none | not))] | join("; ")) as $all
+    # Steps that only say "nothing" or "none" are no steps.
+    | ([$p.text, $p.items[], $inline | select(. != "")] | length > 0) as $said
     | {line: $rest[0:300],
        verdict: (if ($rest | test("^ready\\b"; "i")) then "ready"
                  elif ($rest | test("^not yet\\b"; "i")) then "not-yet" else "unclear" end),
        # not yet: <what remains>, <owner>
        owner: ($rest | capture(",\\s*(?<o>user|you|agent)\\W*$"; "i").o // null
                | if . == null then null elif ascii_downcase == "agent" then "agent" else "user" end),
+       leftForYou: (if $all == "" then null else $all[0:600] end),
+       leftForYouUnread: (($p.whole | not) or ($all | length) > 600
+         or (($said | not) and ($a.text | test("left for you"; "i")))),
        at: $a.at,
        stale: ($user != null and $user > $a.at)}
     end)}

@@ -65,7 +65,11 @@ cat >"$tmp/facts-report.json" <<'JSON'
    {"threadId": "running", "title": "E", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []},
    {"threadId": "says-agent", "title": "F", "project": "p", "bucket": "unsettled", "phase": "implementing", "owner": "user", "waitingOn": []},
    {"threadId": "quiet", "title": "G", "project": "p", "bucket": "unsettled", "phase": "awaiting-user", "owner": "user", "waitingOn": []},
-   {"threadId": "quiet-done", "title": "H", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []}]}
+   {"threadId": "quiet-done", "title": "H", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []},
+   {"threadId": "s-done", "title": "I", "project": "p", "bucket": "recently-settled", "waitingOn": []},
+   {"threadId": "s-left", "title": "J", "project": "p", "bucket": "recently-settled", "waitingOn": []},
+   {"threadId": "s-reader", "title": "K", "project": "p", "bucket": "recently-settled", "progressPct": 100, "verdict": "done", "waitingOn": []},
+   {"threadId": "s-check", "title": "L", "project": "p", "bucket": "recently-settled", "progressPct": 80, "verdict": "follow-up", "waitingOn": []}]}
 JSON
 cat >"$tmp/facts.json" <<'JSON'
 {"database": "/x", "generatedAt": "2026-10-10T12:00:00Z", "threads": [
@@ -75,7 +79,11 @@ cat >"$tmp/facts.json" <<'JSON'
   {"threadId": "running", "verdict": "waiting", "stallReasons": [], "settle": null},
   {"threadId": "says-agent", "verdict": "not-yet", "stallReasons": [], "settle": {"verdict": "not-yet", "line": "not yet: CI, agent", "owner": "agent", "stale": false}},
   {"threadId": "quiet", "verdict": "stalled", "stallReasons": ["idle 30h"], "settle": null},
-  {"threadId": "quiet-done", "verdict": "stalled", "stallReasons": ["idle 30h"], "settle": null}]}
+  {"threadId": "quiet-done", "verdict": "stalled", "stallReasons": ["idle 30h"], "settle": null},
+  {"threadId": "s-done", "verdict": "done", "stallReasons": [], "settle": {"verdict": "ready", "line": "ready.", "stale": false, "leftForYou": null}},
+  {"threadId": "s-left", "verdict": "left-for-you", "stallReasons": [], "settle": {"verdict": "ready", "line": "ready.", "stale": false, "leftForYou": "<deploy>"}},
+  {"threadId": "s-reader", "verdict": "check", "stallReasons": [], "settle": null},
+  {"threadId": "s-check", "verdict": "check", "stallReasons": [], "settle": null}]}
 JSON
 bash "$tmp/render" "$tmp/facts-report.json" "$tmp/facts.html" "$tmp/facts.json"
 if grep -qF /private/path "$tmp/facts.html"; then fail "unused status fields were kept"; fi
@@ -89,11 +97,14 @@ groups=$(node -e '
   console.log(order.join(" "));
   if (!html.includes("Settle: not yet: &lt;deploy&gt;, user")) process.exit(2);
   if ((html.match(/chip stalled/g) || []).length !== 3) process.exit(3);
+  if (!html.includes("</span>&lt;deploy&gt;</div>")) process.exit(4);
 ' "$tmp/facts.js") || fail "page script failed or did not escape the Settle: line"
 # A running thread is waiting, whatever its reader says; the owner a thread
 # names wins; a thread that only went quiet on you stays under "Waiting on
-# you", even when its reader thinks it is done.
-[[ "$groups" == "#Waiting on you said-not-yet quiet quiet-done #Stalled stalled #Agent can continue says-agent #Agent working or waiting on background work running #Ready to settle said-ready no-facts" ]] ||
+# you", even when its reader thinks it is done. A settled thread whose facts
+# agree with its Settle: ready line is done without a reader, unless it left
+# steps for the user, which become its next step; the rest follow the reader.
+[[ "$groups" == "#Waiting on you said-not-yet quiet quiet-done #Stalled stalled #Agent can continue says-agent #Agent working or waiting on background work running #Ready to settle said-ready no-facts #Settled in the last 3 days s-left s-check #Settled in the last 3 days s-done s-reader" ]] ||
   fail "unexpected grouping: $groups"
 echo '{"threads": [{"threadId": "x"}]}' >"$tmp/bad-facts.json"
 status=0

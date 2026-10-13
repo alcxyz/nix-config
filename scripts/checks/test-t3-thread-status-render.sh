@@ -60,6 +60,23 @@ echo '{}' >"$tmp/empty.json"
 bad "$tmp/self.json" "$tmp/empty.json" "self report without a verdict"
 echo '{"verdict": "done"}' >"$tmp/notes.json"
 bad "$tmp/status.json" "$tmp/notes.json" "unknown verdict"
+# A settled thread keeps the script's verdict, and its own Left for you: line
+# fills the card's list unless the notes give one.
+jq '.threads[0] |= (.state = "settled" | .verdict = "left-for-you" | .settle = {verdict: "ready", line: "ready.", stale: false, leftForYou: "deploy"})' \
+  "$tmp/status.json" >"$tmp/settled.json"
+bash "$tmp/render" "$tmp/settled.json" "$tmp/empty.json" "$tmp/settled.html"
+grep -qF '"verdict":"left-for-you"' "$tmp/settled.html" || fail "settled verdict lost"
+grep -qF '"leftForYou":["deploy"]' "$tmp/settled.html" || fail "Left for you: line not used"
+# Notes cannot give a settled thread a live verdict.
+echo '{"verdict": "ready"}' >"$tmp/notes.json"
+bad "$tmp/settled.json" "$tmp/notes.json" "live verdict for a settled thread"
+# Not once a user message has come after it, nor for a live thread.
+jq '.threads[0].settle.stale = true' "$tmp/settled.json" >"$tmp/stale.json"
+bash "$tmp/render" "$tmp/stale.json" "$tmp/empty.json" "$tmp/stale.html"
+grep -qF '"leftForYou":[]' "$tmp/stale.html" || fail "stale Left for you: line used"
+jq '.threads[0] |= (.state = "unsettled" | .verdict = "ready")' "$tmp/settled.json" >"$tmp/live.json"
+bash "$tmp/render" "$tmp/live.json" "$tmp/empty.json" "$tmp/live.html"
+grep -qF '"leftForYou":[]' "$tmp/live.html" || fail "live thread's Left for you: line used"
 echo '{"remaining": "one item"}' >"$tmp/notes.json"
 bad "$tmp/status.json" "$tmp/notes.json" "string remaining"
 echo '{"owner": "someone"}' >"$tmp/notes.json"

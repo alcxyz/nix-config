@@ -117,6 +117,7 @@ recent=$(date -u -d '-10 minutes' +%Y-%m-%dT%H:%M:%S.000Z)
 earlier=$(date -u -d '-20 minutes' +%Y-%m-%dT%H:%M:%S.000Z)
 old=$(date -u -d '-3 days' +%Y-%m-%dT%H:%M:%S.000Z)
 fields='"settledOverride":null,"settledAt":null,"lineage":{},"snoozedUntil":null'
+settled="\"settledOverride\":\"settled\",\"settledAt\":\"$recent\",\"lineage\":{},\"snoozedUntil\":null"
 sqlite3 "$tmp/state.sqlite" <<SQL
 CREATE TABLE orchestration_v2_projection_threads (thread_id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
   title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, archived_at TEXT, deleted_at TEXT,
@@ -174,6 +175,38 @@ INSERT INTO orchestration_v2_projection_threads VALUES
    '{$fields,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
   ('waits', 'p1', 'Waits', '$old', '$recent', NULL, NULL,
    '{$fields,"activeProviderThreadId":"pt-waits","worktreePath":null,"branch":null}'),
+  ('sdone', 'p1', 'Settled, done', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":"$tmp/removed","branch":"feat/removed","pullRequests":[
+     {"url":"https://forge.invalid/pulls/10","number":10,"source":"agent","snapshot":{"state":"merged","baseBranch":"dev"}}]}'),
+  ('slist', 'p1', 'Settled, steps listed', '$old', '$old', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sinline', 'p1', 'Settled, steps inline', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":"$tmp/merged","branch":"feat/merged"}'),
+  ('sopen', 'p1', 'Settled, PR open', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null,"pullRequests":[
+     {"url":"https://forge.invalid/pulls/11","number":11,"source":"agent","snapshot":{"state":"open","baseBranch":"dev"}}]}'),
+  ('squiet', 'p1', 'Settled, never handed off', '$old', '$old', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":"$tmp/dirty","branch":"feat/dirty"}'),
+  ('snumbered', 'p1', 'Settled, numbered steps', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sbold', 'p1', 'Settled, colon outside bold', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sprose', 'p1', 'Settled, steps in prose', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sbroken', 'p1', 'Settled, unreadable worktree', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":"$tmp/broken","branch":"dev"}'),
+  ('swrapped', 'p1', 'Settled, wrapped steps', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('snothing', 'p1', 'Settled, nothing left', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sfenced', 'p1', 'Settled, label in an example', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sexcept', 'p1', 'Settled, nothing except a step', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sboth', 'p1', 'Settled, steps in two places', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null}'),
+  ('sremoved', 'p1', 'Settled, removed without a PR', '$old', '$recent', NULL, NULL,
+   '{$settled,"activeProviderThreadId":null,"worktreePath":"$tmp/removed","branch":"feat/removed"}'),
   ('self', 'p1', 'Self', '$old', '$recent', NULL, NULL,
    '{$fields,"activeProviderThreadId":"pt-self","worktreePath":null,"branch":null,"pullRequests":[
      {"url":"https://forge.invalid/pulls/6","number":6,"source":"agent","snapshot":{"state":"open","baseBranch":"dev"},"watch":{}}]}');
@@ -190,6 +223,15 @@ INSERT INTO orchestration_v2_projection_runs VALUES
   ('f1', 'failed', 1, 'completed', '$old', '$old'), ('f2', 'failed', 2, 'failed', '$earlier', '$recent'),
   ('q1', 'quiet', 1, 'completed', '$old', '$old'),
   ('w1', 'waits', 1, 'completed', '$earlier', '$recent'),
+  ('sd1', 'sdone', 1, 'completed', '$earlier', '$recent'), ('sl1', 'slist', 1, 'completed', '$old', '$old'),
+  ('si1', 'sinline', 1, 'completed', '$earlier', '$recent'), ('so1', 'sopen', 1, 'completed', '$earlier', '$recent'),
+  ('sq2', 'squiet', 1, 'completed', '$old', '$old'),
+  ('sn1', 'snumbered', 1, 'completed', '$earlier', '$recent'), ('sb1', 'sbold', 1, 'completed', '$earlier', '$recent'),
+  ('sp1', 'sprose', 1, 'completed', '$earlier', '$recent'), ('sb2', 'sbroken', 1, 'completed', '$earlier', '$recent'),
+  ('sr1', 'sremoved', 1, 'completed', '$earlier', '$recent'),
+  ('sw9', 'swrapped', 1, 'completed', '$earlier', '$recent'), ('sn9', 'snothing', 1, 'completed', '$earlier', '$recent'),
+  ('sf9', 'sfenced', 1, 'completed', '$earlier', '$recent'),
+  ('se9', 'sexcept', 1, 'completed', '$earlier', '$recent'), ('sb9', 'sboth', 1, 'completed', '$earlier', '$recent'),
   ('s1', 'self', 1, 'running', '$recent', NULL);
 INSERT INTO orchestration_v2_projection_provider_threads VALUES
   ('pt-waits', 'waits', 'idle', '{"pendingBackgroundTasks":[{"taskId":"m","kind":"monitor","description":"pr-review run 5"}]}'),
@@ -208,20 +250,34 @@ INSERT INTO orchestration_v2_projection_messages VALUES
   ('m10', 'failed', 'assistant', 0, '$recent', '{"text":"**Settle:** maybe later"}'),
   ('m11', 'squashed', 'assistant', 0, '$recent', '{"text":"Use this form:\n\n\u0060\u0060\u0060\n**Settle:** ready.\n\u0060\u0060\u0060\nThe fix still needs work."}'),
   ('m12', 'self', 'assistant', 0, '$earlier', '{"text":"**Settle:** ready."}'),
-  ('m13', 'switched', 'assistant', 0, '$recent', '{"text":"**Settle:** not yet: $(printf 'x%.0s' {1..400}), agent."}');
+  ('m13', 'switched', 'assistant', 0, '$recent', '{"text":"**Settle:** not yet: $(printf 'x%.0s' {1..400}), agent."}'),
+  ('m14', 'sdone', 'assistant', 0, '$recent', '{"text":"Merged.\n\n**Settle:** ready."}'),
+  ('m15', 'slist', 'assistant', 0, '$old', '{"text":"Done.\n\n**Left for you:**\n- deploy xyz\n- close #1\n\n**Settle:** ready."}'),
+  ('m16', 'sinline', 'assistant', 0, '$recent', '{"text":"**Settle:** ready. Left for you: run the deploy."}'),
+  ('m17', 'sopen', 'assistant', 0, '$recent', '{"text":"**Settle:** ready."}'),
+  ('m18', 'snumbered', 'assistant', 0, '$recent', '{"text":"## Left for you\n1. Deploy\n2) Close #12\n\n**Settle:** ready."}'),
+  ('m19', 'sbold', 'assistant', 0, '$recent', '{"text":"- **Left for you**: deploy\n**Settle:** ready."}'),
+  ('m20', 'sprose', 'assistant', 0, '$recent', '{"text":"**Left for you:**\nDeploy it and then close the issue.\n**Settle:** ready."}'),
+  ('m21', 'sbroken', 'assistant', 0, '$recent', '{"text":"**Settle:** ready."}'),
+  ('m22', 'sremoved', 'assistant', 0, '$recent', '{"text":"**Settle:** ready."}'),
+  ('m23', 'swrapped', 'assistant', 0, '$recent', '{"text":"**Left for you:** two things:\n- Deploy the change,\n  then verify it.\n- Close #639\n\n**Settle:** ready."}'),
+  ('m24', 'snothing', 'assistant', 0, '$recent', '{"text":"**Left for you:** nothing.\n**Settle:** ready."}'),
+  ('m25', 'sfenced', 'assistant', 0, '$recent', '{"text":"Handoff form:\n\u0060\u0060\u0060\n**Left for you:** <steps>\n\u0060\u0060\u0060\n**Settle:** ready."}'),
+  ('m26', 'sexcept', 'assistant', 0, '$recent', '{"text":"**Left for you:** Nothing except deploying the change.\n**Settle:** ready."}'),
+  ('m27', 'sboth', 'assistant', 0, '$recent', '{"text":"**Left for you:** none.\n**Settle:** ready. Left for you: deploy the change."}');
 SQL
 before=$(sha256sum "$tmp/state.sqlite" "$tmp"/{merged,dirty,gone,squashed,followup,quoted,indent,moved,switched,movedon,offbranch}/.git/index)
 
-out=$(status merged dirty gone squashed followup quoted indent moved switched movedon offbranch unreadable unborn broken removed failed quiet waits)
+out=$(status merged dirty gone squashed followup quoted indent moved switched movedon offbranch unreadable unborn broken removed failed quiet waits sdone slist sinline sopen squiet snumbered sbold sprose sbroken sremoved swrapped snothing sfenced sexcept sboth)
 test "$(jq -r '.database' <<<"$out")" = "$tmp/state.sqlite"
-test "$(jq -c '[.threads[].threadId]' <<<"$out")" = '["merged","dirty","gone","squashed","followup","quoted","indent","moved","switched","movedon","offbranch","unreadable","unborn","broken","removed","failed","quiet","waits"]'
+test "$(jq -c '[.threads[].threadId]' <<<"$out")" = '["merged","dirty","gone","squashed","followup","quoted","indent","moved","switched","movedon","offbranch","unreadable","unborn","broken","removed","failed","quiet","waits","sdone","slist","sinline","sopen","squiet","snumbered","sbold","sprose","sbroken","sremoved","swrapped","snothing","sfenced","sexcept","sboth"]'
 row() { jq -c --arg id "$1" ".threads[] | select(.threadId == \$id) | $2" <<<"$out"; }
 check() { row "$1" "[.checks[] | select(.id == \"$2\") | .pass, .detail]"; }
 
 # Merged by squash and pushed: ready, with the Settle: line from the newest
 # finished message and the stack-dismissed PR left out.
 test "$(row merged '[.project, .state, .run.status, .verdict]')" = '["alpha","unsettled","completed","ready"]'
-test "$(row merged '.settle | [.verdict, .line, .stale]')" = '["ready","ready.",false]'
+test "$(row merged '.settle | [.verdict, .line, .stale, .leftForYou]')" = '["ready","ready.",false,"deploy."]'
 test "$(check merged pushed)" = '[true,"all pushed"]'
 test "$(check merged landed)" = '[true,"changes are in origin/dev"]'
 test "$(row merged '[.prs[].number]')" = '[4]'
@@ -293,6 +349,35 @@ test "$(row quiet '[.idleSince, .verdict, .stallReasons]')" = "[\"$old\",\"stall
 test "$(status --stale-hours 100 quiet | jq -c '.threads[0] | [.verdict, .stallReasons]')" = '["not-yet",[]]'
 
 test "$(row waits '[.verdict, .waitingOn]')" = '["waiting",[{"kind":"monitor","description":"pr-review run 5"}]]'
+
+# A settled thread is done when its current Settle: ready line and every fact
+# agree, even with its worktree removed; steps left for the user, listed below
+# the label or on the Settle: line, make it left-for-you. Anything else, such
+# as an open pull request or no handoff, needs a check, never stalled.
+test "$(row sdone '[.state, .verdict, .settle.leftForYou, .stallReasons]')" = '["settled","done",null,[]]'
+test "$(row slist '[.verdict, .settle.leftForYou]')" = '["left-for-you","deploy xyz; close #1"]'
+test "$(row sinline '[.verdict, .settle.leftForYou]')" = '["left-for-you","run the deploy."]'
+test "$(row sopen '[.verdict, .settle.verdict]')" = '["check","ready"]'
+test "$(row squiet '[.verdict, .settle, .stallReasons]')" = '["check",null,[]]'
+# Steps under a heading, as a numbered list or after a colon outside the
+# bold label count; steps it cannot read leave the thread to a reader.
+test "$(row snumbered '[.verdict, .settle.leftForYou]')" = '["left-for-you","Deploy; Close #12"]'
+test "$(row sbold '[.verdict, .settle.leftForYou]')" = '["left-for-you","deploy"]'
+test "$(row sprose '[.verdict, .settle.leftForYou, .settle.leftForYouUnread]')" = '["check","Deploy it and then close the issue.",true]'
+# The label's own text and the list below it, wrapped lines included, are all
+# the steps; "nothing" is none; a label inside a code block is an example,
+# whose mention still leaves the thread to a reader.
+test "$(row swrapped '[.verdict, .settle.leftForYou]')" = '["left-for-you","two things:; Deploy the change, then verify it.; Close #639"]'
+test "$(row snothing '[.verdict, .settle.leftForYou, .settle.leftForYouUnread]')" = '["done",null,false]'
+test "$(row sfenced '[.verdict, .settle.leftForYou, .settle.leftForYouUnread]')" = '["check",null,true]'
+# Only text that is nothing but "nothing" or "none" is no steps, and steps on
+# the Settle: line add to the labelled ones.
+test "$(row sexcept '[.verdict, .settle.leftForYou]')" = '["left-for-you","Nothing except deploying the change."]'
+test "$(row sboth '[.verdict, .settle.leftForYou]')" = '["left-for-you","deploy the change."]'
+# A git check without an answer is not agreement: an unreadable worktree, or
+# a removed one with nothing merged, needs a look.
+test "$(row sbroken '.verdict')" = '"check"'
+test "$(row sremoved '.verdict')" = '"check"'
 
 # The caller's own thread: T3 shows nothing while the run is active, but the
 # caller sees its monitor and PR watch, not its running tool call.

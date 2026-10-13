@@ -64,6 +64,9 @@ const VERDICTS = {
   "not-yet": { label: "Not yet",         color: "var(--warning)" },
   "waiting": { label: "Waiting",         color: "var(--info)" },
   "stalled": { label: "Stalled",         color: "var(--destructive)" },
+  "done":    { label: "Settled · done",  color: "var(--muted-foreground)" },
+  "left-for-you": { label: "Settled · left for you", color: "var(--warning)" },
+  "check":   { label: "Settled · check", color: "var(--destructive)" },
 };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const t = REPORT.thread;

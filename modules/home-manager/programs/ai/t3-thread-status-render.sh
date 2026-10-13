@@ -7,7 +7,9 @@
 # the facts cannot show, written by the reporting agent:
 #   {"verdict": "ready|not-yet|waiting|stalled", "summary": "...",
 #    "remaining": ["..."], "owner": "user|agent", "leftForYou": ["..."]}
-# Every field is optional, except verdict for a --self report. The Nix wrapper
+# Every field is optional, except verdict for a --self report. A settled
+# thread's verdict is done, left-for-you or check, and its own current Left
+# for you: steps fill the card unless the notes list them. The Nix wrapper
 # sets status_card and t3-page.sh's function; thread text reaches the page
 # only through t3_page_write.
 : "${status_card:?}"
@@ -33,9 +35,13 @@ if ! json=$(jq -cn --slurpfile status "$status_file" --slurpfile notes "$notes_f
     then $notes[0] else error("expected one notes object") end
   | . as $n
   | ($n.verdict // $s.threads[0].verdict) as $verdict
-  | if ($verdict | IN("ready", "not-yet", "waiting", "stalled")) then . else error("no valid verdict") end
+  | if ($verdict | IN(if $s.threads[0].state == "settled" then "done", "left-for-you", "check"
+                      else "ready", "not-yet", "waiting", "stalled" end))
+    then . else error("no valid verdict") end
   | {generatedAt: $s.generatedAt, verdict: $verdict, summary: $n.summary,
-     remaining: ($n.remaining // []), owner: $n.owner, leftForYou: ($n.leftForYou // []),
+     remaining: ($n.remaining // []), owner: $n.owner,
+     leftForYou: ($n.leftForYou // [$s.threads[0] | select(.state == "settled") | .settle
+       | select(. != null and (.stale | not)) | .leftForYou | select(type == "string")]),
      # Only what the card shows.
      thread: ($s.threads[0] | {threadId, project, title, state, run: (.run | {status, active}),
        idleMinutes, self, settle, stallReasons,
