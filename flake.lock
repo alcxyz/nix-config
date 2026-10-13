@@ -290,6 +290,27 @@
         "type": "github"
       }
     },
+    "devstats": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791854830,
+        "narHash": "sha256-TrMpE27v2MTLAphTL7NGY5w9+I7OLuZ3ME1L7INU+28=",
+        "ref": "main",
+        "rev": "5c90f238e8430f7068a0c392c8bb4da6105ff143",
+        "revCount": 10,
+        "type": "git",
+        "url": "https://git.alc.xyz/alcxyz/devstats.git"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "https://git.alc.xyz/alcxyz/devstats.git"
+      }
+    },
     "diskusage": {
       "flake": false,
       "locked": {
@@ -1133,11 +1154,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791823553,
-        "narHash": "sha256-dy2LM9uRRjmTph/VaQ4lVcw9AU4ev3HsdC0SLckKqMM=",
+        "lastModified": 1791856029,
+        "narHash": "sha256-AuP/5eOJ1EfRHmiPDHOLLvdDcFPGXWqT8gCL3L4hRLk=",
         "ref": "dev",
-        "rev": "2ccbe1f4a06ddfc664dfe5c286f1013f90672973",
-        "revCount": 694,
+        "rev": "701bb266e99539d7ec947dab8921fecb71dd4dd5",
+        "revCount": 696,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1481,6 +1502,7 @@
         "dankMaterialShell": "dankMaterialShell",
         "danksession": "danksession",
         "darwin": "darwin",
+        "devstats": "devstats",
         "dms-plugins": "dms-plugins",
         "dsearch": "dsearch",
         "flake-parts": "flake-parts",

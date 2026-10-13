@@ -35,6 +35,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Nightly development statistics collector: package and Home Manager
+    # module; nix-secrets supplies its private settings.
+    devstats = {
+      url = "git+https://git.alc.xyz/alcxyz/devstats.git?ref=main";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Installed from its own flake; bn-bootstrap supplies only its Bane NOR
     # configuration (ADR-0090). Released app, refreshed by apps-update; its dev
     # build is refreshed by dev-apps-update (ADR-0089).

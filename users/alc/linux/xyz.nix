@@ -69,6 +69,9 @@ in {
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
     "${configDir}/modules/home-manager/services/devlog/default.nix"
+    # Nightly development statistics collector and its private settings.
+    inputs.devstats.homeManagerModules.default
+    inputs.nix-secrets.homeManagerModules.devstats
     ./xyz/gaming
     gamingDesktop.module
     ./xyz/t3code.nix
@@ -315,6 +318,7 @@ in {
   services.devlog.weekly.enable = true;
   services.devlog.forgejo.url = "https://git.alc.xyz";
   services.devlog.repoUrl = "git@git-ssh.alc.xyz:alcxyz/devlog.git";
+  services.devstats.enable = true;
 
   programs.ai.enable = true;
   programs.ai.forgejoMcp.enable = true;
