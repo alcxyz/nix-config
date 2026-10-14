@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1791672427,
-        "narHash": "sha256-It4sVwwR/6qmWdIpWcgK0FpojIVaKGoSNHq4fCxE+r4=",
+        "lastModified": 1791997409,
+        "narHash": "sha256-JL2sY0cT1op3feVzE/yTDZq32u8+KPUfErnQu7IbStQ=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "9049957e384a0fb09fdd813819c642b4d4a126d2",
+        "rev": "48be14bc9856ba6ab7b0e8139447ad163c7ec601",
         "type": "github"
       },
       "original": {
@@ -1132,11 +1132,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1791986778,
-        "narHash": "sha256-dVoEs/kdcgr4K4gkMIsFnEnpqZ3i/ZoxUY8KYAkwOr0=",
+        "lastModified": 1792013012,
+        "narHash": "sha256-wM2BeZmbL8tbjKEOsuobYYy5pG7gjFDda+d74NbMdIU=",
         "ref": "dev",
-        "rev": "619f6e2dff5b3d13bf7e52c1414ef71369b1367f",
-        "revCount": 758,
+        "rev": "04c3eb0cefa9ac93b3f6523871077e1a89bf70a8",
+        "revCount": 760,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
