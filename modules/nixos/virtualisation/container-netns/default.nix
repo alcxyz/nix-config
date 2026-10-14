@@ -73,6 +73,7 @@ in {
         mode = "recent-success";
         maximumAgeSeconds = 900;
         allowPendingFirstTimer = true;
+        pendingFirstTimerMaximumAgeSeconds = 180;
       }
     ];
   };

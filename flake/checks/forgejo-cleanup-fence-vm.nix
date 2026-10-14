@@ -81,7 +81,12 @@ else
           (pkgs.writeShellApplication {
             name = "fixture-cleanup-health";
             runtimeInputs = [pkgs.coreutils pkgs.gawk pkgs.systemd];
-            text = "exec bash ${../../modules/nixos/services/storage-health-monitor/check-recent-success.sh} forgejo-idle-podman-cleanup.service 1800 true /var/lib/storage-health-monitor/success/${builtins.hashString "sha256" "forgejo-idle-podman-cleanup.service"} /proc/uptime";
+            text = ''
+              export STORAGE_HEALTH_PENDING_TIMER=${pkgs.writeShellScript "fixture-pending-timer" ''
+                exec ${pkgs.python3}/bin/python3 ${../../modules/nixos/services/storage-health-monitor/check-pending-first-timer.py} "$@"
+              ''}
+              exec bash ${../../modules/nixos/services/storage-health-monitor/check-recent-success.sh} forgejo-idle-podman-cleanup.service 1800 true /var/lib/storage-health-monitor/success/${builtins.hashString "sha256" "forgejo-idle-podman-cleanup.service"} /proc/uptime 1320
+            '';
           })
         ];
       };

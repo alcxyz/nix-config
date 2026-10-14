@@ -37,7 +37,7 @@
     }
   );
   unitType = lib.types.submodule (
-    {...}: {
+    {config, ...}: {
       options = {
         name = lib.mkOption {type = lib.types.str;};
         mode = lib.mkOption {
@@ -55,8 +55,19 @@
           type = lib.types.bool;
           default = false;
           description = ''
-            Do not report a missing completion timestamp while the matching
-            timer is active and has not reached its first trigger yet.
+            Allow missing or valid stale success only before the matching timer's
+            first trigger this boot, within its scheduled deadline plus accuracy
+            and pendingFirstTimerMaximumAgeSeconds. Invalid state and current
+            failures still fail immediately. No post-trigger grace is granted.
+          '';
+        };
+        pendingFirstTimerMaximumAgeSeconds = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = config.maximumAgeSeconds;
+          description = ''
+            Maximum boot age (including suspend) for the opt-in first-timer
+            exception. Timer restart or rescheduling cannot extend this cap.
+            Set it to cover startup scheduling, randomized delay and accuracy.
           '';
         };
       };
@@ -83,7 +94,8 @@
         ${lib.escapeShellArg unit.name} \
         ${lib.escapeShellArg unit.mode} \
         ${toString unit.maximumAgeSeconds} \
-        ${lib.boolToString unit.allowPendingFirstTimer}
+        ${lib.boolToString unit.allowPendingFirstTimer} \
+        ${toString unit.pendingFirstTimerMaximumAgeSeconds}
     '')
     cfg.units;
   recentSuccessUnits = builtins.filter (unit: unit.mode == "recent-success") cfg.units;
@@ -105,8 +117,14 @@
       pkgs.coreutils
       pkgs.gawk
       pkgs.systemd
+      pendingTimerChecker
     ];
     text = builtins.readFile ./check-recent-success.sh;
+  };
+  pendingTimerChecker = pkgs.writeShellApplication {
+    name = "storage-health-check-pending-first-timer";
+    runtimeInputs = [pkgs.python3 pkgs.systemd];
+    text = ''exec python3 ${./check-pending-first-timer.py} "$@"'';
   };
   monitorScript = pkgs.writeShellApplication {
     name = "storage-health-monitor";
@@ -200,6 +218,7 @@
         mode="$2"
         maximum_age="$3"
         allow_pending_first_timer="$4"
+        pending_first_timer_maximum_age="$5"
 
         if [ "$mode" = active ] || [ "$mode" = active-not-degraded ]; then
           if ! issue="$(${lib.getExe activeUnitChecker} "$unit" "$mode")"; then
@@ -211,7 +230,7 @@
         marker=${successStateDirectory}/$(printf '%s' "$unit" | sha256sum | cut -d ' ' -f 1)
         if ! issue="$(${lib.getExe recentSuccessChecker} \
           "$unit" "$maximum_age" "$allow_pending_first_timer" \
-          "$marker" /proc/uptime)"; then
+          "$marker" /proc/uptime "$pending_first_timer_maximum_age")"; then
           record_issue "''${issue:-$unit: recent-success check failed without a reason}"
         fi
       }

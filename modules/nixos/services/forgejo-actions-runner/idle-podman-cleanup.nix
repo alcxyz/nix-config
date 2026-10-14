@@ -73,6 +73,8 @@ in {
         mode = "recent-success";
         maximumAgeSeconds = cleanup.healthMaximumAgeSeconds;
         allowPendingFirstTimer = true;
+        # OnBootSec + maximum randomized delay + default AccuracySec.
+        pendingFirstTimerMaximumAgeSeconds = 1320;
       }
     ];
 

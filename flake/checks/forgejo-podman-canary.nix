@@ -95,6 +95,7 @@ in
       name = "forgejo-idle-podman-cleanup.service";
       mode = "recent-success";
       maximumAgeSeconds = 1800;
+      pendingFirstTimerMaximumAgeSeconds = 1320;
       allowPendingFirstTimer = true;
     }
   ];

@@ -96,17 +96,11 @@ if [[ $1 == is-active ]]; then
   printf '%s\n' "${FIXTURE_ACTIVE_STATE:-active}"
 elif [[ $1 == show ]]; then
   property=$4
-  if [[ $property == LastTriggerUSec &&
-    ${FIXTURE_LAST_TRIGGER_FAIL:-false} == true ]]; then
-    exit 95
-  fi
   case $property in
     Result) printf '%s\n' "${FIXTURE_RESULT:-}" ;;
     ExecMainCode) printf '%s\n' "${FIXTURE_CODE:-}" ;;
     ExecMainStatus) printf '%s\n' "${FIXTURE_STATUS:-}" ;;
     InactiveEnterTimestampMonotonic) printf '%s\n' "${FIXTURE_FINISHED:-0}" ;;
-    LastTriggerUSec) printf '%s\n' "${FIXTURE_LAST_TRIGGER:-}" ;;
-    ActiveState) printf '%s\n' "${FIXTURE_TIMER_STATE:-inactive}" ;;
     StatusText) printf '%s\n' "${FIXTURE_STATUS_TEXT-monitoring}" ;;
     *) exit 97 ;;
   esac
@@ -162,13 +156,11 @@ check_fixture() {
     FIXTURE_CODE=${FIXTURE_CODE:-0} \
     FIXTURE_STATUS=${FIXTURE_STATUS:-0} \
     FIXTURE_FINISHED=${FIXTURE_FINISHED:-0} \
-    FIXTURE_LAST_TRIGGER=${FIXTURE_LAST_TRIGGER:-} \
-    FIXTURE_LAST_TRIGGER_FAIL=${FIXTURE_LAST_TRIGGER_FAIL:-false} \
-    FIXTURE_TIMER_STATE=${FIXTURE_TIMER_STATE:-inactive} \
     FIXTURE_SYSTEMCTL_FAIL=${FIXTURE_SYSTEMCTL_FAIL:-false} \
     FIXTURE_NOW=${FIXTURE_NOW:-0} \
     STORAGE_HEALTH_SYSTEMCTL=$sandbox/systemctl \
     STORAGE_HEALTH_DATE=$sandbox/date \
+    STORAGE_HEALTH_PENDING_TIMER=$sandbox/pending \
     "$BASH" "$check_recent_success" \
     fixture.service 50 "$1" "$marker" "$sandbox/uptime"
 }
@@ -237,22 +229,26 @@ if output=$(FIXTURE_RESULT=success FIXTURE_CODE=1 FIXTURE_STATUS=0 \
 fi
 grep -Fqx 'fixture.service: last successful completion is 100 seconds old' <<<"$output"
 
-FIXTURE_TIMER_STATE=active FIXTURE_LAST_TRIGGER='' check_fixture true
-if output=$(FIXTURE_LAST_TRIGGER_FAIL=true FIXTURE_TIMER_STATE=active \
-  check_fixture true); then
-  echo 'pending first timer passed without trigger metadata' >&2
+# The detailed timer matrix exercises the real Python policy separately. Here
+# verify shell delegation, the default cap, and preservation of stale evidence.
+printf '#!%s\n' "$BASH" >"$sandbox/pending"
+cat >>"$sandbox/pending" <<'EOF'
+[[ $1 == fixture.service && $2 == 50 ]]
+EOF
+chmod +x "$sandbox/pending"
+check_fixture true
+printf '100\n' >"$marker"
+FIXTURE_NOW=200 check_fixture true
+[[ $(<"$marker") == 100 ]]
+printf '#!%s\nexit 1\n' "$BASH" >"$sandbox/pending"
+if output=$(FIXTURE_NOW=200 check_fixture true); then
+  echo 'stale success passed after the bounded exception was denied' >&2
   exit 1
 fi
-grep -Fqx 'fixture.service: first-timer state is unavailable' <<<"$output"
-if output=$(FIXTURE_TIMER_STATE=inactive FIXTURE_LAST_TRIGGER='' \
-  check_fixture true); then
-  echo 'missing success passed with an inactive first timer' >&2
-  exit 1
-fi
-grep -Fqx 'fixture.service: no successful completion timestamp' <<<"$output"
-if output=$(FIXTURE_TIMER_STATE=active FIXTURE_LAST_TRIGGER='today' \
-  check_fixture true); then
-  echo 'missing success passed after the first timer trigger' >&2
+grep -Fqx 'fixture.service: last successful completion is 100 seconds old' <<<"$output"
+rm "$marker"
+if output=$(check_fixture true); then
+  echo 'missing success passed after the bounded exception was denied' >&2
   exit 1
 fi
 grep -Fqx 'fixture.service: no successful completion timestamp' <<<"$output"

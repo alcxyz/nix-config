@@ -42,6 +42,8 @@ operation exits successfully. Failed, canceled, or signaled runs do not advance
 the marker. Replace markers atomically, reject malformed or future timestamps,
 and allow only a bounded first-run exception. Activation must not invent prior
 success. This preserves freshness evidence across reboot.
+[ADR-0096](0096-bounded-first-timer-freshness.md) defines the bounded exception
+for opted-in consumers awaiting their first timer after reboot.
 
 The cross-repository alert ownership and reconciler policy is recorded in
 GitOps ADR-048. Private backup and monitoring detail follows

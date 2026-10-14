@@ -130,6 +130,8 @@ in {
 
   forgejo-cleanup-completion-fence-lifecycle = import ./forgejo-cleanup-fence-vm.nix {inherit pkgs;};
 
+  storage-health-freshness-lifecycle = import ./storage-health-freshness-vm.nix {inherit pkgs;};
+
   forgejo-orphan-monitor-credential-isolation = import ./forgejo-orphan-monitor-vm.nix {inherit pkgs;};
 
   forgejo-runner-pool-contract = let
@@ -394,13 +396,15 @@ in {
         mode = "active-not-degraded";
         maximumAgeSeconds = 129600;
         allowPendingFirstTimer = false;
+        pendingFirstTimerMaximumAgeSeconds = 129600;
       }
     ];
-      mkRepoCheck "storage-health-monitor-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.gnugrep] ''
+      mkRepoCheck "storage-health-monitor-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.gnugrep pkgs.python3] ''
         bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.sh \
           modules/nixos/services/storage-health-monitor/record-success.sh \
           modules/nixos/services/storage-health-monitor/check-recent-success.sh \
           modules/nixos/services/storage-health-monitor/check-active-unit.sh
+        python3 scripts/checks/test-first-timer-freshness.py
       '';
 
   nix-deploy-inventory-contract = let

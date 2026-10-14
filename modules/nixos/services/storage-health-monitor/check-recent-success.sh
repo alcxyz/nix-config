@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (($# != 5)); then
-  echo 'usage: check-recent-success UNIT MAXIMUM_AGE ALLOW_PENDING_FIRST_TIMER MARKER UPTIME_FILE' >&2
+if (($# != 5 && $# != 6)); then
+  echo 'usage: check-recent-success UNIT MAXIMUM_AGE ALLOW_PENDING_FIRST_TIMER MARKER UPTIME_FILE [PENDING_FIRST_TIMER_MAXIMUM_AGE]' >&2
   exit 2
 fi
 
@@ -11,6 +11,8 @@ maximum_age=$2
 allow_pending_first_timer=$3
 marker=$4
 uptime_file=$5
+pending_first_timer_maximum_age=${6:-$maximum_age}
+pending_timer_command=${STORAGE_HEALTH_PENDING_TIMER:-storage-health-check-pending-first-timer}
 systemctl_command=${STORAGE_HEALTH_SYSTEMCTL:-systemctl}
 date_command=${STORAGE_HEALTH_DATE:-date}
 
@@ -26,7 +28,8 @@ if ! result=$(read_property Result) ||
   exit 1
 fi
 
-if [[ -z $result || ! $code =~ ^[0-9]+$ || ! $status =~ ^[0-9]+$ ]]; then
+if [[ -z $result || ! $code =~ ^[0-9]{1,9}$ || ! $status =~ ^[0-9]{1,9}$ ||
+  ! $finished =~ ^[0-9]{1,18}$ ]]; then
   printf '%s: current unit state is malformed\n' "$unit"
   exit 1
 fi
@@ -36,7 +39,12 @@ if [[ $result != success ]] || ((code != 0 && code != 1)) || ((status != 0)); th
   exit 1
 fi
 
-if [[ -e $marker ]]; then
+failure_reason='no successful completion timestamp'
+if [[ -e $marker || -L $marker ]]; then
+  if [[ ! -f $marker || ! -r $marker ]]; then
+    printf '%s: durable successful completion timestamp is unavailable\n' "$unit"
+    exit 1
+  fi
   mapfile -t marker_lines <"$marker"
   if ((${#marker_lines[@]} != 1)) ||
     [[ ! ${marker_lines[0]:-} =~ ^[1-9][0-9]{0,17}$ ]]; then
@@ -54,14 +62,11 @@ if [[ -e $marker ]]; then
     exit 1
   fi
   age=$((10#$now - 10#$successful_at))
-  if ((age > maximum_age)); then
-    printf '%s: last successful completion is %s seconds old\n' "$unit" "$age"
-    exit 1
+  if ((age <= maximum_age)); then
+    exit 0
   fi
-  exit 0
-fi
-
-if [[ $result == success && $code == 1 && $status == 0 &&
+  failure_reason="last successful completion is $age seconds old"
+elif [[ $result == success && $code == 1 && $status == 0 &&
   $finished =~ ^[0-9]+$ ]] && ((finished > 0)); then
   now=$(awk '{printf "%.0f", $1 * 1000000}' "$uptime_file")
   if [[ ! $now =~ ^[0-9]+$ ]] || ((finished > now)); then
@@ -76,17 +81,10 @@ if [[ $result == success && $code == 1 && $status == 0 &&
   exit 0
 fi
 
-timer=${unit%.service}.timer
-if [[ $allow_pending_first_timer == true ]]; then
-  if ! last_trigger=$("$systemctl_command" show "$timer" -p LastTriggerUSec --value 2>/dev/null) ||
-    ! timer_state=$("$systemctl_command" show "$timer" -p ActiveState --value 2>/dev/null); then
-    printf '%s: first-timer state is unavailable\n' "$unit"
-    exit 1
-  fi
-  if [[ $timer_state == active && -z $last_trigger ]]; then
-    exit 0
-  fi
+if [[ $allow_pending_first_timer == true && $code == 0 ]] &&
+  "$pending_timer_command" "$unit" "$pending_first_timer_maximum_age"; then
+  exit 0
 fi
 
-printf '%s: no successful completion timestamp\n' "$unit"
+printf '%s: %s\n' "$unit" "$failure_reason"
 exit 1
