@@ -99,6 +99,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0092](0092-t3-preview-browser-from-nix.md) | Provide T3's preview browser from the Nix package | Accepted | T3 Code, previews, nix-packages |
 | [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Accepted | agent skills, `programs.ai`, Forgejo, GitHub |
 | [ADR-0094](0094-browser-roles.md) | One Chromium browser (Brave Origin), Zen provisional | Accepted, Zen provisional | browsers, xyz, xps, mac, Wolf |
+| [ADR-0095](0095-bounded-workspace-sync-go-pilot.md) | Evaluate Go through one bounded workspace-sync pilot | Accepted; implementation deferred | workspace reconciliation, nix-packages, Home Manager |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the
