@@ -1132,11 +1132,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1791886316,
-        "narHash": "sha256-rV0tMa15Qn+ecbzvR/CX8U8eNwZbiTZhEKaaxVOdWjk=",
+        "lastModified": 1791986778,
+        "narHash": "sha256-dVoEs/kdcgr4K4gkMIsFnEnpqZ3i/ZoxUY8KYAkwOr0=",
         "ref": "dev",
-        "rev": "0e7dcbd6cbbb96cabd7ff90bcce33b1f4d043ef5",
-        "revCount": 751,
+        "rev": "619f6e2dff5b3d13bf7e52c1414ef71369b1367f",
+        "revCount": 758,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1154,11 +1154,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791856029,
-        "narHash": "sha256-AuP/5eOJ1EfRHmiPDHOLLvdDcFPGXWqT8gCL3L4hRLk=",
+        "lastModified": 1791986605,
+        "narHash": "sha256-8aYWuaZd0SFZX5mHC2jvEICU6AWrkVmatWNyUULw7J0=",
         "ref": "dev",
-        "rev": "701bb266e99539d7ec947dab8921fecb71dd4dd5",
-        "revCount": 696,
+        "rev": "7012a16306fc676ec5b1fed5fefe7d5d48845291",
+        "revCount": 700,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1528,6 +1528,7 @@
         "reportcraft": "reportcraft",
         "rustfs": "rustfs",
         "rustfs-app": "rustfs-app",
+        "rustfs-rust-overlay": "rustfs-rust-overlay",
         "sops-nix": "sops-nix",
         "stashdb-pop": "stashdb-pop",
         "t3rry": "t3rry",
@@ -1537,27 +1538,6 @@
       }
     },
     "rust-overlay": {
-      "inputs": {
-        "nixpkgs": [
-          "rustfs",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1783834461,
-        "narHash": "sha256-FCmrs1StAghJDKfqy56KM96KZtxpYzgeq6zM3QO8wjA=",
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "rev": "a286e5b998e852297a403786f063fb2c9fe7f57a",
-        "type": "github"
-      },
-      "original": {
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "type": "github"
-      }
-    },
-    "rust-overlay_2": {
       "inputs": {
         "nixpkgs": [
           "rustfs-app",
@@ -1583,7 +1563,9 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "rust-overlay": "rust-overlay"
+        "rust-overlay": [
+          "rustfs-rust-overlay"
+        ]
       },
       "locked": {
         "lastModified": 1784257078,
@@ -1605,7 +1587,7 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "rust-overlay": "rust-overlay_2"
+        "rust-overlay": "rust-overlay"
       },
       "locked": {
         "lastModified": 1789045742,
@@ -1619,6 +1601,26 @@
         "owner": "rustfs",
         "ref": "1.0.0-rc.6",
         "repo": "rustfs",
+        "type": "github"
+      }
+    },
+    "rustfs-rust-overlay": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788591095,
+        "narHash": "sha256-Vh+BeLWfbTT9AecazIsQ/Tkg/RzJeX3lEduANf256WA=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "c361047d3a538f547f1617bb6b410411929ac9cc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
         "type": "github"
       }
     },

@@ -116,6 +116,16 @@
     rustfs = {
       url = "github:rustfs/rustfs/1.0.0-beta.10";
       inputs.nixpkgs.follows = "nixpkgs";
+      # The beta's own rust-overlay pin predates the overlay's move off the
+      # deprecated stdenv.isLinux and stdenv.isDarwin.
+      inputs.rust-overlay.follows = "rustfs-rust-overlay";
+    };
+
+    # The backup service's toolchain: the beta builds with the latest stable
+    # Rust this overlay knows, so updating it rebuilds k8s-backup-rustfs.
+    rustfs-rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     paperless-tools = {
