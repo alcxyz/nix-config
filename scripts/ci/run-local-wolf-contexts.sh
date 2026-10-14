@@ -50,6 +50,12 @@ if ! flock -n 9; then
   exit 0
 fi
 
+# Keep the lock in this producer shell, but do not pass it to Git or its
+# children: detached maintenance must not extend the producer's lock lifetime.
+git() {
+  command git "$@" 9>&-
+}
+
 checkout="$work/nix-config"
 git init --quiet "$checkout"
 git -C "$checkout" remote add origin "$CONFIG_REMOTE"
@@ -87,7 +93,8 @@ package=(--url "$FORGEJO_URL" --owner "$FORGEJO_OWNER" --channel "$CONFIG_BRANCH
 client="$checkout/scripts/ci/wolf-context-package.py"
 state=$(python3 "$client" exists "${package[@]}")
 if [[ $state == missing ]]; then
-  (cd "$checkout" && nix build --no-update-lock-file --out-link "$work/product" .#wolf-deployed-image-products)
+  # Nix invokes Git to fetch flake inputs without using the shell wrapper.
+  (cd "$checkout" && nix build --no-update-lock-file --out-link "$work/product" .#wolf-deployed-image-products 9>&-)
   [[ -z $(git -C "$checkout" status --porcelain) ]] || {
     echo 'Wolf build changed the committed tree.' >&2
     exit 1

@@ -2,14 +2,17 @@
 """Synthetic checks for the Wolf package handoff; no live credentials or API."""
 
 import datetime as dt
+import fcntl
 import hashlib
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
+import signal
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import types
@@ -264,6 +267,9 @@ class HandoffTests(unittest.TestCase):
                 # Out-link a product directory whose manifest comes from products.json.
                 "nix": """#!/usr/bin/env bash
 set -eu
+if [[ -e $MOCK_ROOT/fetch-via-nix ]]; then
+  MOCK_NIX_FETCH=1 git fetch --quiet --no-tags origin refs/heads/dev
+fi
 link=; while [[ $# -gt 0 ]]; do [[ $1 == --out-link ]] && { link=$2; shift; }; shift; done
 product=$(mktemp -d "$MOCK_ROOT/product.XXXX")
 jq '{schemaVersion: 1, products: .}' products.json >"$product/manifest.json"
@@ -315,27 +321,43 @@ if action == "dispatch" and os.path.exists(os.environ["MOCK_ROOT"] + "/fail-disp
                            FORGEJO_URL="https://forge.invalid", FORGEJO_OWNER="o", FORGEJO_REPO="r",
                            FORGEJO_API_TOKEN_FILE=str(token), DOCKER_CONFIG_FILE=str(token),
                            WOLF_CONTEXT_STATE_DIRECTORY=str(state), XDG_RUNTIME_DIR=str(root))
-                result = subprocess.run(["bash", str(PRODUCER)], env=env, capture_output=True, text=True)
+                result = subprocess.run(["bash", str(PRODUCER)], env=env, capture_output=True,
+                                        text=True, timeout=60)
+                self.producer_output = f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
                 return result.returncode, log.read_text().split()
 
+            def expect(code, calls, message=None):
+                self.assertEqual(produce(), (code, calls), self.producer_output)
+                if message is not None:
+                    self.assertIn(message, self.producer_output)
+                if calls:
+                    self.assertNotIn("Another local native build is running.", self.producer_output)
+
+            # Real contention must remain a successful skip, with its own
+            # diagnostic and no client calls or state changes.
+            with (root / "nix-package-promotion.lock").open("w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                expect(0, [], "Another local native build is running.")
+                self.assertFalse(state.exists())
+
             commit("lock-1")
-            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
+            expect(0, ["exists", "upload", "dispatch", "prune"])
             # An input-neutral lock bump records the revision without publishing.
             commit("lock-2")
-            self.assertEqual(produce(), (0, ["exists"]))
+            expect(0, ["exists"], "Wolf image inputs match the last dispatched products;")
             # A changed image input publishes.
             changed = [dict(item, buildArgs={"RUNTIME_IMAGE": "new"}) for item in products]
             commit("lock-3", changed)
-            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
+            expect(0, ["exists", "upload", "dispatch", "prune"])
             # A failed dispatch must not let identical inputs skip the next publish.
             (root / "fail-dispatch").touch()
             commit("lock-4", products)
             code, calls = produce()
-            self.assertNotEqual(code, 0)
-            self.assertEqual(calls, ["exists", "upload", "dispatch"])
+            self.assertNotEqual(code, 0, self.producer_output)
+            self.assertEqual(calls, ["exists", "upload", "dispatch"], self.producer_output)
             (root / "fail-dispatch").unlink()
             commit("lock-5", products)
-            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
+            expect(0, ["exists", "upload", "dispatch", "prune"])
 
             # Root registration fails after upload; the retry finds the upload,
             # dispatches it and records this revision's products.
@@ -343,25 +365,103 @@ if action == "dispatch" and os.path.exists(os.environ["MOCK_ROOT"] + "/fail-disp
             (root / "fail-root").touch()
             commit("lock-6", moved)
             code, calls = produce()
-            self.assertNotEqual(code, 0)
-            self.assertEqual(calls, ["exists", "upload"])
+            self.assertNotEqual(code, 0, self.producer_output)
+            self.assertEqual(calls, ["exists", "upload"], self.producer_output)
             (root / "fail-root").unlink()
             (root / "exists").write_text("present")
-            self.assertEqual(produce(), (0, ["exists", "dispatch", "prune"]))
+            expect(0, ["exists", "dispatch", "prune"])
             (root / "exists").unlink()
             commit("lock-7", moved)
-            self.assertEqual(produce(), (0, ["exists"]))
+            expect(0, ["exists"], "Wolf image inputs match the last dispatched products;")
 
             # Without proof of which revision was uploaded, no record is kept and
             # identical inputs publish again.
             (state / "dev.uploaded.json").unlink()
             (root / "exists").write_text("present")
             commit("lock-8", products)
-            self.assertEqual(produce(), (0, ["exists", "dispatch", "prune"]))
+            expect(0, ["exists", "dispatch", "prune"])
             (root / "exists").unlink()
             self.assertFalse((state / "dev.dispatched.json").exists())
             commit("lock-9", products)
-            self.assertEqual(produce(), (0, ["exists", "upload", "dispatch", "prune"]))
+            expect(0, ["exists", "upload", "dispatch", "prune"])
+            (source / "README.md").write_text("Unrelated documentation change.\n")
+            commit("lock-9", products)
+            expect(0, ["prune"], "Wolf image inputs have not changed.")
+
+            # Model a detached fetch child without relying on Git's automatic
+            # maintenance thresholds or how quickly background work finishes.
+            # The real Git still performs the fetch. A pipe confirms the child
+            # is alive before fetch returns, and an alarm bounds its lifetime.
+            real_git = shutil.which("git")
+            git_shim = shims / "git"
+            git_shim.write_text(f"#!{sys.executable}\n" + f"REAL_GIT = {real_git!r}\n" + """
+import fcntl, json, os, pathlib, select, signal, sys
+if "fetch" in sys.argv and "MOCK_ROOT" in os.environ:
+    root = pathlib.Path(os.environ["MOCK_ROOT"])
+    marker = root / "fetch-child.json"
+    via_nix = (root / "fetch-via-nix").exists()
+    if ("MOCK_NIX_FETCH" in os.environ) == via_nix and not marker.exists():
+        # The producer must still exclude another run while Git is executing,
+        # even when Git itself has no copy of the producer's descriptor.
+        with (root / "nix-package-promotion.lock").open("w") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                pass
+            else:
+                raise RuntimeError("producer released its lock during fetch")
+        try:
+            descriptor = os.fstat(9)
+            lock_stat = (root / "nix-package-promotion.lock").stat()
+            inherited = (descriptor.st_dev, descriptor.st_ino) == (lock_stat.st_dev, lock_stat.st_ino)
+        except OSError:
+            inherited = False
+        read_fd, write_fd = os.pipe()
+        if os.fork() == 0:
+            os.close(read_fd)
+            os.setsid()
+            os.chdir(root)
+            with open(os.devnull, "r+b") as null:
+                for fd in (0, 1, 2):
+                    os.dup2(null.fileno(), fd)
+            signal.alarm(180)
+            marker.write_text(json.dumps({"pid": os.getpid(), "inherited_lock": inherited}))
+            os.write(write_fd, b"ready")
+            os.close(write_fd)
+            signal.pause()
+            os._exit(0)
+        os.close(write_fd)
+        if not select.select([read_fd], [], [], 10)[0] or os.read(read_fd, 5) != b"ready":
+            raise RuntimeError("fetch child did not become ready")
+        os.close(read_fd)
+os.execv(REAL_GIT, [REAL_GIT, *sys.argv[1:]])
+""")
+            git_shim.chmod(0o755)
+
+            def check_detached_child(lock, items):
+                try:
+                    commit(f"lock-{lock}", items)
+                    expect(0, ["exists", "upload", "dispatch", "prune"])
+                    child = json.loads((root / "fetch-child.json").read_text())
+                    os.kill(child["pid"], 0)
+                    # A fresh producer reaches the identical-input check while
+                    # the detached child from the previous run is still alive.
+                    commit(f"lock-{lock + 1}", items)
+                    expect(0, ["exists"], "Wolf image inputs match the last dispatched products;")
+                    self.assertFalse(child["inherited_lock"])
+                finally:
+                    marker = root / "fetch-child.json"
+                    if marker.exists():
+                        try:
+                            os.kill(json.loads(marker.read_text())["pid"], signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                        marker.unlink()
+
+            check_detached_child(10, changed)
+            # Git launched by Nix does not use the producer's shell function.
+            (root / "fetch-via-nix").touch()
+            check_detached_child(12, moved)
 
 if __name__ == "__main__":
     unittest.main()
