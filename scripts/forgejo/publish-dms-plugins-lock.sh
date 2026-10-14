@@ -15,7 +15,6 @@ fi
 : "${FORGEJO_REPO:?FORGEJO_REPO is required}"
 : "${BASE_BRANCH:?BASE_BRANCH is required}"
 : "${UPDATE_BRANCH:?UPDATE_BRANCH is required}"
-: "${REVISION:?REVISION is required}"
 : "${VERSION:?VERSION is required}"
 
 if [[ "$BASE_BRANCH" != "dev" || "$UPDATE_BRANCH" != "update/dms-plugins-lock" ]]; then
@@ -38,6 +37,11 @@ if [[ "$(git rev-parse HEAD)" != "$base_sha" ]]; then
   echo "Refusing to publish from a stale ${BASE_BRANCH} checkout" >&2
   exit 1
 fi
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# Describe the same base and candidate lock that the publication gates verify.
+description=$(git show "${base_sha}:flake.lock" |
+  python3 "${script_dir}/describe-dms-lock.py" flake.lock "$VERSION")
 
 if [[ -z ${FORGEJO_TOKEN_FILE:-} ]]; then
   # Hosted compatibility: the local operator path uses its native Git helper.
@@ -69,8 +73,8 @@ if [[ -z "$head_sha" ]]; then
   fi
   git switch -C "$UPDATE_BRANCH"
   git add flake.lock
-  git commit -m "chore(dms): update plugin lock to ${REVISION:0:12}" \
-    -m "Refresh the verified aggregate plugin pin for the current development head."
+  git commit -m "chore(dms): refresh plugin lock inputs" \
+    -m "Refresh the build-verified DMS input revisions for the current development head."
   head_sha=$(git rev-parse HEAD)
   lease_args=()
   if [[ -n "$remote_ref" ]]; then
@@ -94,12 +98,8 @@ token = open(sys.argv[1], encoding="utf-8").read().strip() if sys.argv[1] else o
 print("header = " + json.dumps("Authorization: token " + token))
 PY
 
-jq -n \
-  --arg base "$BASE_BRANCH" \
-  --arg head "$UPDATE_BRANCH" \
-  --arg title "chore(dms): update plugins to ${REVISION:0:12}" \
-  --arg body "Automated, build-verified refresh of the aggregate DMS plugin lock to \`${REVISION}\` (DankAIUsage ${VERSION})." \
-  '{base: $base, head: $head, title: $title, body: $body}' >"$payload"
+jq --arg base "$BASE_BRANCH" --arg head "$UPDATE_BRANCH" \
+  '. + {base: $base, head: $head}' <<<"$description" >"$payload"
 
 status=$(curl -sS -K "$curl_config" -H "Accept: application/json" -H "Content-Type: application/json" -o "$response" -w '%{http_code}' \
   --data @"$payload" "${api_base}/pulls")
@@ -136,7 +136,6 @@ if ! jq -e --arg number "$pr_number" --arg base "$BASE_BRANCH" \
   exit 1
 fi
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 token_file=$(mktemp)
 chmod 600 "$token_file"
 if [[ -n ${FORGEJO_TOKEN_FILE:-} ]]; then
@@ -169,5 +168,10 @@ if ! python3 "${script_dir}/commit-status.py" require \
       ;;
   esac
 fi
+
+# Refresh reused PRs too, after verifying their repository and branch identity.
+jq '{title, body}' <<<"$description" >"$payload"
+curl -fsS -K "$curl_config" -H "Accept: application/json" -H "Content-Type: application/json" \
+  -X PATCH --data @"$payload" "${api_base}/pulls/${pr_number}" -o "$response"
 
 echo "DMS plugins lock update PR #${pr_number} awaits exact-head validation and the merge queue."

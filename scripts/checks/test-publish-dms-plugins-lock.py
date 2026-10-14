@@ -2,6 +2,8 @@
 """Exercise the DMS publisher without a Forgejo token or network access."""
 
 import base64
+import copy
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -30,6 +32,7 @@ class Publisher(unittest.TestCase):
 printf 'git %s\n' "$*" >>"$CALL_LOG"
 case "$1" in
   diff) case "$*" in *--name-only*) echo flake.lock; exit 0 ;; esac; exit 1 ;;
+  show) cat "$TEST_BASE_LOCK"; exit 0 ;;
   status) printf '%s\n' "${TEST_WORKTREE_STATUS:- M flake.lock}"; exit 0 ;;
   rev-parse)
     case "$2" in
@@ -71,6 +74,13 @@ assert config.stat().st_mode & 0o777 == 0o600
 assert os.environ["TEST_TOKEN"] in config.read_text()
 url = next(arg for arg in args if arg.startswith("http://") or arg.startswith("https://"))
 status = "201"
+if "--data" in args and (url.endswith("/pulls") or url.endswith("/pulls/47")):
+    payload = pathlib.Path(args[args.index("--data") + 1][1:]).read_text()
+    pathlib.Path(os.environ["TEST_PR_PAYLOAD"]).write_text(payload)
+    if "PATCH" in args:
+        open(os.environ["CALL_LOG"], "a").write("refresh PR description\\n")
+        if os.environ.get("TEST_PATCH_FAIL") == "1":
+            sys.exit(22)
 if url.endswith("/pulls"):
     if os.environ.get("TEST_PR_EXISTS") == "1":
         body = {"message": "already exists"}
@@ -118,6 +128,23 @@ exec "REAL_PYTHON" "$@"
                 "REAL_PYTHON", subprocess.check_output(["which", "python3"], text=True).strip()
             ),
         )
+        self.before = {
+            "root": "root", "nodes": {
+                "root": {"inputs": {"dms-plugins": "bundle", "danksession": "session"}},
+                "bundle": {"locked": {"rev": "a" * 40}, "inputs": {
+                    "firstparty": "upstream", "aiusage": "plugin",
+                    "danksession": ["danksession"]}},
+                "upstream": {"locked": {"rev": "b" * 40}},
+                "plugin": {"locked": {"rev": "c" * 40}},
+                "session": {"locked": {"rev": "d" * 40}},
+            },
+        }
+        self.after = copy.deepcopy(self.before)
+        self.after["nodes"]["bundle"]["locked"]["rev"] = "e" * 40
+        self.after["nodes"]["upstream"]["locked"]["rev"] = "f" * 40
+        self.base_lock = self.root / "base.lock"
+        self.base_lock.write_text(json.dumps(self.before))
+        self.pr_payload = self.root / "pr-payload.json"
         self.env = os.environ.copy()
         self.env.pop("FORGEJO_TOKEN_FILE", None)
         self.env.update(
@@ -127,6 +154,8 @@ exec "REAL_PYTHON" "$@"
                 "TEST_TOKEN": TOKEN,
                 "TEST_HEAD": HEAD,
                 "TEST_BASE": BASE,
+                "TEST_BASE_LOCK": str(self.base_lock),
+                "TEST_PR_PAYLOAD": str(self.pr_payload),
                 "TEST_COMMITTED": str(self.root / "committed"),
                 "FORGEJO_TOKEN": TOKEN,
                 "FORGEJO_URL": "https://forgejo.invalid",
@@ -145,6 +174,7 @@ exec "REAL_PYTHON" "$@"
         path.chmod(0o700)
 
     def run_publisher(self):
+        (self.root / "flake.lock").write_text(json.dumps(self.after))
         return subprocess.run(
             ["bash", str(PUBLISHER)], cwd=self.root, env=self.env, text=True, capture_output=True
         )
@@ -158,6 +188,38 @@ exec "REAL_PYTHON" "$@"
         self.assertNotIn("/merge", calls)
         self.assertNotIn(TOKEN, calls + result.stdout + result.stderr)
         self.assertNotIn(base64.b64encode(f"fixture:{TOKEN}".encode()).decode(), calls)
+
+    def test_describes_changed_inputs_and_keeps_version_as_validation_metadata(self):
+        result = self.run_publisher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(self.pr_payload.read_text())
+        self.assertEqual(payload["title"], "chore(dms): refresh plugin lock inputs")
+        body = payload["body"]
+        for name, old, new in (("dms-plugins", "a", "e"),
+                               ("dms-plugins/firstparty", "b", "f")):
+            self.assertIn(f"- `{name}`: `{old * 40}` -> `{new * 40}`", body)
+        changes, validation = body.split("Validation metadata:")
+        self.assertNotIn("aiusage", changes.lower())
+        self.assertNotIn("1.2.3", changes)
+        self.assertIn("DankAIUsage `1.2.3`", validation)
+
+    def test_firstparty_only_refresh_with_unchanged_aggregate_and_plugin(self):
+        self.after["nodes"]["bundle"] = copy.deepcopy(self.before["nodes"]["bundle"])
+        result = self.run_publisher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        body = json.loads(self.pr_payload.read_text())["body"]
+        self.assertIn(f"- `dms-plugins/firstparty`: `{'b' * 40}` -> `{'f' * 40}`", body)
+        self.assertNotIn("- `dms-plugins`:", body)
+        self.assertNotIn("- `dms-plugins/aiusage`:", body)
+
+    def test_follows_input_uses_canonical_name_even_when_node_id_changes(self):
+        self.after["nodes"]["root"]["inputs"]["danksession"] = "session_2"
+        self.after["nodes"]["session_2"] = {"locked": {"rev": "9" * 40}}
+        result = self.run_publisher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        body = json.loads(self.pr_payload.read_text())["body"]
+        self.assertIn(f"- `danksession`: `{'d' * 40}` -> `{'9' * 40}`", body)
+        self.assertNotIn("session_2", body)
 
     def test_local_activated_token_file_uses_native_git(self):
         token_file = self.root / "activated-token"
@@ -197,7 +259,19 @@ exec "REAL_PYTHON" "$@"
         calls = self.calls.read_text()
         self.assertNotIn("git commit", calls)
         self.assertNotIn("git push", calls)
+        self.assertIn("refresh PR description", calls)
+        self.assertIn("dms-plugins/firstparty", json.loads(self.pr_payload.read_text())["body"])
         self.assertIn("dispatch exact head", calls)
+
+    def test_description_refresh_failure_does_not_block_build_or_validation(self):
+        self.env["TEST_PR_EXISTS"] = "1"
+        self.env["TEST_PATCH_FAIL"] = "1"
+        result = self.run_publisher()
+        self.assertNotEqual(result.returncode, 0)
+        calls = self.calls.read_text()
+        self.assertIn(f"--sha {HEAD} --context ci/dms-lock-build", calls)
+        self.assertLess(calls.index("dispatch exact head"),
+                        calls.index("refresh PR description"))
 
     def test_dispatch_accepts_no_content_response(self):
         self.env["TEST_DISPATCH_STATUS"] = "204"
@@ -229,6 +303,7 @@ exec "REAL_PYTHON" "$@"
                 calls = self.calls.read_text()
                 self.assertNotIn("\nstatus ", calls)
                 self.assertNotIn("dispatch exact head", calls)
+                self.assertNotIn("refresh PR description", calls)
                 self.calls.unlink()
                 del self.env[key]
 
