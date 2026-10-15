@@ -367,7 +367,7 @@ in {
   # session is stopped; treat that normal lifecycle as successful.
   systemd.user.services.dms = {
     overrideStrategy = "asDropin";
-    path = [inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default];
+    path = [pkgs.quickshell];
     serviceConfig.SuccessExitStatus = 143;
   };
 

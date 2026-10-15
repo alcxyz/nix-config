@@ -123,7 +123,7 @@ in
               openbao = inputs.nixpkgs-openbao.legacyPackages.${system}.openbao;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
-                quickshell = inputs.quickshell.packages.${system}.default;
+                inherit (_final) quickshell;
               };
               ffmpeg-v4l2-request = _prev.callPackage ../packages/ffmpeg-v4l2-request {};
               moonlight-v4l2-request = _prev.moonlight-qt.override {
@@ -167,6 +167,22 @@ in
                   (old.patches or [])
                   ++ [../packages/hyprland/center-underfilled-scrolling-column.patch];
               });
+              # The one quickshell for DMS, xps's DMS unit and the session
+              # splash: the upstream git build plus the polkit details DMS
+              # reads. Every variant is its own C++ build, so keep one.
+              quickshell = let
+                base = inputs.quickshell.packages.${system}.default;
+                unwrapped = base.unwrapped.overrideAttrs (old: {
+                  patches = (old.patches or []) ++ [../packages/quickshell/quickshell-polkit-details.patch];
+                });
+              in
+                base.overrideAttrs (_: {
+                  installPhase = ''
+                    mkdir -p "$out"
+                    cp -r ${unwrapped}/* "$out"
+                  '';
+                  passthru = (base.passthru or {}) // {inherit unwrapped;};
+                });
             }
         )
       ];

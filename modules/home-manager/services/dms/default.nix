@@ -267,25 +267,9 @@
     then dankaiusagePkg + "/share/dms-plugins/DankAIUsage"
     else plugins.aiusage;
   danksessionPkg = inputs.danksession.packages.${pkgs.stdenv.hostPlatform.system}.danksession;
-  quickshellBasePkg = inputs.quickshell.packages.${pkgs.stdenv.hostPlatform.system}.default;
-  quickshellUnwrappedPkg = quickshellBasePkg.unwrapped.overrideAttrs (old: {
-    patches =
-      (old.patches or [])
-      ++ [
-        ./patches/quickshell-polkit-details.patch
-      ];
-  });
-  quickshellPkg = quickshellBasePkg.overrideAttrs (_: {
-    installPhase = ''
-      mkdir -p "$out"
-      cp -r ${quickshellUnwrappedPkg}/* "$out"
-    '';
-    passthru =
-      (quickshellBasePkg.passthru or {})
-      // {
-        unwrapped = quickshellUnwrappedPkg;
-      };
-  });
+  # Patched in the package overlay (flake/pkgs.nix) and shared with the
+  # session splash, so the host builds quickshell once.
+  quickshellPkg = pkgs.quickshell;
   dmsPkg =
     inputs.dankMaterialShell.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs
     (old: {
