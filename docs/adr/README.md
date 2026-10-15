@@ -101,6 +101,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0094](0094-browser-roles.md) | One Chromium browser (Brave Origin), Zen provisional | Accepted, Zen provisional | browsers, xyz, xps, mac, Wolf |
 | [ADR-0095](0095-bounded-workspace-sync-go-pilot.md) | Evaluate Go through one bounded workspace-sync pilot | Accepted; source integration implemented, runtime qualification pending | workspace reconciliation, nix-packages, Home Manager |
 | [ADR-0096](0096-bounded-first-timer-freshness.md) | Bound the first-timer freshness exception after reboot | Accepted | storage health, timers |
+| [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted; xyz serves `ci-fast`, xev fallback pending | Forgejo runners, xyz, xev, workflows |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

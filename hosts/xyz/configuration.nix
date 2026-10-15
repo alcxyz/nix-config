@@ -187,9 +187,11 @@ in {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
       # Preserve the manual canary workflow while jobs adopt the shared label.
+      # ci-fast serves opted-in jobs on the fastest host (ADR-0097).
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
+        "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
     };
     name = "xyz";
