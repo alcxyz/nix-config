@@ -1,7 +1,7 @@
 # ADR-0091: Deploy a T3 thread overview skill that reads T3 state directly
 
 **Status:** Accepted
-**Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets)
+**Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets; 2026-10-15 for #676)
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`
 
@@ -120,3 +120,44 @@ facts (#631) most can be judged without one.
 - Only threads that handed off since #631 have a `Settle:` line, so threads
   without one still get a reader. Steps left for the user are shown, not
   checked: the facts cannot tell whether a deploy happened.
+
+## Amendment: where a thread's time goes (#676)
+
+Long threads spend most of their wall time in a few steps, and the experience
+reports in #657 estimate those by hand. `programs.ai` therefore also installs
+`t3-thread-time` and `t3-thread-time-render`, used by a `t3-thread-time` skill
+in nix-secrets.
+
+- **Measured, not judged.** The command splits a thread's time by kind of
+  work (discussion, tracking, exploring, coding, test, build, git, review, CI,
+  deploy, verification, delegation, waiting) from the same state database.
+  Inside a run, calls are grouped into batches (parallel calls start
+  together), and a batch's time, including the model time spent writing it,
+  belongs to the call it waited on longest. So the time spent writing an edit
+  counts as coding, concurrent calls are never counted twice, and a call still
+  running when the next batch starts counts as background work from then on.
+  Waits for a question or approval are the user's time. Between runs, a run
+  started by a notification charges the gap to the background work that woke
+  it, and one started by the user charges it to the user, or to idle above a
+  threshold. Items stored without a run (threads from before T3's run
+  projection, native subagent threads) are grouped into runs at each message
+  that starts a turn or notice; without T3's run status they count as
+  finished, so a live one is understated. It also counts churn: failed items,
+  steers, compactions and `pr-review` runs per pull request.
+- **Heuristic categories.** Commands are classified by rules on their shell
+  text, with heredoc bodies ignored and edits winning. The rules will misfile
+  some commands; the `other` share and the fixture test show where, and the
+  rules change with the evidence rather than with a model's guess.
+- **A `light` reader explains, the numbers do not change.** The skill gives the
+  JSON to a `light`-role worker, which reads only the hotspots in the thread
+  and writes notes: why the top categories took that long and what to tune.
+  The page shows the notes beside the measured numbers.
+- **Text stays inside.** Command text is read to classify it and leaves the
+  command only as a short first-line label; the renderer escapes it like the
+  other pages.
+
+The command reads each turn item's `startedAt` and `completedAt`, each run's
+`startedAt`, and fails with exit 3 when items or runs lack those fields or a
+finished item has no completion time. Notification summaries and sources are
+optional: a notice without them counts as generic. Delegated child threads are not followed; their time shows as
+delegation in the parent, and the skill can run the command on a child.

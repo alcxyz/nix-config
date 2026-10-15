@@ -18,6 +18,7 @@ includes = [
   "modules/home-manager/programs/ai/t3-thread-overview-render.sh",
   "modules/home-manager/programs/ai/t3-thread-status.sh",
   "modules/home-manager/programs/ai/t3-thread-status-render.sh",
+  "modules/home-manager/programs/ai/t3-thread-time-render.sh",
   "modules/home-manager/services/t3code/link-preview-browser.sh",
   "scripts/ci/*.sh",
   "scripts/forgejo/publish-nix-packages-lock.sh",

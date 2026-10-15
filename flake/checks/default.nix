@@ -495,6 +495,12 @@ in {
     bash scripts/checks/test-t3-thread-status-render.sh
   '';
 
+  check-t3-thread-time = mkRepoCheck "check-t3-thread-time" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.nodejs pkgs.shellcheck] ''
+    python3 scripts/checks/test-t3-thread-time.py
+    shellcheck modules/home-manager/programs/ai/t3-thread-time-render.sh scripts/checks/test-t3-thread-time-render.sh
+    bash scripts/checks/test-t3-thread-time-render.sh
+  '';
+
   check-backlog-overview = mkRepoCheck "check-backlog-overview" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.nodejs pkgs.shellcheck] ''
     python3 scripts/checks/test-backlog-inventory.py
     shellcheck modules/home-manager/programs/ai/backlog-overview-render.sh scripts/checks/test-backlog-overview-render.sh

@@ -1,0 +1,423 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- T3 thread time breakdown. t3-thread-time-render replaces the JSON between
+     the REPORT markers with one thread's t3-thread-time output and the
+     interpreting agent's notes. Every string reaches the page as text
+     (textContent), never as markup. Categories share a colour by family, in
+     the validated categorical order, so at most eight hues appear; labels,
+     the legend and the table view carry identity. -->
+<style>
+  :root {
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #6250d6;
+    --s-other: #898781; --s-idle: #e1e0d9; --grid: #e1e0d9; --axis: #c3c2b7;
+    --surface: var(--background, #fcfcfb); --wait-mix: 42%;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9;
+      --s-other: #898781; --s-idle: #383835; --grid: #2c2c2a; --axis: #383835;
+      --surface: var(--background, #1a1a19); --wait-mix: 60%;
+    }
+  }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground); margin: 0; }
+  .wrap { display: flex; flex-direction: column; gap: 22px; padding: 4px 0 8px; }
+  .head { display: flex; flex-direction: column; gap: 4px; }
+  .title { font-weight: 600; font-size: 16px; color: var(--foreground); text-decoration: none; overflow-wrap: anywhere; }
+  .title:hover { text-decoration: underline; }
+  .meta, .note { font-size: 12px; color: var(--muted-foreground); }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+  .kpi { border: 1px solid var(--border); border-radius: var(--radius, 8px); padding: 10px 11px; min-width: 0; }
+  .kpi .n { font-size: 20px; white-space: nowrap; font-weight: 600; line-height: 1.15; }
+  .kpi .l { font-size: 12px; color: var(--muted-foreground); margin-top: 4px; }
+  .kpi .s { font-size: 11px; color: var(--muted-foreground); margin-top: 2px; }
+  h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); margin: 0 0 10px; }
+  h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-foreground); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted-foreground); margin-bottom: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .bars { display: grid; grid-template-columns: max-content 1fr max-content; gap: 6px 12px; align-items: center; font-size: 13px; }
+  .bars .name { display: inline-flex; align-items: center; gap: 7px; }
+  .bars .name i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .track { display: flex; gap: 2px; height: 14px; align-items: stretch; min-width: 0; }
+  .seg { height: 100%; min-width: 2px; }
+  .seg:last-child { border-radius: 0 4px 4px 0; }
+  .val { font-size: 12.5px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .val .sub { color: var(--muted-foreground); }
+  .val .bad { color: var(--destructive); }
+  .chart { position: relative; }
+  .chart { overflow-x: auto; }
+  .chart svg { display: block; width: 100%; min-width: 560px; height: auto; overflow: visible; }
+  .chart text { font-size: 10.5px; fill: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .col:focus { outline: none; }
+  .col:focus rect.hit, .col:hover rect.hit { fill: var(--foreground); fill-opacity: .06; }
+  #tip { position: fixed; pointer-events: none; z-index: 10; display: none; background: var(--popover, var(--background)); color: var(--popover-foreground, var(--foreground));
+         border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0,0,0,.15); max-width: 260px; }
+  #tip .t { font-weight: 600; margin-bottom: 3px; }
+  #tip .r { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  #tip .r i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+  #tip .r b { font-weight: 400; margin-left: auto; padding-left: 10px; }
+  details { font-size: 12.5px; color: var(--muted-foreground); margin-top: 8px; }
+  summary { cursor: pointer; user-select: none; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  td, th { padding: 4px 6px; border-top: 1px solid var(--border); vertical-align: top; text-align: left; }
+  th { font-weight: 600; color: var(--muted-foreground); border-top: none; font-size: 11.5px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; overflow-wrap: anywhere; color: var(--foreground); }
+  .scroll { max-height: 340px; overflow: auto; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px 14px; margin-bottom: 16px; }
+  .stats div { font-size: 12px; color: var(--muted-foreground); }
+  .stats b { display: block; font-size: 17px; font-weight: 600; color: var(--foreground); }
+  i.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .cols > div { min-width: 0; }
+  .wide { grid-column: 1 / -1; }
+  .reqs { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(60px, 160px); gap: 0 12px; align-items: stretch; font-size: 13px; }
+  .reqs > div { padding: 5px 0; border-top: 1px solid var(--border); min-width: 0; }
+  .reqs .hd { border-top: none; font-size: 11.5px; font-weight: 600; color: var(--muted-foreground); padding: 0; }
+  .reqs .no { color: var(--muted-foreground); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .reqs .txt { overflow-wrap: anywhere; }
+  .reqs .txt small { display: block; color: var(--muted-foreground); font-size: 11.5px; }
+  .reqs .rnote { display: block; color: var(--muted-foreground); font-size: 12.5px; margin-top: 2px; font-style: italic; }
+  .reqs .tag { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 0 5px; border-radius: 4px; background: var(--secondary); color: var(--secondary-foreground); margin-right: 6px; }
+  .reqs .bar { display: flex; align-items: center; }
+  .reqs .bar .track { height: 10px; gap: 1px; width: 100%; }
+  .reqs .bar .seg { min-width: 0; }
+  .reqs .bar .seg:first-child { border-radius: 2px 0 0 2px; }
+  .btns { display: flex; gap: 8px; margin-top: 8px; }
+  .btns button { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--foreground); cursor: pointer; }
+  .btns button[aria-pressed="true"] { background: var(--secondary); }
+  .notes { display: flex; flex-direction: column; gap: 12px; font-size: 13.5px; line-height: 1.45; }
+  .notes p { margin: 0; }
+  .hot { border-left: 3px solid var(--border); padding: 2px 0 2px 10px; }
+  .hot b { display: block; font-weight: 600; }
+  .hot span { color: var(--muted-foreground); font-size: 13px; }
+  ul { margin: 0; padding-left: 18px; }
+  .empty { font-size: 12.5px; color: var(--muted-foreground); }
+  @media (max-width: 720px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 600px) {
+    .cols { grid-template-columns: 1fr; }
+    .bars { grid-template-columns: max-content 1fr; }
+    .bars .val { grid-column: 1 / -1; text-align: left; margin: -4px 0 4px; }
+    .reqs { grid-template-columns: max-content minmax(0, 1fr) max-content; }
+    .reqs .bar { display: none; }
+  }
+</style></head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="tip" role="tooltip"></div>
+<script>
+const REPORT =
+/*REPORT-START*/
+{
+  "generatedAt": "2026-10-11T12:00:00Z", "idleMinutes": 30, "threadId": "sample-1", "title": "Sample thread",
+  "start": "2026-10-11T09:00:00Z", "end": "2026-10-11T11:00:00Z", "spanSeconds": 7200,
+  "activeSeconds": 4800, "agentSeconds": 3600, "waitSeconds": 1200, "userSeconds": 600, "idleSeconds": 1800,
+  "categories": [
+    {"category": "coding", "seconds": 2400, "agentSeconds": 2400, "waitSeconds": 0, "share": 0.5, "items": 40, "failed": 1},
+    {"category": "review", "seconds": 1500, "agentSeconds": 300, "waitSeconds": 1200, "share": 0.3125, "items": 6, "failed": 0},
+    {"category": "discussion", "seconds": 900, "agentSeconds": 900, "waitSeconds": 0, "share": 0.1875, "items": 3, "failed": 0}
+  ],
+  "churn": {"runs": 12, "userMessages": 4, "steers": 1, "wakeups": 7, "compactions": 0, "interruptedRuns": 0, "failedRuns": 0, "failedItems": 1},
+  "reviewRuns": {"total": 3, "prs": 1, "top": [{"target": "example#1", "count": 3}]},
+  "repeated": [{"category": "review", "label": "pr-review run 1", "count": 3}],
+  "longest": [{"category": "review", "seconds": 900, "label": "pr-review run 1", "at": "2026-10-11T10:00:00Z"}],
+  "binMinutes": 30,
+  "timeline": [
+    {"start": "2026-10-11T09:00:00Z", "seconds": {"coding": 1200, "discussion": 300, "user": 300}},
+    {"start": "2026-10-11T09:30:00Z", "seconds": {"coding": 1200, "review": 300, "user": 300}},
+    {"start": "2026-10-11T10:00:00Z", "seconds": {"review": 1200, "discussion": 600}},
+    {"start": "2026-10-11T10:30:00Z", "seconds": {"idle": 1800}}
+  ],
+  "requests": [
+    {"number": 1, "at": "2026-10-11T09:00:00Z", "intent": "turn_start", "text": "Build the sample", "activeSeconds": 3300,
+     "seconds": {"coding": 2400, "discussion": 600, "review": 300, "user": 600}},
+    {"number": 2, "at": "2026-10-11T10:00:00Z", "intent": "steer", "text": "Review it", "activeSeconds": 1500,
+     "seconds": {"review": 1200, "discussion": 300, "idle": 1800}}
+  ],
+  "notes": {"summary": "Sample: most time went to coding and one long review.",
+            "hotspots": [{"title": "Review waits", "detail": "One review ran for 15 minutes."}],
+            "suggestions": ["Start reviews earlier."],
+            "requests": [{"number": 1, "note": "Most of the coding happened here."}]}
+}
+/*REPORT-END*/
+;
+// Families share a colour, in the validated categorical order (stack order
+// too, so neighbouring segments keep their tested separation).
+const FAMILIES = [
+  { id: "talk",   label: "Discussion, tracking",  color: "var(--s1)", cats: ["discussion", "tracking"] },
+  { id: "look",   label: "Explore, research",     color: "var(--s2)", cats: ["explore", "research"] },
+  { id: "code",   label: "Coding, test, build",   color: "var(--s3)", cats: ["coding", "test", "build"] },
+  { id: "git",    label: "Git, review",           color: "var(--s4)", cats: ["git", "review"] },
+  { id: "ship",   label: "CI, deploy, verify",    color: "var(--s5)", cats: ["ci", "deploy", "verify"] },
+  { id: "deleg",  label: "Delegation, waiting",   color: "var(--s6)", cats: ["delegation", "waiting"] },
+  { id: "other",  label: "Other",                 color: "var(--s-other)", cats: ["other"] },
+  { id: "user",   label: "Your turnaround",       color: "var(--s7)", cats: ["user"] },
+  { id: "idle",   label: "Idle (excluded)",       color: "var(--s-idle)", cats: ["idle"] },
+];
+const ORDER = FAMILIES.flatMap(f => f.cats);
+const FAMILY_OF = {};
+for (const f of FAMILIES) for (const c of f.cats) FAMILY_OF[c] = f;
+const famOf = c => FAMILY_OF[c] || FAMILY_OF.other;
+const NAMES = { ci: "CI", user: "Your turnaround", idle: "Idle" };
+const catName = c => NAMES[c] || (String(c).charAt(0).toUpperCase() + String(c).slice(1));
+const WAIT_TONE = c => `color-mix(in srgb, ${famOf(c).color} var(--wait-mix), var(--surface))`;
+
+const num = x => (Number.isFinite(x) ? x : 0);
+function dur(s) {
+  s = Math.round(num(s));
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${String(m % 60).padStart(2, "0")}m`;
+}
+const pct = x => `${(num(x) * 100).toFixed(num(x) < 0.1 ? 1 : 0)}%`;
+function when(iso, opts) {
+  if (iso == null || iso === "") return "unknown";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso ?? "");
+  return d.toLocaleString(undefined, opts || { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+// DOM helpers: strings always become text nodes.
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "style") Object.assign(el.style, v);
+    else el.setAttribute(k, String(v));
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) el.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  return el;
+}
+const SVG = "http://www.w3.org/2000/svg";
+function s(tag, attrs, ...kids) {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) el.setAttribute(k, String(v));
+  for (const k of kids.flat()) if (k != null) el.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  return el;
+}
+const swatch = (color, cls) => h("i", { class: cls, style: { background: color } });
+
+// One tooltip for every mark; its rows are built as text.
+const tip = document.getElementById("tip");
+function showTip(ev, title, rows) {
+  tip.replaceChildren(h("div", { class: "t" }, title),
+    ...rows.map(([color, label, value]) => h("div", { class: "r" }, color ? swatch(color) : null, label, h("b", null, value))));
+  tip.style.display = "block";
+  let x, y;
+  if (ev.type === "focus") { const r = ev.target.getBoundingClientRect(); x = r.right; y = r.top; }
+  else { x = ev.clientX; y = ev.clientY; }
+  const w = tip.offsetWidth, ht = tip.offsetHeight;
+  tip.style.left = `${Math.max(4, Math.min(x + 12, innerWidth - w - 4))}px`;
+  tip.style.top = `${Math.max(4, y + 14 + ht > innerHeight ? y - ht - 10 : y + 14)}px`;
+}
+const hideTip = () => { tip.style.display = "none"; };
+function hover(el, title, rows) {
+  const show = ev => showTip(ev, title, rows);
+  el.addEventListener("pointermove", show);
+  el.addEventListener("pointerleave", hideTip);
+  el.addEventListener("focus", show);
+  el.addEventListener("blur", hideTip);
+  return el;
+}
+
+const R = REPORT;
+const app = document.getElementById("app");
+
+// Header.
+app.append(h("div", { class: "head" },
+  h("a", { class: "title", href: `t3-thread://v1/${encodeURIComponent(String(R.threadId ?? ""))}` }, R.title || "Untitled thread"),
+  h("div", { class: "meta" }, `${when(R.start)} to ${when(R.end)} (${dur(R.spanSeconds)} span) · generated ${when(R.generatedAt)}`)));
+
+// KPI tiles.
+const rr = R.reviewRuns || {};
+const kpi = (n, l, sub) => h("div", { class: "kpi" }, h("div", { class: "n" }, n), h("div", { class: "l" }, l), sub ? h("div", { class: "s" }, sub) : null);
+app.append(h("div", { class: "kpis" },
+  kpi(dur(R.activeSeconds), "Active time", "agent + background waits"),
+  kpi(dur(R.agentSeconds), "Agent time"),
+  kpi(dur(R.waitSeconds), "Background waits"),
+  kpi(dur(R.userSeconds), "Your turnaround"),
+  kpi(dur(R.idleSeconds), "Idle (excluded)", `gaps over ${num(R.idleMinutes)}m`),
+  kpi(String(num(rr.total)), "Review runs", `over ${num(rr.prs)} PR${num(rr.prs) === 1 ? "" : "s"}`)));
+
+// Where the time went.
+const cats = (R.categories || []).filter(c => num(c.seconds) > 0).sort((a, b) => num(b.seconds) - num(a.seconds));
+const maxSec = Math.max(1, ...cats.map(c => num(c.seconds)));
+const where = h("section", null, h("h3", null, "Where the time went"));
+if (cats.length) {
+  where.append(h("div", { class: "legend" },
+    h("span", null, swatch("var(--muted-foreground)"), "Agent time (solid)"),
+    h("span", null, swatch("color-mix(in srgb, var(--muted-foreground) var(--wait-mix), var(--surface))"), "Background wait (light)")));
+  const bars = h("div", { class: "bars" });
+  for (const c of cats) {
+    const agent = num(c.agentSeconds), wait = num(c.waitSeconds);
+    const track = h("div", { class: "track", style: { width: `${(num(c.seconds) / maxSec) * 100}%` } });
+    if (agent > 0) track.append(h("div", { class: "seg", style: { flex: String(agent), background: famOf(c.category).color } }));
+    if (wait > 0) track.append(h("div", { class: "seg", style: { flex: String(wait), background: WAIT_TONE(c.category) } }));
+    track.setAttribute("tabindex", "0");
+    hover(track, catName(c.category), [
+      [famOf(c.category).color, "Agent", dur(agent)],
+      [WAIT_TONE(c.category), "Background wait", dur(wait)],
+      [null, "Items", String(num(c.items))],
+      [null, "Failed", String(num(c.failed))]]);
+    bars.append(
+      h("div", { class: "name" }, swatch(famOf(c.category).color), catName(c.category)),
+      h("div", { style: { minWidth: "0" } }, track),
+      h("div", { class: "val" }, `${dur(c.seconds)} `, h("span", { class: "sub" }, `${pct(c.share)} · ${num(c.items)} items`),
+        num(c.failed) ? h("span", { class: "bad" }, ` · ${num(c.failed)} failed`) : null));
+  }
+  where.append(bars);
+} else where.append(h("div", { class: "empty" }, "No timed work."));
+app.append(where);
+
+// Timeline: stacked columns per bin, by family.
+const bins = R.timeline || [];
+const binSec = Math.max(60, num(R.binMinutes) * 60);
+const tl = h("section", null, h("h3", null, `Timeline (${num(R.binMinutes)}-minute bins)`));
+if (bins.length) {
+  const used = new Set();
+  for (const b of bins) for (const [k, v] of Object.entries(b.seconds || {})) if (num(v) > 0) used.add(famOf(k).id);
+  tl.append(h("div", { class: "legend" }, FAMILIES.filter(f => used.has(f.id)).map(f => h("span", null, swatch(f.color), f.label))));
+  const W = 720, H = 170, padL = 34, padB = 22, padT = 6;
+  const plotW = W - padL, plotH = H - padB - padT;
+  const totals = bins.map(b => Object.values(b.seconds || {}).reduce((a, v) => a + num(v), 0));
+  const top = Math.max(binSec, ...totals);
+  const y = v => padT + plotH - (v / top) * plotH;
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Time per bin by kind of work" });
+  // Recessive grid: zero, half and one bin.
+  for (let v = 0; v <= top; v += binSec / 2) {
+    svg.append(s("line", { x1: padL, x2: W, y1: y(v), y2: y(v), stroke: v ? "var(--grid)" : "var(--axis)", "stroke-width": 1, "shape-rendering": "crispEdges" }));
+    svg.append(s("text", { x: padL - 6, y: y(v) + 3.5, "text-anchor": "end" }, dur(v)));
+  }
+  const step = plotW / bins.length;
+  const gap = step >= 6 ? 2 : step >= 3 ? 1 : 0;
+  const colW = Math.max(0.5, Math.min(24, step - gap));
+  // X ticks: about six, on bin starts.
+  const every = Math.max(1, Math.ceil(bins.length / 6));
+  const t0 = new Date(bins[0].start), t1 = new Date(bins[bins.length - 1].start);
+  const multiDay = t0.toDateString() !== t1.toDateString();
+  bins.forEach((b, i) => {
+    const x = padL + i * step + (step - colW) / 2;
+    const g = s("g", { class: "col", tabindex: "0" });
+    g.append(s("rect", { class: "hit", x: padL + i * step, y: padT, width: step, height: plotH, fill: "transparent" }));
+    const famSec = {};
+    for (const [k, v] of Object.entries(b.seconds || {})) famSec[famOf(k).id] = (famSec[famOf(k).id] || 0) + num(v);
+    const stack = FAMILIES.filter(f => famSec[f.id] > 0);
+    let acc = 0;
+    stack.forEach((f, j) => {
+      const y0 = y(acc), y1 = y(acc + famSec[f.id]);
+      acc += famSec[f.id];
+      // A 2px surface gap between segments, when it leaves the segment visible.
+      const hgt = Math.max(0.5, y0 - y1 - (j && y0 - y1 > 3 ? 2 : 0));
+      const last = j === stack.length - 1;
+      const r = Math.min(4, colW / 2, hgt);
+      if (last && r > 0.5) {
+        // Rounded data end, square at the baseline side.
+        g.append(s("path", { fill: f.color, d: `M${x},${y0}V${y0 - hgt + r}a${r},${r} 0 0 1 ${r},${-r}H${x + colW - r}a${r},${r} 0 0 1 ${r},${r}V${y0}Z` }));
+      } else g.append(s("rect", { x, y: y0 - hgt, width: colW, height: hgt, fill: f.color }));
+    });
+    const rows = Object.entries(b.seconds || {}).filter(([, v]) => num(v) > 0)
+      .sort((a, c) => ORDER.indexOf(a[0]) - ORDER.indexOf(c[0])).map(([k, v]) => [famOf(k).color, catName(k), dur(v)]);
+    hover(g, when(b.start), rows.length ? rows : [[null, "Nothing recorded", ""]]);
+    svg.append(g);
+    if (i % every === 0) {
+      const d = new Date(b.start);
+      const label = multiDay ? when(b.start, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
+        : when(b.start, { hour: "2-digit", minute: "2-digit", hour12: false });
+      if (!Number.isNaN(d.getTime())) svg.append(s("text", { x: padL + i * step + step / 2, y: H - 6, "text-anchor": i === 0 ? "start" : "middle" }, label));
+    }
+  });
+  tl.append(h("div", { class: "chart" }, svg));
+  // Table view: the same numbers without colour.
+  const shown = ORDER.filter(c => bins.some(b => num((b.seconds || {})[c]) > 0));
+  tl.append(h("details", null, h("summary", null, "Table view"),
+    h("div", { class: "scroll" }, h("table", null,
+      h("tr", null, h("th", null, "Bin start"), shown.map(c => h("th", { class: "num" }, catName(c)))),
+      bins.map(b => h("tr", null, h("td", null, when(b.start)), shown.map(c => h("td", { class: "num" }, num((b.seconds || {})[c]) ? dur(b.seconds[c]) : ""))))))));
+} else tl.append(h("div", { class: "empty" }, "No timeline."));
+app.append(tl);
+
+// Requests: the time from each user message to the next, costliest first.
+const reqs = (R.requests || []).filter(r => r && typeof r === "object");
+if (reqs.length) {
+  const noteFor = {};
+  for (const x of (R.notes && R.notes.requests) || []) if (x && x.note) noteFor[x.number] = x.note;
+  const INTENTS = { turn_start: null, queued_turn: "queued", promoted_queued_to_steer: "steer", steer: "steer" };
+  const sec = h("section", null, h("h3", null, `Requests (${reqs.length})`));
+  const grid = h("div", { class: "reqs" });
+  const state = { all: false, byCost: true };
+  const row = r => {
+    const secs = Object.entries(r.seconds || {}).filter(([k, v]) => k !== "user" && k !== "idle" && num(v) > 0)
+      .sort((a, c) => ORDER.indexOf(a[0]) - ORDER.indexOf(c[0]));
+    const track = h("div", { class: "track", tabindex: "0" },
+      secs.map(([k, v]) => h("div", { class: "seg", style: { flex: String(num(v)), background: famOf(k).color } })));
+    const extra = [];
+    if (num((r.seconds || {}).user)) extra.push([famOf("user").color, "Your turnaround", dur(r.seconds.user)]);
+    if (num((r.seconds || {}).idle)) extra.push([famOf("idle").color, "Idle", dur(r.seconds.idle)]);
+    hover(track, `Request ${num(r.number)}`, [...secs.map(([k, v]) => [famOf(k).color, catName(k), dur(v)]), ...extra]);
+    const intent = r.intent in INTENTS ? INTENTS[r.intent] : r.intent;
+    return [
+      h("div", { class: "no" }, `#${num(r.number)}`),
+      h("div", { class: "txt" }, intent ? h("span", { class: "tag" }, intent) : null, r.text || "(no text)",
+        h("small", null, when(r.at)), noteFor[r.number] ? h("span", { class: "rnote" }, noteFor[r.number]) : null),
+      h("div", { class: "val" }, dur(r.activeSeconds)),
+      h("div", { class: "bar" }, track)];
+  };
+  const btnAll = h("button", { type: "button" });
+  const btnSort = h("button", { type: "button" });
+  const draw = () => {
+    const list = [...reqs].sort(state.byCost ? (a, c) => num(c.activeSeconds) - num(a.activeSeconds) : (a, c) => num(a.number) - num(c.number));
+    grid.replaceChildren(h("div", { class: "hd" }, "#"), h("div", { class: "hd" }, "Request"), h("div", { class: "hd val" }, "Active"),
+      h("div", { class: "hd bar" }, "By kind"), ...(state.all ? list : list.slice(0, 10)).flatMap(row));
+    btnAll.textContent = state.all ? "Show top 10" : `Show all ${reqs.length}`;
+    btnSort.textContent = state.byCost ? "Sort by order" : "Sort by time";
+  };
+  btnAll.addEventListener("click", () => { state.all = !state.all; draw(); });
+  btnSort.addEventListener("click", () => { state.byCost = !state.byCost; draw(); });
+  draw();
+  sec.append(grid);
+  if (reqs.length > 10) sec.append(h("div", { class: "btns" }, btnAll, btnSort));
+  app.append(sec);
+}
+
+// Churn.
+const ch = R.churn || {};
+const churn = h("section", null, h("h3", null, "Churn"));
+const stat = (n, l) => h("div", null, h("b", null, String(num(n))), l);
+churn.append(h("div", { class: "stats" },
+  stat(ch.runs, "runs"), stat(ch.userMessages, "your messages"), stat(ch.steers, "steers"),
+  stat(ch.wakeups, "wakeups"), stat(ch.compactions, "compactions"), stat(ch.interruptedRuns, "interrupted runs"),
+  stat(ch.failedRuns, "failed runs"), stat(ch.failedItems, "failed items")));
+const table = (head, rows) => rows.length
+  ? h("div", { class: "scroll" }, h("table", null, h("tr", null, head.map(([t, cls]) => h("th", { class: cls }, t))), rows))
+  : h("div", { class: "empty" }, "None.");
+const catCell = c => h("td", { style: { whiteSpace: "nowrap" } }, swatch(famOf(c).color, "dot"), " ", catName(c));
+const cols = h("div", { class: "cols" },
+  h("div", null, h("h4", null, `Review runs: ${num(rr.total)} over ${num(rr.prs)} PRs`),
+    table([["Target"], ["Runs", "num"]], (rr.top || []).map(r => h("tr", null, h("td", null, r.target), h("td", { class: "num" }, String(num(r.count))))))),
+  h("div", null, h("h4", null, "Repeated checks"),
+    table([["Kind"], ["Command"], ["Times", "num"]], (R.repeated || []).map(r => h("tr", null, catCell(r.category), h("td", { class: "code" }, r.label), h("td", { class: "num" }, `${num(r.count)}x`))))),
+  h("div", { class: "wide" }, h("h4", null, "Longest single items"),
+    table([["Kind"], ["Item"], ["Took", "num"], ["At", "num"]], (R.longest || []).map(r => h("tr", null, catCell(r.category), h("td", { class: "code" }, r.label),
+      h("td", { class: "num" }, dur(r.seconds)), h("td", { class: "num" }, when(r.at)))))));
+churn.append(cols);
+app.append(churn);
+
+// Notes from the interpreting agent.
+const n = R.notes;
+if (n && (n.summary || (n.hotspots || []).length || (n.suggestions || []).length)) {
+  const box = h("div", { class: "notes" });
+  if (n.summary) box.append(h("p", null, n.summary));
+  if ((n.hotspots || []).length) box.append(h("div", null, h("h4", null, "Hotspots"),
+    h("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } }, n.hotspots.map(x => h("div", { class: "hot" }, h("b", null, x.title), h("span", null, x.detail))))));
+  if ((n.suggestions || []).length) box.append(h("div", null, h("h4", null, "Suggestions"), h("ul", null, n.suggestions.map(x => h("li", null, x)))));
+  app.append(h("section", null, h("h3", null, "Reading"), box));
+}
+
+app.append(h("div", { class: "note" },
+  `From t3-thread-time. Active time is agent work plus background waits; your turnaround and idle gaps over ${num(R.idleMinutes)} minutes are kept out of it. Times shown in your local time zone.`));
+</script>
+</body></html>

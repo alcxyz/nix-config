@@ -167,6 +167,26 @@ with lib; let
       ${builtins.readFile ./t3-thread-status-render.sh}
     '';
   };
+  # The thread time skill (ADR-0091, #676) breaks a thread's time down by kind
+  # of work from the same state databases.
+  t3ThreadTime = pkgs.writeShellApplication {
+    name = "t3-thread-time";
+    runtimeInputs = [pkgs.python3];
+    text = ''
+      T3_STATE_DBS=''${T3_STATE_DBS:-${escapeShellArg (concatStringsSep ":" t3StateDbs)}}
+      export T3_STATE_DBS
+      exec python3 -I ${./t3-thread-time.py} "$@"
+    '';
+  };
+  t3ThreadTimeRender = pkgs.writeShellApplication {
+    name = "t3-thread-time-render";
+    runtimeInputs = [pkgs.jq];
+    text = ''
+      time_template=${./t3-thread-time.html}
+      ${builtins.readFile ./t3-page.sh}
+      ${builtins.readFile ./t3-thread-time-render.sh}
+    '';
+  };
   # The backlog overview skill (ADR-0093) lists open issues and PRs across
   # Forgejo and the user's GitHub repositories. The Forgejo token is read from
   # its file inside the process; gh keeps its own credentials.
@@ -343,7 +363,7 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender];
+    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender];
 
     # The agent skills that call these commands live in nix-secrets
     # shared/skills and are linked by its agentSkills module (nix-secrets
