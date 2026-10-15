@@ -7,7 +7,8 @@ import sys
 import tempfile
 
 
-def check(script, accepted_channel, accepted_version, expected, inside_service=None, active="*"):
+def check(script, accepted_channel, accepted_version, expected, inside_service=None, active="*",
+          managed="/nix/store/new-t3code/bin/t3 serve"):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         (root / "version").write_text(accepted_version + "\n")
@@ -24,14 +25,18 @@ def check(script, accepted_channel, accepted_version, expected, inside_service=N
             "BASH_FUNC_systemctl%%": "() { return 1; }",
         }
         if inside_service:
-            (root / "unit").write_text("ExecStart=/nix/store/new-t3code/bin/t3 serve\n")
+            units = root / "units"
+            units.mkdir()
+            for unit in ("t3code.service", "t3code-bn.service"):
+                (units / unit).write_text(f"[Service]\nExecStart={managed}\n")
             (root / "cgroup").write_text(f"0::/user.slice/{inside_service}\n")
             env.update({
-                "T3CODE_MANAGED_UNIT": str(root / "unit"),
+                "T3CODE_MANAGED_UNITS": str(units),
                 "T3CODE_CGROUP_FILE": str(root / "cgroup"),
                 "BASH_FUNC_systemctl%%": (
                     f"() {{ if [[ $* == *is-active* ]]; then [[ $* == *{active}* ]]; return; fi; "
-                    "printf '%s\\n' '{ path=/nix/store/old-t3code/bin/t3 ; }'; }"
+                    "printf '%s\\n' '{ path=/nix/store/old-t3code/bin/t3 ; "
+                    "argv[]=/nix/store/old-t3code/bin/t3 serve ; ignore_errors=no ; }'; }"
                 ),
             })
         result = subprocess.run([script], env=env, capture_output=True, text=True)
@@ -57,4 +62,10 @@ check(guard, "upstream", "0.0.1", 75, inside_service="t3code.service")
 check(guard, "fork-stable", "9999.0.0", 75, inside_service="t3code-bn.service")
 # A running additional instance needs the restart even if the primary is stopped.
 check(guard, "upstream", "0.0.1", 75, inside_service="t3code-bn.service", active="t3code-bn.service")
-print("T3 channel guard: 11 cases passed")
+# The whole command counts: wrapping the same executable in the session
+# environment wrapper needs a restart, an unchanged command does not.
+check(guard, "upstream", "0.0.1", 75, inside_service="t3code.service",
+      managed="/nix/store/env-t3code-session-env/bin/t3code-session-env /nix/store/old-t3code/bin/t3 serve")
+check(guard, "upstream", "0.0.1", 0, inside_service="t3code.service",
+      managed="/nix/store/old-t3code/bin/t3 serve")
+print("T3 channel guard: 13 cases passed")

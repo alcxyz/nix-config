@@ -588,6 +588,11 @@ in {
     switcher = "${lib.head (lib.filter (p: lib.hasInfix "t3code-ai-stack-switch" (toString p)) home.config.home.packages)}/bin/t3code-ai-stack-switch";
     restartNotice = "${lib.head (lib.filter (p: lib.hasInfix "t3code-restart-notice" (toString p)) home.config.home.packages)}/bin/t3code-restart-notice";
     claudeSettingsActivation = pkgs.writeText "claude-statusline-activation" home.config.home.activation.claudeStatusline.data;
+    # Every instance starts through the session environment wrapper (#689).
+    sessionEnvLink = lib.head (lib.splitString " " (lib.head home.config.systemd.user.services.t3code.Service.ExecStart));
+    sessionEnv = home.config.home.file.${sessionEnvLink}.source;
+    sessionVariables = "${home.config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh";
+    scheduleUnitRestart = pkgs.writeText "t3code-schedule-unit-restart" home.config.home.activation.t3codeScheduleUnitRestart.data;
     fakeT3 = version:
       pkgs.runCommand "t3code-${version}" {} ''
         mkdir -p $out/bin
@@ -599,8 +604,13 @@ in {
         ln -s ${fakeT3 version}/bin/t3 $out/bin/t3
       '';
   in
-    assert lib.hasPrefix "${home.config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/bin/t3 " (lib.head home.config.systemd.user.services.t3code.Service.ExecStart);
+    assert lib.all (unit: lib.hasPrefix "${sessionEnvLink} ${home.config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/bin/t3 serve " (lib.head home.config.systemd.user.services.${unit}.Service.ExecStart)) ["t3code" "t3code-bn"];
+    # The units name a stable link, so rebuilding the wrapper restarts nothing.
+    assert sessionEnvLink == "${home.config.home.homeDirectory}/.local/state/t3code/bin/t3code-session-env";
+    assert lib.hasPrefix "/nix/store/" "${sessionEnv}";
+    assert home.config.home.sessionVariables ? FORGEJO_API_TOKEN_FILE;
     assert !(home.config.home.activation ? t3codeRestartGuard);
+    assert !(upstreamHome.config.home.activation ? t3codeScheduleUnitRestart);
     assert t3Unit.X-RestartIfChanged == false;
     assert lib.hasSuffix " serve --host 0.0.0.0 --port 3774 --base-dir ${home.config.home.homeDirectory}/.t3-bn" (lib.head bnService.ExecStart);
     # Every instance links the profile's preview browser into its own base
@@ -633,6 +643,10 @@ in {
         # database (#575); the switcher's idle check is the shared entry point.
         idle_check=$(grep -oE '/nix/store/[^ ]+/bin/t3code-idle-check' ${switcher} | head -n1)
         python3 ${../../modules/home-manager/services/t3code/test-restart-guard.py} "$idle_check" ${restartNotice}
+        # The wrapper reads the profile's session variables file at every start.
+        grep -F ${lib.escapeShellArg "${home.config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh"} ${sessionEnv}
+        unit_change_check=$(grep -oE '/nix/store/[^ ]+/bin/t3code-unit-change-check' ${scheduleUnitRestart} | head -n1)
+        python3 ${../../modules/home-manager/services/t3code/test-session-env.py} ${sessionEnv} "$unit_change_check" "$idle_check" ${sessionVariables} ${lib.escapeShellArgs (lib.attrNames home.config.home.sessionVariables)}
         grep -F "statev2.sqlite" "$idle_check"
         grep -F "pendingBackgroundTasks" "$idle_check"
         grep -F "t3code-record-restart" ${switcher}

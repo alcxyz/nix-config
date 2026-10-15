@@ -2,7 +2,7 @@
 
 **Status:** Accepted; the updater follows the nix-packages `promoted` branch since [ADR-0080](0080-promoted-package-ref.md)
 **Date:** 2026-09-30
-**Amended:** 2026-10-08, the T3 Code fork channels were retired (nix-packages ADR-0005)
+**Amended:** 2026-10-08, the T3 Code fork channels were retired (nix-packages ADR-0005); 2026-10-16, a Home Manager change to the service command restarts T3 when idle (#689)
 **Applies to:** `modules/home-manager/services/t3code/`, nix-packages `ai-stack-*` outputs
 
 ## Context
@@ -43,6 +43,12 @@ without running Home Manager activation.
   profile the updater has moved forward.
 - Hosts without the updater keep installing these packages through Home
   Manager as before.
+- *Amendment, 2026-10-16:* Home Manager activation never restarts T3 for a
+  package update, but a change to the service's command line (for example the
+  session environment wrapper from #689) does need a restart. Activation then
+  writes the restart marker without blocking, and the existing apply step
+  restarts the running instances once the idle guard allows it, or at a later
+  activation.
 
 ## Alternatives Considered
 

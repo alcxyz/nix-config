@@ -42,6 +42,32 @@ with lib; let
     bashOptions = [];
     text = builtins.readFile ./link-preview-browser.sh;
   };
+  # Home Manager's session variables reach the systemd user manager only when
+  # the graphical login imports them, and T3 can start at boot before that.
+  # Each instance therefore reads the profile's file itself at every start, so
+  # agent shells get the variables whatever the start order (#689).
+  sessionVariablesFile = "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh";
+  sessionEnv = pkgs.writeShellApplication {
+    name = "t3code-session-env";
+    # The sourced file is written for login shells, not for strict mode.
+    bashOptions = [];
+    text = ''
+      session_vars="''${T3CODE_SESSION_VARS:-${sessionVariablesFile}}"
+      if [[ -r "$session_vars" ]]; then
+        # An environment imported at login marks the file as sourced; read it
+        # anyway so a restart after a deploy gets the current values.
+        unset __HM_SESS_VARS_SOURCED
+        # shellcheck source=/dev/null
+        . "$session_vars"
+      else
+        echo "No Home Manager session variables at $session_vars; starting without them." >&2
+      fi
+      exec "$@"
+    '';
+  };
+  # Units run the wrapper through a stable link, so a rebuild of the wrapper
+  # alone (a nixpkgs update) leaves the command unchanged and restarts nothing.
+  sessionEnvLink = "${config.xdg.stateHome}/t3code/bin/t3code-session-env";
   # The primary server keeps the historical unit name and state. Additional
   # instances share its executable, so the guards below cover all of them.
   instances =
@@ -128,6 +154,22 @@ with lib; let
     elif [[ -n "''${T3CODE_STATE_DATABASE:-}" ]]; then
       state_directories=()
       fixed_state_files=("$T3CODE_STATE_DATABASE")
+    else
+      # A running instance keeps the state directory it was started with
+      # until it restarts, even when the configuration names another one.
+      # Read it from the process itself: after a systemd reload the unit's
+      # ExecStart already shows the new configuration.
+      for unit in ${unitArgs}; do
+        main_pid=$(systemctl --user show "$unit" --property=MainPID --value 2>/dev/null) || main_pid=""
+        if [[ ! "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
+          continue
+        fi
+        running_base_dir=$(tr '\0' '\n' 2>/dev/null < "''${T3CODE_PROC_ROOT:-/proc}/$main_pid/cmdline" \
+          | sed -n '/^--base-dir$/{n;p;q}') || running_base_dir=""
+        if [[ -n "$running_base_dir" && " ''${state_directories[*]} " != *" $running_base_dir/userdata "* ]]; then
+          state_directories+=("$running_base_dir/userdata")
+        fi
+      done
     fi
     # Latest write to the database or its WAL, in nanoseconds; 0 if absent.
     # A read-only open (this guard's own) creates an empty WAL with a fresh
@@ -199,6 +241,37 @@ with lib; let
       echo "$total"
     }
   '';
+  # Lists the running instances whose loaded command line differs from the
+  # unit Home Manager has just linked, a change only a restart applies: a new
+  # executable, the session environment wrapper or another argument. Runs
+  # before the systemd reload, so the loaded command is still the old one.
+  # Prints "unknown" for a running instance whose commands cannot be read.
+  changedUnitsFunction = ''
+    managed_units="''${T3CODE_MANAGED_UNITS:-${config.xdg.configHome}/systemd/user}"
+    loaded_command() {
+      systemctl --user show "$1" --property=ExecStart --value \
+        | sed -nE 's/^\{ path=[^;]* ; argv\[\]=([^;]*[^; ]) *;.*/\1/p'
+    }
+    changed_units() {
+      local unit loaded managed
+      for unit in ${unitArgs}; do
+        if ! systemctl --user --quiet is-active "$unit"; then
+          continue
+        fi
+        # An instance that is no longer configured is left to Home Manager.
+        if [[ ! -r "$managed_units/$unit" ]]; then
+          continue
+        fi
+        loaded=$(loaded_command "$unit")
+        managed=$(sed -nE 's/^ExecStart=(.*[^ ]) *$/\1/p' "$managed_units/$unit" | head -n1)
+        if [[ -z "$loaded" || -z "$managed" ]]; then
+          echo unknown
+        elif [[ "$loaded" != "$managed" ]]; then
+          echo "$unit"
+        fi
+      done
+    }
+  '';
   activationGuard = pkgs.writeShellApplication {
     name = "t3code-activation-guard";
     runtimeInputs = with pkgs; [
@@ -236,17 +309,19 @@ with lib; let
         fi
       fi
 
+      ${changedUnitsFunction}
+
       # Every running instance shares the managed executable, so each one's
       # loaded version counts towards the downgrade check and the restart.
-      loaded_execs=()
+      # The executable follows the session environment wrapper, if any.
+      running=false
       for unit in ${unitArgs}; do
         if ! systemctl --user --quiet is-active "$unit"; then
           continue
         fi
-        loaded_exec=$(systemctl --user show "$unit" --property=ExecStart --value \
-          | sed -nE 's/^\{ path=([^ ;]+).*/\1/p')
-        loaded_execs+=("$loaded_exec")
-        loaded_version=$(sed -nE 's#^/nix/store/[a-z0-9]+-t3code-([^/]+)/bin/t3$#\1#p' <<<"$loaded_exec")
+        running=true
+        loaded_version=$(loaded_command "$unit" \
+          | sed -nE 's#^(.* )?/nix/store/[a-z0-9]+-t3code-([^/ ]+)/bin/t3( .*)?$#\2#p')
         if [[ -n "$loaded_version" ]] \
           && { [[ -z "$accepted_version" ]] || version_is_older "$accepted_version" "$loaded_version"; }; then
           accepted_version=$loaded_version
@@ -275,28 +350,16 @@ with lib; let
         echo "T3 Code downgrade from $accepted_version to $managed_version explicitly allowed." >&2
       fi
 
-      if ((''${#loaded_execs[@]} == 0)); then
+      if [[ "$running" != true ]]; then
         exit 0
       fi
 
-      managed_unit="''${T3CODE_MANAGED_UNIT:-$HOME/.config/systemd/user/t3code.service}"
-      if [[ ! -r "$managed_unit" ]]; then
-        exit 0
+      changed=$(changed_units)
+      if grep -qx unknown <<<"$changed"; then
+        echo "Unable to compare the loaded and managed T3 Code commands; refusing a potentially disruptive restart." >&2
+        exit 75
       fi
-
-      managed_exec=$(sed -nE 's/^ExecStart=([^ ]+).*/\1/p' "$managed_unit" | head -n1)
-
-      restart_needed=false
-      for loaded_exec in "''${loaded_execs[@]}"; do
-        if [[ -z "$loaded_exec" || -z "$managed_exec" ]]; then
-          echo "Unable to compare the loaded and managed T3 Code executables; refusing a potentially disruptive restart." >&2
-          exit 75
-        fi
-        if [[ "$loaded_exec" != "$managed_exec" ]]; then
-          restart_needed=true
-        fi
-      done
-      if [[ "$restart_needed" != true ]]; then
+      if [[ -z "$changed" ]]; then
         exit 0
       fi
 
@@ -344,11 +407,42 @@ with lib; let
     '';
   };
 
+  # With the AI stack profile the executable path never changes, so only a
+  # Home Manager change to the command line (such as adding the session
+  # environment wrapper) needs a restart. Unlike the guard above this never
+  # blocks the activation: it writes the marker, and t3codeApplyManagedUnit
+  # restarts T3 once it is idle or keeps the marker for a later activation.
+  unitChangeCheck = pkgs.writeShellApplication {
+    name = "t3code-unit-change-check";
+    runtimeInputs = with pkgs; [
+      coreutils
+      gnugrep
+      gnused
+      systemd
+    ];
+    text = ''
+      restart_marker="''${T3CODE_RESTART_MARKER:-${restartMarker}}"
+      ${changedUnitsFunction}
+      changed=$(changed_units)
+      if grep -qx unknown <<<"$changed"; then
+        echo "Unable to compare the loaded and managed T3 Code commands of a running instance." >&2
+      fi
+      changed=$(grep -vx unknown <<<"$changed" | tr '\n' ' ' || true)
+      if [[ -n "''${changed% }" ]]; then
+        # Instances share the command shape; an empty marker restarts every
+        # running one, as after an executable change.
+        mkdir -p "$(dirname "$restart_marker")"
+        : > "$restart_marker"
+        echo "T3 Code command changed for ''${changed% }; restarting the running instances once T3 Code is idle."
+      fi
+    '';
+  };
+
   # Exits 0 once T3 has had no live turns or background work for the settle
   # window, 75 (retry later) otherwise.
   idleCheck = pkgs.writeShellApplication {
     name = "t3code-idle-check";
-    runtimeInputs = with pkgs; [coreutils sqlite];
+    runtimeInputs = with pkgs; [coreutils gnused sqlite systemd];
     text = ''
       if [[ "''${T3CODE_ALLOW_ACTIVE_RESTART:-0}" == "1" ]]; then
         echo "T3 Code active-session guard explicitly bypassed."
@@ -586,7 +680,7 @@ in {
             Type = "simple";
             # A missing preview browser must never keep T3 from starting.
             ExecStartPre = "-${linkPreviewBrowser}/bin/t3code-link-preview-browser ${previewBrowserBundle} ${instance.baseDir}";
-            ExecStart = "${t3Executable} serve --host ${cfg.host} --port ${toString instance.port} --base-dir ${instance.baseDir}";
+            ExecStart = "${sessionEnvLink} ${t3Executable} serve --host ${cfg.host} --port ${toString instance.port} --base-dir ${instance.baseDir}";
             Environment = "SHELL=${pkgs.bash}/bin/bash";
             # A clean provider/server exit is still unexpected for a persistent
             # headless environment. Systemd stop operations suppress restarts.
@@ -626,6 +720,7 @@ in {
 
     home.sessionPath = mkIf profileMode ["${aiStackProfile}/bin"];
     home.packages = mkIf profileMode [aiStackSwitch];
+    home.file.${sessionEnvLink}.source = "${sessionEnv}/bin/t3code-session-env";
 
     # Seed the profile on first deployment or a channel change. After that
     # the updater owns it, so a deploy never rolls the AI stack back.
@@ -654,6 +749,13 @@ in {
     home.activation.t3codeRestartGuard = mkIf (cfg.restartGuard.enable && !profileMode) (
       lib.hm.dag.entryBetween ["reloadSystemd"] ["linkGeneration"] ''
         run ${activationGuard}/bin/t3code-activation-guard
+      ''
+    );
+
+    home.activation.t3codeScheduleUnitRestart = mkIf (cfg.restartGuard.enable && profileMode) (
+      lib.hm.dag.entryBetween ["reloadSystemd"] ["linkGeneration"] ''
+        run ${unitChangeCheck}/bin/t3code-unit-change-check \
+          || warnEcho "Could not check the T3 Code units for changes; restart them later if their command changed."
       ''
     );
 
@@ -718,7 +820,7 @@ in {
             restart_status=0
             # shellcheck disable=SC2086
             run ${pkgs.systemd}/bin/systemctl --user restart $needed || restart_status=$?
-            run ${recordRestart}/bin/t3code-record-restart home-manager-activation "managed executable changed" "$needed" \
+            run ${recordRestart}/bin/t3code-record-restart home-manager-activation "managed command or AI stack changed" "$needed" \
               || warnEcho "Could not record the restart."
             # A failed restart keeps the marker, naming only the units that
             # did not come back, and fails the activation, as an aborted

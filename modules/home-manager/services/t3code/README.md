@@ -15,7 +15,7 @@ is allowed even when the upstream version sorts lower.
 
 ## Restart guard
 
-A managed restart (profile switch or Home Manager executable change) kills the
+A managed restart (profile switch or Home Manager command change) kills the
 provider process behind every thread, including background shells, monitors,
 subagents and scheduled wake-ups that a thread started and is waiting for. The
 guard therefore counts *live work*, not only running turns, in each instance's
@@ -36,6 +36,11 @@ counts:
 - provider threads that are active or still list pending background tasks
   (background commands, monitors, subagents and tasks). Delegated tasks are
   child threads with their own turns.
+
+The state directory each running instance was started with (read from its
+process, since a reload already shows the new unit) counts too, so a
+changed `baseDir` cannot hide the live work of an instance still running from
+the old one.
 
 A restart proceeds only after that count stays at zero for
 `restartGuard.settleSeconds`; otherwise the updater retries later (exit 75).
@@ -78,6 +83,26 @@ Manager activation. Roll
 back with `nix-env --profile ~/.local/state/nix/profiles/ai-stack --rollback`
 followed by `systemctl --user restart t3code` (and `t3code-<name>` for each
 additional instance).
+
+Before a Home Manager activation reloads systemd, it compares each running
+instance's loaded command line with the unit it has just linked. Without the
+profile, a changed command must pass the restart guard or the activation is
+deferred, as for an executable change. With the profile, the executable path
+never changes, so a changed command (for example a new wrapper or port) only
+writes the restart marker: the instances restart once the guard reports idle,
+and otherwise at a later activation. The activation itself is never blocked.
+
+## Session environment
+
+Every instance starts through `t3code-session-env`, which sources Home
+Manager's `hm-session-vars.sh` from the profile before it runs `t3`. The units
+run it through the stable link `~/.local/state/t3code/bin/t3code-session-env`,
+so a rebuild of the wrapper alone does not change their command or restart T3. The user
+manager starts T3 at boot, before the graphical login imports those variables,
+so without it agent shells would lack `home.sessionVariables` and
+`home.sessionPath` until the next restart. The file is read again at every
+start, even when the login already imported an older copy, so a restart picks
+up the current values. A missing file is logged and T3 starts without it.
 
 ## Additional instances
 
