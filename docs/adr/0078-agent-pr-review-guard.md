@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -49,25 +49,33 @@ hand or depend on which models their own client offers:
   ignoring user and project settings. Reviewers do not inherit forge token
   variables, but can read local files, including stored credentials, without
   network access. Results and a status per reviewer,
-  including its model and effort, are kept per head SHA; the target branch is
+  including its configured model and effort, are kept per head SHA; the target branch is
   recorded and must still match. Earlier rounds are kept. A failed or
   timed-out reviewer, or one whose reply lacks one of the requested verdicts, is
   reported as a missing review, never as no findings.
 - A new head is reviewed as a **follow-up** of the last round that the
   configured reviewers, and only they, completed on the same target, when it
   descends from that round with the same merge base, at most 40 lines or 40%
-  of the PR's changed lines changed since, no binary files changed, and fewer
+  of the previous reviewed diff's changed lines changed since (recorded in
+  `status.json`), no binary files changed, and fewer
   than three follow-ups ran in a row. Reviewers then get the findings of every
   round since the last full review, the author's `--response` as a claim to
   check, the interdiff to review, and the whole PR diff and checkout as
   context; they raise new findings in untouched code only if they are
   blocking. Otherwise, or with `--full`, `run` reviews the whole PR and says
   why; a missing earlier round also forces a full review, and the response is
-  still passed on. `--force` repeats the head's previous mode. A result from a
+  still passed on. A round without a valid recorded changed-line count also
+  forces a full review. `--force` repeats the head's previous mode. A result from a
   different reviewer set counts for no reviewer, and a round with another role
   forces a full review. Fix rounds then cost roughly what the fixes need, and fresh
   low-severity findings in unchanged code stop restarting the loop
   ([#524](https://git.alc.xyz/alcxyz/nix-config/issues/524)).
+- The outer `run` needs forge/provider network access and a writable
+  `$XDG_STATE_HOME/pr-review` (by default `~/.local/state/pr-review`), so run
+  it outside a network-restricted Codex sandbox. This is a requirement for
+  the orchestrating process, not permission to relax the reviewers' isolation.
+  An inherited SIGHUP ignore disposition, such as under `nohup`, is kept;
+  ordinary SIGHUP and SIGTERM still cancel the run and clean up its children.
 - `pr-review comment <pr> "<outcome>"` posts the comment for the current head,
   and refuses unless every reviewer completed for that head, except for skips.
 - `pr-review check <pr>` reports whether a comment names the current head.
@@ -90,8 +98,10 @@ reviews of small documentation changes found only low-severity wording
 problems, and that re-reviewing promotions repeated their feature PRs'
 reviews. `pr-review` never loads a role
 profile, so its isolation is unchanged. A role can name a Claude alias, so each
-result records the model the client reports (Claude's JSON result, Codex's
-session header) alongside the configured one.
+result records the model the client reports alongside the configured one.
+Claude's JSON result names its models; Codex's JSON event mode currently
+omits its session header, so its reported model can be `null`. The configured
+reviewer identity is always retained.
 
 `programs.ai` installs `agent-pr-review-guard` as a `PreToolUse` hook for shell
 commands in both clients. Claude receives it through the managed settings merge,
@@ -112,7 +122,136 @@ state when it selects a follow-up. It also blocks when it
 cannot verify the comment, including when its lookups exceed a 90-second
 deadline inside the 120-second hook timeout. The hook also matches Forgejo MCP
 tools and checks `merge_pull_request` like other merges, from its structured
-arguments (ADR-0081); other MCP tools pass. The guard and `pr-review` share one script.
+arguments (ADR-0081); other MCP tools pass. The guard and `pr-review` share one script. Shell checks separate ordinary
+literal commands from quoted arguments, comments and heredoc bodies, so text
+in a commit message does not become a merge command. They also check each
+command in a chain, ordinary execution wrappers such as `env` and `timeout`,
+and leading redirections. Unknown wrapper options are refused. Heredocs and
+`-c` arguments passed to shell interpreters are checked as executable shell
+text, with a separate working-directory context for that shell. Process
+substitutions and command expansions in unquoted heredocs are also executable;
+substitutions inside double-quoted arguments and assignments are checked too.
+Quoted heredocs and literal message/search arguments remain data, including
+heredoc prose inside a `$(cat ...)` message. Subshell directory changes stay
+local. Conditional directory changes are tracked conservatively; if a merge
+could run in more than one directory, name its repository explicitly.
+Directory-affecting assignments propagate into nested shells. Logical `.` and
+`..` navigation is normalized before lookup; physical and opaque directory
+modes require an explicit repository. `eval` leaves the subsequent directory
+unknown, while `source` and `.` files remain opaque executable source.
+User-switching wrappers also make home and directory navigation uncertain.
+An initial symlink directory is also uncertain, because a new shell can start
+with physical `PWD` rather than the supplied logical path.
+Unsupported wrappers and inline programs containing literal merge syntax are
+refused conservatively, rather than assumed harmless. Recognized prose
+contexts, including git commit messages, searches and cat heredocs, are exempt.
+Piping that prose into an executable context is refused when its interpretation
+cannot be verified. Shell options are consumed before selecting `-c` source.
+Literal merge arguments forwarded through `-c` are opaque unless the program
+is a simple text producer. Git's explicit pager and transport program options
+are executable contexts too; ordinary commit, push and PR-body flows remain data.
+The same applies to explicit helper programs on text/search commands. Shell
+source from files or inherited stdin is opaque in a merge context; use literal
+source or a direct merge. Command substitutions retain that context, and
+`printf -v` assignments retain executable value provenance.
+That context covers the whole tool-call command, including merge syntax in
+recognized prose. Consequently, `git commit -m "explain gh pr merge" && bash
+tests.sh` is conservatively refused because the shell file is opaque.
+Replacing `&&` with `;` or a newline in the same tool call does not change
+that boundary. Run the commit and the script in separate tool calls instead.
+The prose command alone remains exempt. This rule covers explicit shell
+interpreter invocations; it does not track files across commands or verify
+files invoked through other executables. Broader file-flow tracking is outside
+this decision.
+The trigger itself is a conservative word heuristic: a CLI name (`gh`, `tea`
+or `fj`), a PR noun (`pr`, `pull` or `pulls`), and `merge` or a standalone `m`
+can appear anywhere in the tool call, including in different commands.
+For example, `git merge origin/dev && gh pr view 670 && bash tests.sh` also
+requires separate tool calls. The heuristic does not establish that a PR
+merge actually occurs. `exec` options that reset the environment or change
+the invocation identity are opaque and refused; use plain `exec` instead.
+For GitHub merges or nested shells, sudo's handling of inherited `GH_REPO`
+and `GH_HOST` is opaque, including with `-E`, because preservation depends on
+the operator's sudo policy. Use a direct merge without sudo when either is
+present in the hook environment.
+Dynamic assignment destinations and executable Git helper transports are
+opaque too. Redirected stdin remains data when a shell executes a script file;
+`-s` explicitly selects stdin source instead.
+Redirections retain their descriptor information. Auxiliary descriptors do not
+become shell source, and opaque stdin from a file or descriptor is refused even
+alongside literal here-input. Trailing stdin redirections are retained because
+they can replace earlier source. Push options use Git's value and bundle forms;
+unknown options are opaque rather than guessed.
+Descriptor-zero duplication is tracked for either operator direction, and
+expanded here-string source stays opaque. Literal or opaque auxiliary input
+requires empty source or a simple text consumer, rather than a client that can
+invoke configured helpers. Null-device and closed input are known empty data.
+Process-substitution output used as source is also opaque; output substitutions
+that consume literal merge text require a recognized prose command too.
+A `-c` program can
+forward stdin into another interpreter, so literal merge input is refused
+unless the program is a single recognized prose command.
+Persistent `exec` and named-descriptor inputs and consumers are refused when
+the script contains literal merge syntax. Git global configuration containing
+that syntax, including environment-backed settings, is executable configuration,
+not exempt message text. Value references retain executable provenance through
+arguments, pipes and assignment copies. Only exported or inline environment
+assignments are visible to child programs; unused local message values do not
+block subsequent build commands. Nested shells receive the exported values,
+including through ambiguous shell-option paths.
+Dynamic declarations and shell name references are opaque assignment targets.
+Internal shell scopes retain local variables, while external children receive
+exported values. Expanded `-c` source and expanding stdin-source heredocs are
+opaque when their executable value cannot be verified. Redirections after a
+parenthesized scope retain their inputs and require a simple text consumer.
+All-export, keyword-export and dynamic shell-option modes are refused; use
+explicit exports. Zsh option mutations, shell startup environment settings and
+interactive/login startup are opaque. Words after a closed shell group are
+refused rather than silently discarded.
+Explicit Zsh execution requires `-f` to suppress user startup files and rejects
+named option changes. Negated assignment-export option names are still opaque.
+Prefix assignments to special declaration builtins or bare `exec` may persist
+in POSIX mode, so their export visibility is tracked conservatively.
+Declaration attributes are limited to string, export, global, readonly and
+print behavior; arithmetic, aliasing and unknown attributes are opaque.
+ANSI-C shell quoting and case grammar inside substitutions are also refused
+in merge contexts because their token boundaries are not verified. Use
+ordinary quotes and direct literal commands. `printf` assignment destinations
+participate in repository and directory tracking; repeated destinations,
+expanded formats and variable-writing `%n` formats are opaque.
+Append assignments, input-assignment builtins, `eval`, `let`, `getopts` and
+dynamic variable removal are opaque too;
+declarations and removals of target or directory variables retain their effect
+on later merge checks. Substitution output keeps opaque provenance when passed
+to executable configuration.
+Literal shell source retains its quoting provenance so message-only variable
+references remain data. Parameter assignments to target/directory variables,
+Zsh local declarations and environment-wrapper removals retain their effect;
+shell arithmetic and wildcard variable removals are opaque. Explicit Git
+pagers receiving generated merge text are executable contexts.
+Inline pager settings count too. Merge flags and selectors must be literal;
+expanded message values remain data only when quoted so they cannot introduce
+additional flags. GitHub API output filters and caching options are supported;
+pagination remains opaque because it can issue additional requests.
+REST targets must also be literal, and expanded REST values must be quoted
+so word splitting cannot introduce another request or option.
+Git and forge clients' executable environment settings are checked before
+granting their prose exemption; unrelated message and identity values remain
+data. A direct merge's result may still be piped to ordinary formatters after
+its review is checked, while curl's explicit output text remains tracked.
+Use a direct literal merge command when an unfamiliar invocation is refused.
+Delayed `gh pr merge --auto` and Forgejo
+`merge_when_checks_succeed` merges are refused because they can outlive the
+reviewed head. REST merge payloads or request configuration from a file or stdin are refused because
+the scheduling option cannot be verified without reading that input; use
+inline JSON or fields once checks pass. Multiple REST transfers in one command
+are also refused, so one transfer's method or review cannot cover another.
+Unsupported REST options and URL lists from files are opaque inputs and are
+refused rather than guessed, including options that expand or retarget requests.
+Expanded inline payloads are opaque, and scheduling keys are checked without
+regard to case. Repository cloning and forking are executable contexts because
+they may forward Git options, so they receive no prose exemption.
+Curl URL globbing is refused rather than treating its expansion as one target.
 
 A `pr-review` skill for both clients, held in nix-secrets `shared/skills/`
 since 2026-10-11 (ADR-0091's last amendment), is the one full copy of the
@@ -124,6 +263,19 @@ across the rules, a workflow guide and the guard's message, for example on
 low-severity findings, while the rules alone cost every session in both
 clients its full text.
 
+Each new reviewer result in `status.json` has a `usage` object with
+`input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
+`output_tokens` and `reasoning_output_tokens`. Counts come from Codex's
+`turn.completed` JSON event or Claude's JSON `usage` result. Claude's
+`cache_read_input_tokens` and `cache_creation_input_tokens` map to the
+cache read and write fields. Missing, invalid and unavailable counters are
+`null`, never inferred zeros; failed runs retain any available reported
+usage without becoming successful reviews. Existing cached state is not
+backfilled. These are native provider counts: Claude input excludes cache
+reads and writes, while Codex input includes cached reads, so consumers must
+keep the client identity rather than comparing these as identical totals.
+No dollar cost is inferred.
+
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
 
@@ -134,6 +286,11 @@ reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
   need organization agreement for GitHub repositories the operator does not own.
 - **A `gh` wrapper for all users:** would also cover manual merges, which are
   out of scope, and could not cover Forgejo REST calls or web merges.
+- **Recognize only supported executable contexts:** avoids false positives in
+  unfamiliar programs, but silently loses the earlier guard's coverage of
+  literal merges inside wrappers and inline code. Conservatively refusing
+  ambiguous contexts preserves that coverage without claiming to interpret
+  arbitrary programs; ordinary prose contexts are explicitly exempted.
 - **A single fixed reviewer:** a model would review its own work when it is
   also the author.
 - **Resuming the reviewers' earlier sessions for follow-ups:** conflicts with
@@ -165,8 +322,10 @@ and merges with an ordinary command. Commands built to get past it, such as
 merge targets assembled at run time, quoting tricks or aliases, are out of
 scope; stopping them would need a forge-side control (see Alternatives). An
 agent can still post a review comment by
-hand, and web merges, other merge tools, indirect commands and
-non-literal targets are not verified, GitHub Enterprise merges are blocked
+hand, and web merges, other merge tools and indirect commands without literal
+merge syntax are not verified. Ambiguous executable contexts with literal
+merge syntax are refused, which can require rewriting an unusual command.
+Non-literal targets are not verified, GitHub Enterprise merges are blocked
 because only github.com is supported, and a push between the guard's
 lookup and the merge itself is not caught. Reviewers read the repository's
 agent instructions from the PR head, so a PR that edits them can steer its own

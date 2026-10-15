@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
@@ -74,8 +75,552 @@ def expect(command, status, cwd="/work"):
 
 # Unrelated commands and non-merge calls pass without lookups.
 assert not expect("git merge origin/main", 0)[0]
+for command in ("git merge gh-pages", "git merge-base HEAD origin/gh-pages",
+                "sed -n '/x/p' ~/.config/gh/merge.log", "python3 -m pytest tests/gh/"):
+    assert not expect(command, 0)[0], command
 assert not expect("gh pr view 5", 0)[0]
 assert not expect("echo hello", 0)[0]
+for command in ("for f in *; do case $f in *.md) echo instead;; esac; done",
+                "printf $'it\\'s a team'", "echo teardown >| result"):
+    assert not expect(command, 0)[0], command
+
+# Quoted arguments of unrelated commands and heredoc bodies are data. Text
+# containing quotes, separators, merge URLs and << must not steer lookups.
+for command in (
+    "git commit -m 'gh pr merge 9'",
+    "git -C child commit -m 'gh pr merge 9'",
+    "git commit -m '-c gh pr merge 9'",
+    "MSG='gh pr merge 9' git commit -m prose",
+    "GIT_AUTHOR_NAME='gh pr merge 9' git log -1",
+    '''MSG='docs: explain gh pr merge refusal'; git commit -m "$MSG" && git push''',
+    '''MSG='docs: explain gh pr merge refusal'; git commit -m "$MSG" && python3 scripts/checks/test-pr-review.py''',
+    '''MSG='docs: explain gh pr merge refusal'; git commit -m "$MSG" && nix flake check''',
+    '''declare MSG='docs: explain gh pr merge refusal'; git commit -m "$MSG" && python3 build.py''',
+    '''set -e; MSG='gh pr merge 9'; git commit -m "$MSG" && python3 build.py''',
+    '''CMD='gh pr merge 9'; bash <<'EOF'\n$CMD\nEOF''',
+    '''(cat) <<'EOF'\ngh pr merge 9\nEOF''',
+    '''bash -s -- 'gh pr merge 9' <<'EOF'\nprintf '%s' "$1"\nEOF''',
+    '''MSG='gh pr merge 9'; branch="$USER/fix"; git commit -m "$MSG" && python3 build.py "$branch"''',
+    '''printf -v GIT_EXTERNAL_DIFF 'sh -c "gh pr merge 9"'; git diff --ext-diff''',
+    '''BODY=$(cat <<'EOF'\nrefuse gh pr merge --auto\nEOF\n); git push -u origin fix && gh pr create --body "$BODY"''',
+    "git grep -e '-Ogh pr merge 9' -- README.md",
+    "git grep -O -e 'gh pr merge 9' -- README.md",
+    "rg -e '--pre=gh pr merge 9' .",
+    "rg -- '--pre' 'gh pr merge 9'",
+    "sort -- '--compress-program=gh pr merge 9'",
+    "git push -o '--receive-pack=gh pr merge 9' origin HEAD",
+    "git push -vo '--receive-pack=gh pr merge 9' origin HEAD",
+    "git push --push-o '--receive-pack=gh pr merge 9' origin HEAD",
+    '''MSG='gh pr merge 9'; git push --repo fallback origin "$branch"''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash -s script.sh <<< '' ''',
+    '''bash -s 3<<< 'gh pr merge 9' <<< '' ''',
+    '''bash -s 3<<< 'gh pr merge 9' <<< 'cat <&3' ''',
+    "git commit -m 'gh pr merge 9' >| message.log",
+    "tea pr create --title 'fix merge-guard follow-ups'",
+    "tea pr create --title merge",
+    "tea comment --message merge",
+    "gh pr review 7 --body 'gh pr merge'",
+    "gh release create v1 --notes 'gh pr merge'",
+    "gh repo edit --enable-merge-commit",
+    "gh run list --branch fix/merge-guard",
+    'gh search prs "merge queue"',
+    'pr-review run 670 --response "Kept tea merge refusal; gh pr merge --auto now refused"',
+    "rg 'gh pr merge' .",
+    "git commit -m gh 'pr' 'merge' '9'",
+    "git commit -m 'https://git.example/api/v1/repos/o/r/pulls/9/merge'",
+    "echo '<<EOF' 'gh pr merge 9'",
+    "echo ';' gh pr merge 9",
+    "cat <<'EOF'\ngh pr merge 9\nIt's prose: tea pulls merge 9\nEOF\n",
+    "cat <<-\"END\"\n\tgh pr merge 9\n\tEND\n",
+    "cat <<A <<'B'\ngh pr merge 9\nA\ntea pulls merge 9\nB\n",
+    "bash -c cat <<'EOF'\ngh pr merge 9\nEOF\n",
+    "cat <<< 'gh pr merge 9'",
+    "cat <<'EOF'\n$(gh pr merge 9)\nEOF",
+    "comm -13 <(git branch --merged main) <(git branch)",
+    'grep -c merge <<< "$log"',
+    "# gh pr merge 9\necho ok",
+):
+    assert not expect(command, 0)[0], command
+expect("cat <<'EOF'\ngh pr merge 7\nEOF\ngh pr merge 9", 2)
+expect("cat <<'EOF'\nIt's prose\nEOF\ngh pr merge 7", 0)
+expect("cat <<''\n\ngh pr merge 9", 2)
+expect("echo ok\ngh pr merge 9", 2)
+expect("if true; then gh pr merge 9; fi", 2)
+expect("gh pr merge 7 && gh pr merge 9", 2)
+expect("'gh' 'pr' 'merge' 9", 2)
+expect("gh pr merge 9 # It's a merge", 2)
+expect("cat <<EOF\ngh pr merge 9", 2)
+for command in ("gh pr merge 7 --auto", "gh pr merge 7 --auto=true",
+                '''tea api -X POST /repos/o/r/pulls/7/merge -d '{"merge_when_checks_succeed": true}' ''',
+                '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --data '{"merge_when_checks_succeed":true}' '''):
+    seen, message = expect(command, 2)
+    assert "delayed merges" in message and not seen, (command, message)
+expect('''tea api -X POST /repos/o/r/pulls/7/merge -d '{"merge_when_checks_succeed": false}' ''', 0)
+for command in (
+    '''tea api -X POST /repos/o/r/pulls/7/merge --field merge_when_checks_succeed=true''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge -d@body.json''',
+    '''tea api -X POST /repos/o/r/pulls/7/merge -d @- <<'EOF'\n{"merge_when_checks_succeed":true}\nEOF''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --json '{"merge_when_checks_succeed":true}' ''',
+):
+    assert not expect(command, 2)[0], command
+expect('''curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge -d '{"message":"--request GET"}' ''', 2)
+expect("curl -XGET -XPOST https://git.example/api/v1/repos/o/r/pulls/9/merge", 2)
+for command in (
+    '''KEY=merge_when_checks_succeed; curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --json "{\\"Do\\":\\"squash\\",\\"$KEY\\":true}"''',
+    '''curl -X GET https://git.example/api/v1/repos/o/r/pulls/7/merge --json '{"$KEY":true}' ''',
+    '''tea api -X POST /repos/o/r/pulls/7/merge --field '$KEY=true' ''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --form-string '$KEY=true' ''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --data '`key`=true' ''',
+):
+    seen, message = expect(command, 2)
+    assert "expanded merge payload" in message and not seen, (command, message)
+
+# Only printf's options before the format select an assignment destination.
+for command in (
+    '''CMD='gh pr merge 9'; bash -c "$(printf '%s' "$CMD")"''',
+    '''CMD='gh pr merge 9'; bash -c "`printf '%s' "$CMD"`"''',
+    '''CMD='gh pr merge 9'; printf '%s\\n' "$CMD" > >(xargs -I{} bash -c '{}'); wait''',
+    '''CMD='gh pr merge 9'; COPY="$CMD"; printf '%s' "$COPY" > >(xargs sh -c); wait''',
+):
+    assert not expect(command, 2)[0], command
+for command in (
+    '''gh repo clone git@github.com:o/r.git -- --config 'core.sshCommand=sh -c "gh pr merge 9 --repo o/r"' ''',
+    '''gh repo fork o/r -- --config 'core.sshCommand=sh -c "gh pr merge 9 --repo o/r"' ''',
+    '''export GH_REPO; printf -v GH_REPO other/repo; gh pr merge 7''',
+    '''export GH_HOST; printf -v GH_HOST other.example; gh pr merge 7''',
+    '''printf -v CDPATH other; cd repo; gh pr merge 7''',
+    '''printf -v HOME other; cd; gh pr merge 7''',
+    '''echo "$(case x in x) gh pr merge 9;; esac)"''',
+    "git commit -m $'it\\'s done' && gh pr merge 9 # don't",
+    '''printf "%'n" 'a[$(gh pr merge 9)]' ''',
+    '''tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash","MERGE_WHEN_CHECKS_SUCCEED":true}' ''',
+    '''tea api -X POST /repos/o/r/pulls/7/merge --field MeRgE_WhEn_ChEcKs_SuCcEeD=true''',
+):
+    assert not expect(command, 2)[0], command
+expect('''tea api -X POST /repos/o/r/pulls/7/merge -d '{"MERGE_WHEN_CHECKS_SUCCEED":false}' ''', 0)
+for command in (
+    '''GH_REPO+=other/repo; export GH_REPO; gh pr merge 7''',
+    '''read -r GH_REPO <<< other/repo; export GH_REPO; gh pr merge 7''',
+    '''mapfile -t GH_REPO <<< other/repo; gh pr merge 7''',
+    '''readarray -t CDPATH <<< other; cd repo; gh pr merge 7''',
+    '''export GH_REPO; gh pr merge 7''',
+    '''unset GH_REPO; gh pr merge 7''',
+    '''NAME=GH_REPO; unset "$NAME"; gh pr merge 7''',
+    '''eval 'GH_REPO=other/repo'; gh pr merge 7''',
+    '''let GH_REPO=123; gh pr merge 7''',
+    '''getopts : GH_REPO a; gh pr merge 7''',
+    '''git -c diff.external="$(printf '%s' 'sh -c "gh pr merge 9 --repo o/r"')" diff --ext-diff HEAD~1 HEAD''',
+    '''curl -X POST 'https://git.example/{api/v1/repos/o/r/pulls/7/merge,api/v1/repos/o/r/pulls/9/merge}' --json '{"Do":"squash"}' ''',
+    '''curl -X POST 'https://git.example/api/v1/repos/o/r/pulls/[7-9]/merge' --json '{"Do":"squash"}' ''',
+):
+    assert not expect(command, 2)[0], command
+for shell in ("bash", "sh"):
+    assert not expect(f'''git commit -m "fix(pr-review): quote gh output" && {shell} scripts/checks/test-agent-role.sh''', 0)[0]
+# Opaque shell files stay conservative across one tool call, even after prose.
+# Separate calls each receive their own context, without cross-call file tracking.
+for separator in (" && ", "; ", "\n"):
+    for shell in ("bash", "sh"):
+        command = f'''git commit -m "explain gh pr merge"{separator}{shell} tests.sh'''
+        seen, message = expect(command, 2)
+        assert not seen and "shell script file" in message, (command, message)
+assert not expect('git commit -m "explain gh pr merge"', 0)[0]
+for shell in ("bash", "sh"):
+    assert not expect(f"{shell} tests.sh", 0)[0]
+seen, message = expect("git merge origin/dev && gh pr view 670 && bash tests.sh", 2)
+assert not seen and "shell script file" in message, message
+for command in (
+    '''exec -c env HOME="$HOME" PATH="$PATH" bash -c 'gh pr merge 7' ''',
+    '''exec -l bash -c 'gh pr merge 7' ''',
+    '''exec -a login-shell bash -c 'gh pr merge 7' ''',
+):
+    seen, message = expect(command, 2)
+    assert not seen and "wrapper option" in message, (command, message)
+expect("exec gh pr merge 7", 0)
+for variable, value in (("GH_REPO", "reviewed/repo"), ("GH_HOST", "github.com")):
+    with patch.dict(os.environ, {variable: value}):
+        for prefix in ("sudo", "sudo -E", 'sudo -u "$USER"', "sudo --preserve-env"):
+            for command in (f"{prefix} gh pr merge 7", f"{prefix} bash -c 'gh pr merge 7'"):
+                seen, message = expect(command, 2)
+                assert not seen and "sudo's handling" in message, (command, message)
+for command in (
+    '''GIT_PAGER=bash git --paginate log -1 --format='format:gh pr merge 9 --repo o/r' ''',
+    '''export GIT_PAGER=bash; git log -1 --format='format:gh pr merge 9 --repo o/r' ''',
+    '''env -u GH_REPO gh pr merge 7''',
+    '''env --unset=GH_HOST gh pr merge 7''',
+    '''env -uGH_REPO gh pr merge 7''',
+    '''env -i gh pr merge 7''',
+    '''zsh -f -c 'local GH_REPO=other/repo; gh pr merge 7' ''',
+    '''unset -m 'GH_*'; gh pr merge 7''',
+    ''': ${CDPATH:=/other}; cd repo && gh pr merge 7''',
+    ''': ${GH_REPO=other/repo}; gh pr merge 7''',
+    '''((CDPATH=1)); cd repo && gh pr merge 7''',
+    '''echo "$((CDPATH=1))"; cd repo && gh pr merge 7''',
+):
+    assert not expect(command, 2)[0], command
+assert not expect('''export MSG='gh pr merge 9'; bash -c 'git commit -m "$MSG"' ''', 0)[0]
+expect('''git commit -m '${CDPATH:=/other} gh pr merge 9'; cd repo && gh pr merge 7''', 0)
+for command in (
+    '''git -c core.pager=bash log -1 --format='format:gh pr merge 9 --repo o/r' ''',
+    '''URL='https://git.example/api/v1/repos/o/r/pulls/9/merge'; curl -X POST "$URL" --json '{}' ''',
+    '''HEADER='x: y --next'; curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge -H $HEADER --json '{}' ''',
+    '''OPTS='--json {"Do":"squash","merge_when_checks_succeed":true}'; curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge $OPTS''',
+    '''noglob cd child && gh pr merge 7''',
+    '''nocorrect cd child && gh pr merge 7''',
+    '''tea api -X POST /repos/o/r/pulls/7/merge -d '{"merge_when_checkſ_succeed":true}' ''',
+    '''git -c pager.log=bash log -1 --format='format:gh pr merge 9 --repo o/r' ''',
+    '''MERGE_OPTION=--auto; gh pr merge 7 "$MERGE_OPTION"''',
+    '''MSG='text --auto'; gh pr merge 7 --body $MSG''',
+    '''MSG='text --auto'; gh pr merge 7 --body=$MSG''',
+    '''gh pr merge 7 --body=$(printf 'text --auto')''',
+    '''gh api -X PUT repos/o/r/pulls/7/merge --paginate''',
+    '''gh api -X PUT repos/o/r/pulls/7/merge --template 'gh pr merge 9' | bash''',
+):
+    assert not expect(command, 2)[0], command
+for command in (
+    '''MSG='text --auto'; gh pr merge 7 --body "$MSG"''',
+    '''MSG='text --auto'; gh pr merge 7 "--body=$MSG"''',
+    '''gh pr merge 7 --body="$(printf 'text --auto')"''',
+    '''gh api -X PUT repos/o/r/pulls/7/merge -f merge_method=squash --jq .merged''',
+    '''gh api -X PUT repos/o/r/pulls/7/merge -q .merged --cache 60s''',
+    '''gh api -X PUT repos/o/r/pulls/7/merge --template '{{.merged}}' ''',
+    '''HEADER='x: y --next'; curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge -H "$HEADER" --json '{}' ''',
+):
+    expect(command, 0)
+
+for command in (
+    '''printf -v unused -v 'a[$(gh pr merge 9)]' '%s' text''',
+    '''printf -vunused -vother '%s' 'gh pr merge 9' ''',
+    '''printf '%n' 'a[$(gh pr merge 9)]' ''',
+    '''FORMAT='%n'; printf "$FORMAT" 'a[$(gh pr merge 9)]' ''',
+):
+    assert not expect(command, 2)[0], command
+for command in (
+    '''printf '%s' -v 'gh pr merge 9' ''',
+    '''printf -- '%s' -v 'gh pr merge 9' ''',
+    '''printf -v MSG -- '%s' 'gh pr merge 9'; git commit -m "$MSG"''',
+    '''printf '%%n %s' 'gh pr merge 9' ''',
+):
+    assert not expect(command, 0)[0], command
+
+# Execution wrappers and leading redirections do not turn executable merges
+# into data. Their options are interpreted before locating the real client.
+for prefix in ("timeout 120", "timeout -k 5 120", "time", "sudo -E", "sudo -u root",
+               "env --", "env -u TERM", "env -uTERM", "</dev/null", "2>/dev/null",
+               "nice -n 10", "stdbuf -oL"):
+    expect(f"{prefix} gh pr merge 9", 2)
+    expect(f"{prefix} gh pr merge 7", 0)
+    expect(f"{prefix} tea pulls merge 9", 2)
+    expect(f"{prefix} curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge -d '{{}}'", 2)
+expect("env --chdir other gh pr merge 7", 2)
+for command in (
+    "nix shell nixpkgs#gh -c gh pr merge 9 --squash",
+    "nix develop -c gh pr merge 9",
+    "setsid gh pr merge 9",
+    "echo 9 | xargs gh pr merge",
+    "flock /tmp/l gh pr merge 9",
+    '''python3 -c "urlopen(Request('https://git.example/api/v1/repos/o/r/pulls/9/merge', method='POST'))"''',
+    "http POST https://git.example/api/v1/repos/o/r/pulls/9/merge",
+    "python3 <<'EOF'\nurl = 'https://git.example/api/v1/repos/o/r/pulls/9/merge'\nEOF",
+    "gh pr --repo o/r merge 9",
+):
+    seen, message = expect(command, 2)
+    assert "unsupported executable context" in message and not seen, (command, message)
+expect("export GH_REPO=other/repo && gh pr merge 7", 2)
+expect("export GH_HOST=ghe.example ; gh api -X PUT repos/o/r/pulls/7/merge", 2)
+expect("bash <<'EOF'\ngh pr merge 9\nEOF", 2)
+expect("bash -c 'gh pr merge 9'", 2)
+for command in (
+    '''bash -c 'exec "$@"' _ gh pr merge 9 --repo o/r''',
+    '''bash -c '$1 $2 $3 $4' _ gh pr merge 9''',
+    '''bash -c 'git push "$@"' _ --receive-pack='sh -c "gh pr merge 9"' /tmp/repo''',
+    '''bash -c 'sort "$@"' _ --compress-program='sh -c "gh pr merge 9"' input''',
+    '''bash -c 'printf "$@"' _ -v 'a[$(gh pr merge 9)]' text''',
+    '''git grep --open-files-in-pager='sh -c "gh pr merge 9"' -e fix -- README.md''',
+    '''git grep -O'sh -c "gh pr merge 9"' -e fix -- README.md''',
+    '''git grep -nO'sh -c "gh pr merge 9"' -e fix -- README.md''',
+    '''git grep --open-files-in='sh -c "gh pr merge 9"' -e fix -- README.md''',
+    '''git push --receive-pack='sh -c "gh pr merge 9"' /tmp/repo HEAD''',
+    '''git push --receive-p='sh -c "gh pr merge 9"' /tmp/repo HEAD''',
+    '''export GIT_EXTERNAL_DIFF; printf -v GIT_EXTERNAL_DIFF 'sh -c "gh pr merge 9"'; git diff --ext-diff''',
+    '''export GIT_EXTERNAL_DIFF; CMD='sh -c "gh pr merge 9"'; printf -v GIT_EXTERNAL_DIFF '%s' "$CMD"; git diff --ext-diff''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash script.sh''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash script.sh <<< '' ''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash -- script.sh <<'DATA'\nprose\nDATA''',
+    '''export GIT_EXTERNAL_DIFF; dest=GIT_EXTERNAL_DIFF; printf -v "$dest" 'sh -c "gh pr merge 9"'; git diff --ext-diff''',
+    '''git -c protocol.ext.allow=always push 'ext::gh pr merge 9 --repo o/r' HEAD''',
+    '''git push -- 'ext::gh pr merge 9 --repo o/r' HEAD''',
+    '''REMOTE='ext::gh pr merge 9 --repo o/r'; git push "$REMOTE" HEAD''',
+    '''git push --repo='ext::gh pr merge 9 --repo o/r' HEAD''',
+    '''git push --rep='ext::gh pr merge 9 --repo o/r' ''',
+    '''REMOTE='ext::gh pr merge 9'; git push --repo origin "$REMOTE" HEAD''',
+    '''git push --repo origin 'ext::gh pr merge 9 --repo o/r' HEAD''',
+    '''git push -vo note 'ext::gh pr merge 9 --repo o/r' HEAD''',
+    '''git push --push-o note 'ext::gh pr merge 9 --repo o/r' HEAD''',
+    '''git push --unknown-option note 'ext::gh pr merge 9 --repo o/r' HEAD''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash -s <script.sh 3<<< '' ''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash -s <<< '' <script.sh''',
+    '''printf '%s\\n' 'gh pr merge 9' > script.sh; bash <<< '' <script.sh''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash <<< '' 0<&3''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash <<< '' 0<>script.sh''',
+    '''bash -s 3<<< 'gh pr merge 9' <<< '' 0>&3''',
+    '''bash -s 3<<< 'gh pr merge 9' <<< "$(cat /dev/fd/3)"''',
+    '''bash -s 3<<< 'gh pr merge 9' <<< '. /dev/fd/3' ''',
+    '''bash -s 3<<< 'gh pr merge 9' <<< 'source /dev/fd/3' ''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash --rcfile script.sh -ic true''',
+    '''sort --compress-program='sh -c "gh pr merge 9"' -S1b input''',
+    '''rg --pre='sh -c "gh pr merge 9"' pattern input''',
+):
+    assert not expect(command, 2)[0], command
+assert not expect('''bash -c 'printf "%s" "$1"' _ 'gh pr merge 9' ''', 0)[0]
+for option in ("--", "-e", "-ex", "-o errexit"):
+    expect(f"bash -c {option} 'gh pr merge 9'", 2)
+    seen, _ = expect(f"bash -c {option} 'gh pr merge 7'", 0)
+    assert seen, option
+for option in ("-cO extglob", "-Oc extglob", "-c -O extglob"):
+    expect(f"bash {option} 'gh pr merge 9'", 2)
+for option in ("+e", "+x", "+O extglob", "+o errexit", "-"):
+    expect(f"bash -c {option} 'gh pr merge 9'", 2)
+    if option == "-":
+        assert expect(f"bash -c {option} 'gh pr merge 7'", 0)[0]
+for command in ("echo 'gh pr merge 9' > >(bash)",
+                "cat <<'EOF' > >(bash)\ngh pr merge 9\nEOF",
+                "echo 'gh pr merge 9' > >(python3)",
+                "echo 'gh pr merge 9' > >(tee >(bash))"):
+    assert not expect(command, 2)[0], command
+assert not expect("echo 'gh pr merge 9' > >(cat)", 0)[0]
+for command in (
+    '''git -c 'diff.external=sh -c "gh pr merge 9 --squash"' diff --ext-diff HEAD~1 HEAD''',
+    '''git -ccore.pager='gh pr merge 9' log''',
+    '''exec 3> >(bash); printf '%s\\n' 'gh pr merge 9' >&3; exec 3>&-; wait''',
+    '''exec > >(bash); echo 'gh pr merge 9' ''',
+    '''exec 3< <(echo 'gh pr merge 9'); bash <&3''',
+    '''exec 3<<< 'gh pr merge 9'; bash <&3''',
+    '''PAGER_CMD='sh -c "gh pr merge 9"' git --config-env=core.pager=PAGER_CMD --paginate log -1''',
+    '''export PAGER_CMD='sh -c "gh pr merge 9"'; git --config-env core.pager=PAGER_CMD --paginate log -1''',
+    '''PAGER_CMD='gh pr merge 9' bash -c 'git --config-env=core.pager=PAGER_CMD --paginate log -1' ''',
+    '''export PAGER_CMD='gh pr merge 9'; bash -c 'git --config-env=core.pager=PAGER_CMD --paginate log -1' ''',
+    '''PAGER_CMD='gh pr merge 9' git -c core.pager="$PAGER_CMD" --paginate log -1''',
+    '''CMD='gh pr merge 9' python3 -c 'import os; os.system(os.environ["CMD"])' ''',
+    '''exec {merge_fd}> >(bash); printf '%s\\n' 'gh pr merge 9' > /dev/fd/$merge_fd; wait''',
+    '''{merge_fd}> >(bash); printf '%s\\n' 'gh pr merge 9' > /dev/fd/$merge_fd; wait''',
+    '''curl -X GET https://api.github.com/repos/o/r/pulls/7/merge -o /dev/null --write-out 'gh pr merge 9\\n' | bash''',
+):
+    assert not expect(command, 2)[0], command
+for variable in ("GIT_EXTERNAL_DIFF", "GIT_PAGER", "GIT_EDITOR", "GIT_SSH_COMMAND", "GIT_CONFIG_PARAMETERS"):
+    assert not expect(f"{variable}='sh -c \"gh pr merge 9\"' git diff --ext-diff HEAD~1 HEAD", 2)[0]
+for command in (
+    '''CMD='sh -c "gh pr merge 9"' GIT_EXTERNAL_DIFF="$CMD" git diff --ext-diff HEAD~1 HEAD''',
+    '''X='sh -c "gh pr merge 9"'; Y=$X; GIT_EXTERNAL_DIFF=$Y git diff --ext-diff HEAD~1 HEAD''',
+    '''GIT_EXTERNAL_DIFF=$(echo 'sh -c "gh pr merge 9"') git diff --ext-diff HEAD~1 HEAD''',
+    '''GH_BROWSER='sh -c "gh pr merge 9"' gh search prs x --web''',
+    '''CMD='gh pr merge 9' GH_BROWSER=$CMD gh pr view 7 --web''',
+    '''GH_PAGER='gh pr merge 9' gh pr view 7''',
+    '''LESSOPEN='|gh pr merge 9' git log -1''',
+):
+    assert not expect(command, 2)[0], command
+for options in ("+e -c", "-c +e", "-cO extglob", "--unsupported -c", "-z -c"):
+    assert not expect(f"CMD='gh pr merge 9' bash {options} '$CMD'", 2)[0], options
+for variable, value in (("SHELLOPTS", "allexport"), ("BASHOPTS", "extdebug"), ("BASH_ENV", "./startup.sh"), ("ENV", "./startup.sh")):
+    previous = os.environ.get(variable)
+    try:
+        os.environ[variable] = value
+        assert not expect('''bash -c 'GIT_EXTERNAL_DIFF="gh pr merge 9"; git diff --ext-diff' ''', 2)[0]
+    finally:
+        if previous is None:
+            os.environ.pop(variable, None)
+        else:
+            os.environ[variable] = previous
+for command in (
+    '''tea api -X POST /repos/o/r/pulls/7/merge -d '{"Do":"squash"}' | jq .''',
+    '''gh api -X PUT repos/o/r/pulls/7/merge -f merge_method=squash | jq .merged''',
+    "gh pr merge 7 | sed -n '1p'",
+    "bash -c 'gh pr merge 7 --repo o/r' </dev/null 2>&1",
+    "zsh -f -c 'gh pr merge 7 --repo o/r'",
+    "zsh -fc 'gh pr merge 7 --repo o/r'",
+    "bash -c 'gh pr merge 7 --repo o/r' <&-",
+    "exec 3</dev/null; gh pr merge 7 --repo o/r",
+    "curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge -w '%{http_code}' | jq .",
+):
+    assert expect(command, 0)[0], command
+for command in ("bash < <(echo 'gh pr merge 9')", "bash <(echo 'gh pr merge 9')",
+                "bash -c \"$(echo 'gh pr merge 9')\"",
+                "bash -c bash <<'EOF'\ngh pr merge 9\nEOF",
+                "sh -c '. /dev/stdin' <<'EOF'\ngh pr merge 9\nEOF",
+                'bash -c "$(cat)" <<\'EOF\'\ngh pr merge 9\nEOF'):
+    assert not expect(command, 2)[0], command
+assert not expect("cat < <(echo 'gh pr merge 9')", 0)[0]
+assert not expect("bash -c 'cat -' <<'EOF'\ngh pr merge 9\nEOF", 0)[0]
+seen, _ = expect("command -v gh >/dev/null && gh pr merge 7", 0)
+assert seen, seen
+for command in ("export HOME=/other; bash -c 'cd && gh pr merge 7'",
+                "export CDPATH=/other; bash -c 'cd child && gh pr merge 7'",
+                "HOME=/other bash -c 'cd && gh pr merge 7'",
+                "sudo -H bash -c 'cd && gh pr merge 7'",
+                "sudo -u other bash -c 'cd child && gh pr merge 7'"):
+    assert not expect(command, 2)[0], command
+    expect(command + " --repo o/r" if "bash" not in command else command.replace("merge 7", "merge 7 --repo o/r"), 0)
+for command in (
+    "eval cd child && gh pr merge 7 --repo o/r",
+    "source change-dir.sh; gh pr merge 7 --repo o/r",
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash -c '. ./script.sh' ''',
+    '''cat > script.sh <<'EOF'\ngh pr merge 9\nEOF\nbash -c 'source ./script.sh' ''',
+    '''git -c core.pager='bash <&3' --paginate log -1 3<<< 'gh pr merge 9' ''',
+    '''bash -s 3<<< 'gh pr merge 9' <<< 'git -c core.pager="bash <&3" --paginate log -1' ''',
+    '''export MSG='gh pr merge 9'; python3 build.py''',
+    '''MSG='gh pr merge 9' python3 build.py''',
+    '''MSG='gh pr merge 9'; python3 -c "$MSG"''',
+    '''MSG='gh pr merge 9'; eval "$MSG"''',
+    '''MSG='gh pr merge 9'; printf '%s' "$MSG" | python3 -''',
+    '''export GIT_EXTERNAL_DIFF; declare -n dest=GIT_EXTERNAL_DIFF; dest='gh pr merge 9'; git diff --ext-diff''',
+    '''export $(printf '%s' 'GIT_EXTERNAL_DIFF=gh pr merge 9'); git diff --ext-diff''',
+    '''CMD='gh pr merge 9'; $CMD''',
+    '''CMD='gh pr merge 9'; env $CMD''',
+    '''CMD='gh pr merge 9'; bash -c "$CMD"''',
+    '''CMD='gh pr merge 9'; (eval "$CMD")''',
+    '''CMD='gh pr merge 9'; git commit -m "$(eval "$CMD")"''',
+    '''CMD='gh pr merge 9'; bash <<EOF\n$CMD\nEOF''',
+    '''set -a; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''set -o allexport; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''setopt ALL_EXPORT; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''setopt -- allexport; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''unsetopt noallexport; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''set +o noallexport; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''set +o NO_ALL_EXPORT; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''printf '%s\\n' 'gh pr merge 9' > .zshenv; ZDOTDIR=. zsh -c true''',
+    '''zsh -o interactive -c 'gh pr merge 9' ''',
+    '''zsh -o login -c 'gh pr merge 9' ''',
+    '''zsh -f -o interactive -c 'gh pr merge 9' ''',
+    '''bash --posix -c 'GIT_EXTERNAL_DIFF="gh pr merge 9" export DUMMY; git diff --ext-diff' ''',
+    '''bash --posix -c 'GIT_EXTERNAL_DIFF="gh pr merge 9" exec; git diff --ext-diff' ''',
+    '''readonly -x GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''declare -i x='a[$(gh pr merge 9)]' ''',
+    '''set -k; git diff --ext-diff GIT_EXTERNAL_DIFF='gh pr merge 9' ''',
+    '''set -o keyword; git diff --ext-diff GIT_EXTERNAL_DIFF='gh pr merge 9' ''',
+    '''bash -o keyword -c 'git diff --ext-diff GIT_EXTERNAL_DIFF="gh pr merge 9"' ''',
+    '''f() { gh pr merge 9; }; f''',
+    '''case x in (x) gh pr merge 9;; esac''',
+    '''cat > s.sh <<'EOF'\ngh pr merge 9\nEOF\nBASH_ENV=./s.sh bash -c true''',
+    '''cat > s.sh <<'EOF'\ngh pr merge 9\nEOF\nexport BASH_ENV=./s.sh; bash -c true''',
+    '''cat > s.sh <<'EOF'\ngh pr merge 9\nEOF\nENV=./s.sh sh -ic true''',
+    '''OPTIONS=-a; set "$OPTIONS"; GIT_EXTERNAL_DIFF='gh pr merge 9'; git diff --ext-diff''',
+    '''bash -o allexport -c 'GIT_EXTERNAL_DIFF="gh pr merge 9"; git diff --ext-diff' ''',
+    '''OPT=allexport; bash -o "$OPT" -c 'GIT_EXTERNAL_DIFF="gh pr merge 9"; git diff --ext-diff' ''',
+    '''env SHELLOPTS=allexport bash -c 'GIT_EXTERNAL_DIFF="gh pr merge 9"; git diff --ext-diff' ''',
+    '''(python3 -) <<'EOF'\nimport os; os.system("gh pr merge 9")\nEOF''',
+    '''(xargs -I{} sh -c {}) <<< 'gh pr merge 9' ''',
+    '''(git -c diff.external='bash <&3' diff --ext-diff) 3<<< 'gh pr merge 9' ''',
+    '''bash -s -- gh pr merge 9 <<'EOF'\nexec "$@"\nEOF''',
+):
+    assert not expect(command, 2)[0], command
+for command in ("printf '%s\\n' 'gh pr merge 9' | bash",
+                "echo 'gh pr merge 9' | sh", "echo 'gh pr merge 9' | cat | bash",
+                "cat <<'EOF' | bash\ngh pr merge 9\nEOF",
+                "echo 'gh pr merge 9' | python3"):
+    assert not expect(command, 2)[0], command
+expect("bash <<< 'gh pr merge 9'", 2)
+expect("cat <<EOF\n$(gh pr merge 9)\nEOF", 2)
+expect("cat <<EOF\n`gh pr merge 9`\nEOF", 2)
+expect("cat <(gh pr merge 9)", 2)
+expect("bash -c 'curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge'", 2)
+expect("export GH_REPO=other/repo; bash -c 'gh pr merge 7'", 2)
+for declaration in ("declare -x", "typeset -x", "readonly"):
+    expect(f"{declaration} GH_REPO=other/repo; gh pr merge 7", 2)
+seen, _ = expect("cd -- child && gh pr merge 7", 0)
+assert seen[0][1] == "/work/child", seen
+with tempfile.TemporaryDirectory() as directory:
+    root = pathlib.Path(directory)
+    work, child = root / "work", root / "other/repo/child"
+    work.mkdir()
+    child.mkdir(parents=True)
+    (work / "link").symlink_to(child, target_is_directory=True)
+    logical = subprocess.run(["bash", "--noprofile", "--norc", "-c", "cd link && cd .. && pwd -L"],
+                             cwd=work, env={"PATH": os.environ["PATH"]}, text=True, capture_output=True, check=True).stdout.strip()
+    seen, _ = expect("cd link && cd .. && gh pr merge 7", 0, cwd=str(work))
+    assert seen[0][1] == logical == str(work), seen
+    physical = subprocess.run(["bash", "--noprofile", "--norc", "-c", "cd .. && pwd -L"],
+                              cwd=work / "link", env={"PATH": os.environ["PATH"]}, text=True, capture_output=True, check=True).stdout.strip()
+    assert physical == str(child.parent)
+    assert not expect("cd .. && gh pr merge 7", 2, cwd=str(work / "link"))[0]
+    assert expect("cd .. && gh pr merge 7 --repo o/r", 0, cwd=str(work / "link"))[0]
+    for prefix in ("set -P;", "set -o physical;", "shopt -s cdable_vars;"):
+        command = f"{prefix} cd link && cd .. && gh pr merge 7"
+        assert not expect(command, 2, cwd=str(work))[0]
+        assert expect(command + " --repo o/r", 0, cwd=str(work))[0]
+    for options in ("-P", "-o physical"):
+        command = f"bash {options} -c 'cd link && cd .. && gh pr merge 7'"
+        assert not expect(command, 2, cwd=str(work))[0]
+        assert expect(command.replace("merge 7", "merge 7 --repo o/r"), 0, cwd=str(work))[0]
+seen, _ = expect("cd child && gh pr merge 7 --squash | tee merge.log", 0)
+assert seen[0][1] == "/work/child", seen
+# After a semicolon the merge also runs when cd failed, so both directories
+# remain possible even when the intervening pipeline contains no cd.
+assert not expect("cd child && git log | head -1; gh pr merge 7", 2)[0]
+for declaration in ("export", "declare -x", "typeset -x", "readonly"):
+    for assignment, cd in (("CDPATH=/other", "cd child"), ("HOME=/other", "cd")):
+        command = f"{declaration} {assignment}; {cd} && gh pr merge 7"
+        assert not expect(command, 2)[0], command
+        expect(command + " --repo o/r", 0)
+for command in ("cd child | cat; gh pr merge 7", "cd child & gh pr merge 7"):
+    assert not expect(command, 2)[0], command
+seen, _ = expect("bash -c 'cd child && gh pr merge 7'; gh pr merge 7", 0)
+assert [cwd for _, cwd in seen] == ["/work/child", "/work"], seen
+seen, _ = expect("bash <<'EOF'\ncd child && gh pr merge 7\nEOF\ngh pr merge 7", 0)
+assert [cwd for _, cwd in seen] == ["/work/child", "/work"], seen
+
+# Request flags have client-specific meanings: curl -f is --fail and wget -d
+# is --debug; neither consumes the following URL or body option.
+for command in (
+    "curl -f https://git.example/api/v1/repos/o/r/pulls/9/merge -X POST --json '{}'",
+    "curl -X POST &>/dev/null https://git.example/api/v1/repos/o/r/pulls/9/merge",
+    "curl -fsSXPOST https://git.example/api/v1/repos/o/r/pulls/9/merge --json '{}'",
+    "wget -d https://git.example/api/v1/repos/o/r/pulls/9/merge --method POST --body-data '{}'",
+):
+    seen, _ = expect(command, 2)
+    assert seen, command
+expect("curl -f https://git.example/api/v1/repos/o/r/pulls/7/merge -X POST --json '{}'", 0)
+for flags in ("--silent", "-m 30", "--max-time 30", "--connect-timeout 10 --retry 3"):
+    seen, _ = expect(f"curl {flags} -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --json '{{}}'", 0)
+    assert seen, flags
+for command in (
+    '''curl -f --json '{"merge_when_checks_succeed":true}' https://git.example/api/v1/repos/o/r/pulls/7/merge''',
+    '''tea api -X POST /repos/o/r/pulls/7/merge --Field merge_when_checks_succeed=true''',
+    '''tea api -X POST /repos/o/r/pulls/7/merge -F=merge_when_checks_succeed=true''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --data-urlencode merge_when_checks_succeed=true''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --form merge_when_checks_succeed=true''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --form-string merge_when_checks_succeed=true''',
+    '''wget https://git.example/api/v1/repos/o/r/pulls/7/merge --post-data 'x=1&merge_when_checks_succeed=true' ''',
+    '''wget https://git.example/api/v1/repos/o/r/pulls/7/merge --method POST --body-data 'merge_when_checks_succeed=true' ''',
+    '''wget https://git.example/api/v1/repos/o/r/pulls/7/merge --post-file body.json''',
+    '''wget https://git.example/api/v1/repos/o/r/pulls/7/merge --body-file body.json''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --upload-file body.json''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge -Tbody.json''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --data-urlencode merge_when_checks_succeed@setting''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --config request.conf''',
+    '''wget https://git.example/api/v1/repos/o/r/pulls/7/merge --config request.conf''',
+    '''curl -X GET --config request.conf https://git.example/api/v1/repos/o/r/pulls/9/merge''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --data-ascii @body.json''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge --next -X GET https://example.org/''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge -: -X GET https://example.org/''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge https://git.example/api/v1/repos/o/r/pulls/9/merge''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --request-target=/api/v1/repos/o/r/pulls/9/merge''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --variable body@body.json --expand-data '{{body}}' ''',
+    '''curl -X POST https://git.example/api/v1/repos/o/r/pulls/7/merge --url @requests.txt --json '{}' ''',
+    '''wget --method POST https://git.example/api/v1/repos/o/r/pulls/7/merge -i requests.txt''',
+    '''curl -X POST https://git.example --request-target=/api/v1/repos/o/r/pulls/9/merge --json '{}' ''',
+):
+    assert not expect(command, 2)[0], command
+seen, _ = expect("wget -H https://git.example/api/v1/repos/o/r/pulls/9/merge --method POST --body-data '{}'", 2)
+assert seen, seen
+expect("bash -s -- -c config <<'EOF'\ngh pr merge 9\nEOF", 2)
+expect("bash -s arg -c config <<'EOF'\ngh pr merge 9\nEOF", 2)
+seen, _ = expect("FOO=1 cd child && gh pr merge 7", 0)
+assert seen[0][1] == "/work/child", seen
+for command in ("{ cd child; } && gh pr merge 7", "! cd child && gh pr merge 7", "time cd child && gh pr merge 7",
+                "pushd child && gh pr merge 7", "popd && gh pr merge 7", "HOME=elsewhere cd && gh pr merge 7",
+                'gh pr merge "$PR"', 'gh pr merge "$(printf 9)"'):
+    assert not expect(command, 2)[0], command
+seen, _ = expect("curl --referer https://git.example/api/v1/repos/o/r/pulls/7/merge -X POST https://git.example/api/v1/repos/o/r/pulls/9/merge", 2)
+assert seen and seen[0][0].number == "9", seen
 
 # gh pr merge resolves selector, repository and cwd for gh pr view.
 seen, _ = expect("gh pr merge 5 --squash --body 'x y' -R owner/repo", 2)
@@ -83,6 +628,9 @@ assert seen[0][0][:6] == ["gh", "pr", "view", "5", "--repo", "owner/repo"], seen
 seen, _ = expect("cd sub && gh pr merge 7 --squash", 0)
 assert seen[0][1] == "/work/sub", seen
 expect("gh pr merge --repo=owner/reviewed --squash", 0)
+expect("gh pr merge 7 --body '--auto'", 0)
+assert not expect("gh pr create --body 'repos/o/r/pulls/9/merge'", 0)[0]
+assert not expect("curl https://example.com --data 'repos/o/r/pulls/9/merge'", 0)[0]
 
 # A review of an earlier head does not count.
 _, message = expect("gh pr merge 9 --squash", 2)
@@ -192,7 +740,7 @@ assert code == 2 and "not the one programs.ai manages" in message, message
 
 # Unresolvable merge targets block with guidance.
 code, message = hook("curl -X POST https://git.example/api/v1/repos/o/r/pulls/$PR/merge")
-assert code == 2 and "literal owner" in message, message
+assert code == 2 and "unquoted REST arguments" in message, message
 
 
 def failing_run(argv, cwd=None, stdin=None, timeout=None):
@@ -278,6 +826,77 @@ assert review.review_problem([follow], HEAD, "dev") is None and review.PINNED.ma
 sample = ("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n context\n\n--- sql comment\n"
           "+++ added\n-old\n+new\ndiff --git a/y b/y\nBinary files a/y and b/y differ\n")
 assert review.changed_lines(sample) == 4, review.changed_lines(sample)
+
+assert review.token_usage({"input_tokens": 10, "cached_input_tokens": 5, "output_tokens": 0}, "codex") == {
+    "input_tokens": 10, "cached_input_tokens": 5, "cache_write_input_tokens": None,
+    "output_tokens": 0, "reasoning_output_tokens": None}
+assert review.token_usage({"input_tokens": 10, "cache_read_input_tokens": 5,
+                           "cache_creation_input_tokens": 3}, "claude")["cached_input_tokens"] == 5
+for bad in (None, -1, True, "10", 1.5):
+    assert review.token_usage({"input_tokens": bad}, "codex")["input_tokens"] is None
+with tempfile.TemporaryDirectory() as tmp:
+    events = pathlib.Path(tmp, "events.jsonl")
+    events.write_text(json.dumps({"type": "item.completed", "usage": {"input_tokens": 999}}) + "\n" +
+                      json.dumps({"type": "turn.completed", "usage": {"input_tokens": 12, "output_tokens": 3}}) +
+                      '\n{"incomplete":')
+    assert review.reviewer_usage("codex", events)["input_tokens"] == 12
+    events.write_text('{"type":"turn.failed"}\n')
+    assert all(value is None for value in review.reviewer_usage("codex", events).values())
+    events.write_text('{"result":"Verdict: no findings", "usage":{"cache_creation_input_tokens":4}}')
+    assert review.reviewer_usage("claude", events)["cache_write_input_tokens"] == 4
+    events.write_text('{"broken":')
+    assert all(value is None for value in review.reviewer_usage("claude", events).values())
+
+# Fixes must not raise their own allowance by growing the current PR diff.
+previous = {"head": HEAD, "merge_base": "base", "changed_lines": 100}
+def additions(count):
+    return "diff --git a/x b/x\n@@ -0,0 +1,100 @@\n" + "+line\n" * count
+
+assert review.follow_up_problem(previous, "base", additions(40)) is None
+assert "more than 40 lines" in review.follow_up_problem(previous, "base", additions(41))
+assert review.follow_up_problem({**previous, "changed_lines": 200}, "base", additions(80)) is None
+for count in (None, -1, True, "100"):
+    assert "no valid changed-line count" in review.follow_up_problem(
+        {**previous, "changed_lines": count}, "base", additions(1))
+
+# Exercise cmd_run in fresh processes, with the SIGHUP dispositions inherited
+# across exec just as they are under nohup. Default HUP still cancels a run.
+with tempfile.TemporaryDirectory() as tmp:
+    script = '''
+import importlib.util, os, pathlib, signal, sys
+from types import SimpleNamespace
+spec = importlib.util.spec_from_file_location("review", sys.argv[1])
+review = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(review)
+directory = sys.argv[2]
+review.load_config = lambda: {"reviewers": []}
+review.resolve = lambda *args: ("pr", "origin")
+review.pr_info = lambda pr: {"head": "a" * 40, "base": "dev"}
+review.state_dir = lambda *args: directory
+def checkout(*args):
+    os.kill(os.getpid(), signal.SIGHUP)
+    pathlib.Path(directory, "survived").touch()
+    raise review.ReviewError("test stopped after SIGHUP")
+review.checkout = checkout
+args = SimpleNamespace(pr="1", cwd=directory, remote=None, force=False, full=True, role=None)
+try:
+    review.cmd_run(args)
+except review.ReviewError:
+    pass
+'''
+    for ignored in (False, True):
+        # This launcher sets the disposition before exec, rather than depending
+        # on this test process's handlers or a subprocess preexec callback.
+        launcher = '''
+import os, signal, sys
+signal.signal(signal.SIGHUP, signal.SIG_IGN if sys.argv[1] == "ignore" else signal.SIG_DFL)
+os.execv(sys.executable, [sys.executable, "-c", *sys.argv[2:]])
+'''
+        result = subprocess.run([sys.executable, "-c", launcher, "ignore" if ignored else "default",
+                                 script, str(ROOT / "modules/home-manager/programs/ai/pr-review.py"), tmp],
+                                capture_output=True, text=True, timeout=10)
+        assert result.returncode == (0 if ignored else 129), result.stderr
+        assert pathlib.Path(tmp, "survived").exists() == ignored
 
 
 # Forge values used in paths and refspecs must look like a commit and a branch.
@@ -440,13 +1059,15 @@ with tempfile.TemporaryDirectory() as tmp:
     bin_dir = os.path.join(tmp, "bin")
     os.mkdir(bin_dir)
     scripts = {
-        "codex": 'cat >/dev/null; case "$*" in *"mcp_oauth_credentials_store=\\"file\\""*"--ignore-user-config --ignore-rules --disable apps"*) ;; *) exit 3;; esac; '
+        "codex": 'cat >/dev/null; case "$*" in *"mcp_oauth_credentials_store=\\"file\\""*"--ignore-user-config --ignore-rules --disable apps --json"*) ;; *) exit 3;; esac; '
                  'test -z "$FORGEJO_API_TOKEN_FILE$GH_TOKEN" || exit 4; '
                  'printf "OpenAI Codex\\n--------\\nmodel: gpt-reported\\n--------\\nuser\\nmodel: gpt-spoofed\\n" >&2; '
+                 'printf \'{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":9}}\\n\'; '
                  'while [ "$1" != -o ]; do shift; done; test -f file && echo "Verdict: no findings" >"$2"',
         "claude": 'cat >/dev/null; test -f file || exit 1; test ! -L link || exit 5; test ! -e sub/.GIT || exit 7; '
                   'test "$(cat link)" = "symbolic link to /etc/passwd" || exit 6; '
                   'case "$*" in *"--restricted"*"--output-format json"*) printf \'{"result": "Reading the diff.\\\\n\\\\n**Verdict: no findings**", '
+                  '"usage":{"input_tokens":50,"cache_read_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":93}, '
                   '"modelUsage": {"claude-helper": {"outputTokens": 3}, "claude-reported": {"outputTokens": 90}}}\';; *) exit 3;; esac',
     }
     for name, body in scripts.items():
@@ -496,6 +1117,9 @@ with tempfile.TemporaryDirectory() as tmp:
     state = os.path.join(tmp, "state", "pr-review", "github.com", "o", "r", "4", head)
     status = json.loads(pathlib.Path(state, "status.json").read_text())
     assert {r["status"] for r in status["reviewers"].values()} == {"ok"}, status
+    assert status["reviewers"]["gpt"]["usage"]["cached_input_tokens"] == 40, status
+    assert status["reviewers"]["opus"]["usage"]["cache_write_input_tokens"] == 10, status
+    assert status["changed_lines"] == review.changed_lines(pathlib.Path(state, "prompt.md").read_text()), status
     # Roles can pass aliases (ADR-0079), so the recorded model is the reported one.
     reported = {name: r["reported_model"] for name, r in status["reviewers"].items()}
     assert reported == {"gpt": "gpt-reported", "opus": "claude-helper, claude-reported"}, reported
@@ -512,6 +1136,19 @@ with tempfile.TemporaryDirectory() as tmp:
     code, output = cli("comment", "4", "no findings.")
     assert code == 0 and posted[-1][1] == f"Automated read-only review ({head[:12]} on dev): full (deep): no findings.", posted
 
+    # JSON mode can omit Codex's header. Never copy a claimed model from its
+    # agent text, or pretend the configured model was reported by the client.
+    pathlib.Path(bin_dir, "codex").write_text(
+        '#!/bin/sh\ncat >/dev/null\nprintf \'{"type":"turn.completed","usage":{"input_tokens":7}}\\n\'\n'
+        'while [ "$1" != -o ]; do shift; done\necho "Verdict: no findings" >"$2"\n')
+    code, output = cli("run", "4", "--force")
+    assert code == 0, output
+    status = json.loads(pathlib.Path(state, "status.json").read_text())
+    assert status["reviewers"]["gpt"]["reported_model"] is None, status
+    assert status["reviewers"]["gpt"]["reviewer"] == config["reviewers"][0], status
+    assert status["reviewers"]["gpt"]["usage"]["input_tokens"] == 7, status
+    pathlib.Path(bin_dir, "codex").write_text("#!/bin/sh\n" + scripts["codex"] + "\n")
+
     # A reviewer that exits 0 without a valid verdict has not reviewed anything.
     pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\ncat >/dev/null\necho '{\"result\": \"Verdict: unable to review\"}'\n")
     code, output = cli("run", "4", "--force")
@@ -526,6 +1163,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert code == 1 and "opus: failed" in output and "gpt: ok" in output, output
     status = json.loads(pathlib.Path(state, "status.json").read_text())
     assert status["reviewers"]["gpt"]["reported_model"] == "gpt-reported", status
+    assert all(value is None for value in status["reviewers"]["opus"]["usage"].values()), status
     pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\n" + scripts["claude"] + "\n")
     code, output = cli("run", "4")
     assert code == 0, output
@@ -717,6 +1355,44 @@ with tempfile.TemporaryDirectory() as tmp:
     fix = push("chain 3\n", fix)
     review_round(fix, "(full review: an earlier round's findings are missing since", base="main")
 
+    # A growing fix would pass against the new diff's 40% allowance, but
+    # must be measured against the diff the previous reviewers actually saw.
+    content = "reviewed\n" * 100
+    fix = push(content, fix)
+    review_round(fix, "(full review:", "--full", base="main")
+    prior_lines = state_of(fix)["changed_lines"]
+    assert 100 <= prior_lines < 110, prior_lines
+    fix = push(content + "fix\n" * 50, fix)
+    limit = max(review.FOLLOW_UP_LINES, int(review.FOLLOW_UP_SHARE * prior_lines))
+    review_round(fix, f"(full review: more than {limit} lines changed since", base="main")
+    assert state_of(fix)["changed_lines"] == prior_lines + 50
+    # Old state is still usable for exact-head comments, but cannot supply a
+    # follow-up allowance. Do not reconstruct it from today's target branch.
+    status = state_of(fix)
+    status.pop("changed_lines")
+    pathlib.Path(rounds, fix, "status.json").write_text(json.dumps(status))
+    at(fix, "main")
+    assert cli("comment", "4", "no findings.")[0] == 0
+    fix = push(content + "fix\n" * 51, fix)
+    review_round(fix, "has no valid changed-line count)", base="main")
+
+    # A removed reviewer's obsolete failure never appears in cached output or
+    # determines the exit status. A different reviewer set gets a fresh round.
+    status = state_of(fix)
+    status["reviewers"]["obsolete"] = {"status": "failed"}
+    pathlib.Path(rounds, fix, "status.json").write_text(json.dumps(status))
+    at(fix, "main")
+    code, output = cli("run", "4")
+    assert code == 0 and "obsolete:" not in output, output
+    assert set(state_of(fix)["reviewers"]) == {"gpt"}
+
+    # Keep the accepted latest-completed-round rule after an abandoned push:
+    # an older ancestor is deliberately not selected to save a full review.
+    abandoned = push(content + "abandoned\n", fix)
+    review_round(abandoned, "(full review:", "--full", base="main")
+    returned = push(content + "returned\n", fix)
+    review_round(returned, "(full review: the head does not descend from", base="main")
+
     # Roles: small documentation-only changes get the light reviewers; agent
     # rules, decisions, security-adjacent paths, code and large diffs get deep.
     def diff_of(*paths, lines=1):
@@ -766,4 +1442,5 @@ with tempfile.TemporaryDirectory() as tmp:
     else:
         raise AssertionError("--role light must be refused")
 
+subprocess.run([sys.executable, str(ROOT / "scripts/checks/test-pr-review-substitutions.py")], check=True)
 print("pr-review tests passed")
