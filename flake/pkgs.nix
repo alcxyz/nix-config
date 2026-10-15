@@ -162,11 +162,6 @@ in
                 _prev.makeModulesClosure (args // {allowMissing = true;});
             }
             // lib.optionalAttrs _prev.stdenv.hostPlatform.isLinux {
-              hyprland = _prev.hyprland.overrideAttrs (old: {
-                patches =
-                  (old.patches or [])
-                  ++ [../packages/hyprland/center-underfilled-scrolling-column.patch];
-              });
               # The one quickshell for DMS, xps's DMS unit and the session
               # splash: the upstream git build plus the polkit details DMS
               # reads. Every variant is its own C++ build, so keep one.

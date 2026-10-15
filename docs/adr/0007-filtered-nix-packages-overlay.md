@@ -79,8 +79,9 @@ independent qualification:
 |--------|-----------|
 | `packages/nix-deploy` | Generates the consumer inventory and a thin wrapper under ADR-0009. The canonical executable, versioned runtime interface, and command tests live in `nix-packages`; this repository tests its generated inventory and wrapper precedence. |
 | `packages/nixbox-*` | Remain with the branded boot and session configuration they implement. |
-| DMS, Quickshell, RustFS, Wolf, and GStreamer patches under `modules/` | Remain with the module options, service assembly, and version-specific behavior they modify. |
-| Hyprland, Moonlight, and Waynergy patches | Remain with their consumer overrides until each patched package has independent platform and input-path qualification. |
+| DMS, RustFS, Wolf, and GStreamer patches under `modules/` | Remain with the module options, service assembly, and version-specific behavior they modify. |
+| `packages/quickshell` | The polkit-details patch shared by DMS and the session splash; remains with those consumers. |
+| Moonlight and Waynergy patches | Remain with their consumer overrides until each patched package has independent platform and input-path qualification. |
 | `packages/ffmpeg-v4l2-request` and `packages/moonlight-rpi3` | Reusable extraction candidates after native ARM builds and target hardware decode/display qualification. |
 
 ARM media extraction is tracked in [nix-packages #334](https://git.alc.xyz/alcxyz/nix-packages/issues/334).
