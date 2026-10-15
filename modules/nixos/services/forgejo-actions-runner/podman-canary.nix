@@ -146,7 +146,9 @@ in {
     };
     capacity = lib.mkOption {
       type = lib.types.ints.positive;
-      default = 1;
+      default = cfg.capacity;
+      defaultText = lib.literalExpression "config.services.forgejo-actions-runner.capacity";
+      description = "Concurrent jobs of the Podman runner; follows the Docker runner by default.";
     };
     logLevel = lib.mkOption {
       type = lib.types.enum [

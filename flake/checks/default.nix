@@ -150,12 +150,20 @@ in {
         ;
     };
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
+    # Jobs per runner: xyz and xev take two, the smaller nex and nux one.
+    expectedCapacity = {
+      xyz = 2;
+      xev = 2;
+      nex = 1;
+      nux = 1;
+    };
     runnerUnits = lib.mapAttrs (_: host: host.config.systemd.services.forgejo-actions-runner) runnerHosts;
     runnerStarts = map (unit: lib.removeSuffix " " unit.serviceConfig.ExecStart) (lib.attrValues runnerUnits);
     hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:docker://" label) runner.labels;
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
-    assert lib.all (runner: runner.capacity == 2) (lib.attrValues runners);
+    assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
+    assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
     assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
     assert lib.all (hasLabel "docker") (lib.attrValues runners);

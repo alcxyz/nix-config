@@ -38,7 +38,7 @@ while a game runs or under pressure or low disk, and Forgejo then reports them
   A boolean is used rather than a free-form label variable, because a mistyped
   label strands the job.
 - Rollout is staged. First, `ci-fast` is added to xyz's existing Podman runner,
-  so fast jobs share its single job slot with shared-pool jobs. Then the runner
+  so fast jobs share its two job slots with shared-pool jobs. Then the runner
   module supports more than two runner units, which gives xyz a dedicated
   `ci-fast` instance and adds the gated xev instance.
 
@@ -63,9 +63,9 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
 ## Consequences
 
 - With the variable unset, workflows behave as before.
-- Until the dedicated xyz instance exists, a `ci-fast` job waits behind any
-  `forgejo-podman` or `forgejo-podman-canary` job running on xyz's Podman
-  runner, which has capacity 1.
+- Until the dedicated xyz instance exists, a `ci-fast` job waits while
+  `forgejo-podman` or `forgejo-podman-canary` jobs occupy both slots of xyz's
+  Podman runner.
 - Until the xev fallback exists, `ci-fast` jobs wait while xyz is gaming or
   off. Afterwards they wait only while both xyz and xev are unavailable.
 - xyz pressure and disk drains also trigger the fallback; a busy xyz does not.

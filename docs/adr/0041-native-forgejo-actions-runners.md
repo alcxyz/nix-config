@@ -65,9 +65,10 @@ The default runner pool is represented with labels:
   privileged mode or by moving routine jobs onto a host execution label.
 - Host-level labels are explicit and used only for trusted infrastructure
   workflows.
-- Runner admission is explicit in per-host capacity. The three Kubernetes
-  server-workers each admit one job at a time; `xyz` admits two and retains a
-  lower CPU scheduling weight for interactive use.
+- Runner admission is explicit in per-host capacity, applied to both the Docker
+  and the Podman runner. `nex` and `nux` admit one job per runner; the larger
+  `xyz` and `xev` admit two, and `xyz` retains a lower CPU scheduling weight for
+  interactive use.
 - Runner shutdown stops polling before it waits up to the normal job timeout
   for admitted work to finish. The systemd stop timeout includes a small margin
   so routine host maintenance does not cancel in-progress CI work.
@@ -148,10 +149,11 @@ limit across the containers Forgejo Runner creates.
 - Routine workflows can run on all four native runners through the shared
   `forgejo-docker-primary`, `ubuntu-latest`, and `docker` labels. Excess work
   remains queued when their declared capacities are full.
-- Each Kubernetes server-worker contributes one routine-pool slot. This spreads
-  eligible work without allowing concurrent runner jobs to amplify local
-  resource contention on a cluster member.
-- `xyz` contributes two slots within one aggregate resource budget. Builds can
+- `nex` and `nux` contribute one slot per runner. This spreads eligible work
+  without allowing concurrent runner jobs to amplify local resource contention
+  on the smaller cluster members.
+- `xev` and `xyz` contribute two slots per runner within one aggregate resource
+  budget. On `xyz`, builds can
   consume up to half the workstation's CPU and memory, while memory reclaim and
   scheduling weights favor interactive workloads under contention.
 - The policy does not yet provide a hard ZFS I/O guarantee or contain nested

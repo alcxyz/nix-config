@@ -145,7 +145,8 @@ in {
     };
     resourcePolicy.enable = true;
     name = "nux";
-    capacity = 2;
+    # 8 threads shared with k3s and storage: one job per runner (ADR-0041).
+    capacity = 1;
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "forgejo-docker-secondary:docker://node:20-bookworm"
