@@ -348,6 +348,15 @@ in {
       bash ${test} ${lib.getExe helper}
       touch "$out"
     '';
+  xyz-nix-daemon-memory-contract = let
+    daemon = self.nixosConfigurations.xyz.config.systemd.services.nix-daemon.serviceConfig;
+  in
+    assert daemon.MemoryMax == "40G";
+    assert daemon.MemorySwapMax == "2G";
+    assert daemon.OOMPolicy == "continue";
+      pkgs.runCommand "xyz-nix-daemon-memory-contract" {} ''
+        touch "$out"
+      '';
   container-netns-contract = import ./container-netns.nix {inherit self lib pkgs;};
   flannel-source-contract = import ./flannel-source.nix {inherit self lib pkgs;};
 

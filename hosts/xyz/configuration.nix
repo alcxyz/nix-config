@@ -102,6 +102,21 @@ in {
     script = builtins.readFile ./xyz-bluetooth-keyboard-reconnect.sh;
   };
 
+  # Builds through the host daemon (deploys, local builds and remote build
+  # clients) run in nix-daemon.service, which had no memory limit. Overlapping
+  # compiles after a flake update froze the host. Cap the daemon so the kernel
+  # kills the largest build instead. The ZFS ARC (up to 16G, reclaimable) and
+  # the desktop share the rest. CI jobs run their own Nix in containers under
+  # forgejobuilds.slice and its separate cap, so a deploy that overlaps busy CI
+  # can still overcommit RAM.
+  systemd.services.nix-daemon.serviceConfig = {
+    MemoryMax = "40G";
+    # Swapping builds to disk is what stalls the whole host.
+    MemorySwapMax = "2G";
+    # Kill only the offending build process, not the daemon and every build.
+    OOMPolicy = "continue";
+  };
+
   # Allow this host to build for remote machines via SSH
   nix.settings.allowed-uris = [
     "ssh-ng://*"
