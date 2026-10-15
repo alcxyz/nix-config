@@ -5,6 +5,11 @@
 }: let
   lib = pkgs.lib;
   src = lib.cleanSource ../..;
+  inventory = import ../../inventory.nix;
+  workspaceSystems = lib.unique (map (host: host.system) (
+    lib.filter (host: inventory.roles.${host.role}.sourceWorkspace or false) (lib.attrValues inventory.hosts)
+  ));
+  hasWorkspaceConsumers = builtins.elem pkgs.stdenv.hostPlatform.system workspaceSystems;
 
   mkRepoCheck = name: nativeBuildInputs: command:
     pkgs.runCommand name {inherit nativeBuildInputs src;} ''
@@ -501,10 +506,19 @@ in {
     bash scripts/checks/test-t3code-preview-browser-link.sh
   '';
 
-  check-workspace-sync = mkRepoCheck "check-workspace-sync" [pkgs.bash pkgs.coreutils pkgs.git pkgs.ripgrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
-    shellcheck modules/home-manager/workspace/workspace-sync.sh
-    bash scripts/checks/test-workspace-sync.sh
-  '';
+  # Producer parity tests run when building the actual consumer-selected package.
+  ${
+    if hasWorkspaceConsumers
+    then "check-workspace-sync"
+    else null
+  } =
+    pkgs.workspace-sync;
+  ${
+    if hasWorkspaceConsumers
+    then "workspace-consumer-contract"
+    else null
+  } =
+    import ./workspace-consumer.nix {inherit inputs pkgs;};
 
   k8s-api-vip-source-routing-contract = let
     instance = self.nixosConfigurations.xev.config.services.keepalived.vrrpInstances.k8s_api;

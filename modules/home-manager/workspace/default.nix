@@ -39,14 +39,11 @@
 
   workspaceSync = pkgs.writeShellApplication {
     name = "workspace-sync";
-    runtimeInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.git
-      pkgs.jq
-    ];
+    runtimeInputs = [pkgs.git];
     text = ''
-      exec bash ${./workspace-sync.sh} ${lib.escapeShellArg cfg.root} ${workspaceManifest} "$@"
+      # The configured root is literal, including any dollar signs.
+      # shellcheck disable=SC2016
+      exec ${lib.getExe pkgs.workspace-sync} ${lib.escapeShellArg cfg.root} ${workspaceManifest} "$@"
     '';
   };
 in {

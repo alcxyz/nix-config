@@ -1,6 +1,6 @@
 # ADR-0095: Evaluate Go through one bounded workspace-sync pilot
 
-**Status:** Accepted; implementation deferred
+**Status:** Accepted; source integration implemented, runtime qualification pending
 **Date:** 2026-10-14
 **Applies to:** `modules/home-manager/workspace/`, future reusable workspace tooling in `nix-packages`
 
@@ -64,6 +64,12 @@ implement it. Simpler maintenance and clearer ownership determine success.
   resolution: stop at the same point with the command's nonzero status,
   without processing later entries or printing the final summary. Do not turn
   these aborts into reportable skips.
+
+The [producer implementation decision](https://git.alc.xyz/alcxyz/nix-packages/issues/542#issuecomment-28249)
+accepts one command-start exception: an executable with a missing interpreter
+returns 127, matching the pinned Bash 5.2 baseline, while Bash 5.3 returns 126.
+Immediate abort, output, filesystem effects and absence of a summary remain
+part of the preservation contract.
 
 Characterize parser and schema edge cases against the shell before cutover,
 including trailing arguments and jq coercions. Any intentional incompatibility
@@ -148,9 +154,22 @@ credential-backed cloning or installed activation behavior. Existing quirks may
 need separate decisions; they must not turn a preservation pilot into a policy
 rewrite. Keeping shell is preferable to completing a port that adds complexity.
 
-[Issue #412](https://git.alc.xyz/alcxyz/nix-config/issues/412) owns evaluation
-evidence and the proposed implementation tracking. A later authorized thread
-should track reusable implementation in `nix-packages` and link its consumer
-integration/qualification in `nix-config`. Those tasks are proposed, not filed
-by this decision record. This ADR changes no executable, package lock, service
-or activation behavior and authorizes no deployment or promotion to `main`.
+[Issue #412](https://git.alc.xyz/alcxyz/nix-config/issues/412) owns the completed
+evaluation. Authorized implementation is tracked in
+[nix-packages #542](https://git.alc.xyz/alcxyz/nix-packages/issues/542), with
+consumer adoption and qualification in
+[nix-config #674](https://git.alc.xyz/alcxyz/nix-config/issues/674). The reusable
+producer is merged through
+[nix-packages PR #544](https://git.alc.xyz/alcxyz/nix-packages/pulls/544).
+The consumer explicitly selects its package and retains the manifest, profile
+filtering, thin wrapper and directory-only activation. Synthetic consumer
+fixtures use that selected package; producer parity fixtures live with it.
+Native Darwin execution and installed runtime qualification remain separate
+pending evidence. This ADR authorizes no deployment or promotion to `main`.
+
+Rollback restores the prior consumer wrapper, local shell and fixtures from the
+parent of the consumer adoption change and its prior `nix-packages` lock. Keep
+the wrapper and lock together when reverting the adoption. A user who already
+activated the new profile can select the preceding Home Manager generation;
+source rollback alone does not activate it. Reconciliation preserves existing
+checkouts and links, so rollback needs no workspace removal or reset.
