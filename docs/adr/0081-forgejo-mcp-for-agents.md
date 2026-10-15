@@ -1,6 +1,6 @@
 # ADR-0081: Give agents a Forgejo MCP client and guard its merges
 
-**Status:** Accepted (revised 2026-10-05: every tool exposed, merges guarded; amended 2026-10-11: `tea` as the only CLI fallback, `fj` dropped)
+**Status:** Accepted (revised 2026-10-05: every tool exposed, merges guarded; amended 2026-10-11: `tea` as the only CLI fallback, `fj` dropped; 2026-10-15: `tea` reads the activated token file)
 **Date:** 2026-10-03
 **Applies to:** `modules/home-manager/programs/ai/`, Claude Code and Codex CLI user configuration
 
@@ -99,8 +99,13 @@ Merges stay held to ADR-0078 wherever the guard runs as a hook; where it does
 not, MCP merges are as unguarded as shell merges. `permissions.allow` rules for
 `mcp__forgejo__` tools from the earlier allowlist stay in Claude Code user
 settings until removed by hand. The server talks only to `url` and holds the
-token in its process environment. tea picks its login from the checkout's remotes;
-every tea login points at git.alc.xyz, so a `tea api` merge path is looked up
+token in its process environment. Where the activated token file exists, tea
+runs with an environment login for git.alc.xyz built from it
+(`modules/home-manager/programs/tea/`), which overrides stored logins. That
+login has no username, so bare repository names and user-scoped commands such
+as `tea org list` fail, and `tea clone <url>` still uses a stored login; agents
+give `owner/repo` and clone with git. Elsewhere tea picks its login from the checkout's remotes, and every stored
+login points at git.alc.xyz. Either way a `tea api` merge path is looked up
 there. `tea` and `fj` calls that mention a pull request merge are blocked,
 including help requests; text that only quotes such a command, for example in
 a heredoc, can be blocked too. The client config

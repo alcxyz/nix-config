@@ -52,6 +52,7 @@ in
       "${configDir}/modules/home-manager/programs/git/default.nix"
       "${configDir}/modules/home-manager/programs/kubernetes/default.nix"
       "${configDir}/modules/home-manager/programs/ssh/default.nix"
+      "${configDir}/modules/home-manager/programs/tea/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
       # Agent model roles (ADR-0079) follow the shared agent instructions to every host.
       "${configDir}/modules/home-manager/programs/ai/roles.nix"
