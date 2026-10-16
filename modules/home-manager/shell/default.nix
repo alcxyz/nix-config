@@ -111,6 +111,13 @@ in {
     };
     atuin = {
       enable = true;
+      # atuin 18.23.0 has no cached darwin build, and its end-to-end tests that
+      # drive bash over a pty time out when built on macOS (its unit tests
+      # pass). The version check drops the override once nixpkgs moves on.
+      package =
+        if pkgs.stdenv.hostPlatform.isDarwin && pkgs.atuin.version == "18.23.0"
+        then pkgs.atuin.overrideAttrs {doCheck = false;}
+        else pkgs.atuin;
       enableBashIntegration = enableBash;
       enableZshIntegration = enableZsh;
       # daemon.enable = true;
