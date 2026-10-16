@@ -59,6 +59,7 @@
   noProfiles = evaluate {programs.workspace.profiles = [];};
   disabled = evaluate {programs.workspace.enable = lib.mkForce false;};
   wrapper = lib.findFirst (p: p.name == "workspace-sync") null home.config.home.packages;
+  ipull = lib.findFirst (p: p.name == "ipull") null home.config.home.packages;
   activation = home.config.home.activation.workspaceDirs;
   selectedRepos = builtins.fromJSON home.config.xdg.configFile."workspace/repos.json".text;
   selectedProfiles = builtins.fromJSON home.config.xdg.configFile."workspace/profiles.json".text;
@@ -74,6 +75,7 @@
   });
 in
   assert wrapper != null;
+  assert ipull != null;
   assert selectedProfiles == ["selected"];
   assert map (r: r.path) selectedRepos == ["apps/selected"];
   assert (lib.head selectedRepos).branch == "fixture-branch";
@@ -99,9 +101,11 @@ in
   assert activation.after == ["writeBoundary"];
   assert !(disabled.config.home.activation ? workspaceDirs);
   assert !(lib.any (p: p.name == "workspace-sync") disabled.config.home.packages);
+  assert !(lib.any (p: p.name == "ipull") disabled.config.home.packages);
     pkgs.runCommand "workspace-consumer-contract" {
-      nativeBuildInputs = [pkgs.python3 pkgs.bash pkgs.coreutils];
+      nativeBuildInputs = [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.git];
     } ''
       python3 ${./test-workspace-consumer.py} ${cases}
+      bash ${./test-ipull.sh} ${ipull}/bin/ipull ${lib.escapeShellArg root}
       touch "$out"
     ''

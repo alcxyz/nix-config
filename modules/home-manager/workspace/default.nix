@@ -46,6 +46,19 @@
       exec ${lib.getExe pkgs.workspace-sync} ${lib.escapeShellArg cfg.root} ${workspaceManifest} "$@"
     '';
   };
+
+  # workspace-sync never updates existing checkouts (ADR-0095); ipull does.
+  ipull = pkgs.writeShellApplication {
+    name = "ipull";
+    runtimeInputs = [pkgs.git pkgs.coreutils];
+    text =
+      ''
+        # The configured root is literal, including any dollar signs.
+        # shellcheck disable=SC2016
+        dir=${lib.escapeShellArg "${cfg.root}/infra"}
+      ''
+      + builtins.readFile ./ipull.sh;
+  };
 in {
   options.programs.workspace = {
     enable = lib.mkEnableOption "declarative source workspace bootstrap";
@@ -124,7 +137,7 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [workspaceSync];
+    home.packages = [workspaceSync ipull];
 
     home.activation.workspaceDirs = lib.hm.dag.entryAfter ["writeBoundary"] ''
       ${workspaceSync}/bin/workspace-sync --directories
