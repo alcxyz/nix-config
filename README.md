@@ -331,8 +331,8 @@ just update
 just update nix-packages
 ```
 
-Automatic maintenance keeps ordinary GC capped at 10 GiB per run. Before that
-GC, guarded retention checks the system and managed user's profiles. It prunes
+Automatic maintenance runs ordinary GC daily, collecting every dead path
+without deleting generations. Before that GC, guarded retention checks the system and managed user's profiles. It prunes
 profiles back to 10 generations only when a profile exceeds 20 generations or
 the Nix filesystem has less than 15% free, and only after validating every
 current profile closure. `just gc [host]` remains the explicit override.

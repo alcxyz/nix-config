@@ -136,14 +136,13 @@ in {
 
     gc = {
       automatic = true;
-      # Daily so the per-run cap keeps pace with build churn. Ordinary GC
-      # only frees dead paths. Guarded generation retention runs separately
-      # shortly before this job; see ADR-0013.
+      # Collects every dead path, uncapped, and never deletes generations.
+      # Guarded generation retention runs separately shortly before this
+      # job; see ADR-0013.
       interval = {
         Hour = 2;
         Minute = 0;
       };
-      options = "--max-freed 10G";
     };
 
     optimise = {

@@ -82,12 +82,11 @@ in {
     };
     gc = {
       automatic = true;
-      # Daily so the per-run cap keeps pace with build churn; a weekly 10G
-      # cap let dead paths accumulate. Ordinary GC only frees dead paths.
-      # Guarded generation retention runs separately before this service;
-      # see ADR-0013.
+      # Collects every dead path, uncapped, and never deletes generations:
+      # a size cap let dead paths accumulate faster than daily runs freed
+      # them. Guarded generation retention runs separately before this
+      # service; see ADR-0013.
       dates = "daily";
-      options = "--max-freed 10G";
     };
     package = pkgs.nixVersions.latest;
   };

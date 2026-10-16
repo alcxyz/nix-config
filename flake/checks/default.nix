@@ -842,6 +842,10 @@ in {
   in
     assert builtins.elem "nix-generation-retention.service" nixosGc.requires;
     assert builtins.elem "nix-generation-retention.service" nixosGc.after;
+    # ADR-0013: scheduled GC runs without options, so it can neither delete
+    # generations (-d, including combined short flags) nor reintroduce a cap.
+    assert nixosNix.gc.options == "";
+    assert darwinNix.gc.options == "";
     assert nixosNix.settings.min-free > 0;
     assert nixosNix.settings.max-free > nixosNix.settings.min-free;
     assert darwinRetention.StartCalendarInterval.Weekday or null == null;
