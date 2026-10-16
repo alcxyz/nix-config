@@ -34,6 +34,14 @@
     t = "tmux";
     ta = "tmux a";
   };
+
+  # `wt switch` changes directory through a shell function. Only hosts with
+  # the AI package set install worktrunk, so guard on it being on PATH.
+  worktrunkInit = shell: ''
+    if command -v wt >/dev/null 2>&1; then
+      eval "$(command wt config shell init ${shell})"
+    fi
+  '';
 in {
   imports = [
     ../../shared/shell.nix
@@ -82,6 +90,8 @@ in {
         # sessions those guards can be rendered literally after ANSI stripping,
         # so use Starship's plain ANSI prompt rendering for Bash too.
         export STARSHIP_SHELL=unknown
+
+        ${worktrunkInit "bash"}
       '';
     };
 
@@ -92,6 +102,7 @@ in {
       shellAliases.".." = "builtin cd ..";
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
+      initContent = worktrunkInit "zsh";
     };
 
     starship = {

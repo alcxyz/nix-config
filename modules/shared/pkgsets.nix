@@ -125,6 +125,7 @@ in rec {
       croc
       dua
       yazi
+      superfile
 
       # Text processing, viewers & docs
       jq
@@ -244,6 +245,10 @@ in rec {
         claude-code
         codex-cli
         codex-app-server
+
+        # Worktrees for parallel agent sessions
+        worktrunk
+        workmux
       ]
       ++ lib.optionals stdenv.hostPlatform.isLinux [
         t3code

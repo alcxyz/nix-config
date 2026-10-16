@@ -31,6 +31,7 @@ in
               "k8s-node-reboot"
               "nix-gc-maintenance"
               "workspace-sync"
+              "workmux"
             ];
             pt = inputs.paperless-tools.packages.${system} or {};
             regnskap = inputs.regnskap.packages.${system} or {};
