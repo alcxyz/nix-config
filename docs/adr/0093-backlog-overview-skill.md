@@ -1,6 +1,6 @@
 # ADR-0093: Triage open issues and pull requests from one computed inventory
 
-**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode)
+**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode; local worktrees, #701)
 **Date:** 2026-10-12
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`
@@ -130,8 +130,8 @@ only in another repository's issue, leftover branches and outdated status text.
 
 The lanes are heuristics, so an issue can look done when it is not; the page
 says "maybe done" and the skill checks before suggesting a close. Local
-worktrees are left out (nix-secrets #221); remote branches appear only in
-thorough mode. The Forgejo token cannot list organisations, so Forgejo scopes
+worktrees are left out of this inventory; the worktree audit below covers
+them. Remote branches appear only in thorough mode. The Forgejo token cannot list organisations, so Forgejo scopes
 cover the repositories `/user/repos` returns, and a Forgejo repository outside
 that list is reported as missing from the scope.
 
@@ -141,3 +141,82 @@ that list is reported as missing from the scope.
 - **Pulling in every cross-reference:** fleet repositories link each other
   constantly, so the cap would fill with items already covered; only
   repositories outside the scope are invisible otherwise.
+
+## Amendment 2026-10-16: local worktrees (#701)
+
+Leftover Git worktrees across `~/src` were audited by hand in several passes.
+Each pass rebuilt the same facts and hit the same traps:
+
+- `git status` rewrites the index, so its mtime made every checkout look fresh.
+- Squash merges defeat `git cherry`.
+- A deleted branch turns a Forgejo pull request's head ref into
+  `refs/pull/N/head`.
+- Checkouts under `/tmp` lose tracked files to tmpfiles ageing.
+
+`programs.ai` therefore also installs `worktree-audit`, used by a
+`worktree-audit` skill in nix-secrets.
+
+- **One row per linked worktree.** The command finds the main checkouts under
+  a root (`~/src`, four levels) and lists their registered worktrees. Each row
+  gets:
+  - a kind: manual (`~/src/.worktrees`), tmp, T3 (any `~/.t3*/worktrees`),
+    Claude (`.claude/worktrees`) or other;
+  - uncommitted, untracked, deleted and ignored counts, where ignored entries
+    a build recreates (such as `node_modules` or `result`) do not count as work;
+  - unpushed commits and the upstream state;
+  - idle days, from the newest of the HEAD commit and the files Git sees, never
+    the index;
+  - processes whose working directory is inside it, by command name only
+    (from `/proc`; reported as unavailable where there is none, as on macOS);
+  - its pull request and whether its work is in the base branch.
+- **Containment by content.** HEAD is in the base when it is an ancestor, or
+  when `git merge-tree` of the base and HEAD gives the base's own tree, which
+  is how a squash merge looks. Otherwise the row reports how much would still
+  land. When that merge conflicts, it reports HEAD's own changes since it
+  forked instead.
+- **Pull requests by head and branch.**
+  - A pull request whose head is the worktree's HEAD wins. Otherwise the
+    newest one from its branch wins; on Forgejo, the head label keeps the
+    branch name after deletion.
+  - Pull requests from long-lived branches (promotions from `dev`) never match.
+  - Forgejo pull requests are listed by latest update. Listing goes on until
+    every row has a head match, or a page is 30 days older than the oldest
+    HEAD commit or branch creation among the rows still without one. Branch
+    creation is when the branch's oldest reflog entry was written, if that
+    entry records the creation (`branch: Created from`, `clone: from`). A
+    branch whose creation entry has expired bounds nothing, so its repository
+    is read up to the page cap; long-lived branches never match by name and
+    bound by their commit. GitHub and Forgejo mirrors of GitHub use `gh`.
+  - The Forgejo token is read as for `backlog-inventory`, and only remotes on
+    the configured Forgejo hosts are looked up there.
+- **One lane.** The lane is the first that applies, in this order:
+  - `missing` (the directory is gone), `unreadable` (Git fails, or the
+    `.git` file is gone while files remain, which is checked before Git
+    could read a checkout around it instead), `in-use`, `damaged`
+    (tmp with deleted files), `uncommitted`;
+  - `merged-diverged` (its pull request merged with another head, often an
+    earlier draft), `unpushed`, `open-pr`, `closed-pr`, `no-pr`;
+  - `check-ignored` (done, but holding ignored files or moved submodules);
+  - `removable`.
+
+  The rows say whether T3 or Claude manages a worktree. The skill hands those
+  to the owning application's lifecycle instead of removing them.
+- **Changes since the last pass.** `--save` keeps a small snapshot (path,
+  head, lane and pull request per worktree) in the XDG state directory. Every
+  run reports the worktrees added, removed and changed against it.
+- **Read-only.** It never removes, prunes or moves a worktree or changes a
+  branch. `--fetch` runs `git fetch` with pruning, auto maintenance and auto
+  gc explicitly off, since user configuration may turn them on and gc prunes
+  worktrees. It lists live branches so that a deleted remote branch shows as
+  gone. Each fetch times out after a minute without failing the run. Removal
+  stays with the skill: only `git worktree remove`, only on the user's
+  confirmation. It deletes ignored files without asking, so the skill
+  rechecks them first.
+
+The lanes are heuristics. `removable` means that nothing local is at risk:
+the worktree is clean, holds nothing ignored that a build does not recreate,
+and its work is in the base or in a merged pull request with the same head.
+It does not mean the user is finished with it. A fresh worktree on the base
+branch is also `removable`, so the skill weighs idle days. A worktree whose
+branch was renamed, and whose head changed after the pull request, finds no
+match and shows as `unpushed` or `no-pr`; the skill checks those by hand.

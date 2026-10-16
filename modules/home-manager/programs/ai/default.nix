@@ -215,6 +215,21 @@ with lib; let
       ${builtins.readFile ./backlog-overview-render.sh}
     '';
   };
+  # The worktree audit (ADR-0093, amended for #701) lists every linked Git
+  # worktree under ~/src with cleanup facts. It reads the Forgejo token the
+  # same way as backlog-inventory; gh keeps its own credentials. Read-only:
+  # removal stays with the skill and `git worktree remove`.
+  worktreeAudit = pkgs.writeShellApplication {
+    name = "worktree-audit";
+    runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
+    text = ''
+      ${optionalString (mcp.tokenFile != null) ''
+        FORGEJO_API_TOKEN_FILE=''${FORGEJO_API_TOKEN_FILE:-${escapeShellArg (toString mcp.tokenFile)}}
+        export FORGEJO_API_TOKEN_FILE
+      ''}
+      WORKTREE_AUDIT_FORGEJO_URL=${escapeShellArg mcp.url} exec python3 -I ${./worktree-audit.py} "$@"
+    '';
+  };
   # Runs work that must outlive an agent session as a transient systemd user
   # unit (nix-config #612). No runtimeInputs: the job inherits the caller's
   # PATH unchanged, and systemd-run must match the running user manager.
@@ -378,7 +393,7 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender];
+    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
 
     # The agent skills that call these commands live in nix-secrets
     # shared/skills and are linked by its agentSkills module (nix-secrets
