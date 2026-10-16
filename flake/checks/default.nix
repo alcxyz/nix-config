@@ -556,6 +556,36 @@ in {
     bash scripts/checks/test-t3code-preview-browser-link.sh
   '';
 
+  tea-wrapper-contract = mkRepoCheck "tea-wrapper-contract" [pkgs.bash pkgs.coreutils pkgs.diffutils pkgs.gnugrep pkgs.yq-go] ''
+    bash scripts/checks/test-tea-wrapper.sh
+  '';
+
+  # Runs T3's own login matching against the login xyz's activation keeps,
+  # so a T3 update that breaks its PR lookups fails package promotion (#704).
+  # It reads T3 from the AI stack bundle that xyz's auto-update installs.
+  t3code-forgejo-login-contract = let
+    homeConfiguration = self.homeConfigurations.alc-xyz;
+    home = homeConfiguration.config;
+    # The bindings default.nix puts before the activation script's body.
+    ensureLoginHeader = [
+      "tea_url=${lib.escapeShellArg home.programs.tea.url}"
+      "tea_login=${lib.escapeShellArg home.programs.tea.login.name}"
+      "tea_ssh_host=${lib.escapeShellArg home.programs.tea.login.sshHost}"
+      "tea_config_home=.config"
+    ];
+  in
+    mkRepoCheck "t3code-forgejo-login-contract" [pkgs.coreutils pkgs.diffutils pkgs.nodejs pkgs.tea pkgs.yq-go] ''
+      export HOME="$TMPDIR/home" XDG_CONFIG_HOME="$TMPDIR/config"
+      {
+        printf '%s\n' ${lib.escapeShellArgs ensureLoginHeader}
+        cat modules/home-manager/programs/tea/ensure-login.sh
+      } >"$TMPDIR/ensure-login"
+      bash "$TMPDIR/ensure-login"
+      tea login list --output json >"$TMPDIR/logins.json"
+      node scripts/checks/test-t3code-forgejo-login.mjs ${homeConfiguration.pkgs.ai-stack-upstream} "$TMPDIR/logins.json" \
+        ${lib.escapeShellArgs [home.programs.tea.login.name home.programs.tea.url home.programs.tea.login.sshHost]}
+    '';
+
   # Producer parity tests run when building the actual consumer-selected package.
   ${
     if hasWorkspaceConsumers

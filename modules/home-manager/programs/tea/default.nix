@@ -8,6 +8,17 @@
 # rotated file reaches tea without further changes. Callers that unset the
 # variable, such as pr-review's reviewers, get no credential from the wrapper.
 #
+# T3 Code's Forgejo integration only uses stored logins: it matches one from
+# `tea login list` against the repository remote and passes it with `--login`.
+# Activation therefore keeps a stored login for the instance in tea's config
+# with its URL and SSH host, adding no token, and the wrapper drops
+# `--login <that login>` whenever it has the token, so T3's calls use the
+# environment login too (#704). While the token file is set, naming that login
+# therefore no longer selects it; unset FORGEJO_API_TOKEN_FILE to use a token
+# stored in it. The t3code-forgejo-login-contract check runs
+# T3's own matching against that login, so a T3 update that changes it fails
+# package promotion.
+#
 # tea builds the environment login without a username: give repositories as
 # owner/repo rather than a bare name, and expect commands scoped to the login's
 # user, such as `tea org list`, to fail (use `tea api` paths instead).
@@ -20,23 +31,31 @@
   ...
 }: let
   cfg = config.programs.tea;
+  # tea's xdg library puts its config here, relative to HOME, unless
+  # XDG_CONFIG_HOME is set.
+  configHome =
+    if pkgs.stdenv.hostPlatform.isDarwin
+    then "Library/Application Support"
+    else ".config";
+  urlHost = lib.head (lib.splitString "/" (lib.removePrefix "http://" (lib.removePrefix "https://" cfg.url)));
   teaWithTokenFile = pkgs.writeShellApplication {
     name = "tea";
     text = ''
-      token_file=''${FORGEJO_API_TOKEN_FILE:-}
-      token=
-      if [ -n "$token_file" ] && [ -f "$token_file" ] && [ -r "$token_file" ]; then
-        token=$(<"$token_file")
-      fi
-      if [ -n "''${token//[[:space:]]/}" ]; then
-        GITEA_TOKEN=$token
-        GITEA_INSTANCE_URL=${lib.escapeShellArg cfg.url}
-        export GITEA_TOKEN GITEA_INSTANCE_URL
-      elif [ -n "$token_file" ]; then
-        echo "tea: no token in $token_file; using stored logins" >&2
-      fi
-      unset token
-      exec ${pkgs.tea}/bin/tea "$@"
+      tea_bin=${pkgs.tea}/bin/tea
+      tea_url=${lib.escapeShellArg cfg.url}
+      tea_login=${lib.escapeShellArg cfg.login.name}
+      ${builtins.readFile ./tea-with-token-file.sh}
+    '';
+  };
+  ensureLogin = pkgs.writeShellApplication {
+    name = "tea-ensure-login";
+    runtimeInputs = with pkgs; [coreutils diffutils yq-go];
+    text = ''
+      tea_url=${lib.escapeShellArg cfg.url}
+      tea_login=${lib.escapeShellArg cfg.login.name}
+      tea_ssh_host=${lib.escapeShellArg cfg.login.sshHost}
+      tea_config_home=${lib.escapeShellArg configHome}
+      ${builtins.readFile ./ensure-login.sh}
     '';
   };
 in {
@@ -57,11 +76,29 @@ in {
         unwrapped and uses its stored logins.
       '';
     };
+    login = {
+      name = lib.mkOption {
+        type = lib.types.str;
+        default = urlHost;
+        defaultText = lib.literalExpression "the host of programs.tea.url";
+        description = "Name of the stored login for the instance that activation keeps and the wrapper replaces with the environment login.";
+      };
+      sshHost = lib.mkOption {
+        type = lib.types.str;
+        default = urlHost;
+        defaultText = lib.literalExpression "the host of programs.tea.url";
+        description = "SSH host of the instance's Git remotes, which T3 Code matches against the stored login.";
+      };
+    };
   };
 
   # hiPrio: the wrapper wins over pkgs.tea from the package sets, whose
   # completions and other files still apply.
   config = lib.mkIf (cfg.tokenFile != null) {
     home.packages = [(lib.hiPrio teaWithTokenFile)];
+
+    home.activation.teaManagedLogin = lib.hm.dag.entryAfter ["writeBoundary"] ''
+      run ${ensureLogin}/bin/tea-ensure-login
+    '';
   };
 }

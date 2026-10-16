@@ -1,6 +1,6 @@
 # ADR-0081: Give agents a Forgejo MCP client and guard its merges
 
-**Status:** Accepted (revised 2026-10-05: every tool exposed, merges guarded; amended 2026-10-11: `tea` as the only CLI fallback, `fj` dropped; 2026-10-15: `tea` reads the activated token file)
+**Status:** Accepted (revised 2026-10-05: every tool exposed, merges guarded; amended 2026-10-11: `tea` as the only CLI fallback, `fj` dropped; 2026-10-15: `tea` reads the activated token file; 2026-10-16: tea keeps a stored login T3 Code can match)
 **Date:** 2026-10-03
 **Applies to:** `modules/home-manager/programs/ai/`, Claude Code and Codex CLI user configuration
 
@@ -55,6 +55,18 @@ which the guard checks as a REST merge on its `url`. It refuses `tea pulls
 merge`, because `tea --repo` is read as a local checkout when such a path
 exists, and `fj pr merge`.
 
+T3 Code's own pull request features also go through these CLIs: it tries `fj`
+and then `tea`, and in both cases needs a stored login that matches the
+repository remote, which it names with `--login`. Dropping `fj` therefore left
+T3 without a usable login ([#704](https://git.alc.xyz/alcxyz/nix-config/issues/704)). Activation now keeps one stored tea login for
+the instance with its URL and the SSH host of its remotes, adding no token, and
+the tea wrapper drops `--login <that login>` when it has the token, so T3's
+calls use the environment login; while the token file is set, naming that
+login no longer selects it. The `t3code-forgejo-login-contract` check runs
+T3's matching from the packaged bundle against that login; package promotion
+runs it for every candidate, so a T3 update that changes the lookup stops
+before the AI stack takes it.
+
 Registration follows the existing managed merges: activation adds the server
 to `[mcp_servers.forgejo]` in `~/.codex/config.toml` (the role merge, now
 generic over the table) and to `mcpServers.forgejo` in `~/.claude.json`, and
@@ -80,6 +92,11 @@ its merges only as client tool calls.
 - **`fj` as the CLI fallback:** the earlier choice, made during the guard work
   because its merges name a literal `owner/repo#N`. It lacks the raw API and
   JSON output agents need where the server falls short ([#616](https://git.alc.xyz/alcxyz/nix-config/issues/616)).
+- **For T3's lookups: reinstall `fj`, store the token in tea's config, or
+  patch T3:** `fj` would bring back a second plaintext token outside the
+  activated file, a stored tea token would contradict the wrapper, and a T3
+  patch would have to be carried through every upstream pin refresh in
+  nix-packages ([#704](https://git.alc.xyz/alcxyz/nix-config/issues/704)).
 - **A forge-side control:** rejected in ADR-0078; anyone can post the comment,
   and it would change the forge for an accident guard.
 - **A dedicated, narrower token:** agents can already read the existing agent

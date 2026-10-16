@@ -34,6 +34,14 @@ shellcheck --shell=bash users/alc/linux/xyz/desktop-scripts/{mail-workspace,clos
   printf '%s\n' 'policies=[]'
   cat users/alc/linux/xyz/desktop-scripts/game-window-geometry-guard.sh
 } | shellcheck --shell=bash -
+# Check the tea module's script bodies with the bindings default.nix puts
+# before them; each body uses only some of them.
+for body in tea-with-token-file ensure-login; do
+  {
+    printf '%s\n' tea_bin=tea tea_url=url tea_login=login tea_ssh_host=host tea_config_home=.config
+    cat "modules/home-manager/programs/tea/$body.sh"
+  } | shellcheck --shell=bash --exclude=SC2034 -
+done
 
 python3 scripts/checks/test-configuration-ci.py
 python3 scripts/checks/test-commit-status.py

@@ -136,6 +136,10 @@ in
     # Only roles used for development opt in; servers are managed remotely.
     programs.workspace.enable = hostRole.sourceWorkspace or false;
 
+    # Forgejo's SSH remotes use their own host, which T3 Code matches against
+    # tea's stored login (#704).
+    programs.tea.login.sshHost = "git-ssh.alc.xyz";
+
     # Forgejo credential helper — moved to linux/common.nix and darwin/mac.nix
     # where the sops secret path is available for inline injection.
 
