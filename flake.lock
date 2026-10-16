@@ -385,11 +385,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791819669,
-        "narHash": "sha256-9Iau9VhqHSQ3Es56WXC8ARuVvJJDxY1F+4YUytoTXHU=",
+        "lastModified": 1792162608,
+        "narHash": "sha256-Kl4WfI48lVLj51XUS9MqgiH1saoczlwLSq0jD+iPYus=",
         "owner": "AvengeMedia",
         "repo": "danksearch",
-        "rev": "8594864196e2fded51955b0e97619072c462bc3e",
+        "rev": "6b3e2564e98610caa7b5d94f2a130861d0a52f84",
         "type": "github"
       },
       "original": {
@@ -824,11 +824,11 @@
         "xdph": "xdph"
       },
       "locked": {
-        "lastModified": 1792003461,
-        "narHash": "sha256-sqWBYgjkJd5xTJKd9Jz/SbtrJfY3eTqxyqn1xfH6O00=",
+        "lastModified": 1792164938,
+        "narHash": "sha256-4JnTrBgwuVMo5cihxgumqBAk26M7YOK9R6aVc1gqhrk=",
         "owner": "hyprwm",
         "repo": "Hyprland",
-        "rev": "e2ad066c9ffd45ddfbe4dc76d2de16b382fbe3eb",
+        "rev": "25f09b26f9db7dbca4a4b3c265fdb96802db122c",
         "type": "github"
       },
       "original": {
@@ -1129,11 +1129,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1792180201,
-        "narHash": "sha256-Cmfu6rLcaFjYJoEChU17F0cy6qoWD2YoqW63+RuUBKY=",
+        "lastModified": 1792193664,
+        "narHash": "sha256-3rX80LnaxSjA5bXeiUTFQJLaiAijW15XCryVbu0NvuU=",
         "ref": "dev",
-        "rev": "83331fa35828e879de1a4f8c9755436a14b68f6d",
-        "revCount": 777,
+        "rev": "3d4d0f0840e16569d5da99431a2d877244366a4e",
+        "revCount": 782,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1151,11 +1151,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1792142028,
-        "narHash": "sha256-VcONujnAvXKGmYHccXk8ZBI5xuCvG5DnV4AygRfHgaY=",
+        "lastModified": 1792190618,
+        "narHash": "sha256-TxpBS0l69KPV3luQ0pctpyOE8GEToTx8afHATtZAQkQ=",
         "ref": "dev",
-        "rev": "645175a49d101895a6ff1d8892ce8c05cb2937a4",
-        "revCount": 708,
+        "rev": "c7a75f238454bf9e326e4edd9b080e572169eaa5",
+        "revCount": 713,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1608,11 +1608,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1792087235,
-        "narHash": "sha256-vQHkG9lwSHJI3MVnyilP50hWW3TNnBWFTbLIurWgPhI=",
+        "lastModified": 1792133817,
+        "narHash": "sha256-LivT78KkZ18adR5daoXj2nlIOxuLw6B96nvW4FOl4d0=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "87ffb7f777aef2e2647fd8fd718a5b3cbc825588",
+        "rev": "ec07af44be2e0ce4e1a17e00a97d44232607c1ec",
         "type": "github"
       },
       "original": {
