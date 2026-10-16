@@ -445,6 +445,9 @@ in {
       # every kubectl call of the serial ready gate names the same context.
       jq -e '.kubernetesContext as $context | ($context | type) == "string" and $context != ""
         and (.serialReadyCommand | (split("kubectl ") | length) == (split("kubectl --context " + $context + " ") | length))' ${config} >/dev/null
+      # The core tier is named, so reboots order nodes by its single Pods.
+      jq -e '.kubernetesCorePriorityClass | type == "string" and length <= 253
+        and test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\\z")' ${config} >/dev/null
       # Help validates the actual generated inventory without deployment work.
       ${pkgs.nix-deploy}/bin/deploy --help >help.txt 2>error.txt && exit 1
       test ! -s error.txt

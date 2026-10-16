@@ -36,6 +36,10 @@
   # node steps use it, as does the serial ready gate below, so a switched
   # kubectx cannot point them at another cluster.
   kubernetesContext = "funhouse";
+  # The PriorityClass the cluster gives its core services (edge, identity,
+  # forge). nixfleet reboot reboots the nodes holding fewer of their
+  # single-Pod workloads first, so each moves as few times as it can.
+  kubernetesCorePriorityClass = "core-infra";
 
   # The network's DNS servers must never be down together, so they form their
   # own serial group, gated by DNS answers rather than the cluster check.
@@ -108,7 +112,7 @@
     inherit aliases sshHosts systemSshUsers systemActivationModes;
     systemRemoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
     kubernetesNodes = kubernetesNodeHostNames;
-    inherit kubernetesContext;
+    inherit kubernetesContext kubernetesCorePriorityClass;
     serialSystemHosts = k3sServerHostNames;
     # The node's own API server must be ready (this includes etcd health) and
     # the control plane must report the node Ready. kubectl comes from PATH so
