@@ -63,12 +63,18 @@ const REPORT =
   "totals": {"repos": 1, "issues": 3, "prs": 2, "issueLanes": {"active": 1, "stale": 1, "close": 1}, "prLanes": {"ready": 1, "renovate": 1}},
   "repos": [{"forge": "forgejo", "repo": "sample/app", "openIssues": 3, "openPrs": 2, "actionable": 3,
              "issues": {"active": 1, "stale": 1, "close": 1}, "prs": {"ready": 1, "renovate": 1}, "lastActivity": "2026-10-11T12:00:00Z"}],
+  "scope": {"kind": "selected", "groups": ["sample"], "repos": [], "missing": []},
   "readerModel": "light role", "focus": null,
   "picks": [{"ref": "sample/app#2", "why": "Every box is ticked; close it with the merged PR as evidence.", "title": "Sample finished issue"}],
   "prs": [{"ref": "sample/app#5", "title": "Sample ready PR", "lane": "ready", "flags": ["orphan"], "kind": "own", "ci": "success", "idleDays": 1}],
   "issues": [{"ref": "sample/app#2", "title": "Sample finished issue", "lane": "close", "idleDays": 3, "checks": {"done": 2, "total": 2},
-              "mergedPrs": ["sample/app#4"], "judged": {"verdict": "close", "reason": "Both criteria met."}}],
-  "staleHidden": 0
+              "mergedPrs": ["sample/app#4"], "related": ["gh:sample-org/lib#7"], "judged": {"verdict": "close", "reason": "Both criteria met.", "checked": true}}],
+  "staleHidden": 0,
+  "related": [{"ref": "gh:sample-org/lib#7", "kind": "pr", "state": "merged", "title": "Sample upstream fix", "pulledBy": ["sample/app#2"]}],
+  "relatedHidden": 0,
+  "branches": [{"ref": "sample/app@feat/sample", "forge": "forgejo", "repo": "sample/app", "branch": "feat/sample", "lane": "merged", "idleDays": 40,
+                "pr": {"ref": "sample/app#4", "state": "merged"}}],
+  "branchesHidden": 0
 }
 /*REPORT-END*/
 ;
@@ -111,7 +117,10 @@ const PR_LANES = [
   ["waiting", "Waiting on others upstream", "var(--muted-foreground)", ""],
   ["stale", "Stale", "var(--warning)", ""],
 ];
-const VERDICT = { close: "ok", dispatch: "info", refresh: "warn", drop: "bad", keep: "", unclear: "" };
+const VERDICT = { close: "ok", dispatch: "info", refresh: "warn", drop: "bad", delete: "bad", keep: "", unclear: "" };
+const SC = REPORT.scope;
+const RELATED = Object.fromEntries((REPORT.related || []).map(r => [r.ref, r]));
+const STATE_CLASS = { merged: "ok", closed: "ok", open: "info", unavailable: "warn" };
 
 add(`<div class="kpis">
   <div class="kpi"><div class="n">${num(T.issues)}</div><div class="l">open issues · ${num(T.repos)} repos</div></div>
@@ -155,9 +164,15 @@ if (repos.length) {
 }
 
 const FLAG_CLASS = { "ci-failed": "bad", conflict: "bad", "changes-requested": "bad", "review-missing": "warn", "review-outdated": "warn",
-  orphan: "warn", "thread-settled": "warn", "untouched-since-merge": "ok", blocked: "bad", "partly-done": "", "validation-needed": "warn" };
+  orphan: "warn", "thread-settled": "warn", "untouched-since-merge": "ok", blocked: "bad", "partly-done": "", "validation-needed": "warn",
+  "related-closed": "ok" };
 const flagChips = x => (x.flags || []).filter(f => f !== "ci-failed").map(f => `<span class="chip ${FLAG_CLASS[f] || ""}">${esc(f)}</span>`).join("");
-const judged = x => (x.judged ? `<span class="chip ${VERDICT[x.judged.verdict] || ""}">${esc(x.judged.verdict)}</span>` : "");
+const judged = x => (x.judged ? `<span class="chip ${VERDICT[x.judged.verdict] || ""}">${esc(x.judged.verdict)}</span>${x.judged.checked === true ? `<span class="chip info" title="Confirmed by the checking pass">checked</span>` : ""}` : "");
+// Pulled-in items a row links to, with their state when the page carries them.
+const relatedLine = x => ((x.related || []).length ? `<div class="sub">related: ${x.related.map(r => {
+  const item = RELATED[r];
+  return `<a href="${href(urlOf(r, item && item.kind === "pr"))}">${esc(r)}</a>${item ? ` (${esc(item.state)})` : ""}`;
+}).join(", ")}</div>` : "");
 const judgedWhy = x => (x.judged && x.judged.reason ? `<div class="sub">${esc(x.judged.reason)}</div>` : "");
 
 function prRow(p) {
@@ -166,7 +181,7 @@ function prRow(p) {
   return `<div class="row"><span class="ref">${esc(p.ref)}</span>
     <div style="flex:1;min-width:0"><a class="title" href="${href(urlOf(p.ref, true))}">${esc(p.title)}</a>
       <span class="chips">${p.ci && p.ci !== "none" ? `<span class="chip ${ci || ""}">CI ${esc(p.ci)}</span>` : ""}${p.kind !== "own" ? `<span class="chip">${esc(p.kind === "bot" ? p.author : p.kind)}</span>` : ""}${flagChips(p)}${judged(p)}${thread}</span>
-      ${p.issues && p.issues.length ? `<div class="sub">for ${p.issues.map(esc).join(", ")}</div>` : ""}${judgedWhy(p)}</div>
+      ${p.issues && p.issues.length ? `<div class="sub">for ${p.issues.map(esc).join(", ")}</div>` : ""}${relatedLine(p)}${judgedWhy(p)}</div>
     <span class="meta">${num(p.idleDays)}d idle</span></div>`;
 }
 const PH = REPORT.prsHidden || {};
@@ -184,7 +199,7 @@ function issueRow(i) {
   return `<div class="row"><span class="ref">${esc(i.ref)}</span>
     <div style="flex:1;min-width:0"><a class="title" href="${href(urlOf(i.ref, false))}">${esc(i.title)}</a>
       <span class="chips">${checks}${flagChips(i)}${judged(i)}</span>
-      ${i.next ? `<div class="sub">Next: ${esc(i.next)}</div>` : ""}${via ? `<div class="sub">${via}</div>` : ""}${judgedWhy(i)}</div>
+      ${i.next ? `<div class="sub">Next: ${esc(i.next)}</div>` : ""}${via ? `<div class="sub">${via}</div>` : ""}${relatedLine(i)}${judgedWhy(i)}</div>
     <span class="meta">${num(i.idleDays)}d idle</span></div>`;
 }
 // A reader's verdict decides an issue's group; unjudged issues fall back to their flags.
@@ -212,8 +227,42 @@ if (issueGroups.length) {
     ${issueGroups.map(([label, color, xs], i) => `<details ${i < 3 ? "open" : ""}><summary><span style="color:${color}">●</span> ${esc(label)} · ${xs.length}</summary>
       <div class="rows">${xs.sort((a, b) => num(b.idleDays) - num(a.idleDays)).map(issueRow).join("")}</div></details>`).join("")}</div>`);
 }
+
+// Thorough mode: remote branches whose PR merged or closed, or that never had one.
+const BRANCH_LANES = { merged: ["PR merged", "ok"], closed: ["PR closed", "warn"], "no-pr": ["no PR", ""] };
+const segs = s => String(s).split("/").map(encodeURIComponent).join("/");
+const branchUrl = b => (b.forge === "github" ? `https://github.com/${b.repo}/tree/${segs(b.branch)}` : `${String(S.forgejo || "")}/${b.repo}/src/branch/${segs(b.branch)}`);
+const branches = REPORT.branches || [];
+if (branches.length) {
+  const hidden = num(REPORT.branchesHidden);
+  add(`<div class="group"><h3><span class="dot" style="background:var(--chart-5)"></span>Leftover branches · ${num(T.branches) || branches.length}</h3>
+    <details open><summary>Delete only after checking that the commits landed elsewhere${hidden ? ` · ${hidden} more not shown` : ""}</summary>
+    <div class="rows">${branches.map(b => `<div class="row"><span class="ref">${esc(b.forge === "github" ? "gh:" + b.repo : b.repo)}</span>
+      <div style="flex:1;min-width:0"><a class="title" href="${href(branchUrl(b))}">${esc(String(b.branch).length > 80 ? String(b.branch).slice(0, 79) + "…" : b.branch)}</a>
+        <span class="chips"><span class="chip ${(BRANCH_LANES[b.lane] || [])[1] || ""}">${esc((BRANCH_LANES[b.lane] || [b.lane])[0])}</span>${judged(b)}</span>
+        ${b.pr ? `<div class="sub">last PR <a href="${href(urlOf(b.pr.ref, true))}">${esc(b.pr.ref)}</a> ${esc(b.pr.state)}</div>` : ""}${judgedWhy(b)}</div>
+      <span class="meta">${num(b.idleDays)}d since commit</span></div>`).join("")}</div></details></div>`);
+}
+// Shown even without branch rows: the unread branches may hold leftovers.
+if ((REPORT.branchesTruncated || []).length)
+  add(`<div class="note" style="color:var(--warning)">Branches not fully read (more than 100, or more than 100 protected) in ${REPORT.branchesTruncated.map(esc).join(", ")}.</div>`);
+
+// Items in repositories outside the scope that the rows above link to (one hop).
+const related = REPORT.related || [];
+if (related.length) {
+  const hidden = num(REPORT.relatedHidden);
+  add(`<div class="group"><h3><span class="dot" style="background:var(--chart-4)"></span>Pulled in from outside the scope · ${related.length}</h3>
+    <details><summary>Referenced by the rows above; not triaged as a whole${hidden ? ` · ${hidden} more not shown` : ""}</summary>
+    <div class="rows">${related.map(r => `<div class="row"><span class="ref">${esc(r.ref)}</span>
+      <div style="flex:1;min-width:0"><a class="title" href="${href(urlOf(r.ref, r.kind === "pr"))}">${esc(r.title || r.ref)}</a>
+        <span class="chips"><span class="chip ${STATE_CLASS[r.state] || ""}">${r.kind === "pr" ? "PR " : ""}${esc(r.state)}</span></span>
+        <div class="sub">pulled in by ${(r.pulledBy || []).map(esc).join(", ")}</div></div></div>`).join("")}</div></details></div>`);
+}
 if (!repos.length) add(`<div class="empty">No open issues or pull requests.</div>`);
 
-add(`<div class="note">Sources: Forgejo ${esc(S.forgejo)} · GitHub ${esc(S.github)} · T3 threads ${esc(S.threads)}. Lanes are computed by backlog-inventory; "maybe done" means every checkbox is ticked, a merged PR closed it, or nobody touched it in the three days after a PR naming it merged.${REPORT.readerModel ? ` Picks and verdicts by ${esc(REPORT.readerModel)} readers; check before acting.` : ""} Generated ${esc(String(REPORT.generatedAt).slice(0, 16).replace("T", " "))} UTC.</div>`);
+const scopeText = !SC ? "" : (SC.kind === "all" ? "everything" : [...(SC.repos || []), ...(SC.groups || []).map(g => "group " + g)].join(", "))
+  + (SC.kind === "all" && (SC.groups || []).length ? ` (groups ${SC.groups.join(", ")})` : "");
+if (SC && (SC.missing || []).length) add(`<div class="note" style="color:var(--warning)">Not found or archived, so not read: ${SC.missing.map(esc).join(", ")}.</div>`);
+add(`<div class="note">${SC ? `Scope: ${esc(scopeText)}. ` : ""}Sources: Forgejo ${esc(S.forgejo)} · GitHub ${esc(S.github)} · T3 threads ${esc(S.threads)}${S.branches && S.branches !== "skipped" ? ` · branches ${esc(S.branches)}` : ""}. Lanes are computed by backlog-inventory; "maybe done" means every checkbox is ticked, a merged PR closed it, or nobody touched it in the three days after a PR naming it merged.${REPORT.readerModel ? ` Picks and verdicts by ${esc(REPORT.readerModel)} readers; check before acting.` : ""} Generated ${esc(String(REPORT.generatedAt).slice(0, 16).replace("T", " "))} UTC.</div>`);
 </script>
 </body></html>

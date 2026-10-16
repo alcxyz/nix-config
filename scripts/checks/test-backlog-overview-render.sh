@@ -96,7 +96,73 @@ status=0
 bash "$tmp/render" "$tmp/inventory.json" 2>/dev/null || status=$?
 [[ $status == 64 ]] || fail "missing arguments did not exit 64 (exit $status)"
 
+# A cut branch listing is named even when it produced no rows.
+jq '.branches = [] | .branchesTruncated = ["gh:example-org/big"]' "$tmp/inventory.json" >"$tmp/cut.json"
+bash "$tmp/render" "$tmp/cut.json" "$tmp/cut.html"
+sed -n '/^<script>$/,/^<\/script>$/p' "$tmp/cut.html" | sed '1d;$d' >"$tmp/cut.js"
+node -e '
+  let html = "";
+  global.document = {getElementById: () => ({insertAdjacentHTML: (_, h) => { html += h; }})};
+  eval(require("fs").readFileSync(process.argv[1], "utf8"));
+  if (!html.includes("Branches not fully read") || !html.includes("gh:example-org/big")) { console.error("FAIL: a cut listing without rows was not named"); process.exit(1); }
+' "$tmp/cut.js"
+
 # Without judgements the page still renders.
 bash "$tmp/render" "$tmp/inventory.json" "$tmp/plain.html"
 grep -qF '"picks":[]' "$tmp/plain.html" || fail "an empty pick list was not rendered"
+
+# A scoped, thorough inventory: pulled-in items of the rows shown, the 15
+# idlest leftover branches plus any judged, and checked verdicts.
+branches=$(jq -cn '[range(18) | {ref: "me/app@b\(.)", forge: "forgejo", repo: "me/app", branch: "b\(.)", lane: "no-pr",
+  idleDays: (40 + .), lastCommitAt: null, pr: null}]
+  + [{ref: "gh:example-org/service@feat/x", forge: "github", repo: "example-org/service", branch: "feat/x",
+      lane: "merged", idleDays: 1, pr: {ref: "gh:example-org/service#3", state: "merged", at: null}}]
+  + [{ref: "me/app@long", forge: "forgejo", repo: "me/app", branch: ("x" * 100), lane: "closed", idleDays: null,
+      pr: {ref: "me/app#4", state: "closed", at: null}}]')
+jq --argjson branches "$branches" '
+  .scope = {kind: "selected", groups: ["work"], repos: [], missing: ["gh:example-org/missing"]}
+  | .sources.branches = "ok"
+  | .issues[0].related = ["gh:up/stream#4"] | .issues[0].flags = ["related-closed"]
+  | .issues[2].related = ["other/lib#2"]
+  | .related = [
+      {ref: "gh:up/stream#4", forge: "github", repo: "up/stream", number: 4, kind: "pr", state: "merged",
+       title: "<img src=x onerror=alert(1)>", pulledBy: ["me/app#1", "me/app#3"]},
+      {ref: "other/lib#2", forge: "forgejo", repo: "other/lib", number: 2, kind: "issue", state: "closed",
+       title: "pulled by a hidden row", pulledBy: ["me/app#3"]}]
+  | .branches = $branches | .totals.branches = ($branches | length) | .branchesTruncated = ["me/app"]' "$tmp/inventory.json" >"$tmp/thorough.json"
+cat >"$tmp/thorough-judgements.json" <<'JSON'
+{"readerModel": "test", "focus": null, "picks": [],
+ "verdicts": [{"ref": "me/app@long", "verdict": "keep", "reason": "still used"},
+   {"ref": "gh:example-org/service@feat/x", "verdict": "delete", "reason": "Landed as #3", "checked": true},
+   {"ref": "me/app#2", "verdict": "refresh", "reason": "Status is old", "checked": false}]}
+JSON
+bash "$tmp/render" "$tmp/thorough.json" "$tmp/thorough.html" "$tmp/thorough-judgements.json"
+sed -n '/^<script>$/,/^<\/script>$/p' "$tmp/thorough.html" | sed '1d;$d' >"$tmp/thorough.js"
+node -e '
+  const fs = require("fs");
+  const src = fs.readFileSync(process.argv[1], "utf8");
+  const r = JSON.parse(src.split("/*REPORT-START*/")[1].split("/*REPORT-END*/")[0]);
+  const fail = m => { console.error("FAIL: " + m); process.exit(1); };
+  if (r.scope.groups[0] !== "work" || r.scope.missing[0] !== "gh:example-org/missing") fail("scope lost");
+  if (r.related.length !== 1 || r.related[0].ref !== "gh:up/stream#4" || r.related[0].pulledBy.join() !== "me/app#1")
+    fail("pulled-in items not limited to the rows shown: " + JSON.stringify(r.related));
+  const issue = r.issues.find(i => i.ref === "me/app#1");
+  if (issue.related[0] !== "gh:up/stream#4") fail("a row lost its related refs");
+  const refs = r.branches.map(b => b.ref);
+  if (r.branches.length !== 17 || r.branchesHidden !== 3 || refs[0] !== "me/app@b17" || !refs.includes("gh:example-org/service@feat/x")
+      || !refs.includes("me/app@long"))
+    fail("branches not capped at the 15 idlest plus judged: " + refs.join(" "));
+  const judged = r.branches.find(b => b.ref === "gh:example-org/service@feat/x").judged;
+  if (judged.verdict !== "delete" || judged.checked !== true) fail("a checked branch verdict was lost");
+  if (r.issues.find(i => i.ref === "me/app#2").judged.checked !== undefined) fail("an unchecked verdict kept checked: false");
+  // Run the page against a stub document: every section renders and untrusted text stays escaped.
+  let html = "";
+  global.document = {getElementById: () => ({insertAdjacentHTML: (_, h) => { html += h; }})};
+  eval(src);
+  for (const want of ["Leftover branches · 20", "Branches not fully read (more than 100, or more than 100 protected) in me/app", "/src/branch/" + "x".repeat(100) + "\"", "3 more not shown", "Pulled in from outside the scope · 1", "Scope: group work.",
+                      "Not found or archived, so not read: gh:example-org/missing", "related: <a", "(merged)",
+                      "https://github.com/example-org/service/tree/feat/x", "/me/app/src/branch/b17", ">checked<", ">delete<"])
+    if (!html.includes(want)) fail("page lacks " + want);
+  if (html.includes("<img src=x")) fail("a pulled-in title was not escaped");
+' "$tmp/thorough.js"
 echo "backlog-overview-render contract tests passed"

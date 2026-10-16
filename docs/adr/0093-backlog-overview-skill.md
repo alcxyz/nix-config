@@ -1,6 +1,6 @@
 # ADR-0093: Triage open issues and pull requests from one computed inventory
 
-**Status:** Accepted
+**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode)
 **Date:** 2026-10-12
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`
@@ -57,6 +57,66 @@ them, on the pattern of ADR-0091.
 - **Read-only.** The commands never write. The skill suggests closes, comments
   and dispatches, and acts only on the user's confirmation.
 
+### Amendment 2026-10-16: scopes, related items and thorough mode
+
+The first version saw only the Forgejo fleet, the GitHub repositories Forgejo
+mirrors from the user's account and the user's own pull requests elsewhere;
+`--repo` narrowed only Forgejo. Issues in GitHub organisation repositories the
+user works in stayed invisible, and a manual triage showed evidence the
+`light` readers miss: a scheduled workflow's run history, a pull request named
+only in another repository's issue, leftover branches and outdated status text.
+
+- **Scopes.** `--scope` (repeatable; `--repo` stays as an alias) takes
+  `OWNER/REPO` for Forgejo, `gh:OWNER/REPO` for GitHub, a group name or
+  `all`. Without it the run covers all: the Forgejo fleet, the GitHub mirrors,
+  the user's own pull requests elsewhere and every configured group, never a
+  whole GitHub organisation. A narrower scope reads only its repositories and
+  skips the upstream pull request search.
+- **Groups come from a scope file.** `programs.ai.backlog.scopeFile` (default
+  none) names a JSON file
+  `{"groups": {"NAME": {"description": "...", "repos": ["gh:example-org/service", "OWNER/REPO"]}}}`;
+  `--scope-file` overrides it for one run. Groups list repositories
+  explicitly, without wildcards. This flake ships no groups: private modules
+  supply them, so organisation and repository names stay out of this
+  repository. An unknown group or a malformed file exits 64.
+- **Related items.** An open issue or pull request in scope that references an
+  issue or pull request in a repository outside the scope (a URL on either
+  forge, or `OWNER/REPO#N` on the source's forge) pulls in that one item: one hop, at most five per
+  source and `--related N` (30) per run, `0` to turn it off. Pulled-in items
+  carry their state (open, closed, merged or unavailable) and the rows that
+  pulled them in; they get no lane and do not count in the totals, and a
+  source whose related item is closed or merged gets the flag
+  `related-closed`. Related repositories are not triaged as a whole; that is
+  what a group is for. A failed lookup marks the item `unavailable` rather
+  than failing the run; GitHub items are skipped when GitHub is off or failed.
+  A scoped repository that does not exist (HTTP 404) or is archived is listed
+  as missing; other GitHub errors still mark GitHub failed.
+- **Branch lane.** `--branches` adds remote branch rows for the repositories
+  in scope: `merged` or `closed` when the latest pull request from the branch
+  merged or closed, `no-pr` when no pull request ever used it and its last
+  commit is `--branch-days` (30) old. Default and protected branches,
+  `main`, `master`, `dev`, `dev-*`, `develop`, `gh-pages` and `renovate/*`
+  are skipped, as are branches with any open pull request (they have a pull
+  request row). At most 100 branches per repository are read, and the page
+  names repositories with more (on GitHub also those with more than 100
+  protected branches, which then add no rows); on Forgejo every pull request of a repository
+  with candidate branches is read, since an old branch's pull request may be
+  among the oldest.
+- **Thorough mode** is the skill's opt-in on any scope; on all it first
+  estimates how many items it would check and asks. It adds the branch lane, a
+  checking pass and status refresh. The checking pass gives `refresh`,
+  `unclear` and `keep` verdicts with concrete completion criteria to a
+  `standard` worker that may run read-only `gh` and Forgejo queries across
+  repositories (workflow runs, other repositories' issues and pull requests)
+  and marks the verdicts it confirmed or changed as `checked`. Status refresh
+  proposes exact replacement lines for confirmed `refresh` items and, once the
+  user confirms, applies targeted edits instead of rewriting the body.
+  Deleting a branch (verdict `delete`) stays a confirmed action, after
+  checking that its commits landed elsewhere.
+- **Unchanged.** The commands stay read-only, actions go to the item's own
+  forge after confirmation, and live cluster or runtime checks stay out: a
+  verdict says "needs live check" instead.
+
 ## Alternatives and consequences
 
 - **Forgejo MCP and `gh` from the agent:** no new code, but every run pays for
@@ -69,6 +129,15 @@ them, on the pattern of ADR-0091.
   `t3-thread-inventory` output instead.
 
 The lanes are heuristics, so an issue can look done when it is not; the page
-says "maybe done" and the skill checks before suggesting a close. Branches and
-worktrees are left out (nix-secrets #221). The Forgejo token cannot list
-organisations, so the inventory covers the repositories `/user/repos` returns.
+says "maybe done" and the skill checks before suggesting a close. Local
+worktrees are left out (nix-secrets #221); remote branches appear only in
+thorough mode. The Forgejo token cannot list organisations, so Forgejo scopes
+cover the repositories `/user/repos` returns, and a Forgejo repository outside
+that list is reported as missing from the scope.
+
+- **Org-wide GitHub listing for groups:** less to maintain than a repository
+  list, but one large organisation would swamp the inventory and the readers,
+  and a group's members would change without review.
+- **Pulling in every cross-reference:** fleet repositories link each other
+  constantly, so the cap would fill with items already covered; only
+  repositories outside the scope are invisible otherwise.

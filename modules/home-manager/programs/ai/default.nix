@@ -189,7 +189,8 @@ with lib; let
   };
   # The backlog overview skill (ADR-0093) lists open issues and PRs across
   # Forgejo and the user's GitHub repositories. The Forgejo token is read from
-  # its file inside the process; gh keeps its own credentials.
+  # its file inside the process; gh keeps its own credentials. Scope groups
+  # come from a privately supplied file; this flake ships none.
   backlogInventory = pkgs.writeShellApplication {
     name = "backlog-inventory";
     runtimeInputs = [pkgs.python3 pkgs.gh];
@@ -197,6 +198,10 @@ with lib; let
       ${optionalString (mcp.tokenFile != null) ''
         FORGEJO_API_TOKEN_FILE=''${FORGEJO_API_TOKEN_FILE:-${escapeShellArg (toString mcp.tokenFile)}}
         export FORGEJO_API_TOKEN_FILE
+      ''}
+      ${optionalString (cfg.backlog.scopeFile != null) ''
+        BACKLOG_SCOPE_FILE=''${BACKLOG_SCOPE_FILE:-${escapeShellArg "${cfg.backlog.scopeFile}"}}
+        export BACKLOG_SCOPE_FILE
       ''}
       BACKLOG_FORGEJO_URL=${escapeShellArg mcp.url} exec python3 -I ${./backlog-inventory.py} "$@"
     '';
@@ -317,6 +322,16 @@ in {
         default = 1800;
         description = "Seconds before a reviewer is stopped and recorded as timed out.";
       };
+    };
+
+    backlog.scopeFile = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      example = literalExpression ''
+        pkgs.writeText "backlog-scopes.json" (builtins.toJSON {
+          groups.example.repos = ["gh:example-org/service" "example-org/forge-side"];
+        })'';
+      description = "JSON file with the groups `backlog-inventory --scope` accepts (ADR-0093); null for none.";
     };
 
     forgejoMcp = {
