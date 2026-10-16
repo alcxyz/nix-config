@@ -454,10 +454,13 @@ def matching_remote(pr, cwd):
     return None
 
 
+def state_base():
+    return os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "pr-review")
+
+
 def state_dir(pr, head):
-    base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
     host = urllib.parse.urlparse(pr.host).netloc or pr.host
-    return os.path.join(base, "pr-review", host, pr.owner, pr.repo, pr.number, head)
+    return os.path.join(state_base(), host, pr.owner, pr.repo, pr.number, head)
 
 
 def load_config():
@@ -605,7 +608,13 @@ def checkout(pr, head, base, cwd, remote, previous=None):
                 ancestor = False
             if ancestor:
                 interdiff = git_diff(f"{previous}..{head}")
-        temporary = tempfile.mkdtemp(prefix="pr-review-")
+        # Not under /tmp: Codex reviewers cannot read there (CODEX_FILESYSTEM),
+        # and Codex will not set up its home there.
+        # Per host, since another host sharing the state directory has other PIDs.
+        work = os.path.join(state_base(), "work", os.uname().nodename)
+        os.makedirs(work, exist_ok=True)
+        remove_stale_work(work)
+        temporary = tempfile.mkdtemp(prefix=f"pr-review-{os.getpid()}-", dir=work)
         tree = os.path.join(temporary, "checkout")
         write_tree(repository, head, tree)
         return temporary, tree, diff, merge_base, interdiff
@@ -616,6 +625,20 @@ def checkout(pr, head, base, cwd, remote, previous=None):
     finally:
         for ref in ("head", "base"):
             subprocess.run([*GIT, "update-ref", "-d", f"{refs}/{ref}"], cwd=repository, capture_output=True)
+
+
+def remove_stale_work(work):
+    """Remove checkouts left behind by runs that were killed before cleaning up."""
+    for name in os.listdir(work):
+        match = re.fullmatch(r"pr-review-(\d+)-\w+", name)
+        if not match:
+            continue
+        try:
+            os.kill(int(match.group(1)), 0)
+        except ProcessLookupError:
+            shutil.rmtree(os.path.join(work, name), ignore_errors=True)
+        except PermissionError:
+            pass
 
 
 def write_tree(repository, commit, destination):
@@ -675,27 +698,46 @@ def commit_exists(repository, sha):
     ).returncode == 0
 
 
+# Codex's sandbox for reviewer commands: read-only, and no reads outside the
+# checkout except what commands need to run. Its built-in read-only sandbox
+# reads the whole disk; the Nix store stays readable for the tools.
+CODEX_PERMISSIONS = "pr-review"
+CODEX_FILESYSTEM = {
+    ":root": "deny", ":minimal": "read", "/nix/store": "read",
+    ":tmpdir": "deny", ":slash_tmp": "deny", ":workspace_roots": "read",
+}
+
+
 def reviewer_command(reviewer, tree, output):
     """Return (argv, cwd, file for stdout) for one read-only reviewer.
 
-    Neither client loads user MCP servers or app connectors. Claude's restricted
-    mode also ignores user and project settings, so hooks in the PR head do not
-    run; Codex treats the temporary checkout as an untrusted project. Codex
-    keeps MCP credentials in a file so a locked keyring cannot stall it (ADR-0084).
+    Neither client loads user MCP servers, app connectors or plugins. Claude's
+    restricted mode also ignores user and project settings, so hooks in the PR
+    head do not run, skips the user's CLAUDE.md and keeps its file tools in the
+    checkout; safe mode also turns off skills and agents. Codex treats the
+    temporary checkout as an untrusted project and runs in its own home
+    (reviewer_home). Codex keeps MCP credentials in a file so a locked keyring
+    cannot stall it (ADR-0084).
     """
     model, effort = reviewer["model"], reviewer["effort"]
     if reviewer["client"] == "codex":
+        filesystem = ", ".join(f"{json.dumps(path)}={json.dumps(access)}" for path, access in CODEX_FILESYSTEM.items())
         argv = [
             "codex", "exec", "-m", model, "-c", f"model_reasoning_effort={json.dumps(effort)}",
-            "-c", 'mcp_oauth_credentials_store="file"',
-            "-s", "read-only", "-C", tree, "--skip-git-repo-check", "--ephemeral",
+            "-c", 'mcp_oauth_credentials_store="file"', "-c", 'cli_auth_credentials_store="file"',
+            "-c", f"default_permissions={json.dumps(CODEX_PERMISSIONS)}",
+            "-c", f'permissions.{CODEX_PERMISSIONS}.extends=":read-only"',
+            "-c", f"permissions.{CODEX_PERMISSIONS}.filesystem={{{filesystem}}}",
+            "-c", "allow_login_shell=false",
+            "-C", tree, "--skip-git-repo-check", "--ephemeral",
             "--ignore-user-config", "--ignore-rules", "--disable", "apps",
+            "--disable", "plugins", "--disable", "remote_plugin",
             "--json", "--color", "never", "-o", output, "-",
         ]
         return argv, tree, output + ".jsonl"
     if reviewer["client"] == "claude":
         argv = [
-            "claude", "-p", "--model", model, "--effort", effort, "--restricted",
+            "claude", "-p", "--model", model, "--effort", effort, "--restricted", "--safe-mode",
             "--tools", "Read,Grep,Glob", "--strict-mcp-config", "--no-session-persistence",
             "--permission-mode", "dontAsk", "--output-format", "json",
         ]
@@ -842,10 +884,48 @@ def reviewer_env(environ=None):
     }
 
 
-def run_reviewers(config, prompt_path, tree, directory):
+def reviewer_home(home, environ=None):
+    """Create a home for Codex reviewers holding only what they need to sign in.
+
+    Codex reads the user's AGENTS.md, skills and plugins from CODEX_HOME even
+    with --ignore-user-config. auth.json is linked, never copied: Codex rewrites
+    it in place, so a token refresh reaches the user's file. .nix-profile is
+    linked because the managed guard hook looks for the user's guard there.
+    Claude keeps the user's config directory: it replaces its credential file
+    when it refreshes a token, which would leave the user's copy stale.
+    """
+    environ = os.environ if environ is None else environ
+    user_home = environ.get("HOME") or os.path.expanduser("~")
+    codex_home = environ.get("CODEX_HOME") or os.path.join(user_home, ".codex")
+    os.makedirs(os.path.join(home, ".codex"), mode=0o700)
+    for source, target in ((os.path.join(codex_home, "auth.json"), os.path.join(".codex", "auth.json")),
+                           (os.path.join(user_home, ".nix-profile"), ".nix-profile")):
+        if os.path.lexists(source):
+            os.symlink(source, os.path.join(home, target))
+
+
+def client_env(reviewer, env, home):
+    """Return the reviewer's environment: Codex runs in `home`.
+
+    PATH entries are resolved, since profile directories under the user's home
+    are unreadable in Codex's sandbox while their targets in the store are not.
+    """
+    if reviewer["client"] != "codex":
+        return env
+    path = []
+    # Without an absolute entry, the client would be looked up in the checkout.
+    entries = [entry for entry in env.get("PATH", "").split(os.pathsep) if os.path.isabs(entry)]
+    for entry in entries or os.defpath.split(os.pathsep):
+        if os.path.realpath(entry) not in path:
+            path.append(os.path.realpath(entry))
+    return dict(env, HOME=home, CODEX_HOME=os.path.join(home, ".codex"), PATH=os.pathsep.join(path))
+
+
+def run_reviewers(config, prompt_path, tree, directory, home):
     """Run every reviewer in parallel; on interruption, stop them all."""
     deadline = time.monotonic() + config["timeout"]
     env = reviewer_env()
+    reviewer_home(home, env)
     jobs = []
     try:
         for reviewer in config["reviewers"]:
@@ -862,7 +942,7 @@ def run_reviewers(config, prompt_path, tree, directory):
             with open(prompt_path, encoding="utf-8") as prompt:
                 try:
                     process = subprocess.Popen(
-                        argv, cwd=cwd, stdin=prompt, stdout=stdout, stderr=log, env=env,
+                        argv, cwd=cwd, stdin=prompt, stdout=stdout, stderr=log, env=client_env(reviewer, env, home),
                         start_new_session=True,
                     )
                 except OSError as error:
@@ -1080,7 +1160,7 @@ def cmd_run(args):
         names = ", ".join(r["name"] for r in reviewers["reviewers"])
         print(f"Reviewing {pr} at {head[:12]} ({mode}) with the {role} reviewers {names} ({role_reason}); "
               f"results in {directory}", flush=True)
-        results = run_reviewers(reviewers, prompt_path, tree, directory)
+        results = run_reviewers(reviewers, prompt_path, tree, directory, os.path.join(temporary, "home"))
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
     status = {

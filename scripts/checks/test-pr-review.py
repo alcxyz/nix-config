@@ -920,6 +920,43 @@ names = ["FORGEJO_TOKEN", "GITEA_TOKEN", "GH_HOST", "MY_TOKEN_FILE", "CLAUDE_COD
 env = review.reviewer_env({name: "synthetic" for name in names})
 assert set(env) == {"CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY", "PATH"}, env.keys()
 
+# Codex reviewers get a home with links to the credentials and the Nix profile
+# only, and PATH entries resolved out of the user's home; Claude keeps its own.
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = os.path.realpath(tmp)
+    user, codex_home, store = pathlib.Path(tmp, "user"), pathlib.Path(tmp, "codex"), pathlib.Path(tmp, "store")
+    for directory in (user, codex_home, store / "bin"):
+        directory.mkdir(parents=True)
+    pathlib.Path(codex_home, "auth.json").write_text("synthetic\n")
+    pathlib.Path(codex_home, "AGENTS.md").write_text("planted\n")
+    os.symlink(store, user / ".nix-profile")
+    home = os.path.join(tmp, "home")
+    review.reviewer_home(home, {"HOME": str(user), "CODEX_HOME": str(codex_home)})
+    assert sorted(os.listdir(home)) == [".codex", ".nix-profile"] and os.listdir(os.path.join(home, ".codex")) == ["auth.json"]
+    assert os.readlink(os.path.join(home, ".codex", "auth.json")) == str(codex_home / "auth.json")
+    assert os.readlink(os.path.join(home, ".nix-profile")) == str(user / ".nix-profile")
+    bare = os.path.join(tmp, "bare")
+    review.reviewer_home(bare, {"HOME": str(tmp)})
+    assert os.listdir(bare) == [".codex"] and not os.listdir(os.path.join(bare, ".codex"))
+    parent = {"PATH": os.pathsep.join([str(user / ".nix-profile/bin"), "relative", "", str(store / "bin")]), "X": "1"}
+    env = review.client_env({"client": "codex"}, parent, home)
+    assert env == {"PATH": str(store / "bin"), "X": "1", "HOME": home, "CODEX_HOME": os.path.join(home, ".codex")}, env
+    assert review.client_env({"client": "claude"}, parent, home) is parent
+    for unusable in ({}, {"PATH": ""}, {"PATH": "relative:."}):
+        resolved = review.client_env({"client": "codex"}, unusable, home)["PATH"].split(os.pathsep)
+        assert resolved and all(os.path.isabs(entry) for entry in resolved), resolved
+
+    # Checkouts of killed runs are removed; those of live runs and other files are kept.
+    work = pathlib.Path(tmp, "work")
+    finished = subprocess.Popen(["true"])
+    finished.wait()
+    for name in (f"pr-review-{finished.pid}-abc", f"pr-review-{os.getpid()}-def", "other"):
+        pathlib.Path(work, name, "checkout").mkdir(parents=True)
+    os.symlink(codex_home / "auth.json", work / f"pr-review-{finished.pid}-abc" / "auth.json")
+    review.remove_stale_work(str(work))
+    assert sorted(os.listdir(work)) == sorted([f"pr-review-{os.getpid()}-def", "other"]), os.listdir(work)
+    assert pathlib.Path(codex_home, "auth.json").read_text() == "synthetic\n"
+
 # Only an opening verdict counts, not a quoted or fenced example.
 with tempfile.TemporaryDirectory() as tmp:
     reply = pathlib.Path(tmp, "reply.md")
@@ -1054,17 +1091,39 @@ with tempfile.TemporaryDirectory() as tmp:
     pathlib.Path(repository, ".gitattributes").write_text("* binary\n")
     subprocess.run(git + ["config", "filter.probe.smudge", f"touch {tmp}/filter-ran; cat"], check=True)
 
+    # The user's home holds instructions, skills and a CLAUDE.md that reviewers
+    # must not see, next to the credentials Codex needs.
+    user_home = pathlib.Path(tmp, "user-home")
+    for planted in (".codex/AGENTS.md", ".agents/skills/planted/SKILL.md", ".claude/CLAUDE.md"):
+        pathlib.Path(user_home, planted).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(user_home, planted).write_text("Planted user-level instruction.\n")
+    pathlib.Path(user_home, ".codex/auth.json").write_text("synthetic-auth\n")
+    pathlib.Path(user_home, ".nix-profile/bin").mkdir(parents=True)
+    os.environ["HOME"] = str(user_home)
+    os.environ.pop("CODEX_HOME", None)
+    os.environ.pop("CLAUDE_CONFIG_DIR", None)
+
     # Fake reviewer CLIs: codex writes its -o file and reports its model on
-    # stderr; claude prints a JSON result with per-model usage to stdout.
+    # stderr; claude prints a JSON result with per-model usage to stdout. Each
+    # fails if it would load the planted files the way the real client finds
+    # them: Codex from CODEX_HOME (or ~/.codex) despite --ignore-user-config,
+    # and ~/.agents/skills; Claude from its config directory unless restricted.
     bin_dir = os.path.join(tmp, "bin")
     os.mkdir(bin_dir)
     scripts = {
-        "codex": 'cat >/dev/null; case "$*" in *"mcp_oauth_credentials_store=\\"file\\""*"--ignore-user-config --ignore-rules --disable apps --json"*) ;; *) exit 3;; esac; '
+        "codex": 'cat >/dev/null; case "$*" in *"mcp_oauth_credentials_store=\\"file\\" -c cli_auth_credentials_store=\\"file\\" '
+                 '-c default_permissions=\\"pr-review\\""*"\\":root\\"=\\"deny\\""*"\\":workspace_roots\\"=\\"read\\"}"*'
+                 '"--ignore-user-config --ignore-rules --disable apps --disable plugins --disable remote_plugin --json"*) ;; *) exit 3;; esac; '
+                 'case "$*" in *"-s read-only"*) exit 3;; esac; '
+                 'test ! -e "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" && test ! -e "$HOME/.agents" || exit 8; '
+                 'test -L "$CODEX_HOME/auth.json" && test "$(cat "$CODEX_HOME/auth.json")" = synthetic-auth || exit 9; '
+                 'test -d "$HOME/.nix-profile/bin" || exit 10; '
                  'test -z "$FORGEJO_API_TOKEN_FILE$GH_TOKEN" || exit 4; '
                  'printf "OpenAI Codex\\n--------\\nmodel: gpt-reported\\n--------\\nuser\\nmodel: gpt-spoofed\\n" >&2; '
                  'printf \'{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":9}}\\n\'; '
                  'while [ "$1" != -o ]; do shift; done; test -f file && echo "Verdict: no findings" >"$2"',
         "claude": 'cat >/dev/null; test -f file || exit 1; test ! -L link || exit 5; test ! -e sub/.GIT || exit 7; '
+                  'case "$*" in *"--restricted --safe-mode"*) ;; *) test ! -e "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md" || exit 8;; esac; '
                   'test "$(cat link)" = "symbolic link to /etc/passwd" || exit 6; '
                   'case "$*" in *"--restricted"*"--output-format json"*) printf \'{"result": "Reading the diff.\\\\n\\\\n**Verdict: no findings**", '
                   '"usage":{"input_tokens":50,"cache_read_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":93}, '

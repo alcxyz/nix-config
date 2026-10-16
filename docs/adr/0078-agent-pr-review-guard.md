@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -43,12 +43,12 @@ hand or depend on which models their own client offers:
   `.gitattributes` must not hide changes), writes the head's files to a temporary directory from
   raw objects (no hooks, filters or symbolic links), and runs the reviewers in
   parallel with the diff and PR description. One run per PR head at a time.
-  Codex runs in its read-only sandbox without network access, user
-  configuration, saved command rules, MCP servers or app connectors. Claude Code runs in restricted
-  mode with only the Read, Grep and Glob tools, without MCP servers, and
-  ignoring user and project settings. Reviewers do not inherit forge token
-  variables, but can read local files, including stored credentials, without
-  network access. Results and a status per reviewer,
+  Reviewers see the checkout, and none of the user's instructions or other
+  files beyond the limits below. Codex runs read-only without network access, user configuration,
+  saved command rules, MCP servers, app connectors or plugins. Claude Code
+  runs in restricted and safe mode with only the Read, Grep and Glob tools,
+  without MCP servers, and ignoring user and project settings. Reviewers do
+  not inherit forge token variables. Results and a status per reviewer,
   including its configured model and effort, are kept per head SHA; the target branch is
   recorded and must still match. Earlier rounds are kept. A failed or
   timed-out reviewer, or one whose reply lacks one of the requested verdicts, is
@@ -76,6 +76,34 @@ hand or depend on which models their own client offers:
   the orchestrating process, not permission to relax the reviewers' isolation.
   An inherited SIGHUP ignore disposition, such as under `nohup`, is kept;
   ordinary SIGHUP and SIGTERM still cancel the run and clean up its children.
+- **Reviewer isolation** ([#709](https://git.alc.xyz/alcxyz/nix-config/issues/709)).
+  A review must not depend on whose machine runs it, and a review of a public
+  repository must not pull private user-level context into its findings.
+  Checked against Codex 0.163 and Claude Code 2.1.301 with planted files:
+  - Codex loads the user's `AGENTS.md` from `CODEX_HOME` even with
+    `--ignore-user-config`, and its built-in read-only sandbox lets commands
+    read the whole disk; reviewers followed such instructions to files
+    outside the checkout. Codex reviewers therefore run with `HOME` and
+    `CODEX_HOME` set to a fresh directory beside the checkout (both under
+    `pr-review`'s state directory, since the profile denies `/tmp` and Codex
+    will not set up its home there; the next run on the same host removes
+    those of killed runs), which holds
+    only a link to the user's `auth.json` (Codex rewrites it in place, so a
+    token refresh reaches the user's file; credentials are never read or
+    copied) and a link to the user's Nix profile, where the managed hook finds
+    the guard. Their commands run under a permission profile that denies reads
+    everywhere except the checkout, the Nix store and the minimal system paths
+    Codex selects, so not other reviews' checkouts or `/tmp`, and without
+    login-shell startup files. `PATH` entries are resolved first, since
+    profile links under the user's home are unreadable there.
+  - Claude Code in restricted mode does not load the user's `CLAUDE.md` and
+    keeps its file tools inside the checkout; safe mode also turns off
+    plugins, skills and custom agents. It keeps the user's config directory:
+    Claude replaces its credential file on a token refresh, so a linked file
+    in a throwaway directory would leave the user's copy with a spent refresh
+    token, and macOS keys its keychain entry by the config directory.
+  - `test-pr-review.py` plants user-level instruction files and fails if a
+    reviewer would load them where each client looks for them.
 - `pr-review comment <pr> "<outcome>"` posts the comment for the current head,
   and refuses unless every reviewer completed for that head, except for skips.
 - `pr-review check <pr>` reports whether a comment names the current head.
@@ -310,6 +338,13 @@ reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
   to start the review early, and not at all where an untrusted Codex hook is
   skipped. The always-on requirement stays in the rules; a skill that fails to
   load costs one blocked merge, not a missed review.
+- **A throwaway config directory for Claude too:** symmetric, but a token
+  refresh during a review would sign the user out (see the isolation bullet),
+  and restricted mode already keeps the user's instructions and files out.
+- **A container or bubblewrap around each reviewer:** isolates both clients
+  the same way, but adds a platform-specific layer around clients that already
+  sandbox themselves, and a bind-mounted credential file changes how they
+  write it.
 - **`pr-review` in nix-packages:** reusable tooling lives there, but the command
   is tied to this decision's comment format, guard and reviewer settings, so it
   stays next to the guard.
@@ -347,5 +382,10 @@ hook entry cannot be disabled by the user, but the guard it runs comes from the
 user's profile, which the user can replace. The managed hook also checks merges
 through a hand-made Codex server named `forgejo`, and applies to
 `pr-review`'s own Codex reviewers, which cannot complete merge lookups without
-network access. The command is tracked in
+network access. Reviewer isolation has limits: the Nix store stays readable to
+Codex reviewers, so store paths built from private configuration can be read
+by a reviewer that goes looking for them; environment variables other than
+forge and token variables are still inherited; Claude still reads its own settings
+and account files for sign-in, though not into the review; and the isolation
+was verified on Linux, not yet on macOS. The command is tracked in
 [#512](https://git.alc.xyz/alcxyz/nix-config/issues/512).
