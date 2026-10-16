@@ -32,6 +32,10 @@
   # nixfleet reboot sends every Kubernetes node, servers and agents alike,
   # through its node power gates; the node name is the host name.
   kubernetesNodeHostNames = lib.filter (host: (inventory.hosts.${host}.k8sRole or null) != null) nixosHostNames;
+  # The kubeconfig context of their cluster: nixfleet's cluster reads and
+  # node steps use it, as does the serial ready gate below, so a switched
+  # kubectx cannot point them at another cluster.
+  kubernetesContext = "funhouse";
 
   # The network's DNS servers must never be down together, so they form their
   # own serial group, gated by DNS answers rather than the cluster check.
@@ -104,12 +108,12 @@
     inherit aliases sshHosts systemSshUsers systemActivationModes;
     systemRemoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
     kubernetesNodes = kubernetesNodeHostNames;
+    inherit kubernetesContext;
     serialSystemHosts = k3sServerHostNames;
     # The node's own API server must be ready (this includes etcd health) and
     # the control plane must report the node Ready. kubectl comes from PATH so
-    # the managed kubeconfig wrapper applies; the context is pinned so a
-    # switched kubectx cannot point the gate at another cluster.
-    serialReadyCommand = "kubectl --context funhouse --request-timeout=10s --server https://{host}:6443 get --raw=/readyz >/dev/null && kubectl --context funhouse wait --for=condition=Ready node/{host} --timeout=30s";
+    # the managed kubeconfig wrapper applies.
+    serialReadyCommand = "kubectl --context ${kubernetesContext} --request-timeout=10s --server https://{host}:6443 get --raw=/readyz >/dev/null && kubectl --context ${kubernetesContext} wait --for=condition=Ready node/{host} --timeout=30s";
     serialReadyTimeoutSeconds = 600;
     serialGroups = lib.optional (dnsServerHostNames != []) {
       hosts = dnsServerHostNames;
