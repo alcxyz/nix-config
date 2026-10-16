@@ -29,6 +29,9 @@
         role != null && inventory.k8sRoles.${role}.role == "server"
     )
     nixosHostNames;
+  # nixfleet reboot sends every Kubernetes node, servers and agents alike,
+  # through its node power gates; the node name is the host name.
+  kubernetesNodeHostNames = lib.filter (host: (inventory.hosts.${host}.k8sRole or null) != null) nixosHostNames;
 
   # The network's DNS servers must never be down together, so they form their
   # own serial group, gated by DNS answers rather than the cluster check.
@@ -100,6 +103,7 @@
     deployAllHosts = deployAllHostNames;
     inherit aliases sshHosts systemSshUsers systemActivationModes;
     systemRemoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
+    kubernetesNodes = kubernetesNodeHostNames;
     serialSystemHosts = k3sServerHostNames;
     # The node's own API server must be ready (this includes etcd health) and
     # the control plane must report the node Ready. kubectl comes from PATH so

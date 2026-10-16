@@ -438,6 +438,9 @@ in {
     } ''
       jq -e --argjson hosts ${lib.escapeShellArg (builtins.toJSON expectedHosts)} \
         '.knownHosts == $hosts' ${config} >/dev/null
+      # Every quorum member is a Kubernetes node, so nixfleet reboot gives it
+      # the node power gates rather than a plain reboot.
+      jq -e '(.kubernetesNodes | length) > 0 and ((.serialSystemHosts - .kubernetesNodes) == [])' ${config} >/dev/null
       # Help validates the actual generated inventory without deployment work.
       ${pkgs.nix-deploy}/bin/deploy --help >help.txt 2>error.txt && exit 1
       test ! -s error.txt
