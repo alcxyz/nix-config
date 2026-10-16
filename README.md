@@ -320,6 +320,10 @@ deploy --no-preflight --nixos rpi0
 # Make --all abort instead of skipping unreachable remote hosts
 deploy --all --fail-unreachable
 
+# deploy is also nixfleet deploy; read what every host runs and whether it
+# needs a reboot, without changing anything
+nixfleet status --all
+
 # Update flake inputs
 just update
 

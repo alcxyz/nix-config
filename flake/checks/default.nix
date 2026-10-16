@@ -447,6 +447,22 @@ in {
       NIX_DEPLOY_CONFIG=/missing-inventory ${pkgs.nix-deploy}/bin/deploy --config ${config} --help >help.txt 2>error.txt && exit 1
       test ! -s error.txt
       grep -Fq 'Known hosts:' help.txt
+      # nixfleet gets the same inventory through NIX_DEPLOY_CONFIG: an unknown
+      # host is refused against it before any host is contacted.
+      ${pkgs.nix-deploy}/bin/nixfleet --version | grep -q '^nixfleet '
+      status=0
+      ${pkgs.nix-deploy}/bin/nixfleet status no-such-host >/dev/null 2>error.txt || status=$?
+      test "$status" = 2
+      grep -Fq 'known hosts: ' error.txt
+      status=0
+      NIX_DEPLOY_CONFIG=/missing-inventory ${pkgs.nix-deploy}/bin/nixfleet status >/dev/null 2>error.txt || status=$?
+      test "$status" != 0
+      grep -Fq 'cannot read inventory' error.txt
+      # Node power is refused until the Go port is qualified.
+      status=0
+      ${pkgs.nix-deploy}/bin/nixfleet reboot no-such-host >/dev/null 2>error.txt || status=$?
+      test "$status" = 2
+      grep -Fq 'NIXFLEET_QUALIFY_POWER=1' error.txt
       touch "$out"
     '';
 

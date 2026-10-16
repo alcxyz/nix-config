@@ -22,12 +22,17 @@ Work on repositories and manage every host from `xyz` (or the Mac). The servers
 `xev`, `nex` and `nux` and the Pis hold no repository clones; do not clone or
 edit there.
 
-Switch with `deploy`, which resolves the host and checks the package lock:
-`deploy --hm` or `deploy --nixos` for the current machine, `deploy <host>` for
-one remote host. Do not type `home-manager switch --flake .#alc-<host>` by
-hand, since a wrong host name breaks that host's desktop. The user's `hmsw`
-and `nxsw` shell aliases are interactive shortcuts that agent shells do not
-have.
+Switch with `deploy` (also `nixfleet deploy`; nix-packages#548), which resolves
+the host and checks the package lock: `deploy --hm` or `deploy --nixos` for the
+current machine, `deploy <host>` for one remote host. `nixfleet status [--all |
+<host>...]` reads, without changing anything, what each host booted and runs,
+whether it needs a reboot, its k3s cordon state and its runner units. Node
+power stays with `kreboot`, `koff` and `kon`: the Go port, `nixfleet
+reboot|off|on`, refuses to run until the operator qualifies it on each k3s
+node, and agents never start that qualification. Do not type `home-manager
+switch --flake .#alc-<host>` by hand, since a wrong host name breaks that
+host's desktop. The user's `hmsw` and `nxsw` shell aliases are interactive
+shortcuts that agent shells do not have.
 
 For changes that affect several hosts, recommend `deploy --all` from `xyz`:
 the flake is meant to converge the whole fleet, so touching unaffected hosts is

@@ -7,6 +7,7 @@
   gnugrep,
   jq,
   nixDeploy,
+  symlinkJoin,
   writeShellApplication,
   writeShellScript,
   writeShellScriptBin,
@@ -130,14 +131,34 @@
     runtimeInputs = [coreutils gawk git jq];
     text = builtins.readFile ../../scripts/update-inputs/lock-promoted-packages.sh;
   };
-  wrapper = writeShellScriptBin "deploy" ''
+  deploy = writeShellScriptBin "deploy" ''
     ${lockCheck}/bin/nix-deploy-lock-check --check || true
     exec ${nixDeploy}/bin/deploy --config "''${NIX_DEPLOY_CONFIG:-${configFile}}" "$@"
   '';
+  # nixfleet's deploy and status read the inventory from NIX_DEPLOY_CONFIG;
+  # reboot, off and on take none and reject --config, so it is not passed as
+  # an option (nix-packages#548). Node power stays with kreboot, koff and kon
+  # until the Go port is qualified on each k3s node (ADR-0068): its
+  # subcommands run only for a deliberate qualification run.
+  nixfleet = writeShellScriptBin "nixfleet" ''
+    case "''${1:-}" in
+      deploy)
+        ${lockCheck}/bin/nix-deploy-lock-check --check || true
+        ;;
+      reboot | off | on)
+        if [ "''${NIXFLEET_QUALIFY_POWER:-}" != 1 ]; then
+          echo "nixfleet: node power still uses kreboot, koff and kon; set NIXFLEET_QUALIFY_POWER=1 only for a qualification run of the Go port" >&2
+          exit 2
+        fi
+        ;;
+    esac
+    export NIX_DEPLOY_CONFIG="''${NIX_DEPLOY_CONFIG:-${configFile}}"
+    exec ${nixDeploy}/bin/nixfleet "$@"
+  '';
 in
-  wrapper.overrideAttrs (_: {
-    pname = "nix-deploy-configured";
-    version = "0.2.0";
+  symlinkJoin {
+    name = "nix-deploy-configured-0.3.0";
+    paths = [deploy nixfleet];
     passthru = {
       deployConfig = configFile;
       unconfiguredPackage = nixDeploy;
@@ -145,6 +166,7 @@ in
     meta =
       nixDeploy.meta
       // {
-        description = "nix-deploy configured from the nix-config public inventory";
+        description = "nix-deploy and nixfleet configured from the nix-config public inventory";
+        mainProgram = "deploy";
       };
-  })
+  }

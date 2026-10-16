@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-12
-**Applies to:** k3s nodes, `kreboot`, `koff`, `kon`
+**Applies to:** k3s nodes, `kreboot`, `koff`, `kon`, and their Go port `nixfleet reboot|off|on` (nix-packages#548, under qualification)
 
 This decision was originally published as ADR-0036. It was renumbered to
 ADR-0068 to distinguish it from the host-inventory decision; the original
