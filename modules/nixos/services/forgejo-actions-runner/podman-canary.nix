@@ -362,6 +362,13 @@ in {
       };
     };
 
+    services.nixfleet-boot-check.runnerUnits = [
+      {
+        unit = runnerUnit;
+        holdMarkerDirectory = "/run/forgejo-runner-aggregate-pressure/runners/${runnerUnit}";
+      }
+    ];
+
     systemd.services.forgejo-podman-runner = {
       description = "Forgejo Podman canary runner (${canary.name})";
       wantedBy = ["multi-user.target"];

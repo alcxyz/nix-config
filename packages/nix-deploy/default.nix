@@ -41,6 +41,10 @@
   # single-Pod workloads first, so each moves as few times as it can.
   kubernetesCorePriorityClass = "core-infra";
 
+  # Someone may be using these hosts, so nixfleet runs their reboot guard
+  # (modules/nixos/services/nixfleet-reboot-guard) before rebooting them.
+  interactiveHostNames = lib.filter (host: inventory.roles.${inventory.hosts.${host}.role}.interactive or false) nixosHostNames;
+
   # The network's DNS servers must never be down together, so they form their
   # own serial group, gated by DNS answers rather than the cluster check.
   dnsServerHostNames = lib.filter (host: inventory.hosts.${host} ? dnsAddress) nixosHostNames;
@@ -113,6 +117,10 @@
     systemRemoteSudoHosts = lib.filter (host: inventory.hosts.${host}.systemUseRemoteSudo or false) nixosHostNames;
     kubernetesNodes = kubernetesNodeHostNames;
     inherit kubernetesContext kubernetesCorePriorityClass;
+    interactiveHosts = interactiveHostNames;
+    rebootGuardCommand = "nixfleet-reboot-guard";
+    # Every NixOS host records a boot check (modules/nixos/services/nixfleet-boot-check).
+    bootCheck = true;
     serialSystemHosts = k3sServerHostNames;
     # The node's own API server must be ready (this includes etcd health) and
     # the control plane must report the node Ready. kubectl comes from PATH so

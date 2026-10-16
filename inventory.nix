@@ -5,6 +5,8 @@
       systemPackageSet = "workstation";
       workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
       sourceWorkspace = true;
+      # Someone may be using the host: nixfleet asks its reboot guard first.
+      interactive = true;
     };
 
     nuc = {
@@ -24,12 +26,14 @@
       systemPackageSet = "workstation";
       workspaceProfiles = ["base" "infra-admin" "platform" "apps" "tools" "personal" "sites" "orgs" "forks" "clones"];
       sourceWorkspace = true;
+      interactive = true;
     };
 
     family-gaming = {
       homePackageSet = "family-gaming";
       systemPackageSet = "workstation";
       workspaceProfiles = [];
+      interactive = true;
     };
 
     # Single-board TV appliances built from the nixbox-direct-client profile.

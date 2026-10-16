@@ -146,8 +146,23 @@ with lib; let
   # window is seen. A missing database counts as idle; one that exists but
   # cannot be read makes the result non-numeric, which callers treat as busy.
   # T3CODE_STATE_DATABASE may name one state directory or one database file.
+  # T3CODE_INSTANCE_UNIT narrows the count to one instance's unit, still
+  # finding the state directory its running process uses; an unknown unit
+  # counts as unreadable.
   activeSessionsFunction = ''
     state_directories=(${escapeShellArgs (map (instance: "${instance.baseDir}/userdata") instances)})
+    instance_units=(${unitArgs})
+    unknown_instance=""
+    if [[ -n "''${T3CODE_INSTANCE_UNIT:-}" ]]; then
+      case "$T3CODE_INSTANCE_UNIT" in
+        ${concatMapStringsSep "\n    " (instance: "${escapeShellArg "${instance.unit}.service"}) state_directories=(${escapeShellArg "${instance.baseDir}/userdata"}) ;;") instances}
+        *)
+          state_directories=()
+          unknown_instance=1
+          ;;
+      esac
+      instance_units=("$T3CODE_INSTANCE_UNIT")
+    fi
     fixed_state_files=()
     if [[ -d "''${T3CODE_STATE_DATABASE:-}" ]]; then
       state_directories=("$T3CODE_STATE_DATABASE")
@@ -159,7 +174,7 @@ with lib; let
       # until it restarts, even when the configuration names another one.
       # Read it from the process itself: after a systemd reload the unit's
       # ExecStart already shows the new configuration.
-      for unit in ${unitArgs}; do
+      for unit in "''${instance_units[@]}"; do
         main_pid=$(systemctl --user show "$unit" --property=MainPID --value 2>/dev/null) || main_pid=""
         if [[ ! "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
           continue
@@ -227,6 +242,10 @@ with lib; let
     }
     active_sessions() {
       local total=0 database count
+      if [[ -n "$unknown_instance" ]]; then
+        echo unreadable
+        return
+      fi
       while IFS= read -r database; do
         if [[ -z "$database" || ! -e "$database" ]]; then
           continue
@@ -618,6 +637,27 @@ in {
         default = 10;
         description = "Seconds T3 Code must remain without live turns or background work before a managed restart may proceed.";
       };
+    };
+
+    # The host's reboot guard asks the same check per instance; it is a
+    # store path only, so the host configuration reads it from here.
+    idleCheck = mkOption {
+      type = types.raw;
+      readOnly = true;
+      internal = true;
+      default = {
+        package = idleCheck;
+        instances =
+          map (instance: {
+            name =
+              if instance.unit == "t3code"
+              then "primary"
+              else removePrefix "t3code-" instance.unit;
+            unit = "${instance.unit}.service";
+          })
+          instances;
+      };
+      description = "The idle check and the instances it can check, for the host's reboot guard.";
     };
 
     autoUpdate = {

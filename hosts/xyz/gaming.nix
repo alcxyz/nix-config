@@ -11,6 +11,9 @@
   # Steam Stream
   # Keep Sunshine's fixed service ports out of the ephemeral client-port pool.
   boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010";
+  # Sunshine (host networking) binds its video port only while a client
+  # streams, so the reboot guard reads a stream from it.
+  services.nixfleet-reboot-guard.streamServerUdpPorts = [47998];
 
   users.groups.steamheadless = {
     gid = 2001;

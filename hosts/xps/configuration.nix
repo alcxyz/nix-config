@@ -37,6 +37,15 @@ in {
     users = [username];
   };
 
+  # xps plays games only by streaming them from xyz.
+  services.nixfleet-reboot-guard.moonlightClient = {
+    user = config.services.moonlight-client.autoLoginUser;
+    units = [
+      "couch-moonlight-stream.service"
+      "couch-moonlight-browser-stream.service"
+    ];
+  };
+
   boot.initrd.systemd.enable = true;
   # Keep the proven early display path so the diagnostic console can reach
   # external outputs without coupling boot to a graphical splash renderer.

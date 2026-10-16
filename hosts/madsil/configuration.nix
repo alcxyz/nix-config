@@ -158,6 +158,13 @@ in {
   programs.steam.enable = true;
   programs.gamemode.enable = true;
 
+  # Steam runs each game under its reaper process; Heroic and Proton games
+  # keep a wineserver; gamescope runs only around a game.
+  services.nixfleet-reboot-guard.game = {
+    user = "madsil";
+    processNames = ["reaper" "wineserver" "gamescope"];
+  };
+
   services.heroicSideload = {
     enable = true;
     user = "madsil";

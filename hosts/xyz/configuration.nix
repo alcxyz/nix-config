@@ -222,6 +222,50 @@ in {
     ];
   };
 
+  # xyz is the fleet's controller, so its own reboot also interrupts what the
+  # operator and the other hosts run here.
+  services.nixfleet-reboot-guard = let
+    gameProcess = config.services.forgejo-actions-runner.ioPressureGuard.admissionControl.gameProcess;
+    t3code = configDir.homeConfigurations."${username}-${hostName}".config.services.t3code.idleCheck;
+  in {
+    # The agreed rule: a running game on the controller blocks its self reboot.
+    game = {
+      blocksReboot = true;
+      inherit (gameProcess) user;
+      # The runner's games and the sideloaded Heroic games, by the
+      # executable each runs under Wine; the Battle.net launcher is no game.
+      wineArgv0Basenames = lib.unique (gameProcess.argv0Basenames
+        ++ lib.mapAttrsToList (_: app: app.executable)
+        (lib.filterAttrs (name: _: name != "battle-net") config.services.heroicSideload.apps));
+      # Steam runs each game under reaper, alive only while the game runs.
+      # Not wineserver: non-game Wine apps keep one here too.
+      processNames = ["reaper"];
+    };
+    backupUnits = [
+      "xyz-appstate-backup.service"
+      "xyz-k8s-backup.service"
+      "xyz-home-backup.service"
+      "k8s-backup-s3-mirror.service"
+      "k8s-backup-rustfs.service"
+      "snapshot-restic-home-maintenance.service"
+      "snapshot-restic-home-full-check.service"
+    ];
+    operator = {
+      user = username;
+      agentJobs = true;
+      tmux = true;
+      t3code = {
+        idleCheck = t3code.package;
+        inherit (t3code) instances;
+      };
+    };
+    remoteNixClients = true;
+    notes = [
+      "other hosts use xyz as binary cache and remote builder"
+      "xps streams games from SteamHeadless on xyz"
+    ];
+  };
+
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
   # t3code servers (primary and bn-apps, see users/alc/linux/xyz/t3code.nix) —

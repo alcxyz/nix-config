@@ -448,6 +448,10 @@ in {
       # The core tier is named, so reboots order nodes by its single Pods.
       jq -e '.kubernetesCorePriorityClass | type == "string" and length <= 253
         and test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\\z")' ${config} >/dev/null
+      # Interactive hosts get the reboot guard, and every host a boot check.
+      jq -e '(.interactiveHosts | index("xyz") != null and index("xps") != null)
+        and (.rebootGuardCommand | type == "string" and . != "")
+        and .bootCheck == true' ${config} >/dev/null
       # Help validates the actual generated inventory without deployment work.
       ${pkgs.nix-deploy}/bin/deploy --help >help.txt 2>error.txt && exit 1
       test ! -s error.txt

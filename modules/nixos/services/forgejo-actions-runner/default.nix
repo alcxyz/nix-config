@@ -179,6 +179,7 @@ in {
     ./isolated-docker.nix
     ./podman-canary.nix
     ./orphan-monitor.nix
+    ../nixfleet-boot-check/default.nix
     ../storage-health-monitor/default.nix
   ];
 
@@ -718,6 +719,18 @@ in {
         RuntimeDirectoryPreserve = "yes";
       };
     };
+
+    # The aggregate pressure guard's start gate leaves its hold markers in
+    # its runtime directory; a runner it holds back is no failed boot.
+    services.nixfleet-boot-check.runnerUnits = [
+      {
+        unit = "forgejo-actions-runner.service";
+        holdMarkerDirectory =
+          if isolated
+          then "/run/forgejo-runner-aggregate-pressure"
+          else null;
+      }
+    ];
 
     services.storage-health-monitor.units = lib.mkIf (cfg.ioPressureGuard.enable && config.services.storage-health-monitor.enable) [
       {

@@ -7,6 +7,7 @@
   accountUsername,
   accountHomeDirectory,
   hostName,
+  hostRole,
   configDir,
   lib,
   ...
@@ -38,6 +39,8 @@ in {
     ./nsswitch.nix
     ./nix-retention.nix
     ../security/credential-consent/default.nix
+    ../services/nixfleet-boot-check/default.nix
+    ../services/nixfleet-reboot-guard/default.nix
     ../services/snapshot-restic-home/default.nix
     ../services/storage-health-monitor/default.nix
     ../virtualisation/container-netns/default.nix
@@ -90,6 +93,10 @@ in {
     };
     package = pkgs.nixVersions.latest;
   };
+
+  # Someone may be using an interactive host, so nixfleet asks its guard
+  # before a reboot (nix-packages #548).
+  services.nixfleet-reboot-guard.enable = lib.mkDefault (hostRole.interactive or false);
 
   # ==================== System Configuration ====================
   networking.hostName = hostName;
