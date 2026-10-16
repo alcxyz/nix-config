@@ -59,11 +59,14 @@ namespace with no routes.
 
 ## Steam follow-up
 
-Steam Input and controller behavior are a separate acceptance step. The desktop
-launcher starts a user service; adding that starter to Steam does not establish
-that Steam will track the game or apply its controller configuration correctly.
-Verify the launch integration and controller in practice before documenting a
-recommended Steam shortcut. The current change does not modify Steam shortcuts.
+For a non-Steam shortcut, use the foreground `umu-app-spider-man-steam`
+wrapper described under [Steam shortcuts](standalone.md#steam-shortcuts), not
+the desktop launcher, which starts a user service. This configuration does not
+create or modify Steam shortcuts.
+
+Whether Steam tracks the game and applies Steam Input and its controller
+configuration remains a separate acceptance step: verify them in practice
+through the wrapper.
 
 Further games can use this module as an example, but their installed paths,
 Proton release, and compatibility requirements must be checked independently.

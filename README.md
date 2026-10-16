@@ -120,7 +120,7 @@ scripts/checks/                    # Shell checks used by pre-commit and flake c
 hosts/
   {xyz,nux,nex,xev,xps,madsil,rpi0,rpi1,rpi2,rpi3}/
     configuration.nix              # Host-specific NixOS config
-    hardware-configuration.nix     # Generated hardware config
+    hardware-configuration.nix     # Generated hardware config (not rpi1 to rpi3)
   mac/
     configuration.nix              # nix-darwin system config
 modules/
@@ -261,13 +261,14 @@ nix-secrets/
 ## Key features
 
 - **Cross-platform** — NixOS + nix-darwin + Home Manager from one flake
-- **Distributed builds** — nux, nex, and rpi0 can offload builds to xev first,
-  then xyz. If both remote builders are unavailable, hosts fall back to local
-  builds where the target system is supported. mac remains an emergency deploy
+- **Distributed builds** — nux and nex can offload builds to xev first, then
+  xyz; rpi0 offloads only to xyz. If its remote builders are unavailable, a
+  host falls back to local builds where the target system is supported. mac remains an emergency deploy
   operator through its nix-darwin Linux builder.
-- **Forgejo Actions runners** — primary Docker-backed CI labels run on xyz and
-  xev; nux and nex keep secondary and host-specific labels for deliberate
-  fallback work.
+- **Forgejo Actions runners** — `forgejo-podman` is the shared container pool
+  on xyz, xev, nex and nux, `ci-fast` sends heavy jobs to xyz only, and the
+  older Docker labels remain on every host; see
+  [CI runner labels](docs/ci-runner-labels.md).
 - **Encrypted storage** — Host storage integration with private bootstrap and recovery runbooks
 - **GPU passthrough** — Dynamic nvidia bind/unbind via libvirt hooks. Containers (steam, stash) stop/start automatically
 - **NFS + Avahi** — File sharing with Bonjour/Finder discovery, per-IP firewall rules

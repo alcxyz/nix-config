@@ -64,6 +64,8 @@ The SteamHeadless dispatcher on xyz still runs `docker compose` from xyz's own
 gitops checkout. The clients no longer depend on that path, but xyz does.
 
 Because rpi0 and rpi1 are the only DNS servers, they must never be switched or
-rebooted at the same time. Until the deploy tool can serialize them as their
-own group, deploy them one at a time and confirm the first answers DNS before
-touching the second.
+rebooted at the same time. Their `dnsAddress` entries in `inventory.nix` put
+them in their own serial group, so `deploy --all` switches them one at a time
+and waits until each answers DNS locally and resolves a fresh public name
+before touching the next (nix-packages#504). Do not switch or reboot them in
+parallel by other means.

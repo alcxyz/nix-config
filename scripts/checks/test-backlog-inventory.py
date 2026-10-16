@@ -125,15 +125,29 @@ MERGED = [pull_hit(20, "fix: two", f"Closes #2\n{SECRET}", merged_days=2),
 OPEN = [pull_hit(n, t, b) for n, t, b in [
     (30, "held by a thread", "Refs #3"), (31, "reviewed earlier", ""), (32, "conflicting", ""),
     (33, "chore(deps): bump", ""), (34, "ready one", ""), (35, "draft, reported unmergeable", ""),
-    (36, "reviewed for another branch", "Follows other/lib#2")]]
+    (36, "reviewed for another branch", "Follows other/lib#2"), (37, "changes requested", "")]]
 PULLS = {
     30: dict(user="me", mergeable=True), 31: dict(user="me", mergeable=True), 32: dict(user="me", mergeable=False),
     33: dict(user="renovate", mergeable=True), 34: dict(user="me", mergeable=True),
     35: dict(user="me", mergeable=False, draft=True), 36: dict(user="me", mergeable=True, base="main"),
+    37: dict(user="me", mergeable=True),
 }
 COMMENTS = {30: [], 31: [{"body": "Automated read-only review (1234567 on dev): full: clean"}], 32: [],
             34: [{"body": f"Automated read-only review ({HEAD[:12]} on dev): full: clean"}], 35: [],
-            36: [{"body": f"Automated read-only review ({HEAD[:12]} on dev): full: clean"}]}
+            36: [{"body": f"Automated read-only review ({HEAD[:12]} on dev): full: clean"}],
+            37: [{"body": f"Automated read-only review ({HEAD[:12]} on dev): full: clean"}]}
+
+
+def review(review_id, user, state, dismissed=False):
+    return {"id": review_id, "user": {"login": user}, "state": state, "dismissed": dismissed}
+
+
+# Each reviewer's latest verdict counts and comments do not change it; a dismissed latest verdict
+# clears the reviewer's say without bringing back an older one.
+REVIEWS = {34: [review(1, "ann", "REQUEST_CHANGES"), review(3, "ann", "APPROVED"), review(4, "bob", "COMMENT"),
+                review(5, "cid", "REQUEST_CHANGES", dismissed=True), review(8, "dan", "REQUEST_CHANGES"),
+                review(9, "dan", "REQUEST_CHANGES", dismissed=True)],
+           37: [review(2, "bob", "APPROVED"), review(6, "ann", "REQUEST_CHANGES"), review(7, "ann", "COMMENT")]}
 
 
 class Forge(http.server.BaseHTTPRequestHandler):
@@ -200,6 +214,8 @@ class Forge(http.server.BaseHTTPRequestHandler):
                                pr(44, "fork-named", "closed", merged=True, repo="someone/app"),
                                # A closed PR updated after the branch's open one must not hide the open one.
                                pr(45, "feat/reopened", "open", updated=20), pr(46, "feat/reopened", "closed", updated=1)])
+        if parts[:3] == ["repos", "me", "app"] and parts[3] == "pulls" and parts[5:] == ["reviews"]:
+            return self.reply(REVIEWS.get(int(parts[4]), []))
         if parts[:3] == ["repos", "me", "app"] and parts[3] == "pulls":
             number = int(parts[4])
             pull = PULLS[number]
@@ -352,12 +368,17 @@ def main():
         prs = {p["ref"]: p for p in report["prs"]}
         pr_lanes = {ref: p["lane"] for ref, p in prs.items()}
         check(pr_lanes == {"me/app#30": "inflight", "me/app#31": "open", "me/app#32": "blocked", "me/app#33": "renovate",
-                           "me/app#34": "ready", "me/app#35": "open", "me/app#36": "open",
+                           "me/app#34": "ready", "me/app#35": "open", "me/app#36": "open", "me/app#37": "blocked",
                            "gh:me/ghrepo#2": "open", "gh:up/stream#9": "ready"},
               f"PR lanes: {pr_lanes}")
         check(prs["me/app#30"]["thread"]["threadId"] == "t-live", "thread not joined")
         check("conflict" not in prs["me/app#35"]["flags"], "a draft was called conflicting")
         check(prs["me/app#36"]["review"] == "outdated", "a review for another target branch counted")
+        # ADR-0093: a PR with changes requested is blocked, even when it is green and reviewed at its head.
+        check(prs["me/app#37"]["reviewDecision"] == "changes-requested" and "changes-requested" in prs["me/app#37"]["flags"],
+              f"Forgejo changes requested: {prs['me/app#37']}")
+        check(prs["me/app#34"]["reviewDecision"] == "approved" and prs["me/app#30"]["reviewDecision"] is None,
+              f"Forgejo review decisions: {prs['me/app#34']['reviewDecision']} {prs['me/app#30']['reviewDecision']}")
         check({"review-outdated", "orphan"} <= set(prs["me/app#31"]["flags"]), f"flags: {prs['me/app#31']['flags']}")
         check({"conflict", "thread-settled", "orphan"} <= set(prs["me/app#32"]["flags"]), f"flags: {prs['me/app#32']['flags']}")
         check(prs["gh:me/ghrepo#2"]["issues"] == ["gh:me/ghrepo#1"] and prs["gh:me/ghrepo#2"]["review"] == "none",
@@ -366,7 +387,7 @@ def main():
               f"upstream PR: {prs['gh:up/stream#9']}")
         repos = [(r["forge"], r["repo"]) for r in report["repos"]]
         check(repos[0] == ("forgejo", "me/app") and ("github", "up/stream") in repos, f"repos: {repos}")
-        check(report["totals"]["issues"] == 10 and report["totals"]["prs"] == 9, f"totals: {report['totals']}")
+        check(report["totals"]["issues"] == 10 and report["totals"]["prs"] == 10, f"totals: {report['totals']}")
 
         # Items in repositories outside the scope are pulled in once, with their state and sources.
         related = {r["ref"]: r for r in report["related"]}

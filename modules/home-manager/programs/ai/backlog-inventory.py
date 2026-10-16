@@ -223,6 +223,21 @@ def review_state(comments, head, base):
     return "head" if current else "outdated"
 
 
+def review_decision(reviews):
+    """GitHub's reviewDecision from Forgejo reviews: each reviewer's latest verdict, unless it was dismissed."""
+    latest = {}
+    for review in sorted(reviews, key=lambda r: r.get("id") or 0):
+        if review.get("state") in {"APPROVED", "REQUEST_CHANGES"}:
+            latest[(review.get("user") or {}).get("login")] = review
+    # A dismissed verdict clears the reviewer's say; an older one does not come back.
+    states = {review["state"] for review in latest.values() if not review.get("dismissed")}
+    if "REQUEST_CHANGES" in states:
+        return "changes-requested"
+    if "APPROVED" in states:
+        return "approved"
+    return None
+
+
 def issue_row(forge, repo, raw, now, ref, host):
     body = raw.get("body") or ""
     return {
@@ -448,11 +463,12 @@ def collect_forgejo(api, now, merged_days, threads, scope):
         status = api.get(f"/repos/{repo}/commits/{head}/status")
         kind = pr_kind(pull["user"]["login"], user)
         comments = api.get(f"/repos/{repo}/issues/{raw['number']}/comments") if kind == "own" else []
-        return repo, pull, status, kind, comments
+        reviews = api.pages(f"/repos/{repo}/pulls/{raw['number']}/reviews", {}) if kind != "bot" else []
+        return repo, pull, status, kind, comments, reviews
 
     prs = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        for repo, pull, status, kind, comments in pool.map(detail, open_prs):
+        for repo, pull, status, kind, comments, reviews in pool.map(detail, open_prs):
             statuses = [s.get("status") for s in status.get("statuses") or []]
             ref = f"{repo}#{pull['number']}"
             text = f"{pull['title']}\n{pull.get('body') or ''}"
@@ -467,7 +483,7 @@ def collect_forgejo(api, now, merged_days, threads, scope):
                 "draft": bool(pull.get("draft")), "base": pull["base"]["ref"], "head": pull["head"]["sha"][:12],
                 "mergeable": pull.get("mergeable"), "ci": ci_state(statuses),
                 "review": review_state(comments, pull["head"]["sha"], pull["base"]["ref"]) if kind == "own" else "n/a",
-                "reviewDecision": None,
+                "reviewDecision": review_decision(reviews),
                 "issues": sorted(f"{r}#{n}" for (r, n) in refs if (r, n) in issues),
                 "ageDays": days_since(now, pull["created_at"]), "idleDays": days_since(now, pull["updated_at"]),
                 "updatedAt": pull["updated_at"],

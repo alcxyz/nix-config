@@ -60,6 +60,8 @@ test "$(jq -r '.database' <<<"$out")" = "$tmp/state.sqlite"
 test "$(jq -c '[.threads[].threadId]' <<<"$out")" = '["open","waits","recent"]'
 test "$(jq -r '.threads[0] | [.project, .bucket, .status, (.snoozedUntil // "none"), .prs[0].state] | join(" ")' <<<"$out")" = 'alpha unsettled running none open'
 test "$(jq -r '.threads[2] | [.project, .bucket, .status] | join(" ")' <<<"$out")" = 'p2 recently-settled idle'
+# A PR link dismissed from a stack is left out, as in t3-thread-status.
+test "$(jq -c '[.threads[2].prs[].url]' <<<"$out")" = '["https://forge.invalid/pulls/6","https://forge.invalid/pulls/9"]'
 # Background work as T3 derives it (#627): none while a run is active; the
 # active provider thread's roster, active turn items not from rolled-back runs
 # or persistent tools, deduplicated by task ID; a task without a kind counts

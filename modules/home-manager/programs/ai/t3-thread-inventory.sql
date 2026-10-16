@@ -13,6 +13,7 @@ SELECT
      SELECT json_extract(pr.value, '$.url') AS url,
             json_extract(pr.value, '$.snapshot.state') AS state
        FROM json_each(t.payload_json, '$.pullRequests') pr
+      WHERE coalesce(json_extract(pr.value, '$.source'), '') <> 'stack-dismissed'
       ORDER BY pr.key DESC LIMIT 5)) AS prs,
   (SELECT json_group_array(json_object('kind', kind, 'description', description))
      FROM t3_waiting_on w WHERE w.thread_id = t.thread_id) AS waitingOn,

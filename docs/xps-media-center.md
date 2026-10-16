@@ -103,7 +103,7 @@ input.
 | `Super+J` / `Super+K` | Previous / next active workspace |
 | `Super+Shift+1`…`Super+Shift+9` | Move the focused window to an active workspace |
 | `F8` / `F9` / `F10` | Mute / volume down / volume up |
-| `Alt+Shift` | Cycle Norwegian, US, and Russian keyboard layouts |
+| `Alt+Shift` | Switch between Norwegian and US keyboard layouts |
 
 ## Display layouts
 
@@ -192,7 +192,7 @@ topology adds a small but acceptable cost.
 DMS and the audio-cycle shortcuts expose the laptop speakers, each display
 audio path, connected Bluetooth speakers, and a virtual `Both TVs` output.
 Selecting `Both TVs` sends the same stereo stream to both TV sinks with
-PipeWire latency compensation. It is especially useful with the `dual-tvs`
+PipeWire latency compensation. It is especially useful with the `living-bedroom`
 layout and TV mirroring enabled, providing the same picture and sound at both
 TVs.
 
@@ -203,9 +203,9 @@ the default output.
 ## Browser, phone, and desktop use
 
 The couch browser and Moonlight use XWayland so KDE Connect can provide phone
-keyboard, clicks, and scrolling. Phone pointer movement is not currently
-supported; an X11-to-Hyprland pointer bridge was removed because it interfered
-with physical mouse movement over XWayland windows. The protected local browser
+keyboard, clicks, and scrolling. A pointer bridge
+(`kdeconnect-hyprland-input`) moves the phone's pointer movement into Hyprland.
+The protected local browser
 is intentionally omitted from launch menus and the on-screen shortcut guide.
 Its encrypted-profile supervisor runs as an independent user service, so DMS
 restarts do not terminate an active session. Browsers use Hyprland's normal tiled layout; they do
@@ -375,11 +375,13 @@ browser capsules and persistent profiles remain server-side. A normal direct
 exit returns to that saved profile; when it is `merged`, the public browser relaunches
 automatically while the protected client is reopened explicitly.
 
-Host-local DMS, KDE Connect, and Waynergy are compositor-bound and intentionally
-stop during direct display. KDE Connect running inside the remote browser
-capsule remains available through the stream. Physical keyboard, pointer, and
-controller input also continue to reach Moonlight directly. The normal
-`merged` path remains the choice for host-local phone or Synergy input.
+Host-local DMS and Waynergy are compositor-bound and intentionally stop during
+direct display. Host-local KDE Connect restarts on its own Xvfb display and
+forwards phone input into the direct-mode uinput bridge. KDE Connect running
+inside the remote browser capsule remains available through the stream.
+Physical keyboard, pointer, and controller input also continue to reach
+Moonlight directly. The normal `merged` path remains the choice for Synergy
+input.
 
 ```sh
 # Start a one-shot session on the primary TV.
