@@ -164,14 +164,28 @@ in {
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedCapacity.${host}) (lib.attrNames runners);
-    # Only xyz has a dedicated ci-fast runner, beside ci-fast overflow on its
-    # pool runner (ADR-0097).
+    # xyz has a dedicated ci-fast runner, beside ci-fast overflow on its pool
+    # runner (ADR-0097).
     assert lib.attrNames runners.xyz.podmanCanary.extraRunners == ["fast"];
     assert runners.xyz.podmanCanary.extraRunners.fast.capacity == 1;
     assert runners.xyz.podmanCanary.extraRunners.fast.name == "xyz-fast";
     assert hasLabel "ci-fast" runners.xyz.podmanCanary.extraRunners.fast;
     assert hasLabel "ci-fast" runners.xyz.podmanCanary;
-    assert lib.all (host: runners.${host}.podmanCanary.extraRunners == {}) ["xev" "nex" "nux"];
+    assert !runners.xyz.podmanCanary.extraRunners.fast.standby.enable;
+    assert runners.xyz.podmanCanary.extraRunners.fast.status.enable;
+    assert runners.xyz.podmanCanary.extraRunners.fast.status.interface == "wt0";
+    # xev's fast runner is a standby that runs only while xyz-fast is down,
+    # read from xyz's status endpoint; nex and nux never serve ci-fast.
+    assert lib.attrNames runners.xev.podmanCanary.extraRunners == ["fast"];
+    assert runners.xev.podmanCanary.extraRunners.fast.capacity == 1;
+    assert runners.xev.podmanCanary.extraRunners.fast.name == "xev-fast";
+    assert hasLabel "ci-fast" runners.xev.podmanCanary.extraRunners.fast;
+    assert !(hasLabel "ci-fast" runners.xev.podmanCanary);
+    assert runners.xev.podmanCanary.extraRunners.fast.standby.enable;
+    assert runners.xev.podmanCanary.extraRunners.fast.standby.statusInterface == runners.xyz.podmanCanary.extraRunners.fast.status.interface;
+    assert !runners.xev.podmanCanary.extraRunners.fast.status.enable;
+    assert lib.hasSuffix ":${toString runners.xyz.podmanCanary.extraRunners.fast.status.port}/" runners.xev.podmanCanary.extraRunners.fast.standby.statusUrl;
+    assert lib.all (host: runners.${host}.podmanCanary.extraRunners == {}) ["nex" "nux"];
     assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
     assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
     assert lib.all (hasLabel "docker") (lib.attrValues runners);

@@ -192,6 +192,17 @@
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
       ];
+      # Serves ci-fast only while xyz-fast is down (ADR-0097), as xyz
+      # reports over NetBird (100.82.168.59 is xyz's NetBird address).
+      extraRunners.fast = {
+        labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
+        capacity = 1;
+        standby = {
+          enable = true;
+          statusUrl = "http://100.82.168.59:9478/";
+          statusInterface = "wt0";
+        };
+      };
     };
     resourcePolicy.enable = true;
     name = "xev";

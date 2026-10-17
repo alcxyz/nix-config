@@ -216,6 +216,12 @@ in {
       extraRunners.fast = {
         labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
         capacity = 1;
+        # xev's standby xev-fast runs while this runner is down.
+        status = {
+          enable = true;
+          port = 9478;
+          interface = "wt0";
+        };
       };
     };
     name = "xyz";
