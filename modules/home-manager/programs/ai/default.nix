@@ -297,8 +297,9 @@ with lib; let
     }
   ];
 in {
-  # The reviewer defaults read the agent roles (ADR-0079).
-  imports = [./roles.nix];
+  # The reviewer defaults read the agent roles (ADR-0079); repo-review.nix
+  # installs revkit for whole-repository reviews (nix-packages ADR-0011).
+  imports = [./roles.nix ./repo-review.nix];
 
   options.programs.ai = {
     enable = mkEnableOption "Module for vibe coding stuff";

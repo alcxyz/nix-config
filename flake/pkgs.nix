@@ -30,6 +30,7 @@ in
               "nix-deploy"
               "k8s-node-reboot"
               "nix-gc-maintenance"
+              "revkit"
               "workspace-sync"
               "workmux"
             ];
