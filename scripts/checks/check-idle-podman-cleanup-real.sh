@@ -185,6 +185,7 @@ export CURL_BIN="$fixture/curl" JQ_BIN=jq DOCKER_SOCKET="$fixture/docker.sock"
 export PODMAN_SOCKET="$fixture/podman.sock" STORE_PATH="$fixture/graph" DISK_PATH="$fixture"
 export TRIGGER_USED_PERCENT=70 CRITICAL_FREE_BYTES=0 CRITICAL_FREE_PERCENT=0
 export IMAGE_MIN_AGE=1h STALE_AFTER_SECONDS=10800 LOCK_BUDGET_SECONDS=40
+export RUNNER_UNITS='forgejo-actions-runner.service forgejo-podman-runner.service'
 chmod 700 "$STATE_DIR"
 printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service >"$STATE_DIR/runner-units"
 cat >"$SYSTEMCTL_BIN" <<'MOCK'

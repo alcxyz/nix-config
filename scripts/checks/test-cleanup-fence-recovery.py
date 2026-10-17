@@ -12,17 +12,23 @@ import unittest
 from pathlib import Path
 
 MODULE = Path(sys.argv.pop(1)).resolve()
-RUNNERS = ["forgejo-actions-runner.service", "forgejo-podman-runner.service"]
+TWO_RUNNERS = ["forgejo-actions-runner.service", "forgejo-podman-runner.service"]
+EXTRA = "forgejo-podman-runner-fast.service"
+THREE_RUNNERS = TWO_RUNNERS + [EXTRA]
 APIS = ["forgejo-runner-docker.service", "forgejo-runner-podman.service"]
 
 
-class RecoveryTests(unittest.TestCase):
+class RecoveryFixture:
+    runners = TWO_RUNNERS
+
     def setUp(self):
+        RUNNERS = self.runners
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.state = self.root / "state"
-        (self.state / "runners" / RUNNERS[1]).mkdir(parents=True)
+        for unit in RUNNERS[1:]:
+            (self.state / "runners" / unit).mkdir(parents=True)
         self.state.chmod(0o700)
         (self.state / "runner-units").write_text("\n".join(RUNNERS) + "\n")
         self.fence = self.state / "cleanup-in-flight"
@@ -108,22 +114,23 @@ for argument in args[1:-1]:
             check=False,
         )
 
-    def refused(self):
-        result = self.run_script()
+    def refused(self, **env):
+        result = self.run_script(**env)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertTrue(self.fence.exists() or self.fence.is_symlink())
 
-    def test_terminal_generation_clear_preserves_drain_ownership_and_admits_both_runners(
+    def runner_dirs(self):
+        return [self.state] + [self.state / "runners" / unit for unit in self.runners[1:]]
+
+    def test_terminal_generation_clear_preserves_drain_ownership_and_admits_every_runner(
         self,
     ):
-        for directory in (self.state, self.state / "runners" / RUNNERS[1]):
+        for directory in self.runner_dirs():
             (directory / "drain-owned").write_text("fixture-owned\n")
         result = self.run_script()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(self.fence.exists())
-        for unit, directory in zip(
-            RUNNERS, (self.state, self.state / "runners" / RUNNERS[1])
-        ):
+        for unit, directory in zip(self.runners, self.runner_dirs()):
             self.assertEqual((directory / "drain-owned").read_text(), "fixture-owned\n")
             # Existing guard is responsible for completing its owned resume.
             (directory / "drain-owned").unlink()
@@ -131,6 +138,69 @@ for argument in args[1:-1]:
                 self.run_script("runner-start-gate.sh", RUNNER_UNIT=unit).returncode, 0
             )
 
+    def test_each_pending_or_active_runner_refuses(self):
+        for unit in self.runners:
+            for field, value in [
+                ("Job", "42"),
+                ("MainPID", "42"),
+                ("ActiveState", "activating"),
+                ("SubState", "stop"),
+            ]:
+                with self.subTest(unit=unit, field=field):
+                    original = self.units[unit][field]
+                    self.units[unit][field] = value
+                    self.save_units()
+                    self.refused()
+                    self.units[unit][field] = original
+                    self.save_units()
+
+    def test_registry_and_runner_state_must_match_the_baked_list(self):
+        registry = self.state / "runner-units"
+        for body in [
+            "\n".join(self.runners[:-1]) + "\n",
+            "\n".join(self.runners + ["forgejo-podman-runner-old.service"]) + "\n",
+            "\n".join(reversed(self.runners)) + "\n",
+            "\n".join(self.runners) + "\n\n",
+        ]:
+            with self.subTest(body=body):
+                registry.write_text(body)
+                self.refused()
+        registry.write_text("\n".join(self.runners) + "\n")
+        unknown = self.state / "runners" / "forgejo-podman-runner-old.service"
+        unknown.mkdir()
+        self.refused()
+        unknown.rmdir()
+        last = self.state / "runners" / self.runners[-1]
+        last.rename(self.root / "moved")
+        self.refused()
+        last.symlink_to(self.root / "moved")
+        self.refused()
+        last.unlink()
+        (self.root / "moved").rename(last)
+        for marker in ["owned", "pending", "teardown-required", "drain-pending",
+                       "resume-pending", "drain-disowned"]:
+            with self.subTest(marker=marker):
+                path = last / marker
+                path.touch()
+                self.refused()
+                self.assertTrue(path.exists())
+                path.unlink()
+        self.assertEqual(self.run_script().returncode, 0)
+
+    def test_invalid_runner_list_refuses(self):
+        for units in [
+            "",
+            TWO_RUNNERS[0],
+            " ".join(reversed(TWO_RUNNERS)),
+            " ".join(TWO_RUNNERS + [TWO_RUNNERS[1]]),
+            " ".join(TWO_RUNNERS + ["../escape.service"]),
+            " ".join(TWO_RUNNERS + ["fast"]),
+        ]:
+            with self.subTest(units=units):
+                self.refused(RUNNER_UNITS=units)
+
+
+class RecoveryTests(RecoveryFixture, unittest.TestCase):
     def test_every_recorded_request_kind_is_recoverable(self):
         digest = "a" * 64
         for path in [
@@ -156,7 +226,7 @@ for argument in args[1:-1]:
                 self.assertFalse(self.fence.exists())
 
     def test_each_pending_or_active_unit_refuses(self):
-        for unit in RUNNERS + APIS:
+        for unit in TWO_RUNNERS + APIS:
             for field, value in [
                 ("Job", "42"),
                 ("Job", "0"),
@@ -226,7 +296,7 @@ for argument in args[1:-1]:
             self.units["forgejobuilds.slice"][field] = original
 
     def test_active_runner_subprocess_refuses_even_without_main_pid(self):
-        unit = RUNNERS[0]
+        unit = TWO_RUNNERS[0]
         group = self.root / "cgroups" / "system.slice" / unit
         group.mkdir(parents=True)
         (group / "cgroup.events").write_text("populated 1\nfrozen 0\n")
@@ -326,9 +396,9 @@ for argument in args[1:-1]:
             self.refused()
             self.assertTrue(path.is_symlink())
             path.unlink()
-        (self.state / "runner-units").write_text("\n".join(RUNNERS) + "\n\n")
+        (self.state / "runner-units").write_text("\n".join(TWO_RUNNERS) + "\n\n")
         self.refused()
-        (self.state / "runner-units").write_text(RUNNERS[0] + "\n")
+        (self.state / "runner-units").write_text(TWO_RUNNERS[0] + "\n")
         self.refused()
 
     def test_docker_only_gate_does_not_require_podman_registry(self):
@@ -390,6 +460,31 @@ for argument in args[1:-1]:
                         if process and process.poll() is None:
                             process.kill()
                             process.communicate()
+
+
+class ThreeRunnerRecoveryTests(RecoveryFixture, unittest.TestCase):
+    """An extra Podman runner unit is part of the baked list and the proof."""
+
+    runners = THREE_RUNNERS
+
+    def test_extra_runner_cgroup_with_workers_refuses(self):
+        group = self.root / "cgroups" / "system.slice" / EXTRA
+        group.mkdir(parents=True)
+        (group / "cgroup.events").write_text("populated 1\nfrozen 0\n")
+        self.units[EXTRA]["ControlGroup"] = "/system.slice/" + EXTRA
+        self.save_units()
+        self.refused()
+        (group / "cgroup.events").write_text("populated 0\nfrozen 0\n")
+        self.assertEqual(self.run_script().returncode, 0)
+
+    def test_two_runner_list_refuses_three_runner_state(self):
+        self.refused(RUNNER_UNITS=" ".join(TWO_RUNNERS))
+
+    def test_api_generations_follow_every_runner(self):
+        # The API generation records start after the last runner.
+        self.units[APIS[1]]["ExecMainStartTimestampMonotonic"] = "67890"
+        self.save_units()
+        self.refused()
 
 
 if __name__ == "__main__":

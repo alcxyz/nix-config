@@ -8,6 +8,8 @@ else let
   primary = "forgejo-actions-runner.service";
   canary = "forgejo-podman-runner.service";
   both = "${primary} ${canary}";
+  extra = "forgejo-podman-runner-fast.service";
+  three = "${both} ${extra}";
   evaluate = enabled: labels: extra:
     (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       system = pkgs.stdenv.hostPlatform.system;
@@ -165,7 +167,7 @@ in
       SH
       chmod +x "$fixture/systemctl"
       run_gate() {
-        STATE_DIR="$state" SYSTEMCTL_BIN="$fixture/systemctl" RUNNER_UNITS=${lib.escapeShellArg both} \
+        STATE_DIR="$state" SYSTEMCTL_BIN="$fixture/systemctl" RUNNER_UNITS="''${GATE_UNITS:-${both}}" \
           bash ${gateSource} >/dev/null 2>&1
       }
       run_gate
@@ -185,5 +187,26 @@ in
       if MOCK_GUARD_ACTIVE=0 run_gate; then exit 1; fi
       if MOCK_FREEZER=frozen run_gate; then exit 1; fi
       run_gate
+
+      # The primary runner leads and the existing Podman runner follows; any
+      # extra Podman runner needs its own guard state directory.
+      for units in ${lib.escapeShellArg primary} ${lib.escapeShellArg "${canary} ${primary}"} \
+        ${lib.escapeShellArg "${primary} ${extra} ${canary}"}; do
+        if GATE_UNITS=$units run_gate; then exit 1; fi
+      done
+      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} ${lib.escapeShellArg extra} > "$state/runner-units"
+      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      if run_gate; then exit 1; fi
+      mkdir "$state/runners/${extra}"
+      GATE_UNITS=${lib.escapeShellArg three} run_gate
+      if run_gate; then exit 1; fi
+      touch "$state/cleanup-in-flight"
+      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      rm "$state/cleanup-in-flight"
+      rmdir "$state/runners/${canary}"
+      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      mkdir "$state/runners/${canary}"
+      GATE_UNITS=${lib.escapeShellArg three} run_gate
       touch "$out"
     ''

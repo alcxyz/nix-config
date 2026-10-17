@@ -19,6 +19,9 @@ HELPER = Path(sys.argv.pop(1)).resolve()
 MODULE = HELPER.parent
 IMAGE = 'a' * 64
 EXITED = 'b' * 64
+TWO_RUNNERS = ['forgejo-actions-runner.service', 'forgejo-podman-runner.service']
+EXTRA = 'forgejo-podman-runner-fast.service'
+THREE_RUNNERS = TWO_RUNNERS + [EXTRA]
 
 
 def exited(number, created=0, state='exited'):
@@ -32,13 +35,14 @@ def image(number, created=0, **fields):
 
 
 class Fixture:
-    def __init__(self):
+    def __init__(self, units=TWO_RUNNERS):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.state = self.root / 'state'
-        (self.state / 'runners' / 'forgejo-podman-runner.service').mkdir(parents=True)
+        self.units = list(units)
+        for unit in self.units[1:]:
+            (self.state / 'runners' / unit).mkdir(parents=True)
         self.state.chmod(0o700)
-        self.units = ['forgejo-actions-runner.service', 'forgejo-podman-runner.service']
         (self.state / 'runner-units').write_text('\n'.join(self.units) + '\n')
         self.fence = self.state / 'cleanup-in-flight'
         self.calls = []
@@ -192,9 +196,11 @@ esac
         self.temp.cleanup()
 
 
-class FenceTests(unittest.TestCase):
+class FenceFixture:
+    units = TWO_RUNNERS
+
     def setUp(self):
-        self.f = Fixture()
+        self.f = Fixture(self.units)
         self.addCleanup(self.f.close)
         self.addCleanup(lambda: self.assertFalse(
             any('/containers/prune' in path for _, path in self.f.calls)))
@@ -221,7 +227,7 @@ class FenceTests(unittest.TestCase):
         for unit in self.f.units:
             result = subprocess.run(['bash', str(MODULE / 'runner-start-gate.sh')],
                                     env={**self.f.env, 'RUNNER_UNIT': unit}, capture_output=True)
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 1, unit)
         result = subprocess.run(['bash', str(MODULE / 'podman-api-start-gate.sh')],
                                 env=self.f.env, capture_output=True)
         self.assertEqual(result.returncode, 1)
@@ -232,7 +238,8 @@ class FenceTests(unittest.TestCase):
                              {'Id': EXITED, 'State': 'exited', 'Created': 0, 'Names': ['/job']}]
         self.f.volumes = [{'Name': 'buildx_buildkit_fixture0_state'}]
         (self.f.state / 'drain-owned').write_text('123\n')
-        (self.f.state / 'runners' / self.f.units[1] / 'drain-owned').write_text('456\n')
+        for unit in self.f.units[1:]:
+            (self.f.state / 'runners' / unit / 'drain-owned').write_text('456\n')
         result = self.f.run()
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(self.f.mutations, [
@@ -243,8 +250,17 @@ class FenceTests(unittest.TestCase):
         self.assertIn(' containers=1 ', result.stdout)
         self.assertFalse(self.f.fence.exists())
         self.assertEqual((self.f.state / 'drain-owned').read_text(), '123\n')
-        self.assertEqual((self.f.state / 'runners' / self.f.units[1] / 'drain-owned').read_text(), '456\n')
+        for unit in self.f.units[1:]:
+            self.assertEqual((self.f.state / 'runners' / unit / 'drain-owned').read_text(), '456\n')
 
+    def test_uncertain_completion_leaves_fence_for_every_runner(self):
+        self.f.status, self.f.reply = 500, b'{"message":"error"}'
+        result = self.f.run()
+        self.assertEqual(result.returncode, 1)
+        self.assert_fenced()
+
+
+class FenceTests(FenceFixture, unittest.TestCase):
     def test_selection_is_oldest_capped_and_preserves_protected_images(self):
         self.f.images = [image(i, created=i) for i in reversed(range(1, 13))]
         self.f.images += [image(20, int(time.time())),
@@ -645,6 +661,67 @@ exec {jq} "$@"
                             process.communicate()
                         shutil.rmtree(self.f.fence)
         self.f.env['JQ_BIN'] = shutil.which('jq')
+
+
+class ThreeRunnerFenceTests(FenceFixture, unittest.TestCase):
+    """An extra Podman runner unit shares the engine, fence and lock."""
+    units = THREE_RUNNERS
+
+    def unit_states(self, active_unit, state='active'):
+        self.f.script('systemctl', f'''case "$*" in
+  'is-active --quiet '*) exit 0 ;;
+  'show --property=FreezerState --value '*) echo running ;;
+  'show --property=ExecMainStartTimestampMonotonic --value '*) echo 12345 ;;
+  *' {active_unit}') printf 'ActiveState={state}\\nSubState=running\\nMainPID=7\\nControlPID=0\\nJob=\\n' ;;
+  'show --property=ActiveState --property=SubState --property=MainPID --property=ControlPID --property=Job '*)
+    printf 'ActiveState=inactive\\nSubState=dead\\nMainPID=0\\nControlPID=0\\nJob=\\n' ;;
+  *) exit 2 ;;
+esac
+''')
+
+    def test_active_extra_runner_blocks_cleanup_without_requests(self):
+        for state in ('active', 'activating', 'deactivating'):
+            with self.subTest(state=state):
+                self.unit_states(EXTRA, state)
+                result = self.f.run()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), f'skipped reason=runner_active unit={EXTRA}')
+                self.assertEqual(self.f.calls, [])
+                self.assertFalse(self.f.fence.exists())
+
+    def test_marker_in_extra_runner_state_blocks_cleanup(self):
+        for marker in ('owned', 'pending', 'teardown-required', 'drain-pending',
+                       'resume-pending', 'drain-disowned'):
+            with self.subTest(marker=marker):
+                path = self.f.state / 'runners' / EXTRA / marker
+                path.touch()
+                result = self.f.run()
+                self.assertEqual(result.stdout.strip(), f'skipped reason=transition_marker marker={marker}')
+                self.assertEqual(self.f.calls, [])
+                path.unlink()
+
+    def test_unknown_or_missing_runner_state_is_refused(self):
+        unknown = self.f.state / 'runners' / 'forgejo-podman-runner-old.service'
+        unknown.mkdir()
+        result = self.f.run()
+        self.assertEqual(result.stdout.strip(), 'skipped reason=runner_registry_mismatch')
+        unknown.rmdir()
+        (self.f.state / 'runners' / EXTRA).rmdir()
+        result = self.f.run()
+        self.assertEqual(result.stdout.strip(), 'skipped reason=runner_registry_missing')
+        self.assertEqual(self.f.calls, [])
+
+    def test_fence_blocks_extra_runner_and_api_starts(self):
+        self.f.fence.mkdir()
+        self.assert_fenced()
+        # Without the fence the extra runner and the API are admitted.
+        self.f.fence.rmdir()
+        result = subprocess.run(['bash', str(MODULE / 'runner-start-gate.sh')],
+                                env={**self.f.env, 'RUNNER_UNIT': EXTRA}, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = subprocess.run(['bash', str(MODULE / 'podman-api-start-gate.sh')],
+                                env=self.f.env, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == '__main__':

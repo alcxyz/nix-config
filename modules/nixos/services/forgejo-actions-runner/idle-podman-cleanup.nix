@@ -7,6 +7,7 @@
   cfg = config.services.forgejo-actions-runner;
   cleanup = cfg.idlePodmanCleanup;
   enabled = cfg.enable && cleanup.enable;
+  runnerUnits = lib.concatStringsSep " " cfg.runnerUnits;
   helper = pkgs.writeShellApplication {
     name = "forgejo-idle-podman-cleanup";
     runtimeInputs = with pkgs; [
@@ -28,12 +29,14 @@
     text =
       ''
         [[ $EUID == 0 ]] || { echo "Root execution required" >&2; exit 1; }
+        # Bake the configured runner list into the operator command.
+        RUNNER_UNITS=${lib.escapeShellArg runnerUnits}
       ''
       + builtins.readFile ./cleanup-fence-recover.sh;
   };
 in {
   options.services.forgejo-actions-runner.idlePodmanCleanup = {
-    enable = lib.mkEnableOption "bounded Podman CI cache cleanup while both runners are inactive";
+    enable = lib.mkEnableOption "bounded Podman CI cache cleanup while every runner is inactive";
     triggerUsedPercent = lib.mkOption {
       type = lib.types.ints.between 1 99;
       default = 70;
@@ -93,6 +96,7 @@ in {
         DISK_PATH = cfg.ioPressureGuard.diskSpace.path;
         STORE_PATH = cfg.podmanCanary.storageRoot;
         IMAGE_MIN_AGE = cleanup.imageMinAge;
+        RUNNER_UNITS = runnerUnits;
       };
       serviceConfig = {
         Type = "oneshot";

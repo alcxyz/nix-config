@@ -16,7 +16,7 @@ podman_admission=${PODMAN_ADMISSION:-1}
 exec 9>"$state_dir/lifecycle.lock"
 flock -w 60 -x 9 || exit 1
 [[ ! -e $state_dir/cleanup-in-flight && ! -L $state_dir/cleanup-in-flight ]] || exit 1
-# Docker-only boot needs neither a dual-runner registry nor an armed lifecycle
+# Docker-only boot needs neither a multi-runner registry nor an armed lifecycle
 # service (which starts after Docker). Both APIs still exclude fence recovery.
 [[ $podman_admission == 1 ]] || exit 0
 [[ -n $runner_units_text ]] || exit 1
@@ -27,7 +27,10 @@ IFS=$' \t\n' read -r -d '' -a runner_units <<< "$runner_units_text" || true
 
 [[ -f $state_dir/runner-units && ! -L $state_dir/runner-units ]] || exit 1
 [[ $(cat "$state_dir/runner-units") == "$(printf '%s\n' "${runner_units[@]}")" ]] || exit 1
-[[ -d $state_dir/runners/forgejo-podman-runner.service ]] || exit 1
+# The guard creates a state directory for every Podman runner it tracks.
+for unit in "${runner_units[@]:1}"; do
+  [[ -d $state_dir/runners/$unit ]] || exit 1
+done
 
 for marker in owned pending teardown-required; do
   [[ ! -e $state_dir/$marker ]] || exit 1

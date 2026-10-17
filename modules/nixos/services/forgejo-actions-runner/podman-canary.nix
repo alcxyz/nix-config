@@ -110,6 +110,20 @@
     canary.jobEnv
   );
 in {
+  options.services.forgejo-actions-runner.runnerUnits = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    readOnly = true;
+    internal = true;
+    default =
+      ["forgejo-actions-runner.service"]
+      ++ lib.optional canary.enable runnerUnit;
+    description = ''
+      Runner units sharing the dedicated CI aggregate: the primary Docker
+      runner first, then every Podman runner. The pressure guard, start gates,
+      lifecycle teardown, idle cleanup and fence recovery all take this list.
+    '';
+  };
+
   options.services.forgejo-actions-runner.podmanCanary = {
     enable = lib.mkEnableOption "separate, qualified rootless Podman CI canary";
     storageRoot = lib.mkOption {
@@ -324,7 +338,7 @@ in {
       environment = {
         HOME = builderState;
         XDG_RUNTIME_DIR = builderRuntime;
-        RUNNER_UNITS = "forgejo-actions-runner.service ${runnerUnit}";
+        RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
         CONTAINERS_CONF_OVERRIDE = lib.mkIf (canary.dnsServers != []) "${containersConf}";
         # Netavark must spawn DNS inside this delegated service. systemd-run
         # would create a user scope outside the aggregate resource boundary.
@@ -391,7 +405,7 @@ in {
           HOME = runnerState;
           DOCKER_HOST = "unix://${socketPath}";
           RUNNER_UNIT = runnerUnit;
-          RUNNER_UNITS = "forgejo-actions-runner.service ${runnerUnit}";
+          RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
           GAME_HELPER_FILE = "${./game-admission.sh}";
           GAME_ADMISSION_ENABLED =
             if cfg.ioPressureGuard.admissionControl.gameProcess.enable

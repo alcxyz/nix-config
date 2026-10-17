@@ -150,6 +150,7 @@ export CURL_BIN="$fixture/curl" DF_BIN="$fixture/df" JQ_BIN=jq
 export DOCKER_SOCKET="$fixture/docker.sock" PODMAN_SOCKET="$fixture/podman.sock"
 export MOCK_CALLS="$fixture/calls" TRIGGER_USED_PERCENT=70
 export MOCK_REQUESTS="$fixture/requests"
+export RUNNER_UNITS='forgejo-actions-runner.service forgejo-podman-runner.service'
 export STORE_PATH="$fixture/store"
 a=$(printf 'a%.0s' {1..64})
 b=$(printf 'b%.0s' {1..64})
@@ -307,6 +308,68 @@ done
 rm "$fixture/state/runner-units"
 expect_none
 printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service >"$fixture/state/runner-units"
+
+# The runner list comes from the unit environment and is validated strictly
+# before any lock, API request or mutation.
+for units in '' forgejo-actions-runner.service \
+  'forgejo-podman-runner.service forgejo-actions-runner.service' \
+  'forgejo-actions-runner.service forgejo-podman-runner-fast.service forgejo-podman-runner.service' \
+  'forgejo-actions-runner.service forgejo-podman-runner.service forgejo-podman-runner.service' \
+  'forgejo-actions-runner.service forgejo-podman-runner.service ../escape.service' \
+  'forgejo-actions-runner.service forgejo-podman-runner.service fast'; do
+  : >"$MOCK_CALLS"
+  : >"$MOCK_REQUESTS"
+  if RUNNER_UNITS=$units run_cleanup >/dev/null 2>&1; then exit 1; fi
+  [[ ! -s $MOCK_CALLS && ! -s $MOCK_REQUESTS && ! -e $STATE_DIR/cleanup-in-flight ]]
+done
+if (
+  unset RUNNER_UNITS
+  run_cleanup >/dev/null 2>&1
+); then exit 1; fi
+
+# Three runners: an extra Podman runner shares the engine, so its registry
+# entry, state directory, transition markers and unit state all gate cleanup.
+extra=forgejo-podman-runner-fast.service
+three="forgejo-actions-runner.service forgejo-podman-runner.service $extra"
+# A two-runner registry is a configuration switch awaiting reboot.
+[[ $(RUNNER_UNITS=$three run_cleanup) == 'skipped reason=runner_registry_mismatch' ]]
+printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service "$extra" >"$fixture/state/runner-units"
+[[ $(RUNNER_UNITS=$three run_cleanup) == 'skipped reason=runner_registry_missing' ]]
+mkdir "$fixture/state/runners/$extra"
+: >"$MOCK_CALLS"
+RUNNER_UNITS=$three run_cleanup >/dev/null
+[[ $(cat "$MOCK_CALLS") == images && ! -e $STATE_DIR/cleanup-in-flight ]]
+# The two-runner configuration no longer matches the three-runner registry.
+[[ $(run_cleanup) == 'skipped reason=runner_registry_mismatch' ]]
+for marker in owned pending teardown-required drain-pending resume-pending drain-disowned; do
+  touch "$fixture/state/runners/$extra/$marker"
+  : >"$MOCK_CALLS"
+  [[ $(RUNNER_UNITS=$three run_cleanup) == "skipped reason=transition_marker marker=$marker" ]]
+  [[ ! -s $MOCK_CALLS ]]
+  rm "$fixture/state/runners/$extra/$marker"
+done
+for state in active activating deactivating; do
+  : >"$MOCK_CALLS"
+  [[ $(RUNNER_UNITS=$three MOCK_RUNNER_UNIT=$extra MOCK_RUNNER_STATE=$state run_cleanup) == "skipped reason=runner_active unit=$extra" ]]
+  [[ ! -s $MOCK_CALLS ]]
+done
+: >"$MOCK_CALLS"
+[[ $(RUNNER_UNITS=$three MOCK_RUNNER_UNIT=$extra MOCK_RUNNER_JOB_FIELD=Job=7 run_cleanup) == "skipped reason=runner_active unit=$extra" ]]
+[[ ! -s $MOCK_CALLS ]]
+# An unknown runner state directory or a symlinked one is never trusted.
+mkdir "$fixture/state/runners/forgejo-podman-runner-old.service"
+[[ $(RUNNER_UNITS=$three run_cleanup) == 'skipped reason=runner_registry_mismatch' ]]
+rmdir "$fixture/state/runners/forgejo-podman-runner-old.service"
+mv "$fixture/state/runners/$extra" "$fixture/extra-state"
+ln -s "$fixture/extra-state" "$fixture/state/runners/$extra"
+[[ $(RUNNER_UNITS=$three run_cleanup) == 'skipped reason=runner_registry_missing' ]]
+rm "$fixture/state/runners/$extra"
+rmdir "$fixture/extra-state"
+printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service >"$fixture/state/runner-units"
+# The leftover extra directory is unknown to the two-runner configuration.
+mkdir "$fixture/state/runners/$extra"
+[[ $(run_cleanup) == 'skipped reason=runner_registry_mismatch' ]]
+rmdir "$fixture/state/runners/$extra"
 
 # Exited and dead containers are removed one by one, newest first and then by
 # ID, up to the limit; never by a bulk prune. Each removal is its own fenced

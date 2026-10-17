@@ -5,7 +5,9 @@ state_dir=${STATE_DIR:-/run/forgejo-runner-aggregate-pressure}
 cgroup_root=${CGROUP_ROOT:-/sys/fs/cgroup}
 systemctl_bin=${SYSTEMCTL_BIN:-systemctl}
 fence=$state_dir/cleanup-in-flight
-runner_units=(forgejo-actions-runner.service forgejo-podman-runner.service)
+# The installed command bakes in the configured list: the primary Docker
+# runner, then every Podman runner in the guard's order.
+runner_units_text=${RUNNER_UNITS:-}
 api_units=(forgejo-runner-docker.service forgejo-runner-podman.service)
 deadline=$((SECONDS + 60))
 fail() {
@@ -24,6 +26,16 @@ trusted_dir() {
 trusted_file() {
   [[ -f $1 && ! -L $1 && $(stat -c '%u:%a:%h' -- "$1") == "$EUID:600:1" ]]
 }
+IFS=$' \t\n' read -r -d '' -a runner_units <<<"$runner_units_text" || true
+((${#runner_units[@]} > 1)) || fail runner_list
+[[ ${runner_units[0]} == forgejo-actions-runner.service &&
+  ${runner_units[1]} == forgejo-podman-runner.service ]] || fail runner_list
+for ((i = 0; i < ${#runner_units[@]}; i++)); do
+  [[ ${runner_units[i]} =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || fail runner_list
+  for ((j = 0; j < i; j++)); do
+    [[ ${runner_units[i]} != "${runner_units[j]}" ]] || fail runner_list
+  done
+done
 trusted_dir "$state_dir" || fail state_directory
 [[ ! -L $state_dir/lifecycle.lock ]] || fail lifecycle_lock
 exec 9>"$state_dir/lifecycle.lock"
@@ -69,13 +81,18 @@ for path in "$fence"/*; do
 done
 
 [[ -f $state_dir/runner-units && ! -L $state_dir/runner-units &&
-  $(wc -l <"$state_dir/runner-units") == 2 &&
+  $(wc -l <"$state_dir/runner-units") == "${#runner_units[@]}" &&
   $(cat "$state_dir/runner-units") == "$(printf '%s\n' "${runner_units[@]}")" ]] || fail runner_registry
 [[ -d $state_dir/runners && ! -L $state_dir/runners ]] || fail runner_registry
+# Exactly one state directory for every Podman runner and nothing else.
 paths=("$state_dir/runners"/*)
-[[ ${#paths[@]} == 1 && ${paths[0]} == "$state_dir/runners/${runner_units[1]}" &&
-  -d ${paths[0]} && ! -L ${paths[0]} ]] || fail runner_registry
-for directory in "$state_dir" "${paths[0]}"; do
+[[ ${#paths[@]} == $((${#runner_units[@]} - 1)) ]] || fail runner_registry
+runner_dirs=()
+for unit in "${runner_units[@]:1}"; do
+  [[ -d $state_dir/runners/$unit && ! -L $state_dir/runners/$unit ]] || fail runner_registry
+  runner_dirs+=("$state_dir/runners/$unit")
+done
+for directory in "$state_dir" "${runner_dirs[@]}"; do
   for marker in owned pending teardown-required drain-pending resume-pending drain-disowned; do
     [[ ! -e $directory/$marker && ! -L $directory/$marker ]] || fail transition_marker
   done
@@ -118,7 +135,7 @@ snapshot() {
       inactive:dead | failed:failed) ;;
       *) fail unit_not_terminal ;;
     esac
-    if ((index >= 2)); then
+    if ((index >= ${#runner_units[@]})); then
       # systemd clears ExecMainStartTimestampMonotonic after a clean stop.
       # Zero is accepted only with the complete terminal + no-job/PID
       # proof above and positive empty-worker evidence below. A different
@@ -126,7 +143,7 @@ snapshot() {
       if [[ ${fields[ExecMainStartTimestampMonotonic]-} == 0 ]]; then
         : # Includes a failed ExecCondition cancelled before ExecStart.
       else
-        [[ "$unit ${fields[ExecMainStartTimestampMonotonic]-}" == "${generation_lines[$((index - 2))]}" ]] || fail api_generation_changed
+        [[ "$unit ${fields[ExecMainStartTimestampMonotonic]-}" == "${generation_lines[$((index - ${#runner_units[@]}))]}" ]] || fail api_generation_changed
       fi
       expected_scope=/forgejobuilds.slice/$unit
     else
@@ -149,7 +166,7 @@ snapshot() {
   empty_cgroup /forgejobuilds.slice
   printf '%s\n' "$metadata"
 }
-# Both APIs and runners take this same lock in ExecCondition. A queued or
+# Both APIs and every runner take this same lock in ExecCondition. A queued or
 # activating start has Job/ActiveState/ControlPID evidence even after its gate
 # passed. Repeat complete evidence under exclusion; stable counts alone cannot
 # establish worker termination or completion of the recorded API generation.

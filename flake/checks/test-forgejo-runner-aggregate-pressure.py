@@ -21,6 +21,7 @@ DISK_HELPER = Path(os.environ.get(
     'DISK_HELPER_FILE', GUARD.with_name('disk-space-admission.sh')))
 PRIMARY = 'forgejo-actions-runner.service'
 SECOND = 'forgejo-podman-actions-runner.service'
+THIRD = 'forgejo-podman-runner-fast.service'
 
 
 class GuardTests(unittest.TestCase):
@@ -36,7 +37,8 @@ class GuardTests(unittest.TestCase):
                   unknown_state=False, game_states=None, game_times=None,
                   game_start_skipped=False, disk_start_skipped=False,
                   disk_values=None, cleanup_fence=None, slice_values=None,
-                  prolonged='100', inactive_after=''):
+                  prolonged='100', inactive_after='', third_runner=None,
+                  third_marker=''):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -80,6 +82,18 @@ class GuardTests(unittest.TestCase):
                 }.items():
                     (root / f'podman-runner-{property_name}').write_text(
                         second_runner.get(property_name, value))
+            if third_runner is not None:
+                third_state = state / 'runners' / THIRD
+                third_state.mkdir(parents=True)
+                if third_marker:
+                    (third_state / third_marker).write_text(
+                        third_runner.get('drain_generation', '789') + '\n')
+                for property_name, value in {
+                    'active': 'active', 'enabled': 'enabled', 'load': 'loaded',
+                    'result': 'success', 'generation': '789'
+                }.items():
+                    (root / f'fast-runner-{property_name}').write_text(
+                        third_runner.get(property_name, value))
             (root / 'actual').write_text(initial)
             (root / 'runner-active').write_text(runner_state)
             (root / 'runner-enabled').write_text(runner_enabled)
@@ -129,6 +143,7 @@ if [[ $1 == show ]]; then
   case "$4" in
     forgejo-actions-runner.service) runner_file="$FIXTURE/runner" ;;
     forgejo-podman-actions-runner.service) runner_file="$FIXTURE/podman-runner" ;;
+    forgejo-podman-runner-fast.service) runner_file="$FIXTURE/fast-runner" ;;
     *) runner_file='' ;;
   esac
   case "$4:$property" in
@@ -158,6 +173,7 @@ if [[ $1 == --no-block ]]; then
   case "$3" in
     forgejo-actions-runner.service) runner_file="$FIXTURE/runner"; printf '%s\n' "$2" >> "$FIXTURE/runner-actions" ;;
     forgejo-podman-actions-runner.service) runner_file="$FIXTURE/podman-runner" ;;
+    forgejo-podman-runner-fast.service) runner_file="$FIXTURE/fast-runner" ;;
     *) exit 2 ;;
   esac
   printf '%s:%s\n' "$2" "$3" >> "$FIXTURE/runner-unit-actions"
@@ -243,6 +259,9 @@ esac
             self.drain_owned = (state / 'drain-owned').exists()
             self.second_drain_owned = (state / 'runners' / SECOND / 'drain-owned').exists()
             self.second_drain_pending = (state / 'runners' / SECOND / 'drain-pending').exists()
+            self.third_drain_owned = (state / 'runners' / THIRD / 'drain-owned').exists()
+            self.third_drain_generation = ((state / 'runners' / THIRD / 'drain-owned').read_text().strip()
+                                           if self.third_drain_owned else None)
             self.first_drain_generation = ((state / 'drain-owned').read_text().strip()
                                            if self.drain_owned else None)
             self.second_drain_generation = ((state / 'runners' / SECOND / 'drain-owned').read_text().strip()
@@ -741,8 +760,52 @@ esac
         self.assertEqual(self.runner_unit_actions, [])
         self.assertTrue(self.second_drain_pending)
 
+    def test_three_runner_drains_have_independent_generations(self):
+        self.assertEqual(self.run_guard([2500, 2500], admission=True,
+                                        second_runner={'generation': '456'},
+                                        third_runner={'generation': '789'},
+                                        runner_units=[PRIMARY, SECOND, THIRD]),
+                         (0, [], False, False))
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'stop:{SECOND}', f'stop:{THIRD}'])
+        self.assertEqual((self.first_drain_generation, self.second_drain_generation,
+                          self.third_drain_generation), ('123', '456', '789'))
+
+    def test_game_drains_and_resumes_all_three_runners(self):
+        self.run_guard([0, 0, 0, 0], admission=True,
+                       game_states=['present', 'absent', 'absent', 'absent'],
+                       game_times=[100, 110, 129, 130],
+                       second_runner={}, third_runner={},
+                       runner_units=[PRIMARY, SECOND, THIRD])
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'stop:{SECOND}', f'stop:{THIRD}',
+                          f'start:{PRIMARY}', f'start:{SECOND}', f'start:{THIRD}'])
+        self.assertFalse(self.drain_owned)
+        self.assertFalse(self.second_drain_owned)
+        self.assertFalse(self.third_drain_owned)
+
+    def test_manually_stopped_third_runner_is_not_claimed(self):
+        self.run_guard([2500, 2500, 0, 0], admission=True, second_runner={},
+                       third_runner={'active': 'inactive', 'generation': '0'},
+                       runner_units=[PRIMARY, SECOND, THIRD])
+        self.assertEqual(self.runner_unit_actions,
+                         [f'stop:{PRIMARY}', f'stop:{SECOND}',
+                          f'start:{PRIMARY}', f'start:{SECOND}'])
+        self.assertFalse(self.third_drain_owned)
+
+    def test_ambiguous_third_drain_blocks_all_transitions(self):
+        self.assertEqual(self.run_guard([2500, 2500], admission=True,
+                                        second_runner={}, third_runner={},
+                                        third_marker='drain-pending',
+                                        runner_units=[PRIMARY, SECOND, THIRD]),
+                         (1, [], False, False))
+        self.assertEqual(self.runner_unit_actions, [])
+
     def test_changed_runner_list_or_unknown_state_fails_closed(self):
         self.assertEqual(self.run_guard([0], runner_units=[PRIMARY],
+                                        persisted_units=[PRIMARY, SECOND])[0], 1)
+        self.assertEqual(self.run_guard([0], runner_units=[PRIMARY, SECOND, THIRD],
+                                        second_runner={}, third_runner={},
                                         persisted_units=[PRIMARY, SECOND])[0], 1)
         self.assertEqual(self.run_guard([0], runner_units=[PRIMARY, SECOND],
                                         second_runner={}, unknown_state=True)[0], 1)
@@ -752,7 +815,8 @@ class LifecycleTests(unittest.TestCase):
     def run_stop(self, freezer='frozen', guard='failed', owned=False,
                  pending=False, drain_disowned=False, runner='inactive',
                  lock_held=False, kill_stays_deactivating=False,
-                 second_runner=None, runner_units=None, persisted_units=None):
+                 second_runner=None, runner_units=None, persisted_units=None,
+                 third_runner=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -766,6 +830,8 @@ class LifecycleTests(unittest.TestCase):
             (root / 'runner').write_text(runner)
             if second_runner is not None:
                 (root / 'podman-runner').write_text(second_runner)
+            if third_runner is not None:
+                (root / 'fast-runner').write_text(third_runner)
             if persisted_units is not None:
                 (state / 'runner-units').write_text('\n'.join(persisted_units) + '\n')
             if owned:
@@ -783,6 +849,7 @@ if [[ $1 == show ]]; then
     --property=ActiveState:forgejo-runner-io-pressure-guard.service) cat "$FIXTURE/guard" ;;
     --property=ActiveState:forgejo-actions-runner.service) cat "$FIXTURE/runner" ;;
     --property=ActiveState:forgejo-podman-actions-runner.service) cat "$FIXTURE/podman-runner" ;;
+    --property=ActiveState:forgejo-podman-runner-fast.service) cat "$FIXTURE/fast-runner" ;;
     *) exit 2 ;;
   esac
 elif [[ $1 == thaw && $2 == forgejobuilds.slice ]]; then
@@ -794,6 +861,7 @@ elif [[ $1 == kill && $2 == --signal=KILL && $3 == --kill-whom=all ]]; then
   case "$4" in
     forgejo-actions-runner.service) runner_file="$FIXTURE/runner"; action=kill ;;
     forgejo-podman-actions-runner.service) runner_file="$FIXTURE/podman-runner"; action=kill-podman ;;
+    forgejo-podman-runner-fast.service) runner_file="$FIXTURE/fast-runner"; action=kill-fast ;;
     *) exit 2 ;;
   esac
   printf '%s\\n' "$action" >> "$FIXTURE/actions"
@@ -861,6 +929,13 @@ fi
                                        runner_units=[PRIMARY, SECOND]),
                          (0, True, ['kill', 'kill-podman', 'thaw'], False, True))
 
+    def test_teardown_kills_all_three_runners_before_owned_thaw(self):
+        self.assertEqual(self.run_stop(owned=True, runner='deactivating',
+                                       second_runner='deactivating',
+                                       third_runner='activating',
+                                       runner_units=[PRIMARY, SECOND, THIRD]),
+                         (0, True, ['kill', 'kill-podman', 'kill-fast', 'thaw'], False, True))
+
     def test_teardown_includes_runner_from_previous_configuration(self):
         self.assertEqual(self.run_stop(owned=True, second_runner='deactivating',
                                        runner_units=[PRIMARY],
@@ -875,7 +950,8 @@ class StartGateTests(unittest.TestCase):
                  game_state=None, game_last_seen=None, game_now=100,
                  game_argv0='/games/HeroesOfTheStorm_x64.exe',
                  game_exe='wine64-preloader', missing_cmdline=False,
-                 zombie=False, game_bypass=None, disk_value=None):
+                 zombie=False, game_bypass=None, disk_value=None,
+                 third_marker='', missing_third=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -886,10 +962,13 @@ class StartGateTests(unittest.TestCase):
                 (state / marker).touch()
             if game_last_seen is not None:
                 (state / 'game-last-seen').write_text(str(game_last_seen) + '\n')
-            if runner_units and SECOND in runner_units:
-                (state / 'runners' / SECOND).mkdir(parents=True)
+            for unit in (SECOND, THIRD):
+                if runner_units and unit in runner_units and not (missing_third and unit == THIRD):
+                    (state / 'runners' / unit).mkdir(parents=True)
             if second_marker:
                 (state / 'runners' / SECOND / second_marker).touch()
+            if third_marker:
+                (state / 'runners' / THIRD / third_marker).touch()
             if persisted_units is not None:
                 (state / 'runner-units').write_text('\n'.join(persisted_units) + '\n')
             if unknown_state:
@@ -958,7 +1037,7 @@ exit 2
                 return process.returncode, (state / marker).exists()
             result = subprocess.run(['bash', str(GATE)], env=env,
                                     capture_output=True, timeout=6)
-            candidate_state = state if runner_unit == PRIMARY else state / 'runners' / SECOND
+            candidate_state = state if runner_unit == PRIMARY else state / 'runners' / runner_unit
             self.game_start_skipped = (candidate_state / 'game-start-skipped').exists()
             self.disk_start_skipped = (candidate_state / 'disk-start-skipped').exists()
             return result.returncode, bool(marker and (state / marker).exists())
@@ -1069,6 +1148,39 @@ exit 2
         self.assertEqual(self.run_gate(runner_units=[PRIMARY, SECOND],
                                        persisted_units=[PRIMARY, SECOND],
                                        second_marker='drain-pending'), (1, False))
+
+    def test_three_runners_are_admitted_and_drains_stay_per_unit(self):
+        units = [PRIMARY, SECOND, THIRD]
+        for unit in units:
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units), (0, False))
+        # Only the drained extra runner is held; the others start.
+        for unit in (PRIMARY, SECOND):
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units,
+                                           third_marker='drain-owned'), (0, False))
+        self.assertEqual(self.run_gate(runner_unit=THIRD, runner_units=units,
+                                       persisted_units=units,
+                                       third_marker='drain-owned'), (1, False))
+        for unit in units:
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units,
+                                           third_marker='drain-pending'), (1, False))
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units,
+                                           missing_third=True), (1, False))
+            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
+                                           persisted_units=units,
+                                           marker='cleanup-in-flight'), (1, True))
+
+    def test_game_and_disk_skips_are_recorded_for_the_extra_runner(self):
+        units = [PRIMARY, SECOND, THIRD]
+        self.assertEqual(self.run_gate(game_state='present', runner_unit=THIRD,
+                                       runner_units=units, persisted_units=units), (1, False))
+        self.assertTrue(self.game_start_skipped)
+        self.assertEqual(self.run_gate(runner_unit=THIRD, runner_units=units,
+                                       persisted_units=units, disk_value='100 25'), (1, False))
+        self.assertTrue(self.disk_start_skipped)
 
     def test_changed_list_and_unknown_state_block_starts(self):
         self.assertEqual(self.run_gate(runner_units=[PRIMARY],

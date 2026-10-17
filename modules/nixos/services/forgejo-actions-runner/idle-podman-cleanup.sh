@@ -27,7 +27,10 @@ image_limit=${IMAGE_DELETE_LIMIT:-8}
 container_limit=${CONTAINER_DELETE_LIMIT:-8}
 fence=$state_dir/cleanup-in-flight
 umask 077
-runner_units=(forgejo-actions-runner.service forgejo-podman-runner.service)
+primary_runner=forgejo-actions-runner.service
+podman_runner=forgejo-podman-runner.service
+# The primary Docker runner, then every Podman runner in the guard's order.
+runner_units_text=${RUNNER_UNITS:-}
 # Buildx docker-container builders run as buildx_buildkit_<node> and keep their
 # BuildKit state in buildx_buildkit_<node>_state.
 builder_pattern='^buildx_buildkit_[A-Za-z0-9][A-Za-z0-9_.-]*$'
@@ -57,6 +60,15 @@ fail() {
 [[ $lock_budget_seconds =~ ^[1-9][0-9]*$ ]] && ((lock_budget_seconds <= 40)) || exit 1
 [[ $image_limit =~ ^[1-9][0-9]*$ ]] && ((image_limit <= 8)) || exit 1
 [[ $container_limit =~ ^[1-9][0-9]*$ ]] && ((container_limit <= 8)) || exit 1
+IFS=$' \t\n' read -r -d '' -a runner_units <<< "$runner_units_text" || true
+((${#runner_units[@]} > 1)) || exit 1
+[[ ${runner_units[0]} == "$primary_runner" && ${runner_units[1]} == "$podman_runner" ]] || exit 1
+for ((i = 0; i < ${#runner_units[@]}; i++)); do
+  [[ ${runner_units[i]} =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || exit 1
+  for ((j = 0; j < i; j++)); do
+    [[ ${runner_units[i]} != "${runner_units[j]}" ]] || exit 1
+  done
+done
 [[ -d $state_dir && ! -L $state_dir ]] || skip aggregate_state_missing
 # The service runs as root. Isolated unprivileged fixtures own their own state.
 [[ $(stat -c '%u:%a' -- "$state_dir") == "$EUID:700" ]] || skip aggregate_state_untrusted
@@ -88,15 +100,23 @@ lock_deadline=$((SECONDS + lock_budget_seconds))
 # into a cleanup opportunity.
 [[ -f $state_dir/runner-units && ! -L $state_dir/runner-units ]] || skip runner_registry_missing
 [[ $(cat "$state_dir/runner-units") == "$(printf '%s\n' "${runner_units[@]}")" ]] || skip runner_registry_mismatch
-[[ -d $state_dir/runners/${runner_units[1]} && ! -L $state_dir/runners/${runner_units[1]} ]] || skip runner_registry_missing
+for unit in "${runner_units[@]:1}"; do
+  [[ -d $state_dir/runners/$unit && ! -L $state_dir/runners/$unit ]] || skip runner_registry_missing
+done
 for path in "$state_dir"/runners/*; do
   [[ -e $path || -L $path ]] || continue
-  [[ $path == "$state_dir/runners/${runner_units[1]}" && -d $path && ! -L $path ]] || skip runner_registry_mismatch
+  known=0
+  for unit in "${runner_units[@]:1}"; do
+    [[ $path != "$state_dir/runners/$unit" ]] || known=1
+  done
+  ((known == 1)) && [[ -d $path && ! -L $path ]] || skip runner_registry_mismatch
 done
 for marker in owned pending teardown-required drain-pending resume-pending drain-disowned; do
   [[ ! -e $state_dir/$marker && ! -L $state_dir/$marker ]] || skip "transition_marker marker=$marker"
-  [[ ! -e $state_dir/runners/${runner_units[1]}/$marker && ! -L $state_dir/runners/${runner_units[1]}/$marker ]] ||
-    skip "transition_marker marker=$marker"
+  for unit in "${runner_units[@]:1}"; do
+    [[ ! -e $state_dir/runners/$unit/$marker && ! -L $state_dir/runners/$unit/$marker ]] ||
+      skip "transition_marker marker=$marker"
+  done
 done
 
 query_unit() {
@@ -208,7 +228,7 @@ destructive_request() {
   rm -- "$response" "$fence/owner" "$fence/api-generations" || fail cleanup_fence_clear
   rmdir -- "$fence" || fail cleanup_fence_clear
 }
-# Exited and dead containers are safe to remove. With both runners inactive and
+# Exited and dead containers are safe to remove. With every runner inactive and
 # the lifecycle lock held, no job can own a container, so two kinds of live
 # container are leftovers from jobs whose cleanup never ran: a Buildx builder in
 # any state, and any other container, apart from a runner job container, that

@@ -6,6 +6,8 @@
 }: let
   cfg = config.services.forgejo-actions-runner;
   enabled = cfg.enable && cfg.isolatedDocker.enable;
+  # The primary runner first, then every Podman runner, as the guard expects.
+  runnerUnits = lib.concatStringsSep " " cfg.runnerUnits;
   stateDir = "/var/lib/forgejo-docker";
   runtimeDir = "/run/forgejo-docker";
   diskSpaceEnvironment = {
@@ -154,9 +156,7 @@ in {
         ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"]
         ++ lib.optional cfg.podmanCanary.enable "forgejo-runner-podman.service";
       restartIfChanged = false;
-      environment.RUNNER_UNITS =
-        "forgejo-actions-runner.service"
-        + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
+      environment.RUNNER_UNITS = runnerUnits;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -175,9 +175,7 @@ in {
       environment =
         diskSpaceEnvironment
         // {
-          RUNNER_UNITS =
-            "forgejo-actions-runner.service"
-            + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
+          RUNNER_UNITS = runnerUnits;
           ADMISSION_CONTROL_ENABLED =
             if cfg.ioPressureGuard.admissionControl.enable
             then "1"
@@ -228,9 +226,7 @@ in {
           GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
           GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
           GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
-          RUNNER_UNITS =
-            "forgejo-actions-runner.service"
-            + lib.optionalString cfg.podmanCanary.enable " forgejo-podman-runner.service";
+          RUNNER_UNITS = runnerUnits;
         };
       # The state directory is root-only; only this fixed condition command
       # runs as root. A skipped start must not trigger Restart=on-failure.
