@@ -2,7 +2,15 @@
 {pkgs}:
 if pkgs.stdenv.hostPlatform.system != "x86_64-linux"
 then pkgs.runCommand "forgejo-cleanup-fence-unsupported-platform" {} ''touch "$out"''
-else
+else let
+  # The timeout trial removes a real exited container from this local image.
+  exitedImage = pkgs.dockerTools.buildLayeredImage {
+    name = "cleanup-fence-exited";
+    tag = "local";
+    contents = [pkgs.pkgsStatic.busybox];
+    config.Cmd = ["/bin/busybox" "true"];
+  };
+in
   pkgs.testers.runNixOSTest {
     name = "forgejo-cleanup-fence";
     nodes.machine = {lib, ...}: {
@@ -126,9 +134,11 @@ else
       runners = ["forgejo-actions-runner.service", "forgejo-podman-runner.service"]
       apis = ["forgejo-runner-docker.service", "forgejo-runner-podman.service"]
       recover = "/run/current-system/sw/bin/forgejo-runner-cleanup-fence-recover"
+      podman = "docker -H unix:///run/forgejo-podman/podman.sock"
+      fixture_container = "a" * 64
 
       def make_fence():
-          machine.succeed(f"umask 077; mkdir -m 700 {fence}; printf 'cleanup-v2 123 123 0 POST /v5.0.0/libpod/containers/prune\\n' > {fence}/owner")
+          machine.succeed(f"umask 077; mkdir -m 700 {fence}; printf 'cleanup-v2 123 123 0 DELETE /v5.0.0/libpod/containers/{fixture_container}?force=false\\n' > {fence}/owner")
           for api in apis:
               generation = machine.succeed(f"systemctl show -p ExecMainStartTimestampMonotonic --value {api}").strip()
               assert int(generation) > 0
@@ -188,10 +198,17 @@ else
 
       success = machine.succeed("cat " + marker)
       # A systemd timeout during a destructive request creates the fence. The
-      # request shim delays completion; actual systemd kills the whole cgroup.
+      # request shim delays the removal of a real exited container; actual
+      # systemd kills the whole cgroup.
       machine.succeed("systemctl stop " + " ".join(runners))
+      machine.succeed(f"{podman} load < ${exitedImage}")
+      # An attached docker CLI run does not return from the Podman API here.
+      machine.succeed(f"{podman} create --network none --name cleanup-fence-exited cleanup-fence-exited:local")
+      machine.succeed(f"{podman} start cleanup-fence-exited")
+      machine.wait_until_succeeds(f"test \"$({podman} inspect --format '{{{{.State.Status}}}}' cleanup-fence-exited)\" = exited", timeout=30)
+      exited = machine.succeed(f"{podman} inspect --format '{{{{.Id}}}}' cleanup-fence-exited").strip()
       df = "#!/bin/sh\nprintf 'Size Avail\\n100 20\\n'\n"
-      curl = "#!${pkgs.bash}/bin/bash\nif [[ \"$*\" == *'/containers/prune'* ]]; then sleep 30; fi\nexec ${pkgs.curl}/bin/curl \"$@\"\n"
+      curl = "#!${pkgs.bash}/bin/bash\nif [[ \"$*\" == *'/libpod/containers/'*'?force=false'* ]]; then sleep 30; fi\nexec ${pkgs.curl}/bin/curl \"$@\"\n"
       machine.succeed("printf %s " + shlex.quote(df) + " > /run/cleanup-df; chmod +x /run/cleanup-df")
       machine.succeed("printf %s " + shlex.quote(curl) + " > /run/cleanup-curl; chmod +x /run/cleanup-curl")
       machine.succeed("mkdir -p /run/systemd/system/forgejo-idle-podman-cleanup.service.d")
@@ -200,6 +217,7 @@ else
       machine.fail("systemctl start " + cleanup)
       assert machine.succeed(f"systemctl show -p Result --value {cleanup}").strip() == "timeout"
       machine.succeed(f"test -d {fence}")
+      machine.succeed(f"grep -qF ' DELETE /v5.0.0/libpod/containers/{exited}?force=false' {fence}/owner")
       machine.fail("fixture-cleanup-health")
       assert machine.succeed("cat " + marker) == success
       # Below-trigger disk samples cannot turn subsequent failures into success.

@@ -3,6 +3,7 @@
 **Status:** Accepted; recovery and deployment require qualification
 **Date:** 2026-10-06
 **Applies to:** idle Podman runner cleanup and aggregate admission
+**Amended:** 2026-10-17, exited containers outside pods follow capped per-ID deletion like images, newest first ([#719](https://git.alc.xyz/alcxyz/nix-config/issues/719)).
 
 ## Context
 
@@ -18,9 +19,15 @@ an available lifecycle lock.
 Use capped, sequential deletion of the oldest unused image IDs beyond the
 creation-age cutoff. Preserve referenced, recent, multitag and parent images.
 Docker-compatible deletion uses `force=false` and `noprune=true`; do not invoke
-bulk image prune or cache-mount cleanup. Retain existing request and service
-budgets, lifecycle exclusion and terminal-job checks. A pass may do partial
-work within its budget.
+bulk image prune or cache-mount cleanup. Exited and dead containers outside
+pods follow the same rule: capped, sequential deletion by ID with
+`force=false`, never a bulk container prune. They go newest first, so a
+container's standalone dependents go before it; a container that a pod member
+depends on is refused and keeps the fence, as the bulk prune did. A bulk
+prune's runtime grows with the number of containers it removes, so any client
+deadline can turn a completing prune into an uncertain one. Retain existing
+request and service budgets, lifecycle exclusion and terminal-job checks. A
+pass may do partial work within its budget.
 
 Before each destructive request, create an independently owned, trusted runtime
 completion fence under the lifecycle lock. Clear it only on a validated complete

@@ -380,6 +380,7 @@ p rm -f --time 1 FORGEJO-ACTIONS-TASK-qualification_JOB-test >/dev/null
 p volume create buildx_buildkit_held0_state >/dev/null
 p run --pull=never --network none --cgroups=disabled --name volume-reference \
   -v buildx_buildkit_held0_state:/state "$base" true >/dev/null
+holder_id=$(p container inspect --format '{{.Id}}' volume-reference)
 status=$("$CURL_BIN" --silent --show-error --max-time 10 --unix-socket "$PODMAN_SOCKET" \
   -X DELETE --output /dev/null --write-out '%{http_code}' \
   http://localhost/v5.0.0/libpod/volumes/buildx_buildkit_held0_state)
@@ -391,7 +392,19 @@ assert_output 'removed_leftover kind=builder name=buildx_buildkit_qualification0
 assert_output 'removed_leftover kind=stale name=nested-database'
 assert_output 'removed_builder_volume name=buildx_buildkit_qualification0_state'
 assert_output 'kept_builder_volume name=buildx_buildkit_held0_state reason=in_use'
-assert_output 'failed_builder_volumes=0'
+# The exited volume holder is removed by ID after the volume phase. Slow
+# leftover removal may exhaust the lock budget before the holder or the image;
+# no image is deleted before such a skip, so further passes finish the same
+# first image snapshot. A later pass may then remove the released volume.
+passes=$output
+for ((pass = 1; pass < 3; pass++)); do
+  [[ $output != *'pruned leftovers='* ]] || break
+  [[ $output == *'skipped reason=lock_budget_exhausted step='* ]]
+  [[ ! -e $STATE_DIR/cleanup-in-flight ]]
+  output=$(run_cleanup)
+  passes+=$'\n'$output
+done
+[[ $(rg --count --fixed-strings "removed_container id=$holder_id" <<<"$passes") == 1 ]]
 assert_complete
 assert_output 'image_min_age=1h images=1 reclaimed_bytes='
 assert_absent image exists localhost/qualification-old-child:fixture
@@ -402,8 +415,8 @@ p volume exists qualification-unrelated
 echo 'PASS first cleanup retains parent, multitag image, Buildah cache sentinel and unrelated volume'
 assert_absent container exists buildx_buildkit_qualification0
 assert_absent container exists nested-database
+assert_absent container exists volume-reference
 assert_absent volume exists buildx_buildkit_qualification0_state
-p volume exists buildx_buildkit_held0_state
 p image exists localhost/qualification-recent-unused:fixture
 for name in old-unused old-referenced; do
   p untag "localhost/qualification-$name:fixture" "localhost/qualification-$name:protected"
@@ -427,7 +440,7 @@ assert_absent image exists localhost/qualification-old-parent:fixture
 p unshare test -f "$cache_mounts/sentinel"
 p volume exists qualification-unrelated
 echo 'PASS bounded individual deletes remove old unused tagged images'
-echo 'PASS actual cleanup: builder/state removal, HTTP 409 preservation, stale nested removal, recent image retention'
+echo 'PASS actual cleanup: builder/state removal, HTTP 409 preservation, stale nested removal, exited container removal by ID, recent image retention'
 run_gate() {
   env -i PATH="$PATH" STATE_DIR="$STATE_DIR" SYSTEMCTL_BIN="$SYSTEMCTL_BIN" \
     GAME_HELPER_FILE="$repo/modules/nixos/services/forgejo-actions-runner/game-admission.sh" \
@@ -437,8 +450,9 @@ run_gate() {
     RUNNER_UNITS='forgejo-actions-runner.service forgejo-podman-runner.service' \
     timeout --kill-after=2s 10s bash -x "$repo/modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh"
 }
-# Earlier passes may have removed the formerly held volume after its container
-# was pruned. Recreate a known removable volume for this independent lock trial.
+# Its holder is gone, so a pass after the first one removed the formerly held
+# volume. Recreate a known removable volume for this independent lock trial.
+assert_absent volume exists buildx_buildkit_held0_state
 p volume create buildx_buildkit_held0_state >/dev/null
 # One controlled eligible image makes full image completion fit after the
 # synthetic lock delay, without changing any production client/lock budget.

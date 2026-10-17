@@ -29,7 +29,9 @@ class RecoveryTests(unittest.TestCase):
         self.fence.mkdir(mode=0o700)
         self.owner = self.fence / "owner"
         self.owner.write_text(
-            "cleanup-v2 123 123 0 POST /v5.0.0/libpod/containers/prune\n"
+            "cleanup-v2 123 123 0 DELETE /v5.0.0/libpod/containers/"
+            + "a" * 64
+            + "?force=false\n"
         )
         self.owner.chmod(0o600)
         generation = self.fence / "api-generations"
@@ -129,6 +131,30 @@ for argument in args[1:-1]:
                 self.run_script("runner-start-gate.sh", RUNNER_UNIT=unit).returncode, 0
             )
 
+    def test_every_recorded_request_kind_is_recoverable(self):
+        digest = "a" * 64
+        for path in [
+            "DELETE /v5.0.0/libpod/containers/" + digest + "?force=false",
+            "DELETE /v5.0.0/libpod/containers/" + digest + "?force=true&timeout=10",
+            "DELETE /v5.0.0/libpod/volumes/buildx_buildkit_fixture0_state",
+            "DELETE /images/" + digest + "?force=false&noprune=true",
+            # Kept by an older cleanup that still used the bulk prune.
+            "POST /v5.0.0/libpod/containers/prune",
+        ]:
+            with self.subTest(path=path):
+                if not self.fence.exists():
+                    self.fence.mkdir(mode=0o700)
+                    generation = self.fence / "api-generations"
+                    generation.write_text(
+                        "\n".join(unit + " 12345" for unit in APIS) + "\n"
+                    )
+                    generation.chmod(0o600)
+                self.owner.write_text("cleanup-v2 123 123 0 " + path + "\n")
+                self.owner.chmod(0o600)
+                result = self.run_script()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(self.fence.exists())
+
     def test_each_pending_or_active_unit_refuses(self):
         for unit in RUNNERS + APIS:
             for field, value in [
@@ -213,6 +239,10 @@ for argument in args[1:-1]:
             "cleanup-v1 123 123 0 POST /containers/prune\n",
             "garbage\n",
             "cleanup-v2 123 123 0 DELETE /unrelated\n",
+            "cleanup-v2 123 123 0 DELETE /v5.0.0/libpod/containers/"
+            + "a" * 64
+            + "?force=true\n",
+            "cleanup-v2 123 123 0 DELETE /v5.0.0/libpod/containers/../x?force=false\n",
             "cleanup-v2 123 123 0 POST /containers/prune\nextra\n",
         ]:
             self.owner.write_text(body)

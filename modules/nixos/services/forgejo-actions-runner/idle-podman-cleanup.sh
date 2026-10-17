@@ -24,6 +24,7 @@ stale_after_seconds=${STALE_AFTER_SECONDS:-10800}
 lock_budget_seconds=${LOCK_BUDGET_SECONDS:-40}
 # A pass may make partial progress; never turn selection into a bulk prune.
 image_limit=${IMAGE_DELETE_LIMIT:-8}
+container_limit=${CONTAINER_DELETE_LIMIT:-8}
 fence=$state_dir/cleanup-in-flight
 umask 077
 runner_units=(forgejo-actions-runner.service forgejo-podman-runner.service)
@@ -55,6 +56,7 @@ fail() {
 [[ $stale_after_seconds =~ ^[1-9][0-9]*$ ]] || exit 1
 [[ $lock_budget_seconds =~ ^[1-9][0-9]*$ ]] && ((lock_budget_seconds <= 40)) || exit 1
 [[ $image_limit =~ ^[1-9][0-9]*$ ]] && ((image_limit <= 8)) || exit 1
+[[ $container_limit =~ ^[1-9][0-9]*$ ]] && ((container_limit <= 8)) || exit 1
 [[ -d $state_dir && ! -L $state_dir ]] || skip aggregate_state_missing
 # The service runs as root. Isolated unprivileged fixtures own their own state.
 [[ $(stat -c '%u:%a' -- "$state_dir") == "$EUID:700" ]] || skip aggregate_state_untrusted
@@ -172,15 +174,15 @@ destructive_request() {
       filter='type == "object" and .response == 409 and
         (.message | type == "string" and length > 0) and (.cause | type == "string")'
       ;;
-    container:200)
+    container:200 | exited:200)
       filter='type == "array" and length == 1 and all(.[];
         type == "object" and .Id == $id and (.Err == null or .Err == ""))'
       ;;
-    prune:200)
-      filter='type == "array" and all(.[]; type == "object" and
-        (.Id | type == "string" and test("^[0-9a-f]{64}$")) and
-        (.Size | type == "number" and . >= 0 and floor == .) and
-        (.Err == null or .Err == ""))'
+    # Podman answers 404 only when neither its database nor storage knows the
+    # ID, before any removal; every other refusal is a 500.
+    exited:404)
+      filter='type == "object" and .response == 404 and
+        (.message | type == "string" and length > 0) and (.cause | type == "string")'
       ;;
     image:200)
       filter='type == "array" and length > 0 and
@@ -206,7 +208,7 @@ destructive_request() {
   rm -- "$response" "$fence/owner" "$fence/api-generations" || fail cleanup_fence_clear
   rmdir -- "$fence" || fail cleanup_fence_clear
 }
-# Exited and dead containers are safe to prune. With both runners inactive and
+# Exited and dead containers are safe to remove. With both runners inactive and
 # the lifecycle lock held, no job can own a container, so two kinds of live
 # container are leftovers from jobs whose cleanup never ran: a Buildx builder in
 # any state, and any other container, apart from a runner job container, that
@@ -221,7 +223,7 @@ leftover_filter='
   def stale: (.Created | type == "number") and .Created <= now - $stale_after;
   def leftover: builder or ((terminal | not) and stale and (job | not));
 '
-# Skips unless every container on the engine is safe to prune, logging an
+# Skips unless every container on the engine is safe to remove, logging an
 # unreadable API separately from live containers.
 require_terminal() {
   local engine=$1 socket=$2 allow_leftovers=$3 containers status=0
@@ -281,12 +283,57 @@ for volume in $volumes; do
   esac
 done
 
-# Podman's native API excludes running containers and images still referenced
-# by containers. This service never touches pods, networks, volumes other than
-# Buildx builder state, or the local Podman storage CLI.
+# A bulk prune's runtime grows with the number of exited containers, so any
+# deadline can turn a completing prune into an uncertain one. Like images,
+# exited and dead containers are removed by ID, each within its own budget, and
+# a pass leaves the rest for the next. Newest go first, so a container's
+# standalone dependents go before it; force=false keeps Podman's refusal to
+# remove a running container or one that a skipped pod member still depends
+# on. Like Podman's prune, pod members are skipped: an infra container cannot
+# be removed on its own. Only the native list names the
+# pod and has sub-second creation times; the compatible list has whole seconds.
+# This service never touches pods, networks, volumes other than Buildx builder
+# state, or the local Podman storage CLI.
 safe_to_prune
-require_budget 10 prune_containers
-destructive_request POST "$libpod/containers/prune" 10 prune
+require_budget 5 list_containers
+containers=$(api "$podman_socket" GET '/containers/json?all=1') || skip "engine_api_unavailable engine=podman"
+require_budget 5 list_pod_members
+native_containers=$(api "$podman_socket" GET "$libpod/containers/json?all=true") || skip "engine_api_unavailable engine=podman"
+container_ids=$(printf '%s\n%s\n' "$containers" "$native_containers" | "$jq_bin" -sr --argjson cap "$container_limit" '
+  def hex: type == "string" and test("^[0-9a-f]{64}$");
+  def stamp: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.(?<f>[0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})$";
+  if length != 2 or (.[0] | type != "array") or (.[1] | type != "array")
+    then error("not container lists") else . end |
+  .[1] as $native | .[0] |
+  if all($native[]; type == "object" and (.Id | hex) and
+      (.Pod | type == "string" and (. == "" or hex)) and (.IsInfra | type == "boolean") and
+      (.Created | type == "string" and test(stamp)))
+    then . else error("invalid native container list") end |
+  if ([$native[] | .Id] | unique | length) == ($native | length) then . else error("duplicate containers") end |
+  ($native | map({key: .Id, value: {standalone: (.Pod == "" and (.IsInfra | not)),
+    nanos: (.Created | capture(stamp) | (.f // "") + "000000000" | .[:9] | tonumber)}}) |
+    from_entries) as $known |
+  map(select(.State == "exited" or .State == "dead")) |
+  if all(.[]; (.Id | hex) and (.Created | type == "number" and . >= 0 and floor == .) and
+      ($known[.Id] | type == "object"))
+    then . else error("invalid container list") end |
+  if ([.[] | .Id] | unique | length) == length then . else error("duplicate containers") end |
+  map(select($known[.Id].standalone)) | sort_by(.Created, $known[.Id].nanos, .Id) | reverse |
+  .[:$cap][] | .Id
+') || skip "engine_api_invalid engine=podman"
+removed_containers=0
+while read -r id; do
+  [[ -n $id ]] || continue
+  require_budget 15 remove_container
+  destructive_request DELETE "$libpod/containers/$id?force=false" 15 exited "$id"
+  case $request_status in
+    200)
+      printf 'removed_container id=%s\n' "$id"
+      removed_containers=$((removed_containers + 1))
+      ;;
+    404) printf 'kept_container id=%s reason=gone\n' "$id" ;;
+  esac
+done <<< "$container_ids"
 safe_to_prune
 require_budget 5 list_images
 images=$(api "$podman_socket" GET '/images/json?all=true') || skip "engine_api_unavailable engine=podman"
@@ -329,5 +376,5 @@ if sample=$(available_bytes "$store_path"); then
 else
   reclaimed=unknown
 fi
-printf 'pruned leftovers=%s builder_volumes=%s failed_builder_volumes=0 image_min_age=%s images=%s reclaimed_bytes=%s\n' \
-  "$removed_leftovers" "$removed_volumes" "$image_min_age" "$removed_images" "$reclaimed"
+printf 'pruned leftovers=%s builder_volumes=%s failed_builder_volumes=0 containers=%s image_min_age=%s images=%s reclaimed_bytes=%s\n' \
+  "$removed_leftovers" "$removed_volumes" "$removed_containers" "$image_min_age" "$removed_images" "$reclaimed"

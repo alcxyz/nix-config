@@ -18,6 +18,12 @@ import unittest
 HELPER = Path(sys.argv.pop(1)).resolve()
 MODULE = HELPER.parent
 IMAGE = 'a' * 64
+EXITED = 'b' * 64
+
+
+def exited(number, created=0, state='exited'):
+    return dict(Id=f'{number:064x}', Created=created, State=state,
+                Names=[f'/FORGEJO-ACTIONS-TASK-{number}'])
 
 
 def image(number, created=0, **fields):
@@ -44,6 +50,8 @@ class Fixture:
         self.completed = threading.Event()
         self.release = threading.Event()
         self.delay = False
+        self.container_delay = 0
+        self.gone = set()
         self.reply = None
         self.status = 200
         owner = self
@@ -55,6 +63,12 @@ class Fixture:
                     value = []
                 elif self.path == '/containers/json?all=1':
                     value = owner.containers
+                elif self.path == '/v5.0.0/libpod/containers/json?all=true':
+                    # Only the native list names pods; it has no integer Created.
+                    value = [dict(Id=c.get('Id'), State=c.get('State'),
+                                  Created=c.get('NativeCreated', '2026-01-01T00:00:00Z'),
+                                  Pod=c.get('Pod', ''), IsInfra=c.get('IsInfra', False))
+                             for c in owner.containers]
                 elif self.path == '/v5.0.0/libpod/volumes/json':
                     value = owner.volumes
                 elif self.path == '/images/json?all=true':
@@ -66,6 +80,10 @@ class Fixture:
 
             def destructive(self):
                 owner.calls.append((self.command, self.path))
+                # Bulk container prune has no bounded runtime.
+                if '/containers/prune' in self.path:
+                    self.send_error(404)
+                    return
                 # The fence must already exist when the server sees a mutation.
                 if not owner.fence.is_dir() or not (owner.fence / 'owner').is_file():
                     self.send_error(500)
@@ -79,12 +97,23 @@ class Fixture:
                 if '/images/' in self.path:
                     image_id = self.path.split('/images/')[1].split('?')[0]
                     body = json.dumps([{'Deleted': image_id}]).encode()
-                elif '/containers/prune' in self.path:
-                    body = b'[]'
                 elif '/containers/' in self.path:
                     container_id = self.path.split('/containers/')[1].split('?')[0]
+                    if self.path.endswith('?force=false'):
+                        time.sleep(owner.container_delay)
                     body = json.dumps([{'Id': container_id}]).encode()
-                    owner.containers = []
+                    dependents = [c for c in owner.containers if c.get('DependsOn') == container_id]
+                    if dependents:
+                        # Podman refuses with ErrCtrExists, which its handler maps to 500.
+                        status = 500
+                        body = json.dumps({'cause': 'container already exists', 'response': 500,
+                                           'message': 'has dependent containers'}).encode()
+                    else:
+                        owner.containers = [c for c in owner.containers if c.get('Id') != container_id]
+                    if container_id in owner.gone:
+                        status = 404
+                        body = json.dumps({'cause': 'no such container', 'response': 404,
+                                           'message': f'no container with ID or name "{container_id}" found: no such container'}).encode()
                 elif '/volumes/' in self.path:
                     status = 204 if status == 200 else status
                     body = b''
@@ -167,6 +196,8 @@ class FenceTests(unittest.TestCase):
     def setUp(self):
         self.f = Fixture()
         self.addCleanup(self.f.close)
+        self.addCleanup(lambda: self.assertFalse(
+            any('/containers/prune' in path for _, path in self.f.calls)))
 
     def assert_fenced(self):
         self.assertTrue(self.f.fence.exists() or self.f.fence.is_symlink())
@@ -197,13 +228,19 @@ class FenceTests(unittest.TestCase):
 
     def test_acknowledged_operations_clear_only_owned_fence(self):
         self.f.containers = [{'Id': IMAGE, 'State': 'running', 'Created': 0,
-                              'Names': ['/buildx_buildkit_fixture0']}]
+                              'Names': ['/buildx_buildkit_fixture0']},
+                             {'Id': EXITED, 'State': 'exited', 'Created': 0, 'Names': ['/job']}]
         self.f.volumes = [{'Name': 'buildx_buildkit_fixture0_state'}]
         (self.f.state / 'drain-owned').write_text('123\n')
         (self.f.state / 'runners' / self.f.units[1] / 'drain-owned').write_text('456\n')
         result = self.f.run()
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertEqual(len(self.f.mutations), 4)
+        self.assertEqual(self.f.mutations, [
+            f'/v5.0.0/libpod/containers/{IMAGE}?force=true&timeout=10',
+            '/v5.0.0/libpod/volumes/buildx_buildkit_fixture0_state',
+            f'/v5.0.0/libpod/containers/{EXITED}?force=false',
+            f'/images/{IMAGE}?force=false&noprune=true'])
+        self.assertIn(' containers=1 ', result.stdout)
         self.assertFalse(self.f.fence.exists())
         self.assertEqual((self.f.state / 'drain-owned').read_text(), '123\n')
         self.assertEqual((self.f.state / 'runners' / self.f.units[1] / 'drain-owned').read_text(), '456\n')
@@ -238,19 +275,18 @@ class FenceTests(unittest.TestCase):
         self.f.images = [image(1, int(time.time()) - 49 * 3600)]
         result = self.f.run(IMAGE_MIN_AGE='72h')
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(len(self.f.mutations), 1)  # container prune only
-        self.f.mutations.clear()
+        self.assertEqual(self.f.mutations, [])
         result = self.f.run(LOCK_BUDGET_SECONDS='12')
         self.assertEqual(result.returncode, 0)
         self.assertIn('lock_budget_exhausted step=remove_image', result.stdout)
-        self.assertEqual(len(self.f.mutations), 1)
+        self.assertEqual(self.f.mutations, [])
         self.assertFalse(self.f.fence.exists())
 
     def test_large_creation_age_does_not_overflow_into_recent_deletion(self):
         self.f.images = [image(1, int(time.time()))]
         result = self.f.run(IMAGE_MIN_AGE='18446744073709551616h')
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertEqual(len(self.f.mutations), 1)
+        self.assertEqual(self.f.mutations, [])
 
     def test_invalid_image_snapshot_never_deletes_an_image(self):
         for images in ({}, [dict(image(1), Created='old')], [image(1), image(1)]):
@@ -354,26 +390,35 @@ esac
                 self.assertFalse(any(path.startswith('/images/') for path in self.f.mutations))
 
     def test_bad_completion_responses_leave_fence(self):
-        for status, body in [(500, b'{"message":"error"}'), (202, b'[]'),
-                             (200, b'['), (200, b'[] []'), (200, b'{}'),
-                             (200, b'[{"Id":"' + IMAGE.encode() + b'","Size":0,"Err":"failure"}]'),
-                             (200, b' ' * (8388608 + 1))]:
-            with self.subTest(status=status, body_length=len(body)):
-                self.f.status, self.f.reply = status, body
-                result = self.f.run()
-                self.assertEqual(result.returncode, 1)
-                self.assert_fenced()
-                shutil.rmtree(self.f.fence)  # test fixture reset only
+        # The first destructive request is a container removal, then an image.
+        for containers in ([exited(int(EXITED, 16))], []):
+            for status, body in [(500, b'{"message":"error"}'), (202, b'[]'),
+                                 (404, b'404 page not found\n'),
+                                 (409, b'{"cause":"conflict","message":"in use","response":409}'),
+                                 (200, b'['), (200, b'[] []'), (200, b'{}'),
+                                 (200, b'[{"Id":"' + EXITED.encode() + b'","Err":"failure"}]'),
+                                 (200, b' ' * (8388608 + 1))]:
+                if status == 409 and not containers:
+                    continue  # a validated image conflict is a completed refusal
+                with self.subTest(containers=len(containers), status=status, body_length=len(body)):
+                    self.f.containers = list(containers)
+                    self.f.status, self.f.reply = status, body
+                    result = self.f.run()
+                    self.assertEqual(result.returncode, 1)
+                    self.assert_fenced()
+                    shutil.rmtree(self.f.fence)  # test fixture reset only
 
     def test_all_destructive_kinds_leave_fence_on_error(self):
-        for kind in ('container', 'volume', 'prune', 'image'):
-            self.f.containers = ([{'Id': IMAGE, 'State': 'running', 'Created': 0,
-                                   'Names': ['/buildx_buildkit_fixture0']}] if kind == 'container' else [])
+        for kind in ('leftover', 'volume', 'container', 'image'):
+            self.f.containers = {
+                'leftover': [{'Id': IMAGE, 'State': 'running', 'Created': 0,
+                              'Names': ['/buildx_buildkit_fixture0']}],
+                'container': [exited(int(EXITED, 16))]}.get(kind, [])
             self.f.volumes = [{'Name': 'buildx_buildkit_fixture0_state'}] if kind == 'volume' else []
             # Fail the selected endpoint, allow preceding acknowledged requests.
             curl = shutil.which('curl')
-            path = {'container': '/libpod/containers/', 'volume': '/libpod/volumes/',
-                    'prune': '/libpod/containers/prune', 'image': '/images/'}[kind]
+            path = {'leftover': '/libpod/containers/', 'volume': '/libpod/volumes/',
+                    'container': '/libpod/containers/', 'image': '/images/'}[kind]
             self.f.script('curl', f'''case "${{@: -1}}" in
   *'{path}'*) if [[ -d $STATE_DIR/cleanup-in-flight ]]; then printf '{{"message":"error"}}' > "$STATE_DIR/cleanup-in-flight/response"; printf 500; else exec {curl} --disable "$@"; fi ;;
   *) exec {curl} --disable "$@" ;;
@@ -461,8 +506,71 @@ exec {jq} "$@"
         self.assert_fenced()
         self.assertEqual(self.f.fence.read_text(), 'unowned\n')
 
+    def test_slow_container_removals_within_their_own_budgets_clear_the_fence(self):
+        # #719: removals that together outlast the old 10-second prune
+        # deadline are each acknowledged within their own 15-second budget.
+        self.f.containers = [exited(i, created=i) for i in (3, 1, 2)]
+        self.f.container_delay = 4
+        started = time.monotonic()
+        result = self.f.run()
+        self.assertGreater(time.monotonic() - started, 10)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.f.fence.exists())
+        self.assertEqual(self.f.mutations, [
+            f'/v5.0.0/libpod/containers/{i:064x}?force=false' for i in (3, 2, 1)
+        ] + [f'/images/{IMAGE}?force=false&noprune=true'])
+        self.assertIn(' containers=3 ', result.stdout)
+
+    def test_pod_members_are_never_selected(self):
+        pod = 'f' * 64
+        self.f.containers = [dict(exited(1, created=1), Pod=pod, IsInfra=True),
+                             dict(exited(2, created=2), Pod=pod), exited(3, created=3)]
+        result = self.f.run()
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.f.fence.exists())
+        self.assertEqual([path for path in self.f.mutations if '/containers/' in path],
+                         [f'/v5.0.0/libpod/containers/{3:064x}?force=false'])
+        self.assertIn(' containers=1 ', result.stdout)
+
+    def test_dependent_goes_before_the_container_it_depends_on(self):
+        # Created in the same second: only the native fraction orders them,
+        # and the dependent's lower ID would otherwise put it last.
+        db = dict(exited(2, created=5), NativeCreated='2026-01-01T00:00:05.1Z')
+        app = dict(exited(1, created=5), NativeCreated='2026-01-01T00:00:05.25Z',
+                   DependsOn=db['Id'])
+        self.f.containers = [db, app]
+        result = self.f.run()
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.f.fence.exists())
+        self.assertEqual([path for path in self.f.mutations if '/containers/' in path], [
+            f'/v5.0.0/libpod/containers/{i:064x}?force=false' for i in (1, 2)])
+        self.assertIn(' containers=2 ', result.stdout)
+
+    def test_removing_a_depended_on_container_first_keeps_the_fence(self):
+        # The fixture refusal matches Podman's: an uncertain 500.
+        db = exited(2, created=6)
+        self.f.containers = [db, dict(exited(1, created=5), DependsOn=db['Id'])]
+        result = self.f.run()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('uncertain_status kind=exited status=500', result.stderr)
+        self.assert_fenced()
+
+    def test_container_already_gone_is_kept_and_the_pass_continues(self):
+        self.f.containers = [exited(i, created=i) for i in (1, 2)]
+        self.f.gone = {f'{2:064x}'}
+        result = self.f.run()
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.f.fence.exists())
+        self.assertIn(f'kept_container id={2:064x} reason=gone', result.stdout)
+        self.assertIn(f'removed_container id={1:064x}', result.stdout)
+        self.assertNotIn(f'removed_container id={2:064x}', result.stdout)
+        self.assertEqual(self.f.mutations, [
+            f'/v5.0.0/libpod/containers/{i:064x}?force=false' for i in (2, 1)
+        ] + [f'/images/{IMAGE}?force=false&noprune=true'])
+        self.assertIn(' containers=1 ', result.stdout)
+
     def test_late_server_mutation_after_real_client_timeout_remains_fenced(self):
-        # Delay the actual first 15-second image DELETE, after acknowledged prune.
+        # Delay the actual first 15-second image DELETE.
         original = self.f.server.RequestHandlerClass.destructive
         def delayed(handler):
             self.f.delay = handler.path.startswith('/images/')
@@ -504,7 +612,7 @@ exec {jq} "$@"
                     self.f.completed.clear()
                     self.f.release.clear()
                     if phase == 'before':
-                        self.f.script('curl', f'''if [[ "${{@: -1}}" == */containers/prune ]]; then
+                        self.f.script('curl', f'''if [[ "${{@: -1}}" == */images/*noprune=true ]]; then
   touch {checkpoint}; sleep 25
 fi
 exec {curl} --disable "$@"
