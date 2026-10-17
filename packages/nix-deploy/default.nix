@@ -119,6 +119,10 @@
     inherit kubernetesContext kubernetesCorePriorityClass;
     interactiveHosts = interactiveHostNames;
     rebootGuardCommand = "nixfleet-reboot-guard";
+    # Planned reboots quiet monitoring and announce progress through the
+    # operator's hook (nix-packages ADR-0010), which the private flake
+    # installs where it applies; elsewhere a run calls nothing.
+    rebootHookCommand = "if command -v nixfleet-reboot-hook >/dev/null; then exec nixfleet-reboot-hook; fi";
     # Every NixOS host records a boot check (modules/nixos/services/nixfleet-boot-check).
     bootCheck = true;
     serialSystemHosts = k3sServerHostNames;

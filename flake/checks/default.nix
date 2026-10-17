@@ -460,6 +460,16 @@ in {
       jq -e '(.interactiveHosts | index("xyz") != null and index("xps") != null)
         and (.rebootGuardCommand | type == "string" and . != "")
         and .bootCheck == true' ${config} >/dev/null
+      # Planned reboots run the operator's hook where it is installed, and
+      # nothing where it is not.
+      jq -e '.rebootHookCommand | type == "string" and contains("nixfleet-reboot-hook")' ${config} >/dev/null
+      hook="$(jq -r .rebootHookCommand ${config})"
+      mkdir hookbin
+      PATH=$PWD/hookbin:$PATH NIXFLEET_EVENT=run-start sh -c "$hook"
+      printf '#!/bin/sh\necho "$NIXFLEET_EVENT" >"$PWD/hook-ran"\n' >hookbin/nixfleet-reboot-hook
+      chmod +x hookbin/nixfleet-reboot-hook
+      PATH=$PWD/hookbin:$PATH NIXFLEET_EVENT=run-start sh -c "$hook"
+      grep -Fxq run-start hook-ran
       # Help validates the actual generated inventory without deployment work.
       ${pkgs.nix-deploy}/bin/deploy --help >help.txt 2>error.txt && exit 1
       test ! -s error.txt
