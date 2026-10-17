@@ -84,6 +84,32 @@ else
   runner_state=$state_dir/runners/$runner_unit
 fi
 [[ ! -e $runner_state/drain-owned ]] || exit 1
+# A standby runner starts only while its controller admits it. The skip
+# leaves a hold marker for the boot check; the controller starts the runner
+# itself once it admits it.
+runner_standby=${RUNNER_STANDBY:-0}
+[[ $runner_standby == 0 || $runner_standby == 1 ]] || exit 1
+if [[ $runner_standby == 1 ]]; then
+  [[ $runner_unit != "$primary_runner" ]] || exit 1
+  if [[ ! -e $runner_state/standby-admitted ]]; then
+    : > "$runner_state/standby-held"
+    exit 1
+  fi
+  # The guard drains only running units, so a drain of the other runners
+  # must also keep a stopped standby from starting.
+  for candidate in "${runner_units[@]}"; do
+    if [[ $candidate == "$primary_runner" ]]; then
+      candidate_state=$state_dir
+    else
+      candidate_state=$state_dir/runners/$candidate
+    fi
+    if [[ -e $candidate_state/drain-owned ]]; then
+      : > "$runner_state/standby-held"
+      exit 1
+    fi
+  done
+  rm -f "$runner_state/standby-held"
+fi
 if disk_space_status; then disk_status=0; else disk_status=$?; fi
 if ((disk_status != 0)); then
   : > "$runner_state/disk-start-skipped"

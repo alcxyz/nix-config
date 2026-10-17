@@ -107,7 +107,10 @@ class DevelopmentCI(unittest.TestCase):
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
         self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 8)
         self.assertEqual(calls.count("shellcheck:--shell=bash --exclude=SC2034 -"), 2)
-        self.assertEqual(sum(call.startswith("python3:") for call in calls), 13)
+        self.assertEqual(sum(call.startswith("python3:") for call in calls), 14)
+        self.assertIn(
+            "python3:flake/checks/test-forgejo-standby-controller.py "
+            "modules/nixos/services/forgejo-actions-runner/standby-controller.sh", calls)
         self.assertIn("python3:scripts/checks/test-podman-canary-logs.py", calls)
         self.assertIn("shellcheck:--shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh", calls)
         self.assertIn("shellcheck:--shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh", calls)

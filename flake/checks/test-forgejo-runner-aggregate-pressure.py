@@ -951,7 +951,8 @@ class StartGateTests(unittest.TestCase):
                  game_argv0='/games/HeroesOfTheStorm_x64.exe',
                  game_exe='wine64-preloader', missing_cmdline=False,
                  zombie=False, game_bypass=None, disk_value=None,
-                 third_marker='', missing_third=False):
+                 third_marker='', missing_third=False, standby=None,
+                 admitted=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -969,6 +970,8 @@ class StartGateTests(unittest.TestCase):
                 (state / 'runners' / SECOND / second_marker).touch()
             if third_marker:
                 (state / 'runners' / THIRD / third_marker).touch()
+            if admitted:
+                (state / 'runners' / runner_unit / 'standby-admitted').touch()
             if persisted_units is not None:
                 (state / 'runner-units').write_text('\n'.join(persisted_units) + '\n')
             if unknown_state:
@@ -1011,6 +1014,8 @@ exit 2
                    'GUARD_ACTIVE': '1' if guard else '0',
                    'RUNNER_UNIT': runner_unit,
                    'RUNNER_UNITS': ' '.join(runner_units or [PRIMARY])}
+            if standby is not None:
+                env['RUNNER_STANDBY'] = standby
             if disk_value is not None:
                 (root / 'disk-space').write_text(disk_value + '\n')
                 env.update({'DISK_HELPER_FILE': str(DISK_HELPER),
@@ -1040,6 +1045,7 @@ exit 2
             candidate_state = state if runner_unit == PRIMARY else state / 'runners' / runner_unit
             self.game_start_skipped = (candidate_state / 'game-start-skipped').exists()
             self.disk_start_skipped = (candidate_state / 'disk-start-skipped').exists()
+            self.standby_held = (candidate_state / 'standby-held').exists()
             return result.returncode, bool(marker and (state / marker).exists())
 
     def test_clear_healthy_start_is_admitted(self):
@@ -1106,6 +1112,36 @@ exit 2
         self.assertEqual(self.run_gate(game_state='present', missing_cmdline=True),
                          (1, False))
         self.assertTrue(self.game_start_skipped)
+
+    def test_standby_runner_starts_only_when_admitted(self):
+        units = [PRIMARY, SECOND, THIRD]
+        common = {'runner_unit': THIRD, 'runner_units': units,
+                  'persisted_units': units, 'standby': '1'}
+        self.assertEqual(self.run_gate(**common), (1, False))
+        self.assertTrue(self.standby_held)
+        self.assertEqual(self.run_gate(admitted=True, **common), (0, False))
+        self.assertFalse(self.standby_held)
+        # Admission does not override the guard's holds.
+        self.assertEqual(self.run_gate(admitted=True, game_state='present', **common),
+                         (1, False))
+        self.assertTrue(self.game_start_skipped)
+        self.assertEqual(self.run_gate(admitted=True, third_marker='drain-owned', **common),
+                         (1, False))
+        # A drain of any other runner holds a stopped standby as well.
+        for marker_kwargs in ({'marker': 'drain-owned'}, {'second_marker': 'drain-owned'}):
+            with self.subTest(**marker_kwargs):
+                self.assertEqual(self.run_gate(admitted=True, **marker_kwargs, **common)[0], 1)
+                self.assertTrue(self.standby_held)
+        # Other runners ignore the standby marker.
+        self.assertEqual(self.run_gate(runner_unit=SECOND, runner_units=units,
+                                       persisted_units=units, standby='0'), (0, False))
+
+    def test_standby_setting_must_be_valid_and_never_primary(self):
+        units = [PRIMARY, SECOND, THIRD]
+        self.assertEqual(self.run_gate(runner_unit=THIRD, runner_units=units,
+                                       persisted_units=units, standby='yes',
+                                       admitted=True), (1, False))
+        self.assertEqual(self.run_gate(standby='1'), (1, False))
 
     def test_switch_start_during_owned_drain_is_skipped_without_mutation(self):
         self.assertEqual(self.run_gate(marker='drain-owned'), (1, True))

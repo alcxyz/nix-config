@@ -68,7 +68,8 @@ fi
 # A runner is fine when it runs or starts, or when it is held back on
 # purpose: the pressure guard owns a drain (drain-owned) or the start gate
 # skipped a start for a game (game-start-skipped) or low disk space
-# (disk-start-skipped), which the guard resumes later. The gate also skips
+# (disk-start-skipped), which the guard resumes later, or held a standby
+# runner its controller has not admitted (standby-held). The gate also skips
 # a start, without a marker, when an inspection or its lock times out; then
 # nothing restarts the runner, so that skip is a failure.
 for entry in "${runner_entries[@]}"; do
@@ -85,7 +86,7 @@ for entry in "${runner_entries[@]}"; do
   esac
   held=0
   if [[ -n $hold_dir ]]; then
-    for marker in drain-owned game-start-skipped disk-start-skipped; do
+    for marker in drain-owned game-start-skipped disk-start-skipped standby-held; do
       [[ -e $hold_dir/$marker ]] && held=1
     done
   fi

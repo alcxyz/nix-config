@@ -28,8 +28,8 @@
         default = null;
         description = ''
           Directory where the runner's start gate leaves drain-owned,
-          game-start-skipped or disk-start-skipped while it holds the runner
-          back on purpose; a held runner is no failure.
+          game-start-skipped, disk-start-skipped or standby-held while it
+          holds the runner back on purpose; a held runner is no failure.
         '';
       };
     };

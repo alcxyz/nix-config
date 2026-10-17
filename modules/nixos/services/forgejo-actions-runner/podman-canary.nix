@@ -62,8 +62,10 @@
     capacity,
     name,
     registrationTokenFile,
+    standby ? null,
+    status ? null,
   }: rec {
-    inherit serviceName description labels capacity name registrationTokenFile;
+    inherit serviceName description labels capacity name registrationTokenFile standby status;
     unit = "${serviceName}.service";
     state = "/var/lib/${serviceName}";
     runtime = "/run/${serviceName}";
@@ -103,9 +105,23 @@
       serviceName = "forgejo-podman-runner-${key}";
       description = "Forgejo Podman runner ${key} (${extra.name})";
       inherit (extra) labels capacity name registrationTokenFile;
+      standby =
+        if extra.standby.enable
+        then extra.standby
+        else null;
+      status =
+        if extra.status.enable
+        then extra.status
+        else null;
     })
   canary.extraRunners;
   instances = [canaryInstance] ++ extraInstances;
+  standbyInstances = builtins.filter (instance: instance.standby != null) extraInstances;
+  statusInstances = builtins.filter (instance: instance.status != null) extraInstances;
+  pollSeconds = 15;
+  # Consecutive polls spanning at least the given time: the first poll that
+  # sees a change starts the span.
+  polls = seconds: (seconds + pollSeconds - 1) / pollSeconds + 1;
   podmanLabels = lib.concatMap (instance: instance.labels) instances;
   # A label name served by more than one Podman runner must be listed in
   # sharedLabels and carry the same image on each of them.
@@ -135,6 +151,33 @@
     runtimeInputs = with pkgs; [coreutils systemd util-linux];
     text = builtins.readFile ./podman-api-start-gate.sh;
   };
+  standbyController = pkgs.writeShellApplication {
+    name = "forgejo-podman-standby-controller";
+    runtimeInputs = with pkgs; [
+      coreutils
+      curl
+      systemd
+      util-linux
+    ];
+    text = builtins.readFile ./standby-controller.sh;
+  };
+  # Answers one HTTP request per connection with the runner unit's systemd
+  # state, for the standby controller on another host.
+  statusResponder = instance:
+    pkgs.writeShellApplication {
+      name = "${instance.serviceName}-status";
+      runtimeInputs = [pkgs.systemd];
+      text = ''
+        while IFS= read -r -t 5 line; do
+          line=''${line%$'\r'}
+          [[ -n $line ]] || break
+        done
+        state=$(systemctl is-active ${instance.unit} || true)
+        [[ -n $state ]] || state=unknown
+        printf 'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s\n' \
+          "$((''${#state} + 1))" "$state"
+      '';
+    };
   lifecycleReady = pkgs.writeShellApplication {
     name = "forgejo-podman-lifecycle-ready";
     runtimeInputs = with pkgs; [
@@ -188,6 +231,10 @@
         DOCKER_HOST = "unix://${socketPath}";
         RUNNER_UNIT = instance.unit;
         RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
+        RUNNER_STANDBY =
+          if instance.standby != null
+          then "1"
+          else "0";
         GAME_HELPER_FILE = "${./game-admission.sh}";
         GAME_ADMISSION_ENABLED =
           if cfg.ioPressureGuard.admissionControl.gameProcess.enable
@@ -238,6 +285,36 @@
     script = ''
       exec forgejo-runner daemon --config ${instance.config}
     '';
+  };
+  standbyService = instance: {
+    description = "Run ${instance.unit} while the primary host's runner is down";
+    # Stopping the controller releases the standby, which would end a running
+    # fallback for as long as its job runs; a changed controller takes effect
+    # at the next boot or an explicit restart.
+    restartIfChanged = false;
+    wantedBy = ["multi-user.target"];
+    wants = ["network-online.target"];
+    after = [
+      "network-online.target"
+      guardUnit
+      lifecycleUnit
+    ];
+    environment = {
+      RUNNER_UNIT = instance.unit;
+      STATUS_URL = instance.standby.statusUrl;
+      STATUS_INTERFACE = lib.optionalString (instance.standby.statusInterface != null) instance.standby.statusInterface;
+      POLL_SECONDS = toString pollSeconds;
+      START_AFTER_POLLS = toString (polls instance.standby.startAfterSeconds);
+      STOP_AFTER_POLLS = toString (polls instance.standby.stopAfterSeconds);
+    };
+    serviceConfig = {
+      ExecStart = lib.getExe standbyController;
+      Restart = "always";
+      RestartSec = "30s";
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectHome = true;
+    };
   };
 in {
   options.services.forgejo-actions-runner.runnerUnits = lib.mkOption {
@@ -360,6 +437,71 @@ in {
             defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.registrationTokenFile";
             description = "Absolute path to an activated registration token file; the canary's by default.";
           };
+          standby = {
+            enable = lib.mkEnableOption ''
+              standby mode: the runner runs only while the matching runner on
+              another host is down, as that host's status endpoint reports.
+              The start gate holds the unit until a controller admits it; the
+              unit stays enabled so pressure and disk drains still cover it.
+              The controller restarts a stopped, enabled standby while the
+              primary is down. Stopping its `-standby` unit releases the
+              standby until the next switch or boot starts that unit again;
+              masking the runner unit keeps it off for good. A switch does not
+              restart a running controller'';
+            statusUrl = lib.mkOption {
+              type = lib.types.strMatching "http://[^ ]+";
+              example = "http://192.0.2.10:9478/";
+              description = ''
+                Status endpoint of the primary runner (`status` on its host).
+                Any answer other than `active`, including none, counts as down.
+              '';
+            };
+            statusInterface = lib.mkOption {
+              type = lib.types.nullOr (lib.types.strMatching "[A-Za-z0-9_.-]+");
+              default = null;
+              example = "wt0";
+              description = ''
+                Network interface the polls must leave through, such as the
+                overlay that authenticates the primary host. Null uses the
+                routing table.
+              '';
+            };
+            startAfterSeconds = lib.mkOption {
+              type = lib.types.ints.positive;
+              default = 60;
+              description = "How long the primary runner must have been seen down before this runner starts; rounded up to the 15-second poll.";
+            };
+            stopAfterSeconds = lib.mkOption {
+              type = lib.types.ints.positive;
+              default = 300;
+              description = ''
+                How long the primary runner must have been seen back before
+                this runner stops; rounded up to the 15-second poll. The stop
+                is graceful: running jobs finish here.
+              '';
+            };
+          };
+          status = {
+            enable = lib.mkEnableOption ''
+              a read-only endpoint that reports this runner unit's systemd
+              state (`active`, `inactive` and so on) to standby runners on
+              other hosts'';
+            port = lib.mkOption {
+              type = lib.types.port;
+              example = 9478;
+              description = "TCP port of the status endpoint.";
+            };
+            interface = lib.mkOption {
+              type = lib.types.str;
+              example = "wt0";
+              description = "The only network interface whose firewall admits the endpoint.";
+            };
+            allowedAddresses = lib.mkOption {
+              type = lib.types.nonEmptyListOf lib.types.str;
+              default = ["100.64.0.0/10"];
+              description = "Source address prefixes the endpoint's socket accepts; all others are dropped.";
+            };
+          };
         };
       }));
       default = {};
@@ -465,6 +607,27 @@ in {
         {
           assertion = lib.all (instance: lib.hasPrefix "/" instance.registrationTokenFile) extraInstances;
           message = "Extra Podman runners require an absolute registrationTokenFile path.";
+        }
+        {
+          assertion = let
+            names =
+              map (instance: instance.serviceName) instances
+              ++ map (instance: "${instance.serviceName}-standby") standbyInstances
+              ++ map (instance: "${instance.serviceName}-status") statusInstances;
+          in
+            builtins.length (lib.unique names) == builtins.length names;
+          message = "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
+        }
+        {
+          assertion = lib.all (instance: instance.status == null) standbyInstances;
+          message = "A standby Podman runner cannot also publish a status endpoint.";
+        }
+        {
+          assertion = let
+            ports = map (instance: instance.status.port) statusInstances;
+          in
+            builtins.length (lib.unique ports) == builtins.length ports;
+          message = "Podman runner status endpoints need distinct ports.";
         }
       ];
 
@@ -601,7 +764,62 @@ in {
         instances;
     })
     (lib.mkIf enabled {
-      systemd.services = lib.listToAttrs (map (instance: lib.nameValuePair instance.serviceName (runnerService instance)) instances);
+      systemd.services = lib.listToAttrs (
+        map (instance: lib.nameValuePair instance.serviceName (runnerService instance)) instances
+        ++ map (instance: lib.nameValuePair "${instance.serviceName}-standby" (standbyService instance)) standbyInstances
+        ++ map (instance:
+          lib.nameValuePair "${instance.serviceName}-status@" {
+            description = "Report ${instance.unit} state to a standby host";
+            # Collect instances that hit the runtime limit instead of keeping
+            # them as failed units.
+            unitConfig.CollectMode = "inactive-or-failed";
+            serviceConfig = {
+              ExecStart = lib.getExe (statusResponder instance);
+              StandardInput = "socket";
+              StandardOutput = "socket";
+              StandardError = "journal";
+              RuntimeMaxSec = "15s";
+              DynamicUser = true;
+              CapabilityBoundingSet = "";
+              LockPersonality = true;
+              MemoryDenyWriteExecute = true;
+              NoNewPrivileges = true;
+              PrivateDevices = true;
+              PrivateTmp = true;
+              ProtectHome = true;
+              ProtectSystem = "strict";
+              ProtectKernelTunables = true;
+              ProtectKernelModules = true;
+              ProtectControlGroups = true;
+              # The accepted connection is inherited; systemctl needs only
+              # the system bus.
+              RestrictAddressFamilies = "AF_UNIX";
+              RestrictNamespaces = true;
+              SystemCallArchitectures = "native";
+            };
+          })
+        statusInstances
+      );
+
+      systemd.sockets = lib.listToAttrs (map (instance:
+        lib.nameValuePair "${instance.serviceName}-status" {
+          description = "Status endpoint of ${instance.unit}";
+          wantedBy = ["sockets.target"];
+          listenStreams = [(toString instance.status.port)];
+          socketConfig = {
+            Accept = true;
+            MaxConnections = 8;
+            MaxConnectionsPerSource = 2;
+            IPAddressAllow = instance.status.allowedAddresses;
+            IPAddressDeny = "any";
+          };
+        })
+      statusInstances);
+
+      networking.firewall.interfaces = lib.mkMerge (map (instance: {
+          ${instance.status.interface}.allowedTCPPorts = [instance.status.port];
+        })
+        statusInstances);
     })
   ];
 }

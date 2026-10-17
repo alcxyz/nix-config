@@ -125,6 +125,67 @@ else let
   extraWithoutCanary = evaluate false validLabels {
     services.forgejo-actions-runner.podmanCanary.extraRunners.fast.labels = [fastLabel];
   };
+  # A standby runner on one host and the status endpoint it reads on another.
+  standbyUrl = "http://192.0.2.10:9478/";
+  standby = withExtra validLabels {
+    labels = [fastLabel];
+    standby = {
+      enable = true;
+      statusUrl = standbyUrl;
+    };
+  } {};
+  standbyUnit = standby.systemd.services.forgejo-podman-runner-fast;
+  standbyController = standby.systemd.services.forgejo-podman-runner-fast-standby;
+  status = withExtra validLabels {
+    labels = [fastLabel];
+    status = {
+      enable = true;
+      port = 9478;
+      interface = "wt0";
+    };
+  } {};
+  statusSocket = status.systemd.sockets.forgejo-podman-runner-fast-status;
+  statusService = status.systemd.services."forgejo-podman-runner-fast-status@";
+  standbyWithStatus = withExtra validLabels {
+    labels = [fastLabel];
+    standby = {
+      enable = true;
+      statusUrl = standbyUrl;
+    };
+    status = {
+      enable = true;
+      port = 9478;
+      interface = "wt0";
+    };
+  } {};
+  standbyNameClash = evaluate true validLabels {
+    networking.hostName = "fixture";
+    services.forgejo-actions-runner.podmanCanary.extraRunners = {
+      fast = {
+        labels = [fastLabel];
+        standby = {
+          enable = true;
+          statusUrl = standbyUrl;
+        };
+      };
+      fast-standby.labels = ["other:docker://example.invalid/other:latest"];
+    };
+  };
+  statusNameClash = evaluate true validLabels {
+    networking.hostName = "fixture";
+    services.forgejo-actions-runner.podmanCanary.extraRunners = {
+      fast = {
+        labels = [fastLabel];
+        status = {
+          enable = true;
+          port = 9478;
+          interface = "wt0";
+        };
+      };
+      fast-status.labels = ["other:docker://example.invalid/other:latest"];
+    };
+  };
+  controllerSource = ../../modules/nixos/services/forgejo-actions-runner/standby-controller.sh;
   recoveryText = config: (lib.findFirst (package: (package.name or "") == "forgejo-runner-cleanup-fence-recover") null config.environment.systemPackages).text;
   labelOverlapMessage = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
   dockerOverlapMessage = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
@@ -241,10 +302,49 @@ in
   assert failedAssertion extraBadName "Extra Podman runner names must match ^[a-z0-9-]+$.";
   assert failedAssertion extraDuplicateName "Docker and Podman runner registration names must be distinct.";
   assert failedAssertion extraWithoutCanary "Extra Podman runners require the Podman CI canary.";
+  # Only a standby runner's start gate waits for admission; its controller
+  # reads the other host's status endpoint and keeps the unit enabled.
+  assert failedAssertions standby == failedAssertions enabled;
+  assert standbyUnit.environment.RUNNER_STANDBY == "1";
+  assert standby.systemd.services.forgejo-podman-runner.environment.RUNNER_STANDBY == "0";
+  assert extraUnit.environment.RUNNER_STANDBY == "0";
+  assert standbyUnit.wantedBy == ["multi-user.target"];
+  assert standbyUnit.serviceConfig.ExecCondition == threeUnit.serviceConfig.ExecCondition;
+  assert standby.services.forgejo-actions-runner.runnerUnits == [primary canary extra];
+  assert standbyController.environment.RUNNER_UNIT == extra;
+  assert standbyController.environment.STATUS_URL == standbyUrl;
+  assert standbyController.environment.STATUS_INTERFACE == "";
+  assert standbyController.environment.POLL_SECONDS == "15";
+  assert standbyController.environment.START_AFTER_POLLS == "5";
+  assert standbyController.environment.STOP_AFTER_POLLS == "21";
+  assert standbyController.serviceConfig.Restart == "always";
+  assert standbyController.wantedBy == ["multi-user.target"];
+  assert !(three.systemd.services ? forgejo-podman-runner-fast-standby);
+  assert !(standby.systemd.sockets ? forgejo-podman-runner-fast-status);
+  # The status endpoint answers only on the named interface and from the
+  # allowed prefixes, in a throwaway unprivileged service.
+  assert failedAssertions status == failedAssertions enabled;
+  assert !(status.systemd.services ? forgejo-podman-runner-fast-standby);
+  assert status.systemd.services.forgejo-podman-runner-fast.environment.RUNNER_STANDBY == "0";
+  assert statusSocket.listenStreams == ["9478"];
+  assert statusSocket.socketConfig.Accept;
+  assert statusSocket.socketConfig.IPAddressAllow == ["100.64.0.0/10"];
+  assert statusSocket.socketConfig.IPAddressDeny == "any";
+  assert status.networking.firewall.interfaces.wt0.allowedTCPPorts == [9478];
+  assert !(builtins.elem 9478 status.networking.firewall.allowedTCPPorts);
+  assert statusService.serviceConfig.DynamicUser;
+  assert statusService.serviceConfig.StandardInput == "socket";
+  assert statusService.serviceConfig.RestrictAddressFamilies == "AF_UNIX";
+  assert failedAssertion standbyWithStatus "A standby Podman runner cannot also publish a status endpoint.";
+  assert failedAssertion standbyNameClash "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
+  assert failedAssertion statusNameClash "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
+  assert !standbyController.restartIfChanged;
     pkgs.runCommand "forgejo-podman-canary-contract" {
-      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.shellcheck pkgs.systemd pkgs.util-linux];
+      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.python3 pkgs.shellcheck pkgs.systemd pkgs.util-linux];
     } ''
       shellcheck ${gateSource}
+      shellcheck ${controllerSource}
+      python3 ${./test-forgejo-standby-controller.py} ${controllerSource}
       # Each Podman runner has its own capacity, labels, state and env file.
       grep -Fxq '  capacity: 1' ${extraConfigFile}
       grep -Fxq '  - ${fastLabel}' ${extraConfigFile}
