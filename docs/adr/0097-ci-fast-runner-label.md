@@ -1,6 +1,6 @@
 # ADR-0097: Route opted-in CI jobs to fast hosts with a `ci-fast` label
 
-**Status:** Accepted; xyz serves `ci-fast`, the xev fallback is pending
+**Status:** Accepted; xyz serves `ci-fast` with a dedicated runner, the xev fallback is pending
 **Date:** 2026-10-15
 **Applies to:** `hosts/xyz/configuration.nix`, `hosts/xev/configuration.nix`,
 `modules/nixos/services/forgejo-actions-runner/`, platform workflows
@@ -41,6 +41,12 @@ while a game runs or under pressure or low disk, and Forgejo then reports them
   so fast jobs share its two job slots with shared-pool jobs. Then the runner
   module supports more than two runner units, which gives xyz a dedicated
   `ci-fast` instance and adds the gated xev instance.
+- The dedicated xyz instance, `xyz-fast`, has one job slot. xyz's pool runner
+  keeps `ci-fast` too, so fast jobs can also start in its free slots. Forgejo
+  has no runner preference: whichever runner polls first takes a job.
+  This is the one label two runners may share (`podmanCanary.sharedLabels`);
+  the Docker runner never shares a label. xyz then runs up to five jobs in
+  its one build slice: two Docker, two pool and one fast.
 
 Workflow authors use [CI runner labels](../ci-runner-labels.md).
 
@@ -63,9 +69,11 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
 ## Consequences
 
 - With the variable unset, workflows behave as before.
-- Until the dedicated xyz instance exists, a `ci-fast` job waits while
-  `forgejo-podman` or `forgejo-podman-canary` jobs occupy both slots of xyz's
-  Podman runner.
+- `ci-fast` jobs on xyz always have the dedicated slot available to them, and
+  wait only while it and both pool slots are busy. A fast job may still take a
+  pool slot while `xyz-fast` is idle, which delays shared-pool jobs.
+- The build slice's CPU and memory budget is unchanged, so five concurrent
+  jobs on xyz each get a smaller share under load.
 - Until the xev fallback exists, `ci-fast` jobs wait while xyz is gaming or
   off. Afterwards they wait only while both xyz and xev are unavailable.
 - xyz pressure and disk drains also trigger the fallback; a busy xyz does not.
@@ -74,4 +82,6 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
   restart on switch, so a label change takes effect only after the runner
   restarts or the host reboots.
 - Adding runner units changes the pressure guard's persisted unit registry, so
-  that step takes effect only after a reboot.
+  that step takes effect only after a reboot. Reboot xyz right after switching
+  to the configuration that adds `xyz-fast`: until then the start gates refuse
+  the new unit, and the first drain would leave the runners stopped.

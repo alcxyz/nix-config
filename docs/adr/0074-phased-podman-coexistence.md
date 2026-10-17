@@ -3,6 +3,8 @@
 - Status: Accepted; qualification in progress
 - Date: 2026-09-23
 - Area: host container runtimes, development and CI
+- Amended: 2026-10-17, any number of Podman runner identities share the one
+  Podman API, pressure controller and build slice ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
 
 ## Decision
 
@@ -17,11 +19,13 @@ workflows. The resource and lifecycle requirements of ADR-0072 remain in force;
 this decision does not replace that implementation or authorize weaker limits.
 Controller failure and shutdown qualification precede any production CI cutover.
 
-The opt-in CI module uses a second runner identity, account, API socket and
-storage root. Both CI runtimes share `forgejobuilds.slice` and one external
-pressure controller, retaining the existing combined CPU and memory budget.
-Admission drain ownership is tracked independently for each runner. A manually
-stopped runner is not claimed or restarted during recovery.
+The opt-in CI module uses separate runner identities, an account, API socket
+and storage root for Podman. A host may run any number of Podman runner
+identities, each its own unit with its own registration and state, against
+that one Podman API. Both CI runtimes share `forgejobuilds.slice` and one
+external pressure controller, retaining the existing combined CPU and memory
+budget. Admission drain ownership is tracked independently for each runner. A
+manually stopped runner is not claimed or restarted during recovery.
 
 The shared lifecycle boundary closes admission across both runtimes when either
 runtime or the controller is lost. Frozen teardown empties the combined worker
@@ -105,7 +109,7 @@ same paths against the opt-in module, and `runnerPackage` to select the
 qualified runner. It verifies graceful cancellation removes native job, service
 and action containers while the API remains available. Caller-created nested
 containers and builders are checked separately during aggregate teardown. The
-companion `flake/checks/forgejo-podman-coexistence-vm.nix` checks dual-runner admission,
+companion `flake/checks/forgejo-podman-coexistence-vm.nix` checks multi-runner admission,
 configuration switching, aggregate containment and failure/shutdown handling.
 These are explicit qualification runs, not automatic host activation. The
 manual `Podman canary` workflow selects only the canary label; image publishing

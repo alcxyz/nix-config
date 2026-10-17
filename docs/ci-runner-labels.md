@@ -10,7 +10,7 @@ Forgejo Actions runners for the alcxyz repositories are configured in
 | Label | Served by | Use for |
 |-------|-----------|---------|
 | `forgejo-podman` | xyz, xev, nex, nux | The default shared pool for container jobs. |
-| `ci-fast` | xyz; xev only while xyz is unavailable (planned) | Heavy jobs on a project you are iterating on. Never runs on nex or nux; the job waits instead. |
+| `ci-fast` | xyz (a dedicated runner, overflowing to its pool runner); xev only while xyz is unavailable (planned) | Heavy jobs on a project you are iterating on. Never runs on nex or nux; the job waits instead. |
 | `forgejo-podman-canary` | xyz, xev, nex, nux | Existing Nix and platform validation workflows. |
 | `ubuntu-latest`, `forgejo-docker-primary` | the Docker runners on every host | Older workflows; prefer `forgejo-podman` for new ones. |
 
@@ -30,6 +30,12 @@ jobs:
 
 Leave light jobs on `forgejo-podman`. With the variable unset, the job uses the
 shared pool as before.
+
+On xyz, `ci-fast` jobs run on a dedicated one-slot runner, `xyz-fast`, or on
+a free slot of xyz's pool runner, which also serves `ci-fast`. Whichever runner
+polls first takes the job, so a fast job may take a pool slot while `xyz-fast`
+is idle. A fast job never waits while any of these slots is free, and the
+dedicated slot means it does not have to wait for shared-pool jobs.
 
 To turn fast CI on for a repository while you iterate, create the Actions
 variable `CI_FAST` with the value `true` under the repository's Settings >

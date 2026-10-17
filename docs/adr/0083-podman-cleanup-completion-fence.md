@@ -4,6 +4,7 @@
 **Date:** 2026-10-06
 **Applies to:** idle Podman runner cleanup and aggregate admission
 **Amended:** 2026-10-17, exited containers outside pods follow capped per-ID deletion like images, newest first ([#719](https://git.alc.xyz/alcxyz/nix-config/issues/719)).
+**Amended:** 2026-10-17, the fence, cleanup window and recovery cover every runner in the configured list, which may hold more than one Podman runner ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
 
 ## Context
 
@@ -33,7 +34,7 @@ Before each destructive request, create an independently owned, trusted runtime
 completion fence under the lifecycle lock. Clear it only on a validated complete
 acknowledgement belonging to that request. Timeout, disconnect, helper death,
 partial responses and uncertain errors leave it intact. Existing or malformed
-fences block further cleanup, both runner start gates, guard resume and both
+fences block further cleanup, every runner start gate, guard resume and both
 dedicated API starts even after the lock is released. API admission uses fixed
 root-executed conditions under the shared lifecycle lock. Docker's condition
 checks only the cleanup fence, retaining ordinary Docker-only boot ordering;
@@ -43,8 +44,9 @@ thaw, teardown and manually stopped runner ownership remain independent.
 Record both API execution generations before mutation. Do not infer recovery
 from elapsed time, attempts, read-only API success or PID changes. An explicit
 operator-invoked recovery command verifies trusted fence ownership and format,
-the exact runner registry, terminal API generation evidence, and fully terminal runners
-and APIs without main/control processes or pending jobs. It requires positive
+the exact runner registry against the runner list built into the command,
+terminal API generation evidence, and fully terminal runners and APIs without
+main/control processes or pending jobs. It requires positive
 unpopulated evidence for the exact managed aggregate and any retained unit
 cgroups, with a running systemd freezer and unfrozen kernel state. Repeat the
 complete terminal evidence under the same lifecycle lock used by runner and API
