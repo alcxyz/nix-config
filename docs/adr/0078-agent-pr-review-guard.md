@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -24,8 +24,8 @@ changes. Each runs sandboxed
 without write or forge access and is given the diff and the PR description. The
 agent addresses or justifies the findings, then posts one PR comment whose first
 line is `Automated read-only review (<short head sha> on <target branch>):
-<mode> (<role>): <outcome>`, where the mode is `full` or `follow-up to <short
-sha>` and the role is `light` or `deep`. A trivial PR, or a promotion such as
+<mode> (<role>): <outcome>`, where the mode is `full`, `follow-up to <short
+sha>` or `carried from <short sha> (rebase|fold)` and the role is `light` or `deep`. A trivial PR, or a promotion such as
 `dev` to `main` whose every commit was already reviewed on its own PR, may
 record `skipped (<reason>)` as the outcome, without a mode. Commits pushed
 directly to the source branch, and conflict resolutions, still need a review,
@@ -70,6 +70,38 @@ hand or depend on which models their own client offers:
   forces a full review. Fix rounds then cost roughly what the fixes need, and fresh
   low-severity findings in unchanged code stop restarting the loop
   ([#524](https://git.alc.xyz/alcxyz/nix-config/issues/524)).
+- **Carried reviews** ([#715](https://git.alc.xyz/alcxyz/nix-config/issues/715)).
+  Agents may curate a PR's commits locally (fix rounds as `fixup!` commits,
+  folded with `git rebase --autosquash`) for a fast-forward merge, so every
+  rebase onto the current target and every fold is a new head. Before a
+  follow-up, and unless `--full` or `--force` is given, `run` carries the
+  latest completed round on the same target, with the same reviewers and
+  role, to a head that only rebases or folds its commits, without running
+  reviewers. Both histories must be linear, and no new commit may have an
+  author or committer email in `programs.ai.prReview.agentIdentities`. A
+  **rebase** needs the new merge base to contain the reviewed one and as many
+  commits, each with the same message, author and committer identity, whose
+  reviewed counterpart replayed onto the new parent with `git merge-tree
+  --merge-base` merges cleanly to exactly the new commit's tree. Comparing
+  patches is not enough: a conflict resolution can look like the reviewed
+  patch applied to an identical block elsewhere. A **fold** needs the same
+  merge base and head tree, and the new commits must equal git's
+  non-interactive autosquash of the reviewed ones (trees, messages, authors,
+  committer identities, order), replayed the same way; only `fixup!`
+  commits fold, since `squash!` and `amend!` change a message and need a
+  review. Only plumbing runs (`rev-list`, `cat-file`, `merge-tree`, and
+  `commit-tree` for unreferenced intermediate commits). Merges run in a
+  throwaway bare repository that borrows the clone's objects (in the clone's
+  object format), without system, user or repository config or system
+  attributes and with attributes from the empty tree, since a
+  merge driver named there is an external program that could report a
+  conflict as clean; so no checkout, hooks, filters, custom merge drivers or
+  editors run. This needs git 2.40 or later. The carried round copies its source's
+  results, mode, follow-up count and changed-line count, so later follow-ups
+  build on it, and `comment` records `carried from <short sha> (rebase|fold)`.
+  A carry that fails prints the failing condition and falls back to a
+  follow-up or full review. A fold and a rebase in one push do not carry;
+  push and run after each.
 - The outer `run` needs forge/provider network access and a writable
   `$XDG_STATE_HOME/pr-review` (by default `~/.local/state/pr-review`), so run
   it outside a network-restricted Codex sandbox. This is a requirement for
@@ -150,7 +182,23 @@ state when it selects a follow-up. It also blocks when it
 cannot verify the comment, including when its lookups exceed a 90-second
 deadline inside the 120-second hook timeout. The hook also matches Forgejo MCP
 tools and checks `merge_pull_request` like other merges, from its structured
-arguments (ADR-0081); other MCP tools pass. The guard and `pr-review` share one script. Shell checks separate ordinary
+arguments (ADR-0081); other MCP tools pass.
+
+For Forgejo repositories listed in `programs.ai.prReview.fastForwardRepositories`
+(`host/owner/repo`), the guard also refuses an agent merge, by REST (including
+`tea api`) or MCP, whose style (`Do`, or the MCP `style`) is not
+`fast-forward-only`, so the forge writes no commit and history keeps the
+operator's identity. It lists the PR's commits from the Forgejo API with the
+same token handling and deadline as its other lookups, and refuses leftover
+`fixup!`, `squash!` or `amend!` commits, and commits whose author or committer
+email is in `agentIdentities`, which a forge-side rebase or "Update branch"
+by an agent forge account would leave. The Forgejo MCP server (3.2.0) lists
+only the other styles in its tool description but passes `fast-forward-only`
+through to the API unchanged; where it does not, merge with `tea api -X POST
+/repos/owner/repo/pulls/N/merge -d '{"Do":"fast-forward-only"}'`. Other
+repositories and GitHub merges are checked as before.
+
+The guard and `pr-review` share one script. Shell checks separate ordinary
 literal commands from quoted arguments, comments and heredoc bodies, so text
 in a commit message does not become a merge command. They also check each
 command in a chain, ordinary execution wrappers such as `env` and `timeout`,
@@ -325,6 +373,11 @@ reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
   their ephemeral, isolated runs, and the earlier checkout is gone.
 - **A follow-up time limit:** time alone does not make a follow-up wrong;
   changed reviewers do, and they force a full review.
+- **Carrying reviews by patch ID or range-diff:** cheaper, but a patch that
+  matches can sit in another identical block, as after a conflict resolution;
+  replaying each reviewed commit and comparing trees cannot.
+- **Reviewing every rebase or fold as a follow-up:** a follow-up needs a
+  descendant head with the same merge base, so each would be a full review.
 - **Chaining follow-ups through posted comments, checked by the guard:** agents
   fix and push before commenting, so it would need a comment for every round.
 - **A light triage pass choosing the role:** adds a model call to every
@@ -370,7 +423,10 @@ targets are blocked with guidance to use literal values. Forgejo lookups use
 the configured Forgejo URL, and do not follow redirects. Forge or network outages
 block agent merges until the operator merges or the outage ends. Each review
 adds model cost and latency to every agent PR, less for documentation-only
-PRs. The light classification goes by path, so documentation that defines
+PRs. A carried rebase is not reviewed against the target's new changes: a
+clean textual replay can still conflict in meaning with them, which CI and
+the target's own reviews must catch. The fast-forward checks see only commit
+metadata the forge reports, and only for listed repositories. The light classification goes by path, so documentation that defines
 policy without matching the deep patterns gets light reviewers unless the
 agent passes `--role deep`. Comments in the earlier format
 without a head SHA no longer satisfy the guard. Diffs over 400 kB are refused

@@ -13,14 +13,20 @@ branch, builds the reviewed diff locally, and writes the head's files from raw
 objects, so no repository hooks or filters run. Reviewers come from the JSON file in PR_REVIEW_CONFIG. Results are kept
 per head commit under $XDG_STATE_HOME/pr-review, and `comment` refuses to post
 unless every reviewer completed for the current head. The review comment's
-first line is `Automated read-only review (<short sha> on <target branch>): <mode>: <outcome>`,
-where <mode> is `full` or `follow-up to <short sha>` (absent for skips).
+first line is `Automated read-only review (<short sha> on <target branch>): <mode> (<role>): <outcome>`,
+where <mode> is `full`, `follow-up to <short sha>` or `carried from <short sha>
+(rebase|fold)` (absent for skips).
 
-`run` reviews only the fixes since the last completed round, as a follow-up,
-when the head descends from it with the same merge base and target, the
-reviewers are unchanged, the fixes are small, and fewer than MAX_FOLLOW_UPS
-follow-ups ran in a row. --response tells the reviewers what was fixed or
-justified. Otherwise, or with --full, it reviews the whole PR.
+`run` first tries to carry the last completed round to the head, running no
+reviewers, when the head only rebases its commits onto a newer target (each
+replays cleanly to the same tree, with the same message, author and committer)
+or folds its `fixup!` commits as `git rebase --autosquash` does, with no commit
+by a configured agent identity. Otherwise it reviews only the fixes since the
+last completed round, as a follow-up, when the head descends from it with the
+same merge base and target, the reviewers are unchanged, the fixes are small,
+and fewer than MAX_FOLLOW_UPS follow-ups ran in a row. --response tells the
+reviewers what was fixed or justified. Otherwise, or with --full, it reviews
+the whole PR; --full and --force never carry. Carries need git 2.40 or later.
 
 Run the outer `pr-review run` in an environment with forge/provider network
 access and a writable state directory, outside a network-restricted Codex
@@ -35,12 +41,15 @@ stdin (tool_input.command). Merges are recognised as `gh pr merge`, `gh api`
 calls to GitHub's pulls/N/merge endpoint, REST calls to a Forgejo/GitHub
 .../pulls/N/merge URL (including `tea api`), and the Forgejo MCP tool
 merge_pull_request (ADR-0081); `tea` and `fj` merge commands are refused. Other Forgejo MCP
-tools pass. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
+tools pass. Forgejo merges into the configured fast-forward repositories must
+also use the style fast-forward-only and contain no `fixup!`, `squash!` or
+`amend!` commit and no commit by a configured agent identity. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
 instead of guessing. This is an accident guard for agent sessions, not a
 security boundary.
 """
 
 import argparse
+import contextlib
 import fcntl
 import json
 import os
@@ -61,7 +70,10 @@ MARKER = "automated read-only review"
 PINNED = re.compile(r"automated read-only review \(([0-9a-f]{7,40}) on ([^\n]+?)\):", re.IGNORECASE)
 OUTCOME_PREFIX = re.compile(r"^automated read-only review(?: \([^)]*\))?:\s*", re.IGNORECASE)
 # The mode follows the pinned prefix, so guards that predate it still read the target.
-MODE_PREFIX = re.compile(r"^(?:full|follow-up to [0-9a-f]{7,40})(?: \((?:light|deep)\))?\s*:\s*", re.IGNORECASE)
+MODE_PREFIX = re.compile(
+    r"^(?:full|follow-up to [0-9a-f]{7,40}|carried from [0-9a-f]{7,40} \((?:rebase|fold)\))"
+    r"(?: \((?:light|deep)\))?\s*:\s*", re.IGNORECASE
+)
 FORGEJO_URL = os.environ.get("AGENT_PR_REVIEW_FORGEJO_URL", "https://git.alc.xyz").rstrip("/")
 # Git remote hosts that belong to FORGEJO_URL; other non-GitHub remotes are refused.
 FORGEJO_REMOTE_HOSTS = set(
@@ -162,7 +174,8 @@ GUIDANCE = (
     "`pr-review comment <pr> \"<outcome>\"`, for example \"no blocking findings.\" "
     "Every new head needs a new review, including direct pushes, conflict "
     "resolutions and a retarget; after small fixes, `pr-review run <pr> --response "
-    "\"<what was fixed or justified>\"` reviews only the fixes. Post "
+    "\"<what was fixed or justified>\"` reviews only the fixes, and a pure rebase or "
+    "fixup fold carries the last review without reviewers. Post "
     "`pr-review comment <pr> \"skipped (<reason>)\"` only for a trivial PR, or a "
     "promotion whose every commit was already reviewed on its own PR; a failed "
     "reviewer is never a reason to skip, so run it again once it recovers. Do not "
@@ -560,6 +573,43 @@ def incomplete(config, status, base):
     return missing
 
 
+@contextlib.contextmanager
+def fetched(pr, head, base, cwd, remote):
+    """Fetch the PR's head and target branch into the local clone, with hooks off.
+
+    Yields (repository, target ref); the temporary refs are removed afterwards.
+    """
+    try:
+        repository = run([*GIT, "rev-parse", "--show-toplevel"], cwd=cwd).strip()
+    except ReviewError as error:
+        raise ReviewError(f"run pr-review from a clone of {pr.owner}/{pr.repo}") from error
+    remote = remote or matching_remote(pr, repository)
+    if remote is None:
+        raise ReviewError(f"no remote of {repository} points to {pr.owner}/{pr.repo}")
+    refs = f"refs/pr-review/{pr.number}-{os.getpid()}"
+    try:
+        if not commit_exists(repository, head):
+            run([*GIT, "fetch", "--quiet", "--no-write-fetch-head", remote,
+                 f"+refs/pull/{pr.number}/head:{refs}/head"], cwd=repository, timeout=300)
+            if not commit_exists(repository, head):
+                raise ReviewError(f"{pr} no longer points to {head[:12]} on {remote}; run again")
+        run([*GIT, "fetch", "--quiet", "--no-write-fetch-head", remote, f"+refs/heads/{base}:{refs}/base"],
+            cwd=repository, timeout=300)
+        yield repository, f"{refs}/base"
+    finally:
+        for ref in ("head", "base"):
+            subprocess.run([*GIT, "update-ref", "-d", f"{refs}/{ref}"], cwd=repository, capture_output=True)
+
+
+def target_diff(repository, target, spec):
+    """Diff locally with the target branch's attributes, so the PR's own
+    .gitattributes cannot mark files as binary and hide them from the reviewers."""
+    return run(
+        [*GIT, f"--attr-source={target}", "diff", "--no-ext-diff", "--no-textconv", "--no-color", spec],
+        cwd=repository, timeout=120,
+    )
+
+
 def checkout(pr, head, base, cwd, remote, previous=None):
     """Unpack `head` into a temporary directory and diff it against `base` locally.
 
@@ -570,61 +620,38 @@ def checkout(pr, head, base, cwd, remote, previous=None):
     diff, merge base, interdiff), where the interdiff is the change since
     `previous`, or None unless this clone has `previous` and `head` descends from it.
     """
-    try:
-        repository = run([*GIT, "rev-parse", "--show-toplevel"], cwd=cwd).strip()
-    except ReviewError as error:
-        raise ReviewError(f"run pr-review from a clone of {pr.owner}/{pr.repo}") from error
-    remote = remote or matching_remote(pr, repository)
-    if remote is None:
-        raise ReviewError(f"no remote of {repository} points to {pr.owner}/{pr.repo}")
-    refs = f"refs/pr-review/{pr.number}-{os.getpid()}"
     temporary = None
-    try:
-        if not commit_exists(repository, head):
-            run([*GIT, "fetch", "--quiet", "--no-write-fetch-head", remote,
-                 f"+refs/pull/{pr.number}/head:{refs}/head"], cwd=repository, timeout=300)
-            if not commit_exists(repository, head):
-                raise ReviewError(f"{pr} no longer points to {head[:12]} on {remote}; run again")
-        run([*GIT, "fetch", "--quiet", "--no-write-fetch-head", remote, f"+refs/heads/{base}:{refs}/base"],
-            cwd=repository, timeout=300)
-        # Attributes come from the target branch, so the PR's own .gitattributes
-        # cannot mark files as binary and hide them from the reviewers.
-        def git_diff(spec):
-            return run(
-                [*GIT, f"--attr-source={refs}/base", "diff", "--no-ext-diff", "--no-textconv", "--no-color", spec],
-                cwd=repository, timeout=120,
-            )
+    with fetched(pr, head, base, cwd, remote) as (repository, target):
+        try:
+            diff = target_diff(repository, target, f"{target}...{head}")
+            merge_base = run([*GIT, "merge-base", target, head], cwd=repository).strip()
+            interdiff = None
+            if previous and commit_exists(repository, previous) and is_ancestor(repository, previous, head):
+                interdiff = target_diff(repository, target, f"{previous}..{head}")
+            # Not under /tmp: Codex reviewers cannot read there (CODEX_FILESYSTEM),
+            # and Codex will not set up its home there.
+            # Per host, since another host sharing the state directory has other PIDs.
+            work = os.path.join(state_base(), "work", os.uname().nodename)
+            os.makedirs(work, exist_ok=True)
+            remove_stale_work(work)
+            temporary = tempfile.mkdtemp(prefix=f"pr-review-{os.getpid()}-", dir=work)
+            tree = os.path.join(temporary, "checkout")
+            write_tree(repository, head, tree)
+            return temporary, tree, diff, merge_base, interdiff
+        except BaseException:  # including SIGTERM/SIGHUP, raised as SystemExit
+            if temporary:
+                shutil.rmtree(temporary, ignore_errors=True)
+            raise
 
-        diff = git_diff(f"{refs}/base...{head}")
-        merge_base = run([*GIT, "merge-base", f"{refs}/base", head], cwd=repository).strip()
-        interdiff = None
-        if previous and commit_exists(repository, previous):
-            try:
-                ancestor = subprocess.run(
-                    [*GIT, "merge-base", "--is-ancestor", previous, head], cwd=repository,
-                    capture_output=True, timeout=120,
-                ).returncode == 0
-            except subprocess.TimeoutExpired:
-                ancestor = False
-            if ancestor:
-                interdiff = git_diff(f"{previous}..{head}")
-        # Not under /tmp: Codex reviewers cannot read there (CODEX_FILESYSTEM),
-        # and Codex will not set up its home there.
-        # Per host, since another host sharing the state directory has other PIDs.
-        work = os.path.join(state_base(), "work", os.uname().nodename)
-        os.makedirs(work, exist_ok=True)
-        remove_stale_work(work)
-        temporary = tempfile.mkdtemp(prefix=f"pr-review-{os.getpid()}-", dir=work)
-        tree = os.path.join(temporary, "checkout")
-        write_tree(repository, head, tree)
-        return temporary, tree, diff, merge_base, interdiff
-    except BaseException:  # including SIGTERM/SIGHUP, raised as SystemExit
-        if temporary:
-            shutil.rmtree(temporary, ignore_errors=True)
-        raise
-    finally:
-        for ref in ("head", "base"):
-            subprocess.run([*GIT, "update-ref", "-d", f"{refs}/{ref}"], cwd=repository, capture_output=True)
+
+def is_ancestor(repository, ancestor, commit):
+    try:
+        return subprocess.run(
+            [*GIT, "merge-base", "--is-ancestor", ancestor, commit], cwd=repository,
+            capture_output=True, timeout=120,
+        ).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
 
 
 def remove_stale_work(work):
@@ -984,9 +1011,19 @@ def terminate(signum, _frame):
 def last_round(config, pr, head, base):
     """Return (status, None) for the round a follow-up can build on, or (None, why not).
 
-    That is the last round on `base` that every configured reviewer of its
-    role, and only they, completed (see incomplete). It must not end a run of MAX_FOLLOW_UPS follow-ups.
+    That is the latest round (see latest_round). It must not end a run of MAX_FOLLOW_UPS follow-ups.
     """
+    latest = latest_round(config, pr, head, base)
+    if latest is None:
+        return None, f"no earlier completed round on {base} with the current reviewers"
+    if latest.get("followups", 0) >= MAX_FOLLOW_UPS:
+        return None, f"{MAX_FOLLOW_UPS} follow-ups in a row"
+    return latest, None
+
+
+def latest_round(config, pr, head, base):
+    """Return the last round of another head on `base` that every configured
+    reviewer of its role, and only they, completed (see incomplete), or None."""
     parent = os.path.dirname(state_dir(pr, head))
     try:
         names = os.listdir(parent)
@@ -1004,12 +1041,7 @@ def last_round(config, pr, head, base):
                 except OSError:
                     continue
             rounds.append(status)
-    if not rounds:
-        return None, f"no earlier completed round on {base} with the current reviewers"
-    latest = max(rounds, key=lambda status: status["finished"])
-    if latest.get("followups", 0) >= MAX_FOLLOW_UPS:
-        return None, f"{MAX_FOLLOW_UPS} follow-ups in a row"
-    return latest, None
+    return max(rounds, key=lambda status: status["finished"]) if rounds else None
 
 
 def changed_lines(diff):
@@ -1066,7 +1098,9 @@ def previous_findings(config, pr, previous, base):
         chain.append(earlier)
     sections = []
     for status in reversed(chain):
-        sections.append(f"### Round at {status['head'][:12]} ({status.get('mode', 'full')})")
+        # A carried round holds its source's replies, which name the source's lines.
+        carried = f", carried from {status['carried']['from'][:12]}" if status.get("carried") else ""
+        sections.append(f"### Round at {status['head'][:12]} ({status.get('mode', 'full')}{carried})")
         if status.get("response"):
             sections.append(f"Author's response before this round:\n\n{status['response']}")
         for reviewer in role_config(config, round_role(status))["reviewers"]:
@@ -1079,6 +1113,350 @@ def previous_findings(config, pr, previous, base):
     return "\n\n".join(sections)
 
 
+# A carried round reuses a completed review for a new head that only rebases
+# or folds the reviewed commits (ADR-0078). Everything here is plumbing: no
+# checkout, rebase, hooks, filters or editors.
+AUTOSQUASH_PREFIXES = ("fixup! ", "amend! ", "squash! ")
+IDENT = re.compile(rb"^(.*?) ?<([^<>]*)> -?\d+ [+-]\d{4}$")
+
+
+def read_commit(repository, sha):
+    """Return a commit's tree, parents, author and committer (name, email) and raw message bytes."""
+    try:
+        result = subprocess.run([*GIT, "cat-file", "commit", sha], cwd=repository, capture_output=True, timeout=120)
+    except subprocess.TimeoutExpired as error:
+        raise ReviewError(f"reading commit {sha[:12]} timed out") from error
+    if result.returncode != 0:
+        raise ReviewError(f"cannot read commit {sha[:12]}")
+    headers, _, message = result.stdout.partition(b"\n\n")
+    commit = {"sha": sha, "parents": [], "message": message, "author": None, "committer": None}
+    for line in headers.split(b"\n"):
+        key, _, value = line.partition(b" ")
+        if key == b"tree":
+            commit["tree"] = value.decode()
+        elif key == b"parent":
+            commit["parents"].append(value.decode())
+        elif key in (b"author", b"committer"):
+            match = IDENT.match(value)
+            commit[key.decode()] = (match[1], match[2]) if match else (value, b"")
+    return commit
+
+
+def commit_subject(message):
+    """Git's subject: the first paragraph, its lines joined with spaces."""
+    lines = []
+    for line in message.decode("utf-8", "replace").split("\n"):
+        line = line.rstrip(" \t\r\f\v")
+        if not line:
+            break
+        lines.append(line)
+    return " ".join(lines)
+
+
+def linear_commits(repository, base, head):
+    """Return (commits of base..head oldest first, None), or (None, why not) unless they form one line on `base`."""
+    output = run([*GIT, "rev-list", "--reverse", "--topo-order", "--parents", f"{base}..{head}"],
+                 cwd=repository, timeout=120)
+    commits, parent = [], base
+    for line in output.splitlines():
+        sha, *parents = line.split()
+        if len(parents) != 1:
+            return None, f"{sha[:12]} is a merge commit"
+        if parents[0] != parent:
+            return None, f"{base[:12]}..{head[:12]} is not one line of commits"
+        commits.append(read_commit(repository, sha))
+        parent = sha
+    if not commits:
+        return None, f"{base[:12]}..{head[:12]} has no commits"
+    return commits, None
+
+
+@dataclass
+class MergeSandbox:
+    """A throwaway bare repository that borrows a clone's objects for merges."""
+
+    git_dir: str
+    env: dict
+    empty_tree: str = ""
+
+    def git(self, *args, stdin=None):
+        """Run git in the sandbox and return the completed process, whatever its exit status."""
+        try:
+            return subprocess.run(
+                ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.attributesFile=/dev/null", *args],
+                cwd=self.git_dir, env=self.env, input=stdin, capture_output=True, text=True, errors="replace",
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ReviewError(f"git {args[0]} in the merge sandbox failed: {error}") from error
+
+    def output(self, *args, stdin=None):
+        result = self.git(*args, stdin=stdin)
+        if result.returncode != 0:
+            detail = result.stderr.strip().splitlines()
+            raise ReviewError(f"git {args[0]} in the merge sandbox failed: {detail[-1] if detail else result.returncode}")
+        return result.stdout.strip()
+
+
+@contextlib.contextmanager
+def merge_sandbox(repository):
+    """Yield a MergeSandbox for `repository`, removed afterwards.
+
+    The clone's config and attributes (.git/config, info/attributes) and the
+    user's and system's git config can name merge drivers: external programs
+    that would run here, outside any reviewer sandbox, and could report a
+    conflict as clean. The sandbox reads none of them, nor the system
+    attributes file (a `merge=union` there would hide a conflict too), and
+    takes attributes from the empty tree, so only git's built-in merge
+    drivers run, as attributes from nowhere select them. Objects the merges
+    write stay in the sandbox and go with it.
+    """
+    objects = run([*GIT, "rev-parse", "--path-format=absolute", "--git-path", "objects"], cwd=repository).strip()
+    object_format = run([*GIT, "rev-parse", "--show-object-format=storage"], cwd=repository).strip()
+    # Like the checkouts: under the state directory, cleaned up by remove_stale_work if killed.
+    work = os.path.join(state_base(), "work", os.uname().nodename)
+    os.makedirs(work, exist_ok=True)
+    directory = tempfile.mkdtemp(prefix=f"pr-review-{os.getpid()}-", dir=work)
+    try:
+        git_dir = os.path.join(directory, "merge.git")
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_ATTR_NOSYSTEM="1",
+                   HOME=directory, XDG_CONFIG_HOME=directory)
+        sandbox = MergeSandbox(directory, env)
+        sandbox.output("init", "--quiet", "--bare", "--template=", f"--object-format={object_format}", git_dir)
+        sandbox = MergeSandbox(git_dir, dict(env, GIT_DIR=git_dir))
+        os.makedirs(os.path.join(git_dir, "objects", "info"), exist_ok=True)
+        with open(os.path.join(git_dir, "objects", "info", "alternates"), "w", encoding="utf-8") as handle:
+            handle.write(objects + "\n")
+        sandbox.empty_tree = sandbox.output("hash-object", "-t", "tree", "--stdin", stdin="")
+        yield sandbox
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
+def replay(sandbox, base, ours, theirs):
+    """Return (tree, clean) for merging `theirs` into `ours` with the merge base `base`.
+
+    Runs in the merge sandbox, so only built-in merge drivers run and no
+    filter does. Needs git 2.40 or later for --merge-base.
+    """
+    result = sandbox.git(f"--attr-source={sandbox.empty_tree}", "merge-tree", "--write-tree", "--no-messages",
+                         f"--merge-base={base}", ours, theirs)
+    if result.returncode not in (0, 1):
+        detail = result.stderr.strip().splitlines()
+        raise ReviewError(f"git merge-tree failed: {detail[-1] if detail else result.returncode}")
+    return result.stdout.split("\n", 1)[0].strip(), result.returncode == 0
+
+
+def scratch_commit(sandbox, tree, parent):
+    """Write an unreferenced commit for `tree` in the merge sandbox, so merge-tree can build on it."""
+    return sandbox.output("-c", "user.name=pr-review", "-c", "user.email=pr-review@localhost", "commit-tree",
+                          "--no-gpg-sign", tree, "-p", parent, "-m", "pr-review carry")
+
+
+def autosquash_order(commits):
+    """Return `git rebase --autosquash`'s order: lists of indexes, each a commit and its fixups.
+
+    Follows git's rules: a fixup names its target by subject, by an
+    abbreviated commit hash, or by a prefix of an earlier subject, nested
+    `fixup! fixup! ` prefixes are skipped, and an unmatched fixup stays a
+    commit of its own. Returns None when the order has a cycle.
+    """
+    subjects = [commit_subject(commit["message"]) for commit in commits]
+    by_subject, following, tail, folded = {}, [-1] * len(commits), [-1] * len(commits), set()
+
+    def skip_prefix(text):
+        for prefix in AUTOSQUASH_PREFIXES:
+            if text.startswith(prefix):
+                return text[len(prefix):]
+        return None
+
+    for index, subject in enumerate(subjects):
+        target = -1
+        rest = skip_prefix(subject)
+        if rest is not None:
+            while True:
+                rest = rest.lstrip(" \t\n\r\f\v")
+                nested = skip_prefix(rest)
+                if nested is None:
+                    break
+                rest = nested
+            named = [other for other, commit in enumerate(commits) if commit["sha"].startswith(rest)]
+            if rest in by_subject:
+                target = by_subject[rest]
+            elif re.fullmatch(r"[0-9a-f]{4,64}", rest) and len(named) == 1:
+                target = named[0]
+            else:
+                target = next((other for other in range(index) if subjects[other].startswith(rest)), -1)
+        if target == index:
+            target = -1
+        if target >= 0:
+            folded.add(index)
+            after = target if tail[target] < 0 else tail[target]
+            following[index], following[after] = following[after], index
+            tail[target] = index
+        elif subject not in by_subject:
+            by_subject[subject] = index
+    order, seen = [], set()
+    for index in range(len(commits)):
+        if index in folded:
+            continue
+        group = []
+        while index >= 0:
+            if index in seen:
+                return None
+            seen.add(index)
+            group.append(index)
+            index = following[index]
+        order.append(group)
+    return order if len(seen) == len(commits) else None
+
+
+def same_commit_problem(label, before, after):
+    """Return how `after` differs from `before` in message, author or committer identity, or None."""
+    for key, name in (("message", "message"), ("author", "author"), ("committer", "committer identity")):
+        if after[key] != before[key]:
+            return f"{label} has another {name} than {before['sha'][:12]}"
+    return None
+
+
+def rebase_problem(repository, sandbox, old, new, old_base, new_base):
+    """Return why `new` on `new_base` is not a pure rebase of `old` on `old_base`, or None.
+
+    Each reviewed commit replayed onto its new parent must merge cleanly and
+    give exactly the new commit's tree, with the same message, author and
+    committer identity. Comparing patches is not enough: a conflict resolution
+    can look like the reviewed patch applied to an identical block elsewhere.
+    """
+    if not is_ancestor(repository, old_base, new_base):
+        return "the new merge base does not contain the reviewed one"
+    if len(new) != len(old):
+        return f"{len(new)} commits instead of the reviewed {len(old)}"
+    for number, (before, after) in enumerate(zip(old, new), 1):
+        label = f"commit {number} ({after['sha'][:12]})"
+        problem = same_commit_problem(label, before, after)
+        if problem:
+            return problem
+        tree, clean = replay(sandbox, before["parents"][0], after["parents"][0], before["sha"])
+        if not clean:
+            return f"replaying {before['sha'][:12]} onto the parent of {label} conflicts"
+        if tree != after["tree"]:
+            return f"{label} differs from {before['sha'][:12]} replayed onto its parent"
+    return None
+
+
+def fold_problem(sandbox, old, new, merge_base):
+    """Return why `new` is not the non-interactive autosquash of `old`, or None.
+
+    Only `fixup!` commits fold this way; `squash!` and `amend!` change a
+    message and need a review.
+    """
+    if new[-1]["tree"] != old[-1]["tree"]:
+        return "the head's tree differs from the reviewed head's"
+    for commit in old:
+        if commit_subject(commit["message"]).startswith(("squash! ", "amend! ")):
+            return f"the reviewed {commit['sha'][:12]} is a squash! or amend! commit"
+    order = autosquash_order(old)
+    if order is None:
+        return "the fixups' order cannot be determined"
+    if len(new) != len(order):
+        return f"{len(new)} commits instead of the {len(order)} an autosquash gives"
+    parent = merge_base
+    for number, (group, after) in enumerate(zip(order, new), 1):
+        label = f"commit {number} ({after['sha'][:12]})"
+        current = parent
+        for step, index in enumerate(group):
+            before = old[index]
+            tree, clean = replay(sandbox, before["parents"][0], current, before["sha"])
+            if not clean:
+                return f"folding {before['sha'][:12]} into {label} conflicts"
+            if step < len(group) - 1:
+                current = scratch_commit(sandbox, tree, current)
+        target = old[group[0]]
+        problem = same_commit_problem(label, target, after)
+        if problem:
+            return problem
+        if tree != after["tree"]:
+            return f"{label} differs from {target['sha'][:12]} with its fixups folded in"
+        parent = after["sha"]
+    return None
+
+
+def carry_problem(repository, source, head, merge_base, identities):
+    """Return (kind, None) when `head` is a pure rebase or fold of the reviewed
+    round `source`, otherwise (kind or None, why not)."""
+    old_head, old_base = source["head"], source.get("merge_base")
+    if not old_base:
+        return None, f"the round at {old_head[:12]} has no recorded merge base"
+    if not commit_exists(repository, old_head) or not commit_exists(repository, old_base):
+        return None, f"this clone lacks {old_head[:12]} or its merge base"
+    if is_ancestor(repository, old_head, head):
+        return None, "the head adds commits to it"
+    old, problem = linear_commits(repository, old_base, old_head)
+    if problem:
+        return None, f"the reviewed commits are not linear: {problem}"
+    new, problem = linear_commits(repository, merge_base, head)
+    if problem:
+        return None, f"the new commits are not linear: {problem}"
+    identities = {identity.lower() for identity in identities}
+    for commit in new:
+        for role in ("author", "committer"):
+            if commit[role][1].decode("utf-8", "replace").lower() in identities:
+                return None, f"{commit['sha'][:12]} has a configured agent identity as its {role}"
+    # Folding fixups leaves fewer commits; with as many, they were kept as they are.
+    with merge_sandbox(repository) as sandbox:
+        if merge_base == old_base and len(new) < len(old):
+            return "fold", fold_problem(sandbox, old, new, merge_base)
+        return "rebase", rebase_problem(repository, sandbox, old, new, old_base, merge_base)
+
+
+def carry_round(config, args, pr, info, remote, source, directory):
+    """Record `source`'s reviews for the PR's head when the head only rebases or
+    folds the reviewed commits, and return the exit status; otherwise print why
+    not and return None."""
+    head, base = info["head"], info["base"]
+    try:
+        with fetched(pr, head, base, args.cwd, remote) as (repository, target):
+            merge_base = run([*GIT, "merge-base", target, head], cwd=repository).strip()
+            diff = target_diff(repository, target, f"{target}...{head}")
+            role = args.role or choose_role(config, diff)[0]
+            if not diff.strip():
+                kind, problem = None, "the PR has an empty diff"
+            elif role != round_role(source):
+                kind, problem = None, f"the round had {round_role(source)} reviewers and this head needs {role}"
+            else:
+                kind, problem = carry_problem(repository, source, head, merge_base,
+                                              config.get("agent_identities") or [])
+    except (ReviewError, subprocess.TimeoutExpired) as error:  # for example git older than 2.40; review instead
+        kind, problem = None, str(error)
+    if problem:
+        print(f"No carry from {source['head'][:12]}{f' ({kind})' if kind else ''}: {problem}.", flush=True)
+        return None
+    current = pr_info(pr)
+    if (current["head"], current["base"]) != (head, base):
+        raise ReviewError(f"{pr} changed while it was checked; run again")
+    results = {}
+    for name, result in source["reviewers"].items():
+        output = os.path.join(directory, f"{name}.md")
+        shutil.copyfile(result["output"], output)
+        # No reviewer ran; the source round keeps its own token counts.
+        results[name] = dict(result, output=output, usage=token_usage(None, result["reviewer"]["client"]))
+    # A carried round stands in for its source: the same mode, chain, follow-up
+    # count, response and changed-line count, on the new head and merge base.
+    status = dict(
+        source, pr=str(pr), url=info["url"], head=head, base=base, merge_base=merge_base,
+        finished=time.time(), reviewers=results,
+        carried={"kind": kind, "from": source["head"], "from_merge_base": source["merge_base"]},
+    )
+    with open(os.path.join(directory, "status.json"), "w", encoding="utf-8") as handle:
+        json.dump(status, handle, indent=2)
+    names = ", ".join(results)
+    print(f"Carried the {round_role(source)} review of {pr} by {names} from {source['head'][:12]} to {head[:12]} "
+          f"({kind}): the new commits only {'rebase' if kind == 'rebase' else 'fold the fixups of'} the reviewed "
+          f"ones, so no reviewer ran. Post the outcome with `pr-review comment`; results in {directory}", flush=True)
+    return print_results(results)
+
+
 def cmd_run(args):
     config = load_config()
     pr, remote = resolve(args.pr, args.cwd, args.remote)
@@ -1086,13 +1464,18 @@ def cmd_run(args):
     head, base = info["head"], info["base"]
     directory = state_dir(pr, head)
     status = load_status(directory)
-    rerun = args.force or (args.full and status.get("mode", "full") != "full")
+    rerun = args.force or (args.full and (status.get("mode", "full") != "full" or bool(status.get("carried"))))
     rerun = rerun or bool(status and args.role and args.role != round_role(status))
     if status and complete(config, status, base) and not rerun:
         print(f"{pr} head {head[:12]} was already reviewed; pass --force to review again.")
         return print_results(status["reviewers"])
+    # Without --full or --force, a head that only rebases or folds the latest
+    # completed round's commits carries that round's reviews.
+    source = None if args.full or args.force else latest_round(config, pr, head, base)
     if args.full:
         previous, reason = None, "--full was given"
+    elif args.force and status.get("carried"):
+        previous, reason = None, "--force reviews a carried head in full"
     elif args.force and status and status.get("mode", "full") == "full":
         previous, reason = None, "--force repeats the full review of this head"
     elif args.force and status:
@@ -1116,6 +1499,10 @@ def cmd_run(args):
     signal.signal(signal.SIGTERM, terminate)
     if signal.getsignal(signal.SIGHUP) != signal.SIG_IGN:
         signal.signal(signal.SIGHUP, terminate)
+    if source:
+        carried = carry_round(config, args, pr, info, remote, source, directory)
+        if carried is not None:
+            return carried
     temporary, tree, diff, merge_base, interdiff = checkout(
         pr, head, base, args.cwd, remote, previous["head"] if previous else None
     )
@@ -1223,7 +1610,12 @@ def cmd_comment(args):
             f"no completed review of {pr} at its current head {head[:12]} by "
             f"{', '.join(missing)}; run `pr-review run {args.pr}` first"
         )
-    mode = f"follow-up to {status['previous'][:12]}" if status.get("mode") == "follow-up" else "full"
+    if status.get("carried"):
+        mode = f"carried from {status['carried']['from'][:12]} ({status['carried']['kind']})"
+    elif status.get("mode") == "follow-up":
+        mode = f"follow-up to {status['previous'][:12]}"
+    else:
+        mode = "full"
     body = f"{prefix}{mode} ({role}): {outcome}"
     post_comment(pr, body)
     print(f"Posted on {pr}: {body}")
@@ -1625,7 +2017,90 @@ def mcp_merge_check(arguments):
     pr = PR("forgejo", FORGEJO_MCP_URL, owner, repo, str(index))
     info = pr_info(pr)
     problem = review_problem(comment_bodies(pr), info["head"], info["base"])
-    return f"{pr} {problem}." if problem else None
+    if problem:
+        return f"{pr} {problem}."
+    return fast_forward_problem(pr, [arguments.get("style")])
+
+
+FAST_FORWARD_STYLE = "fast-forward-only"
+# Forgejo returns at most this many commits per page by default.
+COMMIT_PAGE = 50
+MAX_COMMIT_PAGES = 20
+
+
+def guard_settings():
+    """Return (fast-forward repositories, agent identities) from PR_REVIEW_CONFIG, lowercased.
+
+    Without the variable both are empty; an unreadable file blocks the merge.
+    """
+    path = os.environ.get("PR_REVIEW_CONFIG")
+    if not path:
+        return set(), set()
+    with open(path, encoding="utf-8") as handle:
+        config = json.load(handle)
+    return ({name.lower() for name in config.get("fast_forward_repositories") or []},
+            {email.lower() for email in config.get("agent_identities") or []})
+
+
+def merge_styles(payloads):
+    """Return every merge style (`Do`) a REST merge payload sets; Forgejo matches the key without regard to case."""
+    styles = []
+    for kind, value in payloads:
+        if kind == "body" and value.lstrip().startswith("{"):
+            fields = list(json.loads(value).items())
+        elif kind in ("body", "form"):
+            fields = urllib.parse.parse_qsl(value, keep_blank_values=True)
+        elif kind == "field":
+            fields = [tuple(value.split("=", 1))] if "=" in value else []
+        else:
+            continue
+        styles.extend(setting for key, setting in fields if key.casefold() == "do")
+    return styles
+
+
+def pr_commits(pr):
+    """Return the PR's commits from the Forgejo API, every page."""
+    commits = []
+    for page in range(1, MAX_COMMIT_PAGES + 1):
+        batch = forgejo_request(
+            pr, f"pulls/{pr.number}/commits?limit={COMMIT_PAGE}&page={page}&verification=false&files=false")
+        if not isinstance(batch, list):
+            raise ReviewError(f"unexpected commit list for {pr}")
+        if not batch:
+            return commits
+        commits.extend(batch)
+    raise ReviewError(f"{pr} has more commits than the guard checks")
+
+
+def fast_forward_problem(pr, styles):
+    """Return why a Forgejo merge into a fast-forward repository must not run, or None.
+
+    Such repositories keep the operator's curated commits: the forge must not
+    write a commit, fix rounds must be folded, and no commit may come from an
+    agent forge account, as after a forge-side rebase or branch update.
+    """
+    repositories, identities = guard_settings()
+    host = urllib.parse.urlparse(pr.host).netloc or pr.host
+    if f"{host}/{pr.owner}/{pr.repo}".lower() not in repositories:
+        return None
+    if set(styles) != {FAST_FORWARD_STYLE}:
+        return (f"{pr} is in a fast-forward repository: merge it with the style {FAST_FORWARD_STYLE} "
+                f"(REST `{{\"Do\":\"{FAST_FORWARD_STYLE}\"}}`, MCP `style`), so the forge writes no commit "
+                "and the reviewed commits stay as they are.")
+    for commit in pr_commits(pr):
+        details = commit.get("commit") or {}
+        sha = str(commit.get("sha") or "")[:12]
+        subject = (details.get("message") or "").split("\n", 1)[0]
+        if subject.startswith(AUTOSQUASH_PREFIXES):
+            return (f"{pr} still has the commit {sha} `{subject}`: fold fixups locally with "
+                    "`git rebase -i --autosquash`, push, and run `pr-review run` again, which carries the "
+                    "review to a pure fold; squash! and amend! commits need a new review.")
+        for role in ("author", "committer"):
+            if str((details.get(role) or {}).get("email") or "").lower() in identities:
+                return (f"{pr} has the commit {sha} whose {role} is an agent forge account, for example from a "
+                        "forge-side rebase or branch update; rebase it locally with your own identity, push, "
+                        "and run `pr-review run` again.")
+    return None
 
 
 def code_references(text, names):
@@ -2083,7 +2558,9 @@ def guard_command(tokens, cwd, inputs=(), targets=False, directory_variables=Fal
         pr = PR("forgejo", (f"https://{host}" if host else FORGEJO_URL).rstrip("/"), owner, repo, number)
     info = pr_info(pr)
     problem = review_problem(comment_bodies(pr), info["head"], info["base"])
-    return f"{pr} {problem}." if problem else None
+    if problem:
+        return f"{pr} {problem}."
+    return fast_forward_problem(pr, merge_styles(payloads)) if pr.forge == "forgejo" else None
 
 
 def literal_merge_syntax(text):
@@ -2450,7 +2927,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="pr-review", description="Automated cross-model PR reviews (ADR-0078).")
     commands = parser.add_subparsers(dest="command", required=True)
     for name, handler, text in (
-        ("run", cmd_run, "review the PR's head commit with every configured reviewer"),
+        ("run", cmd_run, "review the PR's head commit with every configured reviewer, or carry the last "
+                         "round to a pure rebase or fold"),
         ("comment", cmd_comment, "post the review comment for the PR's current head"),
         ("check", cmd_check, "exit 1 unless a review comment names the PR's current head"),
     ):
@@ -2459,8 +2937,11 @@ def main(argv=None):
         sub.add_argument("--remote", default="origin", help="git remote that hosts the PR (default: origin)")
         sub.set_defaults(handler=handler, cwd=os.getcwd())
         if name == "run":
-            sub.add_argument("--force", action="store_true", help="review again even if a completed review exists")
-            sub.add_argument("--full", action="store_true", help="review the whole PR, not only the fixes since the last round")
+            sub.add_argument("--force", action="store_true",
+                             help="review again even if a completed review exists; never carries a review")
+            sub.add_argument("--full", action="store_true",
+                             help="review the whole PR, rather than carrying the last round to a rebase or fold "
+                                  "or reviewing only the fixes since it")
             sub.add_argument("--response", default="", help="what was fixed or justified since the last round")
             # Only raising the role is offered: lowering it would cut review depth unnoticed.
             sub.add_argument("--role", choices=["deep"],

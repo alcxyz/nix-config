@@ -5,10 +5,12 @@ import io
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -19,6 +21,8 @@ review = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(review)
 real_run = review.run
 real_forgejo = review.forgejo_request
+# The guard reads fast-forward repositories from here; tests set their own.
+os.environ.pop("PR_REVIEW_CONFIG", None)
 
 HEAD = "0123456789abcdef0123456789abcdef01234567"
 PINNED = f"Automated read-only review ({HEAD[:12]} on dev): no blocking findings."
@@ -737,6 +741,83 @@ with tempfile.TemporaryDirectory() as state:
 # Without the registration state, MCP merges are refused.
 code, message = mcp_hook("mcp__forgejo__merge_pull_request", {"owner": "o", "repo": "r", "index": 7})
 assert code == 2 and "not the one programs.ai manages" in message, message
+
+# Fast-forward repositories (ADR-0078): only Forgejo merges into the listed
+# repositories must be fast-forward-only, without leftover fixups or commits by
+# agent identities. Other repositories and GitHub keep the review check alone.
+commit_pages = {}
+
+
+def commits_forgejo(pr, path, data=None, accept="application/json"):
+    if path.startswith(f"pulls/{pr.number}/commits?"):
+        calls.append((pr, path))
+        assert "limit=50" in path, path
+        return commit_pages.get(int(re.search(r"[?&]page=(\d+)", path)[1]), [])
+    return fake_forgejo(pr, path, data, accept)
+
+
+def pr_commit(subject, author="operator@example.invalid", committer="operator@example.invalid"):
+    return {"sha": "a" * 40, "commit": {"message": f"{subject}\n\nbody\n", "author": {"email": author},
+                                        "committer": {"email": committer}}}
+
+
+review.forgejo_request = commits_forgejo
+with tempfile.TemporaryDirectory() as tmp:
+    os.environ["PR_REVIEW_CONFIG"] = os.path.join(tmp, "config.json")
+    forgejo_host = urllib.parse.urlparse(review.FORGEJO_URL).netloc
+    pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps({
+        "reviewers": [], "fast_forward_repositories": [f"{forgejo_host}/O/r"],
+        "agent_identities": ["Agent@example.invalid"]}))
+    commit_pages.update({1: [pr_commit("feat: one")], 2: [pr_commit("fix: two")]})
+    rest = "tea api -X POST /repos/o/r/pulls/7/merge "
+    fast_forward = '''-d '{"Do":"fast-forward-only"}' '''
+    for payload in ('''-d '{"Do":"squash"}' ''', '''-d '{"Do":"merge"}' ''', "", "-f Do=rebase",
+                    '''-d '{"Do":"fast-forward-only","do":"squash"}' '''):
+        calls.clear()
+        code, message = hook(rest + payload)
+        assert code == 2 and "fast-forward repository" in message and "fast-forward-only" in message, (payload, message)
+    seen, _ = expect(rest + fast_forward, 0)
+    assert [path for _, path in seen if "commits" in path] == [
+        f"pulls/7/commits?limit=50&page={page}&verification=false&files=false" for page in (1, 2, 3)], seen
+    expect(rest + "-f Do=fast-forward-only", 0)
+    expect(f'''curl -X POST {review.FORGEJO_URL}/api/v1/repos/o/r/pulls/7/merge -d '{{"do":"fast-forward-only"}}' ''', 0)
+    # Leftover fix rounds, also on a later page, must be folded first.
+    for subject in ("fixup! feat: one", "squash! feat: one", "amend! feat: one"):
+        commit_pages[2] = [pr_commit(subject)]
+        code, message = hook(rest + fast_forward)
+        assert code == 2 and "still has the commit" in message and "--autosquash" in message, (subject, message)
+    # A commit by an agent forge account, as after a forge-side rebase or branch update.
+    for commit in (pr_commit("fix: two", committer="agent@example.invalid"),
+                   pr_commit("fix: two", author="AGENT@example.invalid")):
+        commit_pages[2] = [commit]
+        code, message = hook(rest + fast_forward)
+        assert code == 2 and "agent forge account" in message, message
+    # The review is still required.
+    commit_pages[2] = [pr_commit("fix: two")]
+    code, message = hook("tea api -X POST /repos/o/r/pulls/9/merge " + fast_forward)
+    assert code == 2 and f"current head {HEAD[:12]}" in message, message
+    # Unlisted repositories and GitHub merges are unchanged and never list commits.
+    commit_pages[2] = [pr_commit("fixup! feat: one", committer="agent@example.invalid")]
+    for command in ('''tea api -X POST /repos/o/other/pulls/7/merge -d '{"Do":"squash"}' ''',
+                    "gh api -X PUT repos/o/r/pulls/7/merge -f merge_method=squash", "gh pr merge 7 --squash"):
+        seen, _ = expect(command, 0)
+        assert not any("commits" in str(call) for call in seen), (command, seen)
+    # MCP merges follow the same rule through their `style`.
+    with tempfile.TemporaryDirectory() as state:
+        os.environ["AGENT_MCP_STATE_DIR"] = state
+        for client in ("codex", "claude"):
+            pathlib.Path(state, f"{client}-managed.json").write_text(json.dumps({"managed": ["forgejo"]}))
+        merge = "mcp__forgejo__merge_pull_request"
+        code, message = mcp_hook(merge, {"owner": "o", "repo": "r", "index": 7, "style": "fast-forward-only"})
+        assert code == 2 and "still has the commit" in message, message
+        commit_pages[2] = [pr_commit("fix: two")]
+        assert mcp_hook(merge, {"owner": "o", "repo": "r", "index": 7, "style": "fast-forward-only"})[0] == 0
+        code, message = mcp_hook(merge, {"owner": "o", "repo": "r", "index": 7, "style": "squash"})
+        assert code == 2 and "fast-forward repository" in message, message
+        assert mcp_hook(merge, {"owner": "o", "repo": "other", "index": 7, "style": "squash"})[0] == 0
+        del os.environ["AGENT_MCP_STATE_DIR"]
+    del os.environ["PR_REVIEW_CONFIG"]
+review.forgejo_request = fake_forgejo
 
 # Unresolvable merge targets block with guidance.
 code, message = hook("curl -X POST https://git.example/api/v1/repos/o/r/pulls/$PR/merge")
@@ -1501,5 +1582,300 @@ with tempfile.TemporaryDirectory() as tmp:
     else:
         raise AssertionError("--role light must be refused")
 
+    # Carries: a pure rebase of the last completed round's commits gets that
+    # round's reviews without running reviewers, and its own comment mode.
+    pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps(config))
+    other_blob = git_out("hash-object", "-w", "--stdin", stdin="target moved\n")
+    target = push("carry base\n", dev, ref="refs/heads/carry")
+    reviewed = push("carry base\nreviewed\n", target)
+    review_round(reviewed, "(full review:", "--full", base="carry")
+    moved = push("carry base\n", target, ref="refs/heads/carry", extra=f"100644 blob {other_blob}\tother\n")
+    rebased = push("carry base\nreviewed\n", moved)
+    at(rebased, "carry")
+    reviewers_ran = os.path.getmtime(pathlib.Path(rounds, reviewed, "gpt.md"))
+    code, output = cli("run", "4")
+    assert code == 0 and f"Carried the deep review of o/r#4 by gpt from {reviewed[:12]} to {rebased[:12]} (rebase)" \
+        in output, output
+    assert "Reviewing" not in output, output
+    # The carried findings are shown before the outcome is posted.
+    assert "===== gpt: ok" in output and "Verdict: no findings" in output, output
+    status = state_of(rebased)
+    assert status["carried"] == {"kind": "rebase", "from": reviewed, "from_merge_base": target}, status
+    assert (status["mode"], status["merge_base"], status["changed_lines"]) == (
+        "full", moved, state_of(reviewed)["changed_lines"]), status
+    assert pathlib.Path(rounds, rebased, "gpt.md").read_text() == pathlib.Path(rounds, reviewed, "gpt.md").read_text()
+    assert all(value is None for value in status["reviewers"]["gpt"]["usage"].values()), status
+    assert os.path.getmtime(pathlib.Path(rounds, reviewed, "gpt.md")) == reviewers_ran
+    code, output = cli("comment", "4", f"carried from {reviewed[:12]} (rebase) (deep): no findings.")
+    body = f"Automated read-only review ({rebased[:12]} on carry): carried from {reviewed[:12]} (rebase) (deep): no findings."
+    assert code == 0 and posted[-1][1] == body, posted[-1]
+    # The guard and older parsers read the head and target from the pinned prefix.
+    assert review.review_problem([body], rebased, "carry") is None and review.PINNED.match(body)[2] == "carry"
+    assert "current head" in review.review_problem([body], reviewed, "carry")
+    code, output = cli("run", "4")
+    assert code == 0 and "already reviewed" in output, output
+    # A follow-up builds on the carried round, with its source's findings.
+    fix = push("carry base\nreviewed\nfixed\n", rebased)
+    at(fix, "carry")
+    code, output = cli("run", "4")
+    assert code == 0 and f"No carry from {rebased[:12]}: the head adds commits to it." in output, output
+    assert f"(follow-up to {rebased[:12]})" in output, output
+    prompt = pathlib.Path(rounds, fix, "prompt.md").read_text()
+    assert f"### Round at {rebased[:12]} (full, carried from {reviewed[:12]})" in prompt, prompt
+    # --full and --force review a carried head, and --full never carries.
+    at(rebased, "carry")
+    code, output = cli("run", "4", "--full")
+    assert code == 0 and "(full review: --full was given)" in output and "Carried" not in output, output
+    assert "carried" not in state_of(rebased)
+    moved = push("carry base\n", moved, ref="refs/heads/carry", extra=f"100644 blob {other_blob}\tmore\n")
+    again = push("carry base\nreviewed\n", moved)
+    assert review_round(again, "(full review: --full was given)", "--full", base="carry") == "full"
+    # A git call that times out during the carry falls back to a review.
+    real_subprocess_run = subprocess.run
+
+    def slow_cat_file(argv, *args, **kwargs):
+        if "cat-file" in argv and "commit" in argv:
+            raise subprocess.TimeoutExpired(argv, 120)
+        return real_subprocess_run(argv, *args, **kwargs)
+
+    moved = push("carry base\n", moved, ref="refs/heads/carry", extra=f"100644 blob {other_blob}\tlate\n")
+    late = push("carry base\nreviewed\n", moved)
+    at(late, "carry")
+    with patch.object(review.subprocess, "run", slow_cat_file):
+        code, output = cli("run", "4")
+    assert code == 0 and f"No carry from {again[:12]}: reading commit" in output and "timed out" in output, output
+    assert "(full review:" in output and "carried" not in state_of(late), output
+    # A carry needs a completed round on the same target.
+    push("carry base\n", moved, ref="refs/heads/carry-other", files=moved)
+    elsewhere = push("carry base\nreviewed\n", moved)
+    review_round(elsewhere, "(full review: no earlier completed round on carry-other", base="carry-other")
+    assert "carried" not in state_of(elsewhere)
+
+# Carry rules, on repositories rebased and folded by git itself.
+FIXTURE_ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                   GIT_SEQUENCE_EDITOR="true", GIT_EDITOR="true")
+OPERATOR, AGENT = "operator@example.invalid", "agent@example.invalid"
+LINES = "".join(f"line {number}\n" for number in range(1, 21))
+
+
+class Fixture:
+    """A repository whose `topic` branch was reviewed at `reviewed` on the merge base `base`."""
+
+    def __init__(self, path, content=LINES, object_format="sha1"):
+        self.path = path
+        os.makedirs(path)
+        self.git("init", "-q", "-b", "dev", f"--object-format={object_format}")
+        self.write(content)
+        self.base = self.commit("base")
+        self.git("checkout", "-qb", "topic")
+
+    def git(self, *args, email=OPERATOR, check=True):
+        result = subprocess.run(["git", "-c", "user.name=Operator", "-c", f"user.email={email}", "-C", self.path, *args],
+                                env=FIXTURE_ENV, capture_output=True, text=True)
+        assert result.returncode == 0 or not check, (args, result.stderr)
+        return result.stdout.strip() if check else result.returncode
+
+    def write(self, content, name="file"):
+        pathlib.Path(self.path, name).write_text(content)
+
+    def edit(self, line, text):
+        lines = pathlib.Path(self.path, "file").read_text().splitlines()
+        lines[line] = text
+        self.write("\n".join(lines) + "\n")
+
+    def commit(self, *message, email=OPERATOR, flags=()):
+        self.git("add", "-A")
+        self.git("commit", "-q", *flags, *[part for line in message for part in ("-m", line)], email=email)
+        return self.git("rev-parse", "HEAD")
+
+    def move_target(self, line=None):
+        self.git("checkout", "-q", "dev")
+        if line is None:
+            self.write("target moved\n", name="other")
+        else:
+            self.edit(line, "target change")
+        self.commit("chore: the target moves")
+        self.git("checkout", "-q", "topic")
+
+    def carry(self):
+        head = self.git("rev-parse", "HEAD")
+        source = {"head": self.reviewed, "merge_base": self.base}
+        return review.carry_problem(self.path, source, head, self.git("merge-base", "dev", head), [AGENT.upper()])
+
+
+def two_commits(path):
+    fixture = Fixture(path)
+    fixture.edit(2, "first change")
+    fixture.first = fixture.commit("feat: first")
+    fixture.edit(14, "second change")
+    fixture.second = fixture.reviewed = fixture.commit("feat: second", "With a body.")
+    return fixture
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    os.environ["XDG_STATE_HOME"] = os.path.join(tmp, "state")
+    work = os.path.join(tmp, "state", "pr-review", "work", os.uname().nodename)
+    # A pure rebase onto a newer target carries, and the merge sandbox is removed.
+    fixture = two_commits(os.path.join(tmp, "rebase"))
+    fixture.move_target()
+    fixture.git("rebase", "-q", "dev")
+    assert fixture.carry() == ("rebase", None), fixture.carry()
+    assert not os.listdir(work), os.listdir(work)
+    # A timed-out git call is a failed carry, never an unhandled exception.
+    real_subprocess_run = subprocess.run
+
+    def slow_merge(argv, *args, **kwargs):
+        if "merge-tree" in argv:
+            raise subprocess.TimeoutExpired(argv, 120)
+        return real_subprocess_run(argv, *args, **kwargs)
+
+    with patch.object(review.subprocess, "run", slow_merge):
+        try:
+            fixture.carry()
+        except review.ReviewError as error:
+            assert "merge-tree" in str(error), error
+        else:
+            raise AssertionError("a timed-out merge-tree must fail the carry")
+    assert not os.listdir(work), os.listdir(work)
+
+    # Merge drivers named by the clone's own config and attributes never run:
+    # here one would report a conflict as clean, keeping the target's line, as
+    # the resolution did.
+    fixture = Fixture(os.path.join(tmp, "driver"))
+    fixture.edit(2, "first change")
+    fixture.first = fixture.reviewed = fixture.commit("feat: first")
+    fixture.move_target(line=2)
+    fixture.git("checkout", "-q", "--detach", "dev")
+    fixture.commit(flags=("--allow-empty", "-C", fixture.first))
+    marker = os.path.join(tmp, "driver-ran")
+    pathlib.Path(fixture.path, ".git", "info").mkdir(exist_ok=True)
+    pathlib.Path(fixture.path, ".git", "info", "attributes").write_text("file merge=ours\n")
+    fixture.git("config", "merge.ours.driver", f"touch {marker}")
+    kind, problem = fixture.carry()
+    assert kind == "rebase" and "conflicts" in problem, problem
+    assert not os.path.exists(marker), "a repository merge driver ran"
+
+    # The sandbox ignores the system attributes file and uses the clone's
+    # object format, so a SHA-256 clone still carries a clean rebase.
+    with review.merge_sandbox(fixture.path) as sandbox:
+        assert sandbox.env["GIT_ATTR_NOSYSTEM"] == "1"
+    fixture = Fixture(os.path.join(tmp, "sha256"), object_format="sha256")
+    fixture.edit(2, "first change")
+    fixture.reviewed = fixture.commit("feat: first")
+    fixture.move_target()
+    fixture.git("rebase", "-q", "dev")
+    assert fixture.carry() == ("rebase", None), fixture.carry()
+
+    # A conflict resolution needs a review, even when it keeps the PR's line.
+    fixture = two_commits(os.path.join(tmp, "conflict"))
+    fixture.move_target(line=2)
+    assert fixture.git("rebase", "dev", check=False) != 0
+    fixture.edit(2, "first change")
+    fixture.git("add", "-A")
+    fixture.git("rebase", "--continue")
+    kind, problem = fixture.carry()
+    assert kind == "rebase" and "conflicts" in problem, problem
+
+    # The reviewed patch applied to an identical block elsewhere has the same
+    # patch ID, but replaying the reviewed commit gives another tree.
+    block = "".join(f"same {number}\n" for number in range(1, 8))
+    fixture = Fixture(os.path.join(tmp, "duplicate"), block + "unique 1\nunique 2\nunique 3\nunique 4\n" + block)
+    fixture.edit(3, "changed")
+    fixture.reviewed = fixture.commit("feat: change the block")
+    fixture.move_target()
+    fixture.git("checkout", "-q", "--detach", "dev")
+    fixture.edit(14, "changed")
+    fixture.commit(flags=("-C", fixture.reviewed))
+    patch_ids = {subprocess.run(["git", "-C", fixture.path, "patch-id", "--stable"], input=fixture.git("show", sha) + "\n",
+                                capture_output=True, text=True, check=True).stdout.split()[0]
+                 for sha in (fixture.reviewed, "HEAD")}
+    assert len(patch_ids) == 1, patch_ids
+    kind, problem = fixture.carry()
+    assert kind == "rebase" and "differs from" in problem, problem
+
+    # A whitespace-only change during the rebase needs a review.
+    fixture = two_commits(os.path.join(tmp, "whitespace"))
+    fixture.move_target()
+    fixture.git("checkout", "-q", "--detach", "dev")
+    fixture.git("cherry-pick", fixture.first)
+    fixture.edit(5, "line 6 ")
+    fixture.commit(flags=("--amend", "-C", "HEAD"))
+    fixture.git("cherry-pick", fixture.second)
+    kind, problem = fixture.carry()
+    assert kind == "rebase" and "commit 1" in problem and "differs from" in problem, problem
+
+    # A rebase by someone else changes the committer identity; one by an agent
+    # forge account, as a forge-side rebase or branch update, never carries.
+    for email, expected in (("someone@example.invalid", "another committer identity"), (AGENT, "agent identity")):
+        fixture = two_commits(os.path.join(tmp, email))
+        fixture.move_target()
+        fixture.git("rebase", "-q", "dev", email=email)
+        kind, problem = fixture.carry()
+        assert expected in problem, (email, problem)
+
+    # A fold of fixups, nested fixups and fixups naming a commit hash carries.
+    fixture = two_commits(os.path.join(tmp, "fold"))
+    fixture.edit(3, "fixup change")
+    fixture.commit("fixup! feat: first")
+    fixture.edit(4, "nested fixup")
+    fixture.commit("fixup! fixup! feat: first")
+    fixture.edit(5, "hash fixup")
+    fixture.reviewed = fixture.commit(f"fixup! {fixture.first[:10]}")
+    fixture.git("rebase", "-q", "-i", "--autosquash", fixture.base)
+    assert fixture.git("rev-list", "--count", f"{fixture.base}..HEAD") == "2"
+    assert fixture.carry() == ("fold", None), fixture.carry()
+    # So does a rebase of the folded head, from the carried round.
+    fixture.reviewed = fixture.git("rev-parse", "HEAD")
+    fixture.move_target()
+    fixture.git("rebase", "-q", "dev")
+    assert fixture.carry() == ("rebase", None), fixture.carry()
+
+    # A fold that moves a hunk between commits keeps the head's tree, but not the commits'.
+    fixture = two_commits(os.path.join(tmp, "moved-hunk"))
+    fixture.edit(3, "fixup change")
+    fixture.reviewed = fixture.commit("fixup! feat: first")
+    fixture.git("checkout", "-q", "--detach", fixture.base)
+    for line, text in ((2, "first change"), (3, "fixup change"), (14, "second change")):
+        fixture.edit(line, text)
+    fixture.commit(flags=("-C", fixture.first))
+    fixture.commit(flags=("--allow-empty", "-C", fixture.second))
+    assert fixture.git("rev-parse", "HEAD^{tree}") == fixture.git("rev-parse", f"{fixture.reviewed}^{{tree}}")
+    kind, problem = fixture.carry()
+    assert kind == "fold" and "commit 1" in problem and "fixups folded in" in problem, problem
+
+    # Moving a fixup before a later commit that changed the same line changes
+    # what it applies to; a resolution that keeps the final tree still needs a review.
+    fixture = Fixture(os.path.join(tmp, "reorder"))
+    fixture.edit(2, "a")
+    fixture.first = fixture.commit("feat: first")
+    fixture.edit(2, "b")
+    fixture.second = fixture.commit("feat: second")
+    fixture.edit(2, "c")
+    fixture.reviewed = fixture.commit("fixup! feat: first")
+    assert fixture.git("rebase", "-i", "--autosquash", fixture.base, check=False) != 0
+    fixture.git("rebase", "--abort")
+    fixture.git("checkout", "-q", "--detach", fixture.base)
+    fixture.edit(2, "c")
+    fixture.commit(flags=("-C", fixture.first))
+    fixture.commit(flags=("--allow-empty", "-C", fixture.second))
+    kind, problem = fixture.carry()
+    assert kind == "fold" and "conflicts" in problem, problem
+
+    # squash! and amend! change a message, so their folds need a review.
+    for message in (("squash! feat: first",), ("amend! feat: first", "feat: first, reworded")):
+        fixture = two_commits(os.path.join(tmp, message[0].split("!")[0]))
+        fixture.edit(3, "more")
+        fixture.reviewed = fixture.commit(*message)
+        fixture.git("rebase", "-q", "-i", "--autosquash", fixture.base)
+        kind, problem = fixture.carry()
+        assert kind == "fold" and "squash! or amend!" in problem, (message, problem)
+
+# git's autosquash order: an unmatched fixup stays where it is, and later
+# fixups follow earlier ones of the same commit.
+commits = [{"sha": f"{index:040x}", "message": message.encode()} for index, message in enumerate(
+    ("feat: a\n", "fixup! nothing\n", "feat: b\n", "fixup! feat: a\n", "fixup! feat\n", "fixup! fixup! feat: a\n"))]
+assert review.autosquash_order(commits) == [[0, 3, 4, 5], [1], [2]], review.autosquash_order(commits)
+
+os.environ.pop("PR_REVIEW_CONFIG", None)  # its temporary file is gone
 subprocess.run([sys.executable, str(ROOT / "scripts/checks/test-pr-review-substitutions.py")], check=True)
 print("pr-review tests passed")

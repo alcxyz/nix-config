@@ -14,6 +14,8 @@ with lib; let
   prReviewConfig = pkgs.writeText "pr-review.json" (builtins.toJSON {
     inherit (cfg.prReview) reviewers timeout;
     light_reviewers = cfg.prReview.lightReviewers;
+    agent_identities = cfg.prReview.agentIdentities;
+    fast_forward_repositories = cfg.prReview.fastForwardRepositories;
   });
   prReview = pkgs.writeShellApplication {
     name = "pr-review";
@@ -23,7 +25,7 @@ with lib; let
   prReviewGuard = pkgs.writeShellApplication {
     name = "agent-pr-review-guard";
     runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
-    text = ''AGENT_FORGEJO_MCP_URL=${escapeShellArg mcp.url} AGENT_MCP_STATE_DIR=${escapeShellArg "${config.xdg.stateHome}/agent-mcp"} exec python3 ${./pr-review.py} guard'';
+    text = ''PR_REVIEW_CONFIG=${prReviewConfig} AGENT_FORGEJO_MCP_URL=${escapeShellArg mcp.url} AGENT_MCP_STATE_DIR=${escapeShellArg "${config.xdg.stateHome}/agent-mcp"} exec python3 ${./pr-review.py} guard'';
   };
   guardHook = matcher: {
     inherit matcher;
@@ -337,6 +339,27 @@ in {
         type = types.ints.positive;
         default = 1800;
         description = "Seconds before a reviewer is stopped and recorded as timed out.";
+      };
+      agentIdentities = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        example = ["agent@example.invalid"];
+        description = ''
+          Commit author and committer emails of agent forge accounts (ADR-0078).
+          `pr-review run` carries no review to a head with such a commit, and the
+          guard refuses merges of them into `fastForwardRepositories`.
+        '';
+      };
+      fastForwardRepositories = mkOption {
+        type = types.listOf (types.strMatching "[^/[:space:]]+/[^/[:space:]]+/[^/[:space:]]+");
+        default = [];
+        example = ["git.example.org/owner/repo"];
+        description = ''
+          Forgejo repositories, as `host/owner/repo`, whose agent merges the guard
+          also requires to be fast-forward-only, without leftover `fixup!`,
+          `squash!` or `amend!` commits and without commits by `agentIdentities`
+          (ADR-0078). Other repositories and GitHub are not affected.
+        '';
       };
     };
 
