@@ -100,19 +100,6 @@
     requiredPrivateRepositories = [];
     credentials = {};
   };
-  auditLegacyCredential = evaluateAudit {
-    forgejoUrl = "https://forge.example";
-    forgejoUser = "forgejo-account";
-    githubUser = "github-account";
-    githubPrimaryRepositories = [];
-    githubDeniedRepositories = [];
-    requiredPrivateRepositories = [];
-    credentials =
-      credentials
-      // {
-        codebergKey = "legacy-codeberg-token";
-      };
-  };
 
   pullPopulated = evaluatePull {
     forgejoUrl = "https://forge.example";
@@ -133,15 +120,6 @@
     forgejoUser = "forgejo-account";
     credentials = {};
   };
-  pullLegacyCredential = evaluatePull {
-    forgejoUrl = "https://forge.example";
-    forgejoUser = "forgejo-account";
-    credentials =
-      credentials
-      // {
-        codebergKey = "legacy-codeberg-token";
-      };
-  };
 in
   assert assertionsPass auditPopulated;
   assert auditPopulated.config.sops.secrets.forge_mirror_forgejo_token.sopsFile == credentials.sopsFile;
@@ -160,7 +138,6 @@ in
   "FORGE_MIRROR_REQUIRED_PRIVATE_REPOS_FILE=/policy/forge-mirror-required-private-repos-8"
   (auditExec auditPopulated);
   assert lib.hasInfix "GITHUB_MIRROR_PAT_FILE=\"/credentials/github\"" (auditExec auditPopulated);
-  assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (auditExec auditPopulated));
   assert lib.hasInfix "exec /forge-mirror/bin/forge-mirror audit" (auditExec auditPopulated);
   assert lib.hasInfix
   "FORGE_MIRROR_GITHUB_PRIMARY_REPOS_FILE=/policy/forge-mirror-github-primary-repos-0"
@@ -175,9 +152,6 @@ in
   assert !(builtins.tryEval (auditExec auditMissingPolicy)).success;
   assert !(builtins.tryEval (auditExec auditEmptyScalar)).success;
   assert !(assertionsPass auditMissingRequired);
-  assert assertionsPass auditLegacyCredential;
-  assert !(auditLegacyCredential.config.sops.secrets ? forge_mirror_codeberg_token);
-  assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (auditExec auditLegacyCredential));
   assert assertionsPass pullPopulated;
   assert pullPopulated.config.sops.secrets.forge_mirror_forgejo_token.sopsFile == credentials.sopsFile;
   assert pullSeparateForgejoFile.config.sops.secrets.forge_mirror_forgejo_token.sopsFile == "/credentials/forgejo.yaml";
@@ -185,12 +159,8 @@ in
   assert lib.hasInfix "export FORGEJO_USER=forgejo-account" (pullExec pullPopulated);
   assert lib.hasInfix "https://forge.example" (pullExec pullPopulated);
   assert lib.hasInfix "GITHUB_MIRROR_PAT_FILE=\"/credentials/github\"" (pullExec pullPopulated);
-  assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (pullExec pullPopulated));
   assert lib.hasInfix "exec /forge-mirror/bin/forge-mirror pull" (pullExec pullPopulated);
   assert !(lib.hasInfix "GITHUB_USER=" (pullExec pullPopulated));
   assert !(builtins.tryEval (pullExec pullEmptyScalar)).success;
   assert !(builtins.tryEval (pullExec pullMissingScalar)).success;
-  assert !(assertionsPass pullMissingCredentials);
-  assert assertionsPass pullLegacyCredential;
-  assert !(pullLegacyCredential.config.sops.secrets ? forge_mirror_codeberg_token);
-  assert !(lib.hasInfix "CODEBERG_MIRROR_PAT" (pullExec pullLegacyCredential)); true
+  assert !(assertionsPass pullMissingCredentials); true

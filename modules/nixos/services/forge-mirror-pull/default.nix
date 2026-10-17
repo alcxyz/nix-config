@@ -79,12 +79,6 @@ in {
         default = null;
         description = "Sops key for the GitHub token.";
       };
-
-      codebergKey = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Deprecated compatibility option; pull does not consume a Codeberg token.";
-      };
     };
   };
 
