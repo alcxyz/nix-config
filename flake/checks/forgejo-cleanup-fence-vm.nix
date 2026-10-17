@@ -127,11 +127,13 @@ in
         specialisation.changed.configuration.systemd.services.forgejo-actions-runner.environment.FIXTURE_GENERATION = "changed";
       };
     };
-    testScript = ''
+    testScript = {nodes, ...}: ''
       import shlex
       state = "/run/forgejo-runner-aggregate-pressure"
       fence = state + "/cleanup-in-flight"
-      runners = ["forgejo-actions-runner.service", "forgejo-podman-runner.service"]
+      # The configured list the guard, gates, cleanup and recovery share.
+      runners = ${builtins.toJSON nodes.machine.services.forgejo-actions-runner.runnerUnits}
+      assert runners == ["forgejo-actions-runner.service", "forgejo-podman-runner.service"]
       apis = ["forgejo-runner-docker.service", "forgejo-runner-podman.service"]
       recover = "/run/current-system/sw/bin/forgejo-runner-cleanup-fence-recover"
       podman = "docker -H unix:///run/forgejo-podman/podman.sock"

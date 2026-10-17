@@ -9,7 +9,7 @@ else let
   canary = "forgejo-podman-runner.service";
   both = "${primary} ${canary}";
   extra = "forgejo-podman-runner-fast.service";
-  three = "${both} ${extra}";
+  three-units = "${both} ${extra}";
   evaluate = enabled: labels: extra:
     (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       system = pkgs.stdenv.hostPlatform.system;
@@ -87,7 +87,47 @@ else let
   dockerRunner = enabled.systemd.services.forgejo-actions-runner;
   failedAssertion = config: message:
     lib.any (entry: !entry.assertion && entry.message == message) config.assertions;
+  failedAssertions = config: map (entry: entry.message) (builtins.filter (entry: !entry.assertion) config.assertions);
   gateSource = ../../modules/nixos/services/forgejo-actions-runner/podman-api-start-gate.sh;
+
+  # An extra Podman runner beside the canary, with ci-fast as a shared
+  # overflow label on both (ADR-0097).
+  fastLabel = "ci-fast:docker://example.invalid/fast:latest";
+  withExtra = canaryLabels: extraRunner: overrides:
+    evaluate true canaryLabels (lib.recursiveUpdate {
+        networking.hostName = "fixture";
+        services.forgejo-actions-runner.podmanCanary.extraRunners.fast = extraRunner;
+      }
+      overrides);
+  sharedConfig = {services.forgejo-actions-runner.podmanCanary.sharedLabels = ["ci-fast"];};
+  three = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} sharedConfig;
+  threeCleanup = withExtra validLabels {labels = [fastLabel];} cleanupConfig;
+  extraUnit = three.systemd.services.forgejo-podman-runner-fast;
+  threeUnit = three.systemd.services.forgejo-podman-runner;
+  extraConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" extraUnit.script));
+  canaryConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" threeUnit.script));
+  sharedWithoutAllowance = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} {};
+  sharedDifferentImage = withExtra (validLabels ++ [fastLabel]) {labels = ["ci-fast:docker://example.invalid/other:latest"];} sharedConfig;
+  sharedWithDocker = withExtra validLabels {labels = ["docker-primary:docker://example.invalid/docker:latest"];} {
+    services.forgejo-actions-runner.podmanCanary.sharedLabels = ["docker-primary"];
+  };
+  allowanceNamesDocker = withExtra validLabels {labels = [fastLabel];} {
+    services.forgejo-actions-runner.podmanCanary.sharedLabels = ["docker-primary"];
+  };
+  extraHostLabel = withExtra validLabels {labels = ["ci-fast:host"];} {};
+  extraBadName = evaluate true validLabels {
+    services.forgejo-actions-runner.podmanCanary.extraRunners.Fast.labels = [fastLabel];
+  };
+  extraDuplicateName = withExtra validLabels {
+    labels = [fastLabel];
+    name = "fixture-podman";
+  } {};
+  extraWithoutCanary = evaluate false validLabels {
+    services.forgejo-actions-runner.podmanCanary.extraRunners.fast.labels = [fastLabel];
+  };
+  recoveryText = config: (lib.findFirst (package: (package.name or "") == "forgejo-runner-cleanup-fence-recover") null config.environment.systemPackages).text;
+  labelOverlapMessage = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
+  dockerOverlapMessage = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
 in
   assert cleanupUnits cleanupOnly == [];
   assert cleanupUnits monitorOnly == [];
@@ -144,10 +184,75 @@ in
   assert !(lib.hasInfix "FIXTURE_SECRET" unit.preStart);
   assert failedAssertion overlap "Podman CI canary label names must not overlap Docker runner label names.";
   assert failedAssertion hostLabel "Podman CI canary requires explicit name:docker://image labels.";
+  # Without extra runners the list is the primary and the canary only.
+  assert enabled.services.forgejo-actions-runner.runnerUnits == [primary canary];
+  assert disabled.services.forgejo-actions-runner.runnerUnits == [primary];
+  assert map (runner: runner.unit) enabled.services.nixfleet-boot-check.runnerUnits == [canary primary];
+  # An extra runner joins every runner list after the canary, has its own
+  # identity, state and configuration, and shares the account and API.
+  assert failedAssertions three == failedAssertions enabled;
+  assert three.services.forgejo-actions-runner.runnerUnits == [primary canary extra];
+  assert lib.all (service: three.systemd.services.${service}.environment.RUNNER_UNITS == three-units) [
+    "forgejo-runner-io-pressure-guard"
+    "forgejo-runner-aggregate-lifecycle"
+    "forgejo-actions-runner"
+    "forgejo-podman-runner"
+    "forgejo-podman-runner-fast"
+    "forgejo-runner-podman"
+  ];
+  assert threeCleanup.systemd.services.forgejo-idle-podman-cleanup.environment.RUNNER_UNITS == three-units;
+  assert cleanupOnly.systemd.services.forgejo-idle-podman-cleanup.environment.RUNNER_UNITS == both;
+  # Fence recovery bakes the configured list in at build time.
+  assert lib.hasInfix "\nRUNNER_UNITS=${lib.escapeShellArg three-units}\n" (recoveryText threeCleanup);
+  assert lib.hasInfix "\nRUNNER_UNITS=${lib.escapeShellArg both}\n" (recoveryText cleanupOnly);
+  assert extraUnit.environment.RUNNER_UNIT == extra;
+  assert threeUnit.environment.RUNNER_UNIT == canary;
+  assert extraUnit.description == "Forgejo Podman runner fast (fixture-fast)";
+  assert extraUnit.serviceConfig.User == "forgejo-podman-runner";
+  assert extraUnit.serviceConfig.Group == "forgejo-podman";
+  assert extraUnit.serviceConfig.WorkingDirectory == "/var/lib/forgejo-podman-runner-fast";
+  assert extraUnit.environment.HOME == "/var/lib/forgejo-podman-runner-fast";
+  assert extraUnit.serviceConfig.RuntimeDirectory == "forgejo-podman-runner-fast";
+  assert extraUnit.environment.DOCKER_HOST == threeUnit.environment.DOCKER_HOST;
+  assert extraUnit.serviceConfig.ExecCondition == threeUnit.serviceConfig.ExecCondition;
+  assert extraUnit.requires == threeUnit.requires && extraUnit.bindsTo == threeUnit.bindsTo && extraUnit.after == threeUnit.after;
+  assert extraUnit.restartIfChanged == false;
+  assert threeUnit.serviceConfig.WorkingDirectory == "/var/lib/forgejo-podman-runner";
+  assert extraConfigFile != canaryConfigFile;
+  # The extra registers its own identity into its own state with the
+  # canary's token file by default.
+  assert lib.hasInfix " /var/lib/forgejo-podman-runner-fast/.runner " extraUnit.preStart;
+  assert lib.hasInfix " fixture-fast " extraUnit.preStart;
+  assert lib.hasInfix "< /run/fixture/podman-registration-token" extraUnit.preStart;
+  assert lib.hasInfix " ${fastLabel} " extraUnit.preStart;
+  assert builtins.elem "d /var/lib/forgejo-podman-runner-fast 0750 forgejo-podman-runner forgejo-podman -" three.systemd.tmpfiles.rules;
+  assert builtins.elem {
+    unit = extra;
+    holdMarkerDirectory = "/run/forgejo-runner-aggregate-pressure/runners/${extra}";
+  }
+  three.services.nixfleet-boot-check.runnerUnits;
+  # ci-fast may be shared between Podman runners only when allowed and with
+  # one image; the Docker runner never shares a label.
+  assert failedAssertion sharedWithoutAllowance labelOverlapMessage;
+  assert failedAssertion sharedDifferentImage labelOverlapMessage;
+  assert failedAssertion sharedWithDocker dockerOverlapMessage;
+  assert failedAssertion allowanceNamesDocker dockerOverlapMessage;
+  assert failedAssertion extraHostLabel "Extra Podman runners require unique, explicit name:docker://image labels.";
+  assert failedAssertion extraBadName "Extra Podman runner names must match ^[a-z0-9-]+$.";
+  assert failedAssertion extraDuplicateName "Docker and Podman runner registration names must be distinct.";
+  assert failedAssertion extraWithoutCanary "Extra Podman runners require the Podman CI canary.";
     pkgs.runCommand "forgejo-podman-canary-contract" {
-      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.shellcheck pkgs.systemd pkgs.util-linux];
+      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.shellcheck pkgs.systemd pkgs.util-linux];
     } ''
       shellcheck ${gateSource}
+      # Each Podman runner has its own capacity, labels, state and env file.
+      grep -Fxq '  capacity: 1' ${extraConfigFile}
+      grep -Fxq '  - ${fastLabel}' ${extraConfigFile}
+      grep -Fxq '  env_file: /run/forgejo-podman-runner-fast/job.env' ${extraConfigFile}
+      grep -Fxq '  workdir_parent: /var/lib/forgejo-podman-runner-fast/host-work' ${extraConfigFile}
+      grep -Fxq '  env_file: /run/forgejo-podman-runner/job.env' ${canaryConfigFile}
+      grep -Fxq '  workdir_parent: /var/lib/forgejo-podman-runner/host-work' ${canaryConfigFile}
+      if grep -Fq podman-canary ${extraConfigFile}; then exit 1; fi
       fixture="$(mktemp -d)"
       trap 'rm -rf "$fixture"' EXIT
       state="$fixture/state"
@@ -194,19 +299,19 @@ in
         ${lib.escapeShellArg "${primary} ${extra} ${canary}"}; do
         if GATE_UNITS=$units run_gate; then exit 1; fi
       done
-      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
       printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} ${lib.escapeShellArg extra} > "$state/runner-units"
-      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
       if run_gate; then exit 1; fi
       mkdir "$state/runners/${extra}"
-      GATE_UNITS=${lib.escapeShellArg three} run_gate
+      GATE_UNITS=${lib.escapeShellArg three-units} run_gate
       if run_gate; then exit 1; fi
       touch "$state/cleanup-in-flight"
-      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
       rm "$state/cleanup-in-flight"
       rmdir "$state/runners/${canary}"
-      if GATE_UNITS=${lib.escapeShellArg three} run_gate; then exit 1; fi
+      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
       mkdir "$state/runners/${canary}"
-      GATE_UNITS=${lib.escapeShellArg three} run_gate
+      GATE_UNITS=${lib.escapeShellArg three-units} run_gate
       touch "$out"
     ''

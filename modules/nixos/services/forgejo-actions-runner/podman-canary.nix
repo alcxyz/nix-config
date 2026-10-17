@@ -17,8 +17,6 @@
   builderRuntime = "/run/forgejo-podman";
   socketPath = "${builderRuntime}/podman.sock";
   runnerState = "/var/lib/forgejo-podman-runner";
-  runnerRuntime = "/run/forgejo-podman-runner";
-  envFile = "${runnerRuntime}/job.env";
   diskSpaceEnvironment = {
     DISK_HELPER_FILE = "${./disk-space-admission.sh}";
     DISK_SPACE_ENABLED =
@@ -35,30 +33,88 @@
   };
   settingsFormat = pkgs.formats.yaml {};
   labelName = label: builtins.head (lib.splitString ":" label);
-  runnerConfig = settingsFormat.generate "forgejo-podman-runner.yaml" {
-    log.level = canary.logLevel;
-    runner = {
-      file = ".runner";
-      capacity = canary.capacity;
-      labels = canary.labels;
-      env_file = envFile;
-      timeout = "3600s";
-      shutdown_timeout = "3600s";
-      insecure = false;
-      fetch_timeout = "5s";
-      fetch_interval = "2s";
+  labelNames = labels: map labelName labels;
+  validLabels = labels:
+    labels
+    != []
+    && lib.all (
+      label: let
+        parts = lib.splitString ":docker://" label;
+      in
+        builtins.length parts
+        == 2
+        && lib.all (part: part != "") parts
+        && !(lib.hasInfix ":" (builtins.head parts))
+    )
+    labels;
+  uniqueLabelNames = labels: builtins.length (lib.unique (labelNames labels)) == builtins.length labels;
+
+  # Every Podman runner unit shares the one Podman API, pressure guard,
+  # lifecycle boundary and build slice, and runs as the one runner account.
+  # Each has its own registration, state and runtime directories. The
+  # existing runner keeps its unit, paths and configuration file name, so
+  # its Forgejo identity survives; extra runners derive theirs from their
+  # attribute name.
+  mkInstance = {
+    serviceName,
+    description,
+    labels,
+    capacity,
+    name,
+    registrationTokenFile,
+  }: rec {
+    inherit serviceName description labels capacity name registrationTokenFile;
+    unit = "${serviceName}.service";
+    state = "/var/lib/${serviceName}";
+    runtime = "/run/${serviceName}";
+    envFile = "${runtime}/job.env";
+    config = settingsFormat.generate "${serviceName}.yaml" {
+      log.level = canary.logLevel;
+      runner = {
+        file = ".runner";
+        inherit capacity labels;
+        env_file = envFile;
+        timeout = "3600s";
+        shutdown_timeout = "3600s";
+        insecure = false;
+        fetch_timeout = "5s";
+        fetch_interval = "2s";
+      };
+      container = {
+        network = "";
+        privileged = false;
+        options = lib.concatStringsSep " " (map (name: "-e ${name}") (lib.attrNames canary.jobEnv));
+        workdir_parent = null;
+        valid_volumes = [socketPath];
+        docker_host = "unix://${socketPath}";
+        force_pull = false;
+      };
+      host.workdir_parent = "${state}/host-work";
     };
-    container = {
-      network = "";
-      privileged = false;
-      options = lib.concatStringsSep " " (map (name: "-e ${name}") (lib.attrNames canary.jobEnv));
-      workdir_parent = null;
-      valid_volumes = [socketPath];
-      docker_host = "unix://${socketPath}";
-      force_pull = false;
-    };
-    host.workdir_parent = "${runnerState}/host-work";
   };
+  canaryInstance = mkInstance {
+    serviceName = "forgejo-podman-runner";
+    description = "Forgejo Podman canary runner (${canary.name})";
+    inherit (canary) labels capacity name registrationTokenFile;
+  };
+  # attrNames order: extra runners follow the existing one, sorted by name.
+  extraInstances = lib.mapAttrsToList (key: extra:
+    mkInstance {
+      serviceName = "forgejo-podman-runner-${key}";
+      description = "Forgejo Podman runner ${key} (${extra.name})";
+      inherit (extra) labels capacity name registrationTokenFile;
+    })
+  canary.extraRunners;
+  instances = [canaryInstance] ++ extraInstances;
+  podmanLabels = lib.concatMap (instance: instance.labels) instances;
+  # A label name served by more than one Podman runner must be listed in
+  # sharedLabels and carry the same image on each of them.
+  labelOverlapAllowed = name: let
+    labels = builtins.filter (label: labelName label == name) podmanLabels;
+  in
+    builtins.length labels
+    <= 1
+    || (builtins.elem name canary.sharedLabels && builtins.length (lib.unique labels) == 1);
   registerFromFile = pkgs.writeShellApplication {
     name = "forgejo-podman-register-from-file";
     runtimeInputs = [pkgs.coreutils];
@@ -109,6 +165,80 @@
     '')
     canary.jobEnv
   );
+  runnerService = instance: {
+    inherit (instance) description;
+    wantedBy = ["multi-user.target"];
+    wants = ["network-online.target"];
+    requires = [
+      apiUnit
+      lifecycleUnit
+    ];
+    bindsTo = [guardUnit];
+    after = [
+      "network-online.target"
+      apiUnit
+      guardUnit
+    ];
+    restartIfChanged = false;
+    path = [canary.package] ++ canary.extraPackages;
+    environment =
+      diskSpaceEnvironment
+      // {
+        HOME = instance.state;
+        DOCKER_HOST = "unix://${socketPath}";
+        RUNNER_UNIT = instance.unit;
+        RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
+        GAME_HELPER_FILE = "${./game-admission.sh}";
+        GAME_ADMISSION_ENABLED =
+          if cfg.ioPressureGuard.admissionControl.gameProcess.enable
+          then "1"
+          else "0";
+        GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
+        GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
+        GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
+      };
+    serviceConfig = {
+      User = "forgejo-podman-runner";
+      Group = "forgejo-podman";
+      WorkingDirectory = instance.state;
+      RuntimeDirectory = instance.serviceName;
+      RuntimeDirectoryMode = "0750";
+      # Retry transient runner process failures only. ExecCondition still
+      # gates each start on drain ownership, game admission and guard health.
+      Restart = "on-failure";
+      RestartSec = "30s";
+      TimeoutStartSec = "90s";
+      TimeoutStopSec = "3660s";
+      KillMode = "mixed";
+      NoNewPrivileges = true;
+      ExecCondition = "+${lib.getExe runnerStartGate}";
+      ExecStartPre = [(lib.getExe lifecycleReady)];
+    };
+    preStart = ''
+      set -euo pipefail
+      test -S ${lib.escapeShellArg socketPath}
+      docker version --format '{{.Server.Version}}' >/dev/null
+      test -s ${lib.escapeShellArg instance.registrationTokenFile}
+
+      env_tmp="$(mktemp ${lib.escapeShellArg instance.runtime}/env.XXXXXX)"
+      chmod 0600 "$env_tmp"
+      ${literalEnvScript}
+      mv "$env_tmp" ${lib.escapeShellArg instance.envFile}
+
+      ${lib.getExe registerFromFile} \
+        ${lib.getExe canary.package} \
+        ${instance.config} \
+        ${lib.escapeShellArg "${instance.state}/.runner"} \
+        ${lib.escapeShellArg "${instance.state}/.runner-name"} \
+        ${lib.escapeShellArg canary.url} \
+        ${lib.escapeShellArg instance.name} \
+        ${lib.escapeShellArg (lib.concatStringsSep "," instance.labels)} \
+        < ${lib.escapeShellArg instance.registrationTokenFile}
+    '';
+    script = ''
+      exec forgejo-runner daemon --config ${instance.config}
+    '';
+  };
 in {
   options.services.forgejo-actions-runner.runnerUnits = lib.mkOption {
     type = lib.types.listOf lib.types.str;
@@ -116,11 +246,12 @@ in {
     internal = true;
     default =
       ["forgejo-actions-runner.service"]
-      ++ lib.optional canary.enable runnerUnit;
+      ++ lib.optionals canary.enable (map (instance: instance.unit) instances);
     description = ''
       Runner units sharing the dedicated CI aggregate: the primary Docker
-      runner first, then every Podman runner. The pressure guard, start gates,
-      lifecycle teardown, idle cleanup and fence recovery all take this list.
+      runner first, then the existing Podman runner, then extra Podman runners
+      sorted by name. The pressure guard, start gates, lifecycle teardown, idle
+      cleanup and fence recovery all take this list.
     '';
   };
 
@@ -205,257 +336,272 @@ in {
       ];
       description = "Packages available to the Podman runner process.";
     };
-  };
-
-  config = lib.mkIf enabled {
-    assertions = [
-      {
-        assertion =
-          cfg.isolatedDocker.enable
-          && cfg.resourcePolicy.enable
-          && cfg.ioPressureGuard.enable
-          && cfg.ioPressureGuard.admissionControl.enable;
-        message = "Podman CI canary requires isolated Docker, aggregate resource policy, pressure guard, and admission control.";
-      }
-      {
-        assertion =
-          canary.labels
-          != []
-          && lib.all (
-            label: let
-              parts = lib.splitString ":docker://" label;
-            in
-              builtins.length parts
-              == 2
-              && lib.all (part: part != "") parts
-              && !(lib.hasInfix ":" (builtins.head parts))
-          )
-          canary.labels;
-        message = "Podman CI canary requires explicit name:docker://image labels.";
-      }
-      {
-        assertion = lib.intersectLists (map labelName canary.labels) (map labelName cfg.labels) == [];
-        message = "Podman CI canary label names must not overlap Docker runner label names.";
-      }
-      {
-        assertion =
-          builtins.length (lib.unique (map labelName canary.labels))
-          == builtins.length canary.labels;
-        message = "Podman CI canary label names must be unique.";
-      }
-      {
-        assertion = canary.name != cfg.name;
-        message = "Podman CI canary registration name must differ from the Docker runner name.";
-      }
-      {
-        assertion = lib.hasPrefix "/" canary.registrationTokenFile;
-        message = "Podman CI canary requires an absolute registrationTokenFile path.";
-      }
-    ];
-
-    virtualisation.containers.enable = true;
-
-    users.groups.forgejo-podman = {};
-    users.users.forgejo-podman-builder = {
-      isSystemUser = true;
-      group = "forgejo-podman";
-      home = builderState;
-      autoSubUidGidRange = true;
-    };
-    users.users.forgejo-podman-runner = {
-      isSystemUser = true;
-      group = "forgejo-podman";
-      home = runnerState;
-    };
-    systemd.tmpfiles.rules = [
-      "d ${runnerState} 0750 forgejo-podman-runner forgejo-podman -"
-      "Z ${runnerState} 0750 forgejo-podman-runner forgejo-podman -"
-    ];
-
-    # This socket is pulled in by the API service. Stopping that service,
-    # guard, or lifecycle also closes the listener so a late client cannot
-    # reactivate workers after aggregate teardown.
-    systemd.sockets.forgejo-runner-podman = {
-      requires = [
-        guardUnit
-        policyUnit
-      ];
-      bindsTo = [
-        guardUnit
-        apiUnit
-      ];
-      after = [
-        guardUnit
-        policyUnit
-      ];
-      partOf = [
-        apiUnit
-        lifecycleUnit
-      ];
-      unitConfig = {
-        # The guard must start before the listener. The default socket
-        # sockets.target dependency would reverse that order through
-        # basic.target and create a boot transaction cycle.
-        DefaultDependencies = false;
-        Before = ["shutdown.target"];
-        Conflicts = ["shutdown.target"];
-        ConditionPathExists = "/run/forgejo-runner-aggregate-pressure/runners/${runnerUnit}";
-      };
-      socketConfig = {
-        ListenStream = socketPath;
-        DirectoryMode = "0755";
-        SocketUser = "forgejo-podman-builder";
-        SocketGroup = "forgejo-podman";
-        SocketMode = "0660";
-        RemoveOnStop = true;
-      };
-    };
-
-    systemd.services.forgejo-runner-podman = {
-      description = "Dedicated rootless Podman CI API";
-      wantedBy = ["multi-user.target"];
-      requires = [
-        socketUnit
-        policyUnit
-        guardUnit
-        lifecycleUnit
-      ];
-      bindsTo = [guardUnit];
-      after = [
-        "network-online.target"
-        socketUnit
-        policyUnit
-        guardUnit
-      ];
-      wants = ["network-online.target"];
-      restartIfChanged = false;
-      path = [
-        pkgs.podman
-        pkgs.slirp4netns
-        pkgs.fuse-overlayfs
-        "/run/wrappers"
-      ];
-      environment = {
-        HOME = builderState;
-        XDG_RUNTIME_DIR = builderRuntime;
-        RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
-        CONTAINERS_CONF_OVERRIDE = lib.mkIf (canary.dnsServers != []) "${containersConf}";
-        # Netavark must spawn DNS inside this delegated service. systemd-run
-        # would create a user scope outside the aggregate resource boundary.
-        PATH = lib.mkForce (
-          lib.makeBinPath [
-            pkgs.podman
-            pkgs.slirp4netns
-            pkgs.fuse-overlayfs
-            pkgs.passt
-            pkgs.coreutils
-            pkgs.util-linux
-          ]
-          + ":/run/wrappers/bin"
-        );
-      };
-      serviceConfig = {
-        Type = "exec";
-        User = "forgejo-podman-builder";
-        Group = "forgejo-podman";
-        StateDirectory = "forgejo-podman";
-        StateDirectoryMode = "0700";
-        RuntimeDirectory = "forgejo-podman";
-        RuntimeDirectoryMode = "0755";
-        UMask = "0007";
-        Slice = "forgejobuilds.slice";
-        Delegate = true;
-        KillMode = "control-group";
-        OOMPolicy = "continue";
-        Restart = "no";
-        TimeoutStartSec = "120s";
-        TimeoutStopSec = "90s";
-        LimitCORE = 0;
-        ExecCondition = "+${lib.getExe apiStartGate}";
-        ExecStart = "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay --root=${canary.storageRoot} --runroot=${builderRuntime}/storage system service --time=0";
-      };
-    };
-
-    services.nixfleet-boot-check.runnerUnits = [
-      {
-        unit = runnerUnit;
-        holdMarkerDirectory = "/run/forgejo-runner-aggregate-pressure/runners/${runnerUnit}";
-      }
-    ];
-
-    systemd.services.forgejo-podman-runner = {
-      description = "Forgejo Podman canary runner (${canary.name})";
-      wantedBy = ["multi-user.target"];
-      wants = ["network-online.target"];
-      requires = [
-        apiUnit
-        lifecycleUnit
-      ];
-      bindsTo = [guardUnit];
-      after = [
-        "network-online.target"
-        apiUnit
-        guardUnit
-      ];
-      restartIfChanged = false;
-      path = [canary.package] ++ canary.extraPackages;
-      environment =
-        diskSpaceEnvironment
-        // {
-          HOME = runnerState;
-          DOCKER_HOST = "unix://${socketPath}";
-          RUNNER_UNIT = runnerUnit;
-          RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
-          GAME_HELPER_FILE = "${./game-admission.sh}";
-          GAME_ADMISSION_ENABLED =
-            if cfg.ioPressureGuard.admissionControl.gameProcess.enable
-            then "1"
-            else "0";
-          GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
-          GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
-          GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
+    extraRunners = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule ({name, ...}: {
+        options = {
+          labels = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            description = "Labels with execution backends, such as ci-fast:docker://image.";
+          };
+          capacity = lib.mkOption {
+            type = lib.types.ints.positive;
+            default = 1;
+            description = "Concurrent jobs of this runner, within the shared build slice.";
+          };
+          name = lib.mkOption {
+            type = lib.types.str;
+            default = "${config.networking.hostName}-${name}";
+            defaultText = lib.literalExpression ''"''${config.networking.hostName}-<name>"'';
+            description = "Distinct Forgejo registration name of this runner.";
+          };
+          registrationTokenFile = lib.mkOption {
+            type = lib.types.str;
+            default = canary.registrationTokenFile;
+            defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.registrationTokenFile";
+            description = "Absolute path to an activated registration token file; the canary's by default.";
+          };
         };
-      serviceConfig = {
-        User = "forgejo-podman-runner";
-        Group = "forgejo-podman";
-        WorkingDirectory = runnerState;
-        RuntimeDirectory = "forgejo-podman-runner";
-        RuntimeDirectoryMode = "0750";
-        # Retry transient runner process failures only. ExecCondition still
-        # gates each start on drain ownership, game admission and guard health.
-        Restart = "on-failure";
-        RestartSec = "30s";
-        TimeoutStartSec = "90s";
-        TimeoutStopSec = "3660s";
-        KillMode = "mixed";
-        NoNewPrivileges = true;
-        ExecCondition = "+${lib.getExe runnerStartGate}";
-        ExecStartPre = [(lib.getExe lifecycleReady)];
-      };
-      preStart = ''
-        set -euo pipefail
-        test -S ${lib.escapeShellArg socketPath}
-        docker version --format '{{.Server.Version}}' >/dev/null
-        test -s ${lib.escapeShellArg canary.registrationTokenFile}
-
-        env_tmp="$(mktemp ${lib.escapeShellArg runnerRuntime}/env.XXXXXX)"
-        chmod 0600 "$env_tmp"
-        ${literalEnvScript}
-        mv "$env_tmp" ${lib.escapeShellArg envFile}
-
-        ${lib.getExe registerFromFile} \
-          ${lib.getExe canary.package} \
-          ${runnerConfig} \
-          ${lib.escapeShellArg "${runnerState}/.runner"} \
-          ${lib.escapeShellArg "${runnerState}/.runner-name"} \
-          ${lib.escapeShellArg canary.url} \
-          ${lib.escapeShellArg canary.name} \
-          ${lib.escapeShellArg (lib.concatStringsSep "," canary.labels)} \
-          < ${lib.escapeShellArg canary.registrationTokenFile}
+      }));
+      default = {};
+      example = lib.literalExpression ''
+        {
+          fast = {
+            labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
+            capacity = 1;
+          };
+        }
       '';
-      script = ''
-        exec forgejo-runner daemon --config ${runnerConfig}
+      description = ''
+        Additional Podman runner units. Entry `<name>` becomes
+        `forgejo-podman-runner-<name>.service` with its own Forgejo
+        registration and state, run by the canary's runner account against the
+        same Podman API. Every runner shares the one pressure guard, lifecycle
+        boundary and build slice, so the slice's budget is split across all of
+        their jobs. Adding or removing an entry changes the guard's runner
+        registry, which takes effect only after a reboot.
+      '';
+    };
+    sharedLabels = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      example = ["ci-fast"];
+      description = ''
+        Label names that more than one Podman runner may serve, such as a
+        label a dedicated extra runner serves while the canary keeps it as
+        overflow. A shared label must name the same image on every Podman
+        runner that serves it. The Docker runner never shares a label.
       '';
     };
   };
+
+  config = lib.mkMerge [
+    (lib.mkIf (cfg.enable && !canary.enable) {
+      assertions = [
+        {
+          assertion = canary.extraRunners == {};
+          message = "Extra Podman runners require the Podman CI canary.";
+        }
+      ];
+    })
+    (lib.mkIf enabled {
+      assertions = [
+        {
+          assertion =
+            cfg.isolatedDocker.enable
+            && cfg.resourcePolicy.enable
+            && cfg.ioPressureGuard.enable
+            && cfg.ioPressureGuard.admissionControl.enable;
+          message = "Podman CI canary requires isolated Docker, aggregate resource policy, pressure guard, and admission control.";
+        }
+        {
+          assertion = validLabels canary.labels;
+          message = "Podman CI canary requires explicit name:docker://image labels.";
+        }
+        {
+          assertion = lib.intersectLists (labelNames canary.labels) (labelNames cfg.labels) == [];
+          message = "Podman CI canary label names must not overlap Docker runner label names.";
+        }
+        {
+          assertion = uniqueLabelNames canary.labels;
+          message = "Podman CI canary label names must be unique.";
+        }
+        {
+          assertion = canary.name != cfg.name;
+          message = "Podman CI canary registration name must differ from the Docker runner name.";
+        }
+        {
+          assertion = lib.hasPrefix "/" canary.registrationTokenFile;
+          message = "Podman CI canary requires an absolute registrationTokenFile path.";
+        }
+        {
+          assertion = lib.all (key: builtins.match "[a-z0-9-]+" key != null) (lib.attrNames canary.extraRunners);
+          message = "Extra Podman runner names must match ^[a-z0-9-]+$.";
+        }
+        {
+          assertion = lib.all (instance: validLabels instance.labels && uniqueLabelNames instance.labels) extraInstances;
+          message = "Extra Podman runners require unique, explicit name:docker://image labels.";
+        }
+        {
+          # Docker and Podman runners run jobs on different engines; a job
+          # must never land on either one by the same label.
+          assertion = lib.intersectLists (labelNames podmanLabels ++ canary.sharedLabels) (labelNames cfg.labels) == [];
+          message = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
+        }
+        {
+          assertion = lib.all labelOverlapAllowed (lib.unique (labelNames podmanLabels));
+          message = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
+        }
+        {
+          assertion = let
+            names = [cfg.name] ++ map (instance: instance.name) instances;
+          in
+            builtins.length (lib.unique names) == builtins.length names;
+          message = "Docker and Podman runner registration names must be distinct.";
+        }
+        {
+          assertion = builtins.length (lib.unique cfg.runnerUnits) == builtins.length cfg.runnerUnits;
+          message = "Runner unit names must be distinct.";
+        }
+        {
+          assertion = lib.all (instance: lib.hasPrefix "/" instance.registrationTokenFile) extraInstances;
+          message = "Extra Podman runners require an absolute registrationTokenFile path.";
+        }
+      ];
+
+      virtualisation.containers.enable = true;
+
+      users.groups.forgejo-podman = {};
+      users.users.forgejo-podman-builder = {
+        isSystemUser = true;
+        group = "forgejo-podman";
+        home = builderState;
+        autoSubUidGidRange = true;
+      };
+      users.users.forgejo-podman-runner = {
+        isSystemUser = true;
+        group = "forgejo-podman";
+        home = runnerState;
+      };
+      systemd.tmpfiles.rules =
+        lib.concatMap (instance: [
+          "d ${instance.state} 0750 forgejo-podman-runner forgejo-podman -"
+          "Z ${instance.state} 0750 forgejo-podman-runner forgejo-podman -"
+        ])
+        instances;
+
+      # This socket is pulled in by the API service. Stopping that service,
+      # guard, or lifecycle also closes the listener so a late client cannot
+      # reactivate workers after aggregate teardown.
+      systemd.sockets.forgejo-runner-podman = {
+        requires = [
+          guardUnit
+          policyUnit
+        ];
+        bindsTo = [
+          guardUnit
+          apiUnit
+        ];
+        after = [
+          guardUnit
+          policyUnit
+        ];
+        partOf = [
+          apiUnit
+          lifecycleUnit
+        ];
+        unitConfig = {
+          # The guard must start before the listener. The default socket
+          # sockets.target dependency would reverse that order through
+          # basic.target and create a boot transaction cycle.
+          DefaultDependencies = false;
+          Before = ["shutdown.target"];
+          Conflicts = ["shutdown.target"];
+          ConditionPathExists = "/run/forgejo-runner-aggregate-pressure/runners/${runnerUnit}";
+        };
+        socketConfig = {
+          ListenStream = socketPath;
+          DirectoryMode = "0755";
+          SocketUser = "forgejo-podman-builder";
+          SocketGroup = "forgejo-podman";
+          SocketMode = "0660";
+          RemoveOnStop = true;
+        };
+      };
+
+      systemd.services.forgejo-runner-podman = {
+        description = "Dedicated rootless Podman CI API";
+        wantedBy = ["multi-user.target"];
+        requires = [
+          socketUnit
+          policyUnit
+          guardUnit
+          lifecycleUnit
+        ];
+        bindsTo = [guardUnit];
+        after = [
+          "network-online.target"
+          socketUnit
+          policyUnit
+          guardUnit
+        ];
+        wants = ["network-online.target"];
+        restartIfChanged = false;
+        path = [
+          pkgs.podman
+          pkgs.slirp4netns
+          pkgs.fuse-overlayfs
+          "/run/wrappers"
+        ];
+        environment = {
+          HOME = builderState;
+          XDG_RUNTIME_DIR = builderRuntime;
+          RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
+          CONTAINERS_CONF_OVERRIDE = lib.mkIf (canary.dnsServers != []) "${containersConf}";
+          # Netavark must spawn DNS inside this delegated service. systemd-run
+          # would create a user scope outside the aggregate resource boundary.
+          PATH = lib.mkForce (
+            lib.makeBinPath [
+              pkgs.podman
+              pkgs.slirp4netns
+              pkgs.fuse-overlayfs
+              pkgs.passt
+              pkgs.coreutils
+              pkgs.util-linux
+            ]
+            + ":/run/wrappers/bin"
+          );
+        };
+        serviceConfig = {
+          Type = "exec";
+          User = "forgejo-podman-builder";
+          Group = "forgejo-podman";
+          StateDirectory = "forgejo-podman";
+          StateDirectoryMode = "0700";
+          RuntimeDirectory = "forgejo-podman";
+          RuntimeDirectoryMode = "0755";
+          UMask = "0007";
+          Slice = "forgejobuilds.slice";
+          Delegate = true;
+          KillMode = "control-group";
+          OOMPolicy = "continue";
+          Restart = "no";
+          TimeoutStartSec = "120s";
+          TimeoutStopSec = "90s";
+          LimitCORE = 0;
+          ExecCondition = "+${lib.getExe apiStartGate}";
+          ExecStart = "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay --root=${canary.storageRoot} --runroot=${builderRuntime}/storage system service --time=0";
+        };
+      };
+
+      services.nixfleet-boot-check.runnerUnits =
+        map (instance: {
+          inherit (instance) unit;
+          holdMarkerDirectory = "/run/forgejo-runner-aggregate-pressure/runners/${instance.unit}";
+        })
+        instances;
+    })
+    (lib.mkIf enabled {
+      systemd.services = lib.listToAttrs (map (instance: lib.nameValuePair instance.serviceName (runnerService instance)) instances);
+    })
+  ];
 }

@@ -18,93 +18,107 @@
   };
   unusedSecrets = pkgs.writeText "forgejo-coexistence-secrets" "fixture-only";
   registrationToken = pkgs.writeText "forgejo-coexistence-registration-token" "unused-fixture-token";
+  # The canary alone, or with an extra Podman runner sharing its engine,
+  # guard, lifecycle and build slice.
+  runnerNode = {
+    extraRunners ? {},
+    switchable ? false,
+  }: {lib, ...}: let
+    podmanRunners = ["forgejo-podman-runner"] ++ map (name: "forgejo-podman-runner-${name}") (lib.attrNames extraRunners);
+  in {
+    imports = [../../modules/nixos/services/forgejo-actions-runner];
+    options.sops.secrets = lib.mkOption {
+      type = lib.types.attrs;
+      default = {};
+    };
+    config = {
+      system.stateVersion = "25.11";
+      users.groups.game-fixture = {};
+      users.users.game-fixture = {
+        isSystemUser = true;
+        group = "game-fixture";
+      };
+      virtualisation = {
+        memorySize = 3072;
+        cores = 2;
+        diskSize = 6144;
+        docker.enable = true;
+      };
+      services.forgejo-actions-runner = {
+        enable = true;
+        name = "coexistence-fixture";
+        labels = ["fixture:docker://example.invalid/unused:local"];
+        secretsFile = unusedSecrets;
+        isolatedDocker.enable = true;
+        resourcePolicy = {
+          memoryHigh = "1800M";
+          memoryMax = "2200M";
+        };
+        ioPressureGuard = {
+          admissionControl.enable = true;
+          highPercent = 20;
+          lowPercent = 5;
+          highDurationSeconds = 1;
+          lowDurationSeconds = 1;
+          sampleSeconds = 1;
+          transitionTimeoutSeconds = 20;
+          admissionControl.severePercent = 80;
+          admissionControl.severeDurationSeconds = 1;
+          admissionControl.settledResumeSeconds = 8;
+          admissionControl.prolongedDrainSeconds = 4;
+          admissionControl.gameProcess = {
+            enable = true;
+            user = "game-fixture";
+            argv0Basenames = ["HeroesOfTheStorm_x64.exe"];
+          };
+        };
+        podmanCanary = {
+          enable = true;
+          registrationTokenFile = toString registrationToken;
+          labels = ["podman-fixture:docker://example.invalid/unused:local"];
+          inherit extraRunners;
+        };
+      };
+      # Keep the production units and dependencies while bypassing remote
+      # runner registration, as in the existing Docker VM.
+      systemd.services =
+        lib.genAttrs (["forgejo-actions-runner"] ++ podmanRunners) (_: {
+          preStart = lib.mkForce "";
+          script = lib.mkForce ''
+            trap 'while test -e /run/fixture-runner-block-stop; do sleep 1; done; exit 0' TERM
+            while :; do sleep 1; done
+          '';
+        })
+        // {
+          fixture-pressure-init = {
+            description = "Initialize disposable pressure input before the guard";
+            serviceConfig.Type = "oneshot";
+            script = ''
+              printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > /run/fixture-pressure
+            '';
+          };
+          forgejo-runner-io-pressure-guard = {
+            requires = ["fixture-pressure-init.service"];
+            after = ["fixture-pressure-init.service"];
+            environment.PRESSURE_FILE = "/run/fixture-pressure";
+          };
+        };
+      specialisation = lib.mkIf switchable {
+        changed.configuration.systemd.services.forgejo-actions-runner.environment.FIXTURE_GENERATION = "changed";
+        changed.configuration.systemd.services.forgejo-podman-runner.environment.FIXTURE_GENERATION = "changed";
+      };
+      environment.systemPackages = [
+        pkgs.docker
+        pkgs.procps
+      ];
+    };
+  };
 in
   pkgs.testers.runNixOSTest {
     name = "forgejo-podman-coexistence";
-    nodes.machine = {lib, ...}: {
-      imports = [../../modules/nixos/services/forgejo-actions-runner];
-      options.sops.secrets = lib.mkOption {
-        type = lib.types.attrs;
-        default = {};
-      };
-      config = {
-        system.stateVersion = "25.11";
-        users.groups.game-fixture = {};
-        users.users.game-fixture = {
-          isSystemUser = true;
-          group = "game-fixture";
-        };
-        virtualisation = {
-          memorySize = 3072;
-          cores = 2;
-          diskSize = 6144;
-          docker.enable = true;
-        };
-        services.forgejo-actions-runner = {
-          enable = true;
-          name = "coexistence-fixture";
-          labels = ["fixture:docker://example.invalid/unused:local"];
-          secretsFile = unusedSecrets;
-          isolatedDocker.enable = true;
-          resourcePolicy = {
-            memoryHigh = "1800M";
-            memoryMax = "2200M";
-          };
-          ioPressureGuard = {
-            admissionControl.enable = true;
-            highPercent = 20;
-            lowPercent = 5;
-            highDurationSeconds = 1;
-            lowDurationSeconds = 1;
-            sampleSeconds = 1;
-            transitionTimeoutSeconds = 20;
-            admissionControl.severePercent = 80;
-            admissionControl.severeDurationSeconds = 1;
-            admissionControl.settledResumeSeconds = 8;
-            admissionControl.prolongedDrainSeconds = 4;
-            admissionControl.gameProcess = {
-              enable = true;
-              user = "game-fixture";
-              argv0Basenames = ["HeroesOfTheStorm_x64.exe"];
-            };
-          };
-          podmanCanary = {
-            enable = true;
-            registrationTokenFile = toString registrationToken;
-            labels = ["podman-fixture:docker://example.invalid/unused:local"];
-          };
-        };
-        systemd.services.fixture-pressure-init = {
-          description = "Initialize disposable pressure input before the guard";
-          serviceConfig.Type = "oneshot";
-          script = ''
-            printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > /run/fixture-pressure
-          '';
-        };
-        systemd.services.forgejo-runner-io-pressure-guard = {
-          requires = ["fixture-pressure-init.service"];
-          after = ["fixture-pressure-init.service"];
-          environment.PRESSURE_FILE = "/run/fixture-pressure";
-        };
-        # Keep the production units and dependencies while bypassing remote
-        # runner registration, as in the existing Docker VM.
-        systemd.services.forgejo-actions-runner.preStart = lib.mkForce "";
-        systemd.services.forgejo-actions-runner.script = lib.mkForce ''
-          trap 'while test -e /run/fixture-runner-block-stop; do sleep 1; done; exit 0' TERM
-          while :; do sleep 1; done
-        '';
-        systemd.services.forgejo-podman-runner.preStart = lib.mkForce "";
-        systemd.services.forgejo-podman-runner.script = lib.mkForce ''
-          trap 'while test -e /run/fixture-runner-block-stop; do sleep 1; done; exit 0' TERM
-          while :; do sleep 1; done
-        '';
-        specialisation.changed.configuration.systemd.services.forgejo-actions-runner.environment.FIXTURE_GENERATION = "changed";
-        specialisation.changed.configuration.systemd.services.forgejo-podman-runner.environment.FIXTURE_GENERATION = "changed";
-        environment.systemPackages = [
-          pkgs.docker
-          pkgs.procps
-        ];
-      };
+    nodes.machine = runnerNode {switchable = true;};
+    nodes.threeRunners = runnerNode {
+      extraRunners.fast.labels = ["fast-fixture:docker://example.invalid/unused:local"];
     };
     testScript = ''
       docker = "docker -H unix:///run/forgejo-docker/docker.sock"
@@ -129,7 +143,7 @@ in
       def assert_worker_alive(pid):
           machine.succeed(f"test -e /proc/{pid}")
 
-      start_all()
+      machine.start()
       machine.wait_for_unit("multi-user.target")
       assert not any("Found ordering cycle" in line for line in machine.full_console_log)
       machine.wait_until_succeeds("systemctl is-active --quiet forgejo-actions-runner.service", timeout=60)
@@ -314,5 +328,85 @@ in
       assert not any("aggregate lifecycle:" in line for line in ambiguous_log)
       assert not any("forgejobuilds.slice: Unit now thawed." in line for line in ambiguous_log)
       assert not any("Cannot stop frozen unit" in line for line in ambiguous_log)
+
+      # An extra Podman runner unit beside the canary: every Podman runner
+      # drains, resumes and is torn down with the shared aggregate.
+      node = threeRunners
+      state = "/run/forgejo-runner-aggregate-pressure"
+      primary = "forgejo-actions-runner.service"
+      podman_runners = ["forgejo-podman-runner.service", "forgejo-podman-runner-fast.service"]
+      runners = [primary] + podman_runners
+      owned = lambda unit: f"{state}/drain-owned" if unit == primary else f"{state}/runners/{unit}/drain-owned"
+      all_active = " && ".join(f"systemctl is-active --quiet {unit}" for unit in runners)
+      all_inactive = " && ".join(f"! systemctl is-active --quiet {unit}" for unit in runners)
+      all_owned = " && ".join(f"test -e {owned(unit)}" for unit in runners)
+      none_owned = " && ".join(f"test ! -e {owned(unit)}" for unit in runners)
+
+      def three_workers():
+          global worker_serial
+          worker_serial += 1
+          name = f"three-worker-{worker_serial}"
+          node.succeed(f"{docker} run -d --name {name}-docker forgejo-coexistence-worker:local {worker}")
+          node.succeed(f"{podman} run -d --name {name}-podman forgejo-coexistence-worker:local {worker}")
+          return [node.succeed(f"{engine} inspect --format '{{{{.State.Pid}}}}' {name}-{kind}").strip()
+                  for engine, kind in ((docker, "docker"), (podman, "podman"))]
+
+      node.start()
+      node.wait_for_unit("multi-user.target")
+      assert not any("Found ordering cycle" in line for line in node.full_console_log)
+      node.wait_until_succeeds(all_active, timeout=90)
+      assert node.succeed(f"cat {state}/runner-units").split() == runners
+      assert sorted(node.succeed(f"ls {state}/runners").split()) == sorted(podman_runners)
+      node.succeed("systemctl is-active --quiet forgejo-runner-aggregate-lifecycle.service")
+      for unit in podman_runners:
+          assert "RUNNER_UNITS=" + " ".join(runners) in node.succeed(f"systemctl show -p Environment --value {unit}")
+      node.succeed(f"{docker} load < ${workerImage}")
+      node.succeed(f"{podman} load < ${workerImage}")
+
+      # A game drains every runner without stopping either API.
+      node.succeed("cp ${pkgs.bash}/bin/bash /run/wine64-preloader")
+      node.succeed("systemd-run --unit=fixture-game --property=User=game-fixture ${pkgs.bash}/bin/bash -c \"exec -a HeroesOfTheStorm_x64.exe /run/wine64-preloader -c 'while :; do ${pkgs.coreutils}/bin/sleep 1; done'\"")
+      node.wait_until_succeeds(all_owned, timeout=30)
+      node.wait_until_succeeds(all_inactive, timeout=30)
+      node.succeed("systemctl is-active --quiet forgejo-runner-docker.service forgejo-runner-podman.service")
+      node.succeed("systemctl stop fixture-game.service")
+      node.wait_until_succeeds(all_active, timeout=75)
+      node.wait_until_succeeds(none_owned)
+
+      # Moderate pressure drains every runner while admitted workers finish;
+      # low pressure resumes all of them.
+      pids = three_workers()
+      node.succeed(pressure(30, 1))
+      node.wait_until_succeeds(all_owned)
+      node.wait_until_succeeds(all_inactive)
+      for pid in pids:
+          node.succeed(f"test -e /proc/{pid}")
+      node.succeed(pressure(0, 2))
+      node.wait_until_succeeds(all_active, timeout=60)
+      node.wait_until_succeeds(none_owned)
+
+      # An operator-stopped extra runner is neither claimed nor restarted.
+      node.succeed("systemctl stop forgejo-podman-runner-fast.service")
+      node.succeed(pressure(30, 3))
+      node.wait_until_succeeds(f"test -e {owned(primary)} && test -e {owned(podman_runners[0])}")
+      node.succeed(f"test ! -e {owned(podman_runners[1])}")
+      node.succeed(pressure(0, 4))
+      node.wait_until_succeeds(f"systemctl is-active --quiet {primary} && systemctl is-active --quiet {podman_runners[0]}", timeout=60)
+      node.succeed("! systemctl is-active --quiet forgejo-podman-runner-fast.service")
+      node.succeed("systemctl start forgejo-podman-runner-fast.service")
+      node.wait_until_succeeds(all_active, timeout=60)
+
+      # Losing the guard while workers are frozen tears down both APIs, every
+      # worker and every runner.
+      pids = three_workers()
+      node.succeed(pressure(99, 5))
+      node.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen")
+      node.succeed("systemctl kill --signal=KILL --kill-whom=all forgejo-runner-io-pressure-guard.service")
+      node.wait_until_succeeds("! systemctl is-active --quiet forgejo-runner-docker.service && ! systemctl is-active --quiet forgejo-runner-podman.service", timeout=150)
+      node.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = running", timeout=150)
+      node.wait_until_succeeds(all_inactive, timeout=60)
+      for pid in pids:
+          node.fail(f"test -e /proc/{pid}")
+      node.succeed("systemctl is-active docker.service")
     '';
   }
