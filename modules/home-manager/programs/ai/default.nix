@@ -44,17 +44,25 @@ with lib; let
 
   # Forgejo MCP client for agents (ADR-0081). The wrapper reads the token file
   # at start, so the token never appears in arguments or client configuration.
+  # The session's FORGEJO_API_TOKEN_FILE chooses the file, so the server acts
+  # as whoever the session acts as: the agent forge account in T3 sessions,
+  # the operator in a terminal (#722). tokenFile serves sessions without it.
+  # A named file that yields no token fails rather than fall back.
   mcp = cfg.forgejoMcp;
   forgejoMcpAgent = pkgs.writeShellApplication {
     name = "forgejo-mcp-agent";
     runtimeInputs = [pkgs.forgejo-mcp];
     text = ''
-      token_file=${escapeShellArg (toString mcp.tokenFile)}
-      if [ ! -r "$token_file" ]; then
+      token_file=''${FORGEJO_API_TOKEN_FILE:-${escapeShellArg (toString mcp.tokenFile)}}
+      if [ ! -f "$token_file" ] || [ ! -r "$token_file" ]; then
         echo "forgejo-mcp-agent: cannot read the Forgejo token file $token_file" >&2
         exit 1
       fi
       FORGEJO_ACCESS_TOKEN=$(<"$token_file")
+      if [ -z "''${FORGEJO_ACCESS_TOKEN//[[:space:]]/}" ]; then
+        echo "forgejo-mcp-agent: no token in $token_file" >&2
+        exit 1
+      fi
       export FORGEJO_ACCESS_TOKEN
       exec forgejo-mcp -t stdio -url ${escapeShellArg mcp.url}
     '';
@@ -62,9 +70,12 @@ with lib; let
   # Not on PATH: the guard sees MCP merges only as client tool calls, not when
   # a shell drives the wrapper directly.
   forgejoMcpCommand = "${forgejoMcpAgent}/bin/forgejo-mcp-agent";
+  # Codex passes MCP servers only a fixed set of variables unless named here;
+  # Claude Code passes its whole environment.
   codexMcpServers = pkgs.writeText "codex-mcp-servers.json" (builtins.toJSON (optionalAttrs mcp.enable {
     forgejo = {
       command = forgejoMcpCommand;
+      env_vars = ["FORGEJO_API_TOKEN_FILE"];
     };
   }));
   # A locked or restarted keyring blocks Codex session start indefinitely, so
@@ -300,8 +311,9 @@ with lib; let
   ];
 in {
   # The reviewer defaults read the agent roles (ADR-0079); repo-review.nix
-  # installs revkit for whole-repository reviews (nix-packages ADR-0011).
-  imports = [./roles.nix ./repo-review.nix];
+  # installs revkit for whole-repository reviews (nix-packages ADR-0011);
+  # agent-forge.nix declares the agent sessions' forge account (ADR-0081).
+  imports = [./roles.nix ./repo-review.nix ./agent-forge.nix];
 
   options.programs.ai = {
     enable = mkEnableOption "Module for vibe coding stuff";
@@ -397,7 +409,7 @@ in {
         type = types.nullOr types.str;
         default = config.home.sessionVariables.FORGEJO_API_TOKEN_FILE or null;
         defaultText = literalExpression "config.home.sessionVariables.FORGEJO_API_TOKEN_FILE or null";
-        description = "File holding the Forgejo API token, read when the server starts. Provisioned privately.";
+        description = "File holding the Forgejo API token, read when the server starts if the session sets no FORGEJO_API_TOKEN_FILE. Provisioned privately.";
       };
     };
   };

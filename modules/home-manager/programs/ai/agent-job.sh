@@ -9,6 +9,11 @@
 # sessions already run with, holding *_FILE credential pointers rather than
 # values) plus the caller's PATH, not the caller's shell additions such as
 # direnv. Tools come from that PATH, so the job sees the caller's PATH as is.
+# The forge identity of an agent session (programs.ai.agentForge, #722) is
+# not in the user manager's environment either, so the caller's
+# FORGEJO_API_TOKEN_FILE, FORGEJO_TOKEN_FILE (clearing FORGEJO_TOKEN) and
+# GIT_CONFIG_COUNT/KEY_n/VALUE_n are passed too,
+# when set: a job started by an agent acts as the agent account.
 
 state_root=${AGENT_JOB_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-jobs}
 
@@ -85,6 +90,23 @@ case $cmd in
     [[ ${1-} == -- ]] || usage
     shift
     (($# > 0)) || usage
+    environment=(--setenv=PATH="$PATH")
+    if [[ -n ${FORGEJO_API_TOKEN_FILE-} ]]; then
+      environment+=(--setenv=FORGEJO_API_TOKEN_FILE="$FORGEJO_API_TOKEN_FILE")
+    fi
+    # forge-mirror prefers FORGEJO_TOKEN, which the user manager may hold;
+    # it treats an empty one as unset and reads the file.
+    if [[ -n ${FORGEJO_TOKEN_FILE-} ]]; then
+      environment+=(--setenv=FORGEJO_TOKEN_FILE="$FORGEJO_TOKEN_FILE" --setenv=FORGEJO_TOKEN=)
+    fi
+    if [[ -n ${GIT_CONFIG_COUNT-} ]]; then
+      [[ $GIT_CONFIG_COUNT =~ ^[0-9]+$ ]] || fail 64 "GIT_CONFIG_COUNT must be a number"
+      environment+=(--setenv=GIT_CONFIG_COUNT="$GIT_CONFIG_COUNT")
+      for ((i = 0; i < GIT_CONFIG_COUNT; i++)); do
+        key=GIT_CONFIG_KEY_$i value=GIT_CONFIG_VALUE_$i
+        environment+=(--setenv="$key=${!key-}" --setenv="$value=${!value-}")
+      done
+    fi
     [[ $dir =~ ^[A-Za-z0-9/._-]+$ ]] || fail 64 "state directory $dir must not need quoting"
     running && fail 73 "$name is already running"
     mkdir -p "$state_root"
@@ -108,7 +130,7 @@ case $cmd in
     } >"$dir/info"
     if ! systemd-run --user --quiet --collect --same-dir \
       --unit="$unit" \
-      --setenv=PATH="$PATH" \
+      "${environment[@]}" \
       -p StandardOutput=append:"$dir/log" \
       -p StandardError=append:"$dir/log" \
       -p ExecStopPost="$self record $dir" \

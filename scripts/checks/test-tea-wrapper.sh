@@ -68,11 +68,20 @@ expect "trailing --login" \
 expect "no token file" \
   "$(printf '%s\n' 'env:' arg:api arg:--login arg:forge.example arg:/user)" \
   "$(run_wrapper "" api --login forge.example /user)"
+# A named token file that yields no token fails closed: neither stored logins
+# nor an inherited GITEA_TOKEN stand in for it (#722).
 : >"$work/empty-token"
-expect "empty token file" \
-  "$(printf '%s\n' 'env:' arg:api arg:--login arg:forge.example)" \
-  "$(run_wrapper "$work/empty-token" api --login forge.example)"
-grep -q 'no token in' "$work/stderr" || fail "empty token file was not reported"
+printf ' \n' >"$work/blank-token"
+printf 'test-token\n' >"$work/unreadable-token"
+chmod 000 "$work/unreadable-token"
+for bad in "$work/empty-token" "$work/blank-token" "$work/missing-token" "$work/unreadable-token" "$work"; do
+  [[ $bad != "$work/unreadable-token" || ! -r $bad ]] || continue # root can read it
+  status=0
+  output=$(GITEA_TOKEN=inherited run_wrapper "$bad" api --login forge.example) || status=$?
+  [[ $status == 1 && -z $output ]] || fail "unusable token file $bad: exit $status, output $output"
+  grep -q "no token in $bad" "$work/stderr" || fail "unusable token file $bad was not reported"
+done
+chmod 600 "$work/unreadable-token"
 if grep -rq test-token "$work/stderr"; then
   fail "the wrapper printed the token"
 fi

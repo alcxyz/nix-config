@@ -5,8 +5,15 @@ token=
 if [ -n "$token_file" ] && [ -f "$token_file" ] && [ -r "$token_file" ]; then
   token=$(<"$token_file")
 fi
+# A named token file that yields no token is an error, not a reason to fall
+# back to stored logins or an inherited GITEA_TOKEN, which may belong to
+# another account (#722). Only an unset variable selects the stored logins.
+if [ -n "$token_file" ] && [ -z "${token//[[:space:]]/}" ]; then
+  echo "tea: no token in $token_file (missing, unreadable or empty); unset FORGEJO_API_TOKEN_FILE to use stored logins" >&2
+  exit 1
+fi
 args=("$@")
-if [ -n "${token//[[:space:]]/}" ]; then
+if [ -n "$token_file" ]; then
   GITEA_TOKEN=$token
   GITEA_INSTANCE_URL=$tea_url
   export GITEA_TOKEN GITEA_INSTANCE_URL
@@ -36,8 +43,6 @@ if [ -n "${token//[[:space:]]/}" ]; then
     args+=("$1")
     shift
   done
-elif [ -n "$token_file" ]; then
-  echo "tea: no token in $token_file; using stored logins" >&2
 fi
 unset token
 exec "$tea_bin" "${args[@]}"

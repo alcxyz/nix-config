@@ -78,6 +78,7 @@ EOF
 chmod +x "$tmp/bin/"*
 
 export PATH="$tmp/bin:$PATH" STUB="$tmp/stub" AGENT_JOB_STATE_DIR="$tmp/state"
+unset FORGEJO_API_TOKEN_FILE FORGEJO_TOKEN_FILE FORGEJO_USER GIT_CONFIG_COUNT
 jobs_dir=$tmp/state
 
 expect_exit() {
@@ -100,6 +101,29 @@ grep -qx -- "--collect" "$tmp/stub/systemd-run.args" || fail "unit is not collec
 grep -qx -- "--setenv=PATH=$PATH" "$tmp/stub/systemd-run.args" || fail "caller PATH not passed"
 [[ $(grep -c -- '--setenv' "$tmp/stub/systemd-run.args") == 1 ]] || fail "more than PATH passed to the unit"
 grep -q 'finished at .* (exited 0)' "$tmp/out" || fail "wait did not report success: $(<"$tmp/out")"
+
+# An agent session's forge identity (#722) reaches the unit, values unchanged.
+FORGEJO_API_TOKEN_FILE=/run/agent/token FORGEJO_TOKEN_FILE=/run/agent/token FORGEJO_USER=operator GIT_CONFIG_COUNT=2 \
+  GIT_CONFIG_KEY_0=credential.https://forge.example.helper GIT_CONFIG_VALUE_0='' \
+  GIT_CONFIG_KEY_1=credential.https://forge.example.helper GIT_CONFIG_VALUE_1="!A='x y' helper %n \$HOME" \
+  agent-job start agent -- true >/dev/null
+expect_exit 0 agent-job wait agent 1
+expected_env=(
+  "--setenv=PATH=$PATH"
+  --setenv=FORGEJO_API_TOKEN_FILE=/run/agent/token
+  --setenv=FORGEJO_TOKEN_FILE=/run/agent/token
+  --setenv=FORGEJO_TOKEN=
+  --setenv=GIT_CONFIG_COUNT=2
+  --setenv=GIT_CONFIG_KEY_0=credential.https://forge.example.helper
+  --setenv=GIT_CONFIG_VALUE_0=
+  --setenv=GIT_CONFIG_KEY_1=credential.https://forge.example.helper
+  "--setenv=GIT_CONFIG_VALUE_1=!A='x y' helper %n \$HOME"
+)
+[[ $(grep -- '^--setenv' "$tmp/stub/systemd-run.args") == "$(printf '%s\n' "${expected_env[@]}")" ]] ||
+  fail "agent environment not passed: $(grep -- '^--setenv' "$tmp/stub/systemd-run.args")"
+# A malformed count starts nothing and leaves no state behind.
+GIT_CONFIG_COUNT=x expect_exit 64 agent-job start badcount -- true
+[[ ! -e $jobs_dir/badcount ]] || fail "rejected start left state"
 
 # wait reports a failed job as 1, whatever its status, and shows its log.
 agent-job start bad -- sh -c 'echo partial; exit 70' >/dev/null

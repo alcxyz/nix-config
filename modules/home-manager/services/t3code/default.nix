@@ -47,6 +47,10 @@ with lib; let
   # Each instance therefore reads the profile's file itself at every start, so
   # agent shells get the variables whatever the start order (#689).
   sessionVariablesFile = "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh";
+  # Agent sessions are the processes T3 starts, so the agent forge account
+  # (programs.ai.agentForge, #722) applies here, after the session variables,
+  # and never in login shells. Empty without that module or when disabled.
+  agentSessionCommands = config.programs.ai.agentForge.sessionCommands or "";
   sessionEnv = pkgs.writeShellApplication {
     name = "t3code-session-env";
     # The sourced file is written for login shells, not for strict mode.
@@ -62,7 +66,7 @@ with lib; let
       else
         echo "No Home Manager session variables at $session_vars; starting without them." >&2
       fi
-      exec "$@"
+      ${agentSessionCommands}exec "$@"
     '';
   };
   # Units run the wrapper through a stable link, so a rebuild of the wrapper

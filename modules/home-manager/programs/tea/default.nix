@@ -7,6 +7,8 @@
 # names one. The token never appears in arguments or in ~/.config/tea, and a
 # rotated file reaches tea without further changes. Callers that unset the
 # variable, such as pr-review's reviewers, get no credential from the wrapper.
+# A set variable whose file is missing, unreadable or empty is an error: tea
+# then does not run, rather than fall back to another account's login.
 #
 # T3 Code's Forgejo integration only uses stored logins: it matches one from
 # `tea login list` against the repository remote and passes it with `--login`.
@@ -67,8 +69,16 @@ in {
     };
     tokenFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
-      default = config.home.sessionVariables.FORGEJO_API_TOKEN_FILE or null;
-      defaultText = lib.literalExpression "config.home.sessionVariables.FORGEJO_API_TOKEN_FILE or null";
+      # With an agent forge account, T3's tea calls must go through the
+      # wrapper even where the session sets no token file (#722).
+      default =
+        config.home.sessionVariables.FORGEJO_API_TOKEN_FILE
+        or (
+          if config.programs.ai.agentForge.enable or false
+          then config.programs.ai.agentForge.tokenFile
+          else null
+        );
+      defaultText = lib.literalMD "`config.home.sessionVariables.FORGEJO_API_TOKEN_FILE`, else `programs.ai.agentForge.tokenFile` when that is enabled, else null";
       description = ''
         Session token file that enables the wrapper. At run time the wrapper
         reads FORGEJO_API_TOKEN_FILE, not this value, so a caller that unsets

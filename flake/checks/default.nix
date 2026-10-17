@@ -763,6 +763,105 @@ in {
         touch "$out"
       '';
 
+  # programs.ai.agentForge (#722), with dummy values: T3's session wrapper
+  # gives agent sessions the agent account after the session variables, and
+  # the Forgejo MCP server uses its token. The Git test runs the generated
+  # wrapper in temporary repositories with a fake forge-mirror.
+  agent-forge-wiring-contract = let
+    dummy = {
+      tokenFile = "/run/agent-forge-test/token";
+      user = "agent-test";
+      url = "https://forge.example.invalid";
+      sshHost = "ssh.forge.example.invalid";
+    };
+    fakeForgeMirror = pkgs.writeShellScriptBin "forge-mirror" ''exec "$AGENT_FORGE_TEST_HELPER" "$@"'';
+    off = self.homeConfigurations.alc-xyz;
+    on =
+      (off.extendModules {
+        modules = [
+          {
+            programs.ai.agentForge =
+              dummy
+              // {
+                enable = true;
+                package = fakeForgeMirror;
+              };
+          }
+        ];
+      }).config;
+    sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
+    sessionEnv = on.home.file.${sessionEnvLink}.source;
+    offSessionEnv = off.config.home.file.${sessionEnvLink}.source;
+    commands = on.programs.ai.agentForge.sessionCommands;
+    # The tea module alone, for its token file default without the session's.
+    teaTokenFile = agentForge:
+      (lib.evalModules {
+        modules = [
+          ../../modules/home-manager/programs/tea/default.nix
+          {
+            config._module.args.pkgs = pkgs;
+            config._module.check = false;
+            options.home.sessionVariables = lib.mkOption {default = {};};
+            options.programs.ai.agentForge = lib.mkOption {default = agentForge;};
+          }
+        ];
+      }).config.programs.tea.tokenFile;
+    # The MCP wrapper with a relative fallback token file the test provides.
+    mcpHome =
+      (off.extendModules {
+        modules = [{programs.ai.forgejoMcp.tokenFile = lib.mkForce "fallback-token";}];
+      }).config;
+    mcpActivation = pkgs.writeText "agent-mcp-servers-activation" mcpHome.home.activation.agentMcpServers.data;
+    helper = "!FORGEJO_TOKEN= FORGEJO_TOKEN_FILE=${lib.escapeShellArg dummy.tokenFile} FORGEJO_USER=${lib.escapeShellArg dummy.user} ${lib.escapeShellArg "${fakeForgeMirror}/bin/forge-mirror"} credential-helper";
+  in
+    # The MCP server follows the session's variable; its fallback stays the
+    # session variables' token file whether or not the account is enabled.
+    assert on.programs.ai.forgejoMcp.tokenFile == off.config.home.sessionVariables.FORGEJO_API_TOKEN_FILE;
+    assert off.config.programs.ai.forgejoMcp.tokenFile == off.config.home.sessionVariables.FORGEJO_API_TOKEN_FILE;
+    assert off.config.programs.ai.agentForge.sessionCommands == "";
+    # With the account, tea is wrapped even without a session token file.
+    assert teaTokenFile (dummy // {enable = true;}) == dummy.tokenFile;
+    assert teaTokenFile {enable = false;} == null;
+    assert lib.hasPrefix (lib.concatStrings [
+      "FORGEJO_API_TOKEN_FILE=${lib.escapeShellArg dummy.tokenFile}\n"
+      "FORGEJO_TOKEN_FILE=${lib.escapeShellArg dummy.tokenFile}\n"
+      "export FORGEJO_API_TOKEN_FILE FORGEJO_TOKEN_FILE\n"
+      "unset FORGEJO_TOKEN\n"
+    ])
+    commands;
+    # hasInfix matches a regex, which must not refer to the fake package.
+    assert lib.all (entry: lib.hasInfix (builtins.unsafeDiscardStringContext entry) (builtins.unsafeDiscardStringContext commands)) [
+      "\"GIT_CONFIG_KEY_$agent_git_config=\"${lib.escapeShellArg "credential.${dummy.url}.helper"} \"GIT_CONFIG_VALUE_$agent_git_config=\"''\n"
+      "\"GIT_CONFIG_VALUE_$agent_git_config=\"${lib.escapeShellArg helper}\n"
+      "\"GIT_CONFIG_VALUE_$agent_git_config=\"${lib.escapeShellArg "git@${dummy.sshHost}:"}\n"
+      "\"GIT_CONFIG_VALUE_$agent_git_config=\"${lib.escapeShellArg "ssh://git@${dummy.sshHost}/"}\n"
+    ];
+      pkgs.runCommand "agent-forge-wiring-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.shellcheck];} ''
+        # Both clients start the same MCP wrapper; Codex is told to pass the
+        # session's token file variable on, Claude Code passes its environment.
+        claude=$(grep -oE '/nix/store/[^ "]+-claude-mcp-servers.json' ${mcpActivation} | head -n1)
+        codex=$(grep -oE '/nix/store/[^ "]+-codex-mcp-servers.json' ${mcpActivation} | head -n1)
+        mcp_wrapper=$(jq -er .forgejo.command "$claude")
+        test "$(jq -er .forgejo.command "$codex")" = "$mcp_wrapper"
+        test "$(jq -c .forgejo.env_vars "$codex")" = '["FORGEJO_API_TOKEN_FILE"]'
+        shellcheck ${../../scripts/checks/test-forgejo-mcp-token.sh}
+        bash ${../../scripts/checks/test-forgejo-mcp-token.sh} "$mcp_wrapper"
+
+        # The commands run after the session variables are read, right before T3.
+        sourced=$(grep -nF '. "$session_vars"' ${sessionEnv} | cut -d: -f1)
+        token=$(grep -nF 'FORGEJO_API_TOKEN_FILE=' ${sessionEnv} | cut -d: -f1)
+        count=$(grep -nxF 'export GIT_CONFIG_COUNT=$agent_git_config' ${sessionEnv} | cut -d: -f1)
+        exec_line=$(grep -nxF 'exec "$@"' ${sessionEnv} | cut -d: -f1)
+        test "$sourced" -lt "$token" && test "$token" -lt "$count" && test "$count" -lt "$exec_line"
+        if grep -E 'GIT_CONFIG|agent_git_config' ${offSessionEnv}; then
+          echo "The session wrapper changes the agent environment while agentForge is disabled" >&2
+          exit 1
+        fi
+        shellcheck ${../../scripts/checks/test-agent-forge-git.sh}
+        bash ${../../scripts/checks/test-agent-forge-git.sh} ${sessionEnv} ${lib.escapeShellArgs [dummy.url dummy.sshHost dummy.user dummy.tokenFile]}
+        touch "$out"
+      '';
+
   umu-apps-contract = let
     home = self.homeConfigurations.alc-xyz;
     homeConfig = home.config;

@@ -104,6 +104,13 @@ so without it agent shells would lack `home.sessionVariables` and
 start, even when the login already imported an older copy, so a restart picks
 up the current values. A missing file is logged and T3 starts without it.
 
+With `programs.ai.agentForge` enabled, the wrapper then gives agent sessions
+the agent forge account (ADR-0081): `FORGEJO_API_TOKEN_FILE` names its token,
+and `GIT_CONFIG_*` entries, appended to any already set, send pushes to the
+forge over HTTPS with only its credential helper. Login shells keep the
+operator's account. Since the link does not change, running instances pick
+this up at their next restart.
+
 ## Additional instances
 
 `services.t3code.instances.<name>` runs another server as
