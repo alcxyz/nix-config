@@ -322,6 +322,7 @@ in {
 
   programs.ai.enable = true;
   programs.ai.forgejoMcp.enable = true;
+  programs.ai.prReview.selftest.enable = true;
   programs.stashdb-pop.enable = true;
 
   services.cloud-sync = {

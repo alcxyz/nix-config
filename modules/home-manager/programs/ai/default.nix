@@ -350,6 +350,19 @@ in {
           guard refuses merges of them into `fastForwardRepositories`.
         '';
       };
+      selftest = {
+        enable = mkEnableOption ''
+          an hourly `pr-review selftest` that runs every reviewer with the real
+          clients on a built-in change and sends a desktop notification when one
+          fails (Linux only). It reruns only after a client, reviewer or
+          `pr-review` change, or once `staleHours` have passed
+        '';
+        staleHours = mkOption {
+          type = types.ints.positive;
+          default = 24;
+          description = "Hours a self-test result stays current when the clients and reviewers are unchanged.";
+        };
+      };
       fastForwardRepositories = mkOption {
         type = types.listOf (types.strMatching "[^/[:space:]]+/[^/[:space:]]+/[^/[:space:]]+");
         default = [];
@@ -427,6 +440,40 @@ in {
     # enforce the guard through security.agentPrReviewGuard instead; this file
     # serves other hosts once trusted.
     home.file.".codex/hooks.json".text = builtins.toJSON {hooks = prReviewHooks;};
+
+    # Catches a client update or an expired sign-in that would fail every
+    # review before an agent needs one (#718). Reviewers use the same clients
+    # as agent sessions: the AI stack profile when present (ADR-0077), else
+    # the Home Manager profile.
+    systemd.user.services = mkIf (cfg.prReview.selftest.enable && pkgs.stdenv.hostPlatform.isLinux) {
+      pr-review-selftest = {
+        Unit = {
+          Description = "Test pr-review's reviewer clients (ADR-0078)";
+          OnFailure = "pr-review-selftest-failure.service";
+        };
+        Service = {
+          Type = "oneshot";
+          Environment = "PATH=${config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/bin:${config.home.profileDirectory}/bin:/run/current-system/sw/bin";
+          ExecStart = "${prReview}/bin/pr-review selftest --if-stale ${toString cfg.prReview.selftest.staleHours}";
+        };
+      };
+      pr-review-selftest-failure = {
+        Unit.Description = "Report a failed pr-review self-test";
+        Service = {
+          Type = "oneshot";
+          ExecStart = ''${pkgs.libnotify}/bin/notify-send --urgency=critical --app-name=pr-review "pr-review cannot run reviews" "A reviewer client failed its self-test. See: journalctl --user -u pr-review-selftest"'';
+        };
+      };
+    };
+    systemd.user.timers.pr-review-selftest = mkIf (cfg.prReview.selftest.enable && pkgs.stdenv.hostPlatform.isLinux) {
+      Unit.Description = "Hourly pr-review self-test, skipped while clients and reviewers are unchanged";
+      Timer = {
+        OnCalendar = "hourly";
+        RandomizedDelaySec = 600;
+        Persistent = true;
+      };
+      Install.WantedBy = ["timers.target"];
+    };
 
     home.activation.claudeStatusline = lib.hm.dag.entryAfter ["writeBoundary"] ''
       run ${mergeClaudeSettings}/bin/merge-claude-settings \

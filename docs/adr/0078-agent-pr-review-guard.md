@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories; amended 2026-10-17: `pr-review selftest` and failure reasons)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
 
@@ -351,6 +351,26 @@ backfilled. These are native provider counts: Claude input excludes cache
 reads and writes, while Codex input includes cached reads, so consumers must
 keep the client identity rather than comparing these as identical totals.
 No dollar cost is inferred.
+
+A failed reviewer's output names the reason the client reported (for
+example an expired sign-in, a usage limit or an unknown option), taken from
+Claude's JSON result, Codex's JSON error events or the client's stderr, since
+that reason otherwise sits in files nobody opens. `pr-review selftest` runs
+every deep and light reviewer with the real clients, sandbox, models and
+efforts on a built-in one-line change in the same work directory as real
+runs, and passes only when each replies with a verdict
+([#718](https://git.alc.xyz/alcxyz/nix-config/issues/718)). The tests' fake
+clients cannot catch a client release that renames an option `pr-review`
+passes or changes its JSON result, a sandbox change that stops a client from
+starting, or an expired sign-in; each would fail every review, loudly but
+only when an agent is ready to merge. With
+`programs.ai.prReview.selftest.enable`, an hourly user timer runs it with
+`--if-stale`, which skips while the last result is younger than
+`staleHours` (24) and used the same reviewers, client binaries on `PATH` and
+`pr-review` build, and a desktop notification reports a failure. A failure
+is notified once per change or day rather than hourly; a manual
+`pr-review selftest` retests at once. One run costs a few tens of thousands
+of mostly cached input tokens across the reviewers.
 
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).

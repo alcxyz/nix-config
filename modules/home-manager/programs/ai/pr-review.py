@@ -4,6 +4,7 @@
                                     (a follow-up when it builds on the last round)
   pr-review comment <pr> <outcome>  post the review comment for the current head
   pr-review check <pr>              exit 1 unless a review comment names the head
+  pr-review selftest [--if-stale H] run every reviewer on a built-in change
   pr-review guard                   PreToolUse hook used by agent-pr-review-guard
 
 <pr> is a PR number, resolved through a remote of the current repository
@@ -35,6 +36,13 @@ Each new reviewer result records provider token counters under `usage`, with
 null for unavailable counts and no inferred cost. Existing cached state is
 not backfilled. Claude input counts exclude cached tokens; Codex input counts
 include cached reads, so consumers must retain the reviewer's client identity.
+
+`selftest` runs every deep and light reviewer, with the real clients, sandbox,
+models and efforts, on a built-in change in a temporary directory, and prints
+each failure's reason as the client reported it. It records its result under
+$XDG_STATE_HOME/pr-review/selftest; with --if-stale it skips when that result
+is younger than H hours and used the same reviewers, client binaries on PATH
+and pr-review build.
 
 As a hook, Claude Code and Codex CLI pass the pending shell command as JSON on
 stdin (tool_input.command). Merges are recognised as `gh pr merge`, `gh api`
@@ -628,13 +636,7 @@ def checkout(pr, head, base, cwd, remote, previous=None):
             interdiff = None
             if previous and commit_exists(repository, previous) and is_ancestor(repository, previous, head):
                 interdiff = target_diff(repository, target, f"{previous}..{head}")
-            # Not under /tmp: Codex reviewers cannot read there (CODEX_FILESYSTEM),
-            # and Codex will not set up its home there.
-            # Per host, since another host sharing the state directory has other PIDs.
-            work = os.path.join(state_base(), "work", os.uname().nodename)
-            os.makedirs(work, exist_ok=True)
-            remove_stale_work(work)
-            temporary = tempfile.mkdtemp(prefix=f"pr-review-{os.getpid()}-", dir=work)
+            temporary = work_directory()
             tree = os.path.join(temporary, "checkout")
             write_tree(repository, head, tree)
             return temporary, tree, diff, merge_base, interdiff
@@ -652,6 +654,17 @@ def is_ancestor(repository, ancestor, commit):
         ).returncode == 0
     except subprocess.TimeoutExpired:
         return False
+
+
+def work_directory():
+    """Create a temporary directory for one run's checkout and reviewer home."""
+    # Not under /tmp: Codex reviewers cannot read there (CODEX_FILESYSTEM),
+    # and Codex will not set up its home there.
+    # Per host, since another host sharing the state directory has other PIDs.
+    work = os.path.join(state_base(), "work", os.uname().nodename)
+    os.makedirs(work, exist_ok=True)
+    remove_stale_work(work)
+    return tempfile.mkdtemp(prefix=f"pr-review-{os.getpid()}-", dir=work)
 
 
 def remove_stale_work(work):
@@ -840,6 +853,10 @@ def reviewer_usage(client, path):
         return token_usage(None, client)
 
 
+# Written to a reviewer's log by pr-review itself, not by the client.
+UNREADABLE_RESULT = "cannot read the reviewer result:"
+
+
 def finish_reviewer(reviewer, output, log_path, stdout_path):
     """Write the review text to `output` and return the model the client reported.
 
@@ -860,7 +877,7 @@ def finish_reviewer(reviewer, output, log_path, stdout_path):
             return codex_header_model(handle.read())
     except (OSError, ValueError) as error:
         with open(log_path, "a", encoding="utf-8") as log:
-            log.write(f"cannot read the reviewer result: {error}\n")
+            log.write(f"{UNREADABLE_RESULT} {error}\n")
         return None
 
 
@@ -1580,6 +1597,9 @@ def print_results(results):
         else:
             failed = True
             log = os.path.splitext(result["output"])[0] + ".log"
+            reason = failure_reason(result)
+            if reason:
+                print(f"Reason: {reason}")
             print(f"No usable review; this does not mean no findings. See {output_or_log(result['output'], log)}.")
     return 1 if failed else 0
 
@@ -1587,6 +1607,198 @@ def print_results(results):
 def output_or_log(output, log):
     files = [path for path in (output, output + ".json", output + ".jsonl") if os.path.exists(path)]
     return " and ".join(files + [log])
+
+
+# Lines that state an error, preferred over usage hints or notices around them.
+ERROR_LINE = re.compile(
+    r"error|fail|denied|expired|limit|quota|capacity|unknown|unexpected|invalid|not found|log ?in|logged|auth",
+    re.IGNORECASE,
+)
+
+
+def failure_reason(result):
+    """Return one line saying why a reviewer gave no usable review, or None.
+
+    Clients report sign-in, usage-limit and option errors in different places:
+    Claude in its JSON result (`result` or `errors`) or on stderr, Codex in its
+    JSON events or on stderr. A client that exited 0 replied without a verdict,
+    so its stderr notices and retried errors are not the reason. Without this,
+    the reason sits in files nobody opens.
+    """
+    if result["status"] == "timeout":
+        return f"no reply within {result['seconds']}s"
+    output = result["output"]
+    exited = result.get("exit")
+    reply = None
+    candidates = []
+    try:
+        if result["reviewer"]["client"] == "claude":
+            with open(output + ".json", encoding="utf-8") as handle:
+                data = json.load(handle)
+            if isinstance(data, dict):
+                if isinstance(data.get("result"), str):
+                    reply = data["result"]
+                if data.get("is_error"):
+                    errors = data.get("errors")
+                    candidates.extend(error for error in (errors if isinstance(errors, list) else [])
+                                      if isinstance(error, str))
+                    if reply:
+                        candidates.insert(0, reply)
+        elif exited != 0:
+            with open(output + ".jsonl", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        event = json.loads(line)
+                    except ValueError:
+                        continue
+                    if not isinstance(event, dict):
+                        continue
+                    error = event.get("error")
+                    message = error.get("message") if isinstance(error, dict) else event.get("message")
+                    if event.get("type") in ("error", "turn.failed") and isinstance(message, str):
+                        candidates.append(message)
+                # The last error is the one that ended the turn; earlier ones may have been retried.
+                candidates = candidates[-1:]
+    except (OSError, ValueError, KeyError):
+        pass
+    try:
+        with open(os.path.splitext(output)[0] + ".log", encoding="utf-8", errors="replace") as handle:
+            lines = [line.strip() for line in handle.read().splitlines() if line.strip()]
+    except OSError:
+        lines = []
+    unreadable = [line for line in lines if line.startswith(UNREADABLE_RESULT)]
+    client_lines = [line for line in lines if not line.startswith(UNREADABLE_RESULT)]
+    if exited == 0 and not candidates:
+        # A result pr-review cannot parse, such as a changed JSON format, is not a model's reply.
+        first = next((line.strip() for line in (reply or "").splitlines() if line.strip()), "")
+        if unreadable:
+            candidates.append(unreadable[-1])
+        else:
+            candidates.append(f"replied without a verdict: {first}" if first else "replied without a verdict")
+    if exited != 0:
+        errors = [line for line in client_lines if ERROR_LINE.search(line)]
+        if errors:
+            candidates.append(errors[-1])
+        if exited is not None:
+            candidates.append(f"exited with status {exited}")
+        candidates.extend(client_lines[-1:] + unreadable[-1:])
+    for candidate in candidates:
+        text = " ".join(candidate.split())
+        if text:
+            return text if len(text) <= 300 else text[:297] + "..."
+    return None
+
+
+# A tiny change for `pr-review selftest`: small enough to cost little, real
+# enough that a reviewer must read it and reply with a verdict.
+SELFTEST_BEFORE = '''def total(prices, discount):
+    """Return the sum of prices after a percentage discount."""
+    return sum(prices) * (1 - discount / 100)
+'''
+SELFTEST_AFTER = SELFTEST_BEFORE.replace("discount / 100", "discount / 10")
+SELFTEST_DIFF = """diff --git a/price.py b/price.py
+--- a/price.py
++++ b/price.py
+@@ -1,3 +1,3 @@
+ def total(prices, discount):
+     \"\"\"Return the sum of prices after a percentage discount.\"\"\"
+-    return sum(prices) * (1 - discount / 100)
++    return sum(prices) * (1 - discount / 10)
+"""
+SELFTEST_TIMEOUT = 600
+
+
+def selftest_reviewers(config):
+    """Every configured reviewer once, deep and light, named by role."""
+    reviewers, seen = [], set()
+    for role, entries in (("deep", config["reviewers"]), ("light", config.get("light_reviewers") or [])):
+        for reviewer in entries:
+            key = (reviewer["client"], reviewer["model"], reviewer["effort"])
+            if key not in seen:
+                seen.add(key)
+                reviewers.append(dict(reviewer, name=f"{role}-{reviewer['name']}"))
+    return reviewers
+
+
+def selftest_fingerprint(reviewers):
+    """What a passing self-test vouches for: the reviewers, the clients on PATH and this program."""
+    clients = {}
+    for reviewer in reviewers:
+        found = shutil.which(reviewer["client"])
+        clients[reviewer["client"]] = os.path.realpath(found) if found else None
+    return {
+        "reviewers": [{key: reviewer[key] for key in ("name", "client", "model", "effort")} for reviewer in reviewers],
+        "clients": clients,
+        "program": os.path.realpath(__file__),
+    }
+
+
+def cmd_selftest(args):
+    """Run every reviewer on a built-in change, so a broken client shows up before a PR needs it."""
+    config = load_config()
+    reviewers = selftest_reviewers(config)
+    fingerprint = selftest_fingerprint(reviewers)
+    directory = os.path.join(state_base(), "selftest")
+    status_path = os.path.join(directory, "status.json")
+    os.makedirs(directory, exist_ok=True)
+    if args.if_stale is not None:
+        last = load_status(directory)
+        age = time.time() - last.get("finished", 0)
+        if last.get("fingerprint") == fingerprint and 0 <= age < args.if_stale * 3600:
+            outcome = "passed" if last.get("ok") else "failed"
+            print(f"The last self-test {outcome} {round(age / 3600, 1)}h ago with the same clients and reviewers; "
+                  f"skipping. Run `pr-review selftest` to test again.")
+            return 0
+    lock = open(os.path.join(directory, "lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        if args.if_stale is not None:
+            # A scheduled run must not report a broken client because one is already being tested.
+            print("Another pr-review selftest is running; skipping.")
+            return 0
+        raise ReviewError("another pr-review selftest is running") from error
+    signal.signal(signal.SIGTERM, terminate)
+    if signal.getsignal(signal.SIGHUP) != signal.SIG_IGN:
+        signal.signal(signal.SIGHUP, terminate)
+    work = os.path.join(directory, "last")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    temporary = work_directory()
+    try:
+        tree = os.path.join(temporary, "tree")
+        os.makedirs(tree)
+        with open(os.path.join(tree, "price.py"), "w", encoding="utf-8") as handle:
+            handle.write(SELFTEST_AFTER)
+        prompt_path = os.path.join(work, "prompt.md")
+        with open(prompt_path, "w", encoding="utf-8") as handle:
+            handle.write(PROMPT.format(
+                ref="selftest", url="a pr-review self-test, not a real pull request", head="(not a commit)",
+                base="dev", title="fix: apply the discount", body="(empty)", notes="", diff=SELFTEST_DIFF,
+            ))
+        names = ", ".join(reviewer["name"] for reviewer in reviewers)
+        print(f"Testing the reviewers {names}; results in {work}", flush=True)
+        timeout = min(config["timeout"], SELFTEST_TIMEOUT)
+        results = run_reviewers(dict(config, reviewers=reviewers, timeout=timeout), prompt_path, tree, work,
+                                os.path.join(temporary, "home"))
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+    failed = False
+    for name, result in results.items():
+        reviewer = result["reviewer"]
+        label = f"{name} ({reviewer['client']} {reviewer['model']} {reviewer['effort']})"
+        if result["status"] == "ok":
+            print(f"{label}: ok")
+        else:
+            failed = True
+            result["reason"] = failure_reason(result)
+            print(f"{label}: {result['status']}: {result['reason'] or 'no reason reported'}")
+    with open(status_path, "w", encoding="utf-8") as handle:
+        json.dump({"finished": time.time(), "ok": not failed, "fingerprint": fingerprint, "reviewers": results},
+                  handle, indent=2)
+    if failed:
+        print("pr-review cannot complete reviews until this is fixed; a real run would fail the same way.")
+    return 1 if failed else 0
 
 
 def cmd_comment(args):
@@ -2948,6 +3160,12 @@ def main(argv=None):
                              help="review with the deep reviewers even when light ones would be chosen")
         if name == "comment":
             sub.add_argument("outcome", help='for example "no blocking findings." or "skipped (<reason>)"')
+    selftest = commands.add_parser("selftest", help="run every configured reviewer on a built-in change and "
+                                                    "report why any of them failed")
+    selftest.add_argument("--if-stale", type=float, metavar="HOURS",
+                          help="skip when the last self-test used the same clients and reviewers and is younger "
+                               "than HOURS")
+    selftest.set_defaults(handler=cmd_selftest)
     commands.add_parser("guard", help="PreToolUse hook for agent merges").set_defaults(handler=cmd_guard)
     args = parser.parse_args(argv)
     try:

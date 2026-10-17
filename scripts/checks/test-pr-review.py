@@ -6,6 +6,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1293,6 +1294,7 @@ with tempfile.TemporaryDirectory() as tmp:
     pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\ncat >/dev/null\necho '{\"result\": \"Verdict: unable to review\"}'\n")
     code, output = cli("run", "4", "--force")
     assert code == 1 and "opus: failed" in output, output
+    assert "Reason: replied without a verdict: Verdict: unable to review" in output, output
     code, output = cli("comment", "4", "no findings.")
     assert code == 1 and "by opus;" in output, output
     # A malformed JSON result is a failed review, not a crash, and the other
@@ -1875,6 +1877,184 @@ with tempfile.TemporaryDirectory() as tmp:
 commits = [{"sha": f"{index:040x}", "message": message.encode()} for index, message in enumerate(
     ("feat: a\n", "fixup! nothing\n", "feat: b\n", "fixup! feat: a\n", "fixup! feat\n", "fixup! fixup! feat: a\n"))]
 assert review.autosquash_order(commits) == [[0, 3, 4, 5], [1], [2]], review.autosquash_order(commits)
+
+# selftest runs every deep and light reviewer on a built-in change and reports
+# why a client failed, in the client's words.
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = os.path.realpath(tmp)
+    bin_dir = os.path.join(tmp, "bin")
+    os.makedirs(bin_dir)
+    calls = os.path.join(tmp, "calls")
+    # Codex's sandbox denies /tmp, so the checkout must sit in the state directory like a real run's.
+    in_work = 'case "$PWD" in "$XDG_STATE_HOME"/pr-review/work/*) ;; *) exit 11;; esac; '
+    good = {
+        "codex": in_work + 'cat >/dev/null; echo codex >>"$SELFTEST_CALLS"; test -f price.py || exit 1; '
+                 'while [ "$1" != -o ]; do shift; done; echo "Verdict: blocking findings" >"$2"',
+        "claude": in_work + 'cat >/dev/null; echo claude >>"$SELFTEST_CALLS"; grep -q "discount / 10)" price.py || exit 1; '
+                  'printf \'{"result": "Verdict: blocking findings\\\\n1. price.py:3"}\'',
+    }
+
+    def client(name, body):
+        path = os.path.join(bin_dir, name)
+        pathlib.Path(path).write_text(f"#!/bin/sh\n{body}\n")
+        os.chmod(path, 0o755)
+
+    def selftest(*argv):
+        out, err = io.StringIO(), io.StringIO()
+        sys.stdout, sys.stderr = out, err
+        try:
+            return review.main(["selftest", *argv]), out.getvalue() + err.getvalue()
+        finally:
+            sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__
+
+    def call_count():
+        return len(pathlib.Path(calls).read_text().split()) if os.path.exists(calls) else 0
+
+    config = {
+        "timeout": 20,
+        "reviewers": [
+            {"name": "gpt", "client": "codex", "model": "m", "effort": "high"},
+            {"name": "opus", "client": "claude", "model": "m", "effort": "high"},
+        ],
+        # The same Codex reviewer is tested once; the cheaper Claude one too.
+        "light_reviewers": [
+            {"name": "gpt", "client": "codex", "model": "m", "effort": "high"},
+            {"name": "opus", "client": "claude", "model": "m", "effort": "low"},
+        ],
+    }
+    config_path = os.path.join(tmp, "config.json")
+    pathlib.Path(config_path).write_text(json.dumps(config))
+    # Never fall through to real clients on the developer's PATH.
+    system_path = [entry for entry in os.environ["PATH"].split(os.pathsep)
+                   if not any(os.path.exists(os.path.join(entry, name)) for name in ("claude", "codex"))]
+    environment = {
+        "PATH": os.pathsep.join([bin_dir, *system_path]), "XDG_STATE_HOME": os.path.join(tmp, "state"),
+        "PR_REVIEW_CONFIG": config_path, "SELFTEST_CALLS": calls,
+    }
+    status_path = os.path.join(tmp, "state", "pr-review", "selftest", "status.json")
+    with patch.dict(os.environ, environment):
+        for name, body in good.items():
+            client(name, body)
+        code, output = selftest()
+        assert code == 0, output
+        assert sorted(json.loads(pathlib.Path(status_path).read_text())["reviewers"]) == \
+            ["deep-gpt", "deep-opus", "light-opus"], output
+        assert "deep-opus (claude m high): ok" in output and "light-opus (claude m low): ok" in output, output
+        assert call_count() == 3, call_count()
+
+        # --if-stale skips a recent result for the same reviewers and clients...
+        code, output = selftest("--if-stale", "24")
+        assert code == 0 and "skipping" in output and call_count() == 3, output
+        # ...but not after a client changes (a release is a new store path),
+        release = os.path.join(tmp, "release")
+        os.makedirs(release)
+        shutil.copy2(os.path.join(bin_dir, "claude"), release)
+        os.environ["PATH"] = release + os.pathsep + os.environ["PATH"]
+        code, output = selftest("--if-stale", "24")
+        assert code == 0 and "skipping" not in output and call_count() == 6, output
+        os.environ["PATH"] = environment["PATH"]
+        # a reviewer changes,
+        config["reviewers"][0]["effort"] = "xhigh"
+        pathlib.Path(config_path).write_text(json.dumps(config))
+        code, output = selftest("--if-stale", "24")
+        assert code == 0 and call_count() == 10, output
+        # or the result gets old.
+        status = json.loads(pathlib.Path(status_path).read_text())
+        status["finished"] -= 25 * 3600
+        pathlib.Path(status_path).write_text(json.dumps(status))
+        code, output = selftest("--if-stale", "24")
+        assert code == 0 and call_count() == 14, output
+        config["reviewers"][0]["effort"] = "high"
+        pathlib.Path(config_path).write_text(json.dumps(config))
+
+        # A failed sign-in is reported as the client put it, and fails the test.
+        client("claude", 'cat >/dev/null; printf \'{"type":"result","is_error":true,'
+                         '"result":"Failed to authenticate: OAuth session expired"}\'; exit 1')
+        code, output = selftest()
+        assert code == 1, output
+        assert "deep-opus (claude m high): failed: Failed to authenticate: OAuth session expired" in output, output
+        assert "deep-gpt (codex m high): ok" in output, output
+        status = json.loads(pathlib.Path(status_path).read_text())
+        assert status["ok"] is False and "OAuth" in status["reviewers"]["deep-opus"]["reason"], status
+        # A recent failure is skipped too, so a timer notifies once per change or day.
+        code, output = selftest("--if-stale", "24")
+        assert code == 0 and "failed" in output and "skipping" in output, output
+
+        # Claude can report its errors in `errors` without a `result`.
+        client("claude", 'cat >/dev/null; printf \'{"type":"result","subtype":"error_during_execution",'
+                         '"is_error":true,"errors":["API Error: 529 overloaded"]}\'; exit 1')
+        code, output = selftest()
+        assert code == 1 and "deep-opus (claude m high): failed: API Error: 529 overloaded" in output, output
+
+        # An option a new client no longer knows shows up as its stderr, even
+        # when usage text follows the error.
+        client("claude", good["claude"])
+        client("codex", "cat >/dev/null; echo \"error: unexpected argument '--ignore-rules' found\" >&2; "
+                        "echo 'Usage: codex exec [OPTIONS]' >&2; echo \"For more information, try '--help'.\" >&2; exit 2")
+        code, output = selftest()
+        assert code == 1 and "deep-gpt (codex m high): failed: error: unexpected argument '--ignore-rules' found" in output, output
+
+        # A held lock is a skip for the timer, so it raises no false alarm, but
+        # an error for a manual run.
+        import fcntl
+        lock_path = os.path.join(tmp, "state", "pr-review", "selftest", "lock")
+        with open(lock_path, "w") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            status = json.loads(pathlib.Path(status_path).read_text())
+            status["finished"] -= 25 * 3600
+            pathlib.Path(status_path).write_text(json.dumps(status))
+            code, output = selftest("--if-stale", "24")
+            assert code == 0 and "already" not in output and "running; skipping" in output, output
+            code, output = selftest()
+            assert code == 1 and "another pr-review selftest is running" in output, output
+
+        # Codex's JSON error events count as the reason: the last one, since earlier ones may have been retried.
+        client("codex", 'cat >/dev/null; printf \'{"type":"error","message":"Reconnecting... 1/5"}\\n'
+                        '{"type":"turn.failed","error":{"message":"Selected model is at capacity."}}\\n\'; exit 1')
+        code, output = selftest()
+        assert code == 1 and "failed: Selected model is at capacity." in output, output
+
+        # A reply without a verdict is not a review, whatever notices or retried errors came before it.
+        client("codex", 'cat >/dev/null; echo "Reading prompt from stdin..." >&2; '
+                        'printf \'{"type":"error","message":"Reconnecting... 1/5"}\\n\'; '
+                        'while [ "$1" != -o ]; do shift; done; echo "I could not open the file." >"$2"')
+        client("claude", "cat >/dev/null; printf '{\"result\": \"I could not open the file.\"}'")
+        code, output = selftest()
+        assert code == 1 and "deep-opus (claude m high): failed: replied without a verdict: I could not open the file." in output, output
+        assert "deep-gpt (codex m high): failed: replied without a verdict" in output, output
+
+        # A result pr-review cannot parse is named as such, not as a reply without a verdict.
+        client("claude", "cat >/dev/null; printf '{\"answer\": \"Verdict: no findings\"}'")
+        code, output = selftest()
+        assert code == 1 and "deep-opus (claude m high): failed: cannot read the reviewer result: no string result" in output, output
+
+        # Sign-in failures worded without "error" still count as the reason.
+        client("codex", 'cat >/dev/null; echo "Not logged in. Please run codex login" >&2; echo "Bye." >&2; exit 1')
+        code, output = selftest()
+        assert code == 1 and "deep-gpt (codex m high): failed: Not logged in. Please run codex login" in output, output
+
+        # A crash after a notice reports the exit status, not the notice.
+        client("codex", 'cat >/dev/null; echo "Reading prompt from stdin..." >&2; exit 137')
+        code, output = selftest()
+        assert code == 1 and "deep-gpt (codex m high): failed: exited with status 137" in output, output
+
+        # A missing client is reported, not a crash.
+        os.remove(os.path.join(bin_dir, "claude"))
+        code, output = selftest()
+        assert code == 1 and "deep-opus (claude m high): failed: cannot start claude" in output, output
+
+        # A stalled client times out within the configured limit.
+        client("claude", good["claude"])
+        client("codex", "sleep 30")
+        config["timeout"] = 1
+        pathlib.Path(config_path).write_text(json.dumps(config))
+        started = time.monotonic()
+        code, output = selftest()
+        assert time.monotonic() - started < 10, output
+        assert code == 1 and "deep-gpt (codex m high): timeout: no reply within" in output, output
+
+assert review.failure_reason({"status": "failed", "exit": 3, "seconds": 1, "reviewer": {"client": "codex"},
+                              "output": "/nonexistent/gpt.md"}) == "exited with status 3"
 
 os.environ.pop("PR_REVIEW_CONFIG", None)  # its temporary file is gone
 subprocess.run([sys.executable, str(ROOT / "scripts/checks/test-pr-review-substitutions.py")], check=True)
