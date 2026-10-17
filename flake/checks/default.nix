@@ -775,17 +775,22 @@ in {
       sshHost = "ssh.forge.example.invalid";
     };
     fakeForgeMirror = pkgs.writeShellScriptBin "forge-mirror" ''exec "$AGENT_FORGE_TEST_HELPER" "$@"'';
-    off = self.homeConfigurations.alc-xyz;
+    # xyz enables the account privately, so both fixtures override it: off with
+    # mkForce, on with a stronger priority over that.
+    off = self.homeConfigurations.alc-xyz.extendModules {
+      modules = [{programs.ai.agentForge.enable = lib.mkForce false;}];
+    };
     on =
       (off.extendModules {
         modules = [
           {
-            programs.ai.agentForge =
+            programs.ai.agentForge = lib.mapAttrs (_: lib.mkOverride 40) (
               dummy
               // {
                 enable = true;
                 package = fakeForgeMirror;
-              };
+              }
+            );
           }
         ];
       }).config;
