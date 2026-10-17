@@ -94,11 +94,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791762177,
-        "narHash": "sha256-WEGFr3n6lXsDKRpjknh0hTcwTGW+Ew+Yr3pMaNBmkTw=",
+        "lastModified": 1792277222,
+        "narHash": "sha256-RHedE4Af4vIXh1jhUfTND57qEOi26HvTOhxlL514g3U=",
         "owner": "alcxyz",
         "repo": "bivrost",
-        "rev": "900d2363f62e0156ca15c4bf2c59171852fa8341",
+        "rev": "05080023016af14d9e7e0f9d3b9025e145bf0afe",
         "type": "github"
       },
       "original": {
@@ -152,15 +152,15 @@
       "locked": {
         "lastModified": 1770921929,
         "narHash": "sha256-bhV22bL38CJp58Y8tCY8sEBRYxmuk671fEymmdg0Yuk=",
-        "owner": "alcxyz",
+        "owner": "rochacbruno",
         "repo": "DankCalculator",
         "rev": "07d7c123a5aee9ac4fd4347bbae36d5957b021f9",
         "type": "github"
       },
       "original": {
-        "owner": "alcxyz",
-        "ref": "main",
+        "owner": "rochacbruno",
         "repo": "DankCalculator",
+        "rev": "07d7c123a5aee9ac4fd4347bbae36d5957b021f9",
         "type": "github"
       }
     },
@@ -364,11 +364,11 @@
         "worldclock": "worldclock"
       },
       "locked": {
-        "lastModified": 1791762234,
-        "narHash": "sha256-sTME7n35lQChTqJQWzwxV4mTK0hROBsG6Y0I0CcbBo0=",
+        "lastModified": 1792254444,
+        "narHash": "sha256-h0uM1vaOH6KbssCcpQlSu3JwwWes8dTmE7cpy/zB68c=",
         "owner": "alcxyz",
         "repo": "dms-plugins",
-        "rev": "a3e1e43984f7ecc0eb89997a21f6966597b89290",
+        "rev": "e89b54534e60d0c83e1634a038f4ca4663914970",
         "type": "github"
       },
       "original": {
@@ -411,6 +411,7 @@
       "original": {
         "owner": "AvengeMedia",
         "repo": "dms-plugins",
+        "rev": "a8a508bc371e7c3f2c7862d8840b88cf5c63978f",
         "type": "github"
       }
     },
@@ -1129,11 +1130,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1792267442,
-        "narHash": "sha256-uocKIPl1DpU+yUEDvtRl+K3m0s1amvRNL6yRScJKd2Y=",
+        "lastModified": 1792279833,
+        "narHash": "sha256-6F07LgYYcjka+jgt9bj7oTj5KB3U/IPssyqLwP8Uk7o=",
         "ref": "dev",
-        "rev": "c13f11d0cf3a5fb8de0f421f293ea0e6d8029a84",
-        "revCount": 793,
+        "rev": "d96af4f6004fe6d6144036552bc718b466560daf",
+        "revCount": 794,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1626,15 +1627,15 @@
       "locked": {
         "lastModified": 1786173229,
         "narHash": "sha256-TjX+mcEdbl///VGCkjD2Cve17SBTV0PRbyEE8P0WbI4=",
-        "owner": "alcxyz",
+        "owner": "JDKamalakar",
         "repo": "DMS-Screenshot",
         "rev": "663eecc48d8532143c5995148aa561122d6bfd7e",
         "type": "github"
       },
       "original": {
-        "owner": "alcxyz",
-        "ref": "main",
+        "owner": "JDKamalakar",
         "repo": "DMS-Screenshot",
+        "rev": "663eecc48d8532143c5995148aa561122d6bfd7e",
         "type": "github"
       }
     },
@@ -2001,15 +2002,15 @@
       "locked": {
         "lastModified": 1772134198,
         "narHash": "sha256-g1MB9gzYQYvn0LuGSbwAzqParC6XOKJK8PtttsdwF14=",
-        "owner": "alcxyz",
+        "owner": "rochacbruno",
         "repo": "WorldClock",
         "rev": "061752535b5b38f8290edb7108a25cb5f779d405",
         "type": "github"
       },
       "original": {
-        "owner": "alcxyz",
-        "ref": "main",
+        "owner": "rochacbruno",
         "repo": "WorldClock",
+        "rev": "061752535b5b38f8290edb7108a25cb5f779d405",
         "type": "github"
       }
     },
