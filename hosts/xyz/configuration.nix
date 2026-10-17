@@ -202,12 +202,21 @@ in {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
       # Preserve the manual canary workflow while jobs adopt the shared label.
-      # ci-fast serves opted-in jobs on the fastest host (ADR-0097).
+      # ci-fast serves opted-in jobs on the fastest host (ADR-0097); this
+      # pool runner keeps it as overflow beside the dedicated xyz-fast runner.
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
         "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
+      sharedLabels = ["ci-fast"];
+      # A ci-fast slot pool jobs cannot take; fast jobs may still start in a
+      # free pool slot, since whichever runner polls first takes the job.
+      # Up to five jobs now share the build slice's budget.
+      extraRunners.fast = {
+        labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
+        capacity = 1;
+      };
     };
     name = "xyz";
     capacity = 2;

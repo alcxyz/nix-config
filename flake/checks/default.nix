@@ -164,6 +164,14 @@ in {
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedCapacity.${host}) (lib.attrNames runners);
+    # Only xyz has a dedicated ci-fast runner, beside ci-fast overflow on its
+    # pool runner (ADR-0097).
+    assert lib.attrNames runners.xyz.podmanCanary.extraRunners == ["fast"];
+    assert runners.xyz.podmanCanary.extraRunners.fast.capacity == 1;
+    assert runners.xyz.podmanCanary.extraRunners.fast.name == "xyz-fast";
+    assert hasLabel "ci-fast" runners.xyz.podmanCanary.extraRunners.fast;
+    assert hasLabel "ci-fast" runners.xyz.podmanCanary;
+    assert lib.all (host: runners.${host}.podmanCanary.extraRunners == {}) ["xev" "nex" "nux"];
     assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
     assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
     assert lib.all (hasLabel "docker") (lib.attrValues runners);
