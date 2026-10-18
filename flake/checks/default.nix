@@ -1180,6 +1180,10 @@ in {
       && builtins.elem home.pkgs.bivrost home.config.home.packages)
     operatorHomes;
     assert lib.all (home: home.config.programs.bnBootstrap.boards.enable) operatorHomes;
+    # Work groups for backlog-inventory --scope come from bn-bootstrap (ADR-0093),
+    # on the operator homes that have the backlog tools.
+    assert lib.all (home: (home.options.programs.ai or {}) ? backlog -> home.config.programs.ai.backlog.scopeFile != null) operatorHomes;
+    assert lib.all (home: (home.config.programs.ai.backlog.scopeFile or null) == null) nonOperatorHomes;
     assert lib.all (home: !(home.options.programs.bnBootstrap ? bullet)) operatorHomes;
     assert lib.all (home: !(home.options.programs.bnBootstrap ? cli)) operatorHomes;
     assert lib.all (home: home.config.programs.kubernetes.managed.enable) operatorHomes;

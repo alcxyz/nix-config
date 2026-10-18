@@ -5,6 +5,7 @@
 }: {
   imports = [
     ../kubernetes-labs.nix
+    inputs.bn-bootstrap.homeManagerModules.backlog
     inputs.bn-bootstrap.homeManagerModules.boards
     inputs.bn-bootstrap.homeManagerModules.bivrost
     inputs.nix-secrets.homeManagerModules.linuxOperator

@@ -22,6 +22,7 @@ in {
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/programs/karabiner/default.nix"
     "${configDir}/modules/home-manager/programs/moonlight-endpoints/default.nix"
+    inputs.bn-bootstrap.homeManagerModules.backlog
     inputs.bn-bootstrap.homeManagerModules.boards
     inputs.bn-bootstrap.homeManagerModules.bivrost
     inputs.nix-secrets.homeManagerModules.darwinOperator
