@@ -45,12 +45,16 @@ STATUS_RE = re.compile(r"\*\*Status \((\d{4}-\d{2}-\d{2})\):?\*\*:?")
 STATUS_FIELD_RE = re.compile(r"\b(Next|Owner):\s*(.+?)(?=\s+\b(?:Decided|Next|Owner):|$)", re.S)
 CHECKBOX_RE = re.compile(r"^\s*[-*] \[([ xX])\]", re.M)
 CLOSING = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
+# A word before `#N` ("other-repo #N", "other-repo#N") names a repository when one by that name is known.
 REF_RE = re.compile(
     rf"(?:\b(?P<kw>{CLOSING})\s*:?\s+)?"
     r"(?:(?P<url>https?://(?P<host>[\w.:-]+)/(?P<o1>[\w.-]+)/(?P<r1>[\w.-]+)/issues/(?P<n1>\d+))"
-    r"|(?<![\w/])(?:(?P<o2>[\w.-]+)/(?P<r2>[\w.-]+))?#(?P<n2>\d+)\b)",
+    r"|(?<![\w/])(?:(?P<o2>[\w.-]+)/(?P<r2>[\w.-]+)|(?P<word>[\w.-]*\w)(?P<gap>[ \t]*))?#(?P<n2>\d+)\b)",
     re.I,
 )
+# A Markdown link's text names what its URL names: "[other-repo #14](https://…/other-repo/pulls/14)".
+MD_LINK_RE = re.compile(r"\[[^\]\n]*\]\((https?://[^)\s]+)(?:\s+\"[^\"\n]*\"|\s+'[^'\n]*'|\s+\([^()\n]*\))?\)")
+ISSUE_URL_RE = re.compile(r"https?://(?P<host>[\w.:-]+)/(?P<owner>[\w.-]+)/(?P<name>[\w.-]+)/issues/(?P<number>\d+)")
 # Links to an issue or pull request in another repository, on either forge.
 LINK_RE = re.compile(
     r"https?://(?P<host>[\w.:-]+)/(?P<o1>[\w.-]+)/(?P<r1>[\w.-]+)/(?:issues|pulls|pull)/(?P<n1>\d+)"
@@ -162,16 +166,52 @@ def checkboxes(body):
     return {"done": sum(1 for m in marks if m != " "), "total": len(marks)} if marks else None
 
 
-def references(text, repo, host):
-    """Issue references in a PR's title and body: {(repo, number): closes}."""
+def repo_names(full_names, names=None):
+    """Known repositories by bare name: {name.lower(): {"owner/name": "OWNER/NAME"}}.
+
+    Names that differ only in case are one repository; the first spelling added is kept."""
+    names = {} if names is None else names
+    for full in full_names:
+        names.setdefault(full.split("/")[-1].lower(), {}).setdefault(full.lower(), full)
+    return names
+
+
+def resolve_name(word, repo, names):
+    """The repository a bare name stands for: the source's own, else one of the source owner's, else a unique one.
+
+    None when no repository has the name, "" when several do."""
+    if repo and word.lower() == repo.split("/")[1].lower():
+        return repo
+    found = sorted(names.get(word.lower(), {}).values())
+    owner = repo.split("/")[0].lower() if repo else None
+    same = [n for n in found if n.split("/")[0].lower() == owner]
+    if len(same) == 1:
+        return same[0]
+    if len(found) == 1:
+        return found[0]
+    return "" if found else None
+
+
+def references(text, repo, host, names=None):
+    """Issue references in a text: {(repo, number): closes}. A plain #N is the source repository's, unless
+    `repo` is None; "other-repo #N" is other-repo's when `names` knows it, and "word#N" counts only then."""
     found = {}
-    for match in REF_RE.finditer(text or ""):
+    for match in REF_RE.finditer(MD_LINK_RE.sub(r"\1", text or "")):
         if match.group("url"):
             if match.group("host") != host:
                 continue
             target = (f"{match.group('o1')}/{match.group('r1')}", int(match.group("n1")))
+        elif match.group("o2"):
+            target = (f"{match.group('o2')}/{match.group('r2')}", int(match.group("n2")))
         else:
-            other = f"{match.group('o2')}/{match.group('r2')}" if match.group("o2") else repo
+            other = repo
+            if match.group("word"):
+                named = resolve_name(match.group("word"), repo, names or {})
+                if named == "" or (named is None and not match.group("gap")):
+                    continue  # several repositories have the name, or "word#N" names none
+                other = named or repo
+            if not other:
+                continue
             target = (other, int(match.group("n2")))
         found[target] = found.get(target, False) or bool(match.group("kw"))
     return found
@@ -259,6 +299,7 @@ def issue_row(forge, repo, raw, now, ref, host):
         "status": status_line(body, now),
         "openPrs": [],
         "mergedPrs": [],
+        "thread": None,
         "dashboard": is_bot(raw["user"]["login"]) and "dashboard" in raw["title"].lower(),
         "createdAt": raw["created_at"],
         "links": links(f"{raw['title']}\n{body}", forge, repo, host),
@@ -289,7 +330,7 @@ def issue_lane(issue, stale_days, now):
         lane = "dashboard"
     elif any(pr["closes"] for pr in issue["mergedPrs"]) or (checks and checks["done"] == checks["total"]):
         lane = "close"
-    elif issue["openPrs"]:
+    elif issue["openPrs"] or issue["thread"]:
         lane = "inflight"
     elif issue["idleDays"] >= stale_days:
         lane = "stale"
@@ -353,21 +394,52 @@ def pr_kind(author, user, upstream=False):
     return "own" if author == user else "other"
 
 
+def thread_info(thread):
+    return {"threadId": thread["threadId"], "title": short(thread.get("title"), TITLE_MAX),
+            "bucket": thread.get("bucket"), "status": thread.get("status")}
+
+
 def load_threads(path):
-    """Map PR URLs to the T3 thread that holds them (t3-thread-inventory output)."""
+    """t3-thread-inventory output: PR URLs mapped to the thread holding each, and the live threads."""
     if not path:
-        return None
+        return None, []
     with open(path, encoding="utf-8") as handle:
         report = json.load(handle)
-    held = {}
+    held, live = {}, []
     # Unsettled threads come first in the inventory, so they win a shared PR.
     for thread in report.get("threads", []):
         for pr in thread.get("prs") or []:
             url = (pr.get("url") or "").rstrip("/")
             if url and url not in held:
-                held[url] = {"threadId": thread["threadId"], "title": short(thread.get("title"), TITLE_MAX),
-                             "bucket": thread.get("bucket"), "status": thread.get("status")}
-    return held
+                held[url] = thread_info(thread)
+        if thread.get("bucket") == "unsettled":
+            live.append(thread)
+    return held, live
+
+
+def thread_issues(live, user, names, host):
+    """Issues a live thread's title names, as "#N" in its project's repository, "other-repo #N" or an issue
+    URL on either forge: {(forge, repo.lower(), number): thread}, where forge is None unless a URL says it.
+    The first live thread that names an issue holds it."""
+    named = {}
+    for thread in live:
+        project = resolve_name(thread.get("project") or "", None, names) if thread.get("project") else None
+        # A project with several repositories of its name is the user's own, if one of them is.
+        if project == "":
+            project = next((n for n in sorted(names.get(thread["project"].lower(), {}).values())
+                            if n.split("/")[0].lower() == user.lower()), None)
+        title = MD_LINK_RE.sub(r"\1", thread.get("title") or "")
+        found = []
+        for match in ISSUE_URL_RE.finditer(title):
+            forge = {host.lower(): "forgejo", "github.com": "github", "www.github.com": "github"}.get(
+                match.group("host").lower())
+            if forge:
+                found.append((forge, f"{match.group('owner')}/{match.group('name')}", int(match.group("number"))))
+        found += [(None, repo, number) for repo, number in references(ISSUE_URL_RE.sub(" ", title), project or None,
+                                                                     host, names)]
+        for forge, repo, number in found:
+            named.setdefault((forge, repo.lower(), number), thread_info(thread))
+    return named
 
 
 def load_groups(path):
@@ -432,8 +504,9 @@ def collect_forgejo(api, now, merged_days, threads, scope):
     # one. The value says whether it is a mirror: a GitHub repository with the name of a Forgejo-first
     # one is its push mirror, whose issues live here.
     readable = {r["full_name"].lower(): bool(r["mirror"]) for r in listed}
+    names = repo_names(r["full_name"] for r in listed)
     if not active:
-        return user, active, [], [], mirrors, missing, covered, readable
+        return user, active, [], [], mirrors, missing, covered, readable, names
 
     issues = {}
     for raw in api.pages("/repos/issues/search", {"state": "open", "type": "issues"}):
@@ -447,7 +520,7 @@ def collect_forgejo(api, now, merged_days, threads, scope):
         merged = (raw.get("pull_request") or {}).get("merged_at")
         if repo not in active or not merged or parse_time(merged) < parse_time(since):
             continue
-        for target, closes in references(f"{raw['title']}\n{raw.get('body') or ''}", repo, api.host).items():
+        for target, closes in references(f"{raw['title']}\n{raw.get('body') or ''}", repo, api.host, names).items():
             issue = issues.get(target)
             if issue and parse_time(merged) >= parse_time(issue["createdAt"]):
                 issue["mergedPrs"].append({"ref": f"{repo}#{raw['number']}", "url": raw["html_url"],
@@ -472,7 +545,7 @@ def collect_forgejo(api, now, merged_days, threads, scope):
             statuses = [s.get("status") for s in status.get("statuses") or []]
             ref = f"{repo}#{pull['number']}"
             text = f"{pull['title']}\n{pull.get('body') or ''}"
-            refs = references(text, repo, api.host)
+            refs = references(text, repo, api.host, names)
             for target in refs:
                 if target in issues:
                     issues[target]["openPrs"].append(ref)
@@ -490,7 +563,7 @@ def collect_forgejo(api, now, merged_days, threads, scope):
                 "thread": (threads or {}).get(pull["html_url"].rstrip("/")),
             })
 
-    return user, active, list(issues.values()), prs, mirrors, missing, covered, readable
+    return user, active, list(issues.values()), prs, mirrors, missing, covered, readable, names
 
 
 def merged_since(name, since):
@@ -505,7 +578,7 @@ def merged_since(name, since):
         page += 1
 
 
-def collect_github(mirrors, explicit, upstream, now, threads, since, forgejo_host):
+def collect_github(mirrors, explicit, upstream, now, threads, since, forgejo_host, forgejo_names):
     """Issues and PRs of GitHub-first repositories and scoped GitHub repositories, and the user's PRs elsewhere."""
     user = gh("api", "user")["login"]
     names = {name.lower(): name for name in sorted(explicit)}
@@ -551,10 +624,13 @@ def collect_github(mirrors, explicit, upstream, now, threads, since, forgejo_hos
                     ref = f"gh:{name}#{raw['number']}"
                     issues[(name, raw["number"])] = issue_row("github", name, raw, now, ref, forgejo_host)
             merged_prs += [(name, pull) for pull in merged]
+    # A bare repository name may stand for a repository on either forge.
+    known = repo_names(metas)
+    repo_names((full for spellings in forgejo_names.values() for full in spellings.values()), known)
     # Join only once every repository's issues are known: a PR may name another repository's issue.
     for name, pull in merged_prs:
         text = f"{pull['title']}\n{pull.get('body') or ''}"
-        for target, closes in references(text, name, "github.com").items():
+        for target, closes in references(text, name, "github.com", known).items():
             issue = issues.get(target)
             if issue and parse_time(pull["merged_at"]) >= parse_time(issue["createdAt"]):
                 issue["mergedPrs"].append({"ref": f"gh:{name}#{pull['number']}", "url": pull["html_url"],
@@ -582,7 +658,7 @@ def collect_github(mirrors, explicit, upstream, now, threads, since, forgejo_hos
         for name, upstream, pull, kind, comments in pool.map(detail, open_prs):
             ref = f"gh:{name}#{pull['number']}"
             text = f"{pull['title']}\n{pull.get('body') or ''}"
-            refs = references(text, name, "github.com")
+            refs = references(text, name, "github.com", known)
             for target in refs:
                 if target in issues:
                     issues[target]["openPrs"].append(ref)
@@ -617,6 +693,8 @@ def collect_related(api, rows, covered, readable, limit, github):
     existing = {row["ref"].lower() for row in rows}
     targets = {}
     for row in rows:
+        if is_bot(row["author"]):
+            continue  # release notes in Renovate's PRs and dashboard link upstream items unrelated to the work
         picked = 0
         for forge, repo, number in sorted(row["links"]):
             ref = item_ref(forge, repo, number)
@@ -657,27 +735,40 @@ def kept_branch(name, default):
 
 
 def branch_row(forge, repo, name, last_commit, pr, now, branch_days):
-    """A leftover branch, or None when it is kept, has an open PR or is still recent without one."""
+    """A leftover branch, or why it is skipped: "recent" without a PR, or "open-pr"."""
     if pr is None:
         idle = days_since(now, last_commit)
         if idle is None or idle < branch_days:
-            return None
+            return "recent"
         lane = "no-pr"
     elif pr["state"] in {"merged", "closed"}:
         lane = pr["state"]
     else:
-        return None
+        return "open-pr"
     prefix = "gh:" if forge == "github" else ""
     return {"ref": f"{prefix}{repo}@{name}", "forge": forge, "repo": repo, "branch": name, "lane": lane,
             "lastCommitAt": last_commit, "idleDays": days_since(now, last_commit), "pr": pr}
 
 
+def tally(skipped, reason):
+    skipped[reason] = skipped.get(reason, 0) + 1
+
+
 def forgejo_branches(api, name, repo, now, branch_days):
     branches = api.pages(f"/repos/{name}/branches", {}, cap=BRANCHES_PER_REPO)
     default = repo.get("default_branch")
-    candidates = [b for b in branches[:BRANCHES_PER_REPO] if not b.get("protected") and not kept_branch(b["name"], default)]
+    read, skipped = branches[:BRANCHES_PER_REPO], {}
+    candidates = []
+    for branch in read:
+        if branch.get("protected"):
+            tally(skipped, "protected")
+        elif kept_branch(branch["name"], default):
+            tally(skipped, "kept")
+        else:
+            candidates.append(branch)
+    cut = len(branches) > BRANCHES_PER_REPO
     if not candidates:
-        return [], len(branches) > BRANCHES_PER_REPO
+        return [], cut, len(read), skipped
     # Every PR is read: an old branch's PR may be among the oldest, and missing it would make the branch look PR-less.
     latest, open_heads = {}, set()
     for pull in api.pages(f"/repos/{name}/pulls", {"state": "all"}):
@@ -692,29 +783,42 @@ def forgejo_branches(api, name, repo, now, branch_days):
     rows = []
     for branch in candidates:
         if branch["name"] in open_heads:
-            continue  # its open PR has a row of its own
+            tally(skipped, "open-pr")  # its open PR has a row of its own
+            continue
         pull = latest.get(branch["name"])
         pr = None
         if pull:
             state = "merged" if pull.get("merged") else pull.get("state")
-            pr = {"ref": f"{name}#{pull['number']}", "state": state,
+            pr = {"ref": f"{name}#{pull['number']}", "state": state, "head": (pull.get("head") or {}).get("sha"),
                   "at": pull.get("merged_at") if state == "merged" else pull.get("closed_at")}
-        row = branch_row("forgejo", name, branch["name"], (branch.get("commit") or {}).get("timestamp"), pr, now, branch_days)
-        if row:
-            rows.append(row)
-    return rows, len(branches) > BRANCHES_PER_REPO
+        commit = branch.get("commit") or {}
+        row = branch_row("forgejo", name, branch["name"], commit.get("timestamp"), pr, now, branch_days)
+        if isinstance(row, str):
+            tally(skipped, row)
+            continue
+        row.update({"head": commit.get("id"), "ahead": None, "aheadOf": default})
+        if default:
+            try:
+                compare = api.get(f"/repos/{name}/compare/{urllib.parse.quote(default, safe='')}"
+                                  f"...{urllib.parse.quote(branch['name'], safe='')}")
+                row["ahead"] = compare.get("total_commits")
+            except Fail:
+                pass  # unknown, not fatal: the row says so with a null
+        rows.append(row)
+    return rows, cut, len(read), skipped
 
 
-GITHUB_BRANCHES = """query($owner: String!, $name: String!) {
+GITHUB_BRANCHES = """query($owner: String!, $name: String!, $base: String!) {
   repository(owner: $owner, name: $name) {
     defaultBranchRef { name }
     refs(refPrefix: "refs/heads/", first: 100) {
       totalCount
       nodes {
         name
-        target { ... on Commit { committedDate } }
+        target { ... on Commit { oid committedDate } }
+        COMPARE
         associatedPullRequests(first: 1, orderBy: {field: UPDATED_AT, direction: DESC}) {
-          nodes { number state mergedAt closedAt }
+          nodes { number state mergedAt closedAt headRefOid }
         }
         open: associatedPullRequests(states: OPEN) { totalCount }
       }
@@ -723,58 +827,82 @@ GITHUB_BRANCHES = """query($owner: String!, $name: String!) {
 }"""
 
 
-def github_branches(name, now, branch_days):
+def github_branches(name, default, now, branch_days):
     owner, repo = name.split("/")
-    data = gh("api", "graphql", "-f", f"query={GITHUB_BRANCHES}", "-f", f"owner={owner}", "-f", f"name={repo}")
+    query = ["api", "graphql", "-f", f"owner={owner}", "-f", f"name={repo}"]
+    compare = GITHUB_BRANCHES.replace("COMPARE", "compare(headRef: $base) { behindBy }")
+    try:
+        data = gh(*query, "-f", f"base={default or 'HEAD'}", "-f", f"query={compare}")
+    except (RuntimeError, subprocess.TimeoutExpired):
+        # Comparing up to 100 branches may exceed GitHub's query limits: then the rows come without `ahead`.
+        plain = GITHUB_BRANCHES.replace("COMPARE", "").replace(", $base: String!", "")
+        data = gh(*query, "-f", f"query={plain}")
     found = data["data"]["repository"]
     default = (found.get("defaultBranchRef") or {}).get("name")
     # GraphQL shows branch protection only to admins; the REST list filters for any reader. One page is
     # read: with a full page, protection is unknown, so the repository is reported as cut and adds no rows.
     protected = {b["name"] for b in gh("api", f"repos/{name}/branches?protected=true&per_page=100")}
+    nodes = found["refs"]["nodes"]
     if len(protected) >= BRANCHES_PER_REPO:
-        return [], True
-    rows = []
-    for ref in found["refs"]["nodes"]:
-        if kept_branch(ref["name"], default) or ref["name"] in protected or ref["open"]["totalCount"]:
+        return [], True, len(nodes), {"unknown-protection": len(nodes)}
+    rows, skipped = [], {}
+    for ref in nodes:
+        if ref["name"] in protected:
+            tally(skipped, "protected")
+            continue
+        if kept_branch(ref["name"], default):
+            tally(skipped, "kept")
+            continue
+        if ref["open"]["totalCount"]:
+            tally(skipped, "open-pr")
             continue
         pulls = ref["associatedPullRequests"]["nodes"]
         pr = None
         if pulls:
             pull = pulls[0]
             state = pull["state"].lower()
-            pr = {"ref": f"gh:{name}#{pull['number']}", "state": state,
+            pr = {"ref": f"gh:{name}#{pull['number']}", "state": state, "head": pull.get("headRefOid"),
                   "at": pull.get("mergedAt") if state == "merged" else pull.get("closedAt")}
-        row = branch_row("github", name, ref["name"], (ref.get("target") or {}).get("committedDate"), pr, now, branch_days)
-        if row:
-            rows.append(row)
-    return rows, found["refs"]["totalCount"] > BRANCHES_PER_REPO
+        target = ref.get("target") or {}
+        row = branch_row("github", name, ref["name"], target.get("committedDate"), pr, now, branch_days)
+        if isinstance(row, str):
+            tally(skipped, row)
+            continue
+        # The branch is the comparison's base, so its own commits are the ones the default branch is behind by.
+        row.update({"head": target.get("oid"), "ahead": (ref.get("compare") or {}).get("behindBy"), "aheadOf": default})
+        rows.append(row)
+    return rows, found["refs"]["totalCount"] > BRANCHES_PER_REPO, len(nodes), skipped
 
 
 def collect_branches(api, forgejo_repos, github_repos, now, branch_days):
-    """Leftover remote branches in the scope's repositories; a failing repository is counted, not fatal."""
-    jobs = [("forgejo", name, repo) for name, repo in forgejo_repos.items()] + [("github", name, None) for name in github_repos]
+    """Leftover remote branches in the scope's repositories; a failing repository is counted, not fatal.
+
+    github_repos maps each GitHub repository to its default branch."""
+    jobs = ([("forgejo", name, repo) for name, repo in forgejo_repos.items()]
+            + [("github", name, default) for name, default in sorted(github_repos.items())])
 
     def run(job):
         forge, name, repo = job
         try:
             if forge == "forgejo":
                 return job, *forgejo_branches(api, name, repo, now, branch_days)
-            return job, *github_branches(name, now, branch_days)
+            return job, *github_branches(name, repo, now, branch_days)
         except (Fail, RuntimeError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
-            return job, None, False
+            return job, None, False, 0, {}
 
-    rows, failed, truncated = [], [], []
+    rows, failed, truncated, scanned = [], [], [], []
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        for (forge, name, _), found, cut in pool.map(run, jobs):
+        for (forge, name, _), found, cut, read, skipped in pool.map(run, jobs):
             label = item_ref(forge, name, 0).split("#")[0]
             if found is None:
                 failed.append(label)
                 continue
             rows += found
+            scanned.append({"repo": label, "read": read, "listed": len(found), "skipped": skipped, "truncated": cut})
             if cut:
                 truncated.append(label)
     status = "ok" if not failed else f"partial: {len(failed)} of {len(jobs)} repositories failed ({', '.join(failed[:5])})"
-    return rows, status, truncated
+    return rows, status, truncated, scanned
 
 
 def summarize(repo_rows, issues, prs, branches=()):
@@ -845,12 +973,12 @@ def main(argv=None):
 
     now = datetime.datetime.now(datetime.timezone.utc)
     try:
-        threads = load_threads(args.threads)
+        threads, live = load_threads(args.threads)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"{PROG}: cannot read --threads: {error}", file=sys.stderr)
         return 64
     try:
-        user, active, issues, prs, mirrors, missing, covered, readable = collect_forgejo(
+        user, active, issues, prs, mirrors, missing, covered, readable, names = collect_forgejo(
             api, now, args.merged_days, threads, scope)
     except Fail as error:
         print(f"{PROG}: {error}", file=sys.stderr)
@@ -864,7 +992,7 @@ def main(argv=None):
         try:
             since = now - datetime.timedelta(days=args.merged_days)
             gh_repos, gh_metas, gh_missing, gh_issues, gh_prs = collect_github(
-                mirrors, scope["github"], scope["all"], now, threads, since, api.host)
+                mirrors, scope["github"], scope["all"], now, threads, since, api.host, names)
             repo_rows.update({("github", name): row for name, row in gh_repos.items()})
             issues += gh_issues
             prs += gh_prs
@@ -878,26 +1006,37 @@ def main(argv=None):
         row["related"] = []
     github_lookups = not args.no_github and not github.startswith("error")
     related = collect_related(api, issues + prs, covered, readable, args.related, github_lookups) if args.related else []
-    closed = {item["ref"] for item in related if item["state"] in {"closed", "merged"}}
 
-    branches, branch_source, truncated = [], "skipped", []
+    branches, branch_source, truncated, scanned = [], "skipped", [], []
     if args.branches:
-        branches, branch_source, truncated = collect_branches(api, active, sorted(gh_metas), now, args.branch_days)
+        branches, branch_source, truncated, scanned = collect_branches(
+            api, active, {name: meta.get("default_branch") for name, meta in gh_metas.items()}, now, args.branch_days)
+
+    # An issue a live thread's title names is in flight, like one with an open PR.
+    repo_names(gh_metas, names)
+    named = thread_issues(live, user, names, api.host)
+    for issue in issues:
+        key = (issue["repo"].lower(), issue["number"])
+        issue["thread"] = named.get((issue["forge"], *key)) or named.get((None, *key))
 
     for issue in issues:
         issue["lane"], issue["flags"] = issue_lane(issue, args.stale_days, now)
         del issue["createdAt"], issue["dashboard"]
     for pr in prs:
         pr["lane"], pr["flags"] = pr_lane(pr, args.stale_days, threads is not None)
+    # Only when every related item that could be read is closed or merged: one still open means work goes on.
+    states = {item["ref"]: item["state"] for item in related}
     for row in issues + prs:
         del row["links"]
-        if closed.intersection(row["related"]):
+        known = [states[ref] for ref in row["related"] if states.get(ref) in {"open", "closed", "merged"}]
+        if known and all(state in {"closed", "merged"} for state in known):
             row["flags"].append("related-closed")
 
     issues.sort(key=lambda i: (i["forge"], i["repo"], i["number"]))
     prs.sort(key=lambda p: (p["forge"], p["repo"], p["number"]))
     branches.sort(key=lambda b: (b["forge"], b["repo"], b["branch"]))
     count = lambda rows: {lane: sum(1 for r in rows if r["lane"] == lane) for lane in sorted({r["lane"] for r in rows})}
+    repos = summarize(repo_rows, issues, prs, branches)
     json.dump({
         "generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "user": user,
@@ -907,15 +1046,18 @@ def main(argv=None):
                   "missing": sorted(missing)},
         "sources": {"forgejo": api.url, "github": github, "threads": "ok" if threads is not None else "none",
                     "related": "ok" if args.related else "off", "branches": branch_source},
-        "totals": {"repos": len({(r["forge"], r["repo"]) for r in issues + prs}), "issues": len(issues),
+        "totals": {"repos": len(repos), "issues": len(issues),
                    "prs": len(prs), "issueLanes": count(issues), "prLanes": count(prs),
-                   "related": len(related), "branches": len(branches), "branchLanes": count(branches)},
-        "repos": summarize(repo_rows, issues, prs, branches),
+                   "related": len(related), "branches": len(branches), "branchLanes": count(branches),
+                   "branchesRead": sum(s["read"] for s in scanned),
+                   "branchesSkipped": sum(sum(s["skipped"].values()) for s in scanned)},
+        "repos": repos,
         "issues": issues,
         "prs": prs,
         "related": related,
         "branches": branches,
         "branchesTruncated": truncated,
+        "branchScan": sorted(scanned, key=lambda s: s["repo"]),
     }, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
     return 0

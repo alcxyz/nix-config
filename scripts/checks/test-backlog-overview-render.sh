@@ -116,7 +116,8 @@ grep -qF '"picks":[]' "$tmp/plain.html" || fail "an empty pick list was not rend
 branches=$(jq -cn '[range(18) | {ref: "me/app@b\(.)", forge: "forgejo", repo: "me/app", branch: "b\(.)", lane: "no-pr",
   idleDays: (40 + .), lastCommitAt: null, pr: null}]
   + [{ref: "gh:example-org/service@feat/x", forge: "github", repo: "example-org/service", branch: "feat/x",
-      lane: "merged", idleDays: 1, pr: {ref: "gh:example-org/service#3", state: "merged", at: null}}]
+      lane: "merged", idleDays: 1, head: ("a" * 40), ahead: 2, aheadOf: "main",
+      pr: {ref: "gh:example-org/service#3", state: "merged", at: null, head: ("b" * 40)}}]
   + [{ref: "me/app@long", forge: "forgejo", repo: "me/app", branch: ("x" * 100), lane: "closed", idleDays: null,
       pr: {ref: "me/app#4", state: "closed", at: null}}]')
 jq --argjson branches "$branches" '
@@ -124,12 +125,14 @@ jq --argjson branches "$branches" '
   | .sources.branches = "ok"
   | .issues[0].related = ["gh:up/stream#4"] | .issues[0].flags = ["related-closed"]
   | .issues[2].related = ["other/lib#2"]
+  | .issues[0].thread = {threadId: "t-1", title: "Thread naming the issue", bucket: "unsettled", status: "idle"}
   | .related = [
       {ref: "gh:up/stream#4", forge: "github", repo: "up/stream", number: 4, kind: "pr", state: "merged",
        title: "<img src=x onerror=alert(1)>", pulledBy: ["me/app#1", "me/app#3"]},
       {ref: "other/lib#2", forge: "forgejo", repo: "other/lib", number: 2, kind: "issue", state: "closed",
        title: "pulled by a hidden row", pulledBy: ["me/app#3"]}]
-  | .branches = $branches | .totals.branches = ($branches | length) | .branchesTruncated = ["me/app"]' "$tmp/inventory.json" >"$tmp/thorough.json"
+  | .branches = $branches | .totals.branches = ($branches | length) | .branchesTruncated = ["me/app"]
+  | .totals.branchesRead = 31 | .totals.branchesSkipped = 11' "$tmp/inventory.json" >"$tmp/thorough.json"
 cat >"$tmp/thorough-judgements.json" <<'JSON'
 {"readerModel": "test", "focus": null, "picks": [],
  "verdicts": [{"ref": "me/app@long", "verdict": "keep", "reason": "still used"},
@@ -161,7 +164,9 @@ node -e '
   eval(src);
   for (const want of ["Leftover branches · 20", "Branches not fully read (more than 100, or more than 100 protected) in me/app", "/src/branch/" + "x".repeat(100) + "\"", "3 more not shown", "Pulled in from outside the scope · 1", "Scope: group work.",
                       "Not found or archived, so not read: gh:example-org/missing", "related: <a", "(merged)",
-                      "https://github.com/example-org/service/tree/feat/x", "/me/app/src/branch/b17", ">checked<", ">delete<"])
+                      "https://github.com/example-org/service/tree/feat/x", "/me/app/src/branch/b17", ">checked<", ">delete<",
+                      "merged, head differs from the branch\u0027s · 2 commits not in main", "11 of 31 read skipped",
+                      "thread: Thread naming the issue"])
     if (!html.includes(want)) fail("page lacks " + want);
   if (html.includes("<img src=x")) fail("a pulled-in title was not escaped");
 ' "$tmp/thorough.js"

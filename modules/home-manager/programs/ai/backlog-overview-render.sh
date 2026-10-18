@@ -66,15 +66,17 @@ if ! json=$(jq -cs --argjson j "$judgements" '
     def keep_pr: $verdicts[.ref] != null or (.ref | IN($picked[]));
     def compact: with_entries(select(.value != null and .value != [] and .value != {} and .value != false));
     def judged: $verdicts[.ref] | if . == null then null else (.reason |= cut(120)) | compact end;
+    def slim_thread: if . == null then null else {threadId, title: (.title | cut(60)), bucket} end;
     def slim: {ref, title: (.title | cut(90)), lane, flags: (.flags - ["mentioned-by-merged-pr"]), idleDays, checks,
-      next: (.status.next | cut(120)), openPrs,
+      next: (.status.next | cut(120)), openPrs, thread: (.thread | slim_thread),
       mergedPrs: [.mergedPrs | sort_by(.mergedAt) | reverse | .[:3][].ref], mergedCount: (.mergedPrs | length | if . > 3 then . else null end),
       related: (.related // [])[:3], judged: judged} | compact;
     def slim_pr: {ref, title: (.title | cut(90)), lane, flags, kind, author: (if .kind == "bot" then .author else null end), ci, idleDays,
-      issues, thread: (.thread | if . == null then null else {threadId, title: (.title | cut(60)), bucket} end),
+      issues, thread: (.thread | slim_thread),
       related: (.related // [])[:3], judged: judged} | compact;
-    def slim_branch: {ref, forge, repo, branch, lane, idleDays,
-      pr: (.pr | if . == null then null else {ref, state} end), judged: judged} | compact;
+    def slim_branch: . as $b | {ref, forge, repo, branch, lane, idleDays, ahead, aheadOf,
+      pr: (.pr | if . == null then null else {ref, state,
+        headDiffers: (.head != null and $b.head != null and .head != $b.head)} | compact end), judged: judged} | compact;
     ([.prs | group_by(.lane)[] | sort_by(-.idleDays)]) as $lanes
   | ([.issues[] | select(.lane == "stale" and (keep_issue | not))] | sort_by(-.idleDays)) as $stale
   | ([$lanes[] | .[:5] + [.[5:][] | select(keep_pr)] | .[] | slim_pr]) as $prs

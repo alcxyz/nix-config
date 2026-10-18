@@ -73,7 +73,7 @@ const REPORT =
   "related": [{"ref": "gh:sample-org/lib#7", "kind": "pr", "state": "merged", "title": "Sample upstream fix", "pulledBy": ["sample/app#2"]}],
   "relatedHidden": 0,
   "branches": [{"ref": "sample/app@feat/sample", "forge": "forgejo", "repo": "sample/app", "branch": "feat/sample", "lane": "merged", "idleDays": 40,
-                "pr": {"ref": "sample/app#4", "state": "merged"}}],
+                "ahead": 0, "aheadOf": "main", "pr": {"ref": "sample/app#4", "state": "merged"}}],
   "branchesHidden": 0
 }
 /*REPORT-END*/
@@ -102,7 +102,7 @@ const has = (x, f) => (x.flags || []).includes(f);
 
 const ISSUE_LANES = {
   close:    ["Maybe done", "var(--success)"],
-  inflight: ["PR open", "var(--info)"],
+  inflight: ["In flight", "var(--info)"],
   active:   ["Active", "var(--chart-4)"],
   stale:    ["Stale", "var(--warning)"],
   dashboard:["Dashboard", "var(--muted-foreground)"],
@@ -175,9 +175,11 @@ const relatedLine = x => ((x.related || []).length ? `<div class="sub">related: 
 }).join(", ")}</div>` : "");
 const judgedWhy = x => (x.judged && x.judged.reason ? `<div class="sub">${esc(x.judged.reason)}</div>` : "");
 
+const threadChip = x => (x.thread ? `<a class="chip ${x.thread.bucket === "unsettled" ? "info" : "warn"}" href="${/^[\w:.-]+$/.test(String(x.thread.threadId)) ? "t3-thread://v1/" + x.thread.threadId : "#"}">thread: ${esc(x.thread.title)}</a>` : "");
+
 function prRow(p) {
   const ci = { success: "ok", failure: "bad", pending: "warn" }[p.ci];
-  const thread = p.thread ? `<a class="chip ${p.thread.bucket === "unsettled" ? "info" : "warn"}" href="${/^[\w:.-]+$/.test(String(p.thread.threadId)) ? "t3-thread://v1/" + p.thread.threadId : "#"}">thread: ${esc(p.thread.title)}</a>` : "";
+  const thread = threadChip(p);
   return `<div class="row"><span class="ref">${esc(p.ref)}</span>
     <div style="flex:1;min-width:0"><a class="title" href="${href(urlOf(p.ref, true))}">${esc(p.title)}</a>
       <span class="chips">${p.ci && p.ci !== "none" ? `<span class="chip ${ci || ""}">CI ${esc(p.ci)}</span>` : ""}${p.kind !== "own" ? `<span class="chip">${esc(p.kind === "bot" ? p.author : p.kind)}</span>` : ""}${flagChips(p)}${judged(p)}${thread}</span>
@@ -198,7 +200,7 @@ function issueRow(i) {
     + (num(i.mergedCount) > (i.mergedPrs || []).length ? ` and ${num(i.mergedCount) - i.mergedPrs.length} more merged` : "");
   return `<div class="row"><span class="ref">${esc(i.ref)}</span>
     <div style="flex:1;min-width:0"><a class="title" href="${href(urlOf(i.ref, false))}">${esc(i.title)}</a>
-      <span class="chips">${checks}${flagChips(i)}${judged(i)}</span>
+      <span class="chips">${checks}${flagChips(i)}${judged(i)}${threadChip(i)}</span>
       ${i.next ? `<div class="sub">Next: ${esc(i.next)}</div>` : ""}${via ? `<div class="sub">${via}</div>` : ""}${relatedLine(i)}${judgedWhy(i)}</div>
     <span class="meta">${num(i.idleDays)}d idle</span></div>`;
 }
@@ -210,7 +212,7 @@ const ISSUE_GROUPS = [
   ["Ready to dispatch", "var(--info)", issues.filter(i => V(i) === "dispatch")],
   ["Needs your decision or a body refresh", "var(--warning)", issues.filter(i => V(i) === "refresh" || V(i) === "unclear")],
   ["Maybe done · not yet judged", "var(--success)", issues.filter(i => !V(i) && flagged(i))],
-  ["PR open", "var(--info)", issues.filter(i => !V(i) && !flagged(i) && i.lane === "inflight")],
+  ["In flight · an open PR or a live thread", "var(--info)", issues.filter(i => !V(i) && !flagged(i) && i.lane === "inflight")],
   ["Blocked or awaiting validation", "var(--destructive)", issues.filter(i => !V(i) && !flagged(i) && i.lane !== "inflight" && (has(i, "blocked") || has(i, "validation-needed")))],
   ["Keep · waiting on something real", "var(--muted-foreground)", issues.filter(i => V(i) === "keep")],
 ];
@@ -236,11 +238,11 @@ const branches = REPORT.branches || [];
 if (branches.length) {
   const hidden = num(REPORT.branchesHidden);
   add(`<div class="group"><h3><span class="dot" style="background:var(--chart-5)"></span>Leftover branches · ${num(T.branches) || branches.length}</h3>
-    <details open><summary>Delete only after checking that the commits landed elsewhere${hidden ? ` · ${hidden} more not shown` : ""}</summary>
+    <details open><summary>Delete only after checking that the commits landed elsewhere${hidden ? ` · ${hidden} more not shown` : ""}${num(T.branchesSkipped) ? ` · ${num(T.branchesSkipped)} of ${num(T.branchesRead)} read skipped (default, long-lived, protected or of unknown protection, open PR or recent)` : ""}</summary>
     <div class="rows">${branches.map(b => `<div class="row"><span class="ref">${esc(b.forge === "github" ? "gh:" + b.repo : b.repo)}</span>
       <div style="flex:1;min-width:0"><a class="title" href="${href(branchUrl(b))}">${esc(String(b.branch).length > 80 ? String(b.branch).slice(0, 79) + "…" : b.branch)}</a>
         <span class="chips"><span class="chip ${(BRANCH_LANES[b.lane] || [])[1] || ""}">${esc((BRANCH_LANES[b.lane] || [b.lane])[0])}</span>${judged(b)}</span>
-        ${b.pr ? `<div class="sub">last PR <a href="${href(urlOf(b.pr.ref, true))}">${esc(b.pr.ref)}</a> ${esc(b.pr.state)}</div>` : ""}${judgedWhy(b)}</div>
+        ${b.pr || b.ahead != null ? `<div class="sub">${b.pr ? `last PR <a href="${href(urlOf(b.pr.ref, true))}">${esc(b.pr.ref)}</a> ${esc(b.pr.state)}${b.pr.headDiffers ? ", head differs from the branch's" : ""}` : ""}${b.pr && b.ahead != null ? " · " : ""}${b.ahead != null ? `${num(b.ahead)} commit${num(b.ahead) === 1 ? "" : "s"} not in ${esc(b.aheadOf)}` : ""}</div>` : ""}${judgedWhy(b)}</div>
       <span class="meta">${num(b.idleDays)}d since commit</span></div>`).join("")}</div></details></div>`);
 }
 // Shown even without branch rows: the unread branches may hold leftovers.

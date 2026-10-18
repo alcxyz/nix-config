@@ -44,6 +44,26 @@ refs = inventory.references(
     "See https://elsewhere.example/me/app/issues/8 and foo#9 and v1.2#3", "me/app", "git.example")
 check(refs == {("me/app", 2): True, ("other/repo", 5): False, ("me/app", 7): True},
       f"unexpected references: {refs}")
+# A known repository's bare name before #N is that repository's, also as a Markdown link's text; a
+# name several owners share resolves to the source owner's, and "word#N" with an unknown word is no ref.
+NAMES = inventory.repo_names(["me/app", "me/lib", "other/lib", "other/tool", "third/tool", "me/old"])
+refs = inventory.references(
+    "Picks up lib #3 (see [tool #4](https://git.example/other/tool/pulls/4)), fixes old#5,\n"
+    "Fixes tool #6, refs app#7, follow-up #8, nosuch#9 and Closes [#10](https://git.example/me/app/issues/10).",
+    "me/app", "git.example", NAMES)
+check(refs == {("me/lib", 3): False, ("me/old", 5): True, ("me/app", 7): False, ("me/app", 8): False,
+               ("me/app", 10): True}, f"unexpected references with repository names: {refs}")
+check(inventory.references("tool #6", "me/app", "git.example", NAMES) == {}, "an ambiguous name was resolved")
+check(inventory.references('lib  #3, Closes [#10](https://git.example/other/lib/issues/10 "Details")\n'
+                           "and [#11](https://git.example/other/lib/issues/11 (x))", "me/app", "git.example", NAMES) == {("me/lib", 3): False, ("other/lib", 10): True, ("other/lib", 11): False},
+      "spaces before #N or a Markdown link title broke name matching")
+# Names that differ only in case, as between a GitHub repository and its Forgejo mirror, are one repository.
+check(inventory.references("foo #3", "me/app", "git.example", inventory.repo_names(["me/Foo", "me/foo"]))
+      == {("me/Foo", 3): False}, "a case-only duplicate made a name ambiguous")
+check(inventory.references("lib #3", "third/x", "git.example", inventory.repo_names(["other/lib"]))
+      == {("other/lib", 3): False}, "a unique name of another owner was not resolved")
+check(inventory.references("#3 and app #4", None, "git.example", NAMES) == {("me/app", 4): False},
+      "a plain ref without a source repository was kept")
 check(inventory.ci_state([]) == "none" and inventory.ci_state(["success", "pending"]) == "pending"
       and inventory.ci_state(["success", "failure"]) == "failure", "ci_state combines badly")
 check(inventory.review_state([{"body": f"Automated read-only review ({HEAD[:12]} on dev): full: clean"}], HEAD, "dev")
@@ -114,17 +134,21 @@ ISSUES = [
     issue(5, "Has a status line", "**Status (2026-10-01):** Decided: a. Next: do the thing. Owner: me.\n\n- [x] a\n- [ ] b\n"),
     issue(6, "Mentioned by a merged PR, untouched since", updated=10),
     issue(8, "Mentioned by a PR merged yesterday", updated=10),
-    issue(9, "Has a malformed status date", "**Status (2026-02-30):** Next: x. Owner: me.\n"),
+    issue(9, "Has a malformed status date", "**Status (2026-02-30):** Next: x. Owner: me.\n\n"
+          "Needs other/lib#2, which closed, and other/tool#3, which is open.\n"),
     issue(7, "Dependency Dashboard", user="renovate"),
     {**issue(1, "Archived repo issue"), "repository": {"full_name": "me/old"}},
 ]
 MERGED = [pull_hit(20, "fix: two", f"Closes #2\n{SECRET}", merged_days=2),
           pull_hit(21, "feat: part", "Part of me/app#6", merged_days=5),
           pull_hit(23, "feat: more", "Part of #8", merged_days=1),
+          # Mentions of other repositories' items, by name and in Markdown link text, are not me/app's.
+          pull_hit(24, "chore: bump lib", "Picks up lib #9 and [lib #5](https://forge/other/lib/pulls/5); app #1",
+                   merged_days=4),
           pull_hit(22, "closed unmerged", "Closes #5")]
 OPEN = [pull_hit(n, t, b) for n, t, b in [
     (30, "held by a thread", "Refs #3"), (31, "reviewed earlier", ""), (32, "conflicting", ""),
-    (33, "chore(deps): bump", ""), (34, "ready one", ""), (35, "draft, reported unmergeable", ""),
+    (33, "chore(deps): bump", "Release notes: other/tool#3 and https://github.com/up/stream/issues/4"), (34, "ready one", ""), (35, "draft, reported unmergeable", ""),
     (36, "reviewed for another branch", "Follows other/lib#2"), (37, "changes requested", "")]]
 PULLS = {
     30: dict(user="me", mergeable=True), 31: dict(user="me", mergeable=True), 32: dict(user="me", mergeable=False),
@@ -187,8 +211,13 @@ class Forge(http.server.BaseHTTPRequestHandler):
                  "updated_at": ago(0), "original_url": ""},
                 {"full_name": "other/lib", "html_url": "https://forge/other/lib", "archived": True, "mirror": False,
                  "updated_at": ago(0), "original_url": ""},
+                {"full_name": "other/tool", "html_url": "https://forge/other/tool", "archived": True, "mirror": False,
+                 "updated_at": ago(0), "original_url": ""},
                 {"full_name": "me/ghrepo", "html_url": "https://forge/me/ghrepo", "archived": False, "mirror": True,
                  "updated_at": ago(0), "original_url": "https://github.com/me/ghrepo.git"},
+                # No issues or PRs: in thorough mode only its leftover branch gives it a row.
+                {"full_name": "me/quiet", "html_url": "https://forge/me/quiet", "archived": False, "mirror": False,
+                 "updated_at": ago(0), "original_url": "", "default_branch": "main"},
             ])
         if path == "/repos/issues/search":
             if query["type"] == "issues":
@@ -198,6 +227,19 @@ class Forge(http.server.BaseHTTPRequestHandler):
         if parts == ["repos", "other", "lib", "issues", "2"]:
             return self.reply({"number": 2, "title": "Library fix", "state": "closed", "body": SECRET,
                                "html_url": "https://forge/other/lib/issues/2", "updated_at": ago(4), "closed_at": ago(4)})
+        if parts == ["repos", "other", "tool", "issues", "3"]:
+            return self.reply({"number": 3, "title": "Tool work", "state": "open", "body": SECRET,
+                               "html_url": "https://forge/other/tool/issues/3", "updated_at": ago(4), "closed_at": None})
+        if parts == ["repos", "me", "quiet", "branches"]:
+            return self.reply([{"name": "main", "protected": False, "commit": {"id": "e" * 40, "timestamp": ago(1)}},
+                               {"name": "stale-work", "protected": False, "commit": {"id": "f" * 40, "timestamp": ago(60)}}])
+        if parts == ["repos", "me", "quiet", "pulls"]:
+            return self.reply([])
+        if parts[:4] == ["repos", "me", "app", "compare"]:
+            base, _, branch = urllib.parse.unquote(parts[4]).partition("...")
+            ahead = {"feat/done": 0, "feat/dropped": 2, "old-spike": 5}
+            if base == "main" and branch in ahead:
+                return self.reply({"total_commits": ahead[branch], "commits": [], "files": []})
         if parts == ["repos", "me", "app", "branches"]:
             return self.reply([
                 {"name": name, "protected": name == "protected-one", "commit": {"id": "c" * 40, "timestamp": ago(days)}}
@@ -205,12 +247,12 @@ class Forge(http.server.BaseHTTPRequestHandler):
                                    ("old-spike", 90), ("new-spike", 3), ("renovate/x", 90), ("dev-next", 90),
                                    ("protected-one", 90), ("fork-named", 2), ("feat/reopened", 60)]])
         if parts == ["repos", "me", "app", "pulls"]:
-            def pr(number, ref, state, merged=False, repo="me/app", updated=5):
+            def pr(number, ref, state, merged=False, repo="me/app", updated=5, sha="c" * 40):
                 return {"number": number, "state": state, "merged": merged, "merged_at": ago(30) if merged else None,
                         "closed_at": ago(5) if state == "closed" else None, "updated_at": ago(updated), "body": SECRET,
-                        "head": {"ref": ref, "repo": {"full_name": repo}}}
+                        "head": {"ref": ref, "sha": sha, "repo": {"full_name": repo}}}
             return self.reply([pr(40, "feat/done", "closed", merged=True), pr(41, "feat/done", "closed", updated=50),
-                               pr(42, "feat/dropped", "closed"), pr(43, "feat/open", "open"),
+                               pr(42, "feat/dropped", "closed", sha="d" * 40), pr(43, "feat/open", "open"),
                                pr(44, "fork-named", "closed", merged=True, repo="someone/app"),
                                # A closed PR updated after the branch's open one must not hide the open one.
                                pr(45, "feat/reopened", "open", updated=20), pr(46, "feat/reopened", "closed", updated=1)])
@@ -253,7 +295,8 @@ if os.environ.get("FAKE_GH_RATE_LIMIT") and args[:2] == ["api", "repos/example-o
 if args[:2] == ["api", "user"]:
     out({"login": "me"})
 if args[:2] == ["api", "repos/me/ghrepo"]:
-    out({"html_url": "https://github.com/me/ghrepo", "pushed_at": now, "archived": False, "fork": False})
+    out({"html_url": "https://github.com/me/ghrepo", "pushed_at": now, "archived": False, "fork": False,
+         "default_branch": "trunk"})
 if args[:2] == ["api", "repos/example-org/service"]:
     out({"full_name": "example-org/service", "html_url": "https://github.com/example-org/service", "pushed_at": now,
          "archived": False, "fork": True})
@@ -272,17 +315,24 @@ if args[:2] == ["api", "repos/me/ghrepo/issues/1"]:
 if args[:2] == ["api", "repos/up/stream/issues/4"]:
     out({"number": 4, "title": "Upstream PR", "state": "closed", "pull_request": {"merged_at": now},
          "html_url": "https://github.com/up/stream/pull/4", "updated_at": now, "closed_at": now})
+if args[:2] == ["api", "graphql"] and os.environ.get("FAKE_GH_COMPARE_FAIL") and "compare(" in joined:
+    print("gh: GraphQL: query too complex", file=sys.stderr)
+    sys.exit(1)
 if args[:2] == ["api", "graphql"]:
     if "name=service" in args:
         print("gh: GraphQL: Resource not accessible by integration", file=sys.stderr)
         sys.exit(1)
-    def ref(name, days, pr=None, open_prs=0):
-        return {"name": name, "target": {"committedDate": days},
+    if "base=trunk" not in args and "compare(" in joined:
+        print("gh: the default branch was not passed", file=sys.stderr)
+        sys.exit(1)
+    def ref(name, days, pr=None, open_prs=0, ahead=0):
+        node = {"name": name, "target": {"oid": name[0] * 40, "committedDate": days},
                 "associatedPullRequests": {"nodes": [pr] if pr else []}, "open": {"totalCount": open_prs}}
+        return {**node, "compare": {"behindBy": ahead}} if "compare(" in joined else node
     out({"data": {"repository": {"defaultBranchRef": {"name": "trunk"}, "refs": {"totalCount": 4, "nodes": [
         ref("trunk", now), ref("main", "2020-01-01T00:00:00Z"),
-        ref("fix/thing", now, {"number": 7, "state": "MERGED", "mergedAt": now, "closedAt": now}),
-        ref("wip", "2020-01-01T00:00:00Z"), ref("release/1", "2020-01-01T00:00:00Z"),
+        ref("fix/thing", now, {"number": 7, "state": "MERGED", "mergedAt": now, "closedAt": now, "headRefOid": "f" * 40}),
+        ref("wip", "2020-01-01T00:00:00Z", ahead=3), ref("release/1", "2020-01-01T00:00:00Z"),
         ref("shared", "2020-01-01T00:00:00Z", {"number": 8, "state": "CLOSED", "mergedAt": None, "closedAt": now}, 1)]}}}})
 if "repos/me/ghrepo/branches?protected=true" in joined:
     out([{"name": "release/1", "protected": True}])
@@ -328,8 +378,20 @@ def main():
         threads.write_text(json.dumps({"threads": [
             {"threadId": "t-live", "title": "Live thread", "bucket": "unsettled", "status": "idle",
              "prs": [{"url": "https://forge/me/app/pulls/30", "state": "open"}]},
-            {"threadId": "t-old", "title": "Settled thread", "bucket": "recently-settled", "status": "idle",
-             "prs": [{"url": "https://forge/me/app/pulls/32", "state": "open"}]}]}))
+            {"threadId": "t-old", "title": "Settled thread (app #6)", "bucket": "recently-settled", "status": "idle",
+             "prs": [{"url": "https://forge/me/app/pulls/32", "state": "open"}]},
+            # A live thread names an issue by repository name, or by number in its project's repository.
+            {"threadId": "t-named", "title": "Finish the status work (app #5)", "bucket": "unsettled",
+             "status": "idle", "project": "elsewhere", "prs": []},
+            {"threadId": "t-project", "title": "Fix the status date (#9)", "bucket": "unsettled", "status": "idle",
+             "project": "app", "prs": []},
+            {"threadId": "t-unknown", "title": "Look at #6", "bucket": "unsettled", "status": "idle",
+             "project": "src", "prs": []},
+            # An issue URL names its forge: a Forgejo URL is not the GitHub issue of the same name.
+            {"threadId": "t-forgejo-url", "title": f"See {base}/me/ghrepo/issues/1", "bucket": "unsettled",
+             "status": "idle", "project": "src", "prs": []},
+            {"threadId": "t-github-url", "title": "Fix https://github.com/me/ghrepo/issues/1", "bucket": "unsettled",
+             "status": "idle", "project": "src", "prs": []}]}))
         env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "FORGEJO_API_TOKEN_FILE": str(token),
                "BACKLOG_FORGEJO_URL": base, "FAKE_NOW": ago(0)}
 
@@ -350,9 +412,17 @@ def main():
         issues = {i["ref"]: i for i in report["issues"]}
         lanes = {ref: i["lane"] for ref, i in issues.items()}
         check(lanes == {"me/app#1": "close", "me/app#2": "close", "me/app#3": "inflight", "me/app#4": "stale",
-                        "me/app#5": "active", "me/app#6": "active", "me/app#7": "dashboard", "me/app#8": "active",
-                        "me/app#9": "active", "gh:me/ghrepo#1": "close"},
+                        "me/app#5": "inflight", "me/app#6": "active", "me/app#7": "dashboard", "me/app#8": "active",
+                        "me/app#9": "inflight", "gh:me/ghrepo#1": "close"},
               f"issue lanes: {lanes}")
+        check(issues["me/app#5"]["thread"]["threadId"] == "t-named" and issues["me/app#9"]["thread"]["threadId"] == "t-project"
+              and issues["me/app#6"]["thread"] is None and issues["me/app#3"]["thread"] is None
+              and issues["gh:me/ghrepo#1"]["thread"]["threadId"] == "t-github-url",
+              f"threads naming issues: {[(r, i['thread']) for r, i in issues.items()]}")
+        # Mentions of other repositories' items in a merged PR are not this repository's.
+        check(issues["me/app#9"]["mergedPrs"] == [] and issues["me/app#5"]["mergedPrs"] == []
+              and [p["ref"] for p in issues["me/app#1"]["mergedPrs"]] == ["me/app#24"],
+              f"mentions by name: {issues['me/app#9']['mergedPrs']} {issues['me/app#1']['mergedPrs']}")
         check("me/old#1" not in issues, "an archived repository's issue was listed")
         check(issues["me/app#2"]["mergedPrs"][0]["closes"] is True, "closing keyword not recorded")
         check(issues["me/app#5"]["status"]["owner"] == "me" and issues["me/app#5"]["checks"] == {"done": 1, "total": 2},
@@ -387,15 +457,21 @@ def main():
               f"upstream PR: {prs['gh:up/stream#9']}")
         repos = [(r["forge"], r["repo"]) for r in report["repos"]]
         check(repos[0] == ("forgejo", "me/app") and ("github", "up/stream") in repos, f"repos: {repos}")
-        check(report["totals"]["issues"] == 10 and report["totals"]["prs"] == 10, f"totals: {report['totals']}")
+        check(report["totals"]["issues"] == 10 and report["totals"]["prs"] == 10 and report["totals"]["repos"] == len(repos),
+              f"totals: {report['totals']}")
 
         # Items in repositories outside the scope are pulled in once, with their state and sources.
         related = {r["ref"]: r for r in report["related"]}
         # gone/repo is not a repository the token can list, so its short ref is not looked up on Forgejo;
         # gh:me/old is the push mirror of a Forgejo-first repository, whose issues live on Forgejo.
-        check(set(related) == {"other/lib#2", "me/old#99", "gh:up/stream#4"}, f"related: {sorted(related)}")
+        check(set(related) == {"other/lib#2", "other/tool#3", "me/old#99", "gh:up/stream#4"}, f"related: {sorted(related)}")
         check(related["other/lib#2"]["state"] == "closed" and related["other/lib#2"]["kind"] == "issue"
-              and related["other/lib#2"]["pulledBy"] == ["me/app#4", "me/app#36"], f"related: {related['other/lib#2']}")
+              and related["other/lib#2"]["pulledBy"] == ["me/app#4", "me/app#9", "me/app#36"], f"related: {related['other/lib#2']}")
+        # Renovate's release notes pull nothing in; one related item still open means no related-closed.
+        check(prs["me/app#33"]["related"] == [] and related["other/tool#3"]["pulledBy"] == ["me/app#9"]
+              and "me/app#33" not in related["gh:up/stream#4"]["pulledBy"], f"a Renovate row pulled items in: {related}")
+        check(issues["me/app#9"]["related"] == ["other/lib#2", "other/tool#3"] and "related-closed" not in issues["me/app#9"]["flags"],
+              f"related-closed with an open related item: {issues['me/app#9']}")
         check(related["gh:up/stream#4"]["state"] == "merged" and related["gh:up/stream#4"]["kind"] == "pr",
               f"related: {related['gh:up/stream#4']}")
         check(related["me/old#99"]["state"] == "unavailable", "a failed lookup was not marked unavailable")
@@ -403,7 +479,7 @@ def main():
               and "related-closed" in issues["me/app#4"]["flags"], f"source of related items: {issues['me/app#4']}")
         check(prs["me/app#36"]["related"] == ["other/lib#2"] and "related-closed" in prs["me/app#36"]["flags"],
               f"PR source of a related item: {prs['me/app#36']}")
-        check(report["totals"]["related"] == 3 and all("links" not in row for row in report["issues"] + report["prs"]),
+        check(report["totals"]["related"] == 4 and all("links" not in row for row in report["issues"] + report["prs"]),
               "related totals or internal fields")
 
         result = run("--threads", str(threads), "--related", "0")
@@ -417,10 +493,35 @@ def main():
         branches = {b["ref"]: (b["lane"], (b["pr"] or {}).get("ref")) for b in report["branches"]}
         check(branches == {"me/app@feat/done": ("merged", "me/app#40"), "me/app@feat/dropped": ("closed", "me/app#42"),
                            "me/app@old-spike": ("no-pr", None), "gh:me/ghrepo@fix/thing": ("merged", "gh:me/ghrepo#7"),
-                           "gh:me/ghrepo@wip": ("no-pr", None)}, f"branches: {branches}")
-        check(report["sources"]["branches"] == "ok" and report["totals"]["branchLanes"] == {"closed": 1, "merged": 2, "no-pr": 2},
+                           "gh:me/ghrepo@wip": ("no-pr", None), "me/quiet@stale-work": ("no-pr", None)},
+              f"branches: {branches}")
+        check(report["sources"]["branches"] == "ok" and report["totals"]["branchLanes"] == {"closed": 1, "merged": 2, "no-pr": 3},
               f"branch sources or totals: {report['sources']} {report['totals']}")
         check(next(r for r in report["repos"] if r["repo"] == "me/ghrepo")["branches"] == 2, "repository branch count")
+        # The branch head, its last PR's head and the commits not in the default branch (null when unknown).
+        heads = {b["ref"]: (b["head"], (b["pr"] or {}).get("head"), b["ahead"], b["aheadOf"]) for b in report["branches"]}
+        check(heads == {"me/app@feat/done": ("c" * 40, "c" * 40, 0, "main"), "me/app@feat/dropped": ("c" * 40, "d" * 40, 2, "main"),
+                        "me/app@old-spike": ("c" * 40, None, 5, "main"), "gh:me/ghrepo@fix/thing": ("f" * 40, "f" * 40, 0, "trunk"),
+                        "gh:me/ghrepo@wip": ("w" * 40, None, 3, "trunk"), "me/quiet@stale-work": ("f" * 40, None, None, "main")},
+              f"branch heads: {heads}")
+        # Every branch read is either listed or counted as skipped, with the reason.
+        scan = {s["repo"]: s for s in report["branchScan"]}
+        check(scan == {"me/app": {"repo": "me/app", "read": 12, "listed": 3, "truncated": False,
+                                  "skipped": {"kept": 4, "open-pr": 2, "recent": 2, "protected": 1}},
+                       "me/quiet": {"repo": "me/quiet", "read": 2, "listed": 1, "truncated": False, "skipped": {"kept": 1}},
+                       "gh:me/ghrepo": {"repo": "gh:me/ghrepo", "read": 6, "listed": 2, "truncated": False,
+                                        "skipped": {"kept": 2, "protected": 1, "open-pr": 1}}}, f"branch scan: {scan}")
+        check(report["totals"]["branchesRead"] == 20 and report["totals"]["branchesSkipped"] == 14, f"totals: {report['totals']}")
+        # A repository with only a leftover branch has a row, and the totals count it.
+        check(any(r["repo"] == "me/quiet" for r in report["repos"]) and report["totals"]["repos"] == len(report["repos"]),
+              f"repository totals: {report['totals']['repos']} {[r['repo'] for r in report['repos']]}")
+
+        # A GitHub query too costly with the comparisons still gives the branch rows, without `ahead`.
+        result = run("--branches", "--related", "0", extra={"FAKE_GH_COMPARE_FAIL": "1"})
+        report = json.loads(result.stdout)
+        gh_rows = {b["ref"]: b["ahead"] for b in report["branches"] if b["forge"] == "github"}
+        check(report["sources"]["branches"] == "ok" and gh_rows == {"gh:me/ghrepo@fix/thing": None, "gh:me/ghrepo@wip": None},
+              f"a failed comparison lost GitHub branch rows: {report['sources']} {gh_rows}")
 
         # A narrower scope reads only its repositories: no GitHub for a Forgejo repository.
         log = tmp / "gh.log"

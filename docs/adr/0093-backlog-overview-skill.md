@@ -1,6 +1,6 @@
 # ADR-0093: Triage open issues and pull requests from one computed inventory
 
-**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode; local worktrees, #701)
+**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode; local worktrees, #701) and 2026-10-19 (inventory accuracy, #739)
 **Date:** 2026-10-12
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`
@@ -220,3 +220,38 @@ It does not mean the user is finished with it. A fresh worktree on the base
 branch is also `removable`, so the skill weighs idle days. A worktree whose
 branch was renamed, and whose head changed after the pull request, finds no
 match and shows as `unpushed` or `no-pr`; the skill checks those by hand.
+
+## Amendment 2026-10-19: inventory accuracy (#739)
+
+The first thorough runs (#694) found signals that misled the readers and
+checkers. The inventory now:
+
+- **Resolves mentions to their own repository.** A known repository's bare
+  name before `#N` (`other-repo #N` or `other-repo#N`) names that repository's
+  item: the source's own, else one of the source owner's, else a unique one;
+  a name several owners share counts for none. A Markdown link's text names
+  what its URL names, so `[other-repo #14](URL)` is never this repository's
+  `#14`. Before, both counted as this repository's, which gave false
+  `mentioned-by-merged-pr` and `untouched-since-merge` flags.
+- **Counts an issue as `inflight` when a live thread's title names it**, as
+  `#N` in the thread's project repository, `other-repo #N` or an issue URL on
+  either forge, besides
+  an open pull request. The row carries that thread (`thread`), like a pull
+  request row.
+- **Pulls in no related items for bot rows**, since Renovate's release notes
+  link upstream items unrelated to the work, and sets `related-closed` only
+  when every related item that could be read is closed or merged: one still
+  open means the work goes on.
+- **Gives branch rows the evidence for a delete.** Each row has the branch
+  `head`, its last pull request's `head`, and `ahead`, the commits not in the
+  default branch (`aheadOf`; null when the comparison failed). `merged` alone
+  is no delete evidence: a branch may have moved on after its pull request
+  merged. `branchScan` says, per repository, how many branches were read,
+  listed and skipped, and why (`kept`, `protected`, `open-pr`, `recent`, and
+  `unknown-protection` for a GitHub repository with a full page of 100
+  protected branches).
+- **Counts `totals.repos` from the `.repos` rows**, which include
+  repositories with only leftover branches.
+
+Output changes are additive; the lanes and flags above narrow or widen as
+described.
