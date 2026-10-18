@@ -1130,11 +1130,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1792279833,
-        "narHash": "sha256-6F07LgYYcjka+jgt9bj7oTj5KB3U/IPssyqLwP8Uk7o=",
+        "lastModified": 1792342256,
+        "narHash": "sha256-KLI96iPDfxE2y+XHdRs2uw3WiUNd9x5FBeSDzpevRdM=",
         "ref": "dev",
-        "rev": "d96af4f6004fe6d6144036552bc718b466560daf",
-        "revCount": 794,
+        "rev": "5fc02b3b78098e594eaf583035c11c6fce2d370f",
+        "revCount": 797,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1152,11 +1152,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1792272535,
-        "narHash": "sha256-K+WGBMu8Sz9kHJcAID7F8dR3gm4/n96NxQM33jXteeg=",
+        "lastModified": 1792341561,
+        "narHash": "sha256-LjKTESdaCY7+YWVbCiQGYv52qgb8f8PtkGNV66Ev9X4=",
         "ref": "dev",
-        "rev": "bf22fa219b69ce8aa6eb8705987fa1258d1bb9f8",
-        "revCount": 725,
+        "rev": "134f41eeaed1c743360d1c6126430ffb306f0fa4",
+        "revCount": 729,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },

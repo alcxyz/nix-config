@@ -81,8 +81,10 @@ in {
         type = types.nullOr (types.coercedTo types.package toString types.str);
         default = null;
         description = ''
-          JSON policy file containing a blockedEmails list. Personal policy
-          belongs in a private module. The guard reads this file at runtime.
+          JSON policy file containing a blockedEmails list and, optionally,
+          privateTerms with the publicRepositories they apply to (see the
+          git-identity-guard README). Personal policy belongs in a private
+          module. The guard reads this file at runtime.
         '';
       };
     };
