@@ -78,7 +78,7 @@ EOF
 chmod +x "$tmp/bin/"*
 
 export PATH="$tmp/bin:$PATH" STUB="$tmp/stub" AGENT_JOB_STATE_DIR="$tmp/state"
-unset FORGEJO_API_TOKEN_FILE FORGEJO_TOKEN_FILE FORGEJO_USER GIT_CONFIG_COUNT
+unset FORGEJO_API_TOKEN_FILE FORGEJO_TOKEN_FILE FORGEJO_USER GIT_CONFIG_COUNT GH_APP_ID GH_APP_KEY_FILE GH_APP_OWNER
 jobs_dir=$tmp/state
 
 expect_exit() {
@@ -104,6 +104,7 @@ grep -q 'finished at .* (exited 0)' "$tmp/out" || fail "wait did not report succ
 
 # An agent session's forge identity (#722) reaches the unit, values unchanged.
 FORGEJO_API_TOKEN_FILE=/run/agent/token FORGEJO_TOKEN_FILE=/run/agent/token FORGEJO_USER=operator GIT_CONFIG_COUNT=2 \
+  GH_APP_ID=4242 GH_APP_KEY_FILE=/run/agent/key.pem GH_APP_OWNER=owner-test \
   GIT_CONFIG_KEY_0=credential.https://forge.example.helper GIT_CONFIG_VALUE_0='' \
   GIT_CONFIG_KEY_1=credential.https://forge.example.helper GIT_CONFIG_VALUE_1="!A='x y' helper %n \$HOME" \
   agent-job start agent -- true >/dev/null
@@ -111,6 +112,9 @@ expect_exit 0 agent-job wait agent 1
 expected_env=(
   "--setenv=PATH=$PATH"
   --setenv=FORGEJO_API_TOKEN_FILE=/run/agent/token
+  --setenv=GH_APP_ID=4242
+  --setenv=GH_APP_KEY_FILE=/run/agent/key.pem
+  --setenv=GH_APP_OWNER=owner-test
   --setenv=FORGEJO_TOKEN_FILE=/run/agent/token
   --setenv=FORGEJO_TOKEN=
   --setenv=GIT_CONFIG_COUNT=2

@@ -811,8 +811,14 @@ in {
     fakeForgeMirror = pkgs.writeShellScriptBin "forge-mirror" ''exec "$AGENT_FORGE_TEST_HELPER" "$@"'';
     # xyz enables the account privately, so both fixtures override it: off with
     # mkForce, on with a stronger priority over that.
+    # agentGithub adds its own GIT_CONFIG entries, so it is off here too.
     off = self.homeConfigurations.alc-xyz.extendModules {
-      modules = [{programs.ai.agentForge.enable = lib.mkForce false;}];
+      modules = [
+        {
+          programs.ai.agentForge.enable = lib.mkForce false;
+          programs.ai.agentGithub.enable = lib.mkForce false;
+        }
+      ];
     };
     on =
       (off.extendModules {
@@ -898,6 +904,56 @@ in {
         fi
         shellcheck ${../../scripts/checks/test-agent-forge-git.sh}
         bash ${../../scripts/checks/test-agent-forge-git.sh} ${sessionEnv} ${lib.escapeShellArgs [dummy.url dummy.sshHost dummy.user dummy.tokenFile]}
+        touch "$out"
+      '';
+
+  # programs.ai.agentGithub (ADR-0099), with dummy values and fake gh-app and
+  # gh: T3's session wrapper sets the App's variables and gives Git the App's
+  # helper ahead of the operator's gh login for github.com. The forge account
+  # is off, so only this module's GIT_CONFIG entries are set.
+  agent-github-wiring-contract = let
+    dummy = {
+      appId = 4242;
+      keyFile = "/run/agent-github-test/key.pem";
+      owner = "owner-test";
+    };
+    fakeApp = pkgs.writeShellScriptBin "gh-app" ''exec "$AGENT_GITHUB_TEST_APP" "$@"'';
+    fakeGh = pkgs.writeShellScriptBin "gh" ''exec "$AGENT_GITHUB_TEST_GH" "$@"'';
+    off = self.homeConfigurations.alc-xyz.extendModules {
+      modules = [
+        {
+          programs.ai.agentForge.enable = lib.mkForce false;
+          programs.ai.agentGithub.enable = lib.mkForce false;
+        }
+      ];
+    };
+    on =
+      (off.extendModules {
+        modules = [
+          {
+            programs.ai.agentGithub = lib.mapAttrs (_: lib.mkOverride 40) (
+              dummy
+              // {
+                enable = true;
+                package = fakeApp;
+                ghPackage = fakeGh;
+              }
+            );
+          }
+        ];
+      }).config;
+    sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
+    sessionEnv = on.home.file.${sessionEnvLink}.source;
+    offSessionEnv = off.config.home.file.${sessionEnvLink}.source;
+  in
+    assert off.config.programs.ai.agentGithub.sessionCommands == "";
+      pkgs.runCommand "agent-github-wiring-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.shellcheck];} ''
+        if grep -E 'credential.https://github.com|GH_APP_' ${offSessionEnv}; then
+          echo "The session wrapper changes GitHub credentials while agentGithub is disabled" >&2
+          exit 1
+        fi
+        shellcheck ${../../scripts/checks/test-agent-github-git.sh}
+        bash ${../../scripts/checks/test-agent-github-git.sh} ${sessionEnv} ${lib.escapeShellArgs [dummy.owner (toString dummy.appId) dummy.keyFile]}
         touch "$out"
       '';
 

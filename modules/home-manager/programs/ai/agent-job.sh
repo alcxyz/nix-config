@@ -12,7 +12,8 @@
 # The forge identity of an agent session (programs.ai.agentForge, #722) is
 # not in the user manager's environment either, so the caller's
 # FORGEJO_API_TOKEN_FILE, FORGEJO_TOKEN_FILE (clearing FORGEJO_TOKEN) and
-# GIT_CONFIG_COUNT/KEY_n/VALUE_n are passed too,
+# GIT_CONFIG_COUNT/KEY_n/VALUE_n are passed too, and so are the GitHub App
+# settings GH_APP_ID, GH_APP_KEY_FILE and GH_APP_OWNER (programs.ai.agentGithub),
 # when set: a job started by an agent acts as the agent account.
 
 state_root=${AGENT_JOB_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-jobs}
@@ -94,6 +95,11 @@ case $cmd in
     if [[ -n ${FORGEJO_API_TOKEN_FILE-} ]]; then
       environment+=(--setenv=FORGEJO_API_TOKEN_FILE="$FORGEJO_API_TOKEN_FILE")
     fi
+    for app_setting in GH_APP_ID GH_APP_KEY_FILE GH_APP_OWNER; do
+      if [[ -n ${!app_setting-} ]]; then
+        environment+=(--setenv="$app_setting=${!app_setting}")
+      fi
+    done
     # forge-mirror prefers FORGEJO_TOKEN, which the user manager may hold;
     # it treats an empty one as unset and reads the file.
     if [[ -n ${FORGEJO_TOKEN_FILE-} ]]; then

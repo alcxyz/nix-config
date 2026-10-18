@@ -327,7 +327,7 @@ in {
   # The reviewer defaults read the agent roles (ADR-0079); repo-review.nix
   # installs revkit for whole-repository reviews (nix-packages ADR-0011);
   # agent-forge.nix declares the agent sessions' forge account (ADR-0081).
-  imports = [./roles.nix ./repo-review.nix ./agent-forge.nix];
+  imports = [./roles.nix ./repo-review.nix ./agent-forge.nix ./agent-github.nix];
 
   options.programs.ai = {
     enable = mkEnableOption "Module for vibe coding stuff";

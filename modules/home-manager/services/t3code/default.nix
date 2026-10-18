@@ -48,9 +48,13 @@ with lib; let
   # agent shells get the variables whatever the start order (#689).
   sessionVariablesFile = "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh";
   # Agent sessions are the processes T3 starts, so the agent forge account
-  # (programs.ai.agentForge, #722) applies here, after the session variables,
-  # and never in login shells. Empty without that module or when disabled.
-  agentSessionCommands = config.programs.ai.agentForge.sessionCommands or "";
+  # (programs.ai.agentForge, #722) and the agent GitHub App
+  # (programs.ai.agentGithub, ADR-0099) apply here, after the session
+  # variables, and never in login shells. Empty without those modules or when
+  # disabled.
+  agentSessionCommands =
+    (config.programs.ai.agentForge.sessionCommands or "")
+    + (config.programs.ai.agentGithub.sessionCommands or "");
   sessionEnv = pkgs.writeShellApplication {
     name = "t3code-session-env";
     # The sourced file is written for login shells, not for strict mode.
