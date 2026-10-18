@@ -8,6 +8,9 @@ The owner's own tools and apps are refreshed by four commands. Each one only
 updates `flake.lock` to the newest commit of its branches; inspect the lockfile
 changes, then run `hmsw` (or `nxsw` for system configuration). Rebuilds never
 fetch new branch heads, and no command promotes branches or creates releases.
+This repository itself promotes `dev` to `main` by pull request and tags each
+promotion with its date, such as `v2026.10.18`
+([ADR-0098](docs/adr/0098-date-tagged-promotions.md)).
 
 | Command | Branch | Refreshes |
 |---|---|---|
