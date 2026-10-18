@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # Refresh the owner's released apps. Each input follows its repository's
-# `main` branch; activation stays explicit (ADR-0089).
+# `main` branch, except bn-bootstrap, which follows `dev` and is shared with
+# dev-apps-update so its configuration stays current (ADR-0089). Activation
+# stays explicit.
 list_only=false
 for option in "$@"; do
   case "$option" in
@@ -18,6 +20,7 @@ inputs=(
   grove
   canopy
   bivrost
+  bn-bootstrap
 )
 
 if "$list_only"; then

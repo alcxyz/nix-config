@@ -1,6 +1,6 @@
 # ADR-0090: Install Bivrost directly, configured by bn-bootstrap
 
-**Status:** Accepted
+**Status:** Accepted; since 2026-10-18 `apps-update` and `dev-apps-update` refresh bn-bootstrap instead of updating it on its own (amendment in [ADR-0089](0089-released-and-dev-app-inputs.md))
 **Date:** 2026-10-10
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `users/alc/linux/operator.nix`, `users/alc/darwin/mac.nix`, `flake/checks/default.nix`; amends ADR-0069 and ADR-0089
 

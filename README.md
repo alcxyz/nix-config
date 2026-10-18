@@ -13,8 +13,8 @@ fetch new branch heads, and no command promotes branches or creates releases.
 |---|---|---|
 | `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, videdupe, t3rry, hedgedoc |
 | `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev`, `t3rry-dev` |
-| `apps-update` | `main` | Grove, Canopy, Bivrost |
-| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, Paperflow, DankSession, the DMS bundle and its maintained plugins |
+| `apps-update` | `main` | Grove, Canopy, Bivrost, and bn-bootstrap (on `dev`) |
+| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, bn-bootstrap, Paperflow, DankSession, the DMS bundle and its maintained plugins |
 
 `dms-update` refreshes only the DMS part of `dev-apps-update`. Each command is
 a shell alias and a `just` recipe of the same name; `qaup` and `just qa-update`
@@ -29,9 +29,11 @@ under a `-dev` name. `paperweight-dev` keeps its reports under
 the regnskap dev build against the sandbox, with its own ledgers. Projects without versioned releases yet (paw and
 vidown) follow `dev` under their own names, and so do the apps that cannot run
 twice on one host (Paperflow, DankSession and the DMS plugins). Bivrost is
-installed from its own flake; its Bane NOR catalogue, profiles and sign-in
-rule come from bn-bootstrap, which is updated on its own and is in neither list
-([ADR-0090](docs/adr/0090-install-bivrost-directly.md)).
+installed from its own flake; its catalogue, profiles and sign-in rule come
+from bn-bootstrap ([ADR-0090](docs/adr/0090-install-bivrost-directly.md)),
+which follows its `dev` branch and is refreshed by both `apps-update` and
+`dev-apps-update`. Both commands therefore need Forgejo SSH access, as
+`dev-apps-update` already did for vidown.
 Grove, Canopy and paw are installed only on xyz and the mac
 (`users/alc/workstation-apps.nix`), together with the Git `ext::` transport
 that paw workspaces need.

@@ -1,6 +1,6 @@
 # ADR-0089: Released and dev app inputs
 
-**Status:** Accepted, amended by [ADR-0090](0090-install-bivrost-directly.md) (this flake installs Bivrost; bn-bootstrap configures it). Since Bivrost v0.3.0, Bivrost follows `main` in `apps-update`, with `bivrost-dev` in `dev-apps-update`
+**Status:** Accepted, amended by [ADR-0090](0090-install-bivrost-directly.md) (this flake installs Bivrost; bn-bootstrap configures it). Since Bivrost v0.3.0, Bivrost follows `main` in `apps-update`, with `bivrost-dev` in `dev-apps-update`. Since 2026-10-18, both commands also refresh bn-bootstrap (see the amendment below)
 **Date:** 2026-10-10
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-apps.sh`, `scripts/update-inputs/update-maintained.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069 and ADR-0087
 
@@ -45,6 +45,14 @@ The apps use the same released and dev split as the tools.
 Like the tool commands, both only change `flake.lock`, and the four update
 lists do not overlap. A released app gains a dev pair when its repository has
 a `dev` branch that gets ahead of `main`.
+
+**Amendment (2026-10-18):** bn-bootstrap is now in both `apps-update` and
+`dev-apps-update`. It stays one input on bn-bootstrap's `dev` branch, whose
+`main` is not promoted, so either command keeps its configuration current; a
+catalogue change once stayed undeployed because no command refreshed it. It is
+the only input the update lists share. Its Forgejo SSH URL makes
+`apps-update` depend on Forgejo SSH access, as `dev-apps-update` already did
+for vidown.
 
 ## Alternatives and consequences
 

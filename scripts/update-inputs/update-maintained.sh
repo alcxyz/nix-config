@@ -30,7 +30,8 @@ inputs=(
   dms-plugins/displaycontrol
 )
 if ! "$dms_only"; then
-  inputs+=(paperflow grove-dev canopy-dev bivrost-dev paw vidown)
+  # bn-bootstrap is shared with apps-update (ADR-0089).
+  inputs+=(paperflow grove-dev canopy-dev bivrost-dev paw vidown bn-bootstrap)
 fi
 
 if "$list_only"; then
