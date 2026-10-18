@@ -48,9 +48,9 @@ The DMS bundle stays the source interface: local input overrides select plugin
 development branches without changing the public bundle's release defaults, and
 widget files and their helpers use the same source revision. Upstream
 dependencies, including DMS itself and nixpkgs, keep their existing pinning
-policies. WorldClock, DankCalculator, and DMS-Screenshot are upstream forks,
-not maintained projects; they retain the bundle's main pins and no command
-refreshes them explicitly.
+policies. WorldClock, DankCalculator, and DMS-Screenshot are third-party plugins,
+not maintained projects; the bundle pins them to exact upstream revisions and
+no command refreshes them explicitly.
 
 ## Hosts
 

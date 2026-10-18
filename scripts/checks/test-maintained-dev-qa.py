@@ -50,7 +50,9 @@ DEV_URLS = {
     "danksession": "github:alcxyz/DankSession/dev",
 }
 
-FORKED_RELEASE_INPUTS = {
+# Third-party plugins the bundle takes from their upstream repositories at exact
+# revisions (dms-plugins ADR-004), never from a moving branch.
+UPSTREAM_PINNED_INPUTS = {
     "worldclock": "WorldClock",
     "calculator": "DankCalculator",
     "screenshot": "DMS-Screenshot",
@@ -98,7 +100,7 @@ class MaintainedInputContracts(unittest.TestCase):
         self.assertEqual(full.stdout.splitlines(), DMS_INPUTS + APP_INPUTS)
         self.assertEqual(dms.stdout.splitlines(), DMS_INPUTS)
 
-    def test_forked_plugins_keep_release_pins_and_are_not_overridden(self):
+    def test_upstream_plugins_stay_pinned_and_are_not_overridden(self):
         flake = (ROOT / "flake.nix").read_text()
         lock = json.loads((ROOT / "flake.lock").read_text())
         listed = subprocess.run(
@@ -108,12 +110,17 @@ class MaintainedInputContracts(unittest.TestCase):
             check=True,
         ).stdout.splitlines()
 
-        for name, repo in FORKED_RELEASE_INPUTS.items():
+        for name, repo in UPSTREAM_PINNED_INPUTS.items():
             with self.subTest(input=name):
                 self.assertNotIn(f"dms-plugins/{name}", listed)
                 self.assertNotIn(f'{name}.url = "github:alcxyz/{repo}/dev";', flake)
-                self.assertEqual(lock["nodes"][name]["original"]["repo"], repo)
-                self.assertEqual(lock["nodes"][name]["original"]["ref"], "main")
+                node = lock["nodes"][name]
+                original = node["original"]
+                self.assertEqual(original["repo"], repo)
+                self.assertNotEqual(original["owner"], "alcxyz")
+                self.assertNotIn("ref", original)
+                self.assertRegex(original.get("rev", ""), r"^[0-9a-f]{40}$")
+                self.assertEqual(original["rev"], node["locked"]["rev"])
 
 
 class ScriptHarness(unittest.TestCase):

@@ -51,8 +51,10 @@ release, or activation is an implicit side effect of the QA update command.
 Leave upstream dependencies and unrelated internal services on their existing
 policies. Additional maintained projects can be added explicitly when their
 development branch and consumer are known.
-WorldClock, DankCalculator, and DMS-Screenshot are upstream forks and are
+WorldClock, DankCalculator, and DMS-Screenshot are third-party plugins and are
 excluded from the maintained development overrides and explicit QA refreshes.
+The bundle takes them from their upstream repositories at exact revisions
+(dms-plugins ADR-004, 2026-10-17), replacing the earlier forks pinned on `main`.
 
 ## Alternatives and consequences
 
