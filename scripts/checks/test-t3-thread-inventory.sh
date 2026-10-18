@@ -12,7 +12,7 @@ trap 'rm -rf -- "$tmp"' EXIT
   echo "common_sql=$PWD/$dir/t3-thread-common.sql"
   echo "inventory_sql=$PWD/$dir/t3-thread-inventory.sql"
   echo "default_dbs=$tmp/missing.sqlite:$tmp/state.sqlite"
-  cat "$dir/t3-state-db.sh" "$dir/t3-thread-inventory.sh"
+  cat "$dir/t3-thread-id.sh" "$dir/t3-state-db.sh" "$dir/t3-thread-inventory.sh"
 } >"$tmp/inventory"
 
 recent=$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%S.000Z)
@@ -71,6 +71,18 @@ test "$(jq -c '.threads[1].waitingOn | sort_by(.kind)' <<<"$out")" = '[{"kind":"
 test "$(jq -c '.threads[2].waitingOn' <<<"$out")" = '[{"kind":"monitor","description":"Watching pull request #9"}]'
 test "$(bash "$tmp/inventory" --thread caller --days 30 | jq '.threads | length')" = 4
 test "$(bash "$tmp/inventory" | jq '.threads | length')" = 4
+
+# A settled thread the user acknowledged is marked while its settle time
+# matches; a broken acknowledgement file only warns.
+echo "{\"recent\": \"$recent\", \"open\": \"$recent\"}" >"$tmp/acks.json"
+test "$(T3_OVERVIEW_ACK_FILE=$tmp/acks.json bash "$tmp/inventory" --thread caller | jq -c '[.threads[] | select(.acknowledged) | .threadId]')" = '["recent"]'
+echo "{\"recent\": \"$old\"}" >"$tmp/acks.json"
+test "$(T3_OVERVIEW_ACK_FILE=$tmp/acks.json bash "$tmp/inventory" --thread caller | jq '[.threads[] | select(.acknowledged)] | length')" = 0
+for broken in 'not json' '{} {}'; do
+  echo "$broken" >"$tmp/acks.json"
+  test "$(T3_OVERVIEW_ACK_FILE=$tmp/acks.json bash "$tmp/inventory" --thread caller 2>"$tmp/err" | jq '.threads | length')" = 3
+  grep -q 'not an acknowledgement file' "$tmp/err"
+done
 
 if bash "$tmp/inventory" --thread elsewhere 2>"$tmp/err"; then exit 1; else test $? = 2; fi
 grep -q 'no readable T3 state database holding thread elsewhere' "$tmp/err"

@@ -147,6 +147,8 @@ with lib; let
       common_sql=${./t3-thread-common.sql}
       inventory_sql=${./t3-thread-inventory.sql}
       default_dbs=${escapeShellArg (concatStringsSep ":" t3StateDbs)}
+      ack_file_default=${escapeShellArg t3OverviewAckFile}
+      ${builtins.readFile ./t3-thread-id.sh}
       ${builtins.readFile ./t3-state-db.sh}
       ${builtins.readFile ./t3-thread-inventory.sh}
     '';
@@ -158,6 +160,7 @@ with lib; let
       common_sql=${./t3-thread-common.sql}
       status_sql=${./t3-thread-status.sql}
       default_dbs=${escapeShellArg (concatStringsSep ":" t3StateDbs)}
+      ${builtins.readFile ./t3-thread-id.sh}
       ${builtins.readFile ./t3-state-db.sh}
       ${builtins.readFile ./t3-thread-status.sh}
     '';
@@ -169,6 +172,17 @@ with lib; let
       overview_template=${./t3-thread-overview.html}
       ${builtins.readFile ./t3-page.sh}
       ${builtins.readFile ./t3-thread-overview-render.sh}
+    '';
+  };
+  # Settled threads the user accepted as done in the overview (ADR-0091).
+  t3OverviewAckFile = "${config.xdg.stateHome}/t3-thread-overview/acknowledged.json";
+  t3ThreadOverviewAck = pkgs.writeShellApplication {
+    name = "t3-thread-overview-ack";
+    runtimeInputs = [pkgs.jq pkgs.flock];
+    text = ''
+      ack_file_default=${escapeShellArg t3OverviewAckFile}
+      ${builtins.readFile ./t3-thread-id.sh}
+      ${builtins.readFile ./t3-thread-overview-ack.sh}
     '';
   };
   t3ThreadStatusRender = pkgs.writeShellApplication {
@@ -442,7 +456,7 @@ in {
     #   enable = true;
     # };
 
-    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
+    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewAck t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
 
     # The agent skills that call these commands live in nix-secrets
     # shared/skills and are linked by its agentSkills module (nix-secrets

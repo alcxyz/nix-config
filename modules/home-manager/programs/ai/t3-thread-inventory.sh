@@ -68,5 +68,17 @@ if ! rows=$(cat "$common_sql" "$inventory_sql" | t3_sql "$selected" "$thread" -j
   echo "$prog: query failed on $selected" >&2
   exit 3
 fi
-jq --arg db "$selected" --argjson days "$days" \
-  '{database: $db, windowDays: $days, threads: map(.prs |= fromjson | .waitingOn |= fromjson)}' <<<"${rows:-[]}"
+# Settled threads the user accepted as done (t3-thread-overview-ack) are
+# marked while their settle time still matches. A broken file only loses the
+# marks, so it warns instead of sending the overview to its MCP fallback.
+ack_file=${T3_OVERVIEW_ACK_FILE:-${ack_file_default:-}}
+acks='{}'
+if [ -n "$ack_file" ] && [ -s "$ack_file" ] &&
+  ! acks=$(jq -cse 'if length == 1 and (.[0] | type == "object") then .[0] else error("bad") end' "$ack_file" 2>/dev/null); then
+  echo "$prog: ignoring $ack_file, which is not an acknowledgement file" >&2
+  acks='{}'
+fi
+jq --arg db "$selected" --argjson days "$days" --argjson acks "$acks" \
+  '{database: $db, windowDays: $days, threads: map(.prs |= fromjson | .waitingOn |= fromjson
+    | if .bucket == "recently-settled" and .settledAt != null and $acks[.threadId] == .settledAt
+      then .acknowledged = true else . end)}' <<<"${rows:-[]}"

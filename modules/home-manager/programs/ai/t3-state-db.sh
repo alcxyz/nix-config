@@ -4,16 +4,11 @@
 # still has the shape t3-thread-common.sql relies on.
 #
 # Callers set prog (for messages) and dbs (the databases to try), and may set
-# sql_extra to more sqlite3 -cmd arguments.
+# sql_extra to more sqlite3 -cmd arguments. t3-thread-id.sh, included first,
+# provides t3_valid_id.
 # shellcheck disable=SC2154 # prog and dbs come from the caller
 
 sql_extra=()
-
-# The thread ID goes into a sqlite dot-command, so allow only the characters
-# T3 uses in IDs.
-t3_valid_id() {
-  [[ $1 =~ ^[A-Za-z0-9:%._-]+$ ]]
-}
 
 # t3_sql DB THREAD [sqlite3 args...]: THREAD becomes :thread. The dot-command
 # parser strips one level of quotes, so the value is double-quoted around a

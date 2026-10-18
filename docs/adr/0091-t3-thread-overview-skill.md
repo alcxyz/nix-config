@@ -1,7 +1,7 @@
 # ADR-0091: Deploy a T3 thread overview skill that reads T3 state directly
 
 **Status:** Accepted
-**Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets; 2026-10-15 for #676)
+**Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets; 2026-10-15 for #676; 2026-10-18: overview sections and acknowledged threads)
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`
 
@@ -161,3 +161,39 @@ The command reads each turn item's `startedAt` and `completedAt`, each run's
 finished item has no completion time. Notification summaries and sources are
 optional: a notice without them counts as generic. Delegated child threads are not followed; their time shows as
 delegation in the parent, and the skill can run the command on a child.
+
+## Amendment: overview sections and acknowledged threads
+
+The single overview page grew past 8000 pixels at about 30 threads, so the
+user scrolled one long frame to find what needed them. Settled threads that a
+reader kept calling "maybe not done" came back on every run, with no way to
+say they were finished.
+
+- **One frame per section.** `t3-thread-overview-render` now writes one page
+  per non-empty section (waiting on you, stalled, ready to settle, recently
+  settled, agent side) and a `pages.json` manifest; the skill publishes each
+  as its own frame with a capped height, so long sections scroll on their own.
+  Threads are one-line rows that expand for details, and "waiting on you" is
+  split by the kind of action a reader names (`actionKind`: decide, deploy or
+  verify, review or merge, sign in or unblock). The renderer, not the page,
+  now groups threads, so each page carries only its own threads and the
+  grouping rules live in one place.
+- **Acknowledged threads.** `t3-thread-overview-ack ID@SETTLED_AT` records a
+  settled thread the user accepts as done, in a small state file.
+  `t3-thread-inventory` marks it `acknowledged` while its settle time still
+  matches, the skill gives it no reader, and the page lists it as done. The
+  page offers a checkbox per "maybe not done" thread that builds this command
+  for the user to run: a rendered page is a sandboxed frame that cannot write
+  anything or reach T3's tools, and the skill stays read-only towards T3.
+- **Thread links go through the app route for now.** T3 forwards only
+  `http(s)` link clicks out of a rendered page, so `t3-thread://` links, which
+  work in chat Markdown, do nothing there. A page is served by the T3 server
+  itself, so it links each thread to that server's `/<environmentId>/<threadId>`
+  route, which T3 opens in a browser tab or its preview pane rather than
+  switching threads. The report carries the environment ID; without it, or
+  outside a served frame, the page keeps `t3-thread://` links. The skill's
+  reply still carries working chat links. Once T3 opens thread links from
+  pages, the pages can go back to `t3-thread://`.
+
+Several frames cost more to publish than one, since each repeats the
+template; the page is about 16 KB before its threads.

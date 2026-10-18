@@ -12,7 +12,7 @@ trap 'rm -rf -- "$tmp"' EXIT
   echo "common_sql=$PWD/$dir/t3-thread-common.sql"
   echo "status_sql=$PWD/$dir/t3-thread-status.sql"
   echo "default_dbs=$tmp/missing.sqlite:$tmp/state.sqlite"
-  cat "$dir/t3-state-db.sh" "$dir/t3-thread-status.sh"
+  cat "$dir/t3-thread-id.sh" "$dir/t3-state-db.sh" "$dir/t3-thread-status.sh"
 } >"$tmp/status"
 status() { bash "$tmp/status" "$@"; }
 

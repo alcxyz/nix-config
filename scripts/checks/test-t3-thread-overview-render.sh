@@ -21,37 +21,69 @@ render_with() {
 }
 render_with "$PWD/$dir/t3-thread-overview.html"
 
+# page_script PAGE: the page's script, for node.
+page_script() {
+  sed -n '/^<script>$/,/^<\/script>$/p' "$1" | sed '1d;$d' >"$1.js"
+  node --check "$1.js" || fail "script in $1 does not parse"
+}
+# page_html PAGE [HREF]: run the page's script against a stub DOM, served
+# from HREF if given, and print its HTML.
+page_html() {
+  page_script "$1"
+  node -e '
+    if (process.argv[2]) globalThis.location = { href: process.argv[2] };
+    let html = "";
+    const app = { set innerHTML(h) { html = h; }, addEventListener() {}, querySelectorAll: () => [] };
+    globalThis.document = { getElementById: id => (id === "app" ? app : null) };
+    require(process.argv[1]);
+    process.stdout.write(html);
+  ' "$1.js" "${2:-}" || fail "script in $1 failed"
+}
+
 # Hostile text in titles and summaries must not close the script element.
 cat >"$tmp/report.json" <<'JSON'
-{"generatedAt": "2026-10-10T12:00:00Z", "windowDays": 3, "source": "test", "readerModel": "test",
- "threads": [{"threadId": "t1", "title": "</script><script>alert(1)</script>", "project": "p",
+{"generatedAt": "2026-10-10T12:00:00Z", "windowDays": 3, "source": "test", "readerModel": "test", "environmentId": "env 1",
+ "threads": [{"threadId": "mcp:t1", "title": "</script><script>alert(1)</script>", "project": "p",
    "bucket": "unsettled", "status": "idle", "updatedAt": "2026-10-10T11:00:00Z", "createdAt": "2026-10-01T00:00:00Z",
    "prs": [{"url": "https://forge.invalid/pulls/1", "state": "merged"}, {"url": "https://forge.invalid/pulls/2", "state": "open"}],
-   "progressPct": 40, "phase": "implementing", "owner": "agent", "goal": "Goal with <b>markup</b>",
+   "progressPct": "40", "phase": "implementing", "owner": "agent", "goal": "Goal with <b>markup</b>",
    "nextAction": "Continue", "done": [], "remaining": [], "blocker": null, "flag": null,
    "verdict": null, "verdictReason": null,
    "waitingOn": [{"kind": "monitor", "description": "pr-review run 1"}]}]}
 JSON
-bash "$tmp/render" "$tmp/report.json" "$tmp/page.html"
-[[ $(grep -c '</script>' "$tmp/page.html") == 1 ]] || fail "report text closed the script element"
-page=$(<"$tmp/page.html")
+bash "$tmp/render" "$tmp/report.json" "$tmp/one"
+[[ $(jq -c '[.[] | [(.file | sub(".*/"; "")), .title, .height]]' "$tmp/one/pages.json") == '[["1-agent.html","T3 threads: Agent side, no action from you (1)",640]]' ]] ||
+  fail "unexpected manifest: $(cat "$tmp/one/pages.json")"
+page_file=$(jq -r '.[0].file' "$tmp/one/pages.json")
+[[ "$page_file" == "$tmp/one/1-agent.html" ]] || fail "manifest path is not absolute: $page_file"
+[[ $(grep -c '</script>' "$page_file") == 1 ]] || fail "report text closed the script element"
+page=$(<"$page_file")
 [[ "$page" == *'\u003c/script>\u003cscript>alert(1)'* ]] || fail "< was not escaped as \\u003c"
-grep -qF '"threadId":"t1"' "$tmp/page.html" || fail "report JSON missing"
-if grep -qF 'sample-1' "$tmp/page.html"; then fail "template sample data kept"; fi
+grep -qF '"threadId":"mcp:t1"' "$page_file" || fail "report JSON missing"
+if grep -qF 'sample-1' "$page_file"; then fail "template sample data kept"; fi
 # Only what the page shows is embedded: open PRs, no inventory timestamps.
-if grep -qF -e 'pulls/1"' -e createdAt "$tmp/page.html"; then fail "unused fields were kept"; fi
-grep -qF 'pulls/2"' "$tmp/page.html" || fail "open PR was dropped"
-[[ $(grep -c 'REPORT-START' "$tmp/page.html") == 1 ]] || fail "markers not preserved once"
+if grep -qF -e 'pulls/1"' -e createdAt "$page_file"; then fail "unused fields were kept"; fi
+grep -qF 'pulls/2"' "$page_file" || fail "open PR was dropped"
+[[ $(grep -c 'REPORT-START' "$page_file") == 1 ]] || fail "markers not preserved once"
 
 # The page's script parses, and the report round-trips through it.
-sed -n '/^<script>$/,/^<\/script>$/p' "$tmp/page.html" | sed '1d;$d' >"$tmp/page.js"
-node --check "$tmp/page.js" || fail "rendered script does not parse"
-title=$(node -e '
+page_script "$page_file"
+fields=$(node -e '
   const src = require("fs").readFileSync(process.argv[1], "utf8");
-  const json = src.split("/*REPORT-START*/")[1].split("/*REPORT-END*/")[0];
-  console.log(JSON.parse(json).threads[0].title);
-' "$tmp/page.js")
-[[ "$title" == '</script><script>alert(1)</script>' ]] || fail "title did not round-trip: $title"
+  const r = JSON.parse(src.split("/*REPORT-START*/")[1].split("/*REPORT-END*/")[0]);
+  console.log(JSON.stringify([r.threads[0].title, r.threads[0].progressPct, r.threads[0].group, !!r.summary, !!r.footer]));
+' "$page_file.js")
+[[ "$fields" == '["</script><script>alert(1)</script>",40,"waiting",true,true]' ]] ||
+  fail "report did not round-trip: $fields"
+html=$(page_html "$page_file")
+[[ "$html" == *'&lt;/script&gt;&lt;script&gt;alert(1)'* && "$html" == *'Goal with &lt;b&gt;markup'* ]] ||
+  fail "page did not escape reader text"
+# Thread links point at the thread's route on the T3 server serving the page,
+# since T3 opens only http(s) links from a page; without one they stay
+# t3-thread:// links.
+[[ "$html" == *'href="t3-thread://v1/mcp:t1"'* ]] || fail "no t3-thread link without a server"
+html=$(page_html "$page_file" "http://t3.invalid:3773/api/assets/page?token=x")
+[[ "$html" == *'href="http://t3.invalid:3773/env%201/mcp%3At1"'* ]] || fail "no app route link"
 
 # t3-thread-status facts join by thread ID: the thread's own Settle: line
 # beats the reader's phase, and a thread that never handed off is stalled.
@@ -60,16 +92,17 @@ cat >"$tmp/facts-report.json" <<'JSON'
  "threads": [
    {"threadId": "said-ready", "title": "A", "project": "p", "bucket": "unsettled", "phase": "implementing", "owner": "agent", "waitingOn": []},
    {"threadId": "stalled", "title": "B", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []},
-   {"threadId": "said-not-yet", "title": "C", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []},
+   {"threadId": "said-not-yet", "title": "C", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "actionKind": "deploy", "waitingOn": []},
    {"threadId": "no-facts", "title": "D", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []},
    {"threadId": "running", "title": "E", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []},
    {"threadId": "says-agent", "title": "F", "project": "p", "bucket": "unsettled", "phase": "implementing", "owner": "user", "waitingOn": []},
-   {"threadId": "quiet", "title": "G", "project": "p", "bucket": "unsettled", "phase": "awaiting-user", "owner": "user", "waitingOn": []},
-   {"threadId": "quiet-done", "title": "H", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "waitingOn": []},
+   {"threadId": "quiet", "title": "G", "project": "p", "bucket": "unsettled", "phase": "awaiting-user", "owner": "user", "actionKind": "decide", "waitingOn": []},
+   {"threadId": "quiet-done", "title": "H", "project": "p", "bucket": "unsettled", "phase": "done-not-settled", "owner": "user", "actionKind": "<bogus>", "waitingOn": []},
    {"threadId": "s-done", "title": "I", "project": "p", "bucket": "recently-settled", "waitingOn": []},
-   {"threadId": "s-left", "title": "J", "project": "p", "bucket": "recently-settled", "waitingOn": []},
+   {"threadId": "s-left", "title": "J", "project": "p", "bucket": "recently-settled", "settledAt": "2026-10-09T10:00:00.000Z", "waitingOn": []},
    {"threadId": "s-reader", "title": "K", "project": "p", "bucket": "recently-settled", "progressPct": 100, "verdict": "done", "waitingOn": []},
-   {"threadId": "s-check", "title": "L", "project": "p", "bucket": "recently-settled", "progressPct": 80, "verdict": "follow-up", "waitingOn": []}]}
+   {"threadId": "s-check", "title": "L", "project": "p", "bucket": "recently-settled", "settledAt": "2026-10-09T11:00:00.000Z", "progressPct": 80, "verdict": "follow-up", "waitingOn": []},
+   {"threadId": "s-ack", "title": "M", "project": "p", "bucket": "recently-settled", "progressPct": 80, "verdict": "follow-up", "acknowledged": true, "waitingOn": []}]}
 JSON
 cat >"$tmp/facts.json" <<'JSON'
 {"database": "/x", "generatedAt": "2026-10-10T12:00:00Z", "threads": [
@@ -85,47 +118,71 @@ cat >"$tmp/facts.json" <<'JSON'
   {"threadId": "s-reader", "verdict": "check", "stallReasons": [], "settle": null},
   {"threadId": "s-check", "verdict": "check", "stallReasons": [], "settle": null}]}
 JSON
-bash "$tmp/render" "$tmp/facts-report.json" "$tmp/facts.html" "$tmp/facts.json"
-if grep -qF /private/path "$tmp/facts.html"; then fail "unused status fields were kept"; fi
-sed -n '/^<script>$/,/^<\/script>$/p' "$tmp/facts.html" | sed '1d;$d' >"$tmp/facts.js"
-groups=$(node -e '
-  let html = "";
-  globalThis.document = { getElementById: () => ({ insertAdjacentHTML: (_, h) => { html += h; } }) };
-  require(process.argv[1]);
-  const order = [...html.matchAll(/<h3>.*?<\/span>([^<·]+)·[^<]*<\/h3>|href="t3-thread:\/\/v1\/([^"]+)"/g)]
-    .map(m => (m[1] ? "#" + m[1].trim() : m[2]));
-  console.log(order.join(" "));
-  if (!html.includes("Settle: not yet: &lt;deploy&gt;, user")) process.exit(2);
-  if ((html.match(/chip stalled/g) || []).length !== 3) process.exit(3);
-  if (!html.includes("</span>&lt;deploy&gt;</div>")) process.exit(4);
-' "$tmp/facts.js") || fail "page script failed or did not escape the Settle: line"
+bash "$tmp/render" "$tmp/facts-report.json" "$tmp/facts" "$tmp/facts.json"
+if grep -rqF /private/path "$tmp/facts"; then fail "unused status fields were kept"; fi
+sections=$(jq -r '.[].file' "$tmp/facts/pages.json" | while read -r f; do
+  page_script "$f"
+  node -e '
+    const src = require("fs").readFileSync(process.argv[1], "utf8");
+    const r = JSON.parse(src.split("/*REPORT-START*/")[1].split("/*REPORT-END*/")[0]);
+    console.log(r.section.key + ":" + r.threads.map(t => t.threadId + "=" + t.group).join(","));
+  ' "$f.js"
+done | paste -sd' ')
 # A running thread is waiting, whatever its reader says; the owner a thread
 # names wins; a thread that only went quiet on you stays under "Waiting on
 # you", even when its reader thinks it is done. A settled thread whose facts
 # agree with its Settle: ready line is done without a reader, unless it left
-# steps for the user, which become its next step; the rest follow the reader.
-[[ "$groups" == "#Waiting on you said-not-yet quiet quiet-done #Stalled stalled #Agent can continue says-agent #Agent working or waiting on background work running #Ready to settle said-ready no-facts #Settled in the last 3 days s-left s-check #Settled in the last 3 days s-done s-reader" ]] ||
-  fail "unexpected grouping: $groups"
+# steps for the user, which become its next step; one the user acknowledged
+# is done; the rest follow the reader. Each page holds only its section.
+[[ "$sections" == "you:said-not-yet=user,quiet=user,quiet-done=user stalled:stalled=stalled settle:said-ready=settle,no-facts=settle settled:s-done=settled-done,s-left=settled-open,s-reader=settled-done,s-check=settled-open,s-ack=settled-done agent:running=waiting,says-agent=agent" ]] ||
+  fail "unexpected sections: $sections"
+[[ $(jq -r '[.[].file | sub(".*/"; "")] | join(" ")' "$tmp/facts/pages.json") == "1-you.html 2-stalled.html 3-settle.html 4-settled.html 5-agent.html" ]] ||
+  fail "unexpected page files"
+
+you=$(page_html "$tmp/facts/1-you.html")
+[[ "$you" == *'class="kpis"'* && "$you" != *'class="note"'* ]] || fail "counts not on the first page only"
+[[ "$you" == *"Settle: not yet: &lt;deploy&gt;, user"* ]] || fail "Settle: line not shown escaped"
+[[ "$you" == *"stalled: idle 30h"* ]] || fail "stalled chip missing"
+# Waiting on you is split by what the user has to do; unknown kinds are Other.
+order=$(grep -o '<h3>[^<]*</h3>' <<<"$you" | paste -sd'|')
+[[ "$order" == "<h3>Decide or answer · 1</h3>|<h3>Deploy or verify · 1</h3>|<h3>Other · 1</h3>" ]] ||
+  fail "unexpected action groups: $order"
+settled=$(page_html "$tmp/facts/4-settled.html")
+[[ "$settled" == *'</span>&lt;deploy&gt;</div>'* ]] || fail "left-for-you step is not the next step"
+# Only threads that may not be done get a checkbox, carrying their settle time.
+acks=$(grep -o 'data-ack="[^"]*"' <<<"$settled" | paste -sd' ')
+[[ "$acks" == 'data-ack="s-left@2026-10-09T10:00:00.000Z" data-ack="s-check@2026-10-09T11:00:00.000Z"' ]] ||
+  fail "unexpected checkboxes: $acks"
+[[ "$settled" == *"you marked it done"* ]] || fail "acknowledged thread not explained"
+agent=$(page_html "$tmp/facts/5-agent.html")
+[[ "$agent" == *'class="note"'* && "$agent" != *'class="kpis"'* ]] || fail "footer not on the last page only"
+
+# No threads still gives one page, with the counts.
+echo '{"generatedAt": "2026-10-10T12:00:00Z", "windowDays": 3, "threads": []}' >"$tmp/empty.json"
+bash "$tmp/render" "$tmp/empty.json" "$tmp/empty"
+[[ $(jq -r '[.[].file | sub(".*/"; "")] | join(" ")' "$tmp/empty/pages.json") == "1-summary.html" ]] || fail "empty report pages"
+[[ $(page_html "$tmp/empty/1-summary.html") == *"No unsettled or recently settled threads."* ]] || fail "empty page text"
+
 echo '{"threads": [{"threadId": "x"}]}' >"$tmp/bad-facts.json"
 status=0
-bash "$tmp/render" "$tmp/facts-report.json" "$tmp/bad.html" "$tmp/bad-facts.json" 2>/dev/null || status=$?
-[[ "$status" == 65 && ! -e "$tmp/bad.html" ]] || fail "malformed status file exited $status"
+bash "$tmp/render" "$tmp/facts-report.json" "$tmp/bad" "$tmp/bad-facts.json" 2>/dev/null || status=$?
+[[ "$status" == 65 && ! -e "$tmp/bad" ]] || fail "malformed status file exited $status"
 
-# Malformed reports are rejected without writing the page.
+# Malformed reports are rejected without writing pages.
 status=0
 echo '{"threads": [{"title": "no id"}]}' >"$tmp/bad.json"
-bash "$tmp/render" "$tmp/bad.json" "$tmp/bad.html" 2>/dev/null || status=$?
-[[ "$status" == 65 && ! -e "$tmp/bad.html" ]] || fail "malformed report exited $status"
+bash "$tmp/render" "$tmp/bad.json" "$tmp/bad" 2>/dev/null || status=$?
+[[ "$status" == 65 && ! -e "$tmp/bad" ]] || fail "malformed report exited $status"
 status=0
 echo 'not json' >"$tmp/bad.json"
-bash "$tmp/render" "$tmp/bad.json" "$tmp/bad.html" 2>/dev/null || status=$?
+bash "$tmp/render" "$tmp/bad.json" "$tmp/bad" 2>/dev/null || status=$?
 [[ "$status" == 65 ]] || fail "invalid JSON exited $status"
 
 # Two concatenated reports, or fields the page would choke on, are rejected.
 bad_report() {
   local status=0
   printf '%s\n' "$1" >"$tmp/bad.json"
-  bash "$tmp/render" "$tmp/bad.json" "$tmp/bad.html" 2>/dev/null || status=$?
+  bash "$tmp/render" "$tmp/bad.json" "$tmp/bad" 2>/dev/null || status=$?
   [[ "$status" == 65 ]] || fail "$2 exited $status"
 }
 bad_report "$(cat "$tmp/report.json" "$tmp/report.json")" "concatenated reports"
@@ -133,25 +190,29 @@ bad_report '{"threads": []}' "missing generatedAt"
 bad_report '{"generatedAt": "x", "threads": [{"threadId": "a", "done": "one item"}]}' "string done list"
 bad_report '{"generatedAt": "x", "threads": [{"threadId": "a", "prs": {}}]}' "object prs"
 bad_report '{"generatedAt": "x", "threads": [{"threadId": "a", "waitingOn": "monitor"}]}' "string waitingOn"
+bad_report '{"generatedAt": "x", "environmentId": 7, "threads": []}' "numeric environmentId"
 
 # A template without exactly one marker block, in order, is refused.
 printf '<script>/*REPORT-START*/{}/*REPORT-END*/ /*REPORT-START*/</script>\n' >"$tmp/twice.html"
 render_with "$tmp/twice.html"
 status=0
-bash "$tmp/render" "$tmp/report.json" "$tmp/out.html" 2>/dev/null || status=$?
+bash "$tmp/render" "$tmp/report.json" "$tmp/out" 2>/dev/null || status=$?
 [[ "$status" == 70 ]] || fail "duplicate markers exited $status"
 for template in '/*REPORT-START*/{}/*REPORT-END*//*REPORT-END*/' '/*REPORT-END*/{}/*REPORT-START*/' '/*REPORT-START*/{}'; do
   printf '%s\n' "$template" >"$tmp/bad-template.html"
   render_with "$tmp/bad-template.html"
   status=0
-  bash "$tmp/render" "$tmp/report.json" "$tmp/out.html" 2>/dev/null || status=$?
+  bash "$tmp/render" "$tmp/report.json" "$tmp/out" 2>/dev/null || status=$?
   [[ "$status" == 70 ]] || fail "template $template exited $status"
 done
 render_with "$PWD/$dir/t3-thread-overview.html"
 
-# Usage errors exit 64.
+# Usage errors exit 64, including an output path that is a file.
 status=0
 bash "$tmp/render" "$tmp/report.json" 2>/dev/null || status=$?
 [[ "$status" == 64 ]] || fail "usage error exited $status"
+status=0
+bash "$tmp/render" "$tmp/report.json" "$tmp/report.json" 2>/dev/null || status=$?
+[[ "$status" == 64 ]] || fail "file as output directory exited $status"
 
 echo "t3 thread overview render: ok"
