@@ -957,6 +957,42 @@ in {
         touch "$out"
       '';
 
+  # The agent pre-push hook (ADR-0078): with a GitHub fast-forward repository
+  # listed, the user's Git configuration registers `pr-review pre-push`, T3's
+  # session wrapper marks agent sessions, and Git runs the hook; without one,
+  # neither is set.
+  agent-pr-review-hook-contract = let
+    listedUrl = "https://github.com/owner-test/repo.git";
+    base = self.homeConfigurations.alc-xyz.extendModules {
+      modules = [
+        {
+          programs.ai.agentForge.enable = lib.mkForce false;
+          programs.ai.agentGithub.enable = lib.mkForce false;
+        }
+      ];
+    };
+    withRepositories = repositories:
+      (base.extendModules {modules = [{programs.ai.prReview.fastForwardRepositories = lib.mkForce repositories;}];}).config;
+    on = withRepositories ["github.com/owner-test/repo" "git.example.org/owner-test/repo"];
+    off = withRepositories ["git.example.org/owner-test/repo"];
+    sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
+    sessionEnv = on.home.file.${sessionEnvLink}.source;
+    offSessionEnv = off.home.file.${sessionEnvLink}.source;
+    gitConfig = on.xdg.configFile."git/config".source;
+    offGitConfig = off.xdg.configFile."git/config".source;
+  in
+    assert off.programs.ai.prReview.sessionCommands == "";
+    assert !(off.programs.git.settings ? hook);
+      pkgs.runCommand "agent-pr-review-hook-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.shellcheck];} ''
+        if grep -F 'agent-pr-review' ${offGitConfig} || grep -F PR_REVIEW_AGENT_SESSION ${offSessionEnv}; then
+          echo "The hook or the agent marker is set without a GitHub fast-forward repository" >&2
+          exit 1
+        fi
+        shellcheck ${../../scripts/checks/test-agent-pr-review-hook.sh}
+        bash ${../../scripts/checks/test-agent-pr-review-hook.sh} ${sessionEnv} ${gitConfig} ${lib.escapeShellArg listedUrl}
+        touch "$out"
+      '';
+
   umu-apps-contract = let
     home = self.homeConfigurations.alc-xyz;
     homeConfig = home.config;

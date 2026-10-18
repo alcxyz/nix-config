@@ -6,6 +6,7 @@
   pr-review check <pr>              exit 1 unless a review comment names the head
   pr-review selftest [--if-stale H] run every reviewer on a built-in change
   pr-review guard                   PreToolUse hook used by agent-pr-review-guard
+  pr-review pre-push <remote> <url> Git pre-push hook for agent sessions
 
 <pr> is a PR number, resolved through a remote of the current repository
 (--remote, default origin), or a GitHub (.../pull/N) or Forgejo (.../pulls/N)
@@ -51,7 +52,19 @@ calls to GitHub's pulls/N/merge endpoint, REST calls to a Forgejo/GitHub
 merge_pull_request (ADR-0081); `tea` and `fj` merge commands are refused. Other Forgejo MCP
 tools pass. Forgejo merges into the configured fast-forward repositories must
 also use the style fast-forward-only and contain no `fixup!`, `squash!` or
-`amend!` commit and no commit by a configured agent identity. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
+`amend!` commit and no commit by a configured agent identity. In listed GitHub
+repositories (`github.com/owner/repo`) agents merge by pushing the reviewed PR
+head to its base branch, so the guard refuses GitHub-side merges (including
+the merges API) and API ref updates there, and, by parsed shell words,
+changes to the agent pre-push hook (`hook.*` settings) and in a pushing
+command `--no-verify` and changes to Git's configuration sources. The hook,
+`pr-review pre-push`, which the user's Git configuration registers, checks
+in agent processes (CLAUDECODE=1, PR_REVIEW_AGENT_SESSION=1 or a Codex
+variable) what Git actually pushes to such a repository: an update of a
+protected branch (the default branch, `main` or an open PR's base) must
+fast-forward it to the head of an open PR into it that has a review comment
+for that head and passes the same commit checks; deletions are refused, and
+other refs pass. It exits 1 with the reason to refuse the push. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
 instead of guessing. This is an accident guard for agent sessions, not a
 security boundary.
 """
@@ -151,6 +164,79 @@ API_MERGE = re.compile(
     r"(?:https?://(?P<host>[^/\s\"']+))?/*(?:api/v\d+/)?repos/"
     r"(?P<owner>[^/\s\"']+)/(?P<repo>[^/\s\"']+)/pulls/(?P<number>[^/\s\"']+)/merge\b"
 )
+# GitHub fast-forward repositories: pushes are checked by the agent pre-push
+# hook; the PreToolUse guard refuses GitHub-side merges, API ref writes and
+# literal attempts to skip that hook.
+GIT_PUSH = re.compile(r"\bgit\b[\s\S]*\bpush\b")
+# A word naming a ref or merges endpoint: with a scheme, `//`, a bare host
+# (with any port or user info) or no host at all.
+GITHUB_WRITE_API = re.compile(
+    r"(?:^|(?<=[\s\"'=]))(?:(?:https?:)?//)?(?:(?P<host>[^/\s\"']+)/+|/+)?(?:api/v3/)?repos/"
+    r"(?P<owner>[^/\s\"']+)/(?P<repo>[^/\s\"']+)/(?P<kind>git/refs|merges)\b"
+)
+GITHUB_HOSTS = {"github.com", "www.github.com", "ssh.github.com"}
+GITHUB_REMOTE = re.compile(
+    r"^(?:(?:ssh|git\+ssh|ssh\+git|https?|git)://(?:[^@/]+@)?(?P<url_host>[^:/@]+)(?::\d*)?/"
+    r"|(?:[^@/:]+@)?(?P<scp_host>[^:/@]+):(?!//))"
+    r"/*(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/*$"
+)
+# Commands that may write hook settings, change Git's configuration sources or use the API.
+# `config ... hook` catches a section rename into the bare `hook` section.
+GITHUB_SYNTAX = re.compile(r"\bgit\b[\s\S]*\bpush\b|/git/refs\b|/merges\b|(?i:hook\.)|(?i:\bconfig\b[\s\S]*\bhook\b)|GIT_CONFIG_"
+                           r"|(?i:\bconfig\b[\s\S]*\binclude)")
+HOOK_SYNTAX = re.compile(r"(?i:hook\.)|(?i:\bconfig\b[\s\S]*\bhook\b)|(?i:\binclude(?:if)?\.)|GIT_CONFIG_"
+                         r"|\b(?:HOME|XDG_CONFIG_HOME)=|\benv\b"
+                         r"|\b(?:CLAUDECODE|PR_REVIEW_AGENT_SESSION|CODEX_THREAD_ID|CODEX_TOOL_CALL_ID"
+                         r"|CODEX_SANDBOX_NETWORK_DISABLED)\b")
+# Variables Git reads its configuration, and with it the agent pre-push hook, from.
+# The agent markers turn the hook on, so they count too.
+HOOK_ENVIRONMENT = {"GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+                    "GIT_CONFIG_NOSYSTEM", "HOME", "XDG_CONFIG_HOME", "CLAUDECODE", "PR_REVIEW_AGENT_SESSION",
+                    "CODEX_THREAD_ID", "CODEX_TOOL_CALL_ID", "CODEX_SANDBOX_NETWORK_DISABLED"}
+# The only `git config` words a proven read may contain besides its key.
+GIT_CONFIG_READ_FLAGS = {
+    "--global", "--system", "--local", "--worktree", "--show-origin", "--show-scope", "--name-only", "--includes",
+    "--no-includes", "--null", "-z", "--fixed-value", "--all", "--bool", "--int", "--bool-or-int", "--path",
+    "--expiry-date", "--no-type",
+}
+GIT_CONFIG_READ_VALUES = {"-f", "--file", "--blob", "--type", "--default"}
+# curl options the guard reads; any other option never proves a read.
+CURL_SHORT_VALUES = set("AbcCdDeEFHKmoPQrtTuUwxXyYz")
+CURL_SHORT_FLAGS = set("sSfLkviIgG012346lNnOqR#jJpBaZ")
+CURL_LONG_DATA = {"--data", "--data-ascii", "--data-binary", "--data-raw", "--data-urlencode", "--json", "--form",
+                  "--form-string", "--upload-file"}
+CURL_LONG_VALUES = CURL_LONG_DATA | {
+    "--request", "--header", "--user", "--user-agent", "--referer", "--output", "--cookie", "--cookie-jar",
+    "--max-time", "--connect-timeout", "--retry", "--retry-delay", "--retry-max-time", "--proxy", "--proxy-user",
+    "--write-out", "--cacert", "--capath", "--cert", "--key", "--config", "--url", "--url-query", "--dump-header",
+    "--range", "--resolve", "--connect-to", "--limit-rate", "--max-filesize", "--oauth2-bearer", "--interface",
+    "--variable", "--trace", "--trace-ascii", "--stderr", "--unix-socket", "--continue-at", "--time-cond",
+    "--output-dir", "--max-redirs", "--keepalive-time", "--netrc-file", "--proto", "--proto-redir", "--ciphers",
+}
+CURL_LONG_FLAGS = {
+    "--get", "--silent", "--show-error", "--fail", "--fail-with-body", "--fail-early", "--location",
+    "--location-trusted", "--insecure", "--verbose", "--include", "--head", "--compressed", "--globoff",
+    "--http1.0", "--http1.1", "--http2", "--http3", "--ipv4", "--ipv6", "--no-progress-meter", "--progress-bar",
+    "--remote-name", "--remote-header-name", "--create-dirs", "--buffer", "--keepalive", "--raw", "--path-as-is",
+    "--ssl-reqd", "--tlsv1.2", "--tlsv1.3", "--disable", "--parallel", "--netrc", "--netrc-optional",
+    "--remote-time", "--styled-output", "--show-headers",
+}
+# env options a pushing command may use: anything else in front of a push refuses it.
+ENV_SAFE_SHORT = set("0v")
+ENV_SAFE_LONG = {"--null", "--debug", "--chdir"}
+# env's long options, so an abbreviation resolves to the option it names.
+ENV_LONG_OPTIONS = ("--ignore-environment", "--null", "--unset", "--chdir", "--split-string", "--block-signal",
+                    "--default-signal", "--ignore-signal", "--list-signal-handling", "--debug", "--help", "--version")
+# The agent pre-push hook checks pushes only in agent processes: Claude Code
+# sets CLAUDECODE, T3 agent sessions and agent-job PR_REVIEW_AGENT_SESSION, and
+# Codex, best effort, one of the others.
+AGENT_MARKERS = {"CLAUDECODE": "1", "PR_REVIEW_AGENT_SESSION": "1"}
+CODEX_MARKERS = ("CODEX_THREAD_ID", "CODEX_TOOL_CALL_ID", "CODEX_SANDBOX_NETWORK_DISABLED")
+NO_VERIFY = re.compile(r"(?<!\S)['\"]?--no-ve(?:r(?:i(?:fy?)?)?)?(?=['\"]?(?:\s|$))")
+# GitHub lists at most 100 items per page and 250 commits of a PR.
+GITHUB_PAGE = 100
+GITHUB_PULL_PAGES = 5
+GITHUB_PR_COMMITS = 250
 # Where to merge a Forgejo PR instead of a refused CLI merge command.
 FORGEJO_MERGE_HINT = (
     "use the Forgejo MCP tool merge_pull_request, or where it is unavailable "
@@ -324,7 +410,8 @@ def gh_api(pr, path, *args, stdin=None):
     # cannot redirect the call.
     if pr.host != "github.com":
         raise ReviewError(f"only github.com is supported for GitHub PRs, not {pr.host}")
-    return run(["gh", "api", "--hostname", "github.com", f"repos/{pr.owner}/{pr.repo}/{path}", *args], stdin=stdin)
+    endpoint = f"repos/{pr.owner}/{pr.repo}/{path}".rstrip("/")
+    return run(["gh", "api", "--hostname", "github.com", endpoint, *args], stdin=stdin)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -2299,7 +2386,12 @@ def fast_forward_problem(pr, styles):
         return (f"{pr} is in a fast-forward repository: merge it with the style {FAST_FORWARD_STYLE} "
                 f"(REST `{{\"Do\":\"{FAST_FORWARD_STYLE}\"}}`, MCP `style`), so the forge writes no commit "
                 "and the reviewed commits stay as they are.")
-    for commit in pr_commits(pr):
+    return commit_problem(pr, pr_commits(pr), identities)
+
+
+def commit_problem(pr, commits, identities):
+    """Return why a fast-forward merge of these forge-reported commits must not run, or None."""
+    for commit in commits:
         details = commit.get("commit") or {}
         sha = str(commit.get("sha") or "")[:12]
         subject = (details.get("message") or "").split("\n", 1)[0]
@@ -2313,6 +2405,619 @@ def fast_forward_problem(pr, styles):
                         "forge-side rebase or branch update; rebase it locally with your own identity, push, "
                         "and run `pr-review run` again.")
     return None
+
+
+def github_fast_forward_repositories():
+    """Return the listed GitHub fast-forward repositories as lowercased `owner/repo`."""
+    repositories, _identities = guard_settings()
+    return {name.split("/", 1)[1] for name in repositories if name.startswith("github.com/")}
+
+
+def github_merge_hint(head="<head sha>", base="<base>"):
+    return ("agents merge there by pushing the reviewed head to the base branch, which GitHub records as "
+            "merging the PR and which keeps the commits as they are: after `pr-review comment`, run "
+            f"`git push <remote> {head}:{base}`, never GitHub's merge, squash or rebase")
+
+
+def github_repository(url):
+    """Return `owner/repo` for a GitHub URL in scp, ssh:// or https:// form, otherwise None."""
+    match = GITHUB_REMOTE.match(url.strip())
+    if not match or github_host(match["url_host"] or match["scp_host"]) not in GITHUB_HOSTS:
+        return None
+    return f"{match['owner']}/{match['repo']}"
+
+
+def github_host(host):
+    """Normalise a host for comparison: case, user info, trailing dot and the default port."""
+    host = host.lower().rpartition("@")[2]
+    for port in (":443", ":80"):
+        host = host.removesuffix(port)
+    return host.rstrip(".")
+
+
+def github_list(repository, path, cache, pages):
+    """Return every item of a GitHub list endpoint, up to `pages` pages, cached per guard call."""
+    key = (repository.lower(), path)
+    if key not in cache:
+        owner, name = repository.split("/")
+        items = []
+        for page in range(1, pages + 1):
+            separator = "&" if "?" in path else "?"
+            batch = json.loads(gh_api(PR("github", "github.com", owner, name, ""),
+                                      f"{path}{separator}per_page={GITHUB_PAGE}&page={page}"))
+            if not isinstance(batch, list):
+                raise ReviewError(f"unexpected list from github.com/{repository}/{path}")
+            items.extend(batch)
+            if len(batch) < GITHUB_PAGE:
+                break
+        else:
+            raise ReviewError(f"github.com/{repository}/{path} lists more items than the guard checks")
+        cache[key] = items
+    return cache[key]
+
+
+def open_pulls(repository, branch, cache):
+    return github_list(repository, f"pulls?state=open&base={urllib.parse.quote(branch, safe='')}",
+                       cache, GITHUB_PULL_PAGES)
+
+
+def protected_branch(repository, branch, cache):
+    """A branch the guard checks pushes to: main, the default branch, or any open PR's base."""
+    if branch == "main":
+        return True
+    key = (repository.lower(), "")
+    if key not in cache:
+        owner, name = repository.split("/")
+        cache[key] = json.loads(gh_api(PR("github", "github.com", owner, name, ""), ""))
+    return cache[key].get("default_branch") == branch or bool(open_pulls(repository, branch, cache))
+
+
+class GitHubContext:
+    """Per-call state of the GitHub checks: the listed repositories, read on first use, and the gh hosts."""
+
+    def __init__(self, listed=None, error=None):
+        self._listed, self.error = listed, error
+        self.gh_hosts = {(os.environ.get("GH_HOST") or "github.com").lower()}
+
+    @property
+    def listed(self):
+        if self.error is not None:
+            raise self.error  # an unreadable list blocks only an actual API write
+        return self._listed
+
+
+def no_verify(word):
+    """Whether a `git push` argument is `--no-verify` or an abbreviation git accepts for it."""
+    return len(word) >= len("--no-ve") and "--no-verify".startswith(word)
+
+
+def hook_key(key):
+    return key.lower().startswith("hook.")
+
+
+def config_target(word):
+    """Whether a `git config` argument names hook or include settings, which can change the agent pre-push hook."""
+    word = word.partition("=")[2] if word.startswith("-") else word
+    name = word.lower()
+    return name in {"hook", "include", "include.path", "includeif"} or name.startswith(("hook.", "includeif."))
+
+
+def git_config_read(words):
+    """Whether `git config` arguments are proven to be a read, in one of a few strict shapes.
+
+    `get [options] KEY`, `list [options]`, or the legacy `--get`, `--get-all`
+    or `--get-regexp KEY [pattern]` and `--list`/`-l`, with every other word a
+    flag that takes no value or `-f`/`--file`/`--blob PATH`, `--file=PATH`,
+    `--type T` or `--default V` in exactly that form. Anything else, including
+    abbreviated or unknown options, is not proven to be a read.
+    """
+    if words[:1] == ["get"]:
+        shape, rest = "get", words[1:]
+    elif words[:1] == ["list"]:
+        shape, rest = "list", words[1:]
+    else:
+        shape, rest = None, words
+    positionals, position = [], 0
+    while position < len(rest):
+        word = rest[position]
+        position += 1
+        if word in GIT_CONFIG_READ_FLAGS:
+            continue
+        if word in GIT_CONFIG_READ_VALUES:
+            if position >= len(rest):
+                return False
+            position += 1
+        elif word.startswith(("--file=", "--blob=", "--type=", "--default=")):
+            continue
+        elif shape is None and word in {"--get", "--get-all", "--get-regexp", "--list", "-l"}:
+            shape = "list" if word in {"--list", "-l"} else "legacy-get"
+        elif word.startswith("-"):
+            return False
+        else:
+            positionals.append(word)
+    if shape == "get":
+        return len(positionals) == 1
+    if shape == "legacy-get":
+        return len(positionals) in (1, 2)
+    return shape == "list" and not positionals
+
+
+def git_config_write(arguments):
+    """Return the hook or include setting a `git config` command that is not proven a read names, or None.
+
+    Any argument naming a hook or include key or section counts, whatever
+    option Git takes it as a value of, so a value that merely looks like
+    `hook.x` is refused too.
+    """
+    words = list(arguments)
+    if git_config_read(words):
+        return None
+    return next((word for word in words if config_target(word)), None)
+
+
+def environment_changes(tokens, index):
+    """Return (variables assigned, exported or unset, whether the environment is cleared, whether
+    `env -S` splits a string into the command) by parsed words."""
+    names, cleared, split = set(), False, False
+    client = os.path.basename(tokens[index]) if index < len(tokens) else ""
+    prefix = list(tokens[:index])
+    if client == "env":
+        prefix += tokens[index:]  # an env the wrapper parser did not take
+    position = 0
+    while position < len(prefix):
+        word = prefix[position]
+        position += 1
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", word):
+            names.add(word.partition("=")[0])
+        elif os.path.basename(word) == "env":
+            while position < len(prefix) and prefix[position].startswith("-"):
+                option = prefix[position]
+                position += 1
+                if option == "--":
+                    break
+                if option == "-":
+                    cleared = True
+                elif option.startswith("--"):
+                    name, equals, value = option.partition("=")
+                    matches = [long for long in ENV_LONG_OPTIONS if long.startswith(name)]
+                    name = name if name in ENV_LONG_OPTIONS else matches[0] if len(matches) == 1 else name
+                    if name == "--ignore-environment":
+                        cleared = True
+                    elif name in {"--unset", "--chdir", "--split-string"}:
+                        split |= name == "--split-string"
+                        if not equals:
+                            value = prefix[position] if position < len(prefix) else ""
+                            position += 1
+                        if name == "--unset":
+                            names.add(value)
+                else:
+                    # A cluster such as -iu NAME or -uNAME: -u, -C and -S take the
+                    # rest of the cluster or the next word.
+                    for offset, letter in enumerate(option[1:], 1):
+                        if letter == "i":
+                            cleared = True
+                        elif letter in "uCS":
+                            split |= letter == "S"
+                            value = option[offset + 1:]
+                            if not value:
+                                value = prefix[position] if position < len(prefix) else ""
+                                position += 1
+                            if letter == "u":
+                                names.add(value)
+                            break
+            if position < len(prefix) and prefix[position] == "-":
+                cleared = True
+    if client in {"export", "declare", "typeset", "local", "readonly", "unset"}:
+        names.update(word.partition("=")[0] for word in tokens[index + 1:] if not word.startswith(("-", "+")))
+    return names, cleared, split
+
+
+def flattened_commands(command):
+    """Yield (tokens, index, inputs) for each literal command, nested scopes and `sh -c` scripts included."""
+    for tokens, inputs in shell_commands(command):
+        if tokens[0] == "<operator>":
+            continue
+        try:
+            index = command_index(tokens)
+        except ReviewError:
+            index = 0  # an unknown wrapper option: read its words as one command
+        name = os.path.basename(tokens[index]) if index < len(tokens) else ""
+        arguments = tokens[index + 1:]
+        yield tokens, index, inputs
+        if name == "<shell-scope>" and arguments:
+            yield from flattened_commands(arguments[0])
+        elif name == "eval" and arguments:
+            yield from flattened_commands(" ".join(arguments))
+        elif name in SHELLS:
+            explicit, position = shell_script_operand(arguments)
+            # Expanding stdin (an unquoted heredoc or a here-string) is read as
+            # the script it becomes, its expansions left as words.
+            scripts = (arguments[position:position + 1] if explicit else
+                       [item.text for item in inputs if item.fd == 0 and not item.expansion])
+            for script in scripts:
+                yield from flattened_commands(script)
+
+
+def github_shell_check(command):
+    """Refuse GitHub-side merges and API ref writes in listed repositories, and attempts to change or skip
+    the agent pre-push hook that checks pushes to them (ADR-0078)."""
+    if not GITHUB_SYNTAX.search(command):
+        return None
+    try:
+        context = GitHubContext(github_fast_forward_repositories())
+    except Exception as error:  # reported once an API write needs the list
+        context = GitHubContext(error=error)
+    else:
+        if not context.listed:
+            return None
+    try:
+        commands = list(flattened_commands(command))
+    except ReviewError as error:
+        # Unparsable shell text: refuse only where it carries hook or API-write syntax.
+        if HOOK_SYNTAX.search(command) or (GIT_PUSH.search(command) and NO_VERIFY.search(command)):
+            return f"cannot verify this command's Git hook settings ({error}); use a direct literal command."
+        if GITHUB_WRITE_API.search(command) and any(name in command.lower() for name in context.listed):
+            return f"cannot verify a GitHub API write in this command ({error}); use a direct literal command."
+        return None
+    pushes = False
+    for tokens, index, _inputs in commands:
+        name = os.path.basename(tokens[index]) if index < len(tokens) else ""
+        arguments = tokens[index + 1:]
+        if name == "git":
+            position, _settings = git_configuration(arguments)
+            pushes |= arguments[position:position + 1] == ["push"]
+        elif name not in SHELLS and name != "<shell-scope>" and not prose_context(name, arguments):
+            pushes |= bool(GIT_PUSH.search(" ".join(arguments)))
+    for tokens, index, _inputs in commands:
+        problem = hook_problem(tokens, index, pushes) or api_command_problem(tokens, index, context)
+        if problem:
+            return problem
+    return None
+
+
+def env_problem(tokens):
+    """Return why an `env` word in a pushing command's words is refused, or None.
+
+    Every `env` word is examined, wherever it stands and whatever wraps it:
+    `-S`, `-i`, `-u` in any form, a lone `-` (also after `--`, which GNU env
+    reads as `-i`), any option the guard does not know, and an assignment of a
+    variable that carries the hook or turns it on refuse the command.
+    """
+    for position, word in enumerate(tokens):
+        if os.path.basename(word) != "env":
+            continue
+        following = position + 1
+        while following < len(tokens) and tokens[following].startswith("-"):
+            option = tokens[following]
+            following += 1
+            if option == "--":
+                break
+            if option.startswith("--"):
+                name = option.partition("=")[0]
+                matches = [long for long in ENV_LONG_OPTIONS if long.startswith(name)]
+                name = name if name in ENV_LONG_OPTIONS else matches[0] if len(matches) == 1 else name
+                if name not in ENV_SAFE_LONG:
+                    return (f"a command that pushes must not run `env {option}`, which can clear the environment, "
+                            "unset an agent marker or run a split string; run the push directly.")
+                following += name == "--chdir" and "=" not in option
+            elif option == "-" or not set(option[1:].partition("C")[0]) <= ENV_SAFE_SHORT:
+                return (f"a command that pushes must not run `env {option}`, which can clear the environment, "
+                        "unset an agent marker or run a split string; run the push directly.")
+            elif "C" in option[1:] and not option.partition("C")[2]:
+                following += 1  # -C takes the next word
+        if tokens[following:following + 1] == ["-"]:
+            return "a command that pushes must not run `env -`, which clears the environment; run the push directly."
+        while following < len(tokens) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[following]):
+            variable = tokens[following].partition("=")[0]
+            following += 1
+            if variable in HOOK_ENVIRONMENT or variable in {"GIT_DIR", "GIT_WORK_TREE", "GIT_NAMESPACE"} or (
+                    variable.startswith("GIT_CONFIG")):
+                return (f"a command that pushes must not set {variable} through env, which carries the agent "
+                        "pre-push hook or turns it on; run the push directly.")
+    return None
+
+
+def hook_problem(tokens, index, pushes):
+    """Return why a parsed command may change or skip the agent pre-push hook, or None."""
+    name = os.path.basename(tokens[index]) if index < len(tokens) else ""
+    arguments = tokens[index + 1:]
+    names, cleared, split = environment_changes(tokens, index)
+    for word in tokens[:index]:
+        variable, equal, value = word.partition("=")
+        if equal and ((variable.startswith("GIT_CONFIG_KEY_") and hook_key(value))
+                      or (variable == "GIT_CONFIG_PARAMETERS" and "hook." in value.lower())):
+            return f"{variable} must not set `hook.*` settings, which define the agent pre-push hook."
+    if name in {"export", "declare", "typeset", "local", "readonly"}:
+        for word in arguments:
+            variable, equal, value = word.partition("=")
+            if equal and ((variable.startswith("GIT_CONFIG_KEY_") and hook_key(value))
+                          or (variable == "GIT_CONFIG_PARAMETERS" and "hook." in value.lower())):
+                return f"{variable} must not set `hook.*` settings, which define the agent pre-push hook."
+    if name == "git":
+        position, settings = git_configuration(arguments)
+        for _option, value in settings:
+            key = value.partition("=")[0]
+            if hook_key(key):
+                return (f"`git -c {key}` changes `hook.*` settings, which define the agent "
+                        "pre-push hook; agents must not change them.")
+            if pushes and (key.lower() == "include.path" or key.lower().startswith("includeif.")):
+                return (f"a command that pushes must not include configuration with `git -c {key}`, which can "
+                        "change the agent pre-push hook.")
+        subcommand = arguments[position] if position < len(arguments) else ""
+        if subcommand == "config":
+            key = git_config_write(arguments[position + 1:])
+            if key:
+                return (f"`git config` must not write `{key}`, and this is not a plain read (`git config get KEY`, "
+                        "`--get KEY` or `--list`): `hook.*` and include settings define the agent pre-push hook, "
+                        "and agents must not change them.")
+        if subcommand == "push" and any(no_verify(word) for word in arguments[position + 1:]):
+            return "`git push --no-verify` skips the agent pre-push hook; push without it."
+    elif pushes and not prose_context(name, arguments) and name not in SHELLS and GIT_PUSH.search(
+            " ".join(arguments)) and any(no_verify(word) for word in arguments):
+        return f"`git push --no-verify` run through {name} skips the agent pre-push hook; push without it."
+    if pushes:
+        hidden = sorted(variable for variable in names if variable in HOOK_ENVIRONMENT
+                        or re.fullmatch(r"GIT_CONFIG_(?:KEY|VALUE)_\w+", variable))
+        if hidden:
+            return (f"a command that pushes must not assign, export or unset {', '.join(hidden)}, which carry "
+                    "the agent pre-push hook (Git's configuration sources) or turn it on (agent markers); run that "
+                    "separately.")
+        if cleared:
+            return ("a command that pushes must not clear the environment (`env -i`), which Git reads its "
+                    "configuration, and with it the agent pre-push hook, from.")
+        if split:
+            return ("a command that pushes must not run a command through `env -S`, whose split string the guard "
+                    "does not read; run it directly.")
+        return env_problem(tokens)  # any other env option the guard does not know
+    return None
+
+
+def api_command_problem(tokens, index, context):
+    """Track GH_HOST assignments, and check gh, curl and wget API writes."""
+    name = os.path.basename(tokens[index]) if index < len(tokens) else ""
+    arguments = tokens[index + 1:]
+    declaration = name in {"export", "declare", "typeset", "local", "readonly"}
+    for word in arguments if declaration else tokens if index == len(tokens) else []:
+        variable, equal, value = word.partition("=")
+        if variable == "GH_HOST" and equal:
+            # Assume the assignment applies; an expanded or empty value may be github.com.
+            context.gh_hosts.add("github.com" if not value or "$" in value or "`" in value else value.lower())
+    if name == "unset" and "GH_HOST" in arguments:
+        context.gh_hosts.add("github.com")
+    if name in {"gh", "curl", "wget"} and GITHUB_WRITE_API.search(" ".join(arguments)):
+        return api_write_problem(name, tokens, index, context)
+    return None
+
+
+def shell_script_operand(arguments):
+    """Return (whether -c is given, position of the first operand), skipping option operands."""
+    explicit, position = False, 0
+    while position < len(arguments):
+        word = arguments[position]
+        if word in ("--", "-"):
+            return explicit, position + 1
+        if word.startswith("--"):
+            position += 2 if word in {"--rcfile", "--init-file"} else 1
+            continue
+        if len(word) > 1 and word[0] in "-+":
+            explicit |= word[0] == "-" and "c" in word[1:]
+            position += 1 + sum(letter in "oO" for letter in word[1:])  # -o, +o and -O take a name
+            continue
+        break
+    return explicit, position
+
+
+@dataclass
+class CurlTransfer:
+    paths: list
+    methods: list
+    data: bool = False  # a data, form or upload option
+    unknown: bool = False  # an option the guard does not know, or indirection such as --config
+
+
+def curl_transfers(words):
+    """Split curl arguments into transfers at real --next flags, reading each option by its curl meaning.
+
+    Option values are never read as flags. Unknown options, `--expand-*`
+    forms and indirection (`-K`, `--config`, `--variable`) mark the transfer
+    as unknown, which never proves a read.
+    """
+    transfers, current, position = [], CurlTransfer([], []), 0
+
+    def value(attached):
+        nonlocal position
+        if attached:
+            return attached
+        position += 1
+        return words[position - 1] if position <= len(words) else ""
+
+    while position < len(words):
+        word = words[position]
+        position += 1
+        if word == "--":
+            current.paths.extend(words[position:])
+            break
+        if word in ("--next", "-:"):
+            transfers.append(current)
+            current = CurlTransfer([], [])
+        elif word.startswith("--"):
+            name, equals, attached = word.partition("=")
+            flag = name[len("--no-"):] if name.startswith("--no-") else None
+            if name in CURL_LONG_VALUES:
+                setting = attached if equals else value("")
+                if name in CURL_LONG_DATA:
+                    current.data = True
+                elif name == "--request":
+                    current.methods.append(setting)
+                elif name == "--url":
+                    current.paths.append(setting)
+                elif name in {"--config", "--variable"}:
+                    current.unknown = True
+            elif name not in CURL_LONG_FLAGS and not (flag and f"--{flag}" in CURL_LONG_FLAGS):
+                current.unknown = True  # including --expand-* and abbreviations
+        elif word.startswith("-") and len(word) > 1:
+            for offset, letter in enumerate(word[1:], 1):
+                if letter in CURL_SHORT_VALUES:
+                    setting = value(word[offset + 1:])
+                    if letter in "dFT":
+                        current.data = True
+                    elif letter == "X":
+                        current.methods.append(setting)
+                    elif letter == "K":
+                        current.unknown = True
+                    break
+                if letter not in CURL_SHORT_FLAGS:
+                    current.unknown = True
+                    break
+        else:
+            current.paths.append(word)
+    transfers.append(current)
+    return transfers
+
+
+def api_write_problem(client, tokens, index, context):
+    """Refuse ref updates and merges through the GitHub API in listed repositories; reads pass."""
+    arguments = tokens[index + 1:]
+    # The command's own GH_HOST or --hostname decide; otherwise any host the call may have set.
+    hosts = set(context.gh_hosts)
+    inline = [word.partition("=")[2] for word in tokens[:index] if word.startswith("GH_HOST=")]
+    if inline:
+        hosts = {inline[-1].lower() or "github.com"}  # gh treats an empty GH_HOST as unset
+    transfers = curl_transfers(arguments) if client == "curl" else [arguments]
+    if client == "curl" and any(transfer.unknown for transfer in transfers):
+        # An unknown option may take the next word, so no transfer boundary after
+        # it can be trusted: refuse when a listed endpoint appears anywhere.
+        for word in arguments:
+            match = GITHUB_WRITE_API.search(word)
+            if match and github_host(match["host"] or "") == "api.github.com" and (
+                    f"{match['owner']}/{match['repo']}".lower() in context.listed):
+                return (f"cannot verify a curl command with an option the guard does not know that names "
+                        f"github.com/{match['owner']}/{match['repo']}, a fast-forward repository on GitHub; "
+                        f"use only common curl options there; {github_merge_hint()}.")
+    if client == "gh":
+        for position, word in enumerate(arguments):
+            if word == "--hostname":
+                hosts = {(arguments[position + 1] if position + 1 < len(arguments) else "").lower()}
+            elif word.startswith("--hostname="):
+                hosts = {word.partition("=")[2].lower()}
+    github_gh = any(not host or github_host(host) == "github.com" or "$" in host or "`" in host for host in hosts)
+    for transfer in transfers:
+        if client == "curl":
+            # A read only when proven: every option known, none a data option, and
+            # no -X other than GET or HEAD anywhere in the transfer; -G proves nothing.
+            paths = transfer.paths
+            if not (transfer.data or transfer.unknown) and all(
+                    method.upper() in {"GET", "HEAD"} for method in transfer.methods):
+                continue
+        else:
+            paths, method, payloads = request_parts(client, transfer)
+            if client == "gh" and paths[:1] != ["api"]:
+                return None
+            written = any(kind in {"field", "body", "form", "file"} for kind, _ in payloads)
+            if (method or ("POST" if written else "GET")).upper() in {"GET", "HEAD"}:
+                continue
+        for path in paths:
+            match = GITHUB_WRITE_API.search(path)
+            if not match or not (github_host(match["host"] or "") == "api.github.com"
+                                 or (client == "gh" and match["host"] is None and github_gh)):
+                continue
+            owner, repo = match["owner"], match["repo"]
+            if not (LITERAL.match(owner) and LITERAL.match(repo)):
+                return "cannot verify a GitHub API write with a nonliteral repository; use a literal owner and repository."
+            if f"{owner}/{repo}".lower() not in context.listed:
+                continue
+            what = "merge through the merges API" if match["kind"] == "merges" else "update branches through the API"
+            return (f"github.com/{owner}/{repo} is a fast-forward repository on GitHub, where agents do not "
+                    f"{what}: {github_merge_hint()}.")
+    return None
+
+
+def pre_push_problem(repository, lines, cwd):
+    """Return why Git must not push these refs to a GitHub repository, or None.
+
+    `lines` are the hook's stdin, `<local ref> <local sha> <remote ref> <remote sha>`.
+    In a listed repository, an update of a protected branch must fast-forward it to
+    the head of an open PR into it with a review comment for that head and no
+    leftover fixups or agent-identity commits. Other refs and repositories pass.
+    """
+    repositories, identities = guard_settings()
+    if f"github.com/{repository}".lower() not in repositories:
+        return None
+    label, cache = f"github.com/{repository}", {}
+    owner, name = repository.split("/")
+    for line in lines:
+        fields = line.split()
+        if not fields:
+            continue
+        if len(fields) != 4 or not all(SHA.match(sha.lower()) for sha in fields[1::2]):
+            return f"unexpected pre-push input {line!r}."
+        local_sha, remote_ref, remote_sha = fields[1].lower(), fields[2], fields[3].lower()
+        if not remote_ref.startswith("refs/heads/"):
+            continue  # tags and other refs
+        branch = remote_ref[len("refs/heads/"):]
+        if not protected_branch(repository, branch, cache):
+            continue
+        if set(local_sha) == {"0"}:
+            return f"{label}: deleting its protected branch {branch} is refused; {github_merge_hint(base=branch)}."
+        if set(remote_sha) != {"0"}:
+            if not commit_exists(cwd, remote_sha):
+                return (f"{label}: {branch} is at {remote_sha[:12]}, which this clone does not have, so the guard "
+                        "cannot tell whether the push fast-forwards it; fetch and push again.")
+            if not is_ancestor(cwd, remote_sha, local_sha):
+                return (f"{label}: the push does not fast-forward its protected branch {branch}; "
+                        f"{github_merge_hint(base=branch)}.")
+        pulls = [pull for pull in open_pulls(repository, branch, cache)
+                 if str((pull.get("head") or {}).get("sha") or "").lower() == local_sha
+                 and (pull.get("base") or {}).get("ref") == branch]
+        if not pulls:
+            return (f"{label}: {local_sha[:12]} is not the head of an open PR into {branch}, its protected branch; "
+                    f"{github_merge_hint(base=branch)}.")
+        problems = []
+        for pull in pulls:
+            pr = PR("github", "github.com", owner, name, str(pull.get("number")))
+            problem = review_problem(comment_bodies(pr), local_sha, branch)
+            if problem:
+                problems.append(f"{pr} {problem}.")
+                continue
+            commits = github_list(repository, f"pulls/{pr.number}/commits", cache, 3)
+            if len(commits) >= GITHUB_PR_COMMITS:
+                raise ReviewError(f"{pr} has more commits than the guard checks")
+            problem = commit_problem(pr, commits, identities)
+            if not problem:
+                break  # one reviewed PR with this head into the branch is enough
+            problems.append(problem)
+        else:
+            return problems[0]
+    return None
+
+
+def cmd_pre_push(args):
+    """Git pre-push hook for agent sessions: check what Git pushes to listed GitHub repositories (ADR-0078)."""
+    global request_timeout
+    if not (any(os.environ.get(name) == value for name, value in AGENT_MARKERS.items())
+            or any(os.environ.get(name) for name in CODEX_MARKERS)):
+        return 0  # the operator's own pushes are not checked
+    repository = github_repository(args.url)
+    if repository is None:
+        return 0  # not GitHub: no lookups
+    request_timeout = 15
+    signal.signal(signal.SIGALRM, guard_deadline)
+    signal.alarm(GUARD_DEADLINE)
+    try:
+        reason = pre_push_problem(repository, sys.stdin.read().splitlines(), os.getcwd())
+    except Exception as error:  # any failure must refuse the push, not let it through
+        reason = f"could not verify the push: {error}."
+    finally:
+        signal.alarm(0)
+    if reason is None:
+        return 0
+    print(f"Blocked by the agent PR review pre-push hook: {reason} {GUIDANCE}", file=sys.stderr)
+    return 1
+
+
+def shell_check(command, cwd):
+    """Check a shell command's GitHub-side merges and hook bypasses, then its merges."""
+    return github_shell_check(command) or guard_check(command, cwd)
 
 
 def code_references(text, names):
@@ -2709,6 +3414,10 @@ def guard_command(tokens, cwd, inputs=(), targets=False, directory_variables=Fal
         data = json.loads(run(["gh", "pr", "view", *view, "--json", fields, "--jq", query], view_cwd))
         if not data["url"].startswith("https://github.com/"):
             return f"cannot verify {ref}: only github.com is supported for GitHub merges, not {data['url']}."
+        match = PR_URL.match(data["url"])
+        if match and f"{match['owner']}/{match['repo']}".lower() in github_fast_forward_repositories():
+            return (f"{ref} is in a fast-forward repository on GitHub: "
+                    f"{github_merge_hint(data['head'], data['base'])}.")
         problem = review_problem(data["bodies"], data["head"], data["base"])
         return f"{ref} {problem}." if problem else None
 
@@ -2742,13 +3451,15 @@ def guard_command(tokens, cwd, inputs=(), targets=False, directory_variables=Fal
         return body_problem
     if (method or "").upper() == "GET":
         return None
+    if client == "gh" and method is None and not any(kind in {"field", "body", "file"} for kind, _ in payloads):
+        return None  # gh api defaults to GET, which reads the merge status
     owner, repo, number = match["owner"], match["repo"], match["number"]
     if not all(LITERAL.match(part) for part in (owner, repo, number)) or not number.isdigit():
         return f"cannot verify {owner}/{repo}#{number}: use a literal owner, repository and PR number in the merge call."
 
     host = match["host"]
     is_gh_api = client == "gh" and api_client
-    if is_gh_api or host == "api.github.com":
+    if is_gh_api or github_host(host or "") == "api.github.com":
         if targets:
             return (f"cannot verify {owner}/{repo}#{number}: only github.com is supported; "
                     "do not change GH_HOST or GH_REPO in a merge command chain.")
@@ -2761,10 +3472,12 @@ def guard_command(tokens, cwd, inputs=(), targets=False, directory_variables=Fal
                 hosts.add(token.split("=", 1)[1])
             elif token == "--hostname":
                 hosts.add(tokens[index + 1] if index + 1 < len(tokens) else "")
-        if host and host != "api.github.com":
+        if host and github_host(host) != "api.github.com":
             hosts.add(host)
         if hosts != {"github.com"}:
             return f"cannot verify {owner}/{repo}#{number}: only github.com is supported for GitHub merges."
+        if f"{owner}/{repo}".lower() in github_fast_forward_repositories():
+            return f"{owner}/{repo}#{number} is in a fast-forward repository on GitHub: {github_merge_hint()}."
         pr = PR("github", "github.com", owner, repo, number)
     else:
         pr = PR("forgejo", (f"https://{host}" if host else FORGEJO_URL).rstrip("/"), owner, repo, number)
@@ -3123,7 +3836,7 @@ def guard(_args):
     signal.signal(signal.SIGALRM, guard_deadline)
     signal.alarm(GUARD_DEADLINE)
     try:
-        reason = mcp_check(mcp_tool, tool_input) if mcp_tool is not None else guard_check(command, cwd)
+        reason = mcp_check(mcp_tool, tool_input) if mcp_tool is not None else shell_check(command, cwd)
     except Exception as error:  # any failure must block, not let the merge through
         reason = f"could not verify the automated review: {error}."
     finally:
@@ -3167,6 +3880,11 @@ def main(argv=None):
                                "than HOURS")
     selftest.set_defaults(handler=cmd_selftest)
     commands.add_parser("guard", help="PreToolUse hook for agent merges").set_defaults(handler=cmd_guard)
+    pre_push = commands.add_parser("pre-push", help="Git pre-push hook that checks pushes to listed GitHub "
+                                                    "fast-forward repositories")
+    pre_push.add_argument("remote", help="remote name, as Git passes it")
+    pre_push.add_argument("url", help="push URL, as Git passes it")
+    pre_push.set_defaults(handler=cmd_pre_push)
     args = parser.parse_args(argv)
     try:
         return args.handler(args)

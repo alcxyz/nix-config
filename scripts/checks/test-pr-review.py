@@ -820,6 +820,488 @@ with tempfile.TemporaryDirectory() as tmp:
     del os.environ["PR_REVIEW_CONFIG"]
 review.forgejo_request = fake_forgejo
 
+# GitHub fast-forward repositories (ADR-0078): agents merge by pushing the
+# reviewed head to the base branch. The agent pre-push hook (`pr-review
+# pre-push`) checks what Git pushes; the PreToolUse guard refuses GitHub-side
+# merges, API ref writes and literal attempts to skip the hook. Other
+# repositories, hosts and Forgejo stay unaffected and never call GitHub.
+github_pulls, github_bodies, github_commits, github_failures = {}, {}, {}, []
+ZERO = "0" * 40
+
+
+def github_response(endpoint):
+    """Answer a faked `gh api` call for o/r, or None for other endpoints."""
+    path, _, query = endpoint.partition("?")
+    parts, fields = path.split("/"), dict(urllib.parse.parse_qsl(query))
+    rest = "/".join(parts[3:])
+    if "/".join(parts[1:3]).lower() != "o/r" or not (
+            rest in ("", "pulls") or re.fullmatch(r"pulls/1\d/commits|issues/1\d/comments", rest)):
+        return None
+    if github_failures:
+        raise review.ReviewError("gh api failed: offline")
+    if rest == "":
+        return json.dumps({"default_branch": "dev"})
+    if rest == "pulls":
+        assert fields["state"] == "open" and fields["per_page"] == "100" and fields["page"] == "1", endpoint
+        return json.dumps([pull for pull in github_pulls.values() if pull["base"]["ref"] == fields["base"]])
+    number = parts[4]
+    if rest.endswith("/commits"):
+        assert fields["per_page"] == "100" and fields["page"] == "1", endpoint
+        return json.dumps(github_commits.get(number, []))
+    return "\n".join(json.dumps(body) for body in github_bodies.get(number, []))
+
+
+def github_run(argv, cwd=None, stdin=None, timeout=None):
+    if argv[0] == "git":
+        return real_run(argv, cwd, stdin, timeout)
+    endpoint = argv[4] if argv[:4] == ["gh", "api", "--hostname", "github.com"] else ""
+    if github_response(endpoint) is None:
+        return fake_run(argv, cwd, stdin, timeout)
+    calls.append((argv, cwd))
+    return github_response(endpoint)
+
+
+def gh_calls(seen):
+    return [call[0][4] for call in seen if call[0][:2] == ["gh", "api"]]
+
+
+review.run = github_run
+with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": os.devnull,
+                                                                  "GIT_CONFIG_NOSYSTEM": "1"}):
+    # The hook checks only agent processes; start without any marker.
+    for marker in ("CLAUDECODE", "PR_REVIEW_AGENT_SESSION", *review.CODEX_MARKERS):
+        os.environ.pop(marker, None)
+    os.environ["PR_REVIEW_CONFIG"] = os.path.join(tmp, "config.json")
+    forgejo_host = urllib.parse.urlparse(review.FORGEJO_URL).netloc
+
+    def configure(*repositories):
+        pathlib.Path(os.environ["PR_REVIEW_CONFIG"]).write_text(json.dumps({
+            "reviewers": [], "fast_forward_repositories": list(repositories),
+            "agent_identities": ["agent@example.invalid"]}))
+
+    repo = os.path.join(tmp, "repo")
+
+    def git(*args, cwd=repo, env=None):
+        return subprocess.run(["git", "-c", "user.name=T", "-c", "user.email=t@example.invalid",
+                               "-c", "commit.gpgsign=false", *args], cwd=cwd, check=True, env=env,
+                              capture_output=True, text=True).stdout.strip()
+
+    os.makedirs(repo)
+    git("init", "-q", "-b", "main")
+    git("commit", "-q", "--allow-empty", "-m", "init")
+    base = git("rev-parse", "HEAD")
+    git("branch", "dev")
+    heads = {}
+    for branch in ("feature", "unreviewed", "loose", "side"):
+        git("switch", "-q", "-c", branch, "main")
+        git("commit", "-q", "--allow-empty", "-m", f"feat: {branch}")
+        heads[branch] = git("rev-parse", "HEAD")
+    git("switch", "-q", "feature")
+    reviewed = heads["feature"]
+    github_pulls.update({
+        "17": {"number": 17, "head": {"sha": reviewed}, "base": {"ref": "dev"}},
+        "19": {"number": 19, "head": {"sha": heads["unreviewed"]}, "base": {"ref": "dev"}},
+    })
+    github_bodies.update({
+        "17": [f"Automated read-only review ({reviewed[:12]} on dev): no blocking findings."],
+        "19": [f"Automated read-only review ({reviewed[:12]} on dev): no blocking findings."],
+    })
+    github_commits.update({"17": [pr_commit("feat: feature")], "19": [pr_commit("feat: unreviewed")]})
+    configure("github.com/O/R", f"{forgejo_host}/O/r")
+    listed_url = "https://github.com/O/R.git"
+
+    def pre_push(url, *lines):
+        calls.clear()
+        sys.stdin, sys.stderr = io.StringIO("".join(f"{line}\n" for line in lines)), io.StringIO()
+        previous = os.getcwd()
+        os.chdir(repo)
+        try:
+            return review.main(["pre-push", "origin", url]), sys.stderr.getvalue(), gh_calls(calls)
+        finally:
+            os.chdir(previous)
+            sys.stdin, sys.stderr = sys.__stdin__, sys.__stderr__
+
+    def update(local, remote_ref="refs/heads/dev", remote=base):
+        return f"refs/heads/x {local} {remote_ref} {remote}"
+
+    # The operator's own pushes are never checked: without an agent marker the
+    # hook returns before reading configuration or calling GitHub.
+    configured = os.environ["PR_REVIEW_CONFIG"]
+    os.environ["PR_REVIEW_CONFIG"] = os.path.join(tmp, "missing.json")
+    code, _, seen = pre_push(listed_url, update(ZERO))
+    assert code == 0 and not seen, seen
+    os.environ["PR_REVIEW_CONFIG"] = configured
+    for marker, value in (("CLAUDECODE", "1"), ("PR_REVIEW_AGENT_SESSION", "1"), ("CODEX_THREAD_ID", "t"),
+                          ("CODEX_TOOL_CALL_ID", "c"), ("CODEX_SANDBOX_NETWORK_DISABLED", "1")):
+        with patch.dict(os.environ, {marker: value}):
+            assert pre_push(listed_url, update(ZERO))[0] == 1, marker
+    with patch.dict(os.environ, {"CLAUDECODE": "0", "PR_REVIEW_AGENT_SESSION": ""}):
+        assert pre_push(listed_url, update(ZERO))[0] == 0
+    os.environ["PR_REVIEW_AGENT_SESSION"] = "1"
+
+    # The reviewed head of an open PR may fast-forward its base, by any GitHub URL form.
+    for url in (listed_url, "git@github.com:O/R.git", "git@github.com:/O/R.git", "ssh://git@github.com/o/r",
+                "https://GITHUB.COM:443/O/R", "ssh://git@ssh.github.com:443/O/R.git"):
+        code, message, seen = pre_push(url, update(reviewed))
+        assert code == 0 and "repos/O/R/pulls/17/commits?per_page=100&page=1" in [path.replace("o/r", "O/R") for path in seen], (url, message, seen)
+    assert pre_push(listed_url, update(reviewed, remote=ZERO))[0] == 0  # creating the base
+    # Other updates of a protected branch are refused.
+    for line, hint in (
+        (update(heads["unreviewed"]), f"no automated review comment for its current head {heads['unreviewed'][:12]}"),
+        (update(heads["loose"]), "is not the head of an open PR into dev"),
+        (update(reviewed, "refs/heads/main"), "is not the head of an open PR into main"),
+        (update(ZERO), "deleting its protected branch dev"),
+        (update(reviewed, remote=heads["side"]), "does not fast-forward"),
+        (update(reviewed, remote="1" * 40), "which this clone does not have"),
+        ("refs/heads/x HEAD refs/heads/dev", "unexpected pre-push input"),
+    ):
+        code, message, _ = pre_push(listed_url, line)
+        assert code == 1 and hint in message and "pr-review run <pr>" in message, (line, message)
+    for commit, hint in ((pr_commit("fixup! feat: feature"), "still has the commit"),
+                         (pr_commit("fix: two", committer="Agent@example.invalid"), "agent forge account")):
+        github_commits["17"] = [pr_commit("feat: feature"), commit]
+        code, message, _ = pre_push(listed_url, update(reviewed))
+        assert code == 1 and hint in message, message
+    github_commits["17"] = [pr_commit("feat: feature")]
+    # Several open PRs with that head into the base: one that passes is enough.
+    pulls = dict(github_pulls)
+    github_pulls.clear()
+    github_pulls.update({"16": {"number": 16, "head": {"sha": reviewed}, "base": {"ref": "dev"}}, **pulls})
+    github_bodies["16"] = []
+    github_commits["16"] = [pr_commit("fixup! feat: feature")]
+    code, message, seen = pre_push(listed_url, update(reviewed))
+    assert code == 0 and "repos/O/R/pulls/17/commits?per_page=100&page=1" in seen, (message, seen)
+    github_commits["17"] = [pr_commit("fixup! feat: feature")]
+    code, message, _ = pre_push(listed_url, update(reviewed))
+    assert code == 1 and "O/R#16 has no automated review comment" in message, message
+    github_commits["17"] = [pr_commit("feat: feature")]
+    github_pulls.clear()
+    github_pulls.update(pulls)
+    # One refused line refuses the whole push.
+    assert pre_push(listed_url, update(reviewed, "refs/heads/topic", ZERO), update(heads["loose"]))[0] == 1
+    # Feature branches pass after learning they are not protected; tags pass without lookups.
+    code, _, seen = pre_push(listed_url, update(heads["loose"], "refs/heads/topic", heads["side"]))
+    assert code == 0 and seen == ["repos/O/R", "repos/O/R/pulls?state=open&base=topic&per_page=100&page=1"], seen
+    code, _, seen = pre_push(listed_url, update(heads["loose"], "refs/tags/v1", ZERO), update(ZERO, "refs/tags/v0"))
+    assert code == 0 and not seen, seen
+    # Unlisted repositories and other hosts pass without lookups, even unreadable configuration
+    # for hosts that are not GitHub.
+    for url in ("git@github.com:o/other.git", f"ssh://git@{forgejo_host}/O/r.git", "/srv/git/repo.git",
+                "https://gitlab.com/O/R.git"):
+        code, _, seen = pre_push(url, update(ZERO))
+        assert code == 0 and not seen, (url, seen)
+    configured = os.environ["PR_REVIEW_CONFIG"]
+    os.environ["PR_REVIEW_CONFIG"] = os.path.join(tmp, "missing.json")
+    assert pre_push(f"ssh://git@{forgejo_host}/O/r.git", update(ZERO))[0] == 0
+    code, message, _ = pre_push(listed_url, update(reviewed))
+    assert code == 1 and "missing.json" in message, message
+    os.environ["PR_REVIEW_CONFIG"] = configured
+    # Lookup failures refuse pushes to listed repositories.
+    github_failures.append(True)
+    code, message, _ = pre_push(listed_url, update(reviewed))
+    assert code == 1 and "offline" in message, message
+    github_failures.clear()
+
+    # End to end: Git runs the hook from its environment configuration, as T3
+    # agent sessions register it, with a fake gh serving the same answers.
+    bin_dir = os.path.join(tmp, "bin")
+    os.makedirs(bin_dir)
+    fixtures = os.path.join(tmp, "gh.json")
+    fake_gh = pathlib.Path(bin_dir, "gh")
+    fake_gh.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "answers = json.load(open(os.environ['FAKE_GH_ANSWERS']))\n"
+        "endpoint = sys.argv[4] if sys.argv[1:4] == ['api', '--hostname', 'github.com'] else ''\n"
+        "if endpoint not in answers:\n"
+        "    sys.exit(f'unexpected gh call {sys.argv[1:]}')\n"
+        "print(answers[endpoint])\n")
+    fake_gh.chmod(0o755)
+    endpoints = ["repos/O/R", "repos/O/R/pulls?state=open&base=dev&per_page=100&page=1",
+                 "repos/O/R/pulls/17/commits?per_page=100&page=1", "repos/O/R/issues/17/comments",
+                 "repos/O/R/issues/19/comments", "repos/O/R/pulls/19/commits?per_page=100&page=1",
+                 "repos/O/R/pulls?state=open&base=topic&per_page=100&page=1"]
+    pathlib.Path(fixtures).write_text(json.dumps({endpoint: github_response(endpoint) for endpoint in endpoints}))
+    # As Home Manager registers it: in the user's global Git configuration.
+    global_config = os.path.join(tmp, "gitconfig")
+    pathlib.Path(global_config).write_text(
+        '[hook "agent-pr-review"]\n'
+        f'\tcommand = "{sys.executable} {ROOT}/modules/home-manager/programs/ai/pr-review.py pre-push"\n'
+        "\tevent = pre-push\n")
+    hook_env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "FAKE_GH_ANSWERS": fixtures,
+                "GIT_CONFIG_GLOBAL": global_config}
+    assert "agent-pr-review" in git("hook", "list", "pre-push", env=hook_env)
+
+    def run_hook(line, url=listed_url):
+        stdin = os.path.join(tmp, "pre-push.in")
+        pathlib.Path(stdin).write_text(line + "\n")
+        return subprocess.run(["git", "hook", "run", f"--to-stdin={stdin}", "pre-push", "--", "origin", url],
+                              cwd=repo, env=hook_env, capture_output=True, text=True)
+
+    result = run_hook(update(reviewed))
+    assert result.returncode == 0, result.stderr
+    result = run_hook(update(heads["unreviewed"]))
+    assert result.returncode != 0 and "Blocked by the agent PR review pre-push hook" in result.stderr, result.stderr
+    assert "current head" in result.stderr, result.stderr
+    # The operator's own push, without an agent marker, is not checked; and a
+    # command-line override of `hook.<name>.enabled` disables the hook, which
+    # is why the PreToolUse guard refuses it.
+    hook_env["PR_REVIEW_AGENT_SESSION"] = ""
+    assert run_hook(update(heads["unreviewed"])).returncode == 0
+    hook_env["PR_REVIEW_AGENT_SESSION"] = "1"
+    hook_env.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "hook.agent-pr-review.enabled",
+                     "GIT_CONFIG_VALUE_0": "false"})
+    assert run_hook(update(heads["unreviewed"])).returncode == 0
+    del hook_env["GIT_CONFIG_COUNT"], hook_env["GIT_CONFIG_KEY_0"], hook_env["GIT_CONFIG_VALUE_0"]
+    # A real push through the hook: a local repository is not GitHub, so it passes.
+    bare = os.path.join(tmp, "bare.git")
+    git("init", "-q", "--bare", bare, cwd=tmp)
+    pushed = subprocess.run(["git", "push", "-q", bare, "feature:dev", "loose:topic"], cwd=repo, env=hook_env,
+                            capture_output=True, text=True)
+    assert pushed.returncode == 0, pushed.stderr
+    assert git("rev-parse", "dev", cwd=bare) == reviewed
+
+    # The PreToolUse guard leaves pushes to the hook, and reads parsed words,
+    # so text in messages, reads of hook settings and unrelated options pass ...
+    for command in ("git push origin +feature:dev", "git push origin :main", "bash -c 'git push --force origin dev'",
+                    "git commit --no-verify -m x && git push origin feature",
+                    "git commit -m 'git push --no-verify' && git push", "echo GIT_CONFIG_COUNT",
+                    "git log --grep push", "git commit -m 'agent-job: forward GIT_CONFIG_COUNT' && git push",
+                    "git config --get hook.agent-pr-review.command && git push",
+                    "git config get hook.agent-pr-review.enabled", "git config --get-all --show-origin hook.x.event",
+                    "git config --global --file=f --type bool --get hook.x.enabled",
+                    "git config -z --get-regexp '^hook\\.' pre", "git config list --show-scope --includes",
+                    "git config -f f -l", "git config get --default no --type=bool hook.x.enabled",
+                    "git config --list --show-origin && git push", "docker run --env A=1 -i img && git push",
+                    "GIT_CONFIG_COUNT=0 git status", "cat <<'EOF'\nGIT_CONFIG_COUNT=0 git push --no-verify\nEOF",
+                    "git commit -m 'set hook.agent-pr-review.enabled' && git push"):
+        assert not expect(command, 0, repo)[0], command
+    # ... but refuses attempts to change or skip it.
+    for command, hint in (
+        ("git push --no-verify origin feature:dev", "--no-verify"),
+        ("git push --no-ver origin feature:dev", "--no-verify"),
+        ("git -C repo push -u --no-verify origin feature", "--no-verify"),
+        ("xargs git push --no-verify origin <<< x", "run through xargs"),
+        ("git commit -m $'x' && git push --no-verify", "cannot verify this command's Git hook settings"),
+        ("git -c hook.agent-pr-review.command=true push origin feature:dev", "git -c hook.agent-pr-review.command"),
+        ("git '-c' hook.agent-pr-review.command=true push origin HEAD:main", "git -c hook.agent-pr-review.command"),
+        ("git -c hook.agent-pr-review.enabled=false push origin HEAD:main", "hook.agent-pr-review.enabled"),
+        ("git --config-env=hook.agent-pr-review.enabled=OFF push", "hook.agent-pr-review.enabled"),
+        ("git -c Hook.Agent-PR-Review.Enabled=false status", "Hook.Agent-PR-Review.Enabled"),
+        ("git config hook.agent-pr-review.enabled false", "must not write"),
+        ("git config --global hook.agent-pr-review.command true", "must not write"),
+        ("git config --worktree --unset hook.agent-pr-review.command", "must not write"),
+        ("git config --file .git/config --add hook.agent-pr-review.event pre-commit", "must not write"),
+        ("git config set hook.agent-pr-review.enabled false", "must not write"),
+        ("git config unset --global hook.agent-pr-review.command", "must not write"),
+        ("git config --remove-section hook.agent-pr-review", "must not write"),
+        ("git config remove-section hook.agent-pr-review", "must not write"),
+        # Subcommand forms with options that take a value.
+        ("git config set --file .git/config hook.agent-pr-review.enabled false", "must not write"),
+        ("git config set --type bool --comment why hook.agent-pr-review.enabled false", "must not write"),
+        ("git config set --global --value=pre-push hook.agent-pr-review.event pre-commit", "must not write"),
+        ("git config set --value pre-push hook.agent-pr-review.event pre-commit", "must not write"),
+        ("git config unset --file f hook.agent-pr-review.command", "must not write"),
+        ("git config unset --worktree --all hook.agent-pr-review.event", "must not write"),
+        ("git config set --system -- hook.agent-pr-review.enabled false", "must not write"),
+        ("git config rename-section --file f hook.agent-pr-review other", "must not write"),
+        # A rename into hook.* writes hook settings too.
+        ("git config rename-section --file f staged hook.agent-pr-review", "must not write"),
+        ("git config rename-section staged hook", "must not write"),
+        ("git config --rename-section staged hook.agent-pr-review", "must not write"),
+        ("git config --rename-section --local staged hook.agent-pr-review", "must not write"),
+        ("git config --rename-section --file .git/config staged hook.agent-pr-review", "must not write"),
+        ("git config set -t bool hook.agent-pr-review.enabled false", "must not write"),
+        ("git config -t bool hook.agent-pr-review.enabled false", "must not write"),
+        # Long options Git accepts abbreviated.
+        ("git config --fil .git/config hook.agent-pr-review.enabled false", "must not write"),
+        ("git config --rename-sec --loc staged hook.agent-pr-review", "must not write"),
+        ("git config set --typ bool hook.agent-pr-review.enabled false", "must not write"),
+        ("git config --remove-sec hook.agent-pr-review", "must not write"),
+        # Unparsable text that clears a marker before a push.
+        ("printf $'x'; unset CLAUDECODE; git push origin HEAD:main", "Git hook settings"),
+        ("git config remove-section --local hook.agent-pr-review", "must not write"),
+        ("git config --file f --type bool hook.agent-pr-review.enabled false", "must not write"),
+        # The agent markers turn the hook on.
+        ("CLAUDECODE= git push origin feature:dev", "CLAUDECODE"),
+        ("unset PR_REVIEW_AGENT_SESSION; git push", "PR_REVIEW_AGENT_SESSION"),
+        ("env -u CLAUDECODE -u PR_REVIEW_AGENT_SESSION git push", "CLAUDECODE"),
+        ("export CODEX_THREAD_ID= && git push", "CODEX_THREAD_ID"),
+        # Only strict read shapes are reads; anything else naming hook settings is refused.
+        ("git config hook.agent-pr-review.command", "must not write"),
+        ("git config --comment --get hook.agent-pr-review.enabled false", "must not write"),
+        ("git config --comm x --get hook.agent-pr-review.enabled", "must not write"),
+        ("git config --fil f --get hook.agent-pr-review.enabled", "must not write"),
+        ("git config --get hook.agent-pr-review.enabled a b", "must not write"),
+        ("git config get --value v hook.agent-pr-review.enabled", "must not write"),
+        ("git config --get --unset hook.agent-pr-review.enabled", "must not write"),
+        ("git config --list hook.agent-pr-review.enabled", "must not write"),
+        # env -S splits a string into the command the guard does not read.
+        ("env -S 'git push --force origin dev' true; git push", "env -S"),
+        ("env --split=x git push", "env -S"),
+        ("env -iS x git push", "clear the environment"),
+        # eval through builtin or command wrappers is read like eval.
+        ("builtin eval 'git push --no-verify origin feature:dev'", "--no-verify"),
+        ("command eval 'git -c hook.agent-pr-review.enabled=false push'", "hook.agent-pr-review.enabled"),
+        ("command -p eval 'git push --no-verify'", "--no-verify"),
+        # env behind any wrapper, with any option the guard does not know.
+        ("command env -S '-u PR_REVIEW_AGENT_SESSION git push origin HEAD:main'", "env -S"),
+        ("exec env -S 'git push origin HEAD:main'", "env -S"),
+        ("nohup env -S '-u PR_REVIEW_AGENT_SESSION git push origin HEAD:main'", "env -S"),
+        ('command env -iu PR_REVIEW_AGENT_SESSION PATH="$PATH" git push origin HEAD:main', "env -iu"),
+        ("sudo -E env --unset=CLAUDECODE git push", "CLAUDECODE"),
+        ("timeout 60 nice env -u PR_REVIEW_AGENT_SESSION git push", "PR_REVIEW_AGENT_SESSION"),
+        ("setsid env --frobnicate git push", "env --frobnicate"),
+        # env assignments of hook-relevant variables, and a lone - after --.
+        ("command env CLAUDECODE= git push origin HEAD:main", "CLAUDECODE"),
+        ("nohup env -C /tmp GIT_DIR=/x/.git git push", "GIT_DIR"),
+        ("env -0 GIT_CONFIG_COUNT=0 git push", "GIT_CONFIG_COUNT"),
+        ("sudo env HOME=/tmp git push", "HOME"),
+        ("env -- - git push", "env -"),
+        ("command env -v -- - PATH=/usr/bin git push", "env -"),
+        ("env --split-s='git push' true && git push", "env -S"),
+        # Any hook word in a git config that is not a pure read, however options are abbreviated.
+        ("git config rename-section --f f other hook", "must not write"),
+        ("git config rename-section --fi=f hook.agent-pr-review other", "must not write"),
+        ("git config --f=f --rename-section other HOOK", "must not write"),
+        ("git config set --comm why hook.agent-pr-review.enabled false", "must not write"),
+        ("git config --file=f --add hook.agent-pr-review.event pre-commit", "must not write"),
+        # Include settings can change the hook too.
+        ("git config --global include.path ~/elsewhere.inc", "must not write"),
+        ("git config set includeIf.gitdir:~/x/.path f", "must not write"),
+        ("git -c include.path=/tmp/x.inc push origin feature:dev", "include configuration"),
+        ("git -c includeIf.gitdir:/.path=/tmp/x.inc push", "include configuration"),
+        ("git --config-env=include.path=INC push", "include configuration"),
+        # Bundled env options.
+        ("env -iu HOME git push", "HOME"),
+        ("env -i0 git push", "clear the environment"),
+        ("env -uCLAUDECODE git push", "CLAUDECODE"),
+        ("env -0u PR_REVIEW_AGENT_SESSION git push", "PR_REVIEW_AGENT_SESSION"),
+        ("env --ignore-env git push", "clear the environment"),
+        ("env --uns=GIT_CONFIG_GLOBAL git push", "GIT_CONFIG_GLOBAL"),
+        # eval and expanding stdin are read as scripts.
+        ("eval 'git push --no-verify origin feature:dev'", "--no-verify"),
+        ("eval git -c hook.agent-pr-review.enabled=false push", "hook.agent-pr-review.enabled"),
+        ('bash <<EOF\necho "$USER"\ngit push --no-verify origin feature:dev\nEOF', "--no-verify"),
+        ('bash <<EOF\nunset PR_REVIEW_AGENT_SESSION\ngit push origin "$BRANCH"\nEOF', "PR_REVIEW_AGENT_SESSION"),
+        ('sh <<< "HOME=/tmp git push origin $BRANCH"', "HOME"),
+        ("export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=hook.agent-pr-review.enabled GIT_CONFIG_VALUE_0=false",
+         "GIT_CONFIG_KEY_0 must not set"),
+        ("GIT_CONFIG_PARAMETERS=\"'hook.agent-pr-review.enabled=false'\" git status", "GIT_CONFIG_PARAMETERS"),
+        ("GIT_CONFIG_COUNT=0 git push origin feature:dev", "GIT_CONFIG_COUNT"),
+        ("unset GIT_CONFIG_COUNT; git push", "GIT_CONFIG_COUNT"),
+        ("env -u GIT_CONFIG_KEY_0 git push", "GIT_CONFIG_KEY_0"),
+        ("export GIT_CONFIG_PARAMETERS=x; git push", "GIT_CONFIG_PARAMETERS"),
+        ("GIT_CONFIG_GLOBAL=/dev/null git push", "GIT_CONFIG_GLOBAL"),
+        ("GIT_CONFIG_NOSYSTEM=1 git push", "GIT_CONFIG_NOSYSTEM"),
+        ("HOME=/tmp git push origin feature:dev", "HOME"),
+        ("export XDG_CONFIG_HOME=/tmp/x && git push", "XDG_CONFIG_HOME"),
+        ('env -i PATH="$PATH" git push origin feature:dev', "clear the environment"),
+        ("bash -c 'HOME=/tmp git push'", "HOME"),
+    ):
+        seen, message = expect(command, 2, repo)
+        assert hint in message and not seen, (command, message)
+    # GitHub-side merges, the merges API and ref updates through the API are refused.
+    seen, message = expect("gh pr merge 7 --squash", 2, repo)
+    assert f"git push <remote> {HEAD}:dev" in message and "fast-forward repository on GitHub" in message, message
+    for command, hint in (
+        ("gh pr merge 7 --rebase", "fast-forward repository on GitHub"),
+        ("gh pr merge 7 --merge --repo o/r", "fast-forward repository on GitHub"),
+        ("gh api -X PUT repos/o/r/pulls/7/merge -f merge_method=merge", "fast-forward repository on GitHub"),
+        ("curl -X PUT https://API.github.com/repos/O/R/pulls/7/merge", "fast-forward repository on GitHub"),
+        ("gh api -X PATCH repos/o/r/git/refs/heads/dev -f sha=abc", "through the API"),
+        ("gh api repos/O/R/git/refs -f ref=refs/heads/dev -f sha=abc", "through the API"),
+        ("gh api -X DELETE repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl -X POST https://api.github.com/repos/o/r/git/refs -d '{}'", "through the API"),
+        ("curl -X PATCH https://api.github.com:443/repos/o/r/git/refs/heads/dev -d '{}'", "through the API"),
+        ("curl -X PATCH https://API.GITHUB.COM/repos/o/r/git/refs/heads/dev -d '{}'", "through the API"),
+        ("gh api --hostname GitHub.com:443 -X PATCH repos/o/r/git/refs/heads/dev -f sha=abc", "through the API"),
+        ("curl -X PATCH https://api.github.com/repos/o/r/git/refs/heads/dev -d '{}' --next -X GET https://api.github.com/user",
+         "through the API"),
+        ("gh api repos/O/R/merges -f base=dev -f head=feature", "merges API"),
+        ("curl -X POST https://api.github.com/repos/o/r/merges -d '{}'", "merges API"),
+        ("bash -c 'gh api -X PATCH repos/o/r/git/refs/heads/dev -f sha=abc'", "through the API"),
+        ("GH_HOST= gh api -X PATCH repos/o/r/git/refs/heads/dev -f sha=abc", "through the API"),
+        ("curl -G --no-get -d '{}' https://api.github.com/repos/o/r/git/refs", "through the API"),
+        ("curl -G -X POST -d '{}' https://api.github.com/repos/o/r/git/refs", "through the API"),
+        # curl is a read only when proven: no data option and no non-GET -X anywhere.
+        ("curl -G -d per_page=1 https://api.github.com/repos/o/r/git/refs", "through the API"),
+        ("curl --get --data-urlencode sha=x https://api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl -X PATCH -X GET https://api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl -sXPATCH https://api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl --request=DELETE https://api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl -T body.json https://api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        # Scheme-less, protocol-relative, port and user-info URLs name the same endpoints.
+        ("curl -d '{}' api.github.com/repos/o/r/merges", "merges API"),
+        ("curl -X PATCH //api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl -X PATCH api.github.com:443/repos/O/R/git/refs/heads/dev", "through the API"),
+        ("curl -X PATCH https://x@API.github.com:443/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl -X DELETE --url api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        # Option values are never flags, and unknown options never prove a read.
+        ("curl -X DELETE --user-agent --next https://api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl -A --next -X DELETE https://api.github.com/repos/o/r/git/refs/heads/dev", "through the API"),
+        ("curl --expand-request DELETE https://api.github.com/repos/o/r/git/refs/heads/main", "option the guard does not know"),
+        ("""curl --expand-json '{"base":"main","head":"topic"}' https://api.github.com/repos/o/r/merges""", "option the guard does not know"),
+        ("curl -K request.conf https://api.github.com/repos/o/r/git/refs/heads/dev", "option the guard does not know"),
+        ("curl --req DELETE https://api.github.com/repos/o/r/git/refs/heads/dev", "option the guard does not know"),
+        ("curl -s% https://api.github.com/repos/o/r/git/refs", "option the guard does not know"),
+        # An unknown option anywhere makes later transfer boundaries untrustworthy.
+        ("curl --frob -X DELETE --next https://api.github.com/repos/o/r/git/refs/heads/dev", "option the guard does not know"),
+        ("curl https://example.org --next --frob x https://api.github.com/repos/o/r/git/refs", "option the guard does not know"),
+    ):
+        _, message = expect(command, 2, repo)
+        assert hint in message and "git push <remote>" in message, (command, message)
+    for command in ("gh api repos/o/r/git/refs/heads/dev", "gh api -X PATCH repos/o/other/git/refs/heads/dev -f sha=abc",
+                    "curl -X POST https://git.example/api/v1/repos/o/r/git/refs -d '{}'",
+                    "gh api repos/o/other/merges -f base=dev -f head=feature", "gh api repos/o/r/merges -X GET",
+                    "gh api --hostname ghe.example -X PATCH repos/o/r/git/refs/heads/dev -f sha=abc",
+                    "GH_HOST=ghe.example gh api -X PATCH repos/o/r/git/refs/heads/dev -f sha=abc",
+                    "curl -s https://api.github.com/repos/o/r/git/refs",
+                    "curl -X GET --url-query per_page=1 https://api.github.com/repos/o/r/git/refs",
+                    "curl -sI https://api.github.com/repos/o/r/merges",
+                    # Reading a PR's merge status is not a merge.
+                    "gh api repos/o/r/pulls/7/merge", "gh api -X GET repos/O/R/pulls/9/merge",
+                    "git config set --file f alias.co checkout", "git config get --file f hook.agent-pr-review.enabled",
+                    "CLAUDECODE=1 git status", "unset CLAUDECODE",
+                    "git config --get include.path", "git -c include.path=/tmp/x.inc status",
+                    "env -i PATH=/usr/bin make", 'bash <<EOF\necho "$USER"\ngit push origin feature\nEOF',
+                    "eval \"$(ssh-agent -s)\" && git push origin feature",
+                    "curl -X HEAD https://api.github.com/repos/o/r/git/refs",
+                    "curl -sSfL -H 'Accept: application/json' https://api.github.com/repos/o/r/git/refs",
+                    "curl -X DELETE https://example.org/x --next https://api.github.com/repos/o/r/git/refs",
+                    "curl --user-agent ua --max-time 5 https://api.github.com/repos/o/r/git/refs",
+                    "nice env -C /tmp git push origin feature", "env -0v git push origin feature",
+                    "env LANG=C git push origin feature", "curl --frob https://example.org/x",
+                    "curl -X PATCH -d '{}' git.example/api/v1/repos/o/r/git/refs",
+                    "curl -X PATCH -d '{}' //git.example/api/v1/repos/o/r/git/refs",
+                    "curl -s api.github.com/repos/o/r/git/refs",
+                    "env -- LANG=C git push origin feature"):
+        assert not expect(command, 0, repo)[0], command
+    # Earlier GH_HOST assignments apply to later gh api calls.
+    with patch.dict(os.environ, {"GH_HOST": "ghe.example"}):
+        for command in ("export GH_HOST=github.com; gh api -X PATCH repos/o/r/git/refs/heads/main -f sha=abc",
+                        "GH_HOST=github.com; gh api -X PATCH repos/o/r/git/refs/heads/main -f sha=abc",
+                        "unset GH_HOST; gh api -X PATCH repos/o/r/git/refs/heads/main -f sha=abc"):
+            _, message = expect(command, 2, repo)
+            assert "through the API" in message, (command, message)
+        assert not expect("gh api -X PATCH repos/o/r/git/refs/heads/main -f sha=abc", 0, repo)[0]
+    # Unlisted GitHub repositories keep the review check alone, and without a
+    # listed GitHub repository nothing about pushes is refused.
+    configure(f"{forgejo_host}/O/r", "github.com/o/other")
+    expect("gh pr merge 7 --squash", 0, repo)
+    expect("gh api -X PUT repos/o/r/pulls/7/merge -f merge_method=squash", 0, repo)
+    expect("gh api -X PATCH repos/o/r/git/refs/heads/dev -f sha=abc", 0, repo)
+    configure(f"{forgejo_host}/O/r")
+    for command in ("git push --no-verify origin +feature:dev", "GIT_CONFIG_COUNT=0 git push"):
+        assert not expect(command, 0, repo)[0], command
+    del os.environ["PR_REVIEW_CONFIG"]
+review.run = fake_run
+assert review.github_repository("ssh://git@ssh.github.com:443/O/R.git") == "O/R"
+assert review.github_repository("github.com:o/r") == "o/r"
+assert review.github_repository("git@github.com:/O/R.git") == "O/R"
+assert review.github_repository("https://x-access-token@github.com/o/r/") == "o/r"
+assert review.github_repository(f"https://{forgejo_host}/o/r") is None
+
 # Unresolvable merge targets block with guidance.
 code, message = hook("curl -X POST https://git.example/api/v1/repos/o/r/pulls/$PR/merge")
 assert code == 2 and "unquoted REST arguments" in message, message

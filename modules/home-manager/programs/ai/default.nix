@@ -22,6 +22,13 @@ with lib; let
     runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
     text = ''PR_REVIEW_CONFIG=${prReviewConfig} exec python3 ${./pr-review.py} "$@"'';
   };
+  # Pushes to listed GitHub repositories are checked by a pre-push hook in the
+  # user's Git configuration (ADR-0078), so it runs beside each repository's
+  # own hooks and covers pushes from scripts, aliases and runners. It checks
+  # only agent processes, which Claude Code marks with CLAUDECODE and T3's
+  # agent sessions (services.t3code runs sessionCommands) and agent-job with
+  # PR_REVIEW_AGENT_SESSION; it returns at once for other URLs.
+  githubFastForward = any (name: hasPrefix "github.com/" (toLower name)) cfg.prReview.fastForwardRepositories;
   prReviewGuard = pkgs.writeShellApplication {
     name = "agent-pr-review-guard";
     runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
@@ -392,12 +399,29 @@ in {
       fastForwardRepositories = mkOption {
         type = types.listOf (types.strMatching "[^/[:space:]]+/[^/[:space:]]+/[^/[:space:]]+");
         default = [];
-        example = ["git.example.org/owner/repo"];
+        example = ["git.example.org/owner/repo" "github.com/owner/repo"];
         description = ''
-          Forgejo repositories, as `host/owner/repo`, whose agent merges the guard
-          also requires to be fast-forward-only, without leftover `fixup!`,
-          `squash!` or `amend!` commits and without commits by `agentIdentities`
-          (ADR-0078). Other repositories and GitHub are not affected.
+          Repositories, as `host/owner/repo`, whose agent merges the guard also
+          requires to be fast-forward, without leftover `fixup!`, `squash!` or
+          `amend!` commits and without commits by `agentIdentities` (ADR-0078).
+          Forgejo merges must use the style fast-forward-only. For GitHub
+          repositories (`github.com/owner/repo`) agents merge by pushing the
+          reviewed PR head to its base branch: the guard refuses GitHub-side
+          merges, API ref updates and changes to the agent pre-push hook,
+          which the user's Git configuration registers and which checks each
+          push from an agent process to a protected branch as the merge.
+          Other repositories are not affected.
+        '';
+      };
+      sessionCommands = mkOption {
+        type = types.lines;
+        internal = true;
+        readOnly = true;
+        default = optionalString (cfg.enable && githubFastForward) "export PR_REVIEW_AGENT_SESSION=1\n";
+        description = ''
+          Bash commands that mark an agent session for the agent pre-push
+          hook; empty unless a GitHub repository is in
+          `fastForwardRepositories`.
         '';
       };
     };
@@ -455,6 +479,13 @@ in {
     # programs.gemini-cli = {
     #   enable = true;
     # };
+
+    programs.git.settings = mkIf githubFastForward {
+      hook.agent-pr-review = {
+        command = "${prReview}/bin/pr-review pre-push";
+        event = "pre-push";
+      };
+    };
 
     home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewAck t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
 

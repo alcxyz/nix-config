@@ -1,8 +1,8 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories; amended 2026-10-17: `pr-review selftest` and failure reasons)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories; amended 2026-10-17: `pr-review selftest` and failure reasons; amended 2026-10-19: GitHub fast-forward repositories merge by a push of the reviewed head to the base branch, checked by an agent pre-push hook)
 **Date:** 2026-10-01
-**Applies to:** `modules/home-manager/programs/ai/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks
+**Applies to:** `modules/home-manager/programs/ai/`, `modules/home-manager/services/t3code/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks, the agent Git pre-push hook in the user's Git configuration
 
 ## Context
 
@@ -196,7 +196,125 @@ by an agent forge account would leave. The Forgejo MCP server (3.2.0) lists
 only the other styles in its tool description but passes `fast-forward-only`
 through to the API unchanged; where it does not, merge with `tea api -X POST
 /repos/owner/repo/pulls/N/merge -d '{"Do":"fast-forward-only"}'`. Other
-repositories and GitHub merges are checked as before.
+repositories, and merges in unlisted GitHub repositories, are checked as before.
+
+The list may also name GitHub repositories as `github.com/owner/repo`
+(amended 2026-10-19), and this decision sets how agents merge there. GitHub
+has no forge fast-forward merge, so for a listed GitHub repository the merge
+is a push of the reviewed PR head to its base branch (`git push <remote>
+<head sha>:<base>`), which GitHub records as merging the PR and which keeps
+the commits byte-identical. Agents never use GitHub's squash, rebase or
+merge-commit methods there, and do not merge or move branches through the
+API; agents act on GitHub through a GitHub App (ADR-0099), which does not
+change this method.
+
+Since that push is the merge, a Git pre-push hook checks it: `pr-review
+pre-push`, which the user's Home Manager Git configuration registers
+(`hook.agent-pr-review.command` and `hook.agent-pr-review.event`) when a
+GitHub repository is listed. Git runs it beside the repository's own
+`pre-push` hook, in every repository and session, with the remote's name, the
+push URL after `insteadOf` and `pushInsteadOf` rewriting, and one line per
+ref it is about to update, so it checks what Git actually pushes, whether
+from a literal command, a script, an alias or a runner. It checks only agent
+processes and returns at once, before reading configuration or calling
+GitHub, unless an agent marker is set: `CLAUDECODE=1`, which Claude Code sets
+for its tool processes; `PR_REVIEW_AGENT_SESSION=1`, which T3 Code's agent
+session wrapper exports, so Codex in T3 is covered, and which `agent-job`
+passes to jobs started from any agent process; or, best effort, any of
+`CODEX_THREAD_ID`, `CODEX_TOOL_CALL_ID` or `CODEX_SANDBOX_NETWORK_DISABLED`
+for Codex outside T3, which are not verified. The operator's pushes outside
+agent clients are not checked, but pushes from T3's interface and commands
+the operator types inside a Claude Code session carry a marker and are. For a URL that is a listed repository in scp, `ssh://` or
+`https://` form (hosts compared without case or default port), each update
+of a protected branch, the repository's default branch, `main` or the base
+of an open PR, must not delete it, must fast-forward it (`git merge-base
+--is-ancestor`; a remote commit the clone lacks refuses the push with a
+request to fetch), and must push the head of an open PR into that branch
+with a review comment for that head and the same commit checks as above,
+read from the GitHub API with the guard's deadline. GitHub itself would also
+refuse a non-fast-forward unless forced. Tags, other refs and feature
+branches pass, the last after the lookups that show they are not protected;
+a branch that is the base of an open PR, as in stacked PRs, is protected by
+design. When several open PRs into the branch have the pushed head, one that
+passes is enough. Other URLs return at once without network. A refusal or a failed
+lookup exits 1 with the reason and refuses the whole push.
+
+The PreToolUse guard keeps what the hook cannot see. For a listed GitHub
+repository it refuses `gh pr merge` with any flags, REST and `gh api` merges
+(`pulls/N/merge` and the `merges` API), and ref updates through the
+`git/refs` API, pointing to the push instead; each curl transfer is read
+on its own (curl transfers split only at a real `--next`, options read by
+their curl meaning so a value is never a flag; a read only when proven:
+every option known, none a data option or indirection such as `-K` or
+`--expand-*`, and no `-X` other than `GET` or `HEAD` anywhere in it,
+whatever `-G` says; a curl command with an option the guard does not know
+anywhere is refused outright when it names a listed endpoint, since that
+option may take the next word), the
+`gh api` host
+follows `--hostname` and `GH_HOST` (empty counts as unset), including
+assignments earlier in the same command, hosts compare without case or
+default port, URLs count with or without a scheme (`https://`, `//` or a
+bare host, with any port or user info), and reads pass, including a `gh api` GET of `pulls/N/merge`
+(its default without fields), which only reads the merge status. It also
+refuses changes to the hook, read from
+parsed shell words so that text in messages and heredoc bodies stays data. In
+any command: `hook.*` settings given with `git -c` or `--config-env`
+(including `hook.<name>.enabled`, which disables a configuration hook),
+any `git config` that is not proven a read and has an argument naming a
+`hook` or
+include (`include.path`, `includeIf.*`) key or section, also as an
+`--option=value`, whatever options Git takes it with, so an unusual value
+that only looks like one is refused too; a read is only `get [options]
+KEY`, `list [options]`, or `--get`, `--get-all` or `--get-regexp KEY
+[pattern]` and `--list`, with every other word a flag that takes no value or
+`-f`, `--file`, `--blob`, `--type` or `--default` with its value, in exactly
+those forms, and `GIT_CONFIG_KEY_n` or
+`GIT_CONFIG_PARAMETERS` values that set `hook.*`. In a command that pushes:
+`git push --no-verify`, include settings given with `git -c` or
+`--config-env`, and assigning, exporting, unsetting or `env -u` (bundled
+options such as `-iu NAME` included) of
+`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`, `GIT_CONFIG_VALUE_n`,
+`GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`,
+`GIT_CONFIG_NOSYSTEM`, `HOME` or `XDG_CONFIG_HOME`, which can hide the user's
+configuration, and of the agent markers, which turn the hook on, `env -i`,
+`env -S`, whose split string the guard does not read, a lone `-` in env's
+options or right after `--`, which GNU env reads as `-i`, any `env` option it
+does not know, and an assignment through `env` of a variable that carries the
+hook or turns it on, wherever an `env` word stands among the command's
+words. Arguments of
+`eval`, also behind `builtin` or `command`, and a shell's expanding stdin (an unquoted
+heredoc or a here-string), are read as the scripts they become. Shell text
+the guard cannot parse is refused only when it carries such syntax. Pushes
+themselves pass the PreToolUse guard.
+
+The pre-push hook is the enforcement. The PreToolUse refusals of hook
+tampering are an accident guard for literal, unwrapped forms: `git -c
+hook.*`, `git config` writes of hook and include keys, `--no-verify`, changes
+to the agent markers and `GIT_CONFIG_*`, `env -i`, `-u` and `-S`, and
+GitHub-side merge and ref calls. Deliberate evasion is out of scope under the
+same-user limit (nix-secrets ADR-0020): wrappers around `git` or `env` the
+guard does not model, Git aliases, `GIT_DIR` or `--git-dir` redirection,
+generated or indirect commands, and scheme or host tricks beyond the handled
+forms. An agent running as the operator can always disable a client-side
+hook, so these checks prevent mistakes, not a determined bypass.
+
+The hook covers agent processes that carry a marker: Claude Code, T3 agent
+sessions and their `agent-job` units, and Codex outside T3 only if one of
+the unverified Codex variables is set. The T3 server and everything it
+starts carry `PR_REVIEW_AGENT_SESSION=1`, so pushes T3 makes from its own
+interface are checked too; its flow pushes feature branches, which pass, and
+a push from it to a protected branch needing a reviewed head is accepted. A
+running T3 gets the marker only after its next restart, like other changes
+to its session wrapper, which it runs through a stable link (see
+`modules/home-manager/services/t3code/README.md`). Hook tampering is caught
+only in the literal forms above; other edits of a repository's `.git/config` or the user's
+configuration, for example by a script, an editor or `sed`, and processes
+that drop the marker are not seen. The `env` scan looks at every `env` word
+in a pushing command, so a data word `env` followed by dashed words, as in
+`rg env --glob '*.nix' && git push`, is refused too; that false refusal is
+accepted. GraphQL mutations are not covered, and
+API writes other than the refused forms are not checked. A push that lands
+between the hook's lookups and GitHub's update is not caught.
 
 The guard and `pr-review` share one script. Shell checks separate ordinary
 literal commands from quoted arguments, comments and heredoc bodies, so text

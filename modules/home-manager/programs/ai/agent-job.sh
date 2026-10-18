@@ -14,7 +14,9 @@
 # FORGEJO_API_TOKEN_FILE, FORGEJO_TOKEN_FILE (clearing FORGEJO_TOKEN) and
 # GIT_CONFIG_COUNT/KEY_n/VALUE_n are passed too, and so are the GitHub App
 # settings GH_APP_ID, GH_APP_KEY_FILE and GH_APP_OWNER (programs.ai.agentGithub),
-# when set: a job started by an agent acts as the agent account.
+# when set: a job started by an agent acts as the agent account. A job started
+# from an agent process gets PR_REVIEW_AGENT_SESSION=1, so the agent pre-push
+# hook (ADR-0078) checks its pushes too.
 
 state_root=${AGENT_JOB_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-jobs}
 
@@ -100,6 +102,10 @@ case $cmd in
         environment+=(--setenv="$app_setting=${!app_setting}")
       fi
     done
+    if [[ ${PR_REVIEW_AGENT_SESSION-} == 1 || ${CLAUDECODE-} == 1 ||
+      -n ${CODEX_THREAD_ID-}${CODEX_TOOL_CALL_ID-}${CODEX_SANDBOX_NETWORK_DISABLED-} ]]; then
+      environment+=(--setenv=PR_REVIEW_AGENT_SESSION=1)
+    fi
     # forge-mirror prefers FORGEJO_TOKEN, which the user manager may hold;
     # it treats an empty one as unset and reads the file.
     if [[ -n ${FORGEJO_TOKEN_FILE-} ]]; then
