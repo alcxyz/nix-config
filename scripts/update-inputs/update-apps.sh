@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Refresh the owner's released apps. Each input follows its repository's
-# `main` branch, except bn-bootstrap, which follows `dev` and is shared with
+# `main` branch, except the private work flake (`work`), which follows `dev`
+# and is shared with
 # dev-apps-update so its configuration stays current (ADR-0089). Activation
 # stays explicit.
 list_only=false
@@ -20,7 +21,7 @@ inputs=(
   grove
   canopy
   bivrost
-  bn-bootstrap
+  work
 )
 
 if "$list_only"; then

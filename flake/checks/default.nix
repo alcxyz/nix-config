@@ -1175,22 +1175,22 @@ in {
   in
     assert lib.sort builtins.lessThan (operatorNames ++ nonOperatorNames)
     == lib.sort builtins.lessThan (builtins.attrNames self.homeConfigurations);
-    assert lib.all (home: home.config.programs.bnBootstrap.bivrost.enable) operatorHomes;
+    assert lib.all (home: home.config.programs.work.bivrost.enable) operatorHomes;
     assert lib.all (home:
-      home.config.programs.bnBootstrap.bivrost.package
+      home.config.programs.work.bivrost.package
       == null
       && builtins.elem home.pkgs.bivrost home.config.home.packages)
     operatorHomes;
-    assert lib.all (home: home.config.programs.bnBootstrap.boards.enable) operatorHomes;
-    # Work groups for backlog-inventory --scope come from bn-bootstrap (ADR-0093),
+    assert lib.all (home: home.config.programs.work.boards.enable) operatorHomes;
+    # Work groups for backlog-inventory --scope come from the work flake (ADR-0093),
     # on the operator homes that have the backlog tools.
     assert lib.all (home: (home.options.programs.ai or {}) ? backlog -> home.config.programs.ai.backlog.scopeFile != null) operatorHomes;
     assert lib.all (home: (home.config.programs.ai.backlog.scopeFile or null) == null) nonOperatorHomes;
-    assert lib.all (home: !(home.options.programs.bnBootstrap ? bullet)) operatorHomes;
-    assert lib.all (home: !(home.options.programs.bnBootstrap ? cli)) operatorHomes;
+    assert lib.all (home: !(home.options.programs.work ? bullet)) operatorHomes;
+    assert lib.all (home: !(home.options.programs.work ? cli)) operatorHomes;
     assert lib.all (home: home.config.programs.kubernetes.managed.enable) operatorHomes;
     assert lib.all (home: builtins.elem home.pkgs.forge-mirror home.config.home.packages) operatorHomes;
-    assert lib.all (home: !(home.options.programs ? bnBootstrap)) nonOperatorHomes;
+    assert lib.all (home: !(home.options.programs ? work)) nonOperatorHomes;
     assert lib.all (home: !(home.config.home.activation ? forgejoPrimary)) nonOperatorHomes;
     assert lib.all (home:
       lib.all (name:

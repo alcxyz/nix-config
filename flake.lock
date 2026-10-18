@@ -125,28 +125,6 @@
         "type": "github"
       }
     },
-    "bn-bootstrap": {
-      "inputs": {
-        "bivrost": "bivrost_2",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1792320402,
-        "narHash": "sha256-8mdVNsmZIPkOU471gNrXpbADcWZEBMC20qM+X1fVb/A=",
-        "ref": "dev",
-        "rev": "10d5cabf086f28021cce0c66a2208c1865b85c39",
-        "revCount": 51,
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
-      },
-      "original": {
-        "ref": "dev",
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
-      }
-    },
     "calculator": {
       "flake": false,
       "locked": {
@@ -1152,11 +1130,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1792344347,
-        "narHash": "sha256-cA+RvhSNyJkABvxwReKuHK2GmI75WL7G4RMQ0YKFgEo=",
+        "lastModified": 1792358401,
+        "narHash": "sha256-ZhWI2mDCFTyP8CK36R0pGFR+oT8iBOlvpMvewYc/vNI=",
         "ref": "dev",
-        "rev": "021fddb46debb21fd186f5afcfd1a4b83d49b8e1",
-        "revCount": 730,
+        "rev": "c993da070399773a450362380c928a2e9ae21a1e",
+        "revCount": 734,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1494,7 +1472,6 @@
       "inputs": {
         "bivrost": "bivrost",
         "bivrost-dev": "bivrost-dev",
-        "bn-bootstrap": "bn-bootstrap",
         "canopy": "canopy",
         "canopy-dev": "canopy-dev",
         "dankMaterialShell": "dankMaterialShell",
@@ -1532,7 +1509,8 @@
         "t3rry": "t3rry",
         "t3rry-dev": "t3rry-dev",
         "videdupe": "videdupe",
-        "vidown": "vidown"
+        "vidown": "vidown",
+        "work": "work"
       }
     },
     "rust-overlay": {
@@ -1995,6 +1973,28 @@
         "ref": "dev",
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git"
+      }
+    },
+    "work": {
+      "inputs": {
+        "bivrost": "bivrost_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792357485,
+        "narHash": "sha256-vA5jYgFIW3uEho2lPsPfMMVcyaHnZ2/esqMaXo0IF04=",
+        "ref": "dev",
+        "rev": "27a2563a63c9ef30ef39c0ac32f4fc28e8e05c1a",
+        "revCount": 52,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
+      },
+      "original": {
+        "ref": "dev",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       }
     },
     "worldclock": {

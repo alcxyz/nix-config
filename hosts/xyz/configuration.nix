@@ -283,7 +283,7 @@ in {
 
   networking.hosts."192.168.1.250" = ["k8s-api.local"];
 
-  # t3code servers (primary and bn-apps, see users/alc/linux/xyz/t3code.nix) —
+  # t3code servers (primary and work, see users/alc/linux/xyz/t3code.nix) —
   # reachable via Netbird and the k8s oauth2-proxy routes.
   networking.firewall.interfaces."wt0".allowedTCPPorts = t3codePorts;
   networking.firewall.extraCommands = lib.mkAfter (lib.concatMapStrings (port:

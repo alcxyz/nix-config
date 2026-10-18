@@ -42,8 +42,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Installed from its own flake; bn-bootstrap supplies only its Bane NOR
-    # configuration (ADR-0090). Released app, refreshed by apps-update; its dev
+    # Installed from its own flake; the private work flake supplies only its
+    # work configuration (ADR-0090). Released app, refreshed by apps-update; its dev
     # build is refreshed by dev-apps-update (ADR-0089).
     bivrost = {
       url = "github:alcxyz/bivrost/main";
@@ -55,7 +55,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    bn-bootstrap = {
+    # The private work flake: Bivrost catalogue, Boards and backlog groups.
+    work = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };

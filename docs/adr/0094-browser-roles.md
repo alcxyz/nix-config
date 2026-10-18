@@ -33,7 +33,7 @@ trust and privacy advantage Helium had. On macOS Origin is a paid product.
 - **The Mac keeps regular Brave** (the `brave-browser` cask), because Origin is
   paid there.
 - **Zen stays, provisionally, as the non-Chromium engine:** the main browser
-  and default URL handler on xyz (Super+B), the Bane NOR sign-in browser on the
+  and default URL handler on xyz (Super+B), the work sign-in browser on the
   Mac, and the Zen slot in the Wolf catalog with its `wolf-zen` image product.
   Its memory use has been high, partly from a Firefox WebGL bug fixed in
   Firefox 160. #662 measures it against Brave Origin once Zen ships Firefox

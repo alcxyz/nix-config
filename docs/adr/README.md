@@ -94,7 +94,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0087](0087-side-by-side-dev-tools.md) | Install dev builds of released tools side by side | Accepted, amended | flake inputs, release workflow |
 | [ADR-0088](0088-tv-clients-share-one-appliance-profile.md) | TV clients share one appliance profile | Accepted | rpi0, rpi1, TV clients, Moonlight, Bluetooth audio |
 | [ADR-0089](0089-released-and-dev-app-inputs.md) | Released and dev app inputs | Accepted, amended | flake inputs, release workflow |
-| [ADR-0090](0090-install-bivrost-directly.md) | Install Bivrost directly, configured by bn-bootstrap | Accepted | Bivrost, bn-bootstrap, operator homes |
+| [ADR-0090](0090-install-bivrost-directly.md) | Install Bivrost directly, configured by the work flake | Accepted | Bivrost, the work flake, operator homes |
 | [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Accepted | T3 Code, agent skills, `programs.ai` |
 | [ADR-0092](0092-t3-preview-browser-from-nix.md) | Provide T3's preview browser from the Nix package | Accepted | T3 Code, previews, nix-packages |
 | [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Accepted, amended | agent skills, `programs.ai`, Forgejo, GitHub, Git worktrees |

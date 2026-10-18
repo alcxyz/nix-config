@@ -43,8 +43,8 @@ in {
     settings.TryExec = "${webLauncher}/bin/t3code-web";
   };
   xdg.desktopEntries.t3code-bn = {
-    name = "T3 Code bn-apps (xyz)";
-    comment = "Connect to the bn-apps T3 Code instance on xyz";
+    name = "T3 Code work (xyz)";
+    comment = "Connect to the work T3 Code instance on xyz";
     icon = "t3code";
     exec = "${bnWebLauncher}/bin/t3code-bn-web";
     categories = ["Development"];
@@ -54,7 +54,7 @@ in {
   services.t3code = {
     enable = true;
     port = 3773;
-    # bn-apps work projects get their own server, so they never mix with
+    # Work projects get their own server, so they never mix with
     # personal projects in the sidebar.
     instances.bn.port = 3774;
     autoUpdate = {

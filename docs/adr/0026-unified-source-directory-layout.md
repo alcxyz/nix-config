@@ -56,7 +56,7 @@ Adopt a single `~/src/` root with purpose-based subdirectories:
 │
 ├── orgs/                     # Repos owned by other GitHub/Forgejo orgs
 │   ├── alcorg/               # alcorg org repos
-│   └── bn-apps/              # bn-apps work org repos
+│   └── <work-org>/           # the work org's repos (name kept private)
 │
 ├── forks/                    # Upstream forks (intent to contribute back)
 │   └── ...

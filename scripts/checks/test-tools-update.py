@@ -29,9 +29,9 @@ DEV_TOOL_INPUTS = {
     "t3rry-dev": "t3rry",
 }
 APP_INPUTS = ["grove", "canopy", "bivrost"]
-# Inputs both apps-update and dev-apps-update refresh (ADR-0089). They follow
-# `dev` on Forgejo.
-SHARED_INPUTS = ["bn-bootstrap"]
+# Inputs both apps-update and dev-apps-update refresh (ADR-0089), by input and
+# repository name. They follow `dev` on Forgejo.
+SHARED_INPUTS = {"work": "bn-bootstrap"}
 # Dev builds of released apps; dev-apps-update (update-maintained.sh) refreshes them.
 DEV_APP_INPUTS = {"grove-dev": "grove", "canopy-dev": "canopy", "bivrost-dev": "bivrost"}
 
@@ -53,7 +53,7 @@ class ToolInputContracts(unittest.TestCase):
         self.assertLessEqual(set(DEV_TOOL_INPUTS.values()), set(TOOL_INPUTS))
 
     def test_app_list_inventory_is_exact(self):
-        self.assertEqual(list_inputs(UPDATE_APPS), APP_INPUTS + SHARED_INPUTS)
+        self.assertEqual(list_inputs(UPDATE_APPS), APP_INPUTS + list(SHARED_INPUTS))
 
     def test_dev_apps_pair_with_released_apps(self):
         self.assertLessEqual(set(DEV_APP_INPUTS.values()), set(APP_INPUTS))
@@ -68,11 +68,11 @@ class ToolInputContracts(unittest.TestCase):
 
     def test_shared_inputs_are_in_both_app_updaters_and_follow_dev(self):
         apps, dev_apps = set(list_inputs(UPDATE_APPS)), set(list_inputs(UPDATE_MAINTAINED))
-        for name in SHARED_INPUTS:
+        for name, repository in SHARED_INPUTS.items():
             with self.subTest(input=name):
                 self.assertIn(name, apps)
                 self.assertIn(name, dev_apps)
-                self.assert_follows(name, name, "dev")
+                self.assert_follows(name, repository, "dev")
 
     def assert_follows(self, name, repository, ref):
         flake = (ROOT / "flake.nix").read_text()
@@ -202,7 +202,7 @@ class ToolUpdaterTests(unittest.TestCase):
     def test_app_updater_updates_exactly_the_app_inputs(self):
         result = self.run_script(script=UPDATE_APPS)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.read_calls(), ["flake update " + " ".join(APP_INPUTS + SHARED_INPUTS)])
+        self.assertEqual(self.read_calls(), ["flake update " + " ".join(APP_INPUTS + list(SHARED_INPUTS))])
 
     def test_invalid_argument_does_not_execute_nix(self):
         for script in (UPDATE_TOOLS, UPDATE_DEV_TOOLS, UPDATE_APPS):

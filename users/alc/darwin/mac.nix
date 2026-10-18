@@ -22,9 +22,9 @@ in {
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/programs/karabiner/default.nix"
     "${configDir}/modules/home-manager/programs/moonlight-endpoints/default.nix"
-    inputs.bn-bootstrap.homeManagerModules.backlog
-    inputs.bn-bootstrap.homeManagerModules.boards
-    inputs.bn-bootstrap.homeManagerModules.bivrost
+    inputs.work.homeManagerModules.backlog
+    inputs.work.homeManagerModules.boards
+    inputs.work.homeManagerModules.bivrost
     inputs.nix-secrets.homeManagerModules.darwinOperator
   ];
 
@@ -40,11 +40,11 @@ in {
     ln -s /Applications/WezTerm.app/Contents/Resources/wezterm.sh "$out/etc/profile.d/wezterm.sh"
   '';
   programs.karabiner.managed.enable = true;
-  # Bivrost comes from its own flake; bn-bootstrap writes only its Bane NOR
+  # Bivrost comes from its own flake; the work flake writes only its work
   # catalogue, profiles and sign-in rule (ADR-0090).
-  programs.bnBootstrap.bivrost.package = null;
-  # Bane NOR Azure sign-in opens in Zen, which holds only the Bane NOR profile.
-  programs.bnBootstrap.bivrost.authenticationBrowser = {
+  programs.work.bivrost.package = null;
+  # Work Azure sign-in opens in Zen, which holds only the work profile.
+  programs.work.bivrost.authenticationBrowser = {
     executable = "/usr/bin/open";
     arguments = ["-a" "Zen" "{url}"];
   };
