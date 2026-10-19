@@ -52,6 +52,13 @@ in {
     arguments = ["--profile-directory=Profile 4" "{url}"];
   };
 
+  # Agents read and, with approval, post in Teams chats through a dedicated
+  # Brave Origin instance with its own data directory (work flake).
+  programs.work.teams = {
+    enable = true;
+    browser.executable = "brave-origin";
+  };
+
   # Import the common Linux configuration
   imports = [
     "${configDir}/users/alc/linux/operator.nix"
@@ -146,6 +153,12 @@ in {
     remotePointerInactiveTimeout = 8;
     remotePointerHideOnTouch = false;
     extraLuaConfig = ''
+      -- The Teams browser for agents opens on its own named workspace
+      -- (programs.work.teams above).
+      hl.bind("SUPER + A", hl.dsp.focus({ workspace = "name:teams" }))
+      hl.bind("SUPER + SHIFT + A", hl.dsp.window.move({ workspace = "name:teams" }))
+      hl.bind("SUPER + ALT + A", hl.dsp.window.move({ workspace = "name:teams", follow = false }))
+
       -- The secondary panel is physically 4K even though it runs at 1440p in
       -- this layout. Its useful scrolling widths start at half the output.
       alc_scrolling_column_widths_by_monitor = {
