@@ -382,7 +382,7 @@ in {
   container-netns-contract = import ./container-netns.nix {inherit self lib pkgs;};
   flannel-source-contract = import ./flannel-source.nix {inherit self lib pkgs;};
 
-  game-window-geometry-contract = mkRepoCheck "game-window-geometry-contract" [pkgs.bash pkgs.jq pkgs.gawk pkgs.gnused] ''
+  game-window-geometry-contract = mkRepoCheck "game-window-geometry-contract" [pkgs.bash pkgs.jq pkgs.gawk pkgs.gnused pkgs.util-linux] ''
     bash scripts/checks/test-game-window-geometry-guard.sh
   '';
 

@@ -96,3 +96,51 @@ introduced one layer at a time.
 
 - Forgejo issue #264 records the compatibility baseline.
 - Forgejo issue #267 tracks regression qualification for the direct launch path.
+
+## Amendment 2026-10-19: floating Battle.net launcher and home placements (#748)
+
+Powering the 49-inch output off with its button disconnects it, unlike DPMS
+blanking, and the panel's care cycle runs only after such a power-off. With
+the output gone, workspace 8 moves to the narrower output, where the scrolling
+layout sizes the tiled Battle.net column below the launcher's minimum width.
+Wine resizes the window back and the layout re-imposes its width without end:
+a watcher logged hundreds of identical configure events per second, wineserver
+and the launcher used up to two cores, and the embedded browser's GPU process
+ran out of memory on the unread events every half hour. The browser
+hardware-acceleration setting made no difference. With the window floating, the
+same power-off produced two configure events and no load.
+
+The decision therefore changes in two places:
+
+- **Static rule.** Besides its workspace-8 route, the exact Battle.net window
+  floats at 1600x1376, a size that fits every output. This replaces the
+  statement that the workspace route is the only static Battle.net rule. Focus,
+  fullscreen and pointer behavior stay outside static rules, and Heroes keeps
+  only its route and border removal.
+- **Launcher placements.** The geometry guard also watches the launcher window
+  and Wine's tray window on workspace 8, which returned off every output after
+  the power-off. These launcher policies are separate from the game matchers,
+  so they do not enable notification suppression. The launcher centers on the
+  gaming output. The tray window has a home offset, 16 px from the output's
+  top-left corner. Launch and display recovery return it there only when it
+  is outside the output, so intentional moves within the output, and
+  contained windows that share its untitled identity such as popups, are
+  left alone.
+- **Scoped launch recovery.** With several watched windows, launch recovery
+  acts only on the windows whose identification armed it, so opening a game
+  no longer resets the launcher or tray. A window arms once per matching
+  policy in its lifetime: one that maps untitled matches the tray policy, and
+  its real title arms it again under the game's policy. Display recovery
+  still considers every watched window, and now runs alongside an active
+  launch window instead of waiting for it. The service-start sweep is armed
+  directly, so an early identification cannot narrow it.
+
+Alternatives considered: freezing or stopping Battle.net when the output
+disconnects, rejected because they would also act on disconnects the operator
+did not intend as idle; giving the tiled launcher a full-width column, which
+fits every output but makes it 5120 px wide on the gaming output; and a forced
+connector state that hides the disconnect, rejected because the output may not
+recover cleanly when it powers on. The tray policy matches any empty-title
+floating Wine window on workspace 8, which that workspace already receives; an
+untitled window left outside the output, from this or another prefix, would
+share the tray's home position until its title selects another policy.

@@ -44,6 +44,7 @@
       pkgs.hyprland
       pkgs.jq
       pkgs.socat
+      pkgs.util-linux
     ];
     text =
       ''

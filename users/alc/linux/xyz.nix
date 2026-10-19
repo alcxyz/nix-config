@@ -15,15 +15,23 @@
     pkgs.callPackage "${configDir}/modules/nixos/services/kdeconnect-scroll-throttle"
     {};
   gamingWindowMatchers = gamingDesktop.windowMatchers;
-  gameWindowGeometryPolicies = map (matcher:
-    matcher
-    // {
-      restoreMonitor = "DP-1";
-      snapFullHeight = true;
-      workspace = 8;
-      centerOnRecovery = true;
-    })
-  gamingWindowMatchers;
+  gameWindowGeometryPolicies =
+    map (matcher:
+      matcher
+      // {
+        restoreMonitor = "DP-1";
+        snapFullHeight = true;
+        workspace = 8;
+        centerOnRecovery = true;
+      })
+    gamingWindowMatchers
+    ++ map (policy:
+      {
+        restoreMonitor = "DP-1";
+        workspace = 8;
+      }
+      // policy)
+    gamingDesktop.launcherGeometryPolicies;
   gamingDesktop = import ./xyz/gaming/desktop.nix {
     inherit lib xwaylandPrimaryOutput gameWindowGeometryGuard;
   };

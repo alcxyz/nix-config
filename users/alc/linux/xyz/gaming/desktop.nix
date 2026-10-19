@@ -10,13 +10,33 @@
       titleRegex = "^Heroes of the Storm$";
     }
   ];
+  # Launcher windows recover geometry without joining the game matchers, which
+  # also drive notification suppression. Offsets are relative to the restore
+  # monitor; the launcher size comes from its floating rule below.
+  launcherGeometryPolicies = [
+    {
+      classRegex = "^steam_app_default$";
+      titleRegex = "^Battle[.]net$";
+      centerOnRecovery = true;
+    }
+    {
+      # Wine's tray window for the launcher prefix.
+      classRegex = "^steam_app_default$";
+      titleRegex = "^$";
+      homeOffset = {
+        x = 16;
+        y = 16;
+      };
+    }
+  ];
 in {
   windowMatchers = gamingWindowMatchers;
+  inherit launcherGeometryPolicies;
   luaRules = lib.removeSuffix "\n" ''
     -- Launcher ecosystems use separate unpinned workspaces, not fixed
     -- outputs. Route only the Steam client; games remain opt-in by exact
     -- identity. Geometry, focus, fullscreen, and pointer behavior remain
-    -- outside static rules.
+    -- outside static rules, except the Battle.net launcher's floating size.
     hl.window_rule({
       name = "steam-client-workspace",
       match = {
@@ -33,6 +53,11 @@ in {
         xwayland = true,
       },
       workspace = "8 silent",
+      -- A tiled column on a narrower output is below the launcher's minimum
+      -- width. Wine and the layout then resize it against each other without
+      -- end, so the launcher floats at a size that fits every output.
+      float = true,
+      size = "1600 1376",
     })
     hl.window_rule({
       name = "wine-desktop-gaming-workspace",

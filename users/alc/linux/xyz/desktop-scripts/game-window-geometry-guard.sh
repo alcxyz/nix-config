@@ -1,20 +1,31 @@
 socket="${XDG_RUNTIME_DIR:?}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
 repair_requested="${XDG_RUNTIME_DIR:?}/hyprland-game-window-geometry-guard.requested"
 display_requested="$repair_requested.display"
+request_lock="$repair_requested.lock"
 tolerance=16
 provider="$(hyprctl status -j | jq -r '.configProvider // empty')"
 
 repair_geometry() {
+  # Launch recovery acts only on the windows that triggered it (newline-
+  # separated addresses), or on every watched window for "*". Display
+  # recovery always considers every watched window.
+  local scope="${2:-*}"
   monitors_json="$(hyprctl monitors -j 2>/dev/null || true)"
   clients_json="$(hyprctl clients -j 2>/dev/null || true)"
   [[ -n "$monitors_json" && -n "$clients_json" ]] || return 0
 
   while IFS= read -r client_json; do
     address="$(jq -r '.address' <<<"$client_json")"
+    if [[ "$scope" != "*" && $'\n'"$scope" != *$'\n'"$address"$'\n'* ]]; then
+      continue
+    fi
     monitor_id="$(jq -r '.monitor' <<<"$client_json")"
     restore_monitor="$(jq -r '._guardRestoreMonitor' <<<"$client_json")"
     snap_full_height="$(jq -r '._guardSnapFullHeight' <<<"$client_json")"
     center_on_recovery="$(jq -r '._guardCenterOnRecovery' <<<"$client_json")"
+    read -r home_x home_y < <(
+      jq -r '[(._guardHomeX | tostring), (._guardHomeY | tostring)] | @tsv' <<<"$client_json"
+    )
     # The longer wake window repairs containment/edge drift only. It
     # must not repeatedly center intentional in-monitor positioning.
     [[ "${1:-launch}" != display ]] || center_on_recovery=false
@@ -50,7 +61,7 @@ repair_geometry() {
     fi
 
     repair_description=""
-    if [[ "$center_on_recovery" == true ]]; then
+    if [[ "$center_on_recovery" == true && "$home_x" == null ]]; then
       target_x=$((monitor_x + ((monitor_width - width) / 2)))
       target_y=$((monitor_y + ((monitor_height - height) / 2)))
       ((x != target_x || y != target_y)) || continue
@@ -76,6 +87,14 @@ repair_geometry() {
       && y + height <= monitor_y + monitor_height + tolerance
     )); then
       continue
+    elif [[ "$home_x" != null ]]; then
+      # A home offset is the declared placement relative to the restore
+      # monitor. It applies only to a window left outside the output, in
+      # either recovery mode, so contained windows that share the policy's
+      # identity (popups, a launcher between titles) are left alone.
+      target_x=$((monitor_x + home_x))
+      target_y=$((monitor_y + home_y))
+      repair_description="Returned watched window to its home position"
     else
       target_x=$((monitor_x + ((monitor_width - width) / 2)))
       target_y=$((monitor_y + ((monitor_height - height) / 2)))
@@ -119,7 +138,9 @@ repair_geometry() {
       . + {
         _guardRestoreMonitor: ($policy.restoreMonitor // null),
         _guardSnapFullHeight: ($policy.snapFullHeight // false),
-        _guardCenterOnRecovery: ($policy.centerOnRecovery // false)
+        _guardCenterOnRecovery: ($policy.centerOnRecovery // false),
+        _guardHomeX: ($policy.homeOffset.x // null),
+        _guardHomeY: ($policy.homeOffset.y // null)
       }
     ' <<<"$clients_json"
   )
@@ -138,17 +159,25 @@ watch_geometry_events() {
         openwindow\>\>* | windowtitle\>\>* | windowtitlev2\>\>*)
           address="${event#*>>}"
           address="0x${address%%,*}"
-          # Titles can change repeatedly in a match. Arm once per
-          # matching window lifetime, not on every title notification.
-          if [[ -z "${identified[$address]:-}" ]] && hyprctl clients -j | jq -e \
+          # Titles can change repeatedly in a match. Arm once per matching
+          # policy in a window lifetime, not on every title notification,
+          # so a window that maps untitled is placed again once its real
+          # title selects another policy, but a title that flips back and
+          # forth does not re-arm.
+          policy_index="$(hyprctl clients -j | jq -r \
             --arg address "$address" --argjson policies "$policies" '
-              any(.[]; . as $w | .address == $address and
-                any($policies[]; . as $p |
-                  ($w.class | test($p.classRegex)) and
-                  ($w.title | test($p.titleRegex))))
-            ' >/dev/null; then
-            identified[$address]=1
-            : >"$repair_requested"
+              first(.[] | select(.address == $address) | . as $w |
+                $policies | to_entries[] | . as $p |
+                select((($w.class // "") | test($p.value.classRegex)) and
+                  (($w.title // "") | test($p.value.titleRegex))) |
+                $p.key) // empty
+            ' 2>/dev/null || true)"
+          if [[ -n "$policy_index" && "${identified[$address]:-}" != *",$policy_index,"* ]]; then
+            identified[$address]="${identified[$address]:-,}$policy_index,"
+            {
+              flock 9
+              printf '%s\n' "$address" >>"$repair_requested"
+            } 9>"$request_lock"
           fi
           ;;
         closewindow\>\>*)
@@ -188,29 +217,43 @@ update_recovery_deadlines() {
     fi
     last_display_signature="$signature"
   fi
-  if [[ -e "$repair_requested" ]]; then
-    rm -f "$repair_requested"
+  # The watcher appends under the same lock, so no request is read half
+  # written or removed unread. Startup arms its own sweep, so an empty
+  # request arms nothing.
+  requested=""
+  {
+    flock 9
+    if [[ -e "$repair_requested" ]]; then
+      requested="$(<"$repair_requested")"
+      rm -f "$repair_requested"
+    fi
+  } 9>"$request_lock"
+  if [[ -n "$requested" ]]; then
+    ((SECONDS <= launch_until)) || launch_scope=""
+    [[ "$launch_scope" == "*" ]] || launch_scope+="$requested"$'\n'
     launch_until=$((SECONDS + 10))
   fi
 }
 
 watch_geometry_events &
 watcher_pid=$!
-trap 'kill "$watcher_pid" 2>/dev/null || true; rm -f "$repair_requested" "$display_requested"' EXIT
+trap 'kill "$watcher_pid" 2>/dev/null || true; rm -f "$repair_requested" "$request_lock" "$display_requested"' EXIT
 trap 'exit 0' HUP INT TERM
 
 # Repair a stale window after service/session startup, then stay active
 # briefly after relevant events so delayed XWayland geometry updates are
-# caught without continuously policing intentional window placement.
-: >"$repair_requested"
-launch_until=0
+# caught without continuously policing intentional window placement. The
+# startup sweep is armed directly, so an early watcher request cannot narrow it.
+launch_until=$((SECONDS + 10))
+launch_scope="*"
 display_until=0
 last_display_signature=""
 while true; do
   update_recovery_deadlines
   if ((SECONDS <= launch_until)); then
-    repair_geometry launch
-  elif ((SECONDS <= display_until)); then
+    repair_geometry launch "$launch_scope"
+  fi
+  if ((SECONDS <= display_until)); then
     repair_geometry display
   fi
   sleep 1
