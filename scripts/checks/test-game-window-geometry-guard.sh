@@ -74,7 +74,11 @@ hyprctl() {
       ;;
     'dispatch movewindowpixel')
       printf '%s\n' "$3" >>"$dispatch_log"
-      printf 'ok\n'
+      if [[ -n "${GUARD_TEST_MOVE_FAILS:-}" ]]; then
+        printf 'error: no such window\n'
+      else
+        printf 'ok\n'
+      fi
       ;;
     'eval '*)
       printf '%s\n' "$2" >>"$dispatch_log"
@@ -225,6 +229,49 @@ clients_json=$(jq -cs '.' \
 repair_geometry display >/dev/null
 [[ "$(<"$dispatch_log")" == 'exact 16 1472,address:0xtray' ]] ||
   fail "display recovery did not return only the uncontained window: '$(<"$dispatch_log")'"
+
+# A launcher that opts into returnHomeAfterDisplay goes home once per display
+# recovery after the output settles, even when reconnection left it contained
+# elsewhere. Before the settle delay, and after its one return, it is left alone.
+policies=$(jq -c '.[1].returnHomeAfterDisplay = true' <<<"$policies")
+clients_json=$(jq -cs '.' \
+  <(watched_client 0xlauncher Launcher 0 1488 1600 1376) \
+  <(watched_client 0xtray '' 400 1600 160 20))
+display_returned=''
+display_settle_at=$((SECONDS - 1))
+display_return_until=-1
+: >"$dispatch_log"
+repair_geometry display >/dev/null
+[[ ! -s "$dispatch_log" ]] ||
+  fail "home return ran without a watched output change: '$(<"$dispatch_log")'"
+display_return_until=$((SECONDS - 1))
+repair_geometry display >/dev/null
+[[ ! -s "$dispatch_log" ]] ||
+  fail "home return ran after its watched recovery expired: '$(<"$dispatch_log")'"
+display_return_until=$((SECONDS + 90))
+display_settle_at=$((SECONDS + 5))
+repair_geometry display >/dev/null
+[[ ! -s "$dispatch_log" ]] ||
+  fail "home return ran before the output settled: '$(<"$dispatch_log")'"
+display_settle_at=$((SECONDS - 1))
+GUARD_TEST_MOVE_FAILS=1 repair_geometry display >/dev/null 2>&1
+[[ -z "$display_returned" ]] ||
+  fail "a failed home return was recorded as done: '$display_returned'"
+: >"$dispatch_log"
+repair_geometry display >/dev/null
+[[ "$(<"$dispatch_log")" == 'exact 1760 1488,address:0xlauncher' ]] ||
+  fail "settled display recovery did not return the launcher home: '$(<"$dispatch_log")'"
+: >"$dispatch_log"
+repair_geometry display >/dev/null
+[[ ! -s "$dispatch_log" ]] ||
+  fail "home return repeated within one display recovery: '$(<"$dispatch_log")'"
+: >"$dispatch_log"
+display_returned=''
+repair_geometry launch '*' >/dev/null
+[[ "$(<"$dispatch_log")" == 'exact 1760 1488,address:0xlauncher' ]] ||
+  fail "launch recovery did not center the launcher: '$(<"$dispatch_log")'"
+[[ -z "$display_returned" ]] ||
+  fail "launch recovery consumed the display home return"
 policies=$game_policies
 
 # Exercise deadline updates without relying on wall-clock sleeps. A transition
@@ -242,6 +289,17 @@ source "$TMP/update-recovery-deadlines.sh"
 display_until=0
 launch_until=0
 launch_scope=''
+display_settle_at=0
+display_returned='0xstale'
+display_return_until=-1
+# shellcheck disable=SC2034 # Used by the sourced production function.
+display_sampled=false
+# shellcheck disable=SC2034 # Used by the sourced production function.
+pending_display_event=false
+# shellcheck disable=SC2034 # Used by the sourced production function.
+pending_watched_change=false
+# shellcheck disable=SC2034 # Used by the sourced production function.
+watched_outputs='DP-1'
 last_display_signature=''
 monitors_on=$monitors_json
 monitors_json=$(jq 'map(if .name == "DP-1" then .dpmsStatus = false else . end)' <<<"$monitors_on")
@@ -249,17 +307,62 @@ SECONDS=5
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 0 && "$last_display_signature" == '[]' ]] ||
   fail 'absent watched monitor armed display recovery'
+[[ "$display_return_until" == -1 ]] ||
+  fail 'first sample armed the home return'
 
 monitors_json=$monitors_on
 SECONDS=500
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 590 ]] ||
   fail "off-to-on transition without event armed until $display_until; expected 590"
+[[ "$display_settle_at" == 505 && -z "$display_returned" ]] ||
+  fail "arming did not restart the settle delay: $display_settle_at, '$display_returned'"
 
 SECONDS=510
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 590 ]] ||
   fail "unchanged available monitor extended deadline to $display_until"
+
+# A display event from another output re-arms containment recovery but keeps
+# the watched output's settle delay and one-time home return.
+display_returned=$'0xlauncher\n'
+: >"$display_requested"
+SECONDS=520
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 610 && "$display_settle_at" == 505 && "$display_returned" == $'0xlauncher\n' ]] ||
+  fail "unchanged output reset the home return: until $display_until, settle $display_settle_at, '$display_returned'"
+printf '%s\n' 'dpms>>1,HDMI-A-1' >"$display_requested"
+SECONDS=525
+update_recovery_deadlines >/dev/null
+[[ "$display_settle_at" == 505 && "$display_returned" == $'0xlauncher\n' ]] ||
+  fail "an event for another output reset the home return: settle $display_settle_at, '$display_returned'"
+
+# A watched-output event resets the home return even when sampling missed
+# the disconnect, so the output returned with an unchanged signature.
+printf '%s\n' 'monitorremovedv2>>1,DP-1,Gaming' 'monitoraddedv2>>1,DP-1,Gaming' >"$display_requested"
+SECONDS=530
+update_recovery_deadlines >/dev/null
+[[ "$display_settle_at" == 535 && -z "$display_returned" && "$display_return_until" == 620 ]] ||
+  fail "watched-output event did not reset the home return: settle $display_settle_at, '$display_returned', until $display_return_until"
+
+# A later event from another output reopens containment recovery but not the
+# expired home return.
+printf '%s\n' 'monitoraddedv2>>2,HDMI-A-1,Secondary' >"$display_requested"
+SECONDS=700
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 790 && "$display_return_until" == 620 ]] ||
+  fail "another output's event extended the home return: until $display_until, return until $display_return_until"
+
+# A guard start with the output already available arms containment recovery
+# but not the home return: startup recovery places watched windows itself.
+# shellcheck disable=SC2034 # Used by the sourced production function.
+display_sampled=false
+display_return_until=-1
+last_display_signature=''
+SECONDS=740
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 830 && "$display_return_until" == -1 ]] ||
+  fail "guard start armed the home return: until $display_until, return until $display_return_until"
 
 monitor_query_succeeds=false
 last_signature=$last_display_signature
@@ -268,7 +371,24 @@ SECONDS=600
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 0 && "$last_display_signature" == "$last_signature" ]] ||
   fail 'failed monitor query fabricated a wake or replaced the last known state'
+
+# A watched-output event consumed while the monitor query fails still arms
+# the home return once sampling recovers with an unchanged signature.
+printf '%s\n' 'monitorremovedv2>>1,DP-1,Gaming' 'monitoraddedv2>>1,DP-1,Gaming' >"$display_requested"
+display_return_until=-1
+SECONDS=601
+update_recovery_deadlines >/dev/null
+[[ "$display_return_until" == -1 && ! -e "$display_requested" ]] ||
+  fail "home return armed without a monitor sample: until $display_return_until"
 monitor_query_succeeds=true
+SECONDS=602
+update_recovery_deadlines >/dev/null
+[[ "$display_until" == 692 && "$display_return_until" == 692 && "$display_settle_at" == 607 ]] ||
+  fail "event from a failed query was lost: until $display_until, return until $display_return_until, settle $display_settle_at"
+SECONDS=603
+update_recovery_deadlines >/dev/null
+[[ "$display_settle_at" == 607 ]] ||
+  fail "a consumed event re-armed the home return: settle $display_settle_at"
 
 # Requests are read under the watcher's lock. An empty request arms
 # nothing: startup arms its own sweep.

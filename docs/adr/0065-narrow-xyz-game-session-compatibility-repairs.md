@@ -144,3 +144,28 @@ recover cleanly when it powers on. The tray policy matches any empty-title
 floating Wine window on workspace 8, which that workspace already receives; an
 untitled window left outside the output, from this or another prefix, would
 share the tray's home position until its title selects another policy.
+
+## Amendment 2026-10-19: settled home return for the launcher (#748)
+
+Qualifying the deployed change, the guard recentered the launcher as the
+49-inch output reconnected, but reconnection then moved it again to the
+output's left edge. It was contained there, so containment-only recovery left
+it. The operator chose a fixed home: after a power-off the launcher returns
+home even if it had been moved.
+
+The launcher policy therefore sets `returnHomeAfterDisplay`. Once per display
+recovery, after the gaming output has stayed unchanged for five seconds, the
+guard returns that window to its home (the output center) even when it is
+contained, but only within the 90 seconds after that output change. A failed
+move is retried; the return counts once a move succeeds or the window is
+already home. Only a change of the gaming output itself, in its sampled state or in a
+compositor event that names it, restarts the delay and the once-only record,
+so display events from the other output do not snap a moved launcher back;
+the outputs have explicit positions, so the other output cannot shift the
+gaming output's geometry. The first sample after the guard starts arms no
+return, since startup recovery already places watched windows. In qualification every reconnection move landed in the same
+second as the output change, inside the delay; a later move is left to
+containment recovery rather than policing the launcher for the whole recovery.
+Containment recovery continues as before for the rest of the 90-second window,
+and the tray keeps containment-only placement, so contained popups that share
+its untitled identity are never moved.

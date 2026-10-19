@@ -26,6 +26,7 @@ repair_geometry() {
     read -r home_x home_y < <(
       jq -r '[(._guardHomeX | tostring), (._guardHomeY | tostring)] | @tsv' <<<"$client_json"
     )
+    return_home="$(jq -r '._guardReturnHomeAfterDisplay' <<<"$client_json")"
     # The longer wake window repairs containment/edge drift only. It
     # must not repeatedly center intentional in-monitor positioning.
     [[ "${1:-launch}" != display ]] || center_on_recovery=false
@@ -61,7 +62,31 @@ repair_geometry() {
     fi
 
     repair_description=""
-    if [[ "$center_on_recovery" == true && "$home_x" == null ]]; then
+    return_on_success=false
+    if [[ "${1:-launch}" == display && "$return_home" == true ]] \
+      && ((SECONDS <= display_return_until)) \
+      && ((SECONDS >= display_settle_at)) \
+      && [[ $'\n'"$display_returned" != *$'\n'"$address"$'\n'* ]]; then
+      # XWayland and Wine can move a window again while the output
+      # reconnects, leaving it contained but away from its declared home.
+      # Once per display recovery, after the output has stayed unchanged
+      # for a few seconds, return such a window home even when contained.
+      # The return counts once a move succeeds or the window is already home,
+      # so a failed move retries.
+      if [[ "$home_x" != null ]]; then
+        target_x=$((monitor_x + home_x))
+        target_y=$((monitor_y + home_y))
+      else
+        target_x=$((monitor_x + ((monitor_width - width) / 2)))
+        target_y=$((monitor_y + ((monitor_height - height) / 2)))
+      fi
+      if ((x == target_x && y == target_y)); then
+        display_returned+="$address"$'\n'
+        continue
+      fi
+      return_on_success=true
+      repair_description="Returned watched window home after the output settled"
+    elif [[ "$center_on_recovery" == true && "$home_x" == null ]]; then
       target_x=$((monitor_x + ((monitor_width - width) / 2)))
       target_y=$((monitor_y + ((monitor_height - height) / 2)))
       ((x != target_x || y != target_y)) || continue
@@ -110,6 +135,7 @@ repair_geometry() {
         "exact $target_x $target_y,address:$address" 2>&1 || true)"
     fi
     if [[ "$move_result" == ok* ]]; then
+      [[ "$return_on_success" != true ]] || display_returned+="$address"$'\n'
       echo "$repair_description $address on monitor $monitor_id"
     else
       echo "Failed to recenter watched window $address: $move_result" >&2
@@ -140,7 +166,8 @@ repair_geometry() {
         _guardSnapFullHeight: ($policy.snapFullHeight // false),
         _guardCenterOnRecovery: ($policy.centerOnRecovery // false),
         _guardHomeX: ($policy.homeOffset.x // null),
-        _guardHomeY: ($policy.homeOffset.y // null)
+        _guardHomeY: ($policy.homeOffset.y // null),
+        _guardReturnHomeAfterDisplay: ($policy.returnHomeAfterDisplay // false)
       }
     ' <<<"$clients_json"
   )
@@ -154,7 +181,12 @@ watch_geometry_events() {
         monitoradded\>\>* | monitoraddedv2\>\>* \
           | monitorremoved\>\>* | monitorremovedv2\>\>* \
           | dpms\>\>*)
-          : >"$display_requested"
+          # Keep the event: one that names a watched output arms its home
+          # return even when sampling missed the transition.
+          {
+            flock 9
+            printf '%s\n' "$event" >>"$display_requested"
+          } 9>"$request_lock"
           ;;
         openwindow\>\>* | windowtitle\>\>* | windowtitlev2\>\>*)
           address="${event#*>>}"
@@ -191,14 +223,35 @@ watch_geometry_events() {
 }
 
 update_recovery_deadlines() {
-  local snapshot signature display_event=false
-  if [[ -e "$display_requested" ]]; then
-    rm -f "$display_requested"
-    display_event=true
-  fi
+  # Events survive a failed monitor query, so a missed transition still
+  # counts once sampling recovers.
+  local snapshot signature display_event=$pending_display_event
+  local watched_change=$pending_watched_change
+  local display_events="" event payload field
+  local -a fields
+  {
+    flock 9
+    if [[ -e "$display_requested" ]]; then
+      display_events="$(<"$display_requested")"
+      rm -f "$display_requested"
+      display_event=true
+    fi
+  } 9>"$request_lock"
+  while IFS= read -r event; do
+    [[ -n "$event" ]] || continue
+    payload="${event#*>>}"
+    IFS=, read -r -a fields <<<"$payload"
+    for field in "${fields[@]}"; do
+      if [[ -n "$field" && $'\n'"$watched_outputs"$'\n' == *$'\n'"$field"$'\n'* ]]; then
+        watched_change=true
+      fi
+    done
+  done <<<"$display_events"
   # Hyprland can change dpmsStatus without emitting a socket event.
   # Sample output state, not game geometry, while otherwise idle.
   # Failed queries are unknown state: never turn them into fake wakes.
+  pending_display_event=$display_event
+  pending_watched_change=$watched_change
   if snapshot="$(hyprctl monitors -j 2>/dev/null)" && signature="$(
     jq -ce --argjson policies "$policies" '
       if type != "array" then error("invalid monitor snapshot") else
@@ -209,10 +262,28 @@ update_recovery_deadlines() {
       end
     ' <<<"$snapshot" 2>/dev/null
   )"; then
+    # The first sample after start records state without arming the home
+    # return: startup recovery already places watched windows.
+    if [[ "$display_sampled" == true && "$signature" != "$last_display_signature" ]]; then
+      watched_change=true
+    fi
+    display_sampled=true
+    pending_display_event=false
+    pending_watched_change=false
     if [[ "$signature" != '[]' ]] && {
       [[ "$signature" != "$last_display_signature" ]] || [[ "$display_event" == true ]]
     }; then
       display_until=$((SECONDS + 90))
+      # Only a change of the watched output itself (its sampled state or an
+      # event naming it) restarts the settle delay and the one-time home
+      # return; events from other outputs do not.
+      # The return is allowed only inside this watched-output recovery, so
+      # a later event from another output cannot reuse an expired arm.
+      if [[ "$watched_change" == true ]]; then
+        display_settle_at=$((SECONDS + 5))
+        display_returned=""
+        display_return_until=$display_until
+      fi
       echo "Output available or changed; armed 90-second geometry recovery"
     fi
     last_display_signature="$signature"
@@ -247,6 +318,13 @@ trap 'exit 0' HUP INT TERM
 launch_until=$((SECONDS + 10))
 launch_scope="*"
 display_until=0
+display_settle_at=0
+display_returned=""
+display_return_until=-1
+display_sampled=false
+pending_display_event=false
+pending_watched_change=false
+watched_outputs="$(jq -r '[.[].restoreMonitor // empty] | unique | .[]' <<<"$policies")"
 last_display_signature=""
 while true; do
   update_recovery_deadlines

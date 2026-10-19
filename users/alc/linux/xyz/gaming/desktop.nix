@@ -18,6 +18,9 @@
       classRegex = "^steam_app_default$";
       titleRegex = "^Battle[.]net$";
       centerOnRecovery = true;
+      # Its home is the output center; return there once the reconnected
+      # output settles, even if reconnection left it elsewhere on the output.
+      returnHomeAfterDisplay = true;
     }
     {
       # Wine's tray window for the launcher prefix.
