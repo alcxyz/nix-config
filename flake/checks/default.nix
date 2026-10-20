@@ -20,6 +20,9 @@
       touch "$out"
     '';
 in {
+  repo-review-configuration-contract = assert import ./repo-review-test.nix {inherit lib pkgs;};
+    pkgs.runCommand "repo-review-configuration-contract" {} "touch $out";
+
   git-identity-configuration-contract = import ./git-identity.nix {inherit lib pkgs;};
 
   k3s-self-fence-contract = mkRepoCheck "k3s-self-fence-contract" [pkgs.python3] ''

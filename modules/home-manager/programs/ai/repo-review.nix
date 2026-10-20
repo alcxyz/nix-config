@@ -139,6 +139,73 @@ in {
       default = true;
       description = "Install `revkit` for read-only whole-repository reviews, whose findings the operator may file (nix-packages ADR-0011).";
     };
+    lenses = mkOption {
+      type = types.attrsOf types.lines;
+      description = ''
+        Shared lenses included in both public repository defaults alongside
+        their three scoped lenses. Without --lens, revkit runs all five;
+        select code-audit or adr-review explicitly for a bounded audit.
+        Extra attributes extend the built-ins; override one to replace it.
+      '';
+      default = {
+        code-audit = ''
+          Audit the whole repository, read-only. Read the code, documentation,
+          tests and available Git history. Do not write files, run builds that
+          need writes, or use the network. Find, in order of importance:
+          1. Correctness bugs: logic errors, unhandled errors, races, data loss
+             and wrong edge cases.
+          2. Security problems: injection, authentication or permission gaps,
+             unsafe input handling and secret handling.
+          3. Important code paths without meaningful tests.
+          4. Dependency risks visible in manifests and lock files. State what
+             should be checked; do not guess CVEs or current package status
+             without network evidence.
+          5. Documentation that contradicts the code, dead code and unused
+             configuration.
+
+          Report only concrete findings supported by file and line evidence.
+          Explain the impact and suggest a small fix suitable for one pull
+          request. Skip style nits and generic advice. Do not open files that
+          contain secret material, encrypted or plaintext; inspect only their
+          paths and the surrounding wiring and configuration. Never reproduce
+          secret values or private, client or personal details. If such data
+          is committed, report only its path and kind of data.
+        '';
+        adr-review = ''
+          Review the complete architecture decision record set, read-only.
+          Read the ADR index (usually docs/adr/README.md) and every ADR, with
+          no limit on their number. Check them against the current code,
+          configuration and documentation. Do not write files or use the
+          network. Look for:
+          1. Drift: implementation that contradicts an accepted decision.
+          2. Dead decisions: components or mechanisms that no longer exist,
+             or decisions superseded in practice without a superseded status.
+          3. Conflicts: contradictory decisions or later decisions that
+             silently override earlier ones.
+          4. Weak decisions: reasoning undermined by changes or disproved
+             premises, or a clearly better alternative the decision missed.
+             Explain what changed and what to reconsider; do not relitigate
+             taste or assume an existing decision may be changed.
+          5. Hygiene: wrong or missing status, broken references and index
+             entries that disagree with their ADRs.
+          6. Gaps: significant policy clearly enforced by the code that no
+             ADR records.
+
+          Support each finding with its ADR path and section, plus file and
+          line evidence from the implementation where relevant. Explain
+          whether the code or ADR should change, or a superseding decision
+          needs consideration. Skip wording nits. Do not call external
+          references broken merely because their targets are outside this
+          tree. Do not guess CVEs or current dependency status without
+          network evidence. Do not open files containing secret material,
+          encrypted or plaintext; inspect only their paths and surrounding
+          wiring and configuration. Never reproduce secret values or private,
+          client or personal details. If such data is committed, report only
+          its path and kind of data. If the repository has no ADRs, do not
+          invent missing decisions without evidence of significant policy.
+        '';
+      };
+    };
     reviewers = mkOption {
       # The same reviewer type as pr-review's, with its name check and effort
       # default.
@@ -179,11 +246,13 @@ in {
             The repository is a public NixOS / Home Manager configuration (nix-config).
             Architecture decisions are in docs/adr/ (index docs/adr/README.md); repository
             rules are in AGENTS.md. ${outsideTree}'';
-          lenses = {
-            adr-drift = adrDrift;
-            stale-mechanisms = staleMechanisms "modules/home-manager/programs/ai/ and the checks in scripts/checks/ and flake/checks/ that test it";
-            docs-drift = docsDrift "AGENTS.md, README.md, every Markdown file under docs/ except docs/adr/, and module READMEs";
-          };
+          lenses =
+            {
+              adr-drift = adrDrift;
+              stale-mechanisms = staleMechanisms "modules/home-manager/programs/ai/ and the checks in scripts/checks/ and flake/checks/ that test it";
+              docs-drift = docsDrift "AGENTS.md, README.md, every Markdown file under docs/ except docs/adr/, and module READMEs";
+            }
+            // rr.lenses;
           issues = {
             owner = "alcxyz";
             repo = "nix-config";
@@ -194,22 +263,31 @@ in {
             The repository is a public Nix flake of packages and tools (nix-packages).
             Architecture decisions are in docs/adr/ (index docs/adr/README.md); repository
             rules are in AGENTS.md. ${outsideTree}'';
-          lenses = {
-            adr-drift = adrDrift;
-            stale-mechanisms = staleMechanisms "tools/ and the CI scripts in scripts/ci/ and .forgejo/workflows/";
-            docs-drift = docsDrift "AGENTS.md, README.md, every Markdown file under docs/ except docs/adr/, and the READMEs and changelogs under tools/ and pkgs/";
-          };
+          lenses =
+            {
+              adr-drift = adrDrift;
+              stale-mechanisms = staleMechanisms "tools/ and the CI scripts in scripts/ci/ and .forgejo/workflows/";
+              docs-drift = docsDrift "AGENTS.md, README.md, every Markdown file under docs/ except docs/adr/, and the READMEs and changelogs under tools/ and pkgs/";
+            }
+            // rr.lenses;
           issues = {
             owner = "alcxyz";
             repo = "nix-packages";
           };
         };
       };
-      defaultText = literalExpression "drift and stale-mechanism lenses for nix-config and nix-packages";
+      defaultText = "Shared lenses plus adr-drift, docs-drift and stale-mechanisms for nix-config and nix-packages";
     };
   };
 
-  config = mkIf (cfg.enable && rr.enable) {
-    home.packages = [revkit];
-  };
+  config = mkMerge [
+    {
+      # Apply the default prompts per key, so adding a shared lens retains
+      # the built-ins rather than replacing the attrsOf option's whole default.
+      programs.ai.repoReview.lenses = mapAttrs (_: value: mkDefault value) options.programs.ai.repoReview.lenses.default;
+    }
+    (mkIf (cfg.enable && rr.enable) {
+      home.packages = [revkit];
+    })
+  ];
 }
