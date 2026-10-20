@@ -948,13 +948,29 @@ in {
     sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
     sessionEnv = on.home.file.${sessionEnvLink}.source;
     offSessionEnv = off.config.home.file.${sessionEnvLink}.source;
+    package = config: name: lib.findFirst (package: package.name == name) null config.home.packages;
+    # agentGh around the real gh-app and gh, run without the App's variables.
+    realAgentGh =
+      (off.extendModules {
+        modules = [{programs.ai.agentGithub = lib.mapAttrs (_: lib.mkOverride 40) (dummy // {enable = true;});}];
+      }).config.programs.ai.agentGithub.agentGh;
   in
     assert off.config.programs.ai.agentGithub.sessionCommands == "";
+    assert off.config.programs.ai.agentGithub.agentGh == pkgs.gh;
       pkgs.runCommand "agent-github-wiring-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.shellcheck];} ''
         if grep -E 'credential.https://github.com|GH_APP_' ${offSessionEnv}; then
           echo "The session wrapper changes GitHub credentials while agentGithub is disabled" >&2
           exit 1
         fi
+        # pr-review and its guard use the App-aware gh, which wraps the App's
+        # gh-app around the operator's gh; the assertion above covers the
+        # disabled case.
+        grep -qF ${on.programs.ai.agentGithub.agentGh}/bin ${package on "pr-review"}/bin/pr-review
+        grep -qF ${on.programs.ai.agentGithub.agentGh}/bin ${package on "agent-pr-review-guard"}/bin/agent-pr-review-guard
+        grep -qF 'gh-app' ${on.programs.ai.agentGithub.agentGh}/bin/gh
+        grep -qF 'GH_APP_GH' ${on.programs.ai.agentGithub.agentGh}/bin/gh
+        # With the real gh-app and no App settings, it passes through to gh.
+        HOME=$TMPDIR ${realAgentGh}/bin/gh --version | grep -q '^gh version'
         shellcheck ${../../scripts/checks/test-agent-github-git.sh}
         bash ${../../scripts/checks/test-agent-github-git.sh} ${sessionEnv} ${lib.escapeShellArgs [dummy.owner (toString dummy.appId) dummy.keyFile]}
         touch "$out"

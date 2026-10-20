@@ -17,9 +17,12 @@ with lib; let
     agent_identities = cfg.prReview.agentIdentities;
     fast_forward_repositories = cfg.prReview.fastForwardRepositories;
   });
+  # pr-review posts its comments with gh, so in agent sessions with the GitHub
+  # App (ADR-0099) they come from the App on its installed repositories; the
+  # guard below reads through the same gh.
   prReview = pkgs.writeShellApplication {
     name = "pr-review";
-    runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
+    runtimeInputs = [pkgs.python3 config.programs.ai.agentGithub.agentGh pkgs.git];
     text = ''PR_REVIEW_CONFIG=${prReviewConfig} exec python3 ${./pr-review.py} "$@"'';
   };
   # Pushes to listed GitHub repositories are checked by a pre-push hook in the
@@ -31,7 +34,7 @@ with lib; let
   githubFastForward = any (name: hasPrefix "github.com/" (toLower name)) cfg.prReview.fastForwardRepositories;
   prReviewGuard = pkgs.writeShellApplication {
     name = "agent-pr-review-guard";
-    runtimeInputs = [pkgs.python3 pkgs.gh pkgs.git];
+    runtimeInputs = [pkgs.python3 config.programs.ai.agentGithub.agentGh pkgs.git];
     text = ''PR_REVIEW_CONFIG=${prReviewConfig} AGENT_FORGEJO_MCP_URL=${escapeShellArg mcp.url} AGENT_MCP_STATE_DIR=${escapeShellArg "${config.xdg.stateHome}/agent-mcp"} exec python3 ${./pr-review.py} guard'';
   };
   guardHook = matcher: {

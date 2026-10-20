@@ -57,6 +57,12 @@ with lib; let
       value = "ssh://git@github.com/${cfg.owner}/";
     }
   ];
+  # The `gh` for agent tools that write to GitHub, such as pr-review's
+  # comments: gh-app's pass-through around ghPackage, like nix-packages'
+  # gh-app-gh, so it uses the App only when the session sets its variables.
+  agentGh = pkgs.runCommand "gh-app-gh-${cfg.package.version or "0"}" {nativeBuildInputs = [pkgs.makeWrapper];} ''
+    makeWrapper ${ghApp} "$out/bin/gh" --add-flags gh --set-default GH_APP_GH ${gh}
+  '';
   # gh-app's pass-through `gh` and agent-job read these; Git's helper has
   # them in its command.
   sessionCommands = ''
@@ -113,6 +119,16 @@ in {
       readOnly = true;
       default = optionalString cfg.enable sessionCommands;
       description = "Bash commands that give an agent session the GitHub App; empty when disabled.";
+    };
+    agentGh = mkOption {
+      type = types.package;
+      internal = true;
+      readOnly = true;
+      default =
+        if cfg.enable
+        then agentGh
+        else pkgs.gh;
+      description = "The `gh` agent tools put on PATH: gh-app's pass-through when enabled, plain gh otherwise.";
     };
   };
 

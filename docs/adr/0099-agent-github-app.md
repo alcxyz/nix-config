@@ -54,6 +54,12 @@ starts: the session wrapper runs its commands after the session variables.
   transport. Fetches keep their URLs.
 - **`agent-job`** passes the App's settings on to its units, with `PATH` and
   the `GIT_CONFIG_*` entries, so a job an agent starts acts the same way.
+- **`pr-review`** and its guard put the same pass-through `gh` on their
+  `PATH` (`agentGh`, plain `gh` when the App is off), so in agent sessions
+  their comments come from the App and their reads use it for installed
+  repositories. When no token can be minted, such as for a suspended
+  installation, those reads fail and the guard refuses, rather than falling
+  back to the operator (added 2026-10-21).
 - gh-app mints tokens from the key when needed and caches each with the
   installation's repository list in `$XDG_RUNTIME_DIR`, readable only by the
   user; it never prints a token except to Git through the credential protocol.
@@ -83,7 +89,7 @@ As with `agentForge`, this is attribution and a guard against accidents, not a
 privilege boundary: agents run as the operator's Unix user and can reach the
 operator's `gh` login, and `GH_AS_OPERATOR` is a convention. Commands `gh-app`
 cannot attribute to a repository, such as `gh api graphql` or `gh search`, run
-as the operator, and so does a `gh` other than T3's on `PATH`. `pushInsteadOf`
+as the operator, and so does a `gh` other than T3's or `agentGh` on `PATH`. `pushInsteadOf`
 matches the owner's name case-sensitively, so a remote spelling it
 differently pushes over SSH as the operator, and a `remote.<name>.pushurl` is
 not rewritten, as ADR-0081 records for the forge. Terminal sessions of
