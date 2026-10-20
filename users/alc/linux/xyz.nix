@@ -84,6 +84,7 @@ in {
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
     "${configDir}/modules/home-manager/services/devlog/default.nix"
+    "${configDir}/modules/home-manager/services/deck/default.nix"
     # Nightly development statistics collector and its private settings.
     inputs.devstats.homeManagerModules.default
     inputs.nix-secrets.homeManagerModules.devstats
@@ -340,6 +341,30 @@ in {
   services.devlog.forgejo.url = "https://git.alc.xyz";
   services.devlog.repoUrl = "git@git-ssh.alc.xyz:alcxyz/devlog.git";
   services.devstats.enable = true;
+
+  # The live T3 thread dashboard (#757), reached at deck.alc.xyz/threads/
+  # through the cluster's oauth2-proxy, which admits the Pocket ID admins
+  # group; deck checks the forwarded ID token itself as well.
+  services.deck = {
+    enable = true;
+    settings = {
+      listen = "0.0.0.0:3775";
+      publicOrigin = "https://deck.alc.xyz";
+      auth = {
+        issuer = "https://id.alc.xyz";
+        clientID = "deck";
+        group = "admins";
+      };
+      threads.instance = [
+        {
+          name = "main";
+          label = "xyz";
+          db = "${config.home.homeDirectory}/.t3/userdata/statev2.sqlite";
+          webURL = "https://t3code.alc.xyz";
+        }
+      ];
+    };
+  };
 
   programs.ai.enable = true;
   programs.ai.forgejoMcp.enable = true;

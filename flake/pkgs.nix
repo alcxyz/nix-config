@@ -25,6 +25,7 @@ in
               "claude-code"
               "codex-app-server"
               "codex-cli"
+              "deck"
               "devlog"
               "omniwm"
               "zen-browser"

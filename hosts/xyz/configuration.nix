@@ -286,12 +286,17 @@ in {
   # t3code servers (primary and work, see users/alc/linux/xyz/t3code.nix) —
   # reachable via Netbird and the k8s oauth2-proxy routes.
   networking.firewall.interfaces."wt0".allowedTCPPorts = t3codePorts;
-  networking.firewall.extraCommands = lib.mkAfter (lib.concatMapStrings (port:
-    lib.concatMapStrings (source: ''
-      iptables -A nixos-fw -p tcp --dport ${toString port} -s ${source} -j nixos-fw-accept
-    '')
-    t3codeSources)
-  t3codePorts);
+  networking.firewall.extraCommands = lib.mkAfter ((lib.concatMapStrings (port:
+      lib.concatMapStrings (source: ''
+        iptables -A nixos-fw -p tcp --dport ${toString port} -s ${source} -j nixos-fw-accept
+      '')
+      t3codeSources)
+    t3codePorts)
+    # The deck dashboard (users/alc/linux/xyz.nix) is reached only through
+    # the k8s oauth2-proxy route.
+    + ''
+      iptables -A nixos-fw -p tcp --dport 3775 -s 10.42.0.0/16 -j nixos-fw-accept
+    '');
 
   services.flatpak.managed = {
     enable = true;
