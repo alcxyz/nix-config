@@ -16,7 +16,8 @@ render_with() {
   {
     echo 'set -euo pipefail'
     echo "overview_template=$1"
-    cat "$dir/t3-page.sh" "$dir/t3-thread-overview-render.sh"
+    echo "overview_group_jq=$PWD/$dir/t3-thread-overview-group.jq"
+    cat "$dir/t3-page.sh" "$dir/t3-thread-overview-lib.sh" "$dir/t3-thread-overview-render.sh"
   } >"$tmp/render"
 }
 render_with "$PWD/$dir/t3-thread-overview.html"
@@ -138,6 +139,34 @@ done | paste -sd' ')
   fail "unexpected sections: $sections"
 [[ $(jq -r '[.[].file | sub(".*/"; "")] | join(" ")' "$tmp/facts/pages.json") == "1-you.html 2-stalled.html 3-settle.html 4-settled.html 5-agent.html" ]] ||
   fail "unexpected page files"
+
+# t3-thread-overview-group prints the same grouping as JSON for the deck
+# dashboard, with the counts once and every report field but the threads.
+{
+  echo 'set -euo pipefail'
+  echo "overview_group_jq=$PWD/$dir/t3-thread-overview-group.jq"
+  cat "$dir/t3-thread-overview-lib.sh" "$dir/t3-thread-overview-group.sh"
+} >"$tmp/group"
+grouped=$(bash "$tmp/group" "$tmp/facts-report.json" "$tmp/facts.json")
+[[ $(jq -r '[.sections[] | .key + ":" + ([.threads[] | .threadId + "=" + .group] | join(","))] | join(" ")' <<<"$grouped") == "$sections" ]] ||
+  fail "group command disagrees with the pages: $grouped"
+[[ $(jq -c '[.source, .windowDays, .summary.user, .summary.settledOpen, (.threads | type), .sections[3].title]' <<<"$grouped") == '["test",3,3,2,"null","Settled in the last 3 days"]' ]] ||
+  fail "unexpected group report fields: $grouped"
+[[ $(jq -r '.sections[0].threads[0].facts.settle.line' <<<"$grouped") == "not yet: <deploy>, user" ]] ||
+  fail "group command lost the facts"
+echo '{"generatedAt": "2026-10-10T12:00:00Z", "windowDays": 3, "threads": []}' >"$tmp/group-empty.json"
+[[ $(bash "$tmp/group" "$tmp/group-empty.json" | jq -c '[.sections, .summary.unsettled]') == '[[],0]' ]] ||
+  fail "empty report did not group to no sections"
+for args in "$tmp/bad-group.json" "$tmp/facts-report.json $tmp/bad-group.json"; do
+  echo '{"threads": [{"title": "no id"}]}' >"$tmp/bad-group.json"
+  status=0
+  # shellcheck disable=SC2086 # two file arguments on purpose
+  bash "$tmp/group" $args >/dev/null 2>&1 || status=$?
+  [[ "$status" == 65 ]] || fail "group command on $args exited $status"
+done
+status=0
+bash "$tmp/group" >/dev/null 2>&1 || status=$?
+[[ "$status" == 64 ]] || fail "group command without arguments exited $status"
 
 you=$(page_html "$tmp/facts/1-you.html")
 [[ "$you" == *'class="kpis"'* && "$you" != *'class="note"'* ]] || fail "counts not on the first page only"

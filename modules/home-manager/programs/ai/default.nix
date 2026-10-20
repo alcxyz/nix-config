@@ -172,13 +172,38 @@ with lib; let
       ${builtins.readFile ./t3-thread-status.sh}
     '';
   };
+  # The deck dashboard (#757) reads a thread's opening and latest messages
+  # for its summaries through the same database selection and checks.
+  t3ThreadMessages = pkgs.writeShellApplication {
+    name = "t3-thread-messages";
+    runtimeInputs = [pkgs.sqlite];
+    text = ''
+      messages_sql=${./t3-thread-messages.sql}
+      default_dbs=${escapeShellArg (concatStringsSep ":" t3StateDbs)}
+      ${builtins.readFile ./t3-thread-id.sh}
+      ${builtins.readFile ./t3-state-db.sh}
+      ${builtins.readFile ./t3-thread-messages.sh}
+    '';
+  };
   t3ThreadOverviewRender = pkgs.writeShellApplication {
     name = "t3-thread-overview-render";
     runtimeInputs = [pkgs.jq];
     text = ''
       overview_template=${./t3-thread-overview.html}
+      overview_group_jq=${./t3-thread-overview-group.jq}
       ${builtins.readFile ./t3-page.sh}
+      ${builtins.readFile ./t3-thread-overview-lib.sh}
       ${builtins.readFile ./t3-thread-overview-render.sh}
+    '';
+  };
+  # The overview's grouping as JSON, for the deck dashboard (#757).
+  t3ThreadOverviewGroup = pkgs.writeShellApplication {
+    name = "t3-thread-overview-group";
+    runtimeInputs = [pkgs.jq];
+    text = ''
+      overview_group_jq=${./t3-thread-overview-group.jq}
+      ${builtins.readFile ./t3-thread-overview-lib.sh}
+      ${builtins.readFile ./t3-thread-overview-group.sh}
     '';
   };
   # Settled threads the user accepted as done in the overview (ADR-0091).
@@ -487,7 +512,7 @@ in {
       };
     };
 
-    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadOverviewAck t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
+    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadMessages t3ThreadOverviewAck t3ThreadOverviewGroup t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
 
     # The agent skills that call these commands live in nix-secrets
     # shared/skills and are linked by its agentSkills module (nix-secrets

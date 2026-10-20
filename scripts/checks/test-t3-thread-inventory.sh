@@ -72,6 +72,15 @@ test "$(jq -c '.threads[2].waitingOn' <<<"$out")" = '[{"kind":"monitor","descrip
 test "$(bash "$tmp/inventory" --thread caller --days 30 | jq '.threads | length')" = 4
 test "$(bash "$tmp/inventory" | jq '.threads | length')" = 4
 
+# The instance's environment ID, beside its database, is reported when it
+# reads as an ID; otherwise it is left out.
+test "$(jq 'has("environmentId")' <<<"$out")" = false
+printf 'env-1\n' >"$tmp/environment-id"
+test "$(bash "$tmp/inventory" --thread caller | jq -r '.environmentId')" = env-1
+printf 'x/y\n' >"$tmp/environment-id"
+test "$(bash "$tmp/inventory" --thread caller | jq 'has("environmentId")')" = false
+rm "$tmp/environment-id"
+
 # A settled thread the user acknowledged is marked while its settle time
 # matches; a broken acknowledgement file only warns.
 echo "{\"recent\": \"$recent\", \"open\": \"$recent\"}" >"$tmp/acks.json"

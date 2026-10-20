@@ -78,7 +78,16 @@ if [ -n "$ack_file" ] && [ -s "$ack_file" ] &&
   echo "$prog: ignoring $ack_file, which is not an acknowledgement file" >&2
   acks='{}'
 fi
-jq --arg db "$selected" --argjson days "$days" --argjson acks "$acks" \
-  '{database: $db, windowDays: $days, threads: map(.prs |= fromjson | .waitingOn |= fromjson
+# The instance's environment ID, beside its database, lets pages link each
+# thread to its route on the T3 server; it is left out when unreadable.
+env_id=""
+env_file=$(dirname -- "$selected")/environment-id
+if [ -r "$env_file" ]; then
+  env_id=$(tr -d '[:space:]' <"$env_file")
+  t3_valid_id "$env_id" || env_id=""
+fi
+jq --arg db "$selected" --argjson days "$days" --argjson acks "$acks" --arg env "$env_id" \
+  '{database: $db, windowDays: $days} + (if $env != "" then {environmentId: $env} else {} end)
+   + {threads: map(.prs |= fromjson | .waitingOn |= fromjson
     | if .bucket == "recently-settled" and .settledAt != null and $acks[.threadId] == .settledAt
       then .acknowledged = true else . end)}' <<<"${rows:-[]}"

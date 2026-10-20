@@ -1,7 +1,7 @@
 # ADR-0091: Deploy a T3 thread overview skill that reads T3 state directly
 
 **Status:** Accepted
-**Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets; 2026-10-15 for #676; 2026-10-18: overview sections and acknowledged threads)
+**Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets; 2026-10-15 for #676; 2026-10-18: overview sections and acknowledged threads; 2026-10-20 for #757: the deck dashboard)
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`
 
@@ -197,3 +197,31 @@ say they were finished.
 
 Several frames cost more to publish than one, since each repeats the
 template; the page is about 16 KB before its threads.
+
+## Amendment: the deck dashboard (#757)
+
+Each overview still cost several reader agents and minutes of waiting, and
+its frames were snapshots that could not open threads or record anything.
+Only the summaries need a model; the facts are a few queries. The overview
+therefore also gets a live page: `deck`, a web server from nix-packages
+(nix-packages #595), runs on the host with the T3 servers and shows the same
+sections, with summaries cached per thread and refreshed only when a thread
+gains messages.
+
+- **This repository stays the T3 adapter.** deck holds no queries against
+  T3's database. It runs `t3-thread-inventory`, `t3-thread-status`,
+  `t3-thread-overview-ack` and two new commands, so a T3 schema change is
+  still fixed here, behind the same checks and contract tests:
+  - `t3-thread-messages` prints a thread's first and latest finished user
+    and assistant messages, cut to a length, with a revision that changes
+    whenever any of them finishes or changes, so a cached summary knows
+    when it is out of date. A finished message of the thread without its
+    text fails the schema check.
+  - `t3-thread-overview-group` prints the overview's grouping as JSON. The
+    rules move from the renderer into `t3-thread-overview-group.jq`, which
+    both commands run, so the frames and the dashboard cannot disagree.
+- **The inventory reports the instance's environment ID**, read from the
+  `environment-id` file beside its database, so pages can link each thread
+  to its route on the T3 server.
+- **The skill stays.** It still works in a thread without the dashboard,
+  and its frames now share the dashboard's grouping.

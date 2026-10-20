@@ -568,6 +568,9 @@ in {
     bash scripts/checks/test-t3-thread-inventory.sh
     shellcheck modules/home-manager/programs/ai/t3-thread-status.sh scripts/checks/test-t3-thread-status.sh
     bash scripts/checks/test-t3-thread-status.sh
+    shellcheck modules/home-manager/programs/ai/t3-thread-messages.sh scripts/checks/test-t3-thread-messages.sh
+    bash scripts/checks/test-t3-thread-messages.sh
+    shellcheck modules/home-manager/programs/ai/t3-thread-overview-lib.sh modules/home-manager/programs/ai/t3-thread-overview-group.sh
     shellcheck modules/home-manager/programs/ai/t3-thread-overview-render.sh scripts/checks/test-t3-thread-overview-render.sh
     bash scripts/checks/test-t3-thread-overview-render.sh
     shellcheck modules/home-manager/programs/ai/t3-thread-overview-ack.sh scripts/checks/test-t3-thread-overview-ack.sh
