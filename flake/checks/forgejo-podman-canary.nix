@@ -104,6 +104,18 @@ else let
   threeCleanup = withExtra validLabels {labels = [fastLabel];} cleanupConfig;
   extraUnit = three.systemd.services.forgejo-podman-runner-fast;
   threeUnit = three.systemd.services.forgejo-podman-runner;
+  # An instance token on the canary carries over to the extra unless it sets
+  # its own scope.
+  instanceScoped = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} (lib.recursiveUpdate sharedConfig {
+    services.forgejo-actions-runner.podmanCanary.registrationScope = "instance";
+  });
+  ownerExtra =
+    withExtra (validLabels ++ [fastLabel]) {
+      labels = [fastLabel];
+      registrationScope = "owner";
+    } (lib.recursiveUpdate sharedConfig {
+      services.forgejo-actions-runner.podmanCanary.registrationScope = "instance";
+    });
   extraConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" extraUnit.script));
   canaryConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" threeUnit.script));
   sharedWithoutAllowance = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} {};
@@ -286,6 +298,13 @@ in
   assert lib.hasInfix " fixture-fast " extraUnit.preStart;
   assert lib.hasInfix "< /run/fixture/podman-registration-token" extraUnit.preStart;
   assert lib.hasInfix " ${fastLabel} " extraUnit.preStart;
+  # Owner tokens pass no scope, so earlier registrations are kept; an instance
+  # token passes its scope to every runner that uses it.
+  assert lib.hasInfix " ${fastLabel} \\\n" extraUnit.preStart;
+  assert lib.hasInfix " ${fastLabel} instance \\\n" instanceScoped.systemd.services.forgejo-podman-runner-fast.preStart;
+  assert lib.hasInfix ",${fastLabel} instance \\\n" instanceScoped.systemd.services.forgejo-podman-runner.preStart;
+  assert lib.hasInfix " ${fastLabel} \\\n" ownerExtra.systemd.services.forgejo-podman-runner-fast.preStart;
+  assert instanceScoped.systemd.services.forgejo-actions-runner.preStart == three.systemd.services.forgejo-actions-runner.preStart;
   assert builtins.elem "d /var/lib/forgejo-podman-runner-fast 0750 forgejo-podman-runner forgejo-podman -" three.systemd.tmpfiles.rules;
   assert builtins.elem {
     unit = extra;

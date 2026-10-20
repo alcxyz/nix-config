@@ -105,3 +105,34 @@ fi
 test -e "$runner_file"
 test ! -e "$called_file"
 test "$(cat "$name_file")" = old-name
+
+# A scope is recorded beside the name: a registration made without one is
+# repeated once for a scoped token, then kept.
+printf '%s\n' "$name" > "$name_file"
+touch "$runner_file"
+rm -f "$called_file"
+run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
+  "$instance" "$name" "$labels" instance < "$tmp/token"
+test -e "$called_file"
+cmp "$tmp/stdin.expected" "$stdin_file"
+test "$(cat "$name_file")" = "$(printf '%s\n%s' "$name" instance)"
+
+rm -f "$called_file"
+run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
+  "$instance" "$name" "$labels" instance < /dev/null
+test ! -e "$called_file"
+
+# Dropping the scope again re-registers with the owner token.
+run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
+  "$instance" "$name" "$labels" < "$tmp/token"
+test -e "$called_file"
+test "$(cat "$name_file")" = "$name"
+
+rm -f "$called_file"
+if run_helper "$tmp/mock-runner" "$config" "$runner_file" "$name_file" \
+  "$instance" "$name" "$labels" $'instance\nowner' < "$tmp/token"; then
+  echo 'registration helper accepted a multiline scope' >&2
+  exit 1
+fi
+test ! -e "$called_file"
+test "$(cat "$name_file")" = "$name"

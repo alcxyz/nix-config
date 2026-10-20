@@ -62,10 +62,11 @@
     capacity,
     name,
     registrationTokenFile,
+    registrationScope,
     standby ? null,
     status ? null,
   }: rec {
-    inherit serviceName description labels capacity name registrationTokenFile standby status;
+    inherit serviceName description labels capacity name registrationTokenFile registrationScope standby status;
     unit = "${serviceName}.service";
     state = "/var/lib/${serviceName}";
     runtime = "/run/${serviceName}";
@@ -97,14 +98,14 @@
   canaryInstance = mkInstance {
     serviceName = "forgejo-podman-runner";
     description = "Forgejo Podman canary runner (${canary.name})";
-    inherit (canary) labels capacity name registrationTokenFile;
+    inherit (canary) labels capacity name registrationTokenFile registrationScope;
   };
   # attrNames order: extra runners follow the existing one, sorted by name.
   extraInstances = lib.mapAttrsToList (key: extra:
     mkInstance {
       serviceName = "forgejo-podman-runner-${key}";
       description = "Forgejo Podman runner ${key} (${extra.name})";
-      inherit (extra) labels capacity name registrationTokenFile;
+      inherit (extra) labels capacity name registrationTokenFile registrationScope;
       standby =
         if extra.standby.enable
         then extra.standby
@@ -131,6 +132,11 @@
     builtins.length labels
     <= 1
     || (builtins.elem name canary.sharedLabels && builtins.length (lib.unique labels) == 1);
+  # An owner token passes no scope, so registrations from before the option
+  # keep their recorded identity and are not repeated.
+  scopeArgument = instance:
+    lib.optionalString (instance.registrationScope != "owner")
+    " ${lib.escapeShellArg instance.registrationScope}";
   registerFromFile = pkgs.writeShellApplication {
     name = "forgejo-podman-register-from-file";
     runtimeInputs = [pkgs.coreutils];
@@ -279,7 +285,7 @@
         ${lib.escapeShellArg "${instance.state}/.runner-name"} \
         ${lib.escapeShellArg canary.url} \
         ${lib.escapeShellArg instance.name} \
-        ${lib.escapeShellArg (lib.concatStringsSep "," instance.labels)} \
+        ${lib.escapeShellArg (lib.concatStringsSep "," instance.labels)}${scopeArgument instance} \
         < ${lib.escapeShellArg instance.registrationTokenFile}
     '';
     script = ''
@@ -366,6 +372,17 @@ in {
       default = "";
       description = "Absolute path to an activated registration token file; no token material is stored in this module.";
     };
+    registrationScope = lib.mkOption {
+      type = lib.types.enum ["owner" "instance"];
+      default = "owner";
+      description = ''
+        Scope the registration token grants: `owner` for a user's,
+        organisation's or repository's token, which serves only that owner's
+        repositories, or `instance` for a site administrator's token, which
+        serves every repository. Changing it re-registers the runner once;
+        `owner` keeps registrations made before this option existed.
+      '';
+    };
     capacity = lib.mkOption {
       type = lib.types.ints.positive;
       default = cfg.capacity;
@@ -436,6 +453,12 @@ in {
             default = canary.registrationTokenFile;
             defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.registrationTokenFile";
             description = "Absolute path to an activated registration token file; the canary's by default.";
+          };
+          registrationScope = lib.mkOption {
+            type = lib.types.enum ["owner" "instance"];
+            default = canary.registrationScope;
+            defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.registrationScope";
+            description = "Scope this runner's registration token grants; the canary's by default.";
           };
           standby = {
             enable = lib.mkEnableOption ''

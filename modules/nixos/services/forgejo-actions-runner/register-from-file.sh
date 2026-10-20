@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 7 ]; then
-  echo "usage: $0 RUNNER CONFIG RUNNER_FILE NAME_FILE INSTANCE NAME LABELS" >&2
+if [ "$#" -ne 7 ] && [ "$#" -ne 8 ]; then
+  echo "usage: $0 RUNNER CONFIG RUNNER_FILE NAME_FILE INSTANCE NAME LABELS [SCOPE]" >&2
   exit 2
 fi
 
@@ -13,12 +13,15 @@ name_file=$4
 instance=$5
 name=$6
 labels=$7
+scope=${8:-}
 
 for value in "$instance" "$name" "$labels"; do
   if [ -z "$value" ]; then
     echo "runner registration settings must not be empty" >&2
     exit 2
   fi
+done
+for value in "$instance" "$name" "$labels" "$scope"; do
   case "$value" in
     *$'\n'* | *$'\r'*)
       echo "runner registration settings must contain exactly one line" >&2
@@ -27,10 +30,17 @@ for value in "$instance" "$name" "$labels"; do
   esac
 done
 
-name_current="$(cat "$name_file" 2>/dev/null || true)"
+# The token's scope is recorded beside the name, so a token of another scope
+# re-registers the runner; without a scope the record is the name alone.
+identity=$name
+if [ -n "$scope" ]; then
+  identity=$(printf '%s\n%s' "$name" "$scope")
+fi
+
+identity_current="$(cat "$name_file" 2>/dev/null || true)"
 
 # The daemon declares configured labels on startup; changing them keeps identity.
-if [ -f "$runner_file" ] && [ "$name_current" = "$name" ]; then
+if [ -f "$runner_file" ] && [ "$identity_current" = "$identity" ]; then
   exit 0
 fi
 
@@ -41,4 +51,4 @@ rm -f "$runner_file"
   printf '\n%s\n%s\n' "$name" "$labels"
 } | "$runner_command" register --config "$config_file"
 
-printf '%s\n' "$name" > "$name_file"
+printf '%s\n' "$identity" > "$name_file"
