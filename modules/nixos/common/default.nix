@@ -37,6 +37,7 @@ in {
     ../../shared/shell.nix
     inputs.nix-secrets.nixosModules.distributedBuildClientPolicy
     ./nsswitch.nix
+    ./pki.nix
     ./nix-retention.nix
     ../security/credential-consent/default.nix
     ../services/nixfleet-boot-check/default.nix

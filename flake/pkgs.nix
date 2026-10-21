@@ -9,6 +9,7 @@ in
   lib.genAttrs supportedSystems (
     system: let
       overlays = [
+        (import ./overlays/cacert-blacklist.nix {inherit lib;})
         (
           _final: _prev: let
             np = nix-packages.packages.${system};

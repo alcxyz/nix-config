@@ -1,0 +1,62 @@
+diff --git a/buildcatrust/cli.py b/buildcatrust/cli.py
+--- a/buildcatrust/cli.py
++++ b/buildcatrust/cli.py
+@@ -160,6 +160,11 @@ def _parse_args(args):
+         "--blocklist_input",
+         help="Path to a new-line separated blocklist of certificates from the provided certstore to distrust. Can be either the label in the NSS store, or the internal key (which is output alongside the certificate in the available output formats).",
+     )
++    argparser.add_argument(
++        "--omit-blocklisted",
++        action="store_true",
++        help="Omit blocklisted certificates from every output.",
++    )
+ 
+     return argparser, argparser.parse_args(args)
+ 
+@@ -215,6 +220,12 @@ def cli_main(raw_args):
+         )
+         return 3
+ 
++    if args.omit_blocklisted:
++        for key in list(db.trustmap):
++            if key in blocklist or db.trustmap[key].label in blocklist:
++                del db.trustmap[key]
++                db.certmap.pop(key, None)
++
+     did_output = False
+     outputs = {
+         "p11kit_output": (output_to_file, p11kit_output.P11KitOutput),
+diff --git a/buildcatrust/tests/test_omit_blocklisted.py b/buildcatrust/tests/test_omit_blocklisted.py
+new file mode 100644
+--- /dev/null
++++ b/buildcatrust/tests/test_omit_blocklisted.py
+@@ -0,0 +1,29 @@
++from buildcatrust import cli
++from . import helpers
++
++
++def test_omit_blocklisted(tmp_path):
++    outputs = {
++        "ca_bundle_output": tmp_path / "bundle.crt",
++        "ca_standard_bundle_output": tmp_path / "plain.crt",
++        "p11kit_output": tmp_path / "trust.p11-kit",
++        "ca_unpacked_output": tmp_path / "unbundled",
++        "ca_hashed_unpacked_output": tmp_path / "hashed",
++    }
++    for name in ("ca_unpacked_output", "ca_hashed_unpacked_output"):
++        outputs[name].mkdir()
++    args = [
++        "--omit-blocklisted",
++        "--certdata_input",
++        str(helpers.TESTDATA_DIR / "certdata-certumec384.txt"),
++        "--blocklist_input",
++        str(helpers.TESTDATA_DIR / "blocklist-certumec384.txt"),
++    ]
++    args.extend(f"--{name}={path}" for name, path in outputs.items())
++    assert cli.cli_main(args) == 0
++    for name, path in outputs.items():
++        if name in ("ca_unpacked_output", "ca_hashed_unpacked_output"):
++            assert not list(path.iterdir())
++        else:
++            assert path.read_text() == ""
++
