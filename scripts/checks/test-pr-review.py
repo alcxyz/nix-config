@@ -1538,6 +1538,60 @@ with tempfile.TemporaryDirectory() as tmp:
     ):
         reply.write_text(text)
         assert review.has_verdict(str(reply)) is expected, text
+    reply.write_text("**Verdict:** Non-blocking findings\n")
+    assert review.reply_verdict(str(reply)) == "non-blocking findings"
+    assert review.reply_verdict(None) is None
+
+    # A round's verdict is its worst reviewer's, and none without every reviewer's.
+    replies = {}
+    for verdict in review.VERDICTS:
+        replies[verdict] = pathlib.Path(tmp, verdict.replace(" ", "-") + ".md")
+        replies[verdict].write_text(f"Verdict: {verdict}\n")
+    ok = lambda verdict: {"status": "ok", "output": str(replies[verdict])}
+    assert review.round_verdict({"a": ok("no findings"), "b": ok("blocking findings")}) == "blocking findings"
+    assert review.round_verdict({"a": ok("no findings"), "b": ok("non-blocking findings")}) == "non-blocking findings"
+    assert review.round_verdict({"a": ok("no findings"), "b": {"status": "failed", "output": str(reply)}}) is None
+    assert review.round_verdict({"a": ok("no findings"), "b": {"status": "ok", "output": str(tmp)}}) is None
+    assert review.round_verdict({}) is None
+
+    # Checkpoints: consecutive blocking rounds, a long series and a large first
+    # review print advice; carried rounds and other targets do not count.
+    reviewer = {"name": "a", "client": "codex", "model": "m", "effort": "high"}
+    checkpoint_config = {"reviewers": [reviewer]}
+    pr = review.PR("forgejo", "https://forge.example", "o", "r", "9")
+    with patch.dict(os.environ, {"XDG_STATE_HOME": tmp}):
+        def add_round(number, verdict, base="dev", stored=True, **extra):
+            sha = f"{number:040x}"
+            directory = review.state_dir(pr, sha)
+            os.makedirs(directory)
+            status = {"head": sha, "base": base, "finished": number, "changed_lines": 10,
+                      "reviewers": {"a": dict(ok(verdict), reviewer=reviewer)}, **extra}
+            if stored:
+                status["verdict"] = verdict
+            pathlib.Path(directory, "status.json").write_text(json.dumps(status))
+            return sha
+
+        def notes(sha, base="dev"):
+            return " ".join(review.checkpoint(checkpoint_config, pr, sha, base))
+
+        first = add_round(1, "blocking findings", changed_lines=501)
+        assert "changes 501 lines" in notes(first) and "Checkpoint" not in notes(first)
+        assert notes(first, base="main") == "", "rounds on another target do not count"
+        second = add_round(2, "blocking findings", stored=False)
+        assert "the last 2 rounds had blocking findings" in notes(second) and "lines" not in notes(second)
+        assert notes(first) == "", "advice waits for the head's own round to be the latest"
+        add_round(3, "blocking findings", carried={"kind": "fold", "from": second})
+        fourth = add_round(4, "non-blocking findings")
+        assert notes(fourth) == "", "a round without blocking findings ends the streak; carries do not count"
+        add_round(5, "blocking findings", base="main")
+        for number in (6, 7):
+            sha = add_round(number, "no findings")
+        assert notes(sha) == ""
+        sha = add_round(8, "non-blocking findings")
+        assert "this is review round 6 of this PR" in notes(sha), notes(sha)
+        sha = add_round(9, "blocking findings")
+        sha = add_round(10, "blocking findings")
+        assert "the last 2 rounds" in notes(sha) and "round 8" not in notes(sha), notes(sha)
 
     # Reviewer names become file names.
     config_path = pathlib.Path(tmp, "config.json")
@@ -1747,8 +1801,10 @@ with tempfile.TemporaryDirectory() as tmp:
     reported = {name: r["reported_model"] for name, r in status["reviewers"].items()}
     assert reported == {"gpt": "gpt-reported", "opus": "claude-helper, claude-reported"}, reported
     assert "gpt: ok" in output and "gpt-reported)" in output and "claude-helper, claude-reported)" in output, output
+    assert status["verdict"] == "no findings", status
     prompt = pathlib.Path(state, "prompt.md").read_text()
     assert "+{braces} survive" in prompt and "+one" not in prompt, prompt
+    assert "Calibrate what you report:" in prompt and "as a low finding for the owner" in prompt, prompt
     assert not os.path.exists(os.path.join(tmp, "hook-ran")), "repository hooks must not run"
     assert not os.path.exists(os.path.join(tmp, "filter-ran")), "checkout filters must not run"
     refs = subprocess.run(git + ["for-each-ref", "refs/pr-review"], capture_output=True, text=True).stdout
@@ -1896,6 +1952,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert (status["mode"], status["previous"], status["root"], status["followups"]) == ("follow-up", first, first, 1)
     prompt = pathlib.Path(rounds, fix, "prompt.md").read_text()
     assert "This is a follow-up review" in prompt and "## Author's response\n\nfixed the parser." in prompt, prompt
+    assert "Calibrate what you report:" in prompt, prompt
     assert f"### Round at {first[:12]} (full)" in prompt and "#### gpt\n\nVerdict: no findings" in prompt, prompt
     interdiff, whole = prompt.split("## Interdiff")[1].split("## Full PR diff")
     assert "+fixed" in interdiff and "+{braces}" not in interdiff and "+{braces} survive" in whole, prompt
@@ -1903,7 +1960,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --force on a follow-up repeats the follow-up.
     code, output = cli("run", "4", "--force", "--response", "fixed the parser.")
-    assert code == 0 and f"(follow-up to {first[:12]})" in output, output
+    assert code == 0 and f"(follow-up to {first[:12]})" in output and "Hint:" not in output, output
 
     # Later follow-ups see every round since the full review; at most
     # MAX_FOLLOW_UPS run in a row.
@@ -1913,8 +1970,12 @@ with tempfile.TemporaryDirectory() as tmp:
         assert (state_of(fix)["followups"], state_of(fix)["root"]) == (count, first)
     prompt = pathlib.Path(rounds, fix, "prompt.md").read_text()
     assert prompt.count("### Round at") == 3 and "Author's response before this round:\n\nfixed the parser." in prompt
-    fix = push("one\n{braces} survive\nfixed 4\n", fix)
-    assert review_round(fix, "(full review: 3 follow-ups in a row)") == "full"
+    # Past the limit, a head that rewrites the reviewed one still gets the fold hint.
+    fix = push("one\n{braces} survive\nfixed 4\n", first)
+    at(fix)
+    code, output = cli("run", "4")
+    assert code == 0 and "(full review: 3 follow-ups in a row)" in output, output
+    assert "Hint: this head does not build on the reviewed" in output, output
 
     # --full reviews the whole PR, also again after a follow-up of the same head.
     fix = push("one\n{braces} survive\nfixed 5\n", fix)
@@ -1941,7 +2002,10 @@ with tempfile.TemporaryDirectory() as tmp:
     review_round(fix, "(full review: binary files changed since")
     dev = git_out("rev-parse", "origin/dev")
     fix = push("rebased\n", dev, files=fix)
-    review_round(fix, "(full review: the head does not descend from")
+    at(fix)
+    code, output = cli("run", "4")
+    assert code == 0 and "(full review: the head does not descend from" in output, output
+    assert "Hint: this head does not build on the reviewed" in output, output
     moved = push("dev moved\n", dev, ref="refs/heads/dev")
     fix = push("rebased\nmerged\n", fix, moved)
     review_round(fix, "(full review: the merge base with the target changed since")
