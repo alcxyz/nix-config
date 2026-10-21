@@ -12,15 +12,18 @@
 }: let
   # Keep in sync with services.t3code ports in users/alc/linux/xyz/t3code.nix.
   t3codePorts = [3773 3774];
-  # k3s pods (the oauth2-proxy routes) and trusted LAN clients.
-  t3codeSources = [
+  # Where the k8s oauth2-proxy routes arrive from: the pod subnet, and the
+  # k3s nodes (xev, nux, nex) and API address, since pod traffic leaving the
+  # cluster is masqueraded to the node.
+  k3sSources = [
     "10.42.0.0/16"
     "192.168.1.13"
     "192.168.1.15"
     "192.168.1.16"
     "192.168.1.250"
-    "192.168.1.23"
   ];
+  # The k8s routes and trusted LAN clients.
+  t3codeSources = k3sSources ++ ["192.168.1.23"];
 in {
   imports = [
     ./hardware-configuration.nix
@@ -294,9 +297,10 @@ in {
     t3codePorts)
     # The deck dashboard (users/alc/linux/xyz.nix) is reached only through
     # the k8s oauth2-proxy route.
-    + ''
-      iptables -A nixos-fw -p tcp --dport 3775 -s 10.42.0.0/16 -j nixos-fw-accept
-    '');
+    + lib.concatMapStrings (source: ''
+      iptables -A nixos-fw -p tcp --dport 3775 -s ${source} -j nixos-fw-accept
+    '')
+    k3sSources);
 
   services.flatpak.managed = {
     enable = true;
