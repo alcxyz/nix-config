@@ -139,5 +139,8 @@ in {
         message = "programs.ai.agentGithub needs an appId, an absolute keyFile and an owner login.";
       }
     ];
+    # `gh-app status` shows the installation in agent sessions, and
+    # `gh-app register` creates new Apps; both are documented for agents.
+    home.packages = [cfg.package];
   };
 }
