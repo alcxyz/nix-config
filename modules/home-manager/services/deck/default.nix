@@ -70,7 +70,8 @@ in {
         Restart = "on-failure";
         RestartSec = 10;
         # The t3-thread-* commands come from the Home Manager profile; the
-        # model CLIs make the summaries through the shared light role.
+        # model CLIs make the summaries through the shared roles (light by
+        # default, standard or deep when picked for one refresh).
         Environment = [
           "PATH=${config.home.profileDirectory}/bin:${lib.makeBinPath [pkgs.claude-code pkgs.codex-cli pkgs.coreutils]}"
           "HOME=${config.home.homeDirectory}"
