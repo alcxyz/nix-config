@@ -150,11 +150,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789920484,
-        "narHash": "sha256-E7HgUvIBaMBZbFB/1ycLZq9k+bhXazSYkeVIlU7P9/A=",
+        "lastModified": 1792607283,
+        "narHash": "sha256-00KHNnSep7Z3aTBLUwMOMPqiCLdj8T2jaFR3GcdREQw=",
         "owner": "alcxyz",
         "repo": "canopy",
-        "rev": "45c84072de9094d8872699541f6b21e89adfb40e",
+        "rev": "bf368f2281653c497d6b717dc8a9d283919d0ade",
         "type": "github"
       },
       "original": {
@@ -172,11 +172,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791762119,
-        "narHash": "sha256-jwzYDMWkIITCTUDaw0R7+MVkHEAC1PBzTKF7o1ts8+E=",
+        "lastModified": 1792607283,
+        "narHash": "sha256-00KHNnSep7Z3aTBLUwMOMPqiCLdj8T2jaFR3GcdREQw=",
         "owner": "alcxyz",
         "repo": "canopy",
-        "rev": "71052e3aed1169b2a42200f3fcb4f63a43986227",
+        "rev": "bf368f2281653c497d6b717dc8a9d283919d0ade",
         "type": "github"
       },
       "original": {
@@ -649,11 +649,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789920487,
-        "narHash": "sha256-67zyLCJ8xkJim19kNqd7QlLi51rx+qbELePRcT8P/Ss=",
+        "lastModified": 1792598175,
+        "narHash": "sha256-hGf0jxM6ds7mg/csuROWMhlll1dj7yJ+inNGpKHggF4=",
         "owner": "alcxyz",
         "repo": "grove",
-        "rev": "57f89b67b7da77869bb4d2cdfce046b5c53ce2d6",
+        "rev": "b886f4c0ce31cc038cd98addf570d0ca83ae5365",
         "type": "github"
       },
       "original": {
@@ -671,11 +671,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791762115,
-        "narHash": "sha256-GtnfdDTtbyGuRDkAQ9rL8Uu1OuNvrma585udu7P53w4=",
+        "lastModified": 1792606873,
+        "narHash": "sha256-wce7NnWcoTUuY+Yc5XQYYUN1C2LR3/voL1EqKzWkvxM=",
         "owner": "alcxyz",
         "repo": "grove",
-        "rev": "9e2ec48caab11049c227158cbf777f5c7c800bb3",
+        "rev": "340a7938814e7cf77d8470db732026e9453985ff",
         "type": "github"
       },
       "original": {
@@ -1108,11 +1108,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable"
       },
       "locked": {
-        "lastModified": 1792570578,
-        "narHash": "sha256-DoXH5iLmEoqBOOgT9Au3J/la9c/LskPKJWe9OAA/SB8=",
+        "lastModified": 1792607668,
+        "narHash": "sha256-Fb4PWiicHjy8v/YddFGWqSKCg4jEI4ZBj0eVPAcQTKI=",
         "ref": "dev",
-        "rev": "09084000b0c8aad8fe3dcd8e8308d6a2fdfe720d",
-        "revCount": 816,
+        "rev": "d1b3df460f0e240b07f0b22ffb101debae62b586",
+        "revCount": 820,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1267,11 +1267,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791107350,
-        "narHash": "sha256-27W6jSvvmLryJ306E925Yu2arHRqhGn2OzGJ4cHCoKA=",
+        "lastModified": 1792609931,
+        "narHash": "sha256-gAbTVU8dOw6rravEaePZ8WcWCQsBWo51Q+831d2qMPg=",
         "owner": "alcxyz",
         "repo": "paperflow",
-        "rev": "5163a7885f0d76132a3b030ac056eca5ba3f5c10",
+        "rev": "c3191bc2ea96d63d2d30d98a896d1a253e7ee3bb",
         "type": "github"
       },
       "original": {
@@ -1454,11 +1454,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1784665979,
-        "narHash": "sha256-/0PUq07PnHiBg6tMEZDoD8p1bn04yEhN+xNt9v5PM8k=",
+        "lastModified": 1792543400,
+        "narHash": "sha256-jgqtvV5RuyAimqEi4A19J0xepVym8bqF9Eu7B5Q5EhI=",
         "ref": "main",
-        "rev": "96981b650a0c88ea03e4cb4ccddd661d79568f07",
-        "revCount": 2,
+        "rev": "cb80668f10245094975ffae74bdb1c5c51ecf699",
+        "revCount": 3,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git"
       },
@@ -1863,11 +1863,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791251439,
-        "narHash": "sha256-SYv+fMdv6ORV7rTNNxhKb8wyM/OWMzZUO7BReQceeqI=",
+        "lastModified": 1792607431,
+        "narHash": "sha256-LkXcOVV60pADLWRM2a5L1DW5hbu7Yub3MnB7RVcJIck=",
         "owner": "alcxyz",
         "repo": "t3rry",
-        "rev": "033615c33a1cad6e53d9803d2c2db931828ebf2e",
+        "rev": "4631d85bf2d7e7cc580ef39b2b9358d691bdc101",
         "type": "github"
       },
       "original": {
@@ -1885,11 +1885,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791252033,
-        "narHash": "sha256-2590wrL9054KBMPJ36TKzpI+juvcqEbANPZ8UQVNd5o=",
+        "lastModified": 1792607431,
+        "narHash": "sha256-LkXcOVV60pADLWRM2a5L1DW5hbu7Yub3MnB7RVcJIck=",
         "owner": "alcxyz",
         "repo": "t3rry",
-        "rev": "ce62c148f3cc0c8d4c09c8ae31152ee70107bdc3",
+        "rev": "4631d85bf2d7e7cc580ef39b2b9358d691bdc101",
         "type": "github"
       },
       "original": {
