@@ -13,6 +13,20 @@
   cfg = config.security.agentPrReviewGuard;
   hooksDir = "/etc/codex/hooks";
   hookCommand = "${hooksDir}/agent-pr-review-guard";
+  descriptionCommand = "${hooksDir}/agent-description-format-observe";
+  # Independent, report-only hook (ADR-0101). The per-user package is inactive
+  # without its explicit private trial settings. Its absence never blocks.
+  descriptionScript = ''
+    #!${pkgs.runtimeShell}
+    user=$(${lib.getExe' pkgs.coreutils "id"} -un)
+    for observer in "/etc/profiles/per-user/$user/bin/agent-description-format-observe" "$HOME/.nix-profile/bin/agent-description-format-observe"; do
+      if [ -x "$observer" ]; then
+        "$observer" --delivery codex-managed || true
+        exit 0
+      fi
+    done
+    exit 0
+  '';
   # Home Manager (programs.ai) builds the guard per user with the user's Forgejo
   # MCP settings; this hook runs that guard. Users in cfg.users are blocked
   # when it is missing, so a broken profile cannot silently disable the guard.
@@ -49,6 +63,16 @@
       PreToolUse = [
         (guardHook "^Bash$")
         (guardHook "^mcp__forgejo__")
+        {
+          matcher = "^(Bash$|mcp__forgejo__)";
+          hooks = [
+            {
+              type = "command";
+              command = descriptionCommand;
+              timeout = 5;
+            }
+          ];
+        }
       ];
     };
   };
@@ -74,6 +98,10 @@ in {
       # A copy, not a store symlink, so the command stays inside managed_dir.
       "codex/hooks/agent-pr-review-guard" = {
         text = hookScript;
+        mode = "0555";
+      };
+      "codex/hooks/agent-description-format-observe" = {
+        text = descriptionScript;
         mode = "0555";
       };
     };

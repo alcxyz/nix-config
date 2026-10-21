@@ -20,6 +20,9 @@
       touch "$out"
     '';
 in {
+  description-format-contract = mkRepoCheck "description-format-contract" [pkgs.python3 pkgs.git] ''
+    python3 scripts/checks/test-description-format.py
+  '';
   repo-review-configuration-contract = assert import ./repo-review-test.nix {inherit lib pkgs;};
     pkgs.runCommand "repo-review-configuration-contract" {} "touch $out";
 

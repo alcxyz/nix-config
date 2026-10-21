@@ -51,6 +51,58 @@ with lib; let
   prReviewHooks = {
     PreToolUse = [(guardHook "Bash")] ++ optional mcp.enable (guardHook "mcp__forgejo__.*");
   };
+  clientHooks = delivery: {
+    PreToolUse =
+      prReviewHooks.PreToolUse
+      ++ optionals cfg.descriptionFormat.enable (map (descriptionHook delivery) ["Bash" "mcp__forgejo__.*"]);
+  };
+
+  # ADR-0101: observation has its own entrypoint and always allows writes.
+  # Private consumers supply an explicit repository list; none is implicit.
+  descriptionConfigSource = pkgs.writeText "description-format-source.json" (builtins.toJSON {
+    schema = 1;
+    mode =
+      if cfg.descriptionFormat.enable
+      then "observe"
+      else "off";
+    forgejo_host = builtins.head (splitString "/" (removePrefix "https://" (removePrefix "http://" mcp.url)));
+    repositories = cfg.descriptionFormat.repositories;
+    end_at = cfg.descriptionFormat.endAt;
+    state_dir = "${config.xdg.stateHome}/description-format";
+  });
+  # Validate dates, scope and paths while building, before a broken setting can
+  # activate an observer that silently collects nothing. This does no I/O to state.
+  descriptionConfig =
+    if cfg.descriptionFormat.enable
+    then
+      pkgs.runCommand "description-format.json" {nativeBuildInputs = [pkgs.python3];} ''
+        python3 -I ${./description-format.py} validate-config --config ${descriptionConfigSource}
+        cp ${descriptionConfigSource} "$out"
+      ''
+    else descriptionConfigSource;
+  descriptionFormat = pkgs.writeShellApplication {
+    name = "description-format";
+    runtimeInputs = [pkgs.python3];
+    text = ''exec python3 -I ${./description-format.py} "$@"'';
+  };
+  descriptionGuard = pkgs.writeShellApplication {
+    name = "agent-description-format-observe";
+    runtimeInputs = [pkgs.python3];
+    text = ''
+      # Observation must not turn a missing interpreter/module into a denial.
+      python3 -I ${./description-format.py} hook --config ${descriptionConfig} "$@" || true
+    '';
+  };
+  descriptionHook = delivery: matcher: {
+    inherit matcher;
+    hooks = [
+      {
+        type = "command";
+        command = "${config.home.profileDirectory}/bin/agent-description-format-observe --delivery ${delivery}";
+        timeout = 5;
+      }
+    ];
+  };
 
   # Forgejo MCP client for agents (ADR-0081). The wrapper reads the token file
   # at start, so the token never appears in arguments or client configuration.
@@ -304,7 +356,7 @@ with lib; let
   };
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
-      hooks = prReviewHooks // t3RestartNoticeHooks;
+      hooks = clientHooks "claude-user" // t3RestartNoticeHooks;
       statusLine = {
         type = "command";
         command = "dankaiusage claude-statusline";
@@ -366,6 +418,40 @@ in {
 
   options.programs.ai = {
     enable = mkEnableOption "Module for vibe coding stuff";
+
+    descriptionFormat = {
+      enable = mkEnableOption "report-only description formatting observation (ADR-0101)";
+      repositories = mkOption {
+        type = types.attrsOf (types.submodule {
+          options = {
+            issue = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Observe issue bodies using the shared format.";
+            };
+            pr = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Observe PR bodies using the shared format.";
+            };
+          };
+        });
+        default = {};
+        example = {
+          "github.com/example/project" = {
+            issue = true;
+            pr = true;
+          };
+        };
+        description = "Explicit host/owner/repository targets. False per-kind values preserve repository template exceptions. Private lists belong in the private consumer.";
+      };
+      endAt = mkOption {
+        type = types.nullOr (types.strMatching "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|\\+00:00)");
+        default = null;
+        example = "2026-11-05T23:59:59Z";
+        description = "UTC observation cutoff. Collection stops at this time; enforcement is never enabled automatically.";
+      };
+    };
 
     prReview = {
       reviewers = mkOption {
@@ -485,6 +571,14 @@ in {
 
     assertions = [
       {
+        assertion = !cfg.descriptionFormat.enable || (cfg.descriptionFormat.endAt != null && cfg.descriptionFormat.repositories != {});
+        message = "Description observation needs an explicit repository list and endAt cutoff (ADR-0101).";
+      }
+      {
+        assertion = all (name: builtins.match "[A-Za-z0-9.-]+(:[0-9]+)?/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" name != null) (attrNames cfg.descriptionFormat.repositories);
+        message = "Description scope entries must be host/owner/repository identifiers, without a URL scheme.";
+      }
+      {
         assertion = !mcp.enable || mcp.tokenFile != null;
         message = "programs.ai.forgejoMcp needs a tokenFile (ADR-0081).";
       }
@@ -515,7 +609,7 @@ in {
       };
     };
 
-    home.packages = [agentJob backlogInventory backlogOverviewRender prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadMessages t3ThreadOverviewAck t3ThreadOverviewGroup t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
+    home.packages = [agentJob backlogInventory backlogOverviewRender descriptionFormat descriptionGuard prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadMessages t3ThreadOverviewAck t3ThreadOverviewGroup t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
 
     # The agent skills that call these commands live in nix-secrets
     # shared/skills and are linked by its agentSkills module (nix-secrets
@@ -524,7 +618,7 @@ in {
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file
     # serves other hosts once trusted.
-    home.file.".codex/hooks.json".text = builtins.toJSON {hooks = prReviewHooks;};
+    home.file.".codex/hooks.json".text = builtins.toJSON {hooks = clientHooks "codex-user";};
 
     # Catches a client update or an expired sign-in that would fail every
     # review before an agent needs one (#718). Reviewers use the same clients
