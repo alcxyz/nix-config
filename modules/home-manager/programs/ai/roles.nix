@@ -31,23 +31,45 @@ with lib; let
     };
   };
 
+  delegatesToLight = name: elem name ["standard" "deep"] && roles ? light;
+  lightDelegation = ''
+    Delegate self-contained, light-sized steps to the light role when the work
+    saved exceeds the briefing overhead: bounded searches and file inventories,
+    log extraction, mechanical edits, and concise summaries. Batch related
+    lookups; keep trivial single reads or edits local. Give a small brief with
+    scope, file ownership for edits, acceptance criteria and checks, and request
+    compact evidence. Preserve the light role's configured model and effort.
+    You own planning, judgment, integration and final verification; assess the
+    returned evidence without repeating the whole task. Respect explicit user
+    instructions and required review roles. If delegation is unavailable or a
+    nesting limit prevents it, do the work locally and report the limitation.
+    Use the instructed durable watch mechanism for CI and other external waits.
+  '';
+
   codexRoleFile = name: role:
     toml.generate "codex-role-${name}.toml" {
       model = role.codex.model;
       model_reasoning_effort = role.codex.effort;
     };
 
-  claudeAgent = name: role: ''
-    ---
-    name: ${name}
-    description: ${builtins.toJSON role.description}
-    model: ${role.claude.model}
-    effort: ${role.claude.effort}
-    ---
-    You are a general-purpose software engineering agent. Follow the user's
-    and repository's instructions, use the available tools as needed, and
-    report results concisely.
-  '';
+  claudeAgent = name: role:
+    ''
+      ---
+      name: ${name}
+      description: ${builtins.toJSON role.description}
+      model: ${role.claude.model}
+      effort: ${role.claude.effort}
+      ---
+      You are a general-purpose software engineering agent. Follow the user's
+      and repository's instructions, use the available tools as needed, and
+      report results concisely.
+    ''
+    + optionalString (delegatesToLight name) ("\n"
+      + lightDelegation
+      + ''
+        Use the Agent tool with subagent_type = light, without a model or effort
+        override. Keep the inherited tools available for delegation and work.
+      '');
 
   codexRegistrations = pkgs.writeText "codex-roles.json" (builtins.toJSON (mapAttrs (name: role: {
       inherit (role) description;

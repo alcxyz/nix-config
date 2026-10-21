@@ -3,6 +3,7 @@
 **Status:** Accepted (implemented 2026-10-02)
 **Date:** 2026-10-02
 **Amended:** 2026-10-09 by [ADR-0085](0085-one-role-vocabulary.md): `build` is renamed `standard`, and the shared LLM config uses the role names instead of `fast` and `strong`.
+**Amended:** 2026-10-22: generated `standard` and `deep` instructions delegate suitable mechanical steps to `light`, subject to client capabilities.
 **Applies to:** `modules/home-manager/programs/ai/`, `users/alc/common.nix`, `docs/llm-config.toml.example`, the retired `users/alc/configs/llm/config.toml`, `~/.codex/config.toml`, `~/.codex/<role>.config.toml`, `~/.claude/agents/`, `~/.config/llm/config.toml`, nix-secrets role table and agent instructions
 
 ## Context
@@ -103,6 +104,36 @@ ordering, because instructions never name models: one reviewed edit, a lock
 refresh and a deploy.
 
 Work is tracked in [#522](https://git.alc.xyz/alcxyz/nix-config/issues/522).
+
+### Light steps within standard and deep work (2026-10-22)
+
+When `light` is configured, generated `standard` and `deep` Claude prompts
+tell agents to delegate self-contained mechanical
+batches to that role when the work saved exceeds briefing overhead. Examples
+include bounded searches, file inventories, log extraction, mechanical edits
+and summaries. Small briefs specify scope, ownership, acceptance criteria and
+checks, and request compact evidence. The parent retains planning, judgment,
+integration and final verification, without repeating the worker's whole task.
+Tiny reads and edits stay local; required review roles still apply.
+
+Delegation names the `light` agent type without overriding its model or effort.
+Claude definitions keep inheriting tools, including Agent where available;
+an explicit tool allowlist would unnecessarily narrow their general-purpose
+contract. Claude Code 2.1.306's packaged tool filter permits nested delegation
+below its spawn-depth limit, and its built-in Explore inherits the session
+model. [Upstream subagent documentation](https://code.claude.com/docs/en/sub-agents)
+describes these controls. At a client limit or without delegation, the agent
+works locally and reports the limitation. External waits use the existing
+durable watch mechanism.
+
+This is prompt guidance, not automatic per-step routing or a measured savings
+claim. `light` gets no recursive delegation instruction, and configurations
+without it get no new guidance. Role mappings, tool defaults and review policy
+are unchanged. Codex profiles retain their existing contents: setting
+`developer_instructions` there replaces parent instructions and can pass the
+delegation rule to `light` children through inheritance. Codex continues to use
+the shared delegation instructions until an additive mechanism is established.
+Tracked in [#784](https://git.alc.xyz/alcxyz/nix-config/issues/784).
 
 ## Alternatives Considered
 
