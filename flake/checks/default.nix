@@ -959,7 +959,8 @@ in {
       }).config.programs.ai.agentGithub.agentGh;
   in
     assert off.config.programs.ai.agentGithub.sessionCommands == "";
-    assert off.config.programs.ai.agentGithub.agentGh == pkgs.gh;
+    # The xyz configuration's own gh: on other systems, this check's pkgs differ.
+    assert off.config.programs.ai.agentGithub.agentGh == off._module.args.pkgs.gh;
       pkgs.runCommand "agent-github-wiring-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.shellcheck];} ''
         if grep -E 'credential.https://github.com|GH_APP_' ${offSessionEnv}; then
           echo "The session wrapper changes GitHub credentials while agentGithub is disabled" >&2
