@@ -2,6 +2,7 @@
 
 **Status:** Accepted; the updater follows the nix-packages `promoted` branch since [ADR-0080](0080-promoted-package-ref.md)
 **Date:** 2026-09-30
+**Retention coverage amended:** 2026-10-22
 **Amended:** 2026-10-08, the T3 Code fork channels were retired (nix-packages ADR-0005); 2026-10-16, a Home Manager change to the service command restarts T3 when idle (#689)
 **Applies to:** `modules/home-manager/services/t3code/`, nix-packages `ai-stack-*` outputs
 
@@ -71,6 +72,11 @@ nixpkgs does not need to match the system: none of its programs load system
 graphics drivers. The profile keeps its own generations, so
 `nix-env --profile ~/.local/state/nix/profiles/ai-stack --rollback` undoes a bad
 update.
+
+The independent profile participates in the guarded generation retention from
+[ADR-0013](0013-safe-nix-gc-no-generation-deletion.md). Its rollback history is
+bounded by the same validation, count and free-space triggers as other managed
+profiles; frequent unattended updates must not retain every historical bundle.
 
 Other nix-packages tools (Ghostty, Zen, Helium, and so on) now update only when
 Home Manager is deployed, instead of riding along with provider updates. The

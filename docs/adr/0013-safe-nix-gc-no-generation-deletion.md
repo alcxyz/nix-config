@@ -1,6 +1,6 @@
 # ADR-0013: Safe Nix GC with guarded generation retention
 
-**Status:** Accepted (amended 2026-08-26, 2026-09-30, 2026-10-16)
+**Status:** Accepted (amended 2026-08-26, 2026-09-30, 2026-10-16, 2026-10-22)
 **Date:** 2026-04-18
 **Applies to:** all managed NixOS and nix-darwin hosts, Home Manager profiles, `nix.gc`
 
@@ -30,8 +30,9 @@ nix.gc = {
 ```
 
 Generation retention is a separate, guarded prerequisite of automatic GC. It
-checks the system profile and the configured managed user's Home Manager and
-user profiles. Retention triggers when any profile exceeds 20 generations or
+checks the system profile and the configured managed user's Home Manager,
+user and independent AI-stack profiles. Missing optional profiles are skipped.
+Retention triggers when any profile exceeds 20 generations or
 when the Nix filesystem has less than 15% free. Hosts may lower the retained
 count with `alc.nix.keepGenerations` (default 10); the trigger stays at twice
 that count. Small, rarely changed SD-card hosts keep 3. When triggered, it validates
@@ -55,8 +56,8 @@ state roots under `~/.local/state` and `~/.cache`; nix-direnv recreates its
 roots the next time a project loads.
 
 The shared `nix-gc-maintenance` command remains the explicit override. It
-retains the latest 10 generations in the invoking user's Home Manager and user
-profiles, retains the latest 10 system generations, then collects every dead
+retains the latest 10 generations in the invoking user's Home Manager, user and
+AI-stack profiles, retains the latest 10 system generations, then collects every dead
 path. Run it through `just gc` from the repository or directly on
 any managed host. From the operator checkout on `xyz`, `just gc <host>` streams
 the same command over the managed SSH connection; the target does not need the

@@ -176,6 +176,7 @@
 in {
   imports = [
     ./idle-podman-cleanup.nix
+    ./podman-storage.nix
     ./isolated-docker.nix
     ./podman-canary.nix
     ./orphan-monitor.nix

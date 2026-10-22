@@ -47,6 +47,23 @@ else let
   validLabels = ["podman-canary:docker://example.invalid/podman:latest"];
   disabled = evaluate false validLabels {};
   enabled = evaluate true validLabels {};
+  dedicatedStorage = evaluate true validLabels {
+    fileSystems."/var/lib/forgejo-podman" = {
+      device = "fixture/runtime/podman";
+      fsType = "zfs";
+    };
+    services.forgejo-actions-runner.podmanCanary.storageMountSource = "fixture/runtime/podman";
+  };
+  missingStorage = evaluate true validLabels {
+    services.forgejo-actions-runner.podmanCanary.storageMountSource = "fixture/runtime/podman";
+  };
+  escapedStorage = evaluate true validLabels {
+    fileSystems."/var/lib/forgejo-podman" = {
+      device = "/dev/disk/by-label/CI\\x20Storage";
+      fsType = "ext4";
+    };
+    services.forgejo-actions-runner.podmanCanary.storageMountSource = "/dev/disk/by-label/CI\\x20Storage";
+  };
   overlap = evaluate true ["docker-primary:docker://example.invalid/different-image:latest"] {};
   hostLabel = evaluate true ["podman-canary:host"] {};
   cleanupConfig = {
@@ -202,6 +219,14 @@ else let
   labelOverlapMessage = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
   dockerOverlapMessage = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
 in
+  assert !(enabled.systemd.services ? forgejo-podman-storage-ready);
+  assert lib.elem "forgejo-podman-storage-ready.service" dedicatedStorage.systemd.services.forgejo-runner-podman.requires;
+  assert lib.elem "forgejo-podman-storage-ready.service" dedicatedStorage.systemd.sockets.forgejo-runner-podman.requires;
+  assert lib.elem "var-lib-forgejo\\x2dpodman.mount" dedicatedStorage.systemd.services.forgejo-runner-podman.bindsTo;
+  assert lib.elem "var-lib-forgejo\\x2dpodman.mount" dedicatedStorage.systemd.sockets.forgejo-runner-podman.bindsTo;
+  assert dedicatedStorage.systemd.services.forgejo-podman-storage-ready.serviceConfig.RemainAfterExit;
+  assert lib.hasInfix "CI\\\\x20Storage" escapedStorage.systemd.services.forgejo-podman-storage-ready.serviceConfig.ExecStart;
+  assert failedAssertion missingStorage "Dedicated Podman storage requires an explicit /var/lib/forgejo-podman filesystem.";
   assert cleanupUnits cleanupOnly == [];
   assert cleanupUnits monitorOnly == [];
   assert cleanupUnits monitoredCleanup

@@ -20,6 +20,9 @@
       touch "$out"
     '';
 in {
+  podman-storage-identity-contract = mkRepoCheck "podman-storage-identity-contract" [pkgs.bash pkgs.coreutils] ''
+    bash scripts/checks/test-podman-storage-check.sh modules/nixos/services/forgejo-actions-runner/podman-storage-check.sh
+  '';
   description-format-contract = mkRepoCheck "description-format-contract" [pkgs.python3 pkgs.git] ''
     python3 scripts/checks/test-description-format.py
   '';
