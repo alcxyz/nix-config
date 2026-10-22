@@ -81,6 +81,10 @@ in
     "serviceUid"
     "serviceGid"
   ];
-    pkgs.runCommand "k8s-backup-s3-interface-contract" {} ''
+    pkgs.runCommand "k8s-backup-s3-interface-contract" {
+      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.jq pkgs.python3 pkgs.rclone];
+    } ''
+      timeout -k 5 120 python3 ${./test-k8s-backup-s3.py} \
+        ${pkgs.writeText "k8s-backup-s3-mirror-fixture.sh" mirror.config.systemd.services.k8s-backup-s3-mirror.script}
       touch "$out"
     ''

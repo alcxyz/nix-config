@@ -126,6 +126,7 @@ in
               };
               reportcraft = inputs.reportcraft.packages.${system}.default;
               openbao = inputs.nixpkgs-openbao.legacyPackages.${system}.openbao;
+              azure-cli = inputs.nixpkgs-azure-cli.legacyPackages.${system}.azure-cli;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
                 inherit (_final) quickshell;

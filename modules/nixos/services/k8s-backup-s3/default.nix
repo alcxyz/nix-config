@@ -211,7 +211,7 @@ in {
     ];
 
     environment.systemPackages = [
-      pkgs.minio-client
+      pkgs.rclone
       rustfsPackage
     ];
 
@@ -359,7 +359,7 @@ in {
         pkgs.coreutils
         pkgs.getent
         pkgs.jq
-        pkgs.minio-client
+        pkgs.rclone
       ];
       serviceConfig = {
         Type = "oneshot";
@@ -376,34 +376,27 @@ in {
         set -euo pipefail
         umask 077
 
-        MC_CONFIG_DIR="$(mktemp -d)"
-        export MC_CONFIG_DIR
-        trap 'rm -rf "$MC_CONFIG_DIR"' EXIT
+        runtime_dir="$(mktemp -d)"
+        trap 'rm -rf "$runtime_dir"' EXIT
 
-        import_alias() {
-          local name="$1"
-          local endpoint="$2"
-          local credential_json="$MC_CONFIG_DIR/$name.json"
+        # Keep credentials out of argv and persistent client configuration.
+        # Both endpoints use the existing systemd credential files.
+        export RCLONE_CONFIG="$runtime_dir/rclone.conf"
+        : >"$RCLONE_CONFIG"
+        RCLONE_S3_ACCESS_KEY_ID="$(cat "$CREDENTIALS_DIRECTORY/s3_access_key")"
+        RCLONE_S3_SECRET_ACCESS_KEY="$(cat "$CREDENTIALS_DIRECTORY/s3_secret_key")"
+        export RCLONE_S3_ACCESS_KEY_ID RCLONE_S3_SECRET_ACCESS_KEY
+        export RCLONE_S3_PROVIDER=Other RCLONE_S3_ENV_AUTH=false
+        export RCLONE_S3_FORCE_PATH_STYLE=true
+        export RCLONE_CONFIG_SOURCE_TYPE=s3 RCLONE_CONFIG_REPLICA_TYPE=s3
+        export RCLONE_CONFIG_SOURCE_ENDPOINT=${lib.escapeShellArg cfg.mirrorSourceEndpoint}
+        export RCLONE_CONFIG_REPLICA_ENDPOINT=${lib.escapeShellArg localEndpoint}
 
-          jq -n \
-            --arg url "$endpoint" \
-            --rawfile access "$CREDENTIALS_DIRECTORY/s3_access_key" \
-            --rawfile secret "$CREDENTIALS_DIRECTORY/s3_secret_key" \
-            '{
-              url: $url,
-              accessKey: ($access | rtrimstr("\n")),
-              secretKey: ($secret | rtrimstr("\n")),
-              api: "s3v4",
-              path: "auto"
-            }' >"$credential_json"
-          mc alias import "$name" "$credential_json" >/dev/null
-          rm -f "$credential_json"
+        rclone() {
+          command rclone --quiet --stats 0 --retries 3 --low-level-retries 10 "$@"
         }
 
-        import_alias source ${lib.escapeShellArg cfg.mirrorSourceEndpoint}
-        import_alias replica ${lib.escapeShellArg localEndpoint}
-
-        inventory_dir="$MC_CONFIG_DIR/inventory"
+        inventory_dir="$runtime_dir/inventory"
         mkdir -p "$inventory_dir"
 
         write_inventory() {
@@ -411,8 +404,8 @@ in {
           local bucket="$2"
           local output="$3"
 
-          mc ls --recursive --json "$alias/$bucket" \
-            | jq -cS 'select(.status == "success" and .type == "file") | {key, size}' \
+          rclone lsjson --recursive --files-only --no-modtime --no-mimetype "$alias:$bucket" \
+            | jq -cS '.[] | select(.IsDir == false) | {key: .Path, size: .Size}' \
             | LC_ALL=C sort >"$output"
         }
 
@@ -432,11 +425,15 @@ in {
 
           : >"$unresolved"
           while IFS= read -r object; do
-            key="$(jq -r '.key' <<<"$object")"
+            # A sentinel preserves trailing newlines in object names.
+            key="$(jq -r '.key + "/"' <<<"$object")"
+            key="''${key%/}"
             expected_size="$(jq -r '.size' <<<"$object")"
 
-            if replica_stat="$(mc stat --json "replica/$bucket/$key" 2>/dev/null)" \
-              && actual_size="$(jq -er 'select(.status == "success") | .size' <<<"$replica_stat")" \
+            # --stat resolves the exact object independently of recursive
+            # listings. Missing S3 objects may be reported as directories.
+            if replica_stat="$(rclone lsjson --stat --files-only --no-modtime --no-mimetype "replica:$bucket/$key" 2>/dev/null)" \
+              && actual_size="$(jq -er 'select(.IsDir == false) | .Size' <<<"$replica_stat")" \
               && [ "$actual_size" = "$expected_size" ]; then
               verified_by_stat=$((verified_by_stat + 1))
             else
@@ -449,7 +446,7 @@ in {
         }
 
         for attempt in $(seq 1 30); do
-          if mc ls replica >/dev/null 2>&1; then
+          if rclone lsjson --dirs-only replica: >/dev/null 2>&1; then
             break
           fi
           if [ "$attempt" -eq 30 ]; then
@@ -459,14 +456,18 @@ in {
           sleep 2
         done
 
-        mapfile -t buckets < <(mc ls --json source | jq -r 'select(.type == "folder") | .key | rtrimstr("/")')
+        # Keep the listing in a checked pipeline. Process substitution would
+        # hide an endpoint failure from mapfile and could accept a partial list.
+        rclone lsjson --dirs-only source: \
+          | jq -r '.[] | select(.IsDir == true) | .Path' >"$inventory_dir/buckets"
+        mapfile -t buckets <"$inventory_dir/buckets"
         if [ "''${#buckets[@]}" -eq 0 ]; then
           echo "authoritative backup target contains no buckets; refusing an empty mirror" >&2
           exit 1
         fi
 
         for bucket in "''${buckets[@]}"; do
-          mc mb --ignore-existing "replica/$bucket"
+          rclone mkdir "replica:$bucket"
 
           bucket_inventory="$(mktemp -d "$inventory_dir/bucket.XXXXXX")"
 
@@ -481,11 +482,16 @@ in {
             # can never converge even when every object observed at the start
             # was replicated correctly.
             write_inventory source "$bucket" "$source_checkpoint"
-            # RustFS can transiently reject an individual streaming PUT. Let
-            # mc retry that object before falling back to the more expensive
-            # full checkpoint/mirror pass, and avoid overwhelming the small
-            # on-demand replica with autodetected worker concurrency.
-            if ! mc mirror --overwrite --remove --retry --max-workers ${toString cfg.mirrorMaxWorkers} --quiet "source/$bucket" "replica/$bucket" >/dev/null; then
+            # Retry transient requests before the bounded full-pass retry.
+            # Limit transfer/check workers and multipart fan-out independently
+            # so a few large objects cannot multiply upload concurrency.
+            # Preserve restoration metadata and distinguish exact S3 keys,
+            # including canonically equivalent Unicode spellings.
+            if ! rclone sync --delete-after --metadata --no-unicode-normalization \
+              --transfers ${toString cfg.mirrorMaxWorkers} \
+              --checkers ${toString cfg.mirrorMaxWorkers} \
+              --s3-upload-concurrency 1 --multi-thread-streams 0 \
+              "source:$bucket" "replica:$bucket" >/dev/null; then
               if [ "$attempt" -eq 5 ]; then
                 echo "mirror failed for bucket $bucket after $attempt attempts" >&2
                 exit 1

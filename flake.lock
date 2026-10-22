@@ -69,7 +69,7 @@
     "bivrost": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs"
+          "nixpkgs-azure-cli"
         ]
       },
       "locked": {
@@ -90,7 +90,7 @@
     "bivrost-dev": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs"
+          "nixpkgs-azure-cli"
         ]
       },
       "locked": {
@@ -1130,11 +1130,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1792636575,
-        "narHash": "sha256-oWcVc27sBux7deVCRZVsbPCpS9nLeLauio05gP2825M=",
+        "lastModified": 1792666596,
+        "narHash": "sha256-xCo3SO+bfQuGT9ZBt0jUJJtMKNgEZMtNunbpRkrpqLo=",
         "ref": "dev",
-        "rev": "a141dc9faa3dab135160c82ae53abe8542c6ccd3",
-        "revCount": 794,
+        "rev": "cea4776c1261d9777aa423356cf1d99cae86dd75",
+        "revCount": 795,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1178,6 +1178,22 @@
         "owner": "NixOS",
         "ref": "nixos-unstable",
         "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs-azure-cli": {
+      "locked": {
+        "lastModified": 1791956154,
+        "narHash": "sha256-jBYGPi4udQ9uo4KQp9m2J0546nJVQitG15gvZSaVVAs=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "55bfb4d7437bd4e09ab7cba58a43bd68eb310044",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "55bfb4d7437bd4e09ab7cba58a43bd68eb310044",
         "type": "github"
       }
     },
@@ -1492,6 +1508,7 @@
         "nix-secrets": "nix-secrets",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_2",
+        "nixpkgs-azure-cli": "nixpkgs-azure-cli",
         "nixpkgs-openbao": "nixpkgs-openbao",
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",
@@ -1979,7 +1996,7 @@
       "inputs": {
         "bivrost": "bivrost_2",
         "nixpkgs": [
-          "nixpkgs"
+          "nixpkgs-azure-cli"
         ]
       },
       "locked": {
