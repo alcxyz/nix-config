@@ -25,6 +25,7 @@
         # Executes the x86_64-linux xyz fixture, not a native Mac package.
         description-format-wiring-contract = import ./checks/description-format.nix {inherit self pkgs;};
         flannel-source-vm = pkgs.k3s-flannel-node-source.tests.flannel-source-vm;
+        zfs-linux73-vm = import ./checks/zfs-linux73-vm.nix {inherit pkgs;};
       };
 
     packages =

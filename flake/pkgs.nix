@@ -19,6 +19,7 @@ in
               "git-identity-guard"
               "ndrop"
               "zfs-auto-unlock"
+              "openzfs_7_3"
               "ghostty"
               "kdash"
               "t3code"

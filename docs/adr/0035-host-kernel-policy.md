@@ -1,7 +1,7 @@
 # ADR-0035: Host kernel policy
 
 **Status:** Accepted
-**Date:** 2026-05-05 (amended 2026-08-13, 2026-09-23)
+**Date:** 2026-05-05 (amended 2026-08-13, 2026-09-23, 2026-10-22)
 **Applies to:** `hosts/nux`, `hosts/nex`, `hosts/xyz`, `hosts/xev`, `hosts/rpi0`, kernel selection
 
 ## Context
@@ -136,3 +136,46 @@ Validate the userspace and kernel-module outputs and the complete `xyz` system
 closure before activation. Moving from a development snapshot to a stable branch
 also requires checking active pool features against the target release before
 rollout. Activation, reboot, and pool feature changes remain separate operations.
+
+## Amendment: pinned Linux 7.3 compatibility candidate
+
+The updated lock selects Linux 7.3, while stable OpenZFS 2.4.4 supports through
+Linux 7.2. The operator selected validation of a pinned Linux 7.3 candidate in
+[#788](https://git.alc.xyz/alcxyz/nix-config/issues/788#issuecomment-37173).
+
+Pin upstream revision
+[`cd3699d308e1b37dcdd0d5a9a8c3624deb5fc3e9`](https://github.com/openzfs/zfs/commit/cd3699d308e1b37dcdd0d5a9a8c3624deb5fc3e9),
+the last accepted commit from the
+[Linux 7.3 compatibility series](https://github.com/openzfs/zfs/pull/19082), as
+`openzfs_7_3` in `nix-packages`. It contains the block iterator and CPU feature
+API changes, flagless inode creation, and restored filesystem access for SPL
+threads and taskqs. It is an unreleased development snapshot, not a stable
+OpenZFS release.
+
+Upstream's snapshot metadata still declares Linux 7.2 as its maximum. The
+candidate applies an explicit local metadata patch for Linux 7.3, based on the
+accepted compatibility code. Keep the generic builder's consistency checks and
+upper compatibility bound, so a future unsupported kernel fails evaluation.
+The metadata patch alone is not the compatibility implementation.
+
+Prefer this exact reviewed source over a new manual backport: applying the
+series to stable 2.4.4 also requires adapting CPU detection and inode/idmap
+changes. Linux 7.2 with stable ZFS remains the alternative supported pairing.
+The development snapshot includes other upstream changes, so keep its revision
+and source hash fixed rather than following the development branch.
+
+Select matching userspace and kernel modules through the shared
+`zfs-latest-kernel.nix` module for `xyz` and `xev`. Build the module against the
+final selected kernel, including its configuration overrides. Host storage
+helpers take their ZFS tools from `boot.zfs.package`.
+
+Before adoption, build matching userspace and kernel-module outputs and both
+complete system closures. Run a disposable Linux 7.3 VM check for matching
+versions, file-vdev creation, cache writes, snapshot/rollback, scrub and
+export/import. These checks qualify the candidate without exercising existing
+pools or hardware. Activation, reboot and pool feature changes remain separate
+operations, and adoption does not require pool upgrades.
+
+Return to packaged stable ZFS once it supports the selected kernel, after the
+same validation. Check pool feature compatibility before any subsequent switch
+from the development snapshot to a stable release.

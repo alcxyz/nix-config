@@ -239,7 +239,7 @@ in {
         requiredBy = ["k8s-backup-rustfs.service"];
         path = [
           pkgs.coreutils
-          pkgs.zfs
+          config.boot.zfs.package
         ];
         serviceConfig = {
           Type = "oneshot";

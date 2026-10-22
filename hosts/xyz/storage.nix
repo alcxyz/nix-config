@@ -6,7 +6,7 @@
   ...
 }: let
   cfg = config.xyz.storage.policy;
-  zfsPackage = pkgs.zfs_2_4;
+  zfsPackage = config.boot.zfs.package;
   runtimePool = cfg.runtime.pool;
   runtimeDatasets = cfg.runtime.datasets;
   isolatedDockerEnabled = config.services.forgejo-actions-runner.isolatedDocker.enable;
@@ -119,7 +119,10 @@
     (builtins.unsafeDiscardStringContext (builtins.readFile ./xyz-games-dataset-prepare.sh))
   );
 in {
-  imports = [./storage-policy-options.nix];
+  imports = [
+    ./storage-policy-options.nix
+    ../../modules/nixos/hardware/zfs-latest-kernel.nix
+  ];
 
   config = {
     assertions = [
@@ -130,11 +133,6 @@ in {
         message = "Isolated runner Docker on xyz requires a dedicated runtime dataset and quota.";
       }
     ];
-
-    # ADR-0035: use matching stable ZFS tools and kernel modules. Nixpkgs'
-    # compatibility check must pass before a newer kernel can be built.
-    boot.kernelPackages = pkgs.linuxPackages_latest;
-    boot.zfs.package = zfsPackage;
 
     # ==================== ZFS ====================
     environment.systemPackages = [
@@ -151,10 +149,7 @@ in {
       pkgs.smartmontools
       pkgs.xfsprogs
     ];
-    boot.supportedFilesystems = ["zfs"];
-    boot.zfs.devNodes = "/dev/disk/by-id";
     boot.zfs.extraPools = [runtimePool];
-    boot.zfs.forceImportRoot = false;
     # Keep swap as an OOM safety net, but prefer retaining latency-sensitive
     # desktop and game memory over filesystem cache during routine pressure.
     boot.kernel.sysctl."vm.swappiness" = 10;
