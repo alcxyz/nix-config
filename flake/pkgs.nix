@@ -34,6 +34,9 @@ in
               "k8s-node-reboot"
               "nix-gc-maintenance"
               "revkit"
+              "khal"
+              "piper-tts"
+              "calibre"
               "workspace-sync"
               "workmux"
             ];
