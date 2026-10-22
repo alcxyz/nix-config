@@ -34,9 +34,6 @@ in
               "k8s-node-reboot"
               "nix-gc-maintenance"
               "revkit"
-              "khal"
-              "piper-tts"
-              "calibre"
               "workspace-sync"
               "workmux"
             ];
@@ -129,7 +126,9 @@ in
               };
               reportcraft = inputs.reportcraft.packages.${system}.default;
               openbao = inputs.nixpkgs-openbao.legacyPackages.${system}.openbao;
-              azure-cli = inputs.nixpkgs-azure-cli.legacyPackages.${system}.azure-cli;
+              # Reuse the previous working package set, including each app's
+              # dependencies, until the current nixpkgs build regressions clear.
+              inherit (inputs.nixpkgs-azure-cli.legacyPackages.${system}) azure-cli khal calibre;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
                 inherit (_final) quickshell;

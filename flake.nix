@@ -9,7 +9,8 @@
     # Hold host OpenBao at the reviewed 2.6.2 until adoption finishes and the
     # next release is reviewed; remove once nixpkgs' version is accepted.
     nixpkgs-openbao.url = "github:NixOS/nixpkgs/6774f7bc253789b113a4f39285dc0fa100abeacc";
-    # Hold Azure CLI at the previous host pin until fabric supports invoke 3:
+    # Previous working package set for Azure CLI, Khal and Calibre. Azure CLI
+    # remains here until fabric supports invoke 3:
     # https://github.com/fabric/fabric/issues/2376
     nixpkgs-azure-cli.url = "github:NixOS/nixpkgs/55bfb4d7437bd4e09ab7cba58a43bd68eb310044";
 
