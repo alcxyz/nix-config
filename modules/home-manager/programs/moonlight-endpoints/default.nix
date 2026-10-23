@@ -106,7 +106,8 @@
       text = ''
         address="$(${lib.getExe selectEndpoint} \
           ${lib.escapeShellArg launcher.hostname} ${lib.escapeShellArg mode})"
-        exec ${lib.getExe pkgs.moonlight-qt} \
+        # Homebrew owns the native app; Nix manages its route launchers.
+        exec /Applications/Moonlight.app/Contents/MacOS/Moonlight \
           ${lib.escapeShellArgs (launcher.arguments ++ routeArguments)} \
           stream "$address" ${lib.escapeShellArg launcher.application}
       '';
