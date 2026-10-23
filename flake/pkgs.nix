@@ -134,7 +134,9 @@ in
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
                 inherit (_final) quickshell;
               };
-              ffmpeg-v4l2-request = _prev.callPackage ../packages/ffmpeg-v4l2-request {};
+              # The pinned downstream FFmpeg 8.1 source needs the previous
+              # dependency set, notably OpenAPV's pre-1.1 API (issue #787).
+              ffmpeg-v4l2-request = inputs.nixpkgs-azure-cli.legacyPackages.${system}.callPackage ../packages/ffmpeg-v4l2-request {};
               moonlight-v4l2-request = _prev.moonlight-qt.override {
                 ffmpeg_8 = _final.ffmpeg-v4l2-request;
               };

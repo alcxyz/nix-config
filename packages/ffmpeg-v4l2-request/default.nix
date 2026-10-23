@@ -1,10 +1,10 @@
 {
-  ffmpeg,
+  ffmpeg_8,
   fetchFromGitHub,
   linuxHeaders,
   systemdLibs,
 }:
-ffmpeg.overrideAttrs (old: {
+ffmpeg_8.overrideAttrs (old: {
   pname = "ffmpeg-v4l2-request";
   version = "8.1-v4l2-request-2026-04-20";
 
