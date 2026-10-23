@@ -32,8 +32,15 @@
       ${lib.escapeShellArg "${appStateBackupRoot}/${name}"} \
       include-parent
   '') (builtins.attrNames appStateDatasets);
-  k8sBackupDataset = cfg.localBackup.k8sDataset;
-  k8sBackupRoot = cfg.localBackup.k8sRoot;
+  replicateK8s = cfg.localBackup.replicateK8s;
+  k8sBackupDataset =
+    if cfg.localBackup.k8sDataset == null
+    then ""
+    else cfg.localBackup.k8sDataset;
+  k8sBackupRoot =
+    if cfg.localBackup.k8sRoot == null
+    then ""
+    else cfg.localBackup.k8sRoot;
   gamesPool = cfg.games.pool;
   gamesDataset = cfg.games.dataset;
   gamesMountpoint = cfg.games.mountpoint;
@@ -66,6 +73,7 @@
       "@backup_pool@"
       "@lock_label@"
       "@app_state_replication_commands@"
+      "@replicate_k8s@"
       "@k8s_backup_dataset@"
       "@k8s_backup_root@"
     ]
@@ -74,6 +82,7 @@
       (lib.escapeShellArg appStateBackupPool)
       cfg.localBackup.lockLabel
       appStateReplicationCommands
+      (lib.boolToString replicateK8s)
       (lib.escapeShellArg k8sBackupDataset)
       (lib.escapeShellArg k8sBackupRoot)
     ]
@@ -126,6 +135,19 @@ in {
 
   config = {
     assertions = [
+      {
+        assertion =
+          !replicateK8s
+          || (
+            k8sBackupDataset
+            != ""
+            && k8sBackupRoot != ""
+            && k8sBackupDataset != k8sBackupRoot
+            && cfg.localBackup.k8sSchedule != null
+            && cfg.localBackup.k8sSchedule != ""
+          );
+        message = "Local Kubernetes backup replication requires distinct source and destination datasets and a schedule.";
+      }
       {
         assertion =
           !isolatedDockerEnabled
@@ -232,7 +254,7 @@ in {
         after = ["xyz-runtime-storage-policy.service"];
         requires = ["xyz-runtime-storage-policy.service"];
       };
-    systemd.services.xyz-k8s-backup =
+    systemd.services.xyz-k8s-backup = lib.mkIf replicateK8s (
       lib.recursiveUpdate
       (mkLocalBackupService "k8s" "Replicate xyz k8s backup dataset to the local backup pool")
       {
@@ -242,7 +264,8 @@ in {
           "zfs-mount.service"
           "k8s-backup-s3-mirror.service"
         ];
-      };
+      }
+    );
 
     systemd.services.xyz-games-dataset = {
       description = "Prepare xyz games dataset";
@@ -257,7 +280,7 @@ in {
     };
 
     systemd.timers.xyz-appstate-backup = mkLocalBackupTimer cfg.localBackup.appStateSchedule "Daily xyz appstate backup";
-    systemd.timers.xyz-k8s-backup = mkLocalBackupTimer cfg.localBackup.k8sSchedule "Daily xyz k8s backup replication";
+    systemd.timers.xyz-k8s-backup = lib.mkIf replicateK8s (mkLocalBackupTimer cfg.localBackup.k8sSchedule "Daily xyz k8s backup replication");
 
     systemd.slices.xyz-backups = {
       description = "Contention-aware xyz backup workloads";

@@ -2,7 +2,7 @@
 
 **Status:** Accepted, staged
 **Date:** 2026-08-31
-**Amended:** 2026-09-07
+**Amended:** 2026-10-23
 **Applies to:** secure storage, replaceable bulk storage, dependent services,
 and Kubernetes backup recovery
 **Amends:** ADR-0052, ADR-0062, ADR-0063
@@ -31,9 +31,12 @@ ownership and migration units.
 
 Keep the Kubernetes backup replica on `xyz`, in a different host failure domain
 from the authoritative target governed by
-[ADR-0052](0052-xev-primary-k8s-backup-target.md). The secure-storage host is not
-part of the bulk-storage ownership unit and is not a prerequisite for the bulk
-move.
+[ADR-0052](0052-xev-primary-k8s-backup-target.md). This is a host separation requirement, not a requirement to put that replica
+on the mirrored secure pool. The backup-role amendment to
+[ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) assigns mirrored
+storage to local-data backups and dedicated storage to the Kubernetes replica.
+The secure-storage host is not part of the bulk-storage ownership unit and is
+not a prerequisite for the bulk move.
 
 Any future secure-storage move requires a separate decision covering unattended
 availability, recovery authorization, failure-domain separation, import

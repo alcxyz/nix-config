@@ -31,10 +31,27 @@
           pool = lib.mkOption {type = lib.types.str;};
           lockLabel = lib.mkOption {type = lib.types.strMatching "[A-Za-z0-9._-]+";};
           appStateRoot = lib.mkOption {type = lib.types.str;};
-          k8sDataset = lib.mkOption {type = lib.types.str;};
-          k8sRoot = lib.mkOption {type = lib.types.str;};
+          replicateK8s = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Replicate the local Kubernetes backup dataset to a separate destination.";
+          };
+          k8sDataset = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Source dataset required when local Kubernetes backup replication is enabled.";
+          };
+          k8sRoot = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Distinct destination dataset required when local Kubernetes backup replication is enabled.";
+          };
           appStateSchedule = lib.mkOption {type = lib.types.str;};
-          k8sSchedule = lib.mkOption {type = lib.types.str;};
+          k8sSchedule = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Calendar schedule required when local Kubernetes backup replication is enabled.";
+          };
         };
         games = {
           pool = lib.mkOption {type = lib.types.str;};

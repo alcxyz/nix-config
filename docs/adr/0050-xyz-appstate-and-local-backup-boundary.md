@@ -1,6 +1,6 @@
 # ADR-0050: xyz appstate and local backup boundary
 
-**Status:** Accepted, amended by ADR-0059
+**Status:** Accepted, amended by ADR-0059 and the 2026-10-23 backup-role simplification
 
 **Date:** 2026-05-18
 
@@ -21,9 +21,11 @@ replaceable bulk content outside that boundary unless a later decision promotes
 them.
 
 Replicate the appstate subtree with ZFS to encrypted local backup storage on a
-schedule. Apply the same local replication boundary to the host-level
-Kubernetes backup target. This copy provides fast host-local recovery and does
-not replace off-host protection. Home-directory protection follows the
+schedule. Keep local application and home backups on storage physically
+separate from their live source. The Kubernetes backup target instead has a
+single independent replica on another host, with snapshots at that replica's
+destination. Do not add a further intra-host copy of that replica. Host-local
+copies provide fast recovery and do not replace off-host protection. Home-directory protection follows the
 file-selective model in
 [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md).
 
@@ -62,3 +64,21 @@ data and makes recovery scope unclear.
 
 Rejected because small application databases and configuration may not be
 reconstructible from declarative configuration alone.
+
+## Backup-role simplification, 2026-10-23
+
+Separate local-data protection from the independent Kubernetes backup replica.
+The original local replication chain was retained when the Kubernetes primary
+moved to another host. Keeping both intra-host copies now costs another full
+object collection and couples scheduled replication to activation without
+adding a host failure domain.
+
+Use mirrored storage for backups of local durable data and a dedicated device
+for the Kubernetes replica. Preserve existing repository and snapshot history
+during migration, verify the replacement copies and representative restores,
+and retain the old recovery copy until acceptance.
+
+Keeping the additional replica copy was considered: it tolerates loss of the
+replica's entire pool, but its storage and lifecycle cost are not justified
+alongside the authoritative copy on a separate host. Loss of the dedicated
+replica disk temporarily leaves the authoritative host as the only location.

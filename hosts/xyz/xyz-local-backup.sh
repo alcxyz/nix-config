@@ -12,6 +12,12 @@ fi
 
 backup_name="$1"
 
+replicate_k8s=@replicate_k8s@
+if [ "$backup_name" = k8s ] && [ "$replicate_k8s" != true ]; then
+  echo "local Kubernetes backup replication is disabled; refusing manual k8s invocation" >&2
+  exit 1
+fi
+
 export PATH=@path@
 
 target_pool=@backup_pool@

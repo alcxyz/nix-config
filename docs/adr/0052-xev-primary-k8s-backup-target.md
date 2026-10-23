@@ -1,6 +1,6 @@
 # ADR-0052: xev primary Kubernetes backup target with xyz ZFS replica
 
-**Status:** Accepted, amended by [ADR-0064](0064-keep-secure-storage-on-xyz.md)
+**Status:** Accepted, amended by [ADR-0064](0064-keep-secure-storage-on-xyz.md) and the 2026-10-23 amendment to [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md)
 **Date:** 2026-07-18
 **Applies to:** host-level S3 backups, replica storage, and backup clients
 **Supersedes:** [ADR-0039](0039-xyz-zfs-s3-backup-target.md)
@@ -22,6 +22,17 @@ Use one authoritative host-level S3-compatible backup target outside the
 Kubernetes scheduling and cluster-storage paths. Replicate it asynchronously in
 one direction to independently managed, snapshot-capable storage in another
 host failure domain.
+
+Keep snapshot history directly at the replica destination. A further local
+replication of that replica is unnecessary; mirrored storage instead protects
+backups of local durable data, as amended in ADR-0050. A successful mirror pass
+creates a snapshot only after all buckets have verified. Retention prunes only
+snapshots owned by that mirror job and preserves migrated history.
+
+Live objects and all retained snapshots share the replica dataset quota.
+Capacity planning must allow for migrated history and object churn, with
+free-space monitoring. Since pruning follows successful verification, quota
+exhaustion requires explicit operator action before replication can resume.
 
 Backup writers use only the authoritative endpoint. Replication has one source
 and one destination, and reversing those roles is an explicit recovery action.

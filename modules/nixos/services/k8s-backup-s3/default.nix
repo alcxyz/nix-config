@@ -121,6 +121,20 @@ in {
       description = "Maximum concurrent workers used by each S3 mirror pass.";
     };
 
+    mirrorSnapshotRetention = lib.mkOption {
+      type = lib.types.ints.unsigned;
+      default = 0;
+      description = ''
+        Number of verified mirror snapshots to retain on the ZFS dataset.
+        Zero disables snapshots. Only snapshots locally marked as owned by
+        this mirror feature are pruned; other snapshots are preserved.
+        The dataset quota covers live objects and all snapshot history. Size
+        it for retained and migrated history plus object churn, and monitor
+        free space. Pruning follows a verified pass, so an exhausted quota
+        requires operator intervention before mirroring can succeed again.
+      '';
+    };
+
     scannerEnabled = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -189,6 +203,15 @@ in {
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        assertion =
+          cfg.mirrorSnapshotRetention
+          == 0
+          || (
+            mirrorEnabled && cfg.storageMode == "zfs" && cfg.dataset != null && cfg.dataset != ""
+          );
+        message = "services.k8s-backup-s3.mirrorSnapshotRetention requires an enabled ZFS mirror with a dataset.";
+      }
+      {
         assertion = cfg.storageMode != "mounted-filesystem" || cfg.storageUnit != null;
         message = "services.k8s-backup-s3.storageUnit is required for mounted-filesystem storage.";
       }
@@ -239,6 +262,7 @@ in {
         requiredBy = ["k8s-backup-rustfs.service"];
         path = [
           pkgs.coreutils
+          pkgs.util-linux
           config.boot.zfs.package
         ];
         serviceConfig = {
@@ -262,10 +286,27 @@ in {
             zfs set atime=off ${lib.escapeShellArg zfsDataset}
           fi
 
+          data=${lib.escapeShellArg (toString cfg.dataDir)}
+          dataset=${lib.escapeShellArg zfsDataset}
+          readonly="$(zfs get -H -o value readonly "$dataset")"
+          mounted="$(zfs get -H -o value mounted "$dataset")"
+          if [ "$readonly" != off ] || [ "$mounted" != yes ]; then
+            echo "backup dataset is read-only or unavailable; refusing to prepare the object directory" >&2
+            exit 1
+          fi
+
+          mount_source="$(findmnt -n -o SOURCE --mountpoint "$data")"
+          mount_target="$(findmnt -n -o TARGET --mountpoint "$data")"
+          mount_type="$(findmnt -n -o FSTYPE --mountpoint "$data")"
+          if [ "$mount_source" != "$dataset" ] || [ "$mount_target" != "$data" ] || [ "$mount_type" != zfs ]; then
+            echo "backup dataset is not mounted at the exact object directory; refusing to prepare it" >&2
+            exit 1
+          fi
+
           install -d -m 0750 \
             -o ${lib.escapeShellArg cfg.serviceUser} \
             -g ${lib.escapeShellArg cfg.serviceGroup} \
-            ${lib.escapeShellArg (toString cfg.dataDir)}
+            "$data"
         '';
       }
       else {
@@ -355,12 +396,14 @@ in {
       ];
       wants = ["network-online.target"];
       requires = ["k8s-backup-rustfs.service"];
-      path = [
-        pkgs.coreutils
-        pkgs.getent
-        pkgs.jq
-        pkgs.rclone
-      ];
+      path =
+        [
+          pkgs.coreutils
+          pkgs.getent
+          pkgs.jq
+          pkgs.rclone
+        ]
+        ++ lib.optional (cfg.mirrorSnapshotRetention > 0) config.boot.zfs.package;
       serviceConfig = {
         Type = "oneshot";
         LoadCredential = [
@@ -533,6 +576,33 @@ in {
             sleep 2
           done
         done
+
+        ${lib.optionalString (cfg.mirrorSnapshotRetention > 0) ''
+          # Snapshot only after every bucket has passed verification. Mark
+          # ownership atomically with creation, independent of snapshot names.
+          snapshot_dataset=${lib.escapeShellArg zfsDataset}
+          snapshot_property=org.nix-config:k8s-backup-s3-mirror
+          snapshot_name="$snapshot_dataset@k8s-backup-s3-mirror-$(date -u +%Y%m%dT%H%M%S.%NZ)"
+          zfs snapshot -o "$snapshot_property=verified" "$snapshot_name"
+
+          # Use checked commands rather than process substitution so a failed
+          # inventory/property read fails the service before pruning anything.
+          zfs list -H -t snapshot -o name -s creation -s name -d 1 "$snapshot_dataset" >"$runtime_dir/snapshots"
+          owned_snapshots=()
+          while IFS= read -r snapshot; do
+            # Limit ownership to this dataset, never a descendant's snapshots.
+            [[ "$snapshot" == "$snapshot_dataset@"* ]] || continue
+            ownership="$(zfs get -H -o value,source "$snapshot_property" "$snapshot")"
+            if [ "$ownership" = $'verified\tlocal' ]; then
+              owned_snapshots+=("$snapshot")
+            fi
+          done <"$runtime_dir/snapshots"
+
+          prune_count=$((''${#owned_snapshots[@]} - ${toString cfg.mirrorSnapshotRetention}))
+          for ((index = 0; index < prune_count; index++)); do
+            zfs destroy "''${owned_snapshots[$index]}"
+          done
+        ''}
       '';
     };
 
