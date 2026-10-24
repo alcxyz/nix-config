@@ -29,6 +29,11 @@ same merge base and target, the reviewers are unchanged, the fixes are small,
 and fewer than MAX_FOLLOW_UPS follow-ups ran in a row. --response tells the
 reviewers what was fixed or justified. Otherwise, or with --full, it reviews
 the whole PR; --full and --force never carry. Carries need git 2.40 or later.
+Rerunning an incomplete head keeps each review a reviewer already completed
+there with the same prompt and settings, and runs only the missing reviewers;
+--force runs them all. A reviewer stopped by its usage limit is recorded as
+`limited`, with the reset its client reports, and is a missing review like
+any failure. Each reviewer's `seconds` is its own run time.
 
 Run the outer `pr-review run` in an environment with forge/provider network
 access and a writable state directory, outside a network-restricted Codex
@@ -690,6 +695,31 @@ def incomplete(config, status, base):
     return missing
 
 
+def reusable_results(status, config, base, prompt_path, prompt):
+    """Return the head's earlier results that this run can keep, by reviewer name.
+
+    A reviewer that completed the same head on the same target, with the same
+    settings and the very same prompt, would only repeat its review, as when
+    another reviewer hit its usage limit. A carried round ran no reviewer, and
+    a changed PR description, mode or earlier findings change the prompt.
+    """
+    if not status or status.get("base") != base or status.get("carried"):
+        return {}
+    try:
+        # Without newline translation, so a CRLF description still compares equal.
+        with open(prompt_path, encoding="utf-8", newline="") as handle:
+            if handle.read() != prompt:
+                return {}
+    except OSError:
+        return {}
+    kept = {}
+    for reviewer in config["reviewers"]:
+        result = (status.get("reviewers") or {}).get(reviewer["name"]) or {}
+        if result.get("status") == "ok" and result.get("reviewer") == reviewer and has_verdict(result.get("output")):
+            kept[reviewer["name"]] = dict(result, reused=True)
+    return kept
+
+
 @contextlib.contextmanager
 def fetched(pr, head, base, cwd, remote):
     """Fetch the PR's head and target branch into the local clone, with hooks off.
@@ -1095,6 +1125,9 @@ def client_env(reviewer, env, home):
     return dict(env, HOME=home, CODEX_HOME=os.path.join(home, ".codex"), PATH=os.pathsep.join(path))
 
 
+POLL_SECONDS = 0.2
+
+
 def run_reviewers(config, prompt_path, tree, directory, home):
     """Run every reviewer in parallel; on interruption, stop them all."""
     deadline = time.monotonic() + config["timeout"]
@@ -1123,26 +1156,38 @@ def run_reviewers(config, prompt_path, tree, directory, home):
                     log.write(f"cannot start {argv[0]}: {error}\n")
             jobs.append((reviewer, output, process, log, stdout, stdout_path, time.monotonic()))
 
-        results = {}
-        for reviewer, output, process, log, stdout, stdout_path, started in jobs:
-            status, code, reported = "failed", None, None
-            if process is not None:
-                try:
-                    code = process.wait(timeout=max(0, deadline - time.monotonic()))
-                except subprocess.TimeoutExpired:
-                    stop(process)
-                    status = "timeout"
-                else:
-                    for handle in {log, stdout}:
-                        handle.flush()
-                    reported = finish_reviewer(reviewer, output, log.name, stdout_path)
-                    status = "ok" if code == 0 and has_verdict(output) else "failed"
-            results[reviewer["name"]] = {
-                "status": status, "exit": code, "seconds": round(time.monotonic() - started),
-                "output": output, "reviewer": reviewer, "reported_model": reported,
-                "usage": reviewer_usage(reviewer["client"], stdout_path),
-            }
-        return results
+        # Wait on every reviewer at once, so each records its own run time
+        # rather than the time it spent queued behind the ones before it.
+        results, pending = {}, list(jobs)
+        while pending:
+            for job in list(pending):
+                reviewer, output, process, log, stdout, stdout_path, started = job
+                status, code, reported = "failed", None, None
+                if process is not None:
+                    code = process.poll()
+                    if code is None and time.monotonic() < deadline:
+                        continue
+                    if code is None:
+                        stop(process)
+                        status = "timeout"
+                    else:
+                        for handle in {log, stdout}:
+                            handle.flush()
+                        reported = finish_reviewer(reviewer, output, log.name, stdout_path)
+                        status = "ok" if code == 0 and has_verdict(output) else "failed"
+                pending.remove(job)
+                results[reviewer["name"]] = {
+                    "status": status, "exit": code, "seconds": round(time.monotonic() - started),
+                    "output": output, "reviewer": reviewer, "reported_model": reported,
+                    "usage": reviewer_usage(reviewer["client"], stdout_path),
+                }
+                if status == "failed":
+                    limit = usage_limit(results[reviewer["name"]])
+                    if limit:
+                        results[reviewer["name"]].update(status="limited", limit=limit)
+            if pending:
+                time.sleep(POLL_SECONDS)
+        return {reviewer["name"]: results[reviewer["name"]] for reviewer, *_ in jobs}
     finally:
         for _, _, process, log, stdout, _, _ in jobs:
             if process is not None and process.poll() is None:
@@ -1628,6 +1673,7 @@ def carry_round(config, args, pr, info, remote, source, directory):
         output = os.path.join(directory, f"{name}.md")
         shutil.copyfile(result["output"], output)
         # No reviewer ran; the source round keeps its own token counts.
+        result = {key: value for key, value in result.items() if key != "reused"}
         results[name] = dict(result, output=output, usage=token_usage(None, result["reviewer"]["client"]))
     # A carried round stands in for its source: the same mode, chain, follow-up
     # count, response and changed-line count, on the new head and merge base.
@@ -1736,16 +1782,23 @@ def cmd_run(args):
             prompt = PROMPT.format(**fields, notes=notes)
             mode = f"full review: {reason}"
         prompt_path = os.path.join(directory, "prompt.md")
-        with open(prompt_path, "w", encoding="utf-8") as handle:
+        kept = {} if args.force else reusable_results(status, reviewers, base, prompt_path, prompt)
+        with open(prompt_path, "w", encoding="utf-8", newline="") as handle:
             handle.write(prompt)
         names = ", ".join(r["name"] for r in reviewers["reviewers"])
         print(f"Reviewing {pr} at {head[:12]} ({mode}) with the {role} reviewers {names} ({role_reason}); "
               f"results in {directory}", flush=True)
+        if kept:
+            print(f"Keeping the completed review{'s' if len(kept) > 1 else ''} of this head by {', '.join(kept)} "
+                  "from the last run, which had the same prompt and reviewer settings; --force runs every "
+                  "reviewer again.", flush=True)
         if rewritten:
             print(f"Hint: this head does not build on the reviewed {rewritten}. If it rewrites reviewed commits "
                   "with fixes, push the fixes as `fixup!` commits on top of the reviewed head instead, and fold "
                   "them only after their review: the fold then carries that review.", flush=True)
-        results = run_reviewers(reviewers, prompt_path, tree, directory, os.path.join(temporary, "home"))
+        missing = dict(reviewers, reviewers=[r for r in reviewers["reviewers"] if r["name"] not in kept])
+        ran = run_reviewers(missing, prompt_path, tree, directory, os.path.join(temporary, "home"))
+        results = {r["name"]: kept.get(r["name"]) or ran[r["name"]] for r in reviewers["reviewers"]}
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
     status = {
@@ -1761,18 +1814,19 @@ def cmd_run(args):
     }
     with open(os.path.join(directory, "status.json"), "w", encoding="utf-8") as handle:
         json.dump(status, handle, indent=2)
-    code = print_results(results)
+    code = print_results(results, kept)
     if code == 0:
         for note in checkpoint(config, pr, head, base):
             print(f"\n{note}")
     return code
 
 
-def print_results(results):
+def print_results(results, kept=()):
     failed = False
     for name, result in results.items():
         reported = result.get("reported_model")
-        print(f"\n===== {name}: {result['status']} ({result['seconds']}s{', ' + reported if reported else ''})")
+        label = ", kept from the last run" if name in kept else ""
+        print(f"\n===== {name}: {result['status']} ({result['seconds']}s{', ' + reported if reported else ''}{label})")
         if result["status"] == "ok":
             try:
                 with open(result["output"], encoding="utf-8") as handle:
@@ -1786,6 +1840,10 @@ def print_results(results):
             if reason:
                 print(f"Reason: {reason}")
             print(f"No usable review; this does not mean no findings. See {output_or_log(result['output'], log)}.")
+            if result["status"] == "limited":
+                resets = result["limit"].get("resets")
+                print(f"Run `pr-review run` again once the limit resets{f' (the client says {resets})' if resets else ''}; "
+                      "it keeps the other reviewers' results for this head and runs only the missing ones.")
     return 1 if failed else 0
 
 
@@ -1801,6 +1859,60 @@ ERROR_LINE = re.compile(
 )
 
 
+# How each client says a subscription or plan limit stopped it. Claude's JSON
+# result also names it as api_error usage_limit_reached; transient rate limits
+# and overload errors are not usage limits.
+USAGE_LIMIT = re.compile(
+    r"hit your (?:(?:weekly|daily|monthly|annual|session|\d+-hour|five-hour) )?(?:usage )?limit"
+    r"|usage_limit_(?:reached|exceeded)",
+    re.IGNORECASE,
+)
+LIMIT_RESET = re.compile(r"\b(?:resets|try again at)\s+(.+?)[.\s]*$", re.IGNORECASE)
+
+
+def usage_limit(result):
+    """Return {"message", "resets"} when a failed reviewer stopped at its usage limit, or None.
+
+    A limit is a missing review like any failure, but recorded apart so it can
+    be told from a broken client, and so the retry advice can name the reset
+    the client reported. That reset is the client's claim, not a schedule:
+    the next run tries again rather than trusting it.
+    """
+    output = result["output"]
+    messages = []
+    try:
+        if result["reviewer"]["client"] == "claude":
+            with open(output + ".json", encoding="utf-8") as handle:
+                data = json.load(handle)
+            if isinstance(data, dict) and data.get("is_error"):
+                text = data.get("result") if isinstance(data.get("result"), str) else ""
+                if data.get("api_error") == "usage_limit_reached" or USAGE_LIMIT.search(text):
+                    messages.append(text or "usage_limit_reached")
+        else:
+            with open(output + ".jsonl", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        event = json.loads(line)
+                    except ValueError:
+                        continue
+                    if not isinstance(event, dict) or event.get("type") not in ("error", "turn.failed"):
+                        continue
+                    error = event.get("error")
+                    message = error.get("message") if isinstance(error, dict) else event.get("message")
+                    if isinstance(message, str) and USAGE_LIMIT.search(message):
+                        messages.append(message)
+    except (OSError, ValueError, KeyError):
+        pass
+    # Never the log: Codex echoes the prompt there, and the prompt holds the
+    # PR's own text, which may quote these messages.
+    if not messages:
+        return None
+    message = " ".join(messages[-1].split())
+    message = message if len(message) <= 300 else message[:297] + "..."
+    reset = LIMIT_RESET.search(message)
+    return {"message": message, "resets": reset.group(1) if reset else None}
+
+
 def failure_reason(result):
     """Return one line saying why a reviewer gave no usable review, or None.
 
@@ -1812,6 +1924,8 @@ def failure_reason(result):
     """
     if result["status"] == "timeout":
         return f"no reply within {result['seconds']}s"
+    if result["status"] == "limited":
+        return f"usage limit: {result['limit']['message']}"
     output = result["output"]
     exited = result.get("exit")
     reply = None

@@ -1848,6 +1848,90 @@ with tempfile.TemporaryDirectory() as tmp:
     code, output = cli("run", "4")
     assert code == 0, output
 
+    # Each reviewer records its own run time, not the time it waited behind
+    # the reviewers checked before it.
+    pathlib.Path(bin_dir, "codex").write_text("#!/bin/sh\nsleep 2\n" + scripts["codex"] + "\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 0, output
+    status = json.loads(pathlib.Path(state, "status.json").read_text())
+    assert status["reviewers"]["gpt"]["seconds"] >= 2 > status["reviewers"]["opus"]["seconds"], status
+
+    # A usage limit is a missing review recorded as `limited`, with the reset
+    # the client claims. A later plain run keeps the review the other reviewer
+    # completed with the same prompt and runs only the missing one.
+    codex_calls = os.path.join(tmp, "codex-calls")
+    pathlib.Path(bin_dir, "codex").write_text(f"#!/bin/sh\necho run >>{codex_calls}\n" + scripts["codex"] + "\n")
+    limit_reply = os.path.join(tmp, "limit.json")
+    pathlib.Path(limit_reply).write_text(json.dumps({
+        "type": "result", "subtype": "success", "is_error": True, "api_error_status": 429,
+        "api_error": "usage_limit_reached", "result": "You've hit your weekly limit · resets Oct 23, 1pm (Europe/Oslo)",
+    }))
+    pathlib.Path(bin_dir, "claude").write_text(f"#!/bin/sh\ncat >/dev/null\ncat {limit_reply}\nexit 1\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 1 and "opus: limited" in output and "gpt: ok" in output, output
+    assert "Reason: usage limit: You've hit your weekly limit" in output, output
+    assert "the client says Oct 23, 1pm (Europe/Oslo)" in output and "does not mean no findings" in output, output
+    status = json.loads(pathlib.Path(state, "status.json").read_text())
+    assert status["reviewers"]["opus"]["limit"]["resets"] == "Oct 23, 1pm (Europe/Oslo)", status
+    assert status["verdict"] is None, status
+    code, output = cli("comment", "4", "no findings.")
+    assert code == 1 and "by opus;" in output, output
+    pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\n" + scripts["claude"] + "\n")
+    code, output = cli("run", "4")
+    assert code == 0 and "Keeping the completed review of this head by gpt" in output, output
+    assert "gpt: ok" in output and "kept from the last run" in output, output
+    assert pathlib.Path(codex_calls).read_text().count("run") == 1, "the kept reviewer must not run again"
+    status = json.loads(pathlib.Path(state, "status.json").read_text())
+    assert status["reviewers"]["gpt"]["reused"] is True and "reused" not in status["reviewers"]["opus"], status
+    assert status["verdict"] == "no findings", status
+    code, output = cli("comment", "4", "no findings.")
+    assert code == 0, output
+    # Only the run that kept a review labels it so.
+    code, output = cli("run", "4")
+    assert code == 0 and "already reviewed" in output and "kept from the last run" not in output, output
+    # A changed prompt, here the PR description, keeps nothing.
+    pathlib.Path(bin_dir, "claude").write_text(f"#!/bin/sh\ncat >/dev/null\ncat {limit_reply}\nexit 1\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 1 and pathlib.Path(codex_calls).read_text().count("run") == 2, output
+    pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\n" + scripts["claude"] + "\n")
+    review.pr_info = lambda pr: {"title": "t", "body": "edited", "head": head, "base": "dev", "url": "u"}
+    code, output = cli("run", "4")
+    assert code == 0 and "Keeping" not in output and pathlib.Path(codex_calls).read_text().count("run") == 3, output
+    # A description with CRLF line endings still matches its saved prompt.
+    review.pr_info = lambda pr: {"title": "t", "body": "one\r\ntwo", "head": head, "base": "dev", "url": "u"}
+    pathlib.Path(bin_dir, "claude").write_text(f"#!/bin/sh\ncat >/dev/null\ncat {limit_reply}\nexit 1\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 1 and pathlib.Path(codex_calls).read_text().count("run") == 4, output
+    pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\n" + scripts["claude"] + "\n")
+    code, output = cli("run", "4")
+    assert code == 0 and "Keeping" in output and pathlib.Path(codex_calls).read_text().count("run") == 4, output
+    review.pr_info = lambda pr: {"title": "t", "body": "", "head": head, "base": "dev", "url": "u"}
+    # A transient rate limit is an ordinary failure, not a usage limit.
+    rate_reply = os.path.join(tmp, "rate.json")
+    pathlib.Path(rate_reply).write_text(json.dumps({"type": "result", "is_error": True, "api_error_status": 429,
+                                                    "result": "You've hit your rate limit, slow down"}))
+    pathlib.Path(bin_dir, "claude").write_text(f"#!/bin/sh\ncat >/dev/null\ncat {rate_reply}\nexit 1\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 1 and "opus: failed" in output and "opus: limited" not in output, output
+    pathlib.Path(bin_dir, "claude").write_text("#!/bin/sh\n" + scripts["claude"] + "\n")
+    # Codex reports its limit as an error event, with its own reset wording.
+    pathlib.Path(bin_dir, "codex").write_text(
+        "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '{\"type\":\"turn.failed\",\"error\":{\"message\":"
+        "\"You have hit your usage limit. Upgrade to Plus to continue using Codex, or try again at 3:42 PM.\"}}'\nexit 1\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 1 and "gpt: limited" in output and "the client says 3:42 PM" in output, output
+    # Limit wording quoted in the PR itself, which Codex echoes to its log, is
+    # not a limit: only the client's own error reports count.
+    review.pr_info = lambda pr: {"title": "t", "body": "You've hit your usage limit", "head": head, "base": "dev",
+                                 "url": "u"}
+    pathlib.Path(bin_dir, "codex").write_text("#!/bin/sh\ncat >&2\nexit 1\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 1 and "gpt: failed" in output and "gpt: limited" not in output, output
+    review.pr_info = lambda pr: {"title": "t", "body": "", "head": head, "base": "dev", "url": "u"}
+    pathlib.Path(bin_dir, "codex").write_text("#!/bin/sh\n" + scripts["codex"] + "\n")
+    code, output = cli("run", "4", "--force")
+    assert code == 0, output
+
     # Only one run per PR head at a time.
     import fcntl
     with open(os.path.join(state, "lock"), "w") as held:

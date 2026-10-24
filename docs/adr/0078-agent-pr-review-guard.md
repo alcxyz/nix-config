@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories; amended 2026-10-17: `pr-review selftest` and failure reasons; amended 2026-10-19: GitHub fast-forward repositories merge by a push of the reviewed head to the base branch, checked by an agent pre-push hook)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories; amended 2026-10-17: `pr-review selftest` and failure reasons; amended 2026-10-19: GitHub fast-forward repositories merge by a push of the reviewed head to the base branch, checked by an agent pre-push hook; amended 2026-10-24: per-reviewer run times, a `limited` status for usage limits, and reruns of only the missing reviewers)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/home-manager/services/t3code/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks, the agent Git pre-push hook in the user's Git configuration
 
@@ -50,9 +50,9 @@ hand or depend on which models their own client offers:
   without MCP servers, and ignoring user and project settings. Reviewers do
   not inherit forge token variables. Results and a status per reviewer,
   including its configured model and effort, are kept per head SHA; the target branch is
-  recorded and must still match. Earlier rounds are kept. A failed or
-  timed-out reviewer, or one whose reply lacks one of the requested verdicts, is
-  reported as a missing review, never as no findings.
+  recorded and must still match. Earlier rounds are kept. A failed,
+  timed-out or usage-limited reviewer, or one whose reply lacks one of the
+  requested verdicts, is reported as a missing review, never as no findings.
 - A new head is reviewed as a **follow-up** of the last round that the
   configured reviewers, and only they, completed on the same target, when it
   descends from that round with the same merge base, at most 40 lines or 40%
@@ -489,6 +489,26 @@ only when an agent is ready to merge. With
 is notified once per change or day rather than hourly; a manual
 `pr-review selftest` retests at once. One run costs a few tens of thousands
 of mostly cached input tokens across the reviewers.
+
+Amended 2026-10-24 ([#802](https://git.alc.xyz/alcxyz/nix-config/issues/802)):
+`run` waits on its reviewers together, so each result's `seconds` is that
+reviewer's own run time; before, a reviewer checked second also counted the
+time it waited on the first, which hid which client was slower. A reviewer
+whose client reports a usage limit (Claude's JSON `api_error`
+`usage_limit_reached`, or a "hit your ... limit" message in Claude's result or
+Codex's JSON error events, never the log, which echoes the PR) is recorded as
+`limited` with the message and the reset the client names. It is still a
+missing review: the status only separates limits from broken clients in the
+data and lets the output name the reset. Rerunning an incomplete head keeps
+each result a reviewer completed for that head and target with identical
+settings and an identical prompt, and runs only the missing reviewers;
+`--force` runs them all. Before, a usage limit on one client meant paying the
+other client's review twice. pr-review stores no limit marker and does not
+wait for the claimed reset: a limited Claude reviewer failed within a second
+in the recorded runs, so the next real run is about as cheap as any check, and
+the claimed time can be wrong when a limit is lifted early. No Codex limit has
+occurred in a recorded run yet, so its message format comes from the client's
+strings and its timing is unmeasured.
 
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).
