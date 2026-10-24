@@ -20,8 +20,8 @@
       touch "$out"
     '';
 in {
-  podman-storage-identity-contract = mkRepoCheck "podman-storage-identity-contract" [pkgs.bash pkgs.coreutils] ''
-    bash scripts/checks/test-podman-storage-check.sh modules/nixos/services/forgejo-actions-runner/podman-storage-check.sh
+  runtime-storage-identity-contract = mkRepoCheck "runtime-storage-identity-contract" [pkgs.bash pkgs.coreutils] ''
+    bash scripts/checks/test-runtime-storage-check.sh modules/nixos/services/forgejo-actions-runner/runtime-storage-check.sh
   '';
   description-format-contract = mkRepoCheck "description-format-contract" [pkgs.python3 pkgs.git] ''
     python3 scripts/checks/test-description-format.py
@@ -137,6 +137,8 @@ in {
       pkgs.runCommand "k8s-api-vip-policy-contract-unsupported" {} ''
         touch "$out"
       '';
+
+  forgejo-docker-storage-contract = import ./forgejo-docker-storage.nix {inherit lib pkgs;};
 
   forgejo-runner-isolated-docker-contract = import ./forgejo-isolated-docker.nix {inherit lib pkgs;};
 

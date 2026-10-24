@@ -11,9 +11,9 @@
   mountUnit = "var-lib-forgejo\\x2dpodman.mount";
   readyUnit = "forgejo-podman-storage-ready.service";
   check = pkgs.writeShellApplication {
-    name = "forgejo-podman-storage-check";
+    name = "forgejo-runtime-storage-check";
     runtimeInputs = [pkgs.coreutils pkgs.util-linux];
-    text = builtins.readFile ./podman-storage-check.sh;
+    text = builtins.readFile ./runtime-storage-check.sh;
   };
 in {
   options.services.forgejo-actions-runner.podmanCanary.storageMountSource = lib.mkOption {
@@ -37,7 +37,7 @@ in {
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${check}/bin/forgejo-podman-storage-check /var/lib/forgejo-podman ${utils.escapeSystemdExecArg source}";
+        ExecStart = "${check}/bin/forgejo-runtime-storage-check /var/lib/forgejo-podman ${utils.escapeSystemdExecArg source}";
       };
     };
     systemd.services.forgejo-runner-podman = {

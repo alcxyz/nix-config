@@ -1,9 +1,17 @@
-name: Podman canary
-run-name: "Opt-in Podman executor qualification"
+name: Container runtime canary
+run-name: "Opt-in container executor qualification"
 
 on:
   workflow_dispatch:
     inputs:
+      runner_label:
+        description: "Trusted runner label to qualify"
+        required: false
+        default: "forgejo-podman-canary"
+      engine:
+        description: "Runtime backend: podman or docker"
+        required: false
+        default: "podman"
       hold_seconds:
         description: "Optional bounded wait for cancellation qualification"
         required: false
@@ -11,14 +19,22 @@ on:
 
 jobs:
   canary:
-    runs-on: forgejo-podman-canary
+    runs-on: ${{ inputs.runner_label || 'forgejo-podman-canary' }}
+    container: docker.io/library/docker:27-cli
     timeout-minutes: 15
+    env:
+      RUNTIME_ENGINE: ${{ inputs.engine || 'podman' }}
     services:
       web:
         image: docker.io/library/httpd:2.4-alpine
     steps:
       - name: Install qualification tools
-        run: apk add --no-cache bash coreutils
+        run: |
+          case "$RUNTIME_ENGINE" in
+            podman|docker) ;;
+            *) echo 'Unsupported runtime backend' >&2; exit 1 ;;
+          esac
+          apk add --no-cache bash coreutils
       - name: Job API, service DNS and nested container
         run: |
           set -eu
@@ -49,8 +65,12 @@ jobs:
           trap cleanup EXIT
           trap 'exit 130' INT
           trap 'exit 143' TERM
-          docker buildx create --name "$builder" --driver docker-container \
-            --driver-opt cgroup-parent=/forgejobuilds.slice/forgejo-runner-podman.service \
+          if [ "$RUNTIME_ENGINE" = podman ]; then
+            set -- --driver-opt cgroup-parent=/forgejobuilds.slice/forgejo-runner-podman.service
+          else
+            set --
+          fi
+          docker buildx create --name "$builder" --driver docker-container "$@" \
             --driver-opt image=docker.io/moby/buildkit:buildx-stable-1 \
             --driver-opt default-load=true
           export BUILDX_BUILDER="$builder"
