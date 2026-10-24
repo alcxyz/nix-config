@@ -1,9 +1,9 @@
 # ADR-0093: Triage open issues and pull requests from one computed inventory
 
-**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode; local worktrees, #701) and 2026-10-19 (inventory accuracy, #739)
+**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode; local worktrees, #701), 2026-10-19 (inventory accuracy, #739) and 2026-10-24 (deck's backlog view)
 **Date:** 2026-10-12
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
-the user modules that enable `programs.ai`
+the user modules that enable `programs.ai`, `modules/home-manager/services/deck/`
 
 ## Context
 
@@ -255,3 +255,30 @@ checkers. The inventory now:
 
 Output changes are additive; the lanes and flags above narrow or widen as
 described.
+
+## Amendment 2026-10-24: deck's backlog view
+
+deck's backlog view (nix-packages ADR-0014, nix-packages #619) shows this
+inventory live. It reads the forges with read-only credentials of the agent
+account rather than the operator's, and its model calls have no tools, so the
+inventory gains three things, and `services.deck` a wrapper that uses them:
+
+- **`--github-user LOGIN`** names the GitHub user instead of asking `gh api
+  user`, and skips the upstream search (`gh search prs --author @me`): a
+  GitHub App installation token can answer neither. Without the flag nothing
+  changes.
+- **`--own LOGIN`** (repeatable) counts further authors as the user's own on
+  both forges: their pull requests get lanes instead of the bot lane, and
+  their links feed related items. gh names an App author `app/NAME`, the REST
+  API `NAME[bot]`, so a consumer passes both.
+- **`item --max-chars N REF [PR_REF...]`** prints one issue's title, body and
+  last five comments, and up to three pull requests' titles and bodies, cut to
+  N characters, as one JSON object. Unlike the inventory it prints bodies, on
+  purpose: its caller passes them to a model as untrusted data. Refs are
+  matched strictly, failures name the ref and status only.
+
+`services.deck.backlog` builds `deck-backlog-inventory`, which runs the
+inventory with an empty scope file (the personal scope; private groups stay
+out), the thread inventory when it can be read, the configured read-only
+Forgejo token, and on GitHub `gh-app read-only` with `--github-user` set to the
+App's owner. Without a GitHub App the wrapper passes `--no-github`.
