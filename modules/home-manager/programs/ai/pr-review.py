@@ -269,9 +269,10 @@ REMOTE_URL = re.compile(
 )
 
 GUIDANCE = (
-    "Before merging a PR you created, run `pr-review run <pr>` in the background "
-    "from a clone of its repository: it gives the diff and PR description to the "
-    "configured read-only cross-model reviewers and records their results for the "
+    "Before merging a PR you created, have a helper subagent run `pr-review run "
+    "<pr>` from a clone of its repository, as the `pr-review` skill says: it gives "
+    "the diff and PR description to the configured read-only cross-model reviewers "
+    "and records their results for the "
     "PR's current head commit, which takes several minutes. Address or justify every "
     "finding, fixing low-severity findings and small cleanups in the PR unless one "
     "needs a real decision or substantial work, then post the outcome with "
