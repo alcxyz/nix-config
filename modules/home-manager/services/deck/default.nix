@@ -52,8 +52,42 @@
       }
     '';
   };
+  # One issue's text for a verdict, read with the same credentials.
+  backlogItem = pkgs.writeShellApplication {
+    name = "deck-backlog-item";
+    runtimeInputs = lib.optional github bl.github.package;
+    text = ''
+      FORGEJO_API_TOKEN_FILE=${escapeShellArg bl.forgejoTokenFile}
+      export FORGEJO_API_TOKEN_FILE
+      ${
+        if github
+        then ''
+          GH_APP_ID=${escapeShellArg (toString bl.github.appId)}
+          GH_APP_KEY_FILE=${escapeShellArg bl.github.keyFile}
+          GH_APP_OWNER=${escapeShellArg bl.github.owner}
+          export GH_APP_ID GH_APP_KEY_FILE GH_APP_OWNER
+          exec gh-app read-only -- backlog-inventory item "$@"
+        ''
+        else ''
+          # Without the App, gh would read GitHub as the operator: refuse.
+          for arg in "$@"; do
+            case $arg in
+            gh:*)
+              echo "deck-backlog-item: GitHub is off for this view" >&2
+              exit 64
+              ;;
+            esac
+          done
+          exec backlog-inventory item "$@"
+        ''
+      }
+    '';
+  };
   settings = lib.recursiveUpdate cfg.settings (lib.optionalAttrs bl.enable {
-    backlog.commands.inventory = lib.getExe backlogInventory;
+    backlog.commands = {
+      inventory = lib.getExe backlogInventory;
+      item = lib.getExe backlogItem;
+    };
   });
   configFile = toml.generate "deck.toml" settings;
 in {
@@ -87,8 +121,9 @@ in {
         deck's configuration file, as described in its README in nix-packages
         (`tools/deck/README.md`). The t3-thread-* commands are found on the
         service's PATH unless `commands` names them. With `backlog.enable`,
-        `backlog.commands.inventory` is the wrapper this module builds; the
-        rest of the `backlog` table may be set here.
+        `backlog.commands` are the wrappers this module builds (the inventory,
+        and one issue's text for verdicts); the rest of the `backlog` table
+        may be set here.
       '';
     };
 

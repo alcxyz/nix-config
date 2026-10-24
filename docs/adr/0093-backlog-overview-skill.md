@@ -281,4 +281,7 @@ inventory gains three things, and `services.deck` a wrapper that uses them:
 inventory with an empty scope file (the personal scope; private groups stay
 out), the thread inventory when it can be read, the configured read-only
 Forgejo token, and on GitHub `gh-app read-only` with `--github-user` set to the
-App's owner. Without a GitHub App the wrapper passes `--no-github`.
+App's owner. Without a GitHub App the wrapper passes `--no-github`. A second
+wrapper, `deck-backlog-item`, runs the item mode with the same credentials for
+deck's verdicts; without a GitHub App it refuses `gh:` references, since
+`gh` would otherwise read GitHub with the operator's own login.
