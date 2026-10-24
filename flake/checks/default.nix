@@ -604,6 +604,10 @@ in {
     bash scripts/checks/test-backlog-overview-render.sh
   '';
 
+  check-evidence-inventory = mkRepoCheck "check-evidence-inventory" [pkgs.python3] ''
+    python3 -I scripts/checks/test-evidence-inventory.py
+  '';
+
   check-t3code-preview-browser-link = mkRepoCheck "check-t3code-preview-browser-link" [pkgs.bash pkgs.coreutils pkgs.shellcheck] ''
     shellcheck modules/home-manager/services/t3code/link-preview-browser.sh scripts/checks/test-t3code-preview-browser-link.sh
     bash scripts/checks/test-t3code-preview-browser-link.sh

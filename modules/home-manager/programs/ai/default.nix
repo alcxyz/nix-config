@@ -329,6 +329,17 @@ with lib; let
       ${builtins.readFile ./backlog-overview-render.sh}
     '';
   };
+  evidenceInventory = pkgs.writeShellApplication {
+    name = "evidence-inventory";
+    runtimeInputs = [pkgs.python3];
+    text = ''
+      ${optionalString (mcp.tokenFile != null) ''
+        FORGEJO_API_TOKEN_FILE=''${FORGEJO_API_TOKEN_FILE:-${escapeShellArg (toString mcp.tokenFile)}}
+        export FORGEJO_API_TOKEN_FILE
+      ''}
+      EVIDENCE_FORGEJO_URL=${escapeShellArg mcp.url} exec python3 -I ${./evidence-inventory.py} "$@"
+    '';
+  };
   # The worktree audit (ADR-0093, amended for #701) lists every linked Git
   # worktree under ~/src with cleanup facts. It reads the Forgejo token the
   # same way as backlog-inventory; gh keeps its own credentials. Read-only:
@@ -609,7 +620,7 @@ in {
       };
     };
 
-    home.packages = [agentJob backlogInventory backlogOverviewRender descriptionFormat descriptionGuard prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadMessages t3ThreadOverviewAck t3ThreadOverviewGroup t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
+    home.packages = [agentJob backlogInventory backlogOverviewRender evidenceInventory descriptionFormat descriptionGuard prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadMessages t3ThreadOverviewAck t3ThreadOverviewGroup t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
 
     # The agent skills that call these commands live in nix-secrets
     # shared/skills and are linked by its agentSkills module (nix-secrets
