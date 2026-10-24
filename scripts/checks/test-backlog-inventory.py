@@ -77,6 +77,10 @@ check(inventory.review_state([{"body": f"Automated read-only review ({HEAD[:12]}
 check(inventory.status_line("**Status (2026-02-31):** Next: x. Owner: me.", NOW) is None, "bad status date accepted")
 check(inventory.pr_kind("app/renovate", "me") == "bot" and inventory.pr_kind("dependabot[bot]", "me") == "bot",
       "gh bot authors not recognised")
+inventory.OWN.update({"app/hugin", "hugin[bot]"})
+check(inventory.pr_kind("app/hugin", "me") == "own" and not inventory.is_bot("hugin[bot]")
+      and inventory.is_bot("app/renovate"), "--own authors still counted as bots")
+inventory.OWN.clear()
 status = inventory.status_line("**Status (2026-10-01):** Decided: a. Next: do the thing. Owner: me.\n\nRest", NOW)
 check(status["owner"] == "me" and status["next"] == "do the thing." and status["date"] == "2026-10-01",
       f"status line parsed badly: {status}")
@@ -224,6 +228,17 @@ class Forge(http.server.BaseHTTPRequestHandler):
                 return self.reply(ISSUES)
             return self.reply(MERGED if query["state"] == "closed" else OPEN)
         parts = path.strip("/").split("/")
+        # Item mode reads me/notes: an issue with seven comments and a PR; anything else there is missing.
+        if parts == ["repos", "me", "notes", "issues", "1"]:
+            return self.reply({"number": 1, "title": "Notes issue", "body": "Line one\n\nLine two " + "x" * 100,
+                               "updated_at": ago(1)})
+        if parts == ["repos", "me", "notes", "issues", "1", "comments"]:
+            return self.reply([{"user": {"login": f"user{n}"}, "created_at": ago(10 - n), "body": f"comment {n}"}
+                               for n in range(1, 8)])
+        if parts == ["repos", "me", "notes", "pulls", "2"]:
+            return self.reply({"number": 2, "title": "Notes PR", "body": "Closes #1\nsecond line"})
+        if parts[:3] == ["repos", "me", "notes"]:
+            return self.reply({"message": SECRET}, 404)
         if parts == ["repos", "other", "lib", "issues", "2"]:
             return self.reply({"number": 2, "title": "Library fix", "state": "closed", "body": SECRET,
                                "html_url": "https://forge/other/lib/issues/2", "updated_at": ago(4), "closed_at": ago(4)})
@@ -337,10 +352,26 @@ if args[:2] == ["api", "graphql"]:
 if "repos/me/ghrepo/branches?protected=true" in joined:
     out([{"name": "release/1", "protected": True}])
 if "repos/me/ghrepo/issues?state=open" in joined:
+    # With FAKE_GH_APP, an App's issue links an upstream item.
+    app_issue = [{"number": 3, "title": "Filed by the App", "body": "See https://github.com/up/stream/issues/4",
+                  "html_url": "https://github.com/me/ghrepo/issues/3", "user": {"login": "hugin[bot]"},
+                  "created_at": now, "updated_at": now, "comments": 0, "labels": [], "milestone": None,
+                  "assignees": []}] if os.environ.get("FAKE_GH_APP") else []
     out([[{"number": 1, "title": "GitHub issue", "body": "- [x] done BODY-TEXT-MUST-NOT-LEAK",
            "html_url": "https://github.com/me/ghrepo/issues/1", "user": {"login": "me"},
            "created_at": now, "updated_at": now, "comments": 0, "labels": [], "milestone": None, "assignees": []},
-          {"number": 2, "title": "a PR", "pull_request": {}}]])
+          {"number": 2, "title": "a PR", "pull_request": {}}, *app_issue]])
+# Item mode: an upstream issue with two comments and its PR; issue 6 fails.
+if args[:2] == ["api", "repos/up/stream/issues/5"]:
+    out({"number": 5, "title": "Upstream issue", "body": "Upstream body\nwith lines", "updated_at": now})
+if args[:4] == ["api", "--paginate", "--slurp", "repos/up/stream/issues/5/comments?per_page=100"]:
+    out([[{"user": {"login": "ann"}, "created_at": "2026-01-01T00:00:00Z", "body": "first"}],
+         [{"user": {"login": "bob"}, "created_at": "2026-01-02T00:00:00Z", "body": "second"}]])
+if args[:2] == ["api", "repos/up/stream/pulls/9"]:
+    out({"number": 9, "title": "Upstream PR", "body": "Fixes #5"})
+if args[:2] == ["api", "repos/up/stream/issues/6"]:
+    print("gh: Not Found (HTTP 404)", file=sys.stderr)
+    sys.exit(1)
 if "repos/me/ghrepo/pulls?state=closed" in joined:
     # One merge outside the --merged-days window, which must not count.
     out([{"number": 3, "title": "old", "body": "Closes #1", "html_url": "https://github.com/me/ghrepo/pull/3",
@@ -353,7 +384,8 @@ if args[:2] == ["search", "prs"]:
 if args[:2] == ["pr", "view"]:
     number = int(args[2])
     out({"number": number, "title": f"PR {number}", "body": "Fixes #1" if number == 2 else "",
-         "url": f"https://github.com/{args[4]}/pull/{number}", "author": {"login": "me"}, "isDraft": False,
+         "url": f"https://github.com/{args[4]}/pull/{number}",
+         "author": {"login": "app/hugin" if number == 2 and os.environ.get("FAKE_GH_APP") else "me"}, "isDraft": False,
          "reviewDecision": "APPROVED" if number == 9 else None, "baseRefName": "main", "headRefOid": "f" * 40,
          "mergeable": "MERGEABLE", "statusCheckRollup": [{"conclusion": "SUCCESS"}],
          "createdAt": now, "updatedAt": now})
@@ -567,6 +599,80 @@ def main():
             scopes.write_text(bad)
             check(run("--scope-file", str(scopes)).returncode == 64, f"a malformed scope file was accepted: {bad}")
         check(run("--scope-file", str(tmp / "absent.json")).returncode == 64, "a missing scope file was accepted")
+
+        # An installation token cannot say who it is: --github-user stands in, and the upstream search is skipped.
+        log.unlink(missing_ok=True)
+        result = run("--github-user", "me", "--related", "0", extra={"FAKE_GH_LOG": str(log)})
+        check(result.returncode == 0, f"--github-user failed: {result.stderr}")
+        report = json.loads(result.stdout)
+        calls = log.read_text().splitlines()
+        check("api user" not in calls and not any(c.startswith("search prs") for c in calls)
+              and "gh:up/stream#9" not in {p["ref"] for p in report["prs"]}
+              and next(p for p in report["prs"] if p["ref"] == "gh:me/ghrepo#2")["kind"] == "own",
+              f"--github-user still asked gh: {calls}")
+        for bad in ("bad_name", "a" * 40, "-me", ""):
+            check(run("--github-user", bad).returncode == 64, f"--github-user {bad!r} was accepted")
+
+        # An App acting for the user: its PRs are own with a real lane, and its issues' links pull items in.
+        result = run("--threads", str(threads), extra={"FAKE_GH_APP": "1"})
+        report = json.loads(result.stdout)
+        app_pr = next(p for p in report["prs"] if p["ref"] == "gh:me/ghrepo#2")
+        check(app_pr["kind"] == "bot" and app_pr["lane"] == "renovate"
+              and "gh:me/ghrepo#3" not in next(r for r in report["related"] if r["ref"] == "gh:up/stream#4")["pulledBy"],
+              f"an App author counted without --own: {app_pr}")
+        result = run("--threads", str(threads), "--own", "app/hugin", "--own", "hugin[bot]", extra={"FAKE_GH_APP": "1"})
+        check(result.returncode == 0, f"--own failed: {result.stderr}")
+        report = json.loads(result.stdout)
+        app_pr = next(p for p in report["prs"] if p["ref"] == "gh:me/ghrepo#2")
+        app_issue = next(i for i in report["issues"] if i["ref"] == "gh:me/ghrepo#3")
+        check(app_pr["kind"] == "own" and app_pr["lane"] == "open" and app_pr["review"] == "none"
+              and "review-missing" in app_pr["flags"], f"an --own PR: {app_pr}")
+        check(app_issue["lane"] == "active" and app_issue["related"] == ["gh:up/stream#4"]
+              and "gh:me/ghrepo#3" in next(r for r in report["related"] if r["ref"] == "gh:up/stream#4")["pulledBy"],
+              f"an --own issue author's links did not feed related: {app_issue}")
+        for bad in ("app/", "x[bot]y", "a b", "app/x[bot]", "-x"):
+            check(run("--own", bad).returncode == 64, f"--own {bad!r} was accepted")
+
+        # Item mode prints the text the inventory never does: cut to --max-chars, newlines kept, last five comments.
+        result = run("item", "--max-chars", "50", "me/notes#1", "me/notes#2")
+        check(result.returncode == 0, f"item mode failed: {result.stderr}")
+        item = json.loads(result.stdout)
+        check(set(item) == {"ref", "title", "body", "updatedAt", "comments", "prs"} and item["ref"] == "me/notes#1"
+              and item["title"] == "Notes issue" and item["updatedAt"] == ago(1), f"item: {item}")
+        check(len(item["body"]) == 50 and item["body"].startswith("Line one\n\nLine two x") and item["body"].endswith("x…"),
+              f"item body not cut at 50 with newlines kept: {item['body']!r}")
+        check([c["author"] for c in item["comments"]] == [f"user{n}" for n in range(3, 8)]
+              and item["comments"][0] == {"author": "user3", "createdAt": ago(7), "body": "comment 3"},
+              f"item comments are not the last five, oldest first: {item['comments']}")
+        check(item["prs"] == [{"ref": "me/notes#2", "title": "Notes PR", "body": "Closes #1\nsecond line"}],
+              f"item PRs: {item['prs']}")
+        # A GitHub-only item needs no Forgejo token; PRs follow the given order.
+        result = run("item", "--max-chars", "20000", "gh:up/stream#5", "gh:up/stream#9", "me/notes#2",
+                     extra={"FORGEJO_API_TOKEN_FILE": str(tmp / "missing")})
+        check(result.returncode == 2, f"a Forgejo PR ref without a token did not exit 2: {result.returncode}")
+        result = run("item", "--max-chars", "20000", "gh:up/stream#5", "gh:up/stream#9",
+                     extra={"FORGEJO_API_TOKEN_FILE": str(tmp / "missing")})
+        check(result.returncode == 0, f"GitHub item mode failed: {result.stderr}")
+        item = json.loads(result.stdout)
+        check(item["body"] == "Upstream body\nwith lines" and [c["author"] for c in item["comments"]] == ["ann", "bob"]
+              and item["prs"] == [{"ref": "gh:up/stream#9", "title": "Upstream PR", "body": "Fixes #5"}],
+              f"GitHub item: {item}")
+        # A failed request names the ref and status, prints nothing else and leaks no text from the response.
+        for refs, named, status in ((["me/notes#3"], "me/notes#3", "404"), (["me/notes#1", "me/notes#99"], "me/notes#99", "404"),
+                                    (["gh:up/stream#6"], "gh:up/stream#6", "HTTP 404")):
+            result = run("item", "--max-chars", "100", *refs)
+            check(result.returncode == 3 and result.stdout == "" and named in result.stderr and status in result.stderr
+                  and SECRET not in result.stderr and "Notes issue" not in result.stderr
+                  and len(result.stderr.strip().splitlines()) == 1, f"failed item {refs}: {result.returncode} {result.stderr}")
+        for bad in (["--max-chars", "50", "me/notes"], ["--max-chars", "50", "me/notes#0"], ["--max-chars", "50", "me/notes#1x"],
+                    ["--max-chars", "50", "-me/notes#1"], ["--max-chars", "50", "--", "-me/notes#1"],
+                    ["--max-chars", "50", "../..#1"], ["--max-chars", "50", "gh:me/a/b#1"], ["--max-chars", "50", "me/notes#1", "x"],
+                    ["--max-chars", "50", "me/notes#1", "me/notes#2", "me/notes#2", "me/notes#2", "me/notes#2"],
+                    ["--max-chars", "0", "me/notes#1"], ["--max-chars", "20001", "me/notes#1"], ["--max-chars", "x", "me/notes#1"],
+                    ["me/notes#1"], ["--max", "50", "me/notes#1"]):
+            check(run("item", *bad).returncode == 64, f"item usage {bad} did not exit 64")
+        check(run("item", "--max-chars", "50", "me/notes#1", extra={"FORGEJO_API_TOKEN_FILE": str(tmp / "missing")}).returncode
+              == 2, "a Forgejo item without a token did not exit 2")
 
         # Without --threads nothing is called orphaned; a gh failure only marks GitHub.
         result = run(extra={"FAKE_GH_FAIL": "1"})

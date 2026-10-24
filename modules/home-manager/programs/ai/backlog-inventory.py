@@ -9,10 +9,19 @@ pull request bodies are read here and never printed, so the output stays small
 and holds no untrusted prose beyond titles and the short `next` text of an
 issue's status line. Items in repositories outside the scope that a row
 references are pulled in once, and `--branches` adds leftover remote branches.
+`--github-user` names the GitHub user for a token that cannot say who it is
+(a GitHub App installation token) and skips the upstream PR search; `--own`
+counts further authors, such as an App acting for the user, as the user's own.
 
-Exit codes: 2 no readable Forgejo token, 3 a Forgejo request failed, 64 usage
-(including an unknown scope or a malformed scope file). GitHub failures do not
-fail the run: `sources.github` says what went wrong.
+`item --max-chars N REF [PR_REF...]` prints one issue's title, body and last
+five comments, and the given PRs' titles and bodies, as one JSON object. Unlike
+the inventory it prints bodies, on purpose, for a caller that treats them as
+untrusted data. Its failures name the ref and status, never item text.
+
+Exit codes: 2 no readable Forgejo token, 3 a Forgejo request failed (in item
+mode, any request), 64 usage (including an unknown scope or a malformed scope
+file). GitHub failures do not fail the inventory: `sources.github` says what
+went wrong.
 """
 
 import argparse
@@ -38,6 +47,12 @@ KEPT_BRANCHES = {"main", "master", "dev", "develop", "gh-pages"}
 KEPT_BRANCH_PREFIXES = ("dev-", "renovate/")
 SCOPE_REPO_RE = re.compile(r"(gh:)?([\w.-]+/[\w.-]+)")
 GROUP_RE = re.compile(r"[A-Za-z0-9][\w.-]*")
+GITHUB_LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
+# Forgejo logins may also hold dots and underscores; gh names an App author app/NAME, the REST API NAME[bot].
+OWN_RE = re.compile(r"(?:app/)?[A-Za-z0-9][\w.-]{0,38}|[A-Za-z0-9][\w.-]{0,38}\[bot\]", re.A)
+ITEM_REF_RE = re.compile(r"(gh:)?([\w.-]+)/([\w.-]+)#([1-9]\d*)", re.A)
+ITEM_COMMENTS = 5
+ITEM_PRS = 3
 # `pr-review comment` starts every outcome with this, naming the reviewed head
 # and target branch; the merge guard accepts a comment that names both (ADR-0078).
 REVIEW_RE = re.compile(r"automated read-only review \(([0-9a-f]{7,40}) on ([^\n]+?)\):", re.I)
@@ -76,6 +91,8 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 OPENER = urllib.request.build_opener(NoRedirect)
+# Authors --own counts as the user's (filled in main): never bots, so their PRs get lanes and their links count.
+OWN = set()
 
 
 def parse_time(value):
@@ -383,10 +400,14 @@ def pr_lane(pr, stale_days, threads_known):
 
 
 def is_bot(login):
+    if login in OWN:
+        return False
     return login in BOTS or login.startswith("app/") or login.endswith("[bot]")
 
 
 def pr_kind(author, user, upstream=False):
+    if author in OWN:
+        return "own"
     if is_bot(author):
         return "bot"
     if upstream:
@@ -578,9 +599,12 @@ def merged_since(name, since):
         page += 1
 
 
-def collect_github(mirrors, explicit, upstream, now, threads, since, forgejo_host, forgejo_names):
-    """Issues and PRs of GitHub-first repositories and scoped GitHub repositories, and the user's PRs elsewhere."""
-    user = gh("api", "user")["login"]
+def collect_github(mirrors, explicit, upstream, now, threads, since, forgejo_host, forgejo_names, github_user=None):
+    """Issues and PRs of GitHub-first repositories and scoped GitHub repositories, and the user's PRs elsewhere.
+
+    An installation token answers neither `gh api user` nor `--author @me`, so with github_user the
+    upstream search is skipped."""
+    user = github_user or gh("api", "user")["login"]
     names = {name.lower(): name for name in sorted(explicit)}
     for mirror in mirrors:
         parsed = urllib.parse.urlparse(mirror.get("original_url") or "")
@@ -636,7 +660,7 @@ def collect_github(mirrors, explicit, upstream, now, threads, since, forgejo_hos
                 issue["mergedPrs"].append({"ref": f"gh:{name}#{pull['number']}", "url": pull["html_url"],
                                            "closes": closes, "mergedAt": pull["merged_at"]})
 
-    if upstream:
+    if upstream and not github_user:
         for found in gh("search", "prs", "--author", "@me", "--state", "open", "--limit", "100",
                         "--json", "repository,number"):
             name = found["repository"]["nameWithOwner"]
@@ -935,7 +959,102 @@ def summarize(repo_rows, issues, prs, branches=()):
     return result
 
 
+def forgejo_client():
+    """The Forgejo client, or None (reported) without a readable token file."""
+    # The token goes only to the Forgejo the Nix wrapper pins; there is no flag to change it.
+    url = os.environ.get("BACKLOG_FORGEJO_URL", "https://git.alc.xyz")
+    try:
+        with open(os.environ["FORGEJO_API_TOKEN_FILE"], encoding="utf-8") as handle:
+            return Forgejo(url, handle.read().strip())
+    except (KeyError, OSError, UnicodeDecodeError):
+        print(f"{PROG}: FORGEJO_API_TOKEN_FILE does not name a readable file", file=sys.stderr)
+        return None
+
+
+def cut(text, limit):
+    """Like short(), but keeps the text's newlines."""
+    text = str(text or "")
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def parse_item_ref(value):
+    match = ITEM_REF_RE.fullmatch(value)
+    # A dot-only segment would walk the API path; a leading dash could pass for an option further down.
+    if not match or value.startswith("-") or {"."} >= set(match.group(2)) or {"."} >= set(match.group(3)):
+        raise Fail(64, f"bad ref {value!r}: use OWNER/REPO#N (Forgejo) or gh:OWNER/REPO#N")
+    return value, "github" if match.group(1) else "forgejo", f"{match.group(2)}/{match.group(3)}", int(match.group(4))
+
+
+def item_main(argv):
+    """One issue's text and its PRs', for a caller that treats the text as untrusted data."""
+    parser = argparse.ArgumentParser(prog=f"{PROG} item", allow_abbrev=False,
+                                     description="Print one issue's and its pull requests' text as JSON.")
+    parser.add_argument("--max-chars", type=int, required=True, help="cut each title and body to this (1 to 20000)")
+    parser.add_argument("ref", help="the issue: OWNER/REPO#N (Forgejo) or gh:OWNER/REPO#N")
+    parser.add_argument("prs", nargs="*", metavar="PR_REF", help=f"up to {ITEM_PRS} pull requests, in the same forms")
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exit_:
+        return 0 if exit_.code == 0 else 64
+    limit = args.max_chars
+    try:
+        if not 1 <= limit <= 20000 or len(args.prs) > ITEM_PRS:
+            raise Fail(64, f"--max-chars must be 1 to 20000, with at most {ITEM_PRS} PR refs")
+        issue = parse_item_ref(args.ref)
+        prs = [parse_item_ref(value) for value in args.prs]
+    except Fail as error:
+        print(f"{PROG}: {error}", file=sys.stderr)
+        return error.code
+    api = None
+    if any(forge == "forgejo" for _, forge, _, _ in [issue, *prs]):
+        api = forgejo_client()
+        if api is None:
+            return 2
+
+    def fetch(ref, forge, path):
+        # A failure names the ref with the HTTP status or gh's last stderr line, never the item's text.
+        try:
+            if forge == "forgejo":
+                return api.get("/repos/" + path)
+            if path.endswith("/comments"):
+                return gh_pages(f"repos/{path}?per_page=100")
+            return gh("api", f"repos/{path}")
+        except (Fail, RuntimeError) as error:
+            raise Fail(3, f"{ref}: {error}") from None
+        except (OSError, ValueError, TypeError, subprocess.TimeoutExpired) as error:
+            raise Fail(3, f"{ref}: gh failed ({type(error).__name__})") from None
+
+    ref, forge, repo, number = issue
+    try:
+        raw = fetch(ref, forge, f"{repo}/issues/{number}")
+        comments = fetch(ref, forge, f"{repo}/issues/{number}/comments")
+        pulls = [(value, fetch(value, pr_forge, f"{pr_repo}/pulls/{pr_number}"))
+                 for value, pr_forge, pr_repo, pr_number in prs]
+        # Both forges list comments oldest first; the sort only makes sure of it.
+        last = sorted(comments, key=lambda c: c.get("created_at") or "")[-ITEM_COMMENTS:]
+        result = {
+            "ref": ref, "title": cut(raw.get("title"), limit), "body": cut(raw.get("body"), limit),
+            "updatedAt": raw.get("updated_at"),
+            "comments": [{"author": (c.get("user") or {}).get("login"), "createdAt": c.get("created_at"),
+                          "body": cut(c.get("body"), limit)} for c in last],
+            "prs": [{"ref": value, "title": cut(pull.get("title"), limit), "body": cut(pull.get("body"), limit)}
+                    for value, pull in pulls],
+        }
+    except Fail as error:
+        print(f"{PROG}: {error}", file=sys.stderr)
+        return error.code
+    except (AttributeError, TypeError):
+        print(f"{PROG}: {ref}: unexpected response shape", file=sys.stderr)
+        return 3
+    json.dump(result, sys.stdout, separators=(",", ":"))
+    sys.stdout.write("\n")
+    return 0
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["item"]:
+        return item_main(argv[1:])
     parser = argparse.ArgumentParser(prog=PROG, description=__doc__.split("\n\n")[0])
     parser.add_argument("--stale-days", type=int, default=45, help="idle days before an item counts as stale (45)")
     parser.add_argument("--merged-days", type=int, default=60, help="look back this far for merged PRs (60)")
@@ -947,6 +1066,9 @@ def main(argv=None):
     parser.add_argument("--branches", action="store_true", help="add leftover remote branches (thorough mode)")
     parser.add_argument("--branch-days", type=int, default=30, help="days before a branch without a PR counts (30)")
     parser.add_argument("--no-github", action="store_true", help="skip GitHub")
+    parser.add_argument("--github-user", help="the GitHub login, instead of asking gh (skips the upstream PR search)")
+    parser.add_argument("--own", action="append", default=[],
+                        help="an author counted as the user's own on both forges: LOGIN, app/NAME or NAME[bot] (repeatable)")
     try:
         args = parser.parse_args(argv)
     except SystemExit as exit_:
@@ -955,6 +1077,14 @@ def main(argv=None):
             and 0 <= args.related <= 500):
         print(f"{PROG}: --stale-days, --merged-days and --branch-days must be positive, --related 0 to 500", file=sys.stderr)
         return 64
+    if args.github_user is not None and not GITHUB_LOGIN_RE.fullmatch(args.github_user):
+        print(f"{PROG}: --github-user must be a GitHub login", file=sys.stderr)
+        return 64
+    if not all(OWN_RE.fullmatch(login) for login in args.own):
+        print(f"{PROG}: --own takes LOGIN, app/NAME or NAME[bot]", file=sys.stderr)
+        return 64
+    OWN.clear()
+    OWN.update(args.own)
     try:
         groups = load_groups(args.scope_file or os.environ.get("BACKLOG_SCOPE_FILE"))
         scope = parse_scope(args.scope, groups)
@@ -962,13 +1092,8 @@ def main(argv=None):
         print(f"{PROG}: {error}", file=sys.stderr)
         return error.code
 
-    # The token goes only to the Forgejo the Nix wrapper pins; there is no flag to change it.
-    url = os.environ.get("BACKLOG_FORGEJO_URL", "https://git.alc.xyz")
-    try:
-        with open(os.environ["FORGEJO_API_TOKEN_FILE"], encoding="utf-8") as handle:
-            api = Forgejo(url, handle.read().strip())
-    except (KeyError, OSError, UnicodeDecodeError):
-        print(f"{PROG}: FORGEJO_API_TOKEN_FILE does not name a readable file", file=sys.stderr)
+    api = forgejo_client()
+    if api is None:
         return 2
 
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -992,7 +1117,7 @@ def main(argv=None):
         try:
             since = now - datetime.timedelta(days=args.merged_days)
             gh_repos, gh_metas, gh_missing, gh_issues, gh_prs = collect_github(
-                mirrors, scope["github"], scope["all"], now, threads, since, api.host, names)
+                mirrors, scope["github"], scope["all"], now, threads, since, api.host, names, args.github_user)
             repo_rows.update({("github", name): row for name, row in gh_repos.items()})
             issues += gh_issues
             prs += gh_prs
