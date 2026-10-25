@@ -1,6 +1,5 @@
 # nix-config/hosts/rpi0/configuration.nix
 {
-  config,
   pkgs,
   inputs,
   username,
@@ -106,14 +105,6 @@
 
   services.netbird.managed.enable = true;
 
-  sops.secrets = {
-    pihole_secret_key = {
-      sopsFile = inputs.nix-secrets.secrets.files.apps;
-      owner = "pihole";
-      group = "pihole";
-    };
-  };
-
   services.unbound = {
     enable = true;
     resolveLocalQueries = false;
@@ -201,10 +192,5 @@
     rateLimitCount = 10000;
     rateLimitInterval = 60;
     stateDirectory = "/var/lib/pihole/etc";
-    passwordFile = config.sops.secrets.pihole_secret_key.path;
-    disableWebPassword = true;
-    webAcl = "+10.42.0.0/16,+192.168.1.10,+192.168.1.13,+192.168.1.15,+192.168.1.16,+192.168.1.23,+192.168.1.24";
   };
-
-  networking.hosts."192.168.1.250" = ["k8s-api.local"];
 }
