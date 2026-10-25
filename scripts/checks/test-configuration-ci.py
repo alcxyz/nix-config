@@ -74,7 +74,7 @@ assert local.returncode == 1
             )
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_evaluation_failure_prevents_native_checks(self):
+    def test_native_failure_prevents_the_read_only_evaluation(self):
         with tempfile.TemporaryDirectory() as directory:
             mock = Path(directory) / "nix"
             calls = Path(directory) / "calls"
@@ -86,8 +86,7 @@ assert local.returncode == 1
                 capture_output=True,
             )
             self.assertEqual(result.returncode, 19)
-            self.assertEqual(len(calls.read_text().splitlines()), 1)
-            self.assertIn("--all-systems --no-build --no-update-lock-file", calls.read_text())
+            self.assertEqual(calls.read_text().splitlines(), ["flake check --keep-going --no-update-lock-file"])
 
     def test_success_runs_both_phases_without_lock_updates(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -101,9 +100,15 @@ assert local.returncode == 1
                 check=True,
             )
             commands = calls.read_text().splitlines()
-            self.assertEqual(len(commands), 2)
-            self.assertIn("--keep-going", commands[1])
-            self.assertTrue(all("--no-update-lock-file" in command for command in commands))
+            # Native evaluation restores collected source copies that the
+            # read-only all-systems evaluation cannot add itself.
+            self.assertEqual(
+                commands,
+                [
+                    "flake check --keep-going --no-update-lock-file",
+                    "flake check --all-systems --no-build --no-update-lock-file",
+                ],
+            )
 
     def test_out_link_prefix_roots_native_check_results(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -122,10 +127,10 @@ assert local.returncode == 1
                 check=True,
             )
             commands = calls.read_text().splitlines()
-            self.assertNotIn("--out-link", commands[0])
             self.assertEqual(
-                commands[1], "flake check --keep-going --no-update-lock-file --out-link /roots/run/check"
+                commands[0], "flake check --keep-going --no-update-lock-file --out-link /roots/run/check"
             )
+            self.assertNotIn("--out-link", commands[1])
 
     def test_credentials_are_restricted_to_the_source_host(self):
         helper = ROOT / "scripts/ci/git-source-credentials.sh"

@@ -1,8 +1,11 @@
 # Configuration validation
 
 Run `bash scripts/ci/check-configurations.sh` from the candidate checkout.
-It evaluates checks for every declared platform, explicitly forces every
-exported NixOS, Home Manager and Darwin deployment, then builds native checks.
+It builds native checks, then evaluates checks for every declared platform and
+explicitly forces every exported NixOS, Home Manager and Darwin deployment.
+The native phase runs first because the all-systems phase evaluates read-only
+(`--no-build`): it cannot restore a source copy, such as a secrets file, that
+garbage collection removed, while the native evaluation can.
 It refuses lock updates. The two phases do not deploy hosts or prove runtime
 behavior, and foreign-platform check builds remain separate.
 
