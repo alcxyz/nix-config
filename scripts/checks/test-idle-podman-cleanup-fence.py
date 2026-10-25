@@ -50,6 +50,7 @@ class Fixture:
         self.images = [image(int(IMAGE, 16))]
         self.containers = []
         self.volumes = []
+        self.native_containers = None
         self.started = threading.Event()
         self.completed = threading.Event()
         self.release = threading.Event()
@@ -69,7 +70,7 @@ class Fixture:
                     value = owner.containers
                 elif self.path == '/v5.0.0/libpod/containers/json?all=true':
                     # Only the native list names pods; it has no integer Created.
-                    value = [dict(Id=c.get('Id'), State=c.get('State'),
+                    value = owner.native_containers if owner.native_containers is not None else [dict(Id=c.get('Id'), State=c.get('State'),
                                   Created=c.get('NativeCreated', '2026-01-01T00:00:00Z'),
                                   Pod=c.get('Pod', ''), IsInfra=c.get('IsInfra', False))
                              for c in owner.containers]
@@ -243,9 +244,9 @@ class FenceFixture:
         result = self.f.run()
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(self.f.mutations, [
+            f'/v5.0.0/libpod/containers/{EXITED}?force=false',
             f'/v5.0.0/libpod/containers/{IMAGE}?force=true&timeout=10',
             '/v5.0.0/libpod/volumes/buildx_buildkit_fixture0_state',
-            f'/v5.0.0/libpod/containers/{EXITED}?force=false',
             f'/images/{IMAGE}?force=false&noprune=true'])
         self.assertIn(' containers=1 ', result.stdout)
         self.assertFalse(self.f.fence.exists())
@@ -561,6 +562,143 @@ exec {jq} "$@"
         self.assertEqual([path for path in self.f.mutations if '/containers/' in path], [
             f'/v5.0.0/libpod/containers/{i:064x}?force=false' for i in (1, 2)])
         self.assertIn(' containers=2 ', result.stdout)
+
+    def live_parent(self, builder=False):
+        return dict(exited(2, created=5, state='running'),
+                    Names=['/buildx_buildkit_fixture0' if builder else '/fixture-db'],
+                    NativeCreated='2026-01-01T00:00:05.1Z')
+
+    def test_exited_dependent_precedes_live_parent_across_categories(self):
+        for builder in (False, True):
+            with self.subTest(builder=builder):
+                db = self.live_parent(builder)
+                app = dict(exited(1, created=5), DependsOn=db['Id'],
+                           NativeCreated='2026-01-01T00:00:05.25Z')
+                self.f.containers = [db, app]
+                self.f.mutations.clear()
+                result = self.f.run()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse(self.f.fence.exists())
+                self.assertEqual([p for p in self.f.mutations if '/containers/' in p], [
+                    f'/v5.0.0/libpod/containers/{1:064x}?force=false',
+                    f'/v5.0.0/libpod/containers/{2:064x}?force=true&timeout=10'])
+                self.assertIn('pruned leftovers=1', result.stdout)
+                self.assertIn(' containers=1 ', result.stdout)
+
+    def test_shared_cap_never_jumps_over_capped_dependent(self):
+        for builder in (False, True):
+            for cap in ('1', '2'):
+                with self.subTest(builder=builder, cap=cap):
+                    db = self.live_parent(builder)
+                    app = dict(exited(1, created=5), DependsOn=db['Id'],
+                               NativeCreated='2026-01-01T00:00:05.25Z')
+                    # With cap=1 the dependent itself is beyond the prefix.
+                    self.f.containers = [db, app, exited(3, created=6)]
+                    self.f.mutations.clear()
+                    result = self.f.run(CONTAINER_DELETE_LIMIT=cap)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn('skipped reason=bounded_partial cause=cap engine=podman', result.stdout)
+                    self.assertFalse(self.f.fence.exists())
+                    self.assertEqual(self.f.mutations, [
+                        f'/v5.0.0/libpod/containers/{i:064x}?force=false'
+                        for i in ([3] if cap == '1' else [3, 1])])
+                    self.assertIn(db, self.f.containers)
+
+    def test_live_leftovers_consume_the_shared_cap(self):
+        newer = dict(self.live_parent(True), Id=f'{3:064x}', Created=6)
+        older = self.live_parent()
+        self.f.containers = [older, newer, exited(1, created=4)]
+        result = self.f.run(CONTAINER_DELETE_LIMIT='1')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('bounded_partial cause=cap', result.stdout)
+        self.assertEqual(self.f.mutations, [
+            f'/v5.0.0/libpod/containers/{3:064x}?force=true&timeout=10'])
+        self.assertFalse(self.f.fence.exists())
+
+    def test_budget_after_acknowledgement_reports_bounded_partial(self):
+        self.f.containers = [self.live_parent(), exited(1, created=6)]
+        # Leave setup slack before the 15-second request requirement.
+        self.f.container_delay = 13
+        result = self.f.run(LOCK_BUDGET_SECONDS='17', CONTAINER_DELETE_LIMIT='1')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('bounded_partial cause=budget step=check_containers', result.stdout)
+        self.assertEqual(self.f.mutations, [
+            f'/v5.0.0/libpod/containers/{1:064x}?force=false'])
+        self.assertFalse(self.f.fence.exists())
+
+    def test_exhausted_queue_budget_stop_is_not_container_partial(self):
+        self.f.containers = [exited(1, created=6)]
+        # Leave setup slack before the 15-second request requirement.
+        self.f.container_delay = 13
+        result = self.f.run(LOCK_BUDGET_SECONDS='17', CONTAINER_DELETE_LIMIT='1')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1],
+                         'skipped reason=lock_budget_exhausted step=check_containers engine=docker')
+        self.assertNotIn('bounded_partial', result.stdout)
+        self.assertEqual(self.f.mutations, [
+            f'/v5.0.0/libpod/containers/{1:064x}?force=false'])
+        self.assertFalse(self.f.fence.exists())
+
+    def test_empty_queue_budget_stop_is_not_container_partial(self):
+        # Account for time spent validating the snapshots, without simulating
+        # a destructive request or exceeding a read-only request deadline.
+        jq = shutil.which('jq')
+        self.f.script('jq', f'''if [[ $1 == -sr ]]; then sleep 13; fi
+exec {jq} "$@"
+''')
+        result = self.f.run(LOCK_BUDGET_SECONDS='17', JQ_BIN=str(self.f.root / 'jq'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.strip(),
+                         'skipped reason=lock_budget_exhausted step=check_containers engine=docker')
+        self.assertEqual(self.f.mutations, [])
+        self.assertFalse(self.f.fence.exists())
+
+    def test_pod_exclusion_applies_to_live_leftovers_and_builders(self):
+        for fields in ({'Pod': 'f' * 64}, {'IsInfra': True}):
+            for builder in (False, True):
+                with self.subTest(fields=fields, builder=builder):
+                    self.f.containers = [dict(self.live_parent(builder), **fields)]
+                    self.f.mutations.clear()
+                    result = self.f.run()
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn('containers_live engine=podman', result.stdout)
+                    self.assertEqual(self.f.mutations, [])
+                    self.assertFalse(self.f.fence.exists())
+
+    def test_skipped_pod_dependent_refusal_keeps_fence_for_both_classes(self):
+        for kind in ('exited', 'stale', 'builder'):
+            with self.subTest(kind=kind):
+                db = exited(2, created=5) if kind == 'exited' else self.live_parent(kind == 'builder')
+                app = dict(exited(1, created=6), DependsOn=db['Id'], Pod='f' * 64)
+                self.f.containers = [db, app]
+                self.f.mutations.clear()
+                result = self.f.run()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                request_kind = 'exited' if kind == 'exited' else 'container'
+                self.assertIn(f'uncertain_status kind={request_kind} status=500', result.stderr)
+                self.assertEqual(len(self.f.mutations), 1)
+                self.assertIn(app, self.f.containers)
+                self.assert_fenced()
+                shutil.rmtree(self.f.fence)
+
+    def test_invalid_native_snapshot_precedes_every_container_mutation(self):
+        for builder in (False, True):
+            parent = self.live_parent(builder)
+            valid = dict(Id=parent['Id'], Created='2026-01-01T00:00:05.1Z', Pod='', IsInfra=False)
+            app_native = dict(valid, Id=f'{1:064x}')
+            for native in ({}, [], [dict(valid, IsInfra='false')],
+                           [dict(valid, Created='yesterday')], [valid, valid],
+                           [valid, app_native, dict(valid, Id=f'{3:064x}', Pod='invalid')]):
+                with self.subTest(builder=builder, native=native):
+                    self.f.containers = [parent, exited(1, created=6)]
+                    self.f.native_containers = native
+                    self.f.mutations.clear()
+                    result = self.f.run()
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn('engine_api_invalid engine=podman', result.stdout)
+                    self.assertEqual(self.f.mutations, [])
+                    self.assertFalse(self.f.fence.exists())
+        self.f.native_containers = None
 
     def test_removing_a_depended_on_container_first_keeps_the_fence(self):
         # The fixture refusal matches Podman's: an uncertain 500.

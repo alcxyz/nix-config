@@ -389,22 +389,39 @@ status=$("$CURL_BIN" --silent --show-error --max-time 10 --unix-socket "$PODMAN_
 p run --pull=never -d --stop-signal SIGKILL --network none --cgroups=disabled --name nested-database "$base" sleep 180 >/dev/null
 sleep 2
 output=$(STALE_AFTER_SECONDS=1 run_cleanup)
-assert_output 'removed_leftover kind=builder name=buildx_buildkit_qualification0'
-assert_output 'removed_leftover kind=stale name=nested-database'
-assert_output 'removed_builder_volume name=buildx_buildkit_qualification0_state'
-assert_output 'kept_builder_volume name=buildx_buildkit_held0_state reason=in_use'
-# The exited volume holder is removed by ID after the volume phase. Slow
-# leftover removal may exhaust the lock budget before the holder or the image;
-# no image is deleted before such a skip, so further passes finish the same
-# first image snapshot. A later pass may then remove the released volume.
+# The exited holder now precedes builder-volume deletion in the shared
+# container queue. Acknowledged container work may stop at its budget before
+# the queue finishes; later stages retain ordinary lock-budget skips. Retry
+# only these bounded outcomes, keeping the same stale-age selection.
 passes=$output
 for ((pass = 1; pass < 3; pass++)); do
   [[ $output != *'pruned leftovers='* ]] || break
-  [[ $output == *'skipped reason=lock_budget_exhausted step='* ]]
+  case ${output##*$'\n'} in
+    'skipped reason=bounded_partial cause=budget step=remove_container' | \
+      'skipped reason=bounded_partial cause=budget step=check_containers engine=docker' | \
+      'skipped reason=bounded_partial cause=budget step=check_containers engine=podman' | \
+      'skipped reason=lock_budget_exhausted step='*) ;;
+    *)
+      echo 'FAIL unexpected first-cleanup skip' >&2
+      exit 1
+      ;;
+  esac
   [[ ! -e $STATE_DIR/cleanup-in-flight ]]
-  output=$(run_cleanup)
+  output=$(STALE_AFTER_SECONDS=1 run_cleanup)
   passes+=$'\n'$output
 done
+completed_output=$output
+output=$passes
+assert_output 'removed_leftover kind=builder name=buildx_buildkit_qualification0'
+assert_output 'removed_leftover kind=stale name=nested-database'
+assert_output "removed_container id=$holder_id"
+assert_output 'removed_builder_volume name=buildx_buildkit_qualification0_state'
+assert_output 'removed_builder_volume name=buildx_buildkit_held0_state'
+[[ $passes != *'kept_builder_volume name=buildx_buildkit_held0_state reason=in_use'* ]]
+# Both container acknowledgements must precede their volume acknowledgements.
+[[ $passes == *"removed_container id=$holder_id"*'removed_builder_volume name=buildx_buildkit_held0_state'* ]]
+[[ $passes == *'removed_leftover kind=builder name=buildx_buildkit_qualification0'*'removed_builder_volume name=buildx_buildkit_qualification0_state'* ]]
+output=$completed_output
 [[ $(rg --count --fixed-strings "removed_container id=$holder_id" <<<"$passes") == 1 ]]
 assert_complete
 assert_output 'image_min_age=1h images=1 reclaimed_bytes='
@@ -451,7 +468,7 @@ run_gate() {
     RUNNER_UNITS='forgejo-actions-runner.service forgejo-podman-runner.service' \
     timeout --kill-after=2s 10s bash -x "$repo/modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh"
 }
-# Its holder is gone, so a pass after the first one removed the formerly held
+# Its holder was removed before the volume phase, releasing the held
 # volume. Recreate a known removable volume for this independent lock trial.
 assert_absent volume exists buildx_buildkit_held0_state
 p volume create buildx_buildkit_held0_state >/dev/null

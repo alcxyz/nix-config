@@ -6,6 +6,8 @@
 **Amended:** 2026-10-17, exited containers outside pods follow capped per-ID deletion like images, newest first ([#719](https://git.alc.xyz/alcxyz/nix-config/issues/719)).
 **Amended:** 2026-10-17, the fence, cleanup window and recovery cover every runner in the configured list, which may hold more than one Podman runner ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
 
+**Amended:** 2026-10-25, standalone container candidates share one validated newest-first queue ([#833](https://git.alc.xyz/alcxyz/nix-config/issues/833)).
+
 ## Context
 
 A bounded HTTP client does not bound stock Podman storage mutation. Podman
@@ -29,6 +31,19 @@ prune's runtime grows with the number of containers it removes, so any client
 deadline can turn a completing prune into an uncertain one. Retain existing
 request and service budgets, lifecycle exclusion and terminal-job checks. A
 pass may do partial work within its budget.
+
+Validate the complete compatible and native container snapshots before any
+container mutation. Exclude native pod members and infra containers from both
+live-leftover/Buildx and exited/dead selection. Order this combined queue by
+compatible creation seconds, native fractional seconds, then ID, descending.
+`CONTAINER_DELETE_LIMIT` caps the entire ordered prefix at at most eight
+attempts, including live leftovers and Buildx builders, rather than only exited
+containers. Never skip a capped candidate to remove an older candidate.
+Preserve each kind's existing deletion flags and response validation. A cap or
+budget that leaves safe live leftovers reports a normal `bounded_partial` skip;
+terminal checks still precede builder-volume and image cleanup. Creation order
+is a heuristic, not dependency discovery: skipped dependents and clock changes
+can still cause refusals, and uncertain responses retain the fence.
 
 Before each destructive request, create an independently owned, trusted runtime
 completion fence under the lifecycle lock. Clear it only on a validated complete

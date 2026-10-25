@@ -155,7 +155,7 @@ done
 require_budget() {
   local needed=$1
   shift
-  ((lock_deadline - SECONDS >= needed)) || skip "lock_budget_exhausted step=$*"
+  ((lock_deadline - SECONDS >= needed)) || skip "${budget_skip_reason:-lock_budget_exhausted} step=$*"
 }
 # Extra arguments go to curl before the URL.
 request() {
@@ -246,7 +246,7 @@ leftover_filter='
 # Skips unless every container on the engine is safe to remove, logging an
 # unreadable API separately from live containers.
 require_terminal() {
-  local engine=$1 socket=$2 allow_leftovers=$3 containers status=0
+  local engine=$1 socket=$2 allow_leftovers=$3 live_reason=${4:-containers_live} containers status=0
   require_budget 5 "check_containers engine=$engine"
   containers=$(api "$socket" GET '/containers/json?all=1') || skip "engine_api_unavailable engine=$engine"
   "$jq_bin" -e --arg pattern "$builder_pattern" --argjson stale_after "$stale_after_seconds" \
@@ -254,7 +254,7 @@ require_terminal() {
     if type != "array" then error("not a container list") else all(.[];
       (.State | type == "string") and (terminal or ($allow_leftovers and leftover))) end' \
     <<< "$containers" >/dev/null 2>&1 || status=$?
-  ((status != 1)) || skip "containers_live engine=$engine"
+  ((status != 1)) || skip "$live_reason engine=$engine"
   ((status == 0)) || skip "engine_api_invalid engine=$engine"
 }
 safe_to_prune() {
@@ -265,23 +265,80 @@ safe_to_prune() {
 require_terminal docker "$docker_socket" false
 require_terminal podman "$podman_socket" true
 
-# Leftovers are removed by ID; the log names them by kind and first name.
-leftovers=$(api "$podman_socket" GET '/containers/json?all=1' |
-  "$jq_bin" -r --arg pattern "$builder_pattern" --argjson stale_after "$stale_after_seconds" "$leftover_filter"'
-    .[] | select(leftover) |
-      "\(.Id) \(if builder then "builder" else "stale" end) \(names[0] // "-" | ltrimstr("/"))"') ||
-  skip "engine_api_unavailable engine=podman"
+# Validate both complete snapshots before any container mutation. One shared
+# newest-first queue covers live leftovers, Buildx builders and exited/dead
+# containers. Compatible seconds plus native fractions order creation, then ID.
+# This is a heuristic: skipped dependents or clock changes can still cause a
+# refusal, which retains the completion fence. Never remove pod members/infra.
+require_budget 5 list_containers
+containers=$(api "$podman_socket" GET '/containers/json?all=1') || skip "engine_api_unavailable engine=podman"
+require_budget 5 list_pod_members
+native_containers=$(api "$podman_socket" GET "$libpod/containers/json?all=true") || skip "engine_api_unavailable engine=podman"
+container_queue=$(printf '%s\n%s\n' "$containers" "$native_containers" | "$jq_bin" -sr \
+  --arg pattern "$builder_pattern" --argjson stale_after "$stale_after_seconds" "$leftover_filter"'
+  def hex: type == "string" and test("^[0-9a-f]{64}$");
+  def stamp: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.(?<f>[0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})$";
+  if length != 2 or (.[0] | type != "array") or (.[1] | type != "array")
+    then error("not container lists") else . end |
+  .[1] as $native | .[0] |
+  if all($native[]; type == "object" and (.Id | hex) and
+      (.Pod | type == "string" and (. == "" or hex)) and (.IsInfra | type == "boolean") and
+      (.Created | type == "string" and test(stamp)))
+    then . else error("invalid native container list") end |
+  if ([$native[] | .Id] | unique | length) == ($native | length) then . else error("duplicate containers") end |
+  ($native | map({key: .Id, value: {standalone: (.Pod == "" and (.IsInfra | not)),
+    nanos: (.Created | capture(stamp) | (.f // "") + "000000000" | .[:9] | tonumber)}}) |
+    from_entries) as $known |
+  if all(.[]; type == "object" and (.State | type == "string") and (.Id | hex) and
+      (.Created | type == "number" and . >= 0 and floor == .) and
+      ($known[.Id] | type == "object"))
+    then . else error("invalid container list") end |
+  if ([.[] | .Id] | unique | length) == length then . else error("duplicate containers") end |
+  map(select((leftover or terminal) and $known[.Id].standalone)) | sort_by(.Created, $known[.Id].nanos, .Id) | reverse |
+  .[] | "\(.Id) \(if leftover then (if builder then "builder" else "stale" end) else "exited" end) \(names[0] // "-" | ltrimstr("/") | gsub("[^A-Za-z0-9_.-]"; "_"))"
+') || skip "engine_api_invalid engine=podman"
 removed_leftovers=0
+removed_containers=0
+attempted_containers=0
+container_capped=0
+unset budget_skip_reason
 while read -r id kind name; do
   [[ -n $id ]] || continue
-  [[ $id =~ ^[0-9a-f]{64}$ ]] || fail "remove_leftover id=invalid"
-  name=${name//[^A-Za-z0-9_.-]/_}
-  require_budget 15 "remove_leftover name=$name"
-  destructive_request DELETE "$libpod/containers/$id?force=true&timeout=10" 15 container "$id"
-  printf 'removed_leftover kind=%s name=%s\n' "$kind" "$name"
-  removed_leftovers=$((removed_leftovers + 1))
-done <<< "$leftovers"
-safe_to_prune
+  # Only a positively unattempted candidate justifies a container partial skip.
+  budget_skip_reason='bounded_partial cause=budget'
+  if ((attempted_containers >= container_limit)); then
+    container_capped=1
+    break
+  fi
+  require_budget 15 remove_container
+  attempted_containers=$((attempted_containers + 1))
+  if [[ $kind == exited ]]; then
+    destructive_request DELETE "$libpod/containers/$id?force=false" 15 exited "$id"
+    case $request_status in
+      200)
+        printf 'removed_container id=%s\n' "$id"
+        removed_containers=$((removed_containers + 1))
+        ;;
+      404) printf 'kept_container id=%s reason=gone\n' "$id" ;;
+    esac
+  else
+    destructive_request DELETE "$libpod/containers/$id?force=true&timeout=10" 15 container "$id"
+    printf 'removed_leftover kind=%s name=%s\n' "$kind" "$name"
+    removed_leftovers=$((removed_leftovers + 1))
+  fi
+  unset budget_skip_reason
+done <<< "$container_queue"
+# Safe live leftovers beyond the prefix are normal bounded partial work.
+# Unexpected live containers still stop the pass, and no volume/image stage
+# starts until both engines are terminal.
+require_terminal docker "$docker_socket" false
+require_terminal podman "$podman_socket" true
+if ((container_capped)); then
+  require_terminal podman "$podman_socket" false 'bounded_partial cause=cap'
+else
+  require_terminal podman "$podman_socket" false
+fi
+unset budget_skip_reason
 
 # Podman refuses, with 409, to remove a volume that a container still uses;
 # such a volume is kept and reported instead of forced. Any other failure
@@ -303,57 +360,6 @@ for volume in $volumes; do
   esac
 done
 
-# A bulk prune's runtime grows with the number of exited containers, so any
-# deadline can turn a completing prune into an uncertain one. Like images,
-# exited and dead containers are removed by ID, each within its own budget, and
-# a pass leaves the rest for the next. Newest go first, so a container's
-# standalone dependents go before it; force=false keeps Podman's refusal to
-# remove a running container or one that a skipped pod member still depends
-# on. Like Podman's prune, pod members are skipped: an infra container cannot
-# be removed on its own. Only the native list names the
-# pod and has sub-second creation times; the compatible list has whole seconds.
-# This service never touches pods, networks, volumes other than Buildx builder
-# state, or the local Podman storage CLI.
-safe_to_prune
-require_budget 5 list_containers
-containers=$(api "$podman_socket" GET '/containers/json?all=1') || skip "engine_api_unavailable engine=podman"
-require_budget 5 list_pod_members
-native_containers=$(api "$podman_socket" GET "$libpod/containers/json?all=true") || skip "engine_api_unavailable engine=podman"
-container_ids=$(printf '%s\n%s\n' "$containers" "$native_containers" | "$jq_bin" -sr --argjson cap "$container_limit" '
-  def hex: type == "string" and test("^[0-9a-f]{64}$");
-  def stamp: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.(?<f>[0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})$";
-  if length != 2 or (.[0] | type != "array") or (.[1] | type != "array")
-    then error("not container lists") else . end |
-  .[1] as $native | .[0] |
-  if all($native[]; type == "object" and (.Id | hex) and
-      (.Pod | type == "string" and (. == "" or hex)) and (.IsInfra | type == "boolean") and
-      (.Created | type == "string" and test(stamp)))
-    then . else error("invalid native container list") end |
-  if ([$native[] | .Id] | unique | length) == ($native | length) then . else error("duplicate containers") end |
-  ($native | map({key: .Id, value: {standalone: (.Pod == "" and (.IsInfra | not)),
-    nanos: (.Created | capture(stamp) | (.f // "") + "000000000" | .[:9] | tonumber)}}) |
-    from_entries) as $known |
-  map(select(.State == "exited" or .State == "dead")) |
-  if all(.[]; (.Id | hex) and (.Created | type == "number" and . >= 0 and floor == .) and
-      ($known[.Id] | type == "object"))
-    then . else error("invalid container list") end |
-  if ([.[] | .Id] | unique | length) == length then . else error("duplicate containers") end |
-  map(select($known[.Id].standalone)) | sort_by(.Created, $known[.Id].nanos, .Id) | reverse |
-  .[:$cap][] | .Id
-') || skip "engine_api_invalid engine=podman"
-removed_containers=0
-while read -r id; do
-  [[ -n $id ]] || continue
-  require_budget 15 remove_container
-  destructive_request DELETE "$libpod/containers/$id?force=false" 15 exited "$id"
-  case $request_status in
-    200)
-      printf 'removed_container id=%s\n' "$id"
-      removed_containers=$((removed_containers + 1))
-      ;;
-    404) printf 'kept_container id=%s reason=gone\n' "$id" ;;
-  esac
-done <<< "$container_ids"
 safe_to_prune
 require_budget 5 list_images
 images=$(api "$podman_socket" GET '/images/json?all=true') || skip "engine_api_unavailable engine=podman"

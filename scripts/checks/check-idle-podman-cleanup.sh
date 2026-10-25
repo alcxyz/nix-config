@@ -65,10 +65,16 @@ done
 podman_containers() {
   if [[ ${MOCK_RUNNING_AFTER_CONTAINERS:-0} == 1 ]] && rg --quiet '^container ' "$MOCK_CALLS"; then
     printf '%s\n' '[{"State":"running","Names":["/job"]}]'
-  elif rg --quiet '^leftover ' "$MOCK_CALLS"; then
+  elif [[ -n ${MOCK_PODMAN_AFTER_BUILDERS:-} ]] && rg --quiet '^leftover ' "$MOCK_CALLS"; then
     printf '%s\n' "${MOCK_PODMAN_AFTER_BUILDERS:-[]}"
   else
-    printf '%s\n' "${MOCK_PODMAN_CONTAINERS:-[]}"
+    if jq -e 'type == "array"' <<< "${MOCK_PODMAN_CONTAINERS:-[]}" >/dev/null 2>&1; then
+      jq -c --rawfile removed "$MOCK_CALLS" '
+        ($removed | split("\n") | map(select(test("^(container|leftover) ")) | split(" ")[1])) as $ids |
+        map(select(.Id as $id | $ids | index($id) == null))' <<< "${MOCK_PODMAN_CONTAINERS:-[]}"
+    else
+      printf '%s\n' "${MOCK_PODMAN_CONTAINERS:-[]}"
+    fi
   fi
 }
 if [[ $method == GET && $args == *'/containers/json?all=1'* ]]; then
@@ -198,20 +204,20 @@ for unit in forgejo-actions-runner.service forgejo-podman-runner.service; do
 done
 
 # Leaked Buildx builders, running or stopped, are removed with their state
-# volumes before ordinary exited containers.
+# volumes. All container kinds share one queue before volumes.
 : >"$MOCK_CALLS"
 output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$new"',"State":"running","Names":["/buildx_buildkit_app0"]},{"Id":"'"$b"'","Created":'"$new"',"State":"exited","Names":["/buildx_buildkit_site0"]},{"Id":"'"$c"'","Created":'"$old"',"State":"exited","Names":["/job"]}]' \
   MOCK_PODMAN_AFTER_BUILDERS='[{"Id":"'"$c"'","Created":'"$old"',"State":"exited","Names":["/job"]}]' \
   MOCK_VOLUMES='[{"Name":"buildx_buildkit_app0_state"},{"Name":"buildx_buildkit_gone0_state"},{"Name":"other_state"},{"Name":"buildx_buildkit_x"}]' \
   run_cleanup)
-[[ $(cat "$MOCK_CALLS") == "leftover $a"$'\n'"leftover $b"$'\nvolume buildx_buildkit_app0_state\nvolume buildx_buildkit_gone0_state\n'"container $c"$'\nimages' ]]
+[[ $(cat "$MOCK_CALLS") == "leftover $b"$'\n'"leftover $a"$'\n'"container $c"$'\nvolume buildx_buildkit_app0_state\nvolume buildx_buildkit_gone0_state\nimages' ]]
 [[ $output == *'removed_leftover kind=builder name=buildx_buildkit_app0'* && $output == *'pruned leftovers=2 builder_volumes=2 failed_builder_volumes=0 containers=1'* ]]
 # A live container older than the longest job, such as a test database whose
 # job was killed, is removed; a recent one or a runner job container is not.
 : >"$MOCK_CALLS"
 output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$old"',"State":"running","Names":["/docuflow-test-postgres-1-1"]},{"Id":"'"$b"'","Created":'"$old"',"State":"paused","Names":[]}]' \
   run_cleanup)
-[[ $(cat "$MOCK_CALLS") == "leftover $a"$'\n'"leftover $b"$'\nimages' ]]
+[[ $(cat "$MOCK_CALLS") == "leftover $b"$'\n'"leftover $a"$'\nimages' ]]
 [[ $output == *'removed_leftover kind=stale name=docuflow-test-postgres-1-1'* && $output == *'removed_leftover kind=stale name=-'* ]]
 : >"$MOCK_CALLS"
 [[ $(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$new"',"State":"running","Names":["/db"]}]' run_cleanup) == 'skipped reason=containers_live engine=podman' ]]
@@ -221,10 +227,10 @@ output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":'"$old"',"State":"run
 # Leftovers on the Docker engine are not this service's to remove.
 [[ $(MOCK_DOCKER_CONTAINERS='[{"Id":"'"$a"'","Created":'"$old"',"State":"running","Names":["/db"]}]' run_cleanup) == 'skipped reason=containers_live engine=docker' ]]
 STALE_AFTER_SECONDS=3h run_cleanup >/dev/null 2>&1 && exit 1
-# A leftover with an unexpected ID fails instead of being removed by name.
+# An unexpected leftover ID invalidates the snapshot before mutation.
 : >"$MOCK_CALLS"
-if output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"../x","Created":'"$old"',"State":"running","Names":["/db"]}]' run_cleanup 2>&1 >/dev/null); then exit 1; fi
-[[ $output == 'failed step=remove_leftover id=invalid' && ! -s $MOCK_CALLS ]]
+output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"../x","Created":'"$old"',"State":"running","Names":["/db"]}]' run_cleanup)
+[[ $output == 'skipped reason=engine_api_invalid engine=podman' && ! -s $MOCK_CALLS ]]
 # Usage of the Podman store's filesystem triggers the cleanup; the guard's
 # disk keeps only its critical floor.
 [[ $(MOCK_DISK_AVAILABLE=20 MOCK_STORE_AVAILABLE=31 run_cleanup) == 'skipped reason=below_trigger' ]]
@@ -246,8 +252,8 @@ rm -r "$STATE_DIR/cleanup-in-flight"
 # Work under the lifecycle lock stops before a step that would outlast the
 # budget runner start gates allow for.
 : >"$MOCK_CALLS"
-output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' LOCK_BUDGET_SECONDS=12 run_cleanup)
-[[ $output == 'skipped reason=lock_budget_exhausted step=remove_leftover name=buildx_buildkit_app0' && ! -s $MOCK_CALLS ]]
+output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":0,"State":"running","Names":["/buildx_buildkit_app0"]}]' LOCK_BUDGET_SECONDS=12 run_cleanup)
+[[ $output == 'skipped reason=bounded_partial cause=budget step=remove_container' && ! -s $MOCK_CALLS ]]
 output=$(LOCK_BUDGET_SECONDS=12 run_cleanup)
 [[ $output == 'skipped reason=lock_budget_exhausted step=remove_image' && ! -s $MOCK_CALLS ]]
 LOCK_BUDGET_SECONDS=0 run_cleanup >/dev/null 2>&1 && exit 1
@@ -261,7 +267,7 @@ LOCK_BUDGET_SECONDS=0 run_cleanup >/dev/null 2>&1 && exit 1
 [[ $(DF_BIN=false run_cleanup 2>&1) == 'skipped reason=disk_unreadable' ]]
 # A failed API call names its step.
 : >"$MOCK_CALLS"
-if output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' MOCK_BUILDER_DELETE_FAILURE=1 run_cleanup 2>&1 >/dev/null); then exit 1; fi
+if output=$(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":0,"State":"running","Names":["/buildx_buildkit_app0"]}]' MOCK_BUILDER_DELETE_FAILURE=1 run_cleanup 2>&1 >/dev/null); then exit 1; fi
 [[ $output == 'failed step=uncertain_request kind=container' ]]
 [[ -d $STATE_DIR/cleanup-in-flight ]]
 rm -r "$STATE_DIR/cleanup-in-flight"
@@ -278,8 +284,8 @@ MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_app0","/j
 MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":[]}]' expect_none
 MOCK_PODMAN_CONTAINERS='[{"State":"running","Names":["/buildx_buildkit_bad name"]}]' expect_none
 : >"$MOCK_CALLS"
-MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' \
-  MOCK_PODMAN_AFTER_BUILDERS='[{"Id":"'"$a"'","State":"running","Names":["/buildx_buildkit_app0"]}]' run_cleanup >/dev/null
+MOCK_PODMAN_CONTAINERS='[{"Id":"'"$a"'","Created":0,"State":"running","Names":["/buildx_buildkit_app0"]}]' \
+  MOCK_PODMAN_AFTER_BUILDERS='[{"Id":"'"$a"'","Created":0,"State":"running","Names":["/buildx_buildkit_app0"]}]' run_cleanup >/dev/null
 [[ $(cat "$MOCK_CALLS") == "leftover $a" ]]
 MOCK_AVAILABLE=31 expect_none
 MOCK_RUNNER_STATE=activating expect_none
@@ -458,14 +464,14 @@ done
 : >"$MOCK_CALLS"
 output=$(LOCK_BUDGET_SECONDS=22 MOCK_CONTAINER_DELAY=4 CONTAINER_DELETE_LIMIT=3 MOCK_PODMAN_CONTAINERS=$exited run_cleanup)
 [[ $(cat "$MOCK_CALLS") == "container ${ids[2]}"$'\n'"container ${ids[3]}" && ! -e $STATE_DIR/cleanup-in-flight ]]
-[[ $output == "removed_container id=${ids[2]}"$'\n'"removed_container id=${ids[3]}"$'\nskipped reason=lock_budget_exhausted step=remove_container' ]]
+[[ $output == "removed_container id=${ids[2]}"$'\n'"removed_container id=${ids[3]}"$'\nskipped reason=bounded_partial cause=budget step=remove_container' ]]
 # Slow read-only requests before the loop still leave room to remove
 # containers within the normal 40 s budget.
 : >"$MOCK_CALLS"
 : >"$MOCK_REQUESTS"
 output=$(MOCK_GET_DELAY=1.1 MOCK_PODMAN_CONTAINERS=$exited run_cleanup)
-# Ten list requests precede the first removal.
-[[ $(awk '/-X DELETE/ { exit } /-X GET/ { n++ } END { print n }' "$MOCK_REQUESTS") == 10 ]]
+# Four list requests precede the first removal.
+[[ $(awk '/-X DELETE/ { exit } /-X GET/ { n++ } END { print n }' "$MOCK_REQUESTS") == 4 ]]
 (($(rg --count '^removed_container id=' <<<"$output") >= 1))
 [[ ! -e $STATE_DIR/cleanup-in-flight ]]
 # Every exited or dead container needs a valid, unique ID and creation time
