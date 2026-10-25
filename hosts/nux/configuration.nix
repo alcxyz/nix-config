@@ -1,6 +1,5 @@
 # nix-config/hosts/nux/configuration.nix
 {
-  config,
   pkgs,
   inputs,
   username,
@@ -54,6 +53,7 @@ in {
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     inputs.nix-secrets.nixosModules.k8sApiVipPolicy
+    inputs.nix-secrets.nixosModules.k3sClusterSecrets
     inputs.nix-secrets.nixosModules.openbaoClusterPolicy
     "${configDir}/modules/nixos/services/rustfs-native/default.nix"
     inputs.nix-secrets.nixosModules.rustfsApplicationPolicy
@@ -71,18 +71,6 @@ in {
 
   alc.distributedBuildClient.enable = true;
 
-  sops.secrets = {
-    flux_age_key = {
-      key = "flux_age_key";
-    };
-    k3s_server_token = {
-      sopsFile = inputs.nix-secrets.secrets.files.clusterBootstrap.secrets;
-      key = "k3s_server_token";
-      owner = "root";
-      group = "root";
-    };
-  };
-
   services.forge-mirror-audit = {
     enable = true;
     schedule = "*-*-* 00/8:00:00"; # every 8 hours
@@ -95,7 +83,6 @@ in {
     # nex is the retained authoritative member during nux root replacement.
     # A clean nux must join it, never initialize an independent etcd cluster.
     serverAddr = "https://192.168.1.16:6443";
-    tokenFile = config.sops.secrets.k3s_server_token.path;
     tlsSans = [
       "k8s-api.local"
       "192.168.1.250"

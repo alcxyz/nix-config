@@ -1,6 +1,5 @@
 # nix-config/hosts/xev/configuration.nix
 {
-  config,
   inputs,
   lib,
   pkgs,
@@ -15,6 +14,7 @@
     "${configDir}/modules/nixos/services/k8s-backup-s3/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     inputs.nix-secrets.nixosModules.k8sApiVipPolicy
+    inputs.nix-secrets.nixosModules.k3sClusterSecrets
     inputs.nix-secrets.nixosModules.openbaoClusterPolicy
     "${configDir}/modules/nixos/services/rustfs-native/default.nix"
     inputs.nix-secrets.nixosModules.rustfsApplicationPolicy
@@ -105,15 +105,6 @@
     "https://*"
   ];
 
-  sops.secrets = {
-    k3s_server_token = {
-      sopsFile = inputs.nix-secrets.secrets.files.clusterBootstrap.secrets;
-      key = "k3s_server_token";
-      owner = "root";
-      group = "root";
-    };
-  };
-
   k3s = {
     enable = true;
     nodeIp = "192.168.1.13";
@@ -121,7 +112,6 @@
     # Hardware watchdog reset path has not passed qualification on this host.
     rebootWatchdogSec = "0";
     serverAddr = "https://k8s-api.local:6443";
-    tokenFile = config.sops.secrets.k3s_server_token.path;
     extraFlags = [
       "--node-label=nixbox.alc.xyz/protected-browser-worker=true"
     ];
