@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Check the lightweight development gate and workflow routing."""
 
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 
@@ -170,6 +172,33 @@ class DevelopmentCI(unittest.TestCase):
         self.assertIn("CANDIDATE_BRANCH: ${{ forgejo.event.pull_request.head.ref || forgejo.ref_name }}", workflow)
         self.assertIn("scripts/forgejo/commit-status.py require", workflow)
         self.assertNotIn("CI_SOURCE_READ_TOKEN", workflow)
+
+    def test_workflows_pin_the_toolchain_to_the_root_nixpkgs_input(self):
+        # Inputs such as Hyprland bring their own nixpkgs, which the lock may
+        # name "nixpkgs"; the toolchain must follow the root flake's input.
+        root_rev = "1" * 40
+        lock = {
+            "nodes": {
+                "nixpkgs": {"locked": {"type": "github", "owner": "NixOS", "repo": "nixpkgs", "rev": "2" * 40}},
+                "nixpkgs_2": {"locked": {"type": "github", "owner": "NixOS", "repo": "nixpkgs", "rev": root_rev}},
+                "root": {"inputs": {"nixpkgs": "nixpkgs_2"}},
+            },
+            "root": "root",
+        }
+        (self.repository / "flake.lock").write_text(json.dumps(lock))
+        for name in ("check-configurations.yml", "validate-dms-lock.yml"):
+            with self.subTest(workflow=name):
+                workflow = (ROOT / ".forgejo/workflows" / name).read_text()
+                program = workflow.split("revision=$(python3 - <<'PYTHON'\n", 1)[1].split("PYTHON\n", 1)[0]
+                result = subprocess.run(
+                    ["python3", "-"],
+                    input=textwrap.dedent(program),
+                    cwd=self.repository,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), root_rev)
 
 
 if __name__ == "__main__":

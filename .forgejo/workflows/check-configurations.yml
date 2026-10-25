@@ -92,7 +92,8 @@ jobs:
           import json
           import re
           with open("flake.lock") as source:
-              locked = json.load(source)["nodes"]["nixpkgs"]["locked"]
+              nodes = json.load(source)["nodes"]
+              locked = nodes[nodes["root"]["inputs"]["nixpkgs"]]["locked"]
           assert locked["type"] == "github"
           assert (locked["owner"], locked["repo"]) == ("NixOS", "nixpkgs")
           assert re.fullmatch(r"[0-9a-f]{40}", locked["rev"])
