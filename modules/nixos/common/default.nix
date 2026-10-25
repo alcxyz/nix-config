@@ -110,6 +110,10 @@ in {
     layout = "us";
   };
 
+  # Remove old coredumps once stored dumps exceed 1G, instead of systemd's
+  # default of 10% of the filesystem capped at 4GiB.
+  systemd.coredump.settings.Coredump.MaxUse = lib.mkDefault "1G";
+
   # ==================== Boot Configuration ====================
   boot.loader =
     if pkgs.stdenv.hostPlatform.isAarch64

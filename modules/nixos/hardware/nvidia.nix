@@ -18,7 +18,25 @@ in {
       modesetting.enable = true;
       open = false;
       nvidiaSettings = true;
-      package = config.boot.kernelPackages.nvidiaPackages.legacy_580;
+      # patchelf 0.19.2 breaks non-PIE binaries when one call sets both the
+      # interpreter and the rpath: nvidia-smi then segfaults in the loader
+      # (NixOS/nixpkgs#576412). Re-patch the untouched origBin copies in two
+      # calls, as NixOS/nixpkgs#576397 does; drop this once the nixpkgs pin
+      # includes that fix.
+      package = config.boot.kernelPackages.nvidiaPackages.legacy_580.overrideAttrs (old: {
+        postInstall =
+          toString (old.postInstall or "")
+          + ''
+            if [ -n "''${bin:-}" ] && [ -d "$bin/origBin" ]; then
+              for i in "$bin"/origBin/*; do
+                n=$(basename "$i")
+                install -m755 "$i" "$bin/bin/$n"
+                patchelf --set-rpath "$out/lib:$libPath" "$bin/bin/$n"
+                patchelf --interpreter "$(cat "$NIX_CC/nix-support/dynamic-linker")" "$bin/bin/$n"
+              done
+            fi
+          '';
+      });
     };
 
     hardware.graphics = {
