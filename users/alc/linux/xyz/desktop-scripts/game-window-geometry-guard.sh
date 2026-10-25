@@ -64,8 +64,8 @@ repair_geometry() {
     repair_description=""
     return_on_success=false
     if [[ "${1:-launch}" == display && "$return_home" == true ]] \
-      && ((SECONDS <= display_return_until)) \
-      && ((SECONDS >= display_settle_at)) \
+      && ((now <= display_return_until)) \
+      && ((now >= display_settle_at)) \
       && [[ $'\n'"$display_returned" != *$'\n'"$address"$'\n'* ]]; then
       # XWayland and Wine can move a window again while the output
       # reconnects, leaving it contained but away from its declared home.
@@ -273,14 +273,14 @@ update_recovery_deadlines() {
     if [[ "$signature" != '[]' ]] && {
       [[ "$signature" != "$last_display_signature" ]] || [[ "$display_event" == true ]]
     }; then
-      display_until=$((SECONDS + 90))
+      display_until=$((now + 90))
       # Only a change of the watched output itself (its sampled state or an
       # event naming it) restarts the settle delay and the one-time home
       # return; events from other outputs do not.
       # The return is allowed only inside this watched-output recovery, so
       # a later event from another output cannot reuse an expired arm.
       if [[ "$watched_change" == true ]]; then
-        display_settle_at=$((SECONDS + 5))
+        display_settle_at=$((now + 5))
         display_returned=""
         display_return_until=$display_until
       fi
@@ -300,9 +300,9 @@ update_recovery_deadlines() {
     fi
   } 9>"$request_lock"
   if [[ -n "$requested" ]]; then
-    ((SECONDS <= launch_until)) || launch_scope=""
+    ((now <= launch_until)) || launch_scope=""
     [[ "$launch_scope" == "*" ]] || launch_scope+="$requested"$'\n'
-    launch_until=$((SECONDS + 10))
+    launch_until=$((now + 10))
   fi
 }
 
@@ -326,12 +326,15 @@ pending_display_event=false
 pending_watched_change=false
 watched_outputs="$(jq -r '[.[].restoreMonitor // empty] | unique | .[]' <<<"$policies")"
 last_display_signature=""
+# Each pass reads the clock once into now, which the functions use, so one
+# pass sees one time and the contract test can set it.
 while true; do
+  now=$SECONDS
   update_recovery_deadlines
-  if ((SECONDS <= launch_until)); then
+  if ((now <= launch_until)); then
     repair_geometry launch "$launch_scope"
   fi
-  if ((SECONDS <= display_until)); then
+  if ((now <= display_until)); then
     repair_geometry display
   fi
   sleep 1

@@ -48,6 +48,9 @@ policies='[{"classRegex":"^Regression Game$","titleRegex":"^Test Window$","initi
 tolerance=16
 # shellcheck disable=SC2034 # Used by the sourced production function.
 provider=legacy
+# The guard's loop samples SECONDS into now once per pass. The test sets now
+# itself, so deadline sums do not depend on wall-clock time or load.
+now=1000
 monitors_json='[{"id":1,"name":"DP-1","x":0,"y":1456,"width":5120,"height":1440,"dpmsStatus":true},{"id":2,"name":"DP-2","x":0,"y":0,"width":2560,"height":1440,"dpmsStatus":true}]'
 clients_json='[]'
 dispatch_log="$TMP/dispatch.log"
@@ -238,22 +241,22 @@ clients_json=$(jq -cs '.' \
   <(watched_client 0xlauncher Launcher 0 1488 1600 1376) \
   <(watched_client 0xtray '' 400 1600 160 20))
 display_returned=''
-display_settle_at=$((SECONDS - 1))
+display_settle_at=$((now - 1))
 display_return_until=-1
 : >"$dispatch_log"
 repair_geometry display >/dev/null
 [[ ! -s "$dispatch_log" ]] ||
   fail "home return ran without a watched output change: '$(<"$dispatch_log")'"
-display_return_until=$((SECONDS - 1))
+display_return_until=$((now - 1))
 repair_geometry display >/dev/null
 [[ ! -s "$dispatch_log" ]] ||
   fail "home return ran after its watched recovery expired: '$(<"$dispatch_log")'"
-display_return_until=$((SECONDS + 90))
-display_settle_at=$((SECONDS + 5))
+display_return_until=$((now + 90))
+display_settle_at=$((now + 5))
 repair_geometry display >/dev/null
 [[ ! -s "$dispatch_log" ]] ||
   fail "home return ran before the output settled: '$(<"$dispatch_log")'"
-display_settle_at=$((SECONDS - 1))
+display_settle_at=$((now - 1))
 GUARD_TEST_MOVE_FAILS=1 repair_geometry display >/dev/null 2>&1
 [[ -z "$display_returned" ]] ||
   fail "a failed home return was recorded as done: '$display_returned'"
@@ -303,7 +306,7 @@ watched_outputs='DP-1'
 last_display_signature=''
 monitors_on=$monitors_json
 monitors_json=$(jq 'map(if .name == "DP-1" then .dpmsStatus = false else . end)' <<<"$monitors_on")
-SECONDS=5
+now=5
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 0 && "$last_display_signature" == '[]' ]] ||
   fail 'absent watched monitor armed display recovery'
@@ -311,14 +314,14 @@ update_recovery_deadlines >/dev/null
   fail 'first sample armed the home return'
 
 monitors_json=$monitors_on
-SECONDS=500
+now=500
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 590 ]] ||
   fail "off-to-on transition without event armed until $display_until; expected 590"
 [[ "$display_settle_at" == 505 && -z "$display_returned" ]] ||
   fail "arming did not restart the settle delay: $display_settle_at, '$display_returned'"
 
-SECONDS=510
+now=510
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 590 ]] ||
   fail "unchanged available monitor extended deadline to $display_until"
@@ -327,12 +330,12 @@ update_recovery_deadlines >/dev/null
 # the watched output's settle delay and one-time home return.
 display_returned=$'0xlauncher\n'
 : >"$display_requested"
-SECONDS=520
+now=520
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 610 && "$display_settle_at" == 505 && "$display_returned" == $'0xlauncher\n' ]] ||
   fail "unchanged output reset the home return: until $display_until, settle $display_settle_at, '$display_returned'"
 printf '%s\n' 'dpms>>1,HDMI-A-1' >"$display_requested"
-SECONDS=525
+now=525
 update_recovery_deadlines >/dev/null
 [[ "$display_settle_at" == 505 && "$display_returned" == $'0xlauncher\n' ]] ||
   fail "an event for another output reset the home return: settle $display_settle_at, '$display_returned'"
@@ -340,7 +343,7 @@ update_recovery_deadlines >/dev/null
 # A watched-output event resets the home return even when sampling missed
 # the disconnect, so the output returned with an unchanged signature.
 printf '%s\n' 'monitorremovedv2>>1,DP-1,Gaming' 'monitoraddedv2>>1,DP-1,Gaming' >"$display_requested"
-SECONDS=530
+now=530
 update_recovery_deadlines >/dev/null
 [[ "$display_settle_at" == 535 && -z "$display_returned" && "$display_return_until" == 620 ]] ||
   fail "watched-output event did not reset the home return: settle $display_settle_at, '$display_returned', until $display_return_until"
@@ -348,7 +351,7 @@ update_recovery_deadlines >/dev/null
 # A later event from another output reopens containment recovery but not the
 # expired home return.
 printf '%s\n' 'monitoraddedv2>>2,HDMI-A-1,Secondary' >"$display_requested"
-SECONDS=700
+now=700
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 790 && "$display_return_until" == 620 ]] ||
   fail "another output's event extended the home return: until $display_until, return until $display_return_until"
@@ -359,7 +362,7 @@ update_recovery_deadlines >/dev/null
 display_sampled=false
 display_return_until=-1
 last_display_signature=''
-SECONDS=740
+now=740
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 830 && "$display_return_until" == -1 ]] ||
   fail "guard start armed the home return: until $display_until, return until $display_return_until"
@@ -367,7 +370,7 @@ update_recovery_deadlines >/dev/null
 monitor_query_succeeds=false
 last_signature=$last_display_signature
 display_until=0
-SECONDS=600
+now=600
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 0 && "$last_display_signature" == "$last_signature" ]] ||
   fail 'failed monitor query fabricated a wake or replaced the last known state'
@@ -376,16 +379,16 @@ update_recovery_deadlines >/dev/null
 # the home return once sampling recovers with an unchanged signature.
 printf '%s\n' 'monitorremovedv2>>1,DP-1,Gaming' 'monitoraddedv2>>1,DP-1,Gaming' >"$display_requested"
 display_return_until=-1
-SECONDS=601
+now=601
 update_recovery_deadlines >/dev/null
 [[ "$display_return_until" == -1 && ! -e "$display_requested" ]] ||
   fail "home return armed without a monitor sample: until $display_return_until"
 monitor_query_succeeds=true
-SECONDS=602
+now=602
 update_recovery_deadlines >/dev/null
 [[ "$display_until" == 692 && "$display_return_until" == 692 && "$display_settle_at" == 607 ]] ||
   fail "event from a failed query was lost: until $display_until, return until $display_return_until, settle $display_settle_at"
-SECONDS=603
+now=603
 update_recovery_deadlines >/dev/null
 [[ "$display_settle_at" == 607 ]] ||
   fail "a consumed event re-armed the home return: settle $display_settle_at"
@@ -396,13 +399,13 @@ display_until=700
 launch_until=0
 launch_scope=''
 : >"$repair_requested"
-SECONDS=650
+now=650
 update_recovery_deadlines >/dev/null
 [[ "$launch_until" == 0 && "$launch_scope" == '' && ! -e "$repair_requested" ]] ||
   fail "empty request armed launch recovery: '$launch_scope' until $launch_until"
 
 printf '0xone\n' >"$repair_requested"
-SECONDS=652
+now=652
 update_recovery_deadlines >/dev/null
 [[ "$launch_until" == 662 && "$launch_scope" == $'0xone\n' ]] ||
   fail "launch request armed '$launch_scope' until $launch_until; expected 0xone until 662"
@@ -427,12 +430,12 @@ launch_scope=$'0xone\n'
 
 # Address requests accumulate within one launch window and start afresh after it.
 printf '0xtwo\n' >"$repair_requested"
-SECONDS=655
+now=655
 update_recovery_deadlines >/dev/null
 [[ "$launch_scope" == $'0xone\n0xtwo\n' && "$launch_until" == 665 ]] ||
   fail "launch requests did not accumulate: '$launch_scope' until $launch_until"
 printf '0xthree\n' >"$repair_requested"
-SECONDS=700
+now=700
 update_recovery_deadlines >/dev/null
 [[ "$launch_scope" == $'0xthree\n' ]] ||
   fail "expired launch window kept its old scope: '$launch_scope'"
@@ -440,7 +443,7 @@ update_recovery_deadlines >/dev/null
 # A wildcard sweep stays a wildcard when requests arrive during it.
 launch_scope='*'
 printf '0xfour\n' >"$repair_requested"
-SECONDS=705
+now=705
 update_recovery_deadlines >/dev/null
 [[ "$launch_scope" == '*' ]] ||
   fail "request narrowed a wildcard sweep to '$launch_scope'"
