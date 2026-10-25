@@ -173,6 +173,8 @@ in {
     hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:docker://" label) runner.labels;
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
+    assert lib.all (runner: runner.idlePodmanCleanup.enable && runner.ioPressureGuard.diskSpace.enable) (lib.attrValues runners);
+    assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable && runner.ioPressureGuard.enable && runner.ioPressureGuard.admissionControl.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     # xyz has a dedicated ci-fast runner, beside ci-fast overflow on its pool

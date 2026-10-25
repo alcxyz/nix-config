@@ -184,6 +184,7 @@ in {
     package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
     ioPressureGuard = {
       enable = true;
+      diskSpace.enable = true;
       highPercent = 20;
       highDurationSeconds = 20;
       lowPercent = 5;
@@ -201,6 +202,7 @@ in {
         };
       };
     };
+    idlePodmanCleanup.enable = true;
     isolatedDocker.enable = true;
     podmanCanary = {
       enable = true;
