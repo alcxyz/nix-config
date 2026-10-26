@@ -75,6 +75,8 @@ in {
   programs.hyprlock.enable = true;
   programs.kdeconnect.enable = true;
   security.pam.services.hyprlock.u2f.enable = true;
+  # Remote view sessions authenticate with the user's password (ADR-0102).
+  security.pam.services.wayvnc = {};
 
   # DMS owns unlocked idle handling, while the Home Manager lock wrapper starts
   # a private hypridle only for an active Hyprlock. Prevent the package-provided

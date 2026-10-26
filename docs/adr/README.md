@@ -106,6 +106,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0099](0099-agent-github-app.md) | Agent sessions act on GitHub through a GitHub App | Accepted | agent sessions, GitHub |
 | [ADR-0100](0100-instance-wide-podman-runners.md) | Register the Podman runners instance-wide | Accepted | Forgejo runners, xyz, xev, nex, nux |
 | [ADR-0101](0101-description-format-observation-trial.md) | Observe description formatting before deciding on enforcement | Accepted for report-only trial | AI agents, issue and PR descriptions |
+| [ADR-0102](0102-loopback-remote-view-of-xyz.md) | View and drive xyz's live desktop through a loopback wayvnc | Accepted | xyz, mac, remote access, Home Manager |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

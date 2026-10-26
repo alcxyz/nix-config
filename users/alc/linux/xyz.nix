@@ -69,6 +69,7 @@ in {
     "${configDir}/modules/home-manager/programs/niri/default.nix"
     "${configDir}/modules/home-manager/services/dms/default.nix"
     "${configDir}/modules/home-manager/services/hyprlock/default.nix"
+    "${configDir}/modules/home-manager/services/remote-view/default.nix"
     "${configDir}/modules/home-manager/services/waynergy/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
@@ -271,6 +272,11 @@ in {
     enable = true;
     turnOffDisplaysOnLock = true;
     displayOffDelay = 360;
+  };
+  # Reach the live desktop from the Mac through an SSH tunnel (ADR-0102).
+  services.remoteView = {
+    enable = true;
+    output = "DP-1";
   };
   services.waynergy = {
     enable = true;
