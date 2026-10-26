@@ -86,6 +86,8 @@ in {
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
     "${configDir}/modules/home-manager/services/devlog/default.nix"
     "${configDir}/modules/home-manager/services/deck/default.nix"
+    # Refreshes a deck report's data from the document portal (xyz only).
+    inputs.nix-secrets.homeManagerModules.deckShareReport
     # Nightly development statistics collector and its private settings.
     inputs.devstats.homeManagerModules.default
     inputs.nix-secrets.homeManagerModules.devstats
