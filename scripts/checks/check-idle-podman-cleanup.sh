@@ -181,6 +181,10 @@ IMAGE_MIN_AGE=72h run_cleanup >/dev/null
 [[ ! -e $STATE_DIR/cleanup-in-flight ]]
 IMAGE_MIN_AGE=2d run_cleanup >/dev/null 2>&1 && exit 1
 [[ $(MOCK_AVAILABLE=31 run_cleanup) == 'skipped reason=below_trigger' ]]
+[[ $(PRESSURE_ONLY=0 MOCK_AVAILABLE=31 run_cleanup) == *'pruned leftovers='* ]]
+[[ $(PRESSURE_ONLY=0 MOCK_AVAILABLE=31 MOCK_RUNNER_STATE=active run_cleanup) == 'skipped reason=runner_active unit=forgejo-actions-runner.service' ]]
+[[ $(PRESSURE_ONLY=0 MOCK_AVAILABLE=7 CRITICAL_FREE_PERCENT=8 run_cleanup) == 'skipped reason=below_critical_floor' ]]
+PRESSURE_ONLY=invalid run_cleanup >/dev/null 2>&1 && exit 1
 [[ $(MOCK_RUNNER_STATE=active run_cleanup) == 'skipped reason=runner_active unit=forgejo-actions-runner.service' ]]
 
 # Both runners must be fully stopped with an explicitly empty Job= field.

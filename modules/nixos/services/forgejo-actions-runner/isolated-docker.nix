@@ -6,6 +6,11 @@
 }: let
   cfg = config.services.forgejo-actions-runner;
   enabled = cfg.enable && cfg.isolatedDocker.enable;
+  retention = cfg.isolatedDocker.retention;
+  pruneAge =
+    if retention.enable
+    then retention.unusedAge
+    else "168h";
   # The primary runner first, then every Podman runner, as the guard expects.
   runnerUnits = lib.concatStringsSep " " cfg.runnerUnits;
   stateDir = "/var/lib/forgejo-docker";
@@ -24,20 +29,41 @@
     DISK_RECOVERY_BYTES = toString (cfg.ioPressureGuard.diskSpace.recoveryFreeGiB * 1024 * 1024 * 1024);
     DISK_RECOVERY_PERCENT = toString cfg.ioPressureGuard.diskSpace.recoveryFreePercent;
   };
-  daemonConfig = (pkgs.formats.json {}).generate "forgejo-docker.json" {
-    hosts = ["unix://${runtimeDir}/docker.sock"];
-    "data-root" = "${stateDir}/overlay2";
-    "exec-root" = "${runtimeDir}/exec";
-    pidfile = "${runtimeDir}/docker.pid";
-    group = "root"; # Root inside the user namespace maps to the service's group.
-    "storage-driver" = "overlay2";
-    "exec-opts" = ["native.cgroupdriver=cgroupfs"];
-    "default-ulimits".nofile = {
-      Name = "nofile";
-      Soft = 65536;
-      Hard = 65536;
-    };
-  };
+  daemonConfig = (pkgs.formats.json {}).generate "forgejo-docker.json" ({
+      hosts = ["unix://${runtimeDir}/docker.sock"];
+      "data-root" = "${stateDir}/overlay2";
+      "exec-root" = "${runtimeDir}/exec";
+      pidfile = "${runtimeDir}/docker.pid";
+      group = "root"; # Root inside the user namespace maps to the service's group.
+      "storage-driver" = "overlay2";
+      "exec-opts" = ["native.cgroupdriver=cgroupfs"];
+      "default-ulimits".nofile = {
+        Name = "nofile";
+        Soft = 65536;
+        Hard = 65536;
+      };
+    }
+    // lib.optionalAttrs retention.enable {
+      # Docker 29's BuilderGCRule uses filter=until, not keepDuration:
+      # https://github.com/moby/moby/blob/docker-v29.9.1/daemon/config/builder.go
+      # Prefer old unused cache, then reclaim any eligible unused cache over the
+      # target. Periodic GC cannot impose a hard quota or reclaim active builds.
+      builder.gc = {
+        enabled = true;
+        policy = [
+          {
+            reservedSpace = retention.budget;
+            maxUsedSpace = retention.budget;
+            filter = ["until=${retention.unusedAge}"];
+          }
+          {
+            reservedSpace = retention.budget;
+            maxUsedSpace = retention.budget;
+            all = true;
+          }
+        ];
+      };
+    });
   guard = pkgs.writeShellApplication {
     name = "forgejo-runner-aggregate-pressure-guard";
     runtimeInputs = with pkgs; [coreutils gawk procps systemd util-linux];
@@ -82,8 +108,33 @@
     text = builtins.readFile ./game-bypass-control.sh;
   };
 in {
-  options.services.forgejo-actions-runner.isolatedDocker.enable =
-    lib.mkEnableOption "experimental dedicated rootless CI Docker daemon (requires qualification before activation)";
+  options.services.forgejo-actions-runner.isolatedDocker = {
+    enable = lib.mkEnableOption "experimental dedicated rootless CI Docker daemon (requires qualification before activation)";
+    retention = {
+      enable = lib.mkEnableOption "bounded native BuildKit GC and daily dedicated CI Docker pruning";
+      budget = lib.mkOption {
+        type = lib.types.strMatching "[1-9][0-9]*(MiB|GiB|TiB)";
+        default = "20GiB";
+        description = ''
+          Unused build cache GC target for the dedicated Docker daemon, not a
+          hard disk quota. Active build data may exceed this target. Nested
+          docker-container BuildKit builders require their own GC configuration;
+          their cache volumes are preserved by the daily system prune.
+        '';
+      };
+      unusedAge = lib.mkOption {
+        type = lib.types.strMatching "[1-9][0-9]*h";
+        default = "48h";
+        description = ''
+          Prefer build cache unused for this duration during native GC, then
+          reclaim other eligible unused cache above the budget. Also used as
+          the daily system prune age filter. For images and stopped containers,
+          Docker measures creation age, not time since last use. Live containers
+          and volumes are preserved.
+        '';
+      };
+    };
+  };
 
   config = lib.mkIf enabled {
     environment.systemPackages = [gameBypass];
@@ -245,13 +296,16 @@ in {
       serviceConfig = {
         Type = "oneshot";
         ExecStartPre = lib.mkBefore [(lib.getExe lifecycleReady)];
-        ExecStart = "${pkgs.docker}/bin/docker system prune --force --all --filter=until=168h";
+        ExecStart = "${pkgs.docker}/bin/docker system prune --force --all --filter=until=${pruneAge}";
       };
     };
     systemd.timers.forgejo-runner-cache-prune = {
       wantedBy = ["timers.target"];
       timerConfig = {
-        OnCalendar = "weekly";
+        OnCalendar =
+          if retention.enable
+          then "daily"
+          else "weekly";
         RandomizedDelaySec = "6h";
         Persistent = true;
       };

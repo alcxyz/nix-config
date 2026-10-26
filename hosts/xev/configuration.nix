@@ -173,7 +173,9 @@
     ioPressureGuard.admissionControl.enable = true;
     ioPressureGuard.diskSpace.enable = true;
     idlePodmanCleanup.enable = true;
+    idlePodmanCleanup.pressureOnly = false;
     isolatedDocker.enable = true;
+    isolatedDocker.retention.enable = true;
     podmanCanary = {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};

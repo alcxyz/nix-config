@@ -13,6 +13,7 @@ disk_path=${DISK_PATH:-/}
 # measures what it reclaimed; DISK_PATH stays the guard's critical floor.
 store_path=${STORE_PATH:-/var/lib/forgejo-podman/storage}
 trigger_used_percent=${TRIGGER_USED_PERCENT:-70}
+pressure_only=${PRESSURE_ONLY:-1}
 critical_free_bytes=${CRITICAL_FREE_BYTES:-0}
 critical_free_percent=${CRITICAL_FREE_PERCENT:-0}
 image_min_age=${IMAGE_MIN_AGE:-48h}
@@ -54,6 +55,7 @@ fail() {
 [[ ! -e $fence && ! -L $fence ]] || fail cleanup_in_flight
 
 [[ $trigger_used_percent =~ ^[1-9][0-9]?$ ]] || exit 1
+[[ $pressure_only == 0 || $pressure_only == 1 ]] || exit 1
 [[ $critical_free_bytes =~ ^[0-9]+$ && $critical_free_percent =~ ^[0-9]+$ ]] || exit 1
 [[ $image_min_age =~ ^[1-9][0-9]*h$ ]] || exit 1
 [[ $stale_after_seconds =~ ^[1-9][0-9]*$ ]] || exit 1
@@ -81,14 +83,16 @@ available_bytes() {
   ((available <= total)) || return 1
   printf '%s %s\n' "$total" "$available"
 }
-# Disk usage needs no lock, so most runs end here without contending with
-# runner starts.
+# Capacity checks need no lock. The critical floor applies in either mode;
+# pressure-only cleanup also exits before contending with runner starts.
 sample=$(available_bytes "$disk_path") || skip disk_unreadable
 read -r total available <<< "$sample"
 ((available >= critical_free_bytes && available * 100 >= total * critical_free_percent)) || skip below_critical_floor
 sample=$(available_bytes "$store_path") || skip store_unreadable
 read -r total available <<< "$sample"
-((available * 100 <= total * (100 - trigger_used_percent))) || skip below_trigger
+if [[ $pressure_only == 1 ]]; then
+  ((available * 100 <= total * (100 - trigger_used_percent))) || skip below_trigger
+fi
 
 exec 9>"$state_dir/lifecycle.lock"
 flock -w 5 -x 9 || skip lifecycle_locked

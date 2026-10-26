@@ -12,6 +12,22 @@ execution as well as outer job containers, without changing application Docker.
 
 ## Decision
 
+The optional dedicated-daemon retention policy configures native BuildKit GC
+with a 20 GiB unused-cache target and prefers cache unused for 48 hours. It also
+runs dedicated Docker system pruning daily for currently unused images and
+stopped containers created at least 48 hours ago. Volumes remain outside that
+prune. It also prunes eligible unused networks and build cache, independently
+of native GC, and may reduce cache below the target. This is not a filesystem
+quota: active builds, images and protected
+references can retain more data. Separate `docker-container` BuildKit workers
+need their own GC settings and disposable-builder cleanup; daemon GC does not
+manage their cache volumes. Application Docker retention remains separate.
+
+The option stays disabled by default. Fleet hosts explicitly opt in, and the
+runner-pool check verifies their shared settings. Changing daemon GC settings
+requires a controlled application to the running daemon; switching a unit with
+`restartIfChanged = false` alone does not establish runtime activation.
+
 Use a dedicated rootless Docker daemon in a delegated systemd service below the
 existing aggregate build slice. Its daemon and worker descendants inherit the
 slice's CPU/memory budget. The runner connects only to that daemon and loses its

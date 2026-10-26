@@ -146,6 +146,8 @@ in {
 
   forgejo-cleanup-completion-fence-lifecycle = import ./forgejo-cleanup-fence-vm.nix {inherit pkgs;};
 
+  forgejo-docker-retention = import ./forgejo-docker-retention.nix {inherit lib pkgs;};
+
   storage-health-freshness-lifecycle = import ./storage-health-freshness-vm.nix {inherit pkgs;};
 
   forgejo-orphan-monitor-credential-isolation = import ./forgejo-orphan-monitor-vm.nix {inherit pkgs;};
@@ -174,6 +176,14 @@ in {
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
     assert lib.all (runner: runner.idlePodmanCleanup.enable && runner.ioPressureGuard.diskSpace.enable) (lib.attrValues runners);
+    assert lib.all (runner: !runner.idlePodmanCleanup.pressureOnly && runner.idlePodmanCleanup.imageMinAge == "48h") (lib.attrValues runners);
+    assert lib.all (runner: runner.isolatedDocker.retention.enable && runner.isolatedDocker.retention.budget == "20GiB" && runner.isolatedDocker.retention.unusedAge == "48h") (lib.attrValues runners);
+    # Private scheduling may stagger the times, but must not retain a weekly
+    # calendar that overrides the retention policy's daily cleanup.
+    assert lib.all (host: let
+      calendar = host.config.systemd.timers.forgejo-runner-cache-prune.timerConfig.OnCalendar;
+    in
+      calendar == "daily" || builtins.match "\\*-\\*-\\* [0-9][0-9]:[0-9][0-9]:[0-9][0-9]" calendar != null) (lib.attrValues runnerHosts);
     assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable && runner.ioPressureGuard.enable && runner.ioPressureGuard.admissionControl.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedCapacity.${host}) (lib.attrNames runners);

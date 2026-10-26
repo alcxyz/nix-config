@@ -32,6 +32,18 @@ deadline can turn a completing prune into an uncertain one. Retain existing
 request and service budgets, lifecycle exclusion and terminal-job checks. A
 pass may do partial work within its budget.
 
+Cleanup may optionally become eligible below the filesystem-pressure trigger,
+so an existing safe idle window can remove old artifacts before the filesystem
+fills. The critical free-space floor and every lifecycle and completion check
+still apply. This option does not stop runners or create a maintenance window;
+the image creation-age cutoff is eligibility, not a deletion deadline or a
+measurement of time since last use. It does not impose a runtime-store quota.
+That cutoff applies only to images: eligible disposable Buildx builders,
+terminal containers and unused Buildx state volumes retain their existing
+selection rules and can be removed sooner. More eligible windows also create
+more opportunities for an uncertain deletion to retain the completion fence;
+recovery remains explicit even when the filesystem has plenty of free space.
+
 Validate the complete compatible and native container snapshots before any
 container mutation. Exclude native pod members and infra containers from both
 live-leftover/Buildx and exited/dead selection. Order this combined queue by

@@ -37,6 +37,15 @@
 in {
   options.services.forgejo-actions-runner.idlePodmanCleanup = {
     enable = lib.mkEnableOption "bounded Podman CI cache cleanup while every runner is inactive";
+    pressureOnly = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Require the store filesystem to reach triggerUsedPercent before cleanup.
+        Disable to remove eligible old artifacts in any existing safe idle window.
+        This does not drain runners or guarantee a cleanup deadline.
+      '';
+    };
     triggerUsedPercent = lib.mkOption {
       type = lib.types.ints.between 1 99;
       default = 70;
@@ -82,7 +91,7 @@ in {
     ];
 
     systemd.services.forgejo-idle-podman-cleanup = {
-      description = "Remove leftover containers and old idle Podman CI artifacts under disk pressure";
+      description = "Remove leftover containers and old Podman CI artifacts in safe idle windows";
       after = [
         "forgejo-runner-io-pressure-guard.service"
         "forgejo-runner-docker.service"
@@ -91,6 +100,10 @@ in {
       restartIfChanged = false;
       environment = {
         TRIGGER_USED_PERCENT = toString cleanup.triggerUsedPercent;
+        PRESSURE_ONLY =
+          if cleanup.pressureOnly
+          then "1"
+          else "0";
         CRITICAL_FREE_BYTES = toString (cfg.ioPressureGuard.diskSpace.criticalFreeGiB * 1024 * 1024 * 1024);
         CRITICAL_FREE_PERCENT = toString cfg.ioPressureGuard.diskSpace.criticalFreePercent;
         DISK_PATH = cfg.ioPressureGuard.diskSpace.path;
