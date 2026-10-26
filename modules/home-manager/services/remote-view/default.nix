@@ -15,6 +15,9 @@
     umask 077
     ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg stateDir}
     if [ ! -s ${lib.escapeShellArg rsaKey} ]; then
+      # ssh-keygen refuses to overwrite an existing (even empty) file without
+      # a prompt, and systemd gives it no stdin.
+      ${pkgs.coreutils}/bin/rm -f ${lib.escapeShellArg rsaKey}
       ${pkgs.openssh}/bin/ssh-keygen -q -m pem -t rsa -b 3072 -N "" \
         -f ${lib.escapeShellArg rsaKey}
       ${pkgs.coreutils}/bin/rm -f ${lib.escapeShellArg "${rsaKey}.pub"}
@@ -23,8 +26,10 @@
 in {
   # ADR-0102: view and drive the live Wayland desktop from another machine.
   # The server listens on loopback only and is reached through SSH; every
-  # session authenticates with the user's own password through PAM, so local
-  # processes running as the same user cannot drive the desktop without it.
+  # session authenticates with the user's own password through PAM. Within
+  # the same-user limit this stops a local process from connecting by
+  # accident, not a deliberate one, which can already use the compositor's
+  # capture and virtual-input protocols directly.
   # The host must define the matching PAM service:
   # `security.pam.services.wayvnc = {};`.
   options.services.remoteView = {
@@ -69,7 +74,9 @@ in {
             ++ lib.optional (cfg.output != null) "--output=${cfg.output}"
           ))
         ];
-        Restart = "on-failure";
+        # wayvnc exits cleanly when the compositor goes away; come back with
+        # the next session instead of staying stopped.
+        Restart = "always";
         RestartSec = 5;
       };
     };

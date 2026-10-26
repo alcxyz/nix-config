@@ -14,9 +14,12 @@ anywhere over NetBird, but none of these can be answered over SSH, and the
 existing ways in (Synergy, ADR-0054; KDE Connect) send input without showing
 the screen and only work nearby.
 
-Agents on xyz run as the operator's own Unix user. A remote view must
+Agents on xyz run as the operator's own Unix user. A remote view should
 therefore not let a local process drive the desktop merely because it can
-reach a local socket.
+reach a local socket. That is an accident guard, not a boundary: under the
+same-user limit (ADR-0078), a process running as the operator can already
+capture the screen and inject input through the compositor's own protocols,
+read the server's key, or stop the server and listen in its place.
 
 ## Decision
 
@@ -36,8 +39,9 @@ Run wayvnc in the Hyprland session through a small Home Manager module,
 
 The consent dialog keeps its rules. The request still comes from the active
 local session, and approving it still takes the operator's password in the
-dialog; the remote view only carries the operator's own keystrokes to it, now
-behind a second password check at the VNC server.
+dialog; the remote view only carries the operator's own keystrokes to it. As
+with the dialog itself, this protects against an agent approving its own
+request, not against a deliberately hostile process running as the operator.
 
 ## Alternatives Considered
 
@@ -50,11 +54,16 @@ behind a second password check at the VNC server.
   policy to maintain. The SSH tunnel reuses the access control that already
   exists.
 - **No VNC authentication on loopback.** Any process running as the operator,
-  agents included, could connect and drive the desktop. Rejected.
-- **A password stored for wayvnc, or legacy DES for macOS Screen Sharing.**
-  A stored secret is one more thing to provision, and DES provides no
-  encryption and truncates the password. PAM reuses the operator's existing
-  password, which agents do not have.
+  agents included, could connect and drive the desktop by mistake. Rejected.
+- **A separate password stored for wayvnc, or legacy DES for macOS Screen
+  Sharing.** A stored password is readable by every process running as the
+  operator, so it would not even stop an accidental connection; DES also
+  provides no encryption and truncates the password. PAM reuses the
+  operator's existing password, which agents are not given.
+- **wayvnc under a dedicated user.** It would keep the key and the service out
+  of the operator's reach, but needs cross-user access to the Wayland socket,
+  and same-user processes would still have the compositor's own capture and
+  input protocols. Not worth it while the same-user limit stands.
 - **A second, headless session (ADR-0012 style).** It cannot show the dialogs
   and lock screen of the live session, which is the point.
 
@@ -70,6 +79,10 @@ behind a second password check at the VNC server.
   typing into Hyprlock through the view, before relying on it.
 - Only one output is visible at a time, and viewing quality depends on the
   link; VNC sends only changed regions.
-- The service is always running while the session is up. Its exposure is the
-  loopback socket, guarded by the operator's password; there is no lockout
-  after failed attempts.
+- The service runs, and restarts, whenever the session is up. Its exposure is
+  the loopback socket, guarded by the operator's password; there is no
+  lockout after failed attempts.
+- A process running as the operator could stop the server and impersonate it
+  with its key to capture what the operator types through the view, including
+  that password. This is accepted under the same-user limit, as for the
+  consent dialog, which such a process could imitate as well.
