@@ -462,6 +462,36 @@ class RecoveryTests(RecoveryFixture, unittest.TestCase):
                             process.communicate()
 
 
+class DockerRecoveryTests(RecoveryFixture, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        headers = self.fence / "response-headers"
+        headers.write_text("HTTP/1.1 500 Failure\r\nContent-Length: 0\r\n\r\n")
+        headers.chmod(0o600)
+        self.owner.write_text(
+            "cleanup-v3 123 123 0 docker DELETE /volumes/fixture_one?force=false\n"
+        )
+
+    test_generation_change_is_never_completion = RecoveryTests.test_generation_change_is_never_completion
+    test_clean_stop_zero_generation_requires_full_worker_terminal_proof = RecoveryTests.test_clean_stop_zero_generation_requires_full_worker_terminal_proof
+    test_aggregate_workers_freezer_jobs_and_unknown_evidence_refuse = RecoveryTests.test_aggregate_workers_freezer_jobs_and_unknown_evidence_refuse
+    test_each_pending_or_active_unit_refuses = RecoveryTests.test_each_pending_or_active_unit_refuses
+
+    def test_exact_docker_protocol_only(self):
+        for record in [
+            "cleanup-v2 123 123 0 DELETE /volumes/fixture_one?force=false",
+            "cleanup-v3 123 123 0 podman DELETE /volumes/fixture_one?force=false",
+            "cleanup-v3 123 123 0 docker DELETE /volumes/fixture_one?force=true",
+            "cleanup-v3 123 123 0 docker DELETE /volumes/../fixture?force=false",
+            "cleanup-v3 123 123 0 docker POST /volumes/prune",
+            "cleanup-v3 123 123 0 docker DELETE /volumes/fixture_one?force=false&extra=1",
+            "cleanup-v3 123 123 0 docker DELETE /v5.0.0/libpod/volumes/fixture_one",
+        ]:
+            with self.subTest(record=record):
+                self.owner.write_text(record + "\n")
+                self.refused()
+
+
 class ThreeRunnerRecoveryTests(RecoveryFixture, unittest.TestCase):
     """An extra Podman runner unit is part of the baked list and the proof."""
 

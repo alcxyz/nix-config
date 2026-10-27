@@ -48,19 +48,25 @@ identity=$(stat -c '%d:%i:%u:%a' -- "$fence")
 owner_identity=$(stat -c '%d:%i:%u:%a:%h' -- "$fence/owner")
 generation_identity=$(stat -c '%d:%i:%u:%a:%h' -- "$fence/api-generations")
 owner=$(cat "$fence/owner")
-[[ $(wc -l <"$fence/owner") == 1 && $owner =~ ^cleanup-v2\ [1-9][0-9]*\ [1-9][0-9]*\ [0-9]+\ (DELETE|POST)\ /[^[:space:]]+$ ]] || fail fence_format
-read -r _ _ _ _ method request_path <<<"$owner"
-case "$method:$request_path" in
-  # A fence kept by an older cleanup that still used the bulk prune (#719).
-  POST:/v5.0.0/libpod/containers/prune) ;;
-  DELETE:*)
-    [[ $request_path =~ ^/images/[0-9a-f]{64}\?force=false\&noprune=true$ ||
-      $request_path =~ ^/v5\.0\.0/libpod/containers/[0-9a-f]{64}\?force=true\&timeout=10$ ||
-      $request_path =~ ^/v5\.0\.0/libpod/containers/[0-9a-f]{64}\?force=false$ ||
-      $request_path =~ ^/v5\.0\.0/libpod/volumes/buildx_buildkit_[A-Za-z0-9][A-Za-z0-9_.-]*_state$ ]] || fail fence_format
-    ;;
-  *) fail fence_format ;;
-esac
+[[ $(wc -l <"$fence/owner") == 1 ]] || fail fence_format
+if [[ $owner =~ ^cleanup-v3\ [1-9][0-9]*\ [1-9][0-9]*\ [0-9]+\ docker\ DELETE\ /volumes/[A-Za-z0-9][A-Za-z0-9_.-]*\?force=false$ ]]; then
+  docker_v3=1 # Completion proof below covers both APIs.
+else
+  docker_v3=0
+  [[ $owner =~ ^cleanup-v2\ [1-9][0-9]*\ [1-9][0-9]*\ [0-9]+\ (DELETE|POST)\ /[^[:space:]]+$ ]] || fail fence_format
+  read -r _ _ _ _ method request_path <<<"$owner"
+  case "$method:$request_path" in
+    # A fence kept by an older cleanup that still used the bulk prune (#719).
+    POST:/v5.0.0/libpod/containers/prune) ;;
+    DELETE:*)
+      [[ $request_path =~ ^/images/[0-9a-f]{64}\?force=false\&noprune=true$ ||
+        $request_path =~ ^/v5\.0\.0/libpod/containers/[0-9a-f]{64}\?force=true\&timeout=10$ ||
+        $request_path =~ ^/v5\.0\.0/libpod/containers/[0-9a-f]{64}\?force=false$ ||
+        $request_path =~ ^/v5\.0\.0/libpod/volumes/buildx_buildkit_[A-Za-z0-9][A-Za-z0-9_.-]*_state$ ]] || fail fence_format
+      ;;
+    *) fail fence_format ;;
+  esac
+fi
 generations=$(cat "$fence/api-generations")
 mapfile -t generation_lines <"$fence/api-generations"
 [[ ${#generation_lines[@]} == 2 && $(wc -l <"$fence/api-generations") == 2 ]] || fail generation_format
@@ -74,6 +80,7 @@ shopt -s nullglob dotglob
 for path in "$fence"/*; do
   case "$path" in
     "$fence/owner" | "$fence/api-generations" | "$fence/response") ;;
+    "$fence/response-headers") ((docker_v3 == 1)) || fail unknown_fence_file ;;
     *) fail unknown_fence_file ;;
   esac
   trusted_file "$path" || fail fence_file

@@ -26,6 +26,7 @@ lock_budget_seconds=${LOCK_BUDGET_SECONDS:-40}
 # A pass may make partial progress; never turn selection into a bulk prune.
 image_limit=${IMAGE_DELETE_LIMIT:-8}
 container_limit=${CONTAINER_DELETE_LIMIT:-8}
+docker_volume_manifest=${DOCKER_VOLUME_MANIFEST:-}
 fence=$state_dir/cleanup-in-flight
 umask 077
 primary_runner=forgejo-actions-runner.service
@@ -62,7 +63,7 @@ fail() {
 [[ $lock_budget_seconds =~ ^[1-9][0-9]*$ ]] && ((lock_budget_seconds <= 40)) || exit 1
 [[ $image_limit =~ ^[1-9][0-9]*$ ]] && ((image_limit <= 8)) || exit 1
 [[ $container_limit =~ ^[1-9][0-9]*$ ]] && ((container_limit <= 8)) || exit 1
-IFS=$' \t\n' read -r -d '' -a runner_units <<< "$runner_units_text" || true
+IFS=$' \t\n' read -r -d '' -a runner_units <<<"$runner_units_text" || true
 ((${#runner_units[@]} > 1)) || exit 1
 [[ ${runner_units[0]} == "$primary_runner" && ${runner_units[1]} == "$podman_runner" ]] || exit 1
 for ((i = 0; i < ${#runner_units[@]}; i++)); do
@@ -75,10 +76,35 @@ done
 # The service runs as root. Isolated unprivileged fixtures own their own state.
 [[ $(stat -c '%u:%a' -- "$state_dir") == "$EUID:700" ]] || skip aggregate_state_untrusted
 
+# Manual Docker mode is an exact operator allowlist, never an automatic policy.
+# Read through a verified descriptor so replacement cannot change parsed bytes.
+docker_volume_queue=''
+if [[ -n $docker_volume_manifest ]]; then
+  [[ -f $docker_volume_manifest && ! -L $docker_volume_manifest &&
+    $(stat -c '%u:%a:%h' -- "$docker_volume_manifest") == "$EUID:600:1" ]] || fail docker_manifest_untrusted
+  manifest_identity=$(stat -c '%d:%i:%u:%a:%h:%s' -- "$docker_volume_manifest") || fail docker_manifest_untrusted
+  exec 8<"$docker_volume_manifest" || fail docker_manifest_untrusted
+  [[ -f /proc/self/fd/8 && ! -L $docker_volume_manifest &&
+    $(stat -Lc '%u:%a:%h' -- /proc/self/fd/8) == "$EUID:600:1" &&
+    $(stat -Lc '%d:%i:%u:%a:%h:%s' -- /proc/self/fd/8) == "$manifest_identity" &&
+    $(stat -c '%d:%i:%u:%a:%h:%s' -- "$docker_volume_manifest") == "$manifest_identity" ]] || fail docker_manifest_untrusted
+  docker_volume_queue=$("$jq_bin" -ser '
+    def name: type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]*\\z");
+    def stamp: type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})\\z");
+    if length != 1 then error("manifest count") else .[0] end |
+    if type == "object" and keys == ["volumes"] and (.volumes | type == "array") and
+      all(.volumes[]; type == "object" and keys == ["created_at", "name"] and
+        (.name | name) and (.created_at | stamp)) and
+      ([.volumes[].name] | unique | length) == (.volumes | length)
+    then [.volumes[] | [.name, .created_at] | @tsv] | join("\n") else error("invalid manifest") end
+  ' <&8) || fail docker_manifest_invalid
+  exec 8<&-
+fi
+
 available_bytes() {
   local path=$1 sample total available
   sample=$($df_bin --block-size=1 --output=size,avail "$path" | awk 'NR == 2 { print $1, $2 }') || return 1
-  read -r total available <<< "$sample"
+  read -r total available <<<"$sample"
   [[ $total =~ ^[1-9][0-9]*$ && $available =~ ^[0-9]+$ ]] || return 1
   ((available <= total)) || return 1
   printf '%s %s\n' "$total" "$available"
@@ -86,10 +112,10 @@ available_bytes() {
 # Capacity checks need no lock. The critical floor applies in either mode;
 # pressure-only cleanup also exits before contending with runner starts.
 sample=$(available_bytes "$disk_path") || skip disk_unreadable
-read -r total available <<< "$sample"
+read -r total available <<<"$sample"
 ((available >= critical_free_bytes && available * 100 >= total * critical_free_percent)) || skip below_critical_floor
 sample=$(available_bytes "$store_path") || skip store_unreadable
-read -r total available <<< "$sample"
+read -r total available <<<"$sample"
 if [[ $pressure_only == 1 ]]; then
   ((available * 100 <= total * (100 - trigger_used_percent))) || skip below_trigger
 fi
@@ -124,7 +150,14 @@ for marker in owned pending teardown-required drain-pending resume-pending drain
 done
 
 query_unit() {
-  timeout -k 2s 5s "$systemctl_bin" "$@"
+  if [[ -n $docker_volume_manifest ]]; then
+    local remaining=$((lock_deadline - SECONDS))
+    ((remaining > 0)) || return 1
+    ((remaining <= 5)) || remaining=5
+    timeout -s KILL "${remaining}s" "$systemctl_bin" "$@"
+  else
+    timeout -k 2s 5s "$systemctl_bin" "$@"
+  fi
 }
 [[ $(query_unit show --property=FreezerState --value forgejobuilds.slice) == running ]] || skip aggregate_frozen
 query_unit is-active --quiet forgejo-runner-io-pressure-guard.service || skip guard_inactive
@@ -180,20 +213,45 @@ api() {
 # incomplete. No EXIT/signal trap clears it. Only this request's validated
 # acknowledgement permits removal while the lifecycle lock is still held.
 destructive_request() {
-  local method=$1 path=$2 max_time=$3 kind=$4 id=${5:-} record identity response filter=''
+  local method=$1 path=$2 max_time=$3 kind=$4 id=${5:-} record identity response filter='' socket=$podman_socket
+  local -a response_options=()
   [[ ! -e $fence && ! -L $fence ]] || fail cleanup_in_flight
   mkdir -m 0700 -- "$fence" || fail cleanup_in_flight
   identity=$(stat -c '%d:%i:%u:%a' -- "$fence") || fail cleanup_fence_record
   record="cleanup-v2 $$ $BASHPID $RANDOM $method $path"
-  printf '%s\n' "$record" > "$fence/owner" || fail cleanup_fence_record
-  printf '%s' "$api_generations" > "$fence/api-generations" || fail cleanup_fence_record
+  if [[ $kind == docker_volume ]]; then
+    socket=$docker_socket
+    record="cleanup-v3 $$ $BASHPID $RANDOM docker $method $path"
+    response_options=(--dump-header "$fence/response-headers")
+  fi
+  printf '%s\n' "$record" >"$fence/owner" || fail cleanup_fence_record
+  printf '%s' "$api_generations" >"$fence/api-generations" || fail cleanup_fence_record
   response=$fence/response
-  request_status=$(request "$podman_socket" "$method" "$path" "$max_time" \
-    --output "$response" --write-out '%{http_code}') || fail "uncertain_request kind=$kind"
+  request_status=$(request "$socket" "$method" "$path" "$max_time" \
+    --output "$response" "${response_options[@]}" --write-out '%{http_code}') || fail "uncertain_request kind=$kind"
   [[ -f $response && ! -L $response ]] || fail "uncertain_response kind=$kind"
-  (( $(stat -c '%s' -- "$response") <= 8388608 )) || fail "oversized_response kind=$kind"
+  (($(stat -c '%s' -- "$response") <= 8388608)) || fail "oversized_response kind=$kind"
   case "$kind:$request_status" in
+    docker_volume:204)
+      [[ ! -s $response ]] || fail "invalid_response kind=$kind"
+      # curl follows HTTP 204 semantics and ignores even an illegally declared
+      # body. Reject nonempty framing as well as bytes in the output file.
+      [[ -f $fence/response-headers && ! -L $fence/response-headers ]] || fail "invalid_response kind=$kind"
+      awk '
+        { sub(/\r$/, ""); line=tolower($0) }
+        /^HTTP\// { ack=($2 == "204") }
+        line ~ /^content-length:/ {
+          sub(/^content-length:[ \t]*/, "", line)
+          if (line != "0") bad=1
+        }
+        line ~ /^transfer-encoding:/ { bad=1 }
+        END { exit (bad || !ack) }
+      ' "$fence/response-headers" || fail "invalid_response kind=$kind"
+      ;;
     volume:204) [[ ! -s $response ]] || fail "invalid_response kind=$kind" ;;
+    docker_volume:409)
+      filter='type == "object" and (.message | type == "string" and length > 0)'
+      ;;
     volume:409 | image:409)
       filter='type == "object" and .response == 409 and
         (.message | type == "string" and length > 0) and (.cause | type == "string")'
@@ -223,12 +281,17 @@ destructive_request() {
   fi
   [[ -d $fence && ! -L $fence && -f $fence/owner && ! -L $fence/owner ]] || fail cleanup_fence_ownership
   [[ $(stat -c '%d:%i:%u:%a' -- "$fence") == "$identity" &&
-     $(stat -c '%u:%a' -- "$fence/owner") == "$EUID:600" &&
-     $(cat "$fence/owner") == "$record" ]] || fail cleanup_fence_ownership
+  $(stat -c '%u:%a' -- "$fence/owner") == "$EUID:600" &&
+  $(cat "$fence/owner") == "$record" ]] || fail cleanup_fence_ownership
   # Remove only the known files, never recursively remove uncertain state.
   [[ -f $fence/api-generations && ! -L $fence/api-generations &&
-     $(stat -c '%u:%a' -- "$fence/api-generations") == "$EUID:600" &&
-     $(cat "$fence/api-generations") == "${api_generations%$'\n'}" ]] || fail cleanup_fence_ownership
+    $(stat -c '%u:%a' -- "$fence/api-generations") == "$EUID:600" &&
+    $(cat "$fence/api-generations") == "${api_generations%$'\n'}" ]] || fail cleanup_fence_ownership
+  if [[ $kind == docker_volume ]]; then
+    [[ -f $fence/response-headers && ! -L $fence/response-headers &&
+      $(stat -c '%u:%a:%h' -- "$fence/response-headers") == "$EUID:600:1" ]] || fail cleanup_fence_ownership
+    rm -- "$fence/response-headers" || fail cleanup_fence_clear
+  fi
   rm -- "$response" "$fence/owner" "$fence/api-generations" || fail cleanup_fence_clear
   rmdir -- "$fence" || fail cleanup_fence_clear
 }
@@ -257,7 +320,7 @@ require_terminal() {
     --argjson allow_leftovers "$allow_leftovers" "$leftover_filter"'
     if type != "array" then error("not a container list") else all(.[];
       (.State | type == "string") and (terminal or ($allow_leftovers and leftover))) end' \
-    <<< "$containers" >/dev/null 2>&1 || status=$?
+    <<<"$containers" >/dev/null 2>&1 || status=$?
   ((status != 1)) || skip "$live_reason engine=$engine"
   ((status == 0)) || skip "engine_api_invalid engine=$engine"
 }
@@ -265,6 +328,70 @@ safe_to_prune() {
   require_terminal docker "$docker_socket" false
   require_terminal podman "$podman_socket" false
 }
+
+# Docker mode never enters any Podman mutation stage. Validate both complete
+# inventories, including mount references from stopped Docker containers.
+if [[ -n $docker_volume_manifest ]]; then
+  docker_references=''
+  for engine in docker podman; do
+    socket=$docker_socket
+    [[ $engine != podman ]] || socket=$podman_socket
+    require_budget 5 "check_containers engine=$engine"
+    containers=$(api "$socket" GET '/containers/json?all=1') || skip "engine_api_unavailable engine=$engine"
+    references=$("$jq_bin" -ser --arg engine "$engine" '
+      def name: type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]*\\z");
+      if length != 1 then error("snapshot count") else .[0] end |
+      if type == "array" and all(.[]; type == "object" and
+          (.Id | type == "string" and test("^[0-9a-f]{64}\\z")) and
+          (.Created | type == "number" and . >= 0 and floor == .) and
+          (.State == "exited" or .State == "dead") and
+          (if $engine == "docker" then
+            (.Mounts | type == "array" and all(.[]; type == "object" and
+              (.Type == "bind" or .Type == "tmpfs" or .Type == "volume" or .Type == "image" or .Type == "npipe") and
+              (if .Type == "volume" then (.Name | name) else true end)))
+           else true end)) and ([.[].Id] | unique | length) == length
+      then [.[] | select($engine == "docker") | .Mounts[] |
+        select(.Type == "volume") | .Name] | join("\n")
+      else error("invalid terminal inventory") end
+    ' <<<"$containers") || skip "engine_api_invalid engine=$engine"
+    [[ $engine != docker ]] || docker_references=$references
+  done
+  attempted_volumes=0
+  while IFS=$'\t' read -r volume created_at; do
+    [[ -n $volume ]] || continue
+    if [[ $'\n'$docker_references$'\n' == *$'\n'"$volume"$'\n'* ]]; then
+      printf 'kept_docker_volume name=%s reason=referenced\n' "$volume"
+      continue
+    fi
+    ((attempted_volumes < 2)) || skip 'bounded_partial cause=cap step=remove_docker_volume'
+    budget_skip_reason='bounded_partial cause=budget'
+    require_budget 5 inspect_docker_volume
+    # Inspect is read-only: a 404 may report absence, but never acknowledges a
+    # dispatched DELETE. Capture HTTP status separately from the JSON body.
+    inspected=$(request "$docker_socket" GET "/volumes/$volume" 5 --write-out $'\n%{http_code}') || skip engine_api_unavailable
+    inspect_status=${inspected##*$'\n'}
+    inspected=${inspected%$'\n'*}
+    if [[ $inspect_status == 404 ]]; then
+      printf 'kept_docker_volume name=%s reason=absent\n' "$volume"
+      continue
+    fi
+    [[ $inspect_status == 200 ]] || skip engine_api_unavailable
+    "$jq_bin" -se --arg name "$volume" --arg created_at "$created_at" '
+      length == 1 and (.[0] | type == "object" and .Name == $name and
+        .CreatedAt == $created_at and .Driver == "local" and .Scope == "local" and
+        (has("Options") and (.Options == null or .Options == {})))
+    ' <<<"$inspected" >/dev/null 2>&1 || skip docker_volume_inspect_mismatch
+    require_budget 25 remove_docker_volume
+    attempted_volumes=$((attempted_volumes + 1))
+    destructive_request DELETE "/volumes/$volume?force=false" 25 docker_volume "$volume"
+    case $request_status in
+      204) printf 'removed_docker_volume name=%s\n' "$volume" ;;
+      409) printf 'kept_docker_volume name=%s reason=in_use\n' "$volume" ;;
+    esac
+  done <<<"$docker_volume_queue"
+  printf 'docker_volume_pass attempts=%s\n' "$attempted_volumes"
+  exit 0
+fi
 
 require_terminal docker "$docker_socket" false
 require_terminal podman "$podman_socket" true
@@ -331,7 +458,7 @@ while read -r id kind name; do
     removed_leftovers=$((removed_leftovers + 1))
   fi
   unset budget_skip_reason
-done <<< "$container_queue"
+done <<<"$container_queue"
 # Safe live leftovers beyond the prefix are normal bounded partial work.
 # Unexpected live containers still stop the pass, and no volume/image stage
 # starts until both engines are terminal.
@@ -387,7 +514,7 @@ image_ids=$("$jq_bin" -sr --arg age "${image_min_age%h}" --argjson cap "$image_l
   map(select(.Containers == 0 and .Created <= now - $age and (.RepoTags | length) <= 1) |
     select((.Id | id) as $i | $parents | index($i) == null)) |
   sort_by(.Created, .Id) | .[:$cap][] | .Id | id
-' <<< "$images") || skip "engine_api_invalid engine=podman"
+' <<<"$images") || skip "engine_api_invalid engine=podman"
 removed_images=0
 while read -r id; do
   [[ -n $id ]] || continue
@@ -398,10 +525,10 @@ while read -r id; do
   else
     printf 'kept_image id=%s reason=conflict\n' "$id"
   fi
-done <<< "$image_ids"
+done <<<"$image_ids"
 
 if sample=$(available_bytes "$store_path"); then
-  read -r _ available_after <<< "$sample"
+  read -r _ available_after <<<"$sample"
   reclaimed=$((available_after - available))
 else
   reclaimed=unknown

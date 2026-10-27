@@ -2,7 +2,7 @@
 
 **Status:** Accepted; recovery and deployment require qualification
 **Date:** 2026-10-06
-**Applies to:** idle Podman runner cleanup and aggregate admission
+**Applies to:** idle runner cleanup and aggregate admission
 **Amended:** 2026-10-17, exited containers outside pods follow capped per-ID deletion like images, newest first ([#719](https://git.alc.xyz/alcxyz/nix-config/issues/719)).
 **Amended:** 2026-10-17, the fence, cleanup window and recovery cover every runner in the configured list, which may hold more than one Podman runner ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
 
@@ -57,6 +57,36 @@ terminal checks still precede builder-volume and image cleanup. Creation order
 is a heuristic, not dependency discovery: skipped dependents and clock changes
 can still cause refusals, and uncertain responses retain the fence.
 
+Manual Docker volume cleanup is a separate opt-in mode, selected only by a
+nonempty `DOCKER_VOLUME_MANIFEST` path. The default remains normal Podman
+cleanup, with its existing limits. The manifest is a regular, non-symlink,
+single-link file owned by the executing UID (root in the installed service),
+mode `0600`, with the exact schema
+`{"volumes":[{"name":"fixture_volume","created_at":"2026-01-01T00:00:00Z"}]}`.
+Validate the complete manifest before mutation: reject unknown keys, duplicate
+names, unsafe names and malformed creation timestamps. This is a manually
+reviewed identity allowlist, not a naming-prefix or automatic retention policy.
+
+Both engine inventories must be completely validated and fully terminal before
+any mutation in this mode; Podman leftovers are not eligible. Preserve every
+volume referenced by any Docker container, including stopped containers.
+Inspect each candidate through the dedicated Docker socket and require exact
+`Name` and `CreatedAt` equality, `local` driver and scope, and empty options
+(null or an empty object). An inspect 404 may report absence. Delete only the
+exact `/volumes/<name>?force=false` endpoint, never bulk prune, force deletion
+or raw directory removal. This mode makes no Podman mutations.
+
+Allow at most two sequential per-name DELETE attempts per pass. Each request
+has a maximum 25-second client deadline and must fit its remaining lock budget;
+read-only requests also check their remaining budget. Keep the existing
+40-second lock budget and 60-second service bound. A cap or insufficient budget
+for the next request is a normal `bounded_partial` result. `PRESSURE_ONLY=0`
+may bypass the ordinary pressure trigger, but never the critical capacity
+floors, lifecycle preflight, exact configured runner registry, all-runner
+terminal inactivity, healthy unfrozen aggregate or both API execution-generation
+checks. A client deadline does not cancel server-side deletion. Real Docker
+qualification remains required before operational use.
+
 Before each destructive request, create an independently owned, trusted runtime
 completion fence under the lifecycle lock. Clear it only on a validated complete
 acknowledgement belonging to that request. Timeout, disconnect, helper death,
@@ -67,6 +97,18 @@ root-executed conditions under the shared lifecycle lock. Docker's condition
 checks only the cleanup fence, retaining ordinary Docker-only boot ordering;
 Podman's existing registry and controller checks remain in force. The guard remains healthy; freeze,
 thaw, teardown and manually stopped runner ownership remain independent.
+
+Normal Podman requests retain the `cleanup-v2 <pid> <bashpid> <nonce> <method>
+<path>` owner format and its compatible recovery parser. Manual Docker volume
+requests use the explicit `cleanup-v3 <pid> <bashpid> <nonce> docker DELETE
+/volumes/<name>?force=false` format. V3 recovery accepts only that exact engine,
+method and safe path. Clear a Docker request's own fence only after a validated
+204 with an empty body and no nonempty body framing, or a Docker 409 JSON
+object with a nonempty `message` refusal. Any other dispatched status (including 404), timeout, disconnect,
+500 or malformed response retains the fence and stops further requests.
+V3 also records response headers as a known fence file for acknowledgement
+validation and recovery. V2 Podman acknowledgements retain their existing
+validation rules.
 
 Record both API execution generations before mutation. Do not infer recovery
 from elapsed time, attempts, read-only API success or PID changes. An explicit

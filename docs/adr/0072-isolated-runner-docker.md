@@ -23,6 +23,11 @@ references can retain more data. Separate `docker-container` BuildKit workers
 need their own GC settings and disposable-builder cleanup; daemon GC does not
 manage their cache volumes. Application Docker retention remains separate.
 
+A separate, manual exact-allowlist exception may remove disposable volumes
+through the dedicated Docker socket, under the lifecycle and completion fence
+contract in [ADR-0083](0083-podman-cleanup-completion-fence.md). It does not
+enable automatic volume sweeping or change retention defaults.
+
 The option stays disabled by default. Fleet hosts explicitly opt in, and the
 runner-pool check verifies their shared settings. Changing daemon GC settings
 requires a controlled application to the running daemon; switching a unit with

@@ -49,6 +49,10 @@ class Fixture:
         self.mutations = []
         self.images = [image(int(IMAGE, 16))]
         self.containers = []
+        self.docker_containers = []
+        self.docker_volumes = {}
+        self.docker_inspect_status = 200
+        self.records = []
         self.volumes = []
         self.native_containers = None
         self.started = threading.Event()
@@ -65,7 +69,16 @@ class Fixture:
             def do_GET(self):
                 owner.calls.append(('GET', self.path))
                 if getattr(self.server, 'docker', False):
-                    value = []
+                    if self.path == '/containers/json?all=1':
+                        value = owner.docker_containers
+                    elif self.path.startswith('/volumes/'):
+                        name = self.path.removeprefix('/volumes/')
+                        self.respond(owner.docker_inspect_status,
+                                     json.dumps(owner.docker_volumes.get(name, {})).encode())
+                        return
+                    else:
+                        self.send_error(404)
+                        return
                 elif self.path == '/containers/json?all=1':
                     value = owner.containers
                 elif self.path == '/v5.0.0/libpod/containers/json?all=true':
@@ -93,6 +106,7 @@ class Fixture:
                 if not owner.fence.is_dir() or not (owner.fence / 'owner').is_file():
                     self.send_error(500)
                     return
+                owner.records.append((owner.fence / 'owner').read_text())
                 owner.started.set()
                 if owner.delay:
                     owner.release.wait(25)
