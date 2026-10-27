@@ -38,7 +38,9 @@ class GuardTests(unittest.TestCase):
                   game_start_skipped=False, disk_start_skipped=False,
                   disk_values=None, cleanup_fence=None, slice_values=None,
                   prolonged='100', inactive_after='', third_runner=None,
-                  third_marker=''):
+                  third_marker='', start_outcomes=(), resume_retry_max='60',
+                  runner_markers=(), resume_queued=None, condition_stamp='100',
+                  condition_result='yes', runner_job=''):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / 'state'
@@ -100,6 +102,16 @@ class GuardTests(unittest.TestCase):
             (root / 'runner-load').write_text(runner_load)
             (root / 'runner-result').write_text(runner_result)
             (root / 'runner-generation').write_text(runner_generation)
+            # How systemd settles each start request; later starts run.
+            (root / 'runner-start-outcomes').write_text(
+                ''.join(outcome + '\n' for outcome in start_outcomes))
+            for marker in runner_markers:
+                (state / marker).touch()
+            if resume_queued is not None:
+                (state / 'resume-queued').write_text(resume_queued + '\n')
+            (root / 'runner-condition-timestamp').write_text(condition_stamp)
+            (root / 'runner-condition-result').write_text(condition_result)
+            (root / 'runner-job').write_text(runner_job)
             (root / 'pressure').write_text('\n'.join(map(str, values)) + '\n')
             if disk_values is not None:
                 (root / 'disk-space').write_text('\n'.join(disk_values) + '\n')
@@ -152,6 +164,9 @@ if [[ $1 == show ]]; then
     *:UnitFileState) cat "${runner_file}-enabled" ;;
     *:LoadState) cat "${runner_file}-load" ;;
     *:Result) cat "${runner_file}-result" ;;
+    *:ConditionResult) cat "${runner_file}-condition-result" 2>/dev/null || printf yes ;;
+    *:ConditionTimestampMonotonic) cat "${runner_file}-condition-timestamp" 2>/dev/null || printf 100 ;;
+    *:Job) cat "${runner_file}-job" 2>/dev/null || true ;;
     *:ExecMainStartTimestampMonotonic)
       # A draining job finishes after a fixed number of guard samples.
       if [[ $4 == forgejo-actions-runner.service && -e $FIXTURE/inactive-after ]]; then
@@ -189,7 +204,40 @@ if [[ $1 == --no-block ]]; then
         printf '0' > "${runner_file}-generation"
       fi
       ;;
-    start) printf active > "${runner_file}-active" ;;
+    start)
+      outcome=run
+      if [[ -s ${runner_file}-start-outcomes ]]; then
+        outcome=$(head -n 1 "${runner_file}-start-outcomes")
+        sed -i 1d "${runner_file}-start-outcomes"
+      fi
+      # Every processed start evaluates the unit's conditions again.
+      case "$outcome" in
+        queued) printf 7 > "${runner_file}-job"; exit ;;
+        cancelled) exit ;;
+      esac
+      stamp=$(cat "${runner_file}-condition-timestamp" 2>/dev/null || printf 100)
+      printf '%s' "$((stamp + 1))" > "${runner_file}-condition-timestamp"
+      case "$outcome" in
+        condition-skip) printf no > "${runner_file}-condition-result" ;;
+        gate-skip | gate-skip-condition-yes)
+          # Observed with ConditionResult=no; also accept yes.
+          [[ $outcome == gate-skip ]] && printf no > "${runner_file}-condition-result" ||
+            printf yes > "${runner_file}-condition-result"
+          printf exec-condition > "${runner_file}-result"
+          ;;
+        exited)
+          printf yes > "${runner_file}-condition-result"
+          printf failed > "${runner_file}-active"
+          printf exit-code > "${runner_file}-result"
+          ;;
+        run)
+          printf yes > "${runner_file}-condition-result"
+          printf success > "${runner_file}-result"
+          printf active > "${runner_file}-active"
+          ;;
+        *) exit 2 ;;
+      esac
+      ;;
     *) exit 2 ;;
   esac
   exit
@@ -231,6 +279,7 @@ esac
                    'SECOND_STOP_STATE': (second_runner or {}).get('stop_state', 'inactive'),
                    'SETTLED_SAMPLES_REQUIRED': '4', 'PROLONGED_DRAIN_SAMPLES': prolonged,
                    'INACTIVE_AFTER': inactive_after,
+                   'RESUME_RETRY_MAX_SAMPLES': resume_retry_max,
                    # Never sample the host's real aggregate.
                    'SLICE_PRESSURE_FILE': str(root / 'missing-slice-pressure')}
             if slice_values is not None:
@@ -271,6 +320,8 @@ esac
             self.drain_disowned = (state / 'drain-disowned').exists()
             self.game_start_skipped = (state / 'game-start-skipped').exists()
             self.disk_start_skipped = (state / 'disk-start-skipped').exists()
+            self.final_runner_state = (root / 'runner-active').read_text()
+            self.state_markers = sorted(path.name for path in state.iterdir())
             return result.returncode, actions, (state / 'owned').exists(), (state / 'pending').exists()
 
     def test_cleanup_fence_withholds_both_owned_resumes_and_keeps_guard_healthy(self):
@@ -579,6 +630,158 @@ esac
                                         runner_generation='0', drain_generation='123'),
                          (0, [], False, False))
         self.assertEqual(self.runner_actions, ['start'])
+
+    def events_named(self, name):
+        return [event for event in self.events if event.startswith(f'event={name} ')]
+
+    def test_skipped_resume_start_is_retried_once_the_cause_clears(self):
+        # A runtime unit condition or the start gate skips the queued resume
+        # start; the cause clears before the next sample.
+        for outcome in ('condition-skip', 'gate-skip', 'gate-skip-condition-yes'):
+            with self.subTest(outcome=outcome):
+                self.assertEqual(self.run_guard(
+                    [0] * 4, admission=True, drain_owned=True, runner_state='inactive',
+                    runner_generation='0', drain_generation='123',
+                    start_outcomes=[outcome])[0], 0)
+                self.assertEqual(self.runner_actions, ['start', 'start'])
+                self.assertEqual(self.final_runner_state, 'active')
+                self.assertEqual(len(self.events_named('admission_resume_skipped')), 1)
+                self.assertIn('retries=1', self.events_named('admission_resume_confirmed')[0])
+                self.assertNotIn('resume-queued', self.state_markers)
+                self.assertNotIn('resume-pending', self.state_markers)
+
+    def test_skipped_resume_retries_back_off_up_to_the_bound(self):
+        self.run_guard([0] * 5, admission=True, drain_owned=True, runner_state='inactive',
+                       runner_generation='0', drain_generation='123',
+                       start_outcomes=['condition-skip'] * 3)
+        # Starts on samples 2, 3 and 4; the next retry is due on sample 6.
+        self.assertEqual(self.runner_actions, ['start'] * 3)
+        self.assertIn('resume-queued', self.state_markers)
+        self.run_guard([0] * 8, admission=True, drain_owned=True, runner_state='inactive',
+                       runner_generation='0', drain_generation='123',
+                       start_outcomes=['condition-skip'] * 3)
+        self.assertEqual(self.runner_actions, ['start'] * 4)
+        self.assertEqual(self.final_runner_state, 'active')
+        self.assertEqual(len(self.events_named('admission_resume_skipped')), 1)
+        # Samples 2, 3, 4, 6 and 10 without a bound; 2, 3, 4, 6, 8, 10 with it.
+        self.run_guard([0] * 10, admission=True, drain_owned=True, runner_state='inactive',
+                       runner_generation='0', drain_generation='123',
+                       start_outcomes=['condition-skip'] * 9)
+        self.assertEqual(self.runner_actions, ['start'] * 5)
+        self.run_guard([0] * 10, admission=True, drain_owned=True, runner_state='inactive',
+                       runner_generation='0', drain_generation='123',
+                       start_outcomes=['condition-skip'] * 9, resume_retry_max='2')
+        self.assertEqual(self.runner_actions, ['start'] * 6)
+
+    def test_skipped_resume_waits_for_recovery_before_retrying(self):
+        self.assertEqual(self.run_guard(
+            [0, 0, 2500, 2500, 2500], admission=True, drain_owned=True,
+            runner_state='inactive', runner_generation='0', drain_generation='123',
+            start_outcomes=['condition-skip'])[0], 0)
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertEqual(len(self.events_named('admission_resume_skipped')), 1)
+        self.assertIn('resume-queued', self.state_markers)
+        self.assertFalse(self.drain_owned)
+
+    def test_restarted_guard_retries_a_skipped_resume_after_recovery(self):
+        self.assertEqual(self.run_guard(
+            [0, 0, 0], admission=True, runner_state='inactive', runner_generation='0',
+            resume_queued='100', condition_stamp='101', condition_result='no')[0], 0)
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertEqual(self.final_runner_state, 'active')
+        self.assertNotIn('resume-queued', self.state_markers)
+
+    def test_cleanup_fence_and_owned_freeze_withhold_resume_retries(self):
+        for options in ({'cleanup_fence': 'malformed'},
+                        {'initial': 'frozen', 'owned': True}):
+            with self.subTest(options=options):
+                self.assertEqual(self.run_guard(
+                    [6500, 6500, 6500], admission=True, runner_state='inactive',
+                    runner_generation='0', resume_queued='100', condition_stamp='101',
+                    condition_result='no', **options)[0], 0)
+                self.assertEqual(self.runner_actions, [])
+                self.assertIn('resume-queued', self.state_markers)
+
+    def test_disabled_runner_with_skipped_resume_is_reported_not_started(self):
+        for enabled in ('disabled', 'masked'):
+            with self.subTest(enabled=enabled):
+                self.run_guard([0] * 4, admission=True, runner_state='inactive',
+                               runner_generation='0', runner_enabled=enabled,
+                               resume_queued='100', condition_stamp='101',
+                               condition_result='no')
+                self.assertEqual(self.runner_actions, [])
+                self.assertEqual(len(self.events_named('admission_resume_blocked')), 1)
+                self.assertIn('resume-queued', self.state_markers)
+
+    def test_gate_hold_marker_takes_over_a_skipped_resume(self):
+        for marker in ('disk-start-skipped', 'game-start-skipped', 'standby-held'):
+            with self.subTest(marker=marker):
+                self.run_guard([0], admission=True, runner_state='inactive',
+                               runner_generation='0', runner_result='exec-condition',
+                               resume_queued='100', condition_stamp='101',
+                               condition_result='no', runner_markers=[marker])
+                self.assertEqual(self.runner_actions, [])
+                self.assertEqual(len(self.events_named('admission_resume_handed_over')), 1)
+                self.assertNotIn('resume-queued', self.state_markers)
+                self.assertIn(marker, self.state_markers)
+
+    def test_queued_resume_start_is_awaited_while_its_job_is_pending(self):
+        self.run_guard([0, 0, 0, 0], admission=True, drain_owned=True,
+                       runner_state='inactive', runner_generation='0',
+                       drain_generation='123', start_outcomes=['queued'])
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertIn('resume-queued', self.state_markers)
+        self.assertEqual(self.events_named('admission_resume_skipped'), [])
+
+    def test_resume_start_that_never_ran_is_reported_and_not_retried(self):
+        self.run_guard([0, 0, 0, 0], admission=True, drain_owned=True,
+                       runner_state='inactive', runner_generation='0',
+                       drain_generation='123', start_outcomes=['cancelled'])
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertEqual(len(self.events_named('admission_resume_not_run')), 1)
+        self.assertNotIn('resume-queued', self.state_markers)
+
+    def test_resumed_runner_that_exits_is_left_to_the_operator(self):
+        self.run_guard([0, 0, 0, 0], admission=True, drain_owned=True,
+                       runner_state='inactive', runner_generation='0',
+                       drain_generation='123', start_outcomes=['exited'])
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertIn('result=exit-code', self.events_named('admission_resume_ended')[0])
+        self.assertNotIn('resume-queued', self.state_markers)
+
+    def test_new_drain_claim_supersedes_a_queued_resume(self):
+        self.run_guard([0], admission=True, resume_queued='100', condition_stamp='101',
+                       game_states=['present'], game_times=[100])
+        self.assertEqual(self.runner_actions, ['stop'])
+        self.assertTrue(self.drain_owned)
+        self.assertNotIn('resume-queued', self.state_markers)
+        self.assertEqual(self.events_named('admission_resume_confirmed'), [])
+
+    def test_unreadable_condition_stamp_keeps_ownership_unchanged(self):
+        # systemd answers, but the stamp is empty or not a number.
+        self.assertEqual(self.run_guard([0, 0], admission=True, drain_owned=True,
+                                        runner_state='inactive', runner_generation='0',
+                                        drain_generation='123', condition_stamp='')[0], 1)
+        self.assertEqual(self.runner_actions, [])
+        self.assertTrue(self.drain_owned)
+        self.assertFalse(self.resume_pending)
+        # An invalid stamp is never taken as a settled start, whatever the
+        # unit's last condition result.
+        for condition_result in ('no', 'yes'):
+            with self.subTest(condition_result=condition_result):
+                self.assertEqual(self.run_guard(
+                    [0, 0, 0], admission=True, runner_state='inactive',
+                    runner_generation='0', resume_queued='100', condition_stamp='bad',
+                    condition_result=condition_result)[0], 1)
+                self.assertEqual(self.runner_actions, [])
+                self.assertIn('resume-queued', self.state_markers)
+                self.assertNotIn('resume-pending', self.state_markers)
+                self.assertEqual(self.events_named('admission_resume_ended'), [])
+
+    def test_queued_resume_requires_admission_control_and_valid_state(self):
+        self.assertEqual(self.run_guard([0], resume_queued='100')[0], 1)
+        self.assertEqual(self.run_guard([0], admission=True, resume_queued='bad')[0], 1)
+        self.assertEqual(self.runner_actions, [])
 
     def test_switch_condition_phase_keeps_owned_drain_without_resuming(self):
         self.assertEqual(self.run_guard([0, 0], admission=True, drain_owned=True,

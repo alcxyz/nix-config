@@ -23,6 +23,7 @@ severe_threshold=${SEVERE_THRESHOLD_HUNDREDTHS:-6000}
 severe_required=${SEVERE_SAMPLES_REQUIRED:-7}
 max_iterations=${MAX_ITERATIONS:-0}
 transition_timeout_seconds=${TRANSITION_TIMEOUT_SECONDS:-120}
+resume_retry_max_samples=${RESUME_RETRY_MAX_SAMPLES:-60}
 unit=forgejobuilds.slice
 primary_runner=forgejo-actions-runner.service
 runner_unit=$primary_runner
@@ -163,6 +164,7 @@ case "$admission_control" in
   0 | 1) ;;
   *) fail "invalid admission control setting" ;;
 esac
+[[ $resume_retry_max_samples =~ ^[1-9][0-9]*$ ]] || fail "invalid resume retry bound"
 for runner_unit in "${runner_units[@]}"; do
   runner_state=$(runner_state_dir "$runner_unit")
   [[ ! -e $runner_state/drain-pending ]] || fail "ambiguous admission drain requires operator recovery"
@@ -176,6 +178,13 @@ for runner_unit in "${runner_units[@]}"; do
   fi
   if [[ $admission_control == 0 && -e $runner_state/disk-start-skipped ]]; then
     fail "disk start ownership remains while admission control is disabled"
+  fi
+  if [[ $admission_control == 0 && -e $runner_state/resume-queued ]]; then
+    fail "queued resume ownership remains while admission control is disabled"
+  fi
+  if [[ -e $runner_state/resume-queued ]]; then
+    IFS= read -r queued_stamp < "$runner_state/resume-queued" || queued_stamp=''
+    [[ $queued_stamp =~ ^[0-9]+$ ]] || fail "queued resume ownership is invalid"
   fi
 done
 flock -u 9
@@ -288,6 +297,9 @@ request_admission_drain() {
 
   printf '%s\n' "$generation" > "$runner_state/drain-pending"
   rm -f "$runner_state/resume-blocked-reported"
+  # Claiming requires an active runner, so a queued resume has taken effect.
+  rm -f "$runner_state/resume-queued"
+  forget_resume_retry
   report_transition admission_drain_requested "runner_unit=$runner_unit active_state=$active reason=$reason"
   if ! metadata --no-block stop "$runner_unit"; then
     fail "runner admission drain failed; ownership requires recovery"
@@ -328,8 +340,10 @@ validate_drain_ownership() {
 
 resume_admissions() {
   local path=${1:-low}
-  local active load_state unit_file_state result marker
+  local active load_state unit_file_state result marker stamp
   [[ $admission_control == 1 ]] || return 0
+  # A queued resume keeps its own ownership until confirm_resume settles it.
+  [[ ! -e $runner_state/resume-queued ]] || return 0
   if [[ -e $runner_state/drain-owned ]]; then
     marker=drain-owned
   elif [[ -e $runner_state/disk-start-skipped ]]; then
@@ -369,15 +383,148 @@ resume_admissions() {
     return 0
   fi
 
+  stamp=$(condition_stamp) || exit 1
   mv "$runner_state/$marker" "$runner_state/resume-pending"
   rm -f "$runner_state/resume-blocked-reported"
   report_transition admission_resume_requested \
     "runner_unit=$runner_unit active_state=$active reason=$marker resume_path=$path sampled_slice_full_avg10_hundredths=$slice_pressure"
+  forget_resume_retry
+  queue_resume_start "$stamp"
+  report_transition admission_start_queued "runner_unit=$runner_unit"
+  unlock_lifecycle
+}
+
+# Every start systemd processes evaluates the unit's conditions again and
+# moves ConditionTimestampMonotonic, so the stamp read before queuing tells a
+# start that is still queued from one that ran or was skipped. Read it before
+# any marker changes: a failed read must leave ownership as it was.
+condition_stamp() {
+  local stamp
+  stamp=$(runner_property ConditionTimestampMonotonic) || fail "cannot inspect runner condition timestamp"
+  [[ $stamp =~ ^[0-9]+$ ]] || fail "runner condition timestamp is invalid"
+  printf '%s\n' "$stamp"
+}
+
+# Called under the lifecycle lock with resume-pending in place. ExecCondition
+# waits for this lock, so the gate cannot observe the intermediate state.
+queue_resume_start() {
+  printf '%s\n' "$1" > "$runner_state/resume-pending"
   if ! metadata --no-block start "$runner_unit"; then
     fail "runner admission resume failed; ownership requires recovery"
   fi
-  rm "$runner_state/resume-pending"
-  report_transition admission_start_queued "runner_unit=$runner_unit"
+  mv "$runner_state/resume-pending" "$runner_state/resume-queued"
+}
+
+# Retry spacing is kept in memory: a restarted guard retries at once.
+declare -A resume_retry_next=() resume_retry_delay=() resume_retry_count=()
+forget_resume_retry() {
+  unset "resume_retry_next[$runner_unit]" "resume_retry_delay[$runner_unit]" "resume_retry_count[$runner_unit]"
+}
+
+# A queued start can still be skipped: a unit condition (for example a runtime
+# maintenance hold) or the start gate leaves the runner inactive with
+# ConditionResult=no. The guard keeps ownership in resume-queued until the
+# runner is active, then forgets it. A skip that left a gate hold marker
+# (disk, game, standby) hands ownership to that marker's owner. Any other skip
+# is reported once and the start is queued again with doubling spacing, capped
+# at RESUME_RETRY_MAX_SAMPLES, only while resume would be allowed: every retry
+# is a new start that systemd's conditions and the start gate evaluate again,
+# and none follows an ambiguous request. A start that ran and stopped or
+# failed, or a job that was cancelled or refused before its conditions ran,
+# ends ownership;
+# the guard never restarts a runner it did not see skipped. Disable or mask a
+# runner to keep it off while a resume is outstanding.
+confirm_resume() {
+  local ready=$1
+  local queued_stamp job stamp active condition result load_state unit_file_state marker delay count next
+  [[ $admission_control == 1 && -e $runner_state/resume-queued ]] || return 0
+  lock_lifecycle
+  [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
+  IFS= read -r queued_stamp < "$runner_state/resume-queued" || fail "cannot read queued resume ownership"
+  [[ $queued_stamp =~ ^[0-9]+$ ]] || fail "queued resume ownership is invalid"
+  # Read the job before the stamp: a job that has gone has already moved it.
+  job=$(runner_property Job) || fail "cannot inspect runner job"
+  stamp=$(condition_stamp) || exit 1
+  active=$(runner_property ActiveState) || fail "cannot inspect runner state"
+  condition=$(runner_property ConditionResult) || fail "cannot inspect runner condition result"
+  result=$(runner_property Result) || fail "cannot inspect runner result"
+
+  case "$active" in
+    active | reloading)
+      rm "$runner_state/resume-queued"
+      rm -f "$runner_state/resume-blocked-reported"
+      report_transition admission_resume_confirmed \
+        "runner_unit=$runner_unit active_state=$active retries=${resume_retry_count[$runner_unit]:-0}"
+      forget_resume_retry
+      unlock_lifecycle
+      return 0
+      ;;
+    inactive | failed) ;;
+    *) unlock_lifecycle; return 0 ;;
+  esac
+  if [[ $stamp == "$queued_stamp" ]]; then
+    if [[ -z $job || $job == 0 ]]; then
+      rm "$runner_state/resume-queued"
+      report_transition admission_resume_not_run \
+        "runner_unit=$runner_unit active_state=$active result=$result"
+      forget_resume_retry
+    fi
+    unlock_lifecycle
+    return 0
+  fi
+  if [[ $active != inactive || ($condition != no && $result != exec-condition) ||
+        ($result != success && $result != exec-condition) ]]; then
+    rm "$runner_state/resume-queued"
+    report_transition admission_resume_ended \
+      "runner_unit=$runner_unit active_state=$active condition_result=$condition result=$result"
+    forget_resume_retry
+    unlock_lifecycle
+    return 0
+  fi
+  for marker in disk-start-skipped game-start-skipped standby-held; do
+    if [[ -e $runner_state/$marker ]]; then
+      rm "$runner_state/resume-queued"
+      report_transition admission_resume_handed_over "runner_unit=$runner_unit reason=$marker"
+      forget_resume_retry
+      unlock_lifecycle
+      return 0
+    fi
+  done
+  if [[ -z ${resume_retry_count[$runner_unit]:-} ]]; then
+    resume_retry_count[$runner_unit]=0
+    resume_retry_next[$runner_unit]=0
+    resume_retry_delay[$runner_unit]=1
+    report_transition admission_resume_skipped \
+      "runner_unit=$runner_unit condition_result=$condition result=$result"
+  fi
+  count=${resume_retry_count[$runner_unit]}
+  next=${resume_retry_next[$runner_unit]}
+  delay=${resume_retry_delay[$runner_unit]}
+  if ((ready != 1 || iteration < next)) ||
+    [[ -e $state_dir/cleanup-in-flight || -L $state_dir/cleanup-in-flight || -e $state_dir/owned ]]; then
+    unlock_lifecycle
+    return 0
+  fi
+  load_state=$(runner_property LoadState) || fail "cannot inspect runner load state"
+  unit_file_state=$(runner_property UnitFileState) || fail "cannot inspect runner enablement"
+  if [[ $load_state != loaded || ($unit_file_state != enabled && $unit_file_state != enabled-runtime) ]]; then
+    if [[ ! -e $runner_state/resume-blocked-reported ]]; then
+      report_transition admission_resume_blocked \
+        "runner_unit=$runner_unit active_state=$active load_state=$load_state unit_file_state=$unit_file_state result=$result"
+      : > "$runner_state/resume-blocked-reported"
+    fi
+    unlock_lifecycle
+    return 0
+  fi
+  rm -f "$runner_state/resume-blocked-reported"
+  resume_retry_count[$runner_unit]=$((count + 1))
+  resume_retry_next[$runner_unit]=$((iteration + delay))
+  delay=$((delay * 2))
+  ((delay <= resume_retry_max_samples)) || delay=$resume_retry_max_samples
+  resume_retry_delay[$runner_unit]=$delay
+  stamp=$(condition_stamp) || exit 1
+  mv "$runner_state/resume-queued" "$runner_state/resume-pending"
+  queue_resume_start "$stamp"
   unlock_lifecycle
 }
 
@@ -507,6 +654,17 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
     if [[ $admission_control == 0 ]]; then high=0; fi
   fi
   if ((recovered >= low_required || settled >= settled_required)) && ((game_status == 1)); then
+    resume_ready=1
+  else
+    resume_ready=0
+  fi
+  # Settle resumes queued on earlier samples before queuing new ones, so a
+  # skip is seen only after systemd has had a sample to process the start.
+  for runner_unit in "${runner_units[@]}"; do
+    runner_state=$(runner_state_dir "$runner_unit")
+    confirm_resume "$resume_ready"
+  done
+  if ((resume_ready == 1)); then
     # Recovery always thaws the aggregate before asking the runner to poll
     # again. If jobs are still draining, resume_admissions keeps waiting for a
     # fully inactive unit while the low-pressure streak continues.

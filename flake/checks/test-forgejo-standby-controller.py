@@ -156,8 +156,8 @@ fi
                 self.assertEqual(self.starts, 1)
 
     def test_guard_holds_are_left_to_the_guard(self):
-        for marker in ('drain-owned', 'drain-pending', 'resume-pending', 'drain-disowned',
-                       'game-start-skipped', 'disk-start-skipped'):
+        for marker in ('drain-owned', 'drain-pending', 'resume-pending', 'resume-queued',
+                       'drain-disowned', 'game-start-skipped', 'disk-start-skipped'):
             with self.subTest(marker=marker):
                 self.run_controller(['unreachable'] * 4, admitted=True, markers=[marker])
                 self.assertTrue(self.admitted)

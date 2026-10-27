@@ -1,6 +1,6 @@
 # ADR-0072: Isolate runner Docker execution in a bounded rootless service
 
-- Status: Accepted; amended 2026-09-27 and 2026-10-12; per-host rollout requires qualification
+- Status: Accepted; amended 2026-09-27, 2026-10-12 and 2026-10-27; per-host rollout requires qualification
 - Date: 2026-09-10
 - Area: Forgejo runners, Docker, systemd
 
@@ -159,9 +159,30 @@ It skips starts while drain, freeze or teardown state is pending or owned;
 the guard's completed resume request clears its pending marker before the
 condition can acquire the lock. A skipped start is not an automatic restart
 failure and leaves ownership markers unchanged.
+
+A resume is owned until the runner is active, not only until its start is
+queued (amended 2026-10-27, #844). A unit condition, such as a temporary
+runtime hold, or the start gate can skip the queued start, and the guard once
+forgot the runner as soon as the request was accepted, leaving it stopped for
+hours after the hold cleared. The guard therefore records the unit's condition
+timestamp with the queued resume. Systemd moves that timestamp for every start
+it processes, so the guard can tell a start that is still queued from one that
+ran, was skipped, or was cancelled or refused before its conditions ran. An active runner ends
+ownership. A skip that left a gate hold marker (disk, game or standby) passes
+ownership to that marker's owner. Any other skip is reported once and the
+start is requested again, with spacing that doubles up to a bound (5 minutes by
+default), only while a resume would be allowed: recovery and game conditions
+hold, no cleanup fence or owned freeze is present, and the unit is still
+loaded and enabled. Each retry is a new start that systemd's conditions and
+the start gate evaluate again, so no gate is bypassed. A start that ran and
+then stopped or failed, or that never reached its conditions, ends ownership
+with a report and is never retried. A disabled or masked runner is reported
+and not started, so disabling or masking it still keeps it off.
+
 The guard retries read-only systemd metadata queries for a bounded interval
-during daemon reloads; stop and start requests are never retried because their
-outcome may be ambiguous. A persistent metadata failure still stops the guard
+during daemon reloads. A stop or start request whose outcome may be ambiguous
+is never retried; only a start that systemd confirms it skipped is requested
+again. A persistent metadata failure still stops the guard
 and invokes the destructive controller-loss boundary.
 
 All runner clients, mounted sockets and cache maintenance use the dedicated

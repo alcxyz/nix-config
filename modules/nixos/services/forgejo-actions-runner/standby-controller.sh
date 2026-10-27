@@ -117,7 +117,7 @@ release() {
 }
 
 # Starts an admitted runner that is down for no reason the guard owns. Drain,
-# game and disk holds are resumed by the guard, a drain of any other runner
+# game and disk holds and queued resumes are resumed by the guard, a drain of any other runner
 # holds it too, and a failed unit or dependency is left for the operator, as
 # is a disabled or masked unit. To keep an enabled standby stopped, stop this
 # controller first.
@@ -136,7 +136,7 @@ ensure_started() {
     fi
     return 0
   fi
-  for marker in drain-owned drain-pending resume-pending drain-disowned game-start-skipped disk-start-skipped; do
+  for marker in drain-owned drain-pending resume-pending resume-queued drain-disowned game-start-skipped disk-start-skipped; do
     [[ ! -e $runner_state/$marker ]] || return 0
   done
   for directory in "$state_dir" "$state_dir"/runners/*; do
