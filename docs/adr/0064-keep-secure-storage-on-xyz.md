@@ -2,7 +2,7 @@
 
 **Status:** Accepted, staged
 **Date:** 2026-08-31
-**Amended:** 2026-10-23
+**Amended:** 2026-09-07, 2026-10-23
 **Applies to:** secure storage, replaceable bulk storage, dependent services,
 and Kubernetes backup recovery
 **Amends:** ADR-0052, ADR-0062, ADR-0063
