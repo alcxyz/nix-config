@@ -1,8 +1,9 @@
 # Spider-Man Remastered direct launcher
 
 The [game module](../../users/alc/linux/xyz/gaming/spider-man.nix) adds an
-application through the existing UMU interface. This is a second concrete
-launcher alongside Battle.net, not a general installation workflow.
+application through the existing UMU interface. It was the first offline game
+launcher after Battle.net, not a general installation workflow; the
+[standalone launcher notes](standalone.md) cover the later titles.
 
 ## Existing installation
 

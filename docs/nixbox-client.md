@@ -4,6 +4,13 @@
 media-center workbench. It composes the existing Moonlight client rather than
 forking its launch, input, audio, or recovery logic.
 
+No host imports the composited `nixbox-client` profile at present. The
+deployed TV appliances (`rpi0` to `rpi3`) use the direct-only
+`services.nixbox-direct-client` profile described under
+[Switching and recovery workflow](#switching-and-recovery-workflow); `rpi1` to
+`rpi3` reach it through `profiles/raspberry-pi-3-direct-client`. The XPS
+imports the shared `nixbox-session` profile directly.
+
 ## Included experience
 
 - a controller-first Hyprland session with remote Steam and browser streams;
@@ -113,8 +120,9 @@ owning DRM, and return to the saved mode when Moonlight exits. A direct-display
 request is scoped to the current boot, so a reboot with a stale request returns
 to the configured default instead of reopening the stale request. Hosts that
 set `defaultSessionMode = "direct-browser"` deliberately initialize the public
-browser on DRM at activation and every boot; `couch` remains their explicit
-maintenance and recovery mode until the next activation or boot.
+browser on DRM at activation and every boot. Composited hosts keep `couch`
+as their maintenance and recovery mode until the next activation or boot;
+direct-only appliances recover over SSH.
 
 The application menu is the normal switching interface from a composited couch
 session. A compact client that already runs the public browser directly on DRM has no
@@ -133,7 +141,8 @@ ssh rpi0 nixbox-mode direct-private # protected browser selector
 ```
 
 The single-board appliances (`rpi0`–`rpi3`, inventory role `tv-client`) use
-the direct-only `nixbox-direct-client` profile (ADR-0088). They carry no
+the direct-only `nixbox-direct-client` profile
+([ADR-0088](adr/0088-tv-clients-share-one-appliance-profile.md)). They carry no
 composited session, Hyprland or DMS, so `couch` is not available there. Use SSH
 for recovery. Each names its TV output `<room> TV` and accepts Bluetooth audio
 as `Nixbox <room>`; open a pairing window with
@@ -168,8 +177,8 @@ another direct-display application. On a compact client whose default is
 `direct-browser`, exiting a one-shot Steam or protected-browser session returns
 to the public browser. Exiting the default browser client relaunches it.
 
-RPi0 runs a persistent, non-grabbing input listener outside the greetd display
-session. It sleeps outside direct-display modes, survives local Moonlight and
+Each TV appliance (`rpi0` to `rpi3`) runs a persistent, non-grabbing input
+listener outside the greetd display session. It sleeps outside direct-display modes, survives local Moonlight and
 greetd replacement, and rediscovers a Bluetooth keyboard after disconnects.
 The active keyboard mappings are:
 
@@ -209,12 +218,19 @@ at 1440p and scale locally. Revisit physical 1440p output only when the display
 hardware changes.
 
 After recovery, these checks distinguish a restored client session from a
-server-side stream failure:
+server-side stream failure. On a composited compact client:
 
 ```sh
 systemctl is-active greetd.service
 systemctl --user is-active couch-dms.service kdeconnect.service waynergy.service
 couch-audio-output status
+```
+
+On a TV appliance, which runs no DMS, Waynergy or audio output cycle:
+
+```sh
+systemctl is-active greetd.service
+nixbox-mode
 ```
 
 Direct-display mode intentionally has no host-local Synergy path. KDE Connect

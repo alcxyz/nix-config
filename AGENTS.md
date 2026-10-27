@@ -36,7 +36,8 @@ shortcuts that agent shells do not have.
 
 For changes that affect several hosts, recommend `deploy --all` from `xyz`:
 the flake is meant to converge the whole fleet, so touching unaffected hosts is
-not a risk. Do flag what breaks that, such as uncommitted or unpushed changes
+not a risk. Hosts with `deployAll = false` in `inventory.nix` (madsil, rpi2,
+rpi3) are left out of `--all` and need `deploy <host>`. Do flag what breaks that, such as uncommitted or unpushed changes
 in the tree being deployed, and units with `restartIfChanged = false` that need
 a restart or reboot.
 

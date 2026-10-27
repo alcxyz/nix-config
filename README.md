@@ -6,7 +6,8 @@ Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, serv
 
 The owner's own tools and apps are refreshed by four commands. Each one only
 updates `flake.lock` to the newest commit of its branches; inspect the lockfile
-changes, then run `hmsw` (or `nxsw` for system configuration). Rebuilds never
+changes, then switch with `deploy --hm` (or `deploy --nixos` for system
+configuration). Rebuilds never
 fetch new branch heads, and no command promotes branches or creates releases.
 This repository itself promotes `dev` to `main` by pull request and tags each
 promotion with its date, such as `v2026.10.18`
@@ -21,8 +22,8 @@ promotion with its date, such as `v2026.10.18`
 
 `dms-update` refreshes only the DMS part of `dev-apps-update`. Each command is
 a shell alias and a `just` recipe of the same name; `qaup` and `just qa-update`
-remain old names for `dev-apps-update`. After first adding an alias, run `hmsw`
-once and open a new terminal to load it.
+remain old names for `dev-apps-update`. After first adding an alias, run
+`deploy --hm` once and open a new terminal to load it.
 
 Daily work runs the released builds. A project with a `dev` branch that gets
 ahead of `main` also gets a dev build on xyz, installed next to the release
@@ -116,12 +117,18 @@ flake.nix                          # Inputs and flake-parts entry point
 flake/
   core.nix                         # Inventory, supported systems, shared package instances
   pkgs.nix                         # Package overlays and local package overrides
+  overlays/                        # Overlay patches (CA bundle policy)
   hosts/                           # NixOS, nix-darwin, and Home Manager output construction
+  modules.nix                      # Exported flake modules
   per-system.nix                   # Development shell, packages, and check composition
   checks/                          # Explicit check definitions and evaluation helpers
 justfile                           # Operator command surface for checks, rebuilds, deploys
+treefmt.toml                       # Formatter selection
 .pre-commit-config.yaml            # Local repository hygiene hooks
-scripts/checks/                    # Shell checks used by pre-commit and flake checks
+.forgejo/workflows/                # Forgejo Actions workflows
+scripts/                           # checks, ci, forgejo, ops, swap, update-inputs
+packages/                          # Local packages (nix-deploy, Pi Moonlight build, Nixbox themes)
+docs/                              # Guides, architecture diagrams, and ADRs
 hosts/
   {xyz,nux,nex,xev,xps,madsil,rpi0,rpi1,rpi2,rpi3}/
     configuration.nix              # Host-specific NixOS config
@@ -135,42 +142,31 @@ modules/
   nixos/
     common/
       default.nix                  # Shared across all NixOS hosts
-      ssh-keys.nix                 # Public SSH key catalog grouped by purpose
       desktop.nix                  # Workstation layer (xyz)
       server.nix                   # Headless system package and X server defaults
-    hardware/
-      amd.nix                      # AMD GPU/CPU
-      nvidia.nix                   # Nvidia GPU (legacy_580)
-    services/
-      nfs/                         # NFS server + Avahi discovery
-      plex/                        # Plex media (Docker)
-      stash/                       # Stash (Docker)
-      torrent/                     # qBittorrent (Docker)
-    virtualisation/
-      kvm/
-        default.nix                # Base KVM/libvirtd
-        gpu-passthrough.nix        # Dynamic GPU passthrough hooks
+      nix-retention.nix            # Guarded generation retention before GC
+      pki.nix                      # CA bundle policy
+    hardware/                      # AMD and Nvidia GPUs, display guard, ZFS kernel
+    profiles/                      # Nixbox couch and TV client profiles
+    security/                      # Credential consent, agent PR review guard
+    services/                      # Opt-in services: NFS, Plex, Stash, qBittorrent,
+                                   #   Forgejo runners, k8s helpers, Moonlight, Wolf, ...
+    virtualisation/                # k3s, KVM and GPU passthrough, container networking
   home-manager/
     shell/                         # zsh, bash, starship
-    programs/
-      ai/                          # AI tools (claude-code, opencode, etc.)
-      git/                         # Git config + SSH signing
-      ssh/                         # SSH client config
-      hyprland/                    # Hyprland + GTK theming
-      foot/                        # Foot terminal
-      rclone/cloud-sync.nix        # Google Drive + Dropbox sync
-    services/
-      paperflow/                   # File organizer + Paperless ingest (cross-platform)
-      dms/                         # DankMaterialShell desktop shell
+    programs/                      # AI tools, git, ssh, Hyprland, niri, terminals, ...
+    services/                      # DMS, Paperflow, T3 Code, devlog, deck, ...
+    profiles/                      # Nixbox session profile
+    workspace/                     # ~/src catalog selection and workspace-sync
 users/alc/
   common.nix                       # Shared Home Manager config (all platforms)
+  workstation-apps.nix             # Grove, Canopy, paw (xyz and mac)
   linux/
     common.nix                     # Shared Linux HM config, no operator secrets
     operator.nix                   # alc Linux operator layer
-    xyz.nix                        # xyz-specific HM config
-    nux.nix                        # nux-specific HM config
-    nex.nix                        # nex-specific HM config
-    rpi0.nix                       # rpi0-specific HM config
+    embedded.nix                   # Minimal layer for the TV Pis
+    {xyz,nux,nex,xev,xps,madsil,rpi0,rpi1,rpi2,rpi3}.nix
+                                   # Per-host HM config
   darwin/
     mac.nix                        # macOS-specific HM config
   configs/                         # Dotfiles symlinked into place
@@ -179,23 +175,21 @@ users/madsil/                      # Family user Home Manager profile and dotfil
 
 ## How it fits together
 
-**Layered configuration** — each host composes from shared layers:
+The [architecture diagrams](docs/architecture.md) show the fleet, flake
+composition, configuration layering, the change and deploy flow, and project
+refreshes.
 
-```
-hosts/xyz/configuration.nix
-  imports common/default.nix       (all hosts)
-  imports common/desktop.nix       (workstations)
-  imports hardware/{amd,nvidia}.nix
-  imports services/{nfs,plex,...}
-  imports virtualisation/kvm/*
-
-users/alc/linux/xyz.nix
-  imports users/alc/linux/operator.nix
-    imports users/alc/linux/common.nix
-    imports users/alc/common.nix   (all platforms)
-  imports modules/home-manager/programs/*
-  imports modules/home-manager/services/*
-```
+**Layered configuration**: each NixOS host composes a common base, a role
+layer where it has one (`desktop.nix` on xyz, `server.nix` on the servers and
+Pis), opt-in service, hardware and profile modules, and its own host file
+([ADR-0006](docs/adr/0006-four-tier-module-layering.md)). Home Manager
+follows a matching chain: operator hosts (xyz, xps, nux, nex, xev) import
+`users/alc/linux/operator.nix`, which brings in `linux/common.nix` and
+`users/alc/common.nix` through a private operator module; the TV Pis import
+only `linux/embedded.nix`; madsil has its own standalone `madsil.nix`; the Mac
+imports `users/alc/common.nix` directly.
+The [layering diagram](docs/architecture.md#configuration-layering) shows the
+full picture.
 
 **Inventory** (`inventory.nix`) is the source of truth for host architecture,
 platform, machine role, package role, workspace profiles, and k8s role.
@@ -226,8 +220,9 @@ inventory instead of hard-coding the role:
 home.packages = pkgsets.home.${hostRole.homePackageSet};
 ```
 
-**Workspace bootstrap** (`modules/home-manager/workspace/`) declares the
-`~/src` repo catalog and selects repos from inventory workspace profiles.
+**Workspace bootstrap** (`modules/home-manager/workspace/`) reads the `~/src`
+repo catalog from the private nix-secrets repo inventory and selects repos by
+the inventory's workspace profiles.
 Home Manager creates the standard directory skeleton and installs
 `workspace-sync`, which is intentionally conservative:
 
@@ -252,33 +247,37 @@ reported and left untouched.
 explicit local overrides and additional package inputs. Role-based package
 selection belongs to [`modules/shared/pkgsets.nix`](modules/shared/pkgsets.nix).
 
-**nix-secrets** stores private infrastructure material consumed by this flake,
-including age-encrypted YAML files decrypted at build/activation time via
-sops-nix:
-
-```
-nix-secrets/
-  shared/secrets.yaml          # Shared across all hosts
-  hosts/{xyz,nux,rpi0,mac}/
-    secrets.yaml               # Per-host secrets
-```
+**nix-secrets** holds private infrastructure material. This flake consumes it
+through its exported NixOS and Home Manager modules (private defaults, policy
+and sops-nix secret wiring) and its repo inventory; its file layout stays
+private ([ADR-0002](docs/adr/0002-nix-secrets-separate-repository.md)).
 
 ## Key features
 
-- **Cross-platform** — NixOS + nix-darwin + Home Manager from one flake
-- **Distributed builds** — nux and nex can offload builds to xev first, then
-  xyz; rpi0 offloads only to xyz. If its remote builders are unavailable, a
-  host falls back to local builds where the target system is supported. mac remains an emergency deploy
-  operator through its nix-darwin Linux builder.
-- **Forgejo Actions runners** — `forgejo-podman` is the shared container pool
-  on xyz, xev, nex and nux, `ci-fast` sends heavy jobs to xyz only, and the
-  older Docker labels remain on every host; see
-  [CI runner labels](docs/ci-runner-labels.md).
-- **Encrypted storage** — Host storage integration with private bootstrap and recovery runbooks
-- **GPU passthrough** — Dynamic nvidia bind/unbind via libvirt hooks. Containers (steam, stash) stop/start automatically
-- **NFS + Avahi** — File sharing with Bonjour/Finder discovery, per-IP firewall rules
-- **Documents pipeline** — inotify/fswatch file organizer + Paperless-ngx ingest (API on macOS, filesystem on Linux)
-- **Private material boundary** — sops-nix wiring in public config, private details in nix-secrets
+- **Cross-platform**: NixOS, nix-darwin and Home Manager from one flake.
+- **Distributed builds**: NixOS hosts opt in as build clients and offload to
+  the fleet's build hosts, falling back to local builds where the target system
+  is supported ([ADR-0009](docs/adr/0009-xyz-as-distributed-build-host.md)).
+  mac remains an emergency deploy operator through its nix-darwin Linux
+  builder.
+- **Forgejo Actions runners**: `forgejo-podman` is the shared container pool
+  on xyz, xev, nex and nux; `ci-fast` sends heavy jobs to xyz, with xev
+  standing in while xyz cannot take them; the older Docker labels remain on
+  the same four hosts. See [CI runner labels](docs/ci-runner-labels.md).
+- **Encrypted storage**: host storage integration with private bootstrap and
+  recovery runbooks.
+- **Native media services**: Plex, Stash and qBittorrent run as NixOS
+  services on xyz.
+- **GPU passthrough**: dynamic Nvidia bind/unbind via libvirt hooks that stop
+  and start the GPU's users (the Steam container stack, the Stash service).
+  Currently disabled on xyz.
+- **NFS and Avahi**: file sharing with Bonjour/Finder discovery and per-client
+  firewall rules.
+- **Documents pipeline**: inotify/fswatch file organizer and Paperless-ngx
+  ingest (API on macOS, filesystem on Linux); see
+  [the documents pipeline](docs/documents-pipeline.md).
+- **Private material boundary**: sops-nix wiring in public config, private
+  details in nix-secrets.
 
 ## Common commands
 
@@ -307,13 +306,18 @@ just gc
 # Run the same maintenance remotely through the managed SSH host configuration
 just gc nux
 
-# Rebuild NixOS
-just rebuild xyz
+# Switch the current machine (deploy resolves the host)
+deploy --hm
+deploy --nixos
 
-# Rebuild Home Manager
-just home xyz
+# Switch one remote host
+deploy nux
 
-# Rebuild macOS
+# Switch the fleet from xyz; hosts with deployAll = false in inventory.nix
+# (madsil, rpi2, rpi3) are left out and need deploy <host>
+deploy --all
+
+# Rebuild macOS on the Mac
 just darwin mac
 
 # Deploy from the current machine instead of requiring xyz as the operator
@@ -334,7 +338,10 @@ nixfleet status --all
 just update
 
 # Update a single input
-just update nix-packages
+just update home-manager
+
+# Lock nix-packages to its validated promoted revision (ADR-0080)
+just lock-packages
 ```
 
 Automatic maintenance runs ordinary GC daily, collecting every dead path

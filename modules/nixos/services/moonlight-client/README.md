@@ -38,4 +38,5 @@ and [0043](../../../../docs/adr/0043-selective-external-nix-config-pattern-adopt
 - `default.nix` composes those helpers and owns NixOS service registration.
 
 These boundaries preserve generated commands, defaults, and service lifecycle.
-Further decomposition is tracked in [issue #279](https://git.alc.xyz/alcxyz/nix-config/issues/279).
+The decomposition recorded in [issue #279](https://git.alc.xyz/alcxyz/nix-config/issues/279)
+is complete; the composition left in `default.nix` is deliberate.

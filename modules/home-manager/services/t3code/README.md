@@ -122,7 +122,7 @@ link does not change, running instances pick this up at their next restart.
 sidebar:
 
 ```nix
-services.t3code.instances.bn.port = 3774;
+services.t3code.instances.work.port = 3774;
 ```
 
 Instances share the primary server's package or AI stack profile, update timer

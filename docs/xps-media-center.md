@@ -216,11 +216,13 @@ device scale; use `Super+Enter` only when fullscreen is explicitly wanted.
 ### Remote browser streaming
 
 XEV also provides on-demand browser sessions through two independent Wolf
-coordinators and Moonlight. The public coordinator exposes one shared
-`Browser` entry, which runs Brave Origin. The protected coordinator exposes
-Wolf UI, whose protected profile offers isolated Brave and Zen homes for
-private use; the Kubernetes private browser runs Brave Origin in its Brave
-entry. Each launch creates a disposable application container and virtual
+coordinators and Moonlight. The public coordinator routes its `Browser`
+entry into one persistent cooperative lobby that XPS shares with the TV
+appliances, and publishes `Browser (Individual)` as an opt-in isolated
+session; both run Brave Origin. The protected coordinator exposes Wolf UI,
+whose protected profile offers isolated Brave and Zen homes for private use;
+the Kubernetes private browser runs Brave Origin in its Brave entry. Each
+isolated launch creates a disposable application container and virtual
 display. A client disconnect leaves the container resumable for 30 minutes;
 its owning coordinator removes it after that idle deadline while retaining the
 browser's isolated home. The browsers are not installed globally on XEV; their
@@ -248,7 +250,8 @@ into a login dependency.
 
 Steam is available through `Home+A`, `Super+M`, and the `Steam Stream` menu
 entry. The launcher first checks the direct LAN endpoint, starts the remote
-Steam container over its established SSH host configuration when needed, and
+SteamHeadless container on xyz through its restricted host-key dispatcher
+(`services.steam-headless-remote`) when needed, and
 shows DMS status notifications while waiting for Sunshine. A cold start is
 expected to take roughly 20–90 seconds; an explicit failure notification
 replaces the previous silent timeout behavior.
@@ -269,7 +272,8 @@ local client pauses the remote application instead of destroying it.
 Steam, the public browser, and the protected Wolf selector use independent Moonlight
 processes on workspaces 1, 2, and 3 respectively. The public browser and the
 protected selector also use separate Wolf coordinators, state trees, runtime
-sockets, ports, cleanup scopes, and watchdogs on XEV. They can remain open and
+sockets, ports and cleanup scopes; the public coordinator runs under an
+external Kubernetes supervisor on XEV. They can remain open and
 be switched with the ordinary workspace shortcuts; launching, restarting, or
 recovering one browser coordinator does not stop the other. Background clients
 mute their audio and do not retain controller input, but continue decoding and
@@ -287,13 +291,14 @@ Systemd kills only that client's unresponsive local processes within three
 seconds; it deliberately does not quit the resumable remote application.
 The optional DMS bar and dock updates are individually time-bounded, so a
 stalled shell IPC request cannot wedge the Moonlight service during cleanup.
-Wolf arms a 30-minute idle deadline when the stream disconnects or a protected
+Wolf arms a 30-minute idle deadline when the stream disconnects or a resumable
 browser lobby becomes empty. Reconnecting cancels the deadline; expiry stops
 and removes the abandoned remote application container. Other applications
 retain Hyprland's ordinary focused-window close behavior.
 
-XEV also guards against the rarer case where either Wolf coordinator remains
-reachable after its CUDA/GStreamer video path has failed. Each watchdog
+XEV also guards the protected Wolf coordinator against the rarer case where it
+remains reachable after its CUDA/GStreamer video path has failed; the public
+coordinator's recovery belongs to its external supervisor. The watchdog
 recognizes only the known fatal buffer-map or streaming-thread signatures,
 waits until its own coordinator reports no active sessions, and reconstructs
 only that coordinator and its disposable runner containers. If a coordinator
@@ -315,8 +320,8 @@ the 1080p Philips output scales the window to that display. Moonlight and
 Hyprland do not request fullscreen; the single tiled window already fills the
 workspace.
 
-The accepted transport profile is 2560×1440 at 60 Hz using HEVC and a 40 Mbit/s
-client bitrate. Helium, Brave, Chromium, Firefox, and Zen each completed the
+The stream profile is 2560×1440 at 60 Hz using H.264 and a 40 Mbit/s client
+bitrate; the original acceptance tests ran with HEVC. Helium, Brave, Chromium, Firefox, and Zen each completed the
 same sustained 1440p playback test without a browser crash, Wolf encoder error,
 Moonlight decoder error, or abnormal XPS resource growth. Helium was then the
 default because it also gave the cleanest observed rendering; Brave Origin
