@@ -105,7 +105,15 @@ FORGEJO_URL = os.environ.get("AGENT_PR_REVIEW_FORGEJO_URL", "https://git.alc.xyz
 FORGEJO_REMOTE_HOSTS = set(
     os.environ.get("AGENT_PR_REVIEW_FORGEJO_REMOTE_HOSTS", "git.alc.xyz,git-ssh.alc.xyz").split(",")
 )
-MAX_DIFF_BYTES = 400_000
+# Every reviewer receives the whole prompt, the PR diff included, and a larger
+# one is refused rather than truncated; a follow-up that would exceed it becomes
+# a full review. At about three bytes per token for code and prose, 1 MB is
+# about 330k tokens, which leaves room for checkout reads in the smallest
+# reviewer window (gpt-6.1-sol: 500k tokens, 95% usable; Claude Opus 5.5 takes
+# 1M). Hash-heavy diffs, such as lock files, use more tokens per byte, so a
+# reviewer can still run out of context: that fails the round, never passes it.
+# Revisit when the reviewer models change.
+MAX_PROMPT_BYTES = 1_000_000
 # A follow-up reviews at most this share of the previous round's changed lines,
 # or this many lines if more. Current fixes cannot raise this round's allowance.
 FOLLOW_UP_SHARE = 0.4
@@ -1751,8 +1759,8 @@ def cmd_run(args):
             raise ReviewError(f"{pr} changed while it was checked out; run again")
         if not diff.strip():
             raise ReviewError(f"{pr} has an empty diff against {base}")
-        if len(diff.encode()) > MAX_DIFF_BYTES:
-            raise ReviewError(f"{pr} diff exceeds {MAX_DIFF_BYTES} bytes; split the PR or review it manually")
+        if len(diff.encode()) > MAX_PROMPT_BYTES:
+            raise ReviewError(f"{pr} diff exceeds {MAX_PROMPT_BYTES} bytes; split the PR or review it manually")
         role, role_reason = (args.role, "--role was given") if args.role else choose_role(config, diff)
         reviewers = role_config(config, role)
         findings = None
@@ -1778,10 +1786,14 @@ def cmd_run(args):
                 previous_short=previous["head"][:12], head_short=head[:12],
             )
             mode = f"follow-up to {previous['head'][:12]}"
-        else:
+            if len(prompt.encode()) > MAX_PROMPT_BYTES:
+                previous, reason = None, f"a follow-up prompt would exceed {MAX_PROMPT_BYTES} bytes"
+        if not previous:
             notes = f"\n## Author's response to earlier findings\n\n{args.response}\n" if args.response else ""
             prompt = PROMPT.format(**fields, notes=notes)
             mode = f"full review: {reason}"
+        if len(prompt.encode()) > MAX_PROMPT_BYTES:
+            raise ReviewError(f"{pr} review prompt exceeds {MAX_PROMPT_BYTES} bytes; split the PR or review it manually")
         prompt_path = os.path.join(directory, "prompt.md")
         kept = {} if args.force else reusable_results(status, reviewers, base, prompt_path, prompt)
         with open(prompt_path, "w", encoding="utf-8", newline="") as handle:

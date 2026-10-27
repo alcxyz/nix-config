@@ -1,6 +1,6 @@
 # ADR-0078: Guard agent PR merges with automated cross-model reviews
 
-**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories; amended 2026-10-17: `pr-review selftest` and failure reasons; amended 2026-10-19: GitHub fast-forward repositories merge by a push of the reviewed head to the base branch, checked by an agent pre-push hook; amended 2026-10-24: per-reviewer run times, a `limited` status for usage limits, and reruns of only the missing reviewers)
+**Status:** Accepted (amended 2026-10-01: `pr-review` command and head-pinned review comments; amended 2026-10-02: reviewers from the `deep` agent role, ADR-0079; amended 2026-10-03: follow-up reviews; amended 2026-10-03: `fj` merges, `tea` merges refused, and Forgejo MCP calls, ADR-0081; amended 2026-10-04: managed Codex hooks; amended 2026-10-04: guarded Forgejo MCP merges, ADR-0081; amended 2026-10-08: light reviewers for small documentation-only changes, and skipped reviews of already-reviewed promotions; amended 2026-10-11: the agent procedure moves to a `pr-review` skill, and low-severity findings are fixed in the PR by default; amended 2026-10-11: `tea api` shell merges, `fj` merges refused, ADR-0081, and the guard's scope stated; amended 2026-10-11: the `pr-review` skill moves to nix-secrets; amended 2026-10-14: inherited SIGHUP ignore, previous-round sizing, token counters and shell merge parsing; amended 2026-10-17: reviewers isolated from user-level instructions and files outside the checkout; amended 2026-10-17: reviews carried to pure rebases and fixup folds, and fast-forward checks for listed repositories; amended 2026-10-17: `pr-review selftest` and failure reasons; amended 2026-10-19: GitHub fast-forward repositories merge by a push of the reviewed head to the base branch, checked by an agent pre-push hook; amended 2026-10-24: per-reviewer run times, a `limited` status for usage limits, and reruns of only the missing reviewers; amended 2026-10-27: a 1 MB bound on the whole review prompt replaces the 400 kB diff limit)
 **Date:** 2026-10-01
 **Applies to:** `modules/home-manager/programs/ai/`, `modules/home-manager/services/t3code/`, `modules/nixos/security/agent-pr-review-guard/`, Claude Code and Codex CLI hooks, the agent Git pre-push hook in the user's Git configuration
 
@@ -587,8 +587,12 @@ the target's own reviews must catch. The fast-forward checks see only commit
 metadata the forge reports, and only for listed repositories. The light classification goes by path, so documentation that defines
 policy without matching the deep patterns gets light reviewers unless the
 agent passes `--role deep`. Comments in the earlier format
-without a head SHA no longer satisfy the guard. Diffs over 400 kB are refused
-rather than truncated. Where both the managed
+without a head SHA no longer satisfy the guard. Review prompts over 1 MB,
+the PR diff included, are refused rather than truncated, and a follow-up
+that would exceed that runs as a full review (a 400 kB diff bound until
+2026-10-27). The bound follows the smallest reviewer context window at about
+three bytes per token; hash-heavy diffs use more tokens per byte, so a
+reviewer can still run out of context, which fails the round. Where both the managed
 and a trusted user hook exist, the guard runs twice per call, which is harmless.
 A host that enables `security.agentPrReviewGuard` for a user without
 `programs.ai` blocks that user's Codex shell and Forgejo MCP calls. The managed

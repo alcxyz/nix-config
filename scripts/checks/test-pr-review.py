@@ -2077,6 +2077,24 @@ with tempfile.TemporaryDirectory() as tmp:
     code, output = cli("run", "4", "--force")
     assert code == 0 and f"(follow-up to {full_round[:12]})" in output, output
 
+    # The prompt bound covers the follow-up's interdiff and earlier findings: a
+    # follow-up that would exceed it is a full review, and a full prompt that
+    # exceeds it is refused.
+    full_size = len(pathlib.Path(rounds, full_round, "prompt.md").read_bytes())
+    follow_size = len(pathlib.Path(rounds, fix, "prompt.md").read_bytes())
+    assert follow_size > full_size + 200, (follow_size, full_size)
+    with patch.object(review, "MAX_PROMPT_BYTES", full_size + 200):
+        bounded = push("one\n{braces} survive\nfixed 7\n", fix)
+        assert review_round(bounded, "(full review: a follow-up prompt would exceed") == "full"
+    with patch.object(review, "MAX_PROMPT_BYTES", full_size - 200):
+        at(push("one\n{braces} survive\nfixed 8\n", bounded))
+        code, output = cli("run", "4")
+        assert code != 0 and "review prompt exceeds" in output, output
+    # Make `fix` the latest round again for the checks below.
+    at(fix)
+    code, output = cli("run", "4", "--force")
+    assert code == 0 and f"(follow-up to {full_round[:12]})" in output, output
+
     # A large or binary change, a rebase, merging the target in, a retarget
     # or changed reviewers each need a full review.
     fix = push("one\n{braces} survive\n" + "more\n" * 60, fix)
