@@ -90,7 +90,7 @@ if [[ -n $docker_volume_manifest ]]; then
     $(stat -c '%d:%i:%u:%a:%h:%s' -- "$docker_volume_manifest") == "$manifest_identity" ]] || fail docker_manifest_untrusted
   docker_volume_queue=$("$jq_bin" -ser '
     def name: type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]*\\z");
-    def stamp: type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})\\z");
+    def stamp: type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])\\z");
     if length != 1 then error("manifest count") else .[0] end |
     if type == "object" and keys == ["volumes"] and (.volumes | type == "array") and
       all(.volumes[]; type == "object" and keys == ["created_at", "name"] and
@@ -99,6 +99,13 @@ if [[ -n $docker_volume_manifest ]]; then
     then [.volumes[] | [.name, .created_at] | @tsv] | join("\n") else error("invalid manifest") end
   ' <&8) || fail docker_manifest_invalid
   exec 8<&-
+  # Shape and time/offset ranges alone cannot establish a real calendar date.
+  # Validate every entry before any API access or mutation, retaining its exact
+  # original timestamp for the later Docker identity comparison.
+  while IFS=$'\t' read -r volume created_at; do
+    [[ -n $volume ]] || continue
+    LC_ALL=C TZ=UTC0 date --date="$created_at" +%s >/dev/null 2>&1 || fail docker_manifest_invalid
+  done <<<"$docker_volume_queue"
 fi
 
 available_bytes() {
@@ -154,28 +161,39 @@ query_unit() {
     local remaining=$((lock_deadline - SECONDS))
     ((remaining > 0)) || return 1
     ((remaining <= 5)) || remaining=5
-    timeout -s KILL "${remaining}s" "$systemctl_bin" "$@"
+    local status=0
+    timeout -s KILL "${remaining}s" "$systemctl_bin" "$@" || status=$?
+    ((SECONDS < lock_deadline)) || return 75
+    return "$status"
   else
     timeout -k 2s 5s "$systemctl_bin" "$@"
   fi
 }
-[[ $(query_unit show --property=FreezerState --value forgejobuilds.slice) == running ]] || skip aggregate_frozen
-query_unit is-active --quiet forgejo-runner-io-pressure-guard.service || skip guard_inactive
-query_unit is-active --quiet forgejo-runner-aggregate-lifecycle.service || skip guard_inactive
-query_unit is-active --quiet forgejo-runner-docker.service || skip engine_inactive
-query_unit is-active --quiet forgejo-runner-podman.service || skip engine_inactive
+# This runs in the caller, including after command substitutions. A query
+# deadline must not be mistaken for unhealthy systemd state or lost metadata.
+preflight_skip() {
+  if [[ -n $docker_volume_manifest ]] && ((SECONDS >= lock_deadline)); then
+    skip 'bounded_partial cause=budget step=preflight'
+  fi
+  skip "$@"
+}
+[[ $(query_unit show --property=FreezerState --value forgejobuilds.slice) == running ]] || preflight_skip aggregate_frozen
+query_unit is-active --quiet forgejo-runner-io-pressure-guard.service || preflight_skip guard_inactive
+query_unit is-active --quiet forgejo-runner-aggregate-lifecycle.service || preflight_skip guard_inactive
+query_unit is-active --quiet forgejo-runner-docker.service || preflight_skip engine_inactive
+query_unit is-active --quiet forgejo-runner-podman.service || preflight_skip engine_inactive
 
 for unit in "${runner_units[@]}"; do
   metadata=$(query_unit show --property=ActiveState --property=SubState \
-    --property=MainPID --property=ControlPID --property=Job "$unit") || skip "runner_unreadable unit=$unit"
-  [[ $(printf '%s\n' "$metadata" | wc -l) == 5 ]] || skip "runner_active unit=$unit"
+    --property=MainPID --property=ControlPID --property=Job "$unit") || preflight_skip "runner_unreadable unit=$unit"
+  [[ $(printf '%s\n' "$metadata" | wc -l) == 5 ]] || preflight_skip "runner_active unit=$unit"
   # systemctl renders the absence of a pending job as an empty Job= field.
   for expected in ActiveState=inactive SubState=dead MainPID=0 ControlPID=0 Job=; do
-    printf '%s\n' "$metadata" | rg --quiet --fixed-strings --line-regexp "$expected" || skip "runner_active unit=$unit"
+    printf '%s\n' "$metadata" | rg --quiet --fixed-strings --line-regexp "$expected" || preflight_skip "runner_active unit=$unit"
   done
 done
 
-[[ -S $docker_socket && -S $podman_socket ]] || skip engine_socket_missing
+[[ -S $docker_socket && -S $podman_socket ]] || preflight_skip engine_socket_missing
 
 # Bind uncertain completion to the executions which could own the storage
 # worker. Clean shutdown can reset systemd's current generation to zero;
@@ -183,8 +201,8 @@ done
 # PID changes and successful GET requests are not completion evidence.
 api_generations=''
 for unit in forgejo-runner-docker.service forgejo-runner-podman.service; do
-  generation=$(query_unit show --property=ExecMainStartTimestampMonotonic --value "$unit") || skip api_generation_unreadable
-  [[ $generation =~ ^[1-9][0-9]*$ ]] || skip api_generation_invalid
+  generation=$(query_unit show --property=ExecMainStartTimestampMonotonic --value "$unit") || preflight_skip api_generation_unreadable
+  [[ $generation =~ ^[1-9][0-9]*$ ]] || preflight_skip api_generation_invalid
   api_generations+="$unit $generation"$'\n'
 done
 
@@ -344,7 +362,9 @@ if [[ -n $docker_volume_manifest ]]; then
       if type == "array" and all(.[]; type == "object" and
           (.Id | type == "string" and test("^[0-9a-f]{64}\\z")) and
           (.Created | type == "number" and . >= 0 and floor == .) and
-          (.State == "exited" or .State == "dead") and
+          (.State | type == "string" and
+            IN("created", "running", "paused", "restarting", "removing", "exited", "dead",
+              "configured", "stopping", "stopped", "unknown")) and
           (if $engine == "docker" then
             (.Mounts | type == "array" and all(.[]; type == "object" and
               (.Type == "bind" or .Type == "tmpfs" or .Type == "volume" or .Type == "image" or .Type == "npipe") and
@@ -352,8 +372,10 @@ if [[ -n $docker_volume_manifest ]]; then
            else true end)) and ([.[].Id] | unique | length) == length
       then [.[] | select($engine == "docker") | .Mounts[] |
         select(.Type == "volume") | .Name] | join("\n")
-      else error("invalid terminal inventory") end
+      else error("invalid container inventory") end
     ' <<<"$containers") || skip "engine_api_invalid engine=$engine"
+    "$jq_bin" -e 'all(.[]; .State == "exited" or .State == "dead")' \
+      <<<"$containers" >/dev/null || skip "live_containers engine=$engine"
     [[ $engine != docker ]] || docker_references=$references
   done
   attempted_volumes=0

@@ -111,6 +111,38 @@ esac
         self.allow()
         self.assertIn('attempts=0', self.run_ok())
 
+    def test_all_manifest_dates_are_semantically_valid_before_mutation(self):
+        for stamp in ['2026-02-30T00:00:00Z', '2025-02-29T00:00:00Z',
+                      '1900-02-29T00:00:00Z', '2026-04-31T00:00:00Z',
+                      '2026-00-01T00:00:00Z', '2026-13-01T00:00:00Z',
+                      '2026-01-00T00:00:00Z', '2026-01-32T00:00:00Z',
+                      '2026-01-01T24:00:00Z', '2026-01-01T00:60:00Z',
+                      '2026-01-01T00:00:60Z', '2026-01-01T00:00:00+24:00',
+                      '2026-01-01T00:00:00-00:60', '2026-01-01T00:00:00+99:99']:
+            with self.subTest(stamp=stamp):
+                # A valid first candidate must not be deleted before discovering
+                # an impossible timestamp anywhere later in the manifest.
+                self.manifest.write_text(json.dumps({'volumes': [
+                    dict(name='fixture_one', created_at=STAMP),
+                    dict(name='fixture_two', created_at=stamp)]}))
+                result = self.f.run()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('docker_manifest_invalid', result.stderr)
+                self.assertEqual(self.f.mutations, [])
+                self.assertEqual(self.f.calls, [])
+
+    def test_valid_leap_fraction_and_offset_dates_keep_exact_identity(self):
+        for stamp in ['2000-02-29T23:59:59.123456789Z',
+                      '2024-02-29T00:00:00+23:59', '2024-02-29T00:00:00-00:30']:
+            with self.subTest(stamp=stamp):
+                self.allow('fixture_one')
+                self.manifest.write_text(json.dumps({'volumes': [
+                    dict(name='fixture_one', created_at=stamp)]}))
+                self.f.docker_volumes['fixture_one']['CreatedAt'] = stamp
+                before = len(self.f.mutations)
+                self.assertIn('removed_docker_volume', self.run_ok())
+                self.assertEqual(len(self.f.mutations), before + 1)
+
     def test_manifest_trust(self):
         self.manifest.chmod(0o644)
         self.assertEqual(self.f.run().returncode, 1)
@@ -134,7 +166,7 @@ esac
 
     def test_both_inventories_fully_terminal_and_strict_before_mutation(self):
         for engine in ['docker', 'podman']:
-            for value in [{}, [dict(State='exited')], [dict(Id='a' * 64, Created=0, State='running', Mounts=[])],
+            for value in [{}, [dict(State='exited')], [dict(Id='a' * 64, Created=0, State='invalid', Mounts=[])],
                           [dict(Id='a' * 64, Created=0, State='exited', Mounts=[]) for _ in range(2)]]:
                 with self.subTest(engine=engine, value=value):
                     self.f.docker_containers = value if engine == 'docker' else []
@@ -146,6 +178,22 @@ esac
             self.f.docker_containers = [dict(Id='a' * 64, Created=0, State='dead', Mounts=mounts)]
             self.assertIn('engine_api_invalid', self.run_ok())
             self.assertEqual(self.f.mutations, [])
+
+    def test_valid_live_inventories_are_distinct_from_invalid_inventories(self):
+        for engine in ['docker', 'podman']:
+            for state in ['created', 'running', 'paused', 'restarting', 'removing']:
+                with self.subTest(engine=engine, state=state):
+                    live = dict(Id='a' * 64, Created=0, State=state, Mounts=[])
+                    self.f.docker_containers = [live] if engine == 'docker' else []
+                    self.f.containers = [live] if engine == 'podman' else []
+                    self.assertEqual(self.run_ok().strip(),
+                                     f'skipped reason=live_containers engine={engine}')
+                    # Validate the entire schema before classifying a valid live
+                    # entry, even when a malformed entry follows it.
+                    inventory = self.f.docker_containers if engine == 'docker' else self.f.containers
+                    inventory.append(dict(State='exited'))
+                    self.assertIn('engine_api_invalid', self.run_ok())
+                    self.assertEqual(self.f.mutations, [])
 
     def test_inspect_identity_driver_scope_options_and_absence(self):
         self.allow('fixture_one')
@@ -188,6 +236,24 @@ esac
         marker.touch()
         self.assertIn('transition_marker', self.run_ok())
         self.assertEqual(self.f.mutations, [])
+
+    def test_preflight_budget_exhaustion_survives_query_substitutions(self):
+        systemctl = self.f.root / 'systemctl'
+        original = systemctl.read_text()
+        for pattern in ['*FreezerState*', '*is-active*', '*ActiveState*',
+                        '*ExecMainStartTimestampMonotonic*']:
+            with self.subTest(query=pattern):
+                # Cover direct queries and each command-substitution family.
+                # A one-second lock budget makes a slow read-only preflight
+                # exhaust the same deadline used by destructive requests.
+                systemctl.write_text('#!/usr/bin/env bash\ncase "$*" in '
+                                     + pattern + ') sleep 3 ;; esac\n' + original)
+                output = self.run_ok(LOCK_BUDGET_SECONDS='1')
+                self.assertEqual(output.strip(),
+                                 'skipped reason=bounded_partial cause=budget step=preflight')
+                self.assertEqual(self.f.calls, [])
+                self.assertEqual(self.f.mutations, [])
+        systemctl.write_text(original)
 
     def test_budget_after_first_success_stops_next_request(self):
         # Simulate time consumed before dispatch without a slow fixture suite.
