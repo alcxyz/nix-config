@@ -1,6 +1,6 @@
 # ADR-0016: Devlog as Go binary with weekly summaries
 
-**Status:** Accepted, amended 2026-08-24 and 2026-10-05
+**Status:** Accepted, amended 2026-08-24, 2026-10-05 and 2026-10-27
 **Date:** 2026-04-25
 **Applies to:** `modules/home-manager/services/devlog/`, `nix-packages/tools/devlog/`
 
@@ -43,3 +43,7 @@ The original implementation also posted each weekly file as a new HedgeDoc note.
 - **Forgejo is the primary activity source.** Most work is Forgejo-first, and GitHub search missed most of it: forge squash merges carry an identity GitHub does not link to the account, and Forgejo pull requests and issues were never seen. devlog reads the user's Forgejo activity feed (`services.devlog.forgejo`, token through a `*_FILE` variable) and keeps GitHub for GitHub-native repositories, removing commits already seen through mirrors.
 - **All repositories the user works in are included.** The devlog is private and records the user's own work, so activity in repositories owned by others (forks, third-party projects, employers) is treated like any other and its diffs are summarised in full.
 - **Entries live in their own private repository.** devlog first wrote into the private journal checkout, which is edited by hand; since devlog refuses to run on a dirty tree, a run could fail just because someone was working there. Generated entries now live in a dedicated repository that devlog clones on first run (`services.devlog.repoUrl`) into a checkout under the XDG state directory that nobody edits by hand. The entries were moved with their history.
+
+## Amendment: a deploy key for pushes (2026-10-27)
+
+devlog pushed entries through the operator's SSH agent, so a run depended on the agent being loaded and used the operator's personal key, which reaches every repository. `services.devlog.sshKeyFile` now points git at a private key instead, and the units then ignore the agent and the user's ssh config, so no personal key is offered. On xyz it is a write deploy key limited to the entries repository (`alcxyz/devlog`), wired from the private flake like the other generated sources' keys (#805). Forgejo records deploy-key pushes as the repository owner, so that repository's publish step, which accepts only the owner's pushes, keeps working. Null keeps the agent.

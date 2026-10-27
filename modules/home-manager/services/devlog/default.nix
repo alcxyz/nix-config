@@ -29,6 +29,27 @@
     mv "$tmp/repo" "$repo"
   '';
   execStartPre = lib.optional (cfg.repoUrl != null) "${ensureClone}";
+  # A dedicated key replaces the operator's SSH agent, so runs do not depend on
+  # an unlocked session and use no broader key than the entries repository
+  # needs. -F /dev/null drops the user's ssh config, whose IdentityFile entries
+  # would offer personal keys after this one. ssh skips a missing -i file and
+  # falls back to its default identities, so the wrapper stops without the key.
+  devlogSsh = pkgs.writeShellScript "devlog-ssh" ''
+    key=${lib.escapeShellArg (toString cfg.sshKeyFile)}
+    if [ ! -r "$key" ]; then
+      echo "devlog-ssh: cannot read SSH key $key" >&2
+      exit 255
+    fi
+    exec ${pkgs.openssh}/bin/ssh -F /dev/null -i "$key" -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes "$@"
+  '';
+  sshEnvironment =
+    if cfg.sshKeyFile != null
+    then ["GIT_SSH_COMMAND=${devlogSsh}"]
+    else ["SSH_AUTH_SOCK=%t/ssh-agent"];
+  sshUnit = lib.optionalAttrs (cfg.sshKeyFile != null) {
+    After = ["sops-nix.service"];
+    Wants = ["sops-nix.service"];
+  };
 in {
   options.services.devlog = {
     enable = lib.mkEnableOption "Daily devlog generator";
@@ -51,6 +72,13 @@ in {
       default = null;
       example = "git@forgejo.example.com:user/devlog.git";
       description = "Remote cloned into repoPath when the checkout is missing. Null expects repoPath to exist already.";
+    };
+
+    sshKeyFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/home/alc/.ssh/devlog_ed25519";
+      description = "Private SSH key, such as a write deploy key limited to the entries repository, used to clone and push repoPath. Null uses the operator's SSH agent.";
     };
 
     notifyOnFailure = lib.mkOption {
@@ -112,6 +140,7 @@ in {
           {
             Description = "Generate daily devlog from development activity";
           }
+          // sshUnit
           // lib.optionalAttrs cfg.notifyOnFailure {OnFailure = "devlog-failure@%n.service";};
         Service = {
           Type = "oneshot";
@@ -123,8 +152,8 @@ in {
             [
               "PATH=${lib.makeBinPath [pkgs.git pkgs.gh pkgs.claude-code pkgs.codex-cli pkgs.forge-mirror pkgs.coreutils pkgs.bash pkgs.openssh]}"
               "HOME=${config.home.homeDirectory}"
-              "SSH_AUTH_SOCK=%t/ssh-agent"
             ]
+            ++ sshEnvironment
             ++ lib.optional (cfg.forgejo.url != null) "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.tokenFile}";
         };
       };
@@ -157,6 +186,7 @@ in {
           {
             Description = "Generate weekly devlog summary";
           }
+          // sshUnit
           // lib.optionalAttrs cfg.notifyOnFailure {OnFailure = "devlog-failure@%n.service";};
         Service = {
           Type = "oneshot";
@@ -164,11 +194,12 @@ in {
           ExecStart = "${pkgs.devlog}/bin/devlog weekly -repo ${cfg.repoPath}";
           StandardOutput = "journal";
           StandardError = "journal";
-          Environment = [
-            "PATH=${lib.makeBinPath [pkgs.git pkgs.claude-code pkgs.codex-cli pkgs.forge-mirror pkgs.coreutils pkgs.openssh]}"
-            "HOME=${config.home.homeDirectory}"
-            "SSH_AUTH_SOCK=%t/ssh-agent"
-          ];
+          Environment =
+            [
+              "PATH=${lib.makeBinPath [pkgs.git pkgs.claude-code pkgs.codex-cli pkgs.forge-mirror pkgs.coreutils pkgs.openssh]}"
+              "HOME=${config.home.homeDirectory}"
+            ]
+            ++ sshEnvironment;
         };
       };
 
