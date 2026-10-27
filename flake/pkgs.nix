@@ -138,7 +138,7 @@ in
               # dependency set, notably OpenAPV's pre-1.1 API (issue #787).
               ffmpeg-v4l2-request = inputs.nixpkgs-azure-cli.legacyPackages.${system}.callPackage ../packages/ffmpeg-v4l2-request {};
               moonlight-v4l2-request = _prev.moonlight-qt.override {
-                ffmpeg_8 = _final.ffmpeg-v4l2-request;
+                ffmpeg = _final.ffmpeg-v4l2-request;
               };
               # Keep the Pi 3 client as its own derivation so board-specific
               # Moonlight/FFmpeg fixes can evolve independently of rpi0.
