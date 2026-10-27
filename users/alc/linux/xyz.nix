@@ -85,6 +85,8 @@ in {
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
     "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
     "${configDir}/modules/home-manager/services/devlog/default.nix"
+    # Pushes devlog entries with a deploy key instead of the SSH agent (#805).
+    inputs.nix-secrets.homeManagerModules.devlogDeployKey
     "${configDir}/modules/home-manager/services/deck/default.nix"
     # Refreshes a deck report's data from the document portal (xyz only).
     inputs.nix-secrets.homeManagerModules.deckShareReport
