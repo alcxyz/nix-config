@@ -27,6 +27,20 @@
     done
     exit 0
   '';
+  # Informational, like the observer: the merge-class hint at session start
+  # comes from the user's own pr-review, and its absence never blocks.
+  mergeClassCommand = "${hooksDir}/agent-merge-class";
+  mergeClassScript = ''
+    #!${pkgs.runtimeShell}
+    user=$(${lib.getExe' pkgs.coreutils "id"} -un)
+    for review in "/etc/profiles/per-user/$user/bin/pr-review" "$HOME/.nix-profile/bin/pr-review"; do
+      if [ -x "$review" ]; then
+        "$review" merge-class --hook || true
+        exit 0
+      fi
+    done
+    exit 0
+  '';
   # Home Manager (programs.ai) builds the guard per user with the user's Forgejo
   # MCP settings; this hook runs that guard. Users in cfg.users are blocked
   # when it is missing, so a broken profile cannot silently disable the guard.
@@ -74,6 +88,18 @@
           ];
         }
       ];
+      SessionStart = [
+        {
+          matcher = "^(startup|resume|compact)$";
+          hooks = [
+            {
+              type = "command";
+              command = mergeClassCommand;
+              timeout = 10;
+            }
+          ];
+        }
+      ];
     };
   };
 in {
@@ -102,6 +128,10 @@ in {
       };
       "codex/hooks/agent-description-format-observe" = {
         text = descriptionScript;
+        mode = "0555";
+      };
+      "codex/hooks/agent-merge-class" = {
+        text = mergeClassScript;
         mode = "0555";
       };
     };

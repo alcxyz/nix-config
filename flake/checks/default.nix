@@ -1004,10 +1004,10 @@ in {
         touch "$out"
       '';
 
-  # The agent pre-push hook (ADR-0078): with a GitHub fast-forward repository
-  # listed, the user's Git configuration registers `pr-review pre-push`, T3's
-  # session wrapper marks agent sessions, and Git runs the hook; without one,
-  # neither is set.
+  # The agent pre-push hook (ADR-0078): with a fast-forward repository listed,
+  # the user's Git configuration registers `pr-review pre-push`, T3's session
+  # wrapper marks agent sessions, and Git runs the hook; with none, neither is
+  # set. Claude Code and Codex start sessions with the merge-class hint.
   agent-pr-review-hook-contract = let
     listedUrl = "https://github.com/owner-test/repo.git";
     base = self.homeConfigurations.alc-xyz.extendModules {
@@ -1021,7 +1021,7 @@ in {
     withRepositories = repositories:
       (base.extendModules {modules = [{programs.ai.prReview.fastForwardRepositories = lib.mkForce repositories;}];}).config;
     on = withRepositories ["github.com/owner-test/repo" "git.example.org/owner-test/repo"];
-    off = withRepositories ["git.example.org/owner-test/repo"];
+    off = withRepositories [];
     sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
     sessionEnv = on.home.file.${sessionEnvLink}.source;
     offSessionEnv = off.home.file.${sessionEnvLink}.source;
@@ -1030,9 +1030,12 @@ in {
   in
     assert off.programs.ai.prReview.sessionCommands == "";
     assert !(off.programs.git.settings ? hook);
+    assert (withRepositories ["git.example.org/owner-test/repo"]).programs.git.settings ? hook;
+    assert lib.any (entry: lib.any (hook: lib.hasSuffix "/bin/pr-review merge-class --hook" hook.command) entry.hooks)
+    (builtins.fromJSON on.home.file.".codex/hooks.json".text).hooks.SessionStart;
       pkgs.runCommand "agent-pr-review-hook-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.shellcheck];} ''
         if grep -F 'agent-pr-review' ${offGitConfig} || grep -F PR_REVIEW_AGENT_SESSION ${offSessionEnv}; then
-          echo "The hook or the agent marker is set without a GitHub fast-forward repository" >&2
+          echo "The hook or the agent marker is set without a fast-forward repository" >&2
           exit 1
         fi
         shellcheck ${../../scripts/checks/test-agent-pr-review-hook.sh}

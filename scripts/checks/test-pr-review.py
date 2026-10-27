@@ -843,6 +843,9 @@ def github_response(endpoint):
         return json.dumps({"default_branch": "dev"})
     if rest == "pulls":
         assert fields["state"] == "open" and fields["per_page"] == "100" and fields["page"] == "1", endpoint
+        if "head" in fields:
+            return json.dumps([pull for pull in github_pulls.values()
+                               if f"O:{pull['head'].get('ref')}" == fields["head"]])
         return json.dumps([pull for pull in github_pulls.values() if pull["base"]["ref"] == fields["base"]])
     number = parts[4]
     if rest.endswith("/commits"):
@@ -981,7 +984,8 @@ with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"GIT_CONFIG_G
     assert pre_push(listed_url, update(reviewed, "refs/heads/topic", ZERO), update(heads["loose"]))[0] == 1
     # Feature branches pass after learning they are not protected; tags pass without lookups.
     code, _, seen = pre_push(listed_url, update(heads["loose"], "refs/heads/topic", heads["side"]))
-    assert code == 0 and seen == ["repos/O/R", "repos/O/R/pulls?state=open&base=topic&per_page=100&page=1"], seen
+    assert code == 0 and seen == ["repos/O/R", "repos/O/R/pulls?state=open&base=topic&per_page=100&page=1",
+                                  "repos/O/R/pulls?state=open&head=O%3Atopic&per_page=100&page=1"], seen
     code, _, seen = pre_push(listed_url, update(heads["loose"], "refs/tags/v1", ZERO), update(ZERO, "refs/tags/v0"))
     assert code == 0 and not seen, seen
     # Unlisted repositories and other hosts pass without lookups, even unreadable configuration
@@ -1001,6 +1005,181 @@ with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"GIT_CONFIG_G
     code, message, _ = pre_push(listed_url, update(reviewed))
     assert code == 1 and "offline" in message, message
     github_failures.clear()
+
+    # After a PR's first completed review, agent pushes to its head branch in a
+    # fast-forward repository add only autosquash commits, or rebase or fold the
+    # reviewed ones; `pr-review curate` lets one rewritten commit through.
+    git("switch", "-q", "-c", "work", "main")
+    git("commit", "-q", "--allow-empty", "-m", "feat: a")
+    git("commit", "-q", "--allow-empty", "-m", "feat: b")
+    work = git("rev-parse", "HEAD")
+
+    def commit_on(parent, subject):
+        git("switch", "-q", "--detach", parent)
+        git("commit", "-q", "--allow-empty", "-m", subject)
+        return git("rev-parse", "HEAD")
+
+    fixup = commit_on(work, "fixup! feat: a")
+    squashed = commit_on(fixup, "squash! feat: b")
+    added = commit_on(fixup, "fix: c")
+    moved = commit_on(base, "chore: dev moves")
+    git("update-ref", "refs/remotes/origin/dev", moved)
+    rebased = commit_on(commit_on(moved, "feat: a"), "feat: b")
+    rebased_fixup = commit_on(rebased, "fixup! feat: b")
+    reworded = commit_on(commit_on(moved, "feat: a"), "feat: b, reworded")
+    amended = commit_on(work, "amend! feat: b")
+    # With a review of `feat: a` alone and a later one of both, a fold of the
+    # later round's fixup still descends from the earlier reviewed head.
+    first = git("rev-parse", f"{work}~1")
+    git("switch", "-q", "--detach", first)
+    git("commit", "-q", "--allow-empty", "-m", "feat: b",
+        env={**os.environ, "GIT_COMMITTER_DATE": "2001-01-01T00:00:00Z"})
+    folded = git("rev-parse", "HEAD")
+    assert folded != work
+    git("switch", "-q", "feature")
+    github_pulls["18"] = {"number": 18, "head": {"sha": work, "ref": "work", "repo": {"full_name": "O/R"}},
+                          "base": {"ref": "dev"}}
+    review_body = f"Automated read-only review ({work[:12]} on dev): full (deep): no blocking findings."
+    github_bodies["18"] = [review_body]
+
+    def work_push(local, remote=work):
+        return update(local, "refs/heads/work", remote)
+
+    for head in (work, fixup, squashed, rebased, rebased_fixup):
+        code, message, seen = pre_push(listed_url, work_push(head))
+        assert code == 0 and not message, (head, message)
+    assert "repos/O/R/pulls?state=open&head=O%3Awork&per_page=100&page=1" in seen, seen
+    assert "repos/O/R/issues/18/comments" in seen, seen
+    code, message, _ = pre_push(listed_url, work_push(added, fixup))
+    assert code == 1 and "is a new commit that is not a fixup" in message and "fix: c" in message, message
+    assert "pr-review curate 18" in message and "pr-review run <pr>" not in message, message
+    code, message, _ = pre_push(listed_url, work_push(reworded))
+    assert code == 1 and "no longer match the reviewed ones" in message, message
+    # amend! rewrites its target's message when folded, so it needs curation.
+    code, message, _ = pre_push(listed_url, work_push(amended))
+    assert code == 1 and "`amend! feat: b` is a new commit that is not a fixup" in message, message
+    github_bodies["18"] = [f"Automated read-only review ({first[:12]} on dev): full (deep): no blocking findings.",
+                           review_body]
+    code, message, _ = pre_push(listed_url, work_push(folded, fixup))
+    assert code == 0 and not message, message
+    # Without the base branch the fold cannot be compared: warn, never refuse it.
+    git("update-ref", "-d", "refs/remotes/origin/dev")
+    code, message, _ = pre_push(listed_url, work_push(folded, fixup))
+    assert code == 0 and "remote-tracking branch for dev" in message, (code, message)
+    git("update-ref", "refs/remotes/origin/dev", moved)
+    github_bodies["18"] = [review_body]
+    # Without the base branch to compare with, the hook warns and lets a rewrite
+    # through, but still refuses a commit added on top of the only review.
+    git("update-ref", "-d", "refs/remotes/origin/dev")
+    assert pre_push(listed_url, work_push(added, fixup))[0] == 1
+    code, message, _ = pre_push(listed_url, work_push(reworded))
+    assert code == 0 and "Warning" in message and "remote-tracking branch for dev" in message, message
+    git("update-ref", "refs/remotes/origin/dev", moved)
+    # A skip, or a review on another base, is no completed review.
+    for body in (f"Automated read-only review ({work[:12]} on dev): skipped (trivial).",
+                 f"Automated read-only review ({work[:12]} on main): full (deep): no blocking findings."):
+        github_bodies["18"] = [body]
+        assert pre_push(listed_url, work_push(added))[0] == 0, body
+    # A reviewed head this clone lacks cannot be compared: warn and push.
+    github_bodies["18"] = [f"Automated read-only review ({'1' * 12} on dev): full (deep): no blocking findings."]
+    code, message, _ = pre_push(listed_url, work_push(added))
+    assert code == 0 and "lacks O/R#18's reviewed head" in message, message
+    # A completed local round counts before its comment is posted.
+    github_bodies["18"] = []
+    with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {"XDG_STATE_HOME": state}):
+        assert pre_push(listed_url, work_push(added))[0] == 0
+        round_dir = os.path.join(state, "pr-review", "github.com", "O", "R", "18", work)
+        os.makedirs(round_dir)
+        pathlib.Path(round_dir, "status.json").write_text(json.dumps({"head": work, "base": "dev"}))
+        with patch.object(review, "load_config", lambda: {"reviewers": [{"name": "a"}]}), \
+                patch.object(review, "complete", lambda config, status, base: status.get("base") == base):
+            assert pre_push(listed_url, work_push(added))[0] == 1
+        github_bodies["18"] = [review_body]
+        # Curation is recorded for one commit, which then passes; others are checked as before.
+        sys.stdout, previous = io.StringIO(), os.getcwd()
+        os.chdir(repo)
+        try:
+            assert review.main(["curate", "https://github.com/O/R/pull/18", added, "--reason", "split a commit"]) == 0
+            assert "will accept" in sys.stdout.getvalue(), sys.stdout.getvalue()
+        finally:
+            sys.stdout = sys.__stdout__
+            os.chdir(previous)
+        code, message, _ = pre_push(listed_url, work_push(added))
+        assert code == 0 and "curated history of O/R#18: split a commit" in message, message
+        assert pre_push(listed_url, work_push(reworded))[0] == 1
+    # Forgejo fast-forward repositories get the same check; their protected
+    # branches are the forge's to guard, and lookup failures only warn.
+    forgejo_url = f"ssh://git@{forgejo_host}/O/r.git"
+    forgejo_failures, forgejo_calls = [], []
+
+    def pushes_forgejo(pr, path, data=None, accept="application/json"):
+        forgejo_calls.append(path)
+        if forgejo_failures:
+            raise review.ReviewError(f"cannot reach {pr.host}: offline")
+        if path.startswith("pulls?state=open&"):
+            return [{"number": 21, "head": {"ref": "work", "repo": {"full_name": "O/r"}}, "base": {"ref": "dev"}},
+                    {"number": 22, "head": {"ref": "work", "repo": {"full_name": "fork/r"}},
+                     "base": {"ref": "dev"}}]
+        if path == "":
+            return {"default_branch": "dev"}
+        if path == "issues/21/comments":
+            return [{"body": review_body}]
+        raise AssertionError(path)
+
+    previous_forgejo, review.forgejo_request = review.forgejo_request, pushes_forgejo
+    try:
+        for head in (fixup, rebased):
+            forgejo_calls.clear()
+            assert pre_push(forgejo_url, work_push(head))[0] == 0, head
+        assert forgejo_calls == ["pulls?state=open&limit=50&page=1", "", "issues/21/comments"], forgejo_calls
+        code, message, _ = pre_push(forgejo_url, work_push(added))
+        assert code == 1 and "O/r#21 has a completed review" in message and "pr-review curate 21" in message, message
+        forgejo_calls.clear()
+        assert pre_push(forgejo_url, update(added))[0] == 0  # dev: the base of an open PR
+        assert forgejo_calls == ["pulls?state=open&limit=50&page=1"], forgejo_calls
+        forgejo_failures.append(True)
+        code, message, _ = pre_push(forgejo_url, work_push(added))
+        assert code == 0 and "Warning" in message and "offline" in message, message
+        forgejo_failures.clear()
+    finally:
+        review.forgejo_request = previous_forgejo
+    del github_pulls["18"], github_bodies["18"]
+
+    # The merge-class hint comes from the same list, for the repository the session starts in.
+    def merge_class(cwd, hook=True):
+        sys.stdin, sys.stdout = io.StringIO(json.dumps({"cwd": cwd, "source": "startup"})), io.StringIO()
+        previous = os.getcwd()
+        os.chdir(tmp if hook else cwd)  # the hook reads its directory from the payload
+        try:
+            assert review.main(["merge-class", *(["--hook"] if hook else [])]) == 0
+            return sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = sys.__stdin__, sys.__stdout__
+            os.chdir(previous)
+
+    hinted = os.path.join(tmp, "hinted")
+    os.makedirs(hinted)
+    git("init", "-q", cwd=hinted)
+    assert merge_class(hinted) == ""  # no remote
+    for url, expected in (("https://github.com/O/R.git", "push the reviewed head to the base branch"),
+                          (forgejo_url, "the Forgejo merge style fast-forward-only"),
+                          (f"https://{forgejo_host}/O/other.git", "squash-merges feature pull requests"),
+                          ("git@github.com:o/other.git", None), ("https://gitlab.com/O/R.git", None)):
+        git("remote", "remove", "origin", cwd=hinted) if git("remote", cwd=hinted) else None
+        git("remote", "add", "origin", url, cwd=hinted)
+        output = merge_class(hinted)
+        if expected is None:
+            assert output == "", (url, output)
+            continue
+        context = json.loads(output)["hookSpecificOutput"]
+        assert context["hookEventName"] == "SessionStart" and expected in context["additionalContext"], (url, context)
+    git("remote", "set-url", "origin", f"https://{forgejo_host}/O/other.git", cwd=hinted)
+    assert merge_class(hinted, hook=False).startswith("Merge class: "), merge_class(hinted, hook=False)
+    assert merge_class(os.path.join(tmp, "missing")) == ""
+    assert merge_class(tmp, hook=False) == ""  # not a repository
+    configure()
+    assert merge_class(hinted) == ""  # nothing listed: no guess
+    configure("github.com/O/R", f"{forgejo_host}/O/r")
 
     # End to end: Git runs the hook from its environment configuration, as T3
     # agent sessions register it, with a fake gh serving the same answers.

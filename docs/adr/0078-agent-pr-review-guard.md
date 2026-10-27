@@ -211,7 +211,8 @@ change this method.
 Since that push is the merge, a Git pre-push hook checks it: `pr-review
 pre-push`, which the user's Home Manager Git configuration registers
 (`hook.agent-pr-review.command` and `hook.agent-pr-review.event`) when a
-GitHub repository is listed. Git runs it beside the repository's own
+fast-forward repository is listed (a GitHub one before the 2026-10-27
+amendment). Git runs it beside the repository's own
 `pre-push` hook, in every repository and session, with the remote's name, the
 push URL after `insteadOf` and `pushInsteadOf` rewriting, and one line per
 ref it is about to update, so it checks what Git actually pushes, whether
@@ -233,10 +234,12 @@ request to fetch), and must push the head of an open PR into that branch
 with a review comment for that head and the same commit checks as above,
 read from the GitHub API with the guard's deadline. GitHub itself would also
 refuse a non-fast-forward unless forced. Tags, other refs and feature
-branches pass, the last after the lookups that show they are not protected;
+branches pass this merge check, the last after the lookups that show they are
+not protected (the 2026-10-27 amendment adds a fixup check for reviewed PR
+branches);
 a branch that is the base of an open PR, as in stacked PRs, is protected by
 design. When several open PRs into the branch have the pushed head, one that
-passes is enough. Other URLs return at once without network. A refusal or a failed
+passes is enough. URLs of unlisted repositories return at once without network. A refusal or a failed
 lookup exits 1 with the reason and refuses the whole push.
 
 The PreToolUse guard keeps what the hook cannot see. For a listed GitHub
@@ -302,7 +305,7 @@ The hook covers agent processes that carry a marker: Claude Code, T3 agent
 sessions and their `agent-job` units, and Codex outside T3 only if one of
 the unverified Codex variables is set. The T3 server and everything it
 starts carry `PR_REVIEW_AGENT_SESSION=1`, so pushes T3 makes from its own
-interface are checked too; its flow pushes feature branches, which pass, and
+interface are checked too; its flow pushes feature branches, which pass the merge check, and
 a push from it to a protected branch needing a reviewed head is accepted. A
 running T3 gets the marker only after its next restart, like other changes
 to its session wrapper, which it runs through a stable link (see
@@ -509,6 +512,27 @@ in the recorded runs, so the next real run is about as cheap as any check, and
 the claimed time can be wrong when a limit is lifted early. No Codex limit has
 occurred in a recorded run yet, so its message format comes from the client's
 strings and its timing is unmeasured.
+
+Amended 2026-10-27 ([#858](https://git.alc.xyz/alcxyz/nix-config/issues/858)):
+the pre-push hook covers every listed fast-forward repository, on Forgejo as
+well as GitHub, and is registered whenever the list is non-empty. In every
+listed repository, it also checks agent pushes to the head branch of an open
+PR that has a completed review (a review comment other than a skip, or a
+completed local round on its base): the push may add only `fixup!` or
+`squash!` commits on top of a reviewed head, or rewrite the branch so that its
+other commits keep the reviewed subjects in order, as a rebase or fold does.
+That keeps fix rounds foldable into the curated commits that fast-forward
+repositories merge. `pr-review curate <pr> --reason "..." [<commit>]` records
+one commit the hook then accepts, for deliberate curation, and that commit
+needs a new review; it is pinned to the commit and leaves a record, unlike an
+environment variable. The comparison uses subjects, so an amended commit that
+keeps its subject passes the hook and is reviewed again by the next `run`,
+which cannot carry it. This check warns and lets the push through when a
+lookup fails, because it shapes fix rounds rather than guarding a merge, and
+it leaves Forgejo's protected branches (`main`, the default branch, any open
+PR's base) to the forge. `pr-review merge-class` reads the same list and, as a
+SessionStart hook for Claude Code and Codex, tells each session whether its
+repository merges fast-forward only or squash-merges feature PRs.
 
 Cost is tracked during an initial QA period before the requirement is
 reconsidered ([#506](https://git.alc.xyz/alcxyz/nix-config/issues/506)).

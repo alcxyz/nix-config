@@ -6,6 +6,9 @@
   pr-review check <pr>              exit 1 unless a review comment names the head
   pr-review selftest [--if-stale H] run every reviewer on a built-in change
   pr-review guard                   PreToolUse hook used by agent-pr-review-guard
+  pr-review curate <pr> --reason R [<commit>]
+                                    let the pre-push hook accept one rewritten commit
+  pr-review merge-class [--hook]    print how this repository merges (SessionStart hook)
   pr-review pre-push <remote> <url> Git pre-push hook for agent sessions
 
 <pr> is a PR number, resolved through a remote of the current repository
@@ -72,6 +75,18 @@ for that head and passes the same commit checks; deletions are refused, and
 other refs pass. It exits 1 with the reason to refuse the push. Exit code 2 with a reason on stderr blocks the call in both clients. Lookup failures also block: the agent should ask the operator
 instead of guessing. This is an accident guard for agent sessions, not a
 security boundary.
+
+In every listed fast-forward repository, GitHub or Forgejo, the pre-push hook
+also checks agent pushes to the head branch of an open PR that has a
+completed review (a review comment other than a skip, or a completed local
+round): the push may add only `fixup!` or `squash!` commits on top of
+a reviewed head, or rewrite the branch so that its other commits keep the
+reviewed subjects in order, as a rebase or fixup fold does. `pr-review curate`
+records one commit the hook then accepts, for deliberate history curation;
+that commit needs a new review. Unlike the merge checks, this check lets the
+push through with a warning when a lookup fails. `merge-class` prints whether
+the current repository merges fast-forward only or by squash, from the same
+list; with --hook it is a SessionStart hook for Claude Code and Codex.
 """
 
 import argparse
@@ -474,7 +489,7 @@ def forgejo_request(pr, path, data=None, accept="application/json"):
     if data is not None:
         data = json.dumps(data).encode()
         headers["Content-Type"] = "application/json"
-    url = f"{pr.host}/api/v1/repos/{pr.owner}/{pr.repo}/{path}"
+    url = f"{pr.host}/api/v1/repos/{pr.owner}/{pr.repo}/{path}".rstrip("/")
     request = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
     try:
         with OPENER.open(request, timeout=request_timeout) as response:
@@ -3158,86 +3173,392 @@ def api_write_problem(client, tokens, index, context):
     return None
 
 
-def pre_push_problem(repository, lines, cwd):
-    """Return why Git must not push these refs to a GitHub repository, or None.
+def pushed_repository(url):
+    """Return a PR without a number for a push URL on GitHub or our Forgejo, otherwise None."""
+    repository = github_repository(url)
+    if repository is not None:
+        owner, name = repository.split("/")
+        return PR("github", "github.com", owner, name, "")
+    found = parse_remote(url)
+    return found if found is not None and found.forge == "forgejo" else None
 
-    `lines` are the hook's stdin, `<local ref> <local sha> <remote ref> <remote sha>`.
-    In a listed repository, an update of a protected branch must fast-forward it to
-    the head of an open PR into it with a review comment for that head and no
-    leftover fixups or agent-identity commits. Other refs and repositories pass.
+
+def repository_key(repo):
+    """Return `host/owner/repo`, lowercased, as fastForwardRepositories lists it."""
+    host = urllib.parse.urlparse(repo.host).netloc or repo.host
+    return f"{host}/{repo.owner}/{repo.repo}".lower()
+
+
+def pre_push_problem(repo, lines, cwd, remote):
+    """Return (why Git must not push these refs, whether the review guidance applies), or (None, False).
+
+    `lines` are the hook's stdin, `<local ref> <local sha> <remote ref> <remote sha>`,
+    and only listed fast-forward repositories are checked. On GitHub an update of a
+    protected branch must fast-forward it to the head of an open PR into it with a
+    review comment for that head and no leftover fixups or agent-identity commits.
+    On both forges a push to the head branch of a reviewed PR may add only
+    fixup commits (see fixup_push_problem). Other refs pass.
     """
     repositories, identities = guard_settings()
-    if f"github.com/{repository}".lower() not in repositories:
-        return None
-    label, cache = f"github.com/{repository}", {}
-    owner, name = repository.split("/")
+    if repository_key(repo) not in repositories:
+        return None, False
+    cache = {}
     for line in lines:
         fields = line.split()
         if not fields:
             continue
         if len(fields) != 4 or not all(SHA.match(sha.lower()) for sha in fields[1::2]):
-            return f"unexpected pre-push input {line!r}."
+            return f"unexpected pre-push input {line!r}.", True
         local_sha, remote_ref, remote_sha = fields[1].lower(), fields[2], fields[3].lower()
         if not remote_ref.startswith("refs/heads/"):
             continue  # tags and other refs
         branch = remote_ref[len("refs/heads/"):]
-        if not protected_branch(repository, branch, cache):
-            continue
-        if set(local_sha) == {"0"}:
-            return f"{label}: deleting its protected branch {branch} is refused; {github_merge_hint(base=branch)}."
-        if set(remote_sha) != {"0"}:
-            if not commit_exists(cwd, remote_sha):
-                return (f"{label}: {branch} is at {remote_sha[:12]}, which this clone does not have, so the guard "
-                        "cannot tell whether the push fast-forwards it; fetch and push again.")
-            if not is_ancestor(cwd, remote_sha, local_sha):
-                return (f"{label}: the push does not fast-forward its protected branch {branch}; "
-                        f"{github_merge_hint(base=branch)}.")
-        pulls = [pull for pull in open_pulls(repository, branch, cache)
-                 if str((pull.get("head") or {}).get("sha") or "").lower() == local_sha
-                 and (pull.get("base") or {}).get("ref") == branch]
-        if not pulls:
-            return (f"{label}: {local_sha[:12]} is not the head of an open PR into {branch}, its protected branch; "
-                    f"{github_merge_hint(base=branch)}.")
-        problems = []
-        for pull in pulls:
-            pr = PR("github", "github.com", owner, name, str(pull.get("number")))
-            problem = review_problem(comment_bodies(pr), local_sha, branch)
+        if repo.forge == "github" and protected_branch(f"{repo.owner}/{repo.repo}", branch, cache):
+            problem = protected_push_problem(f"{repo.owner}/{repo.repo}", branch, local_sha, remote_sha, cwd,
+                                             cache, identities)
             if problem:
-                problems.append(f"{pr} {problem}.")
-                continue
-            commits = github_list(repository, f"pulls/{pr.number}/commits", cache, 3)
-            if len(commits) >= GITHUB_PR_COMMITS:
-                raise ReviewError(f"{pr} has more commits than the guard checks")
-            problem = commit_problem(pr, commits, identities)
-            if not problem:
-                break  # one reviewed PR with this head into the branch is enough
-            problems.append(problem)
-        else:
-            return problems[0]
+                return problem, True
+            continue
+        problem = fixup_push_problem(repo, branch, local_sha, cwd, remote, cache)
+        if problem:
+            return problem, False
+    return None, False
+
+
+def protected_push_problem(repository, branch, local_sha, remote_sha, cwd, cache, identities):
+    """Return why an update of a protected branch of a listed GitHub repository must not run, or None."""
+    label = f"github.com/{repository}"
+    owner, name = repository.split("/")
+    if set(local_sha) == {"0"}:
+        return f"{label}: deleting its protected branch {branch} is refused; {github_merge_hint(base=branch)}."
+    if set(remote_sha) != {"0"}:
+        if not commit_exists(cwd, remote_sha):
+            return (f"{label}: {branch} is at {remote_sha[:12]}, which this clone does not have, so the guard "
+                    "cannot tell whether the push fast-forwards it; fetch and push again.")
+        if not is_ancestor(cwd, remote_sha, local_sha):
+            return (f"{label}: the push does not fast-forward its protected branch {branch}; "
+                    f"{github_merge_hint(base=branch)}.")
+    pulls = [pull for pull in open_pulls(repository, branch, cache)
+             if str((pull.get("head") or {}).get("sha") or "").lower() == local_sha
+             and (pull.get("base") or {}).get("ref") == branch]
+    if not pulls:
+        return (f"{label}: {local_sha[:12]} is not the head of an open PR into {branch}, its protected branch; "
+                f"{github_merge_hint(base=branch)}.")
+    problems = []
+    for pull in pulls:
+        pr = PR("github", "github.com", owner, name, str(pull.get("number")))
+        problem = review_problem(comment_bodies(pr), local_sha, branch)
+        if problem:
+            problems.append(f"{pr} {problem}.")
+            continue
+        commits = github_list(repository, f"pulls/{pr.number}/commits", cache, 3)
+        if len(commits) >= GITHUB_PR_COMMITS:
+            raise ReviewError(f"{pr} has more commits than the guard checks")
+        problem = commit_problem(pr, commits, identities)
+        if not problem:
+            return None  # one reviewed PR with this head into the branch is enough
+        problems.append(problem)
+    return problems[0]
+
+
+# After a PR's first completed review, fixes in a fast-forward repository are
+# pushed as autosquash commits, so they fold into the reviewed commits and the
+# curated history survives the merge. `pr-review curate` records a deliberate
+# rewrite of one commit, which the pre-push hook then accepts.
+CURATE_HINT = (
+    "To curate the history on purpose (reorder, reword or split commits), run "
+    "`pr-review curate {number} --reason \"<why>\" [<commit>]` for the commit you push, push again, "
+    "and review it with `pr-review run {number}`."
+)
+
+
+def fixup_push_problem(repo, branch, local_sha, cwd, remote, cache):
+    """Return why an agent push to the head branch of a reviewed PR must not run, or None.
+
+    Once a PR has a completed review, which is a review comment on the forge or
+    a completed local round, a push may only add `fixup!` or `squash!`
+    commits on top of a reviewed head, or rewrite its branch so that
+    its other commits keep the reviewed subjects in order, as a rebase or a
+    fold does. A commit recorded with `pr-review curate` passes. Lookup
+    failures print a warning and let the push through: this guard only keeps
+    fix rounds in shape, and the merge guard still checks the result.
+    """
+    if set(local_sha) == {"0"}:
+        return None  # deleting the branch adds no commits
+    try:
+        if repo.forge == "forgejo" and forgejo_protected(repo, branch, cache):
+            return None  # pushes to protected branches are the forge's to refuse
+        for pr, base in head_pulls(repo, branch, cache):
+            problem = reviewed_push_problem(pr, base, branch, local_sha, cwd, remote)
+            if problem:
+                return problem
+    except Exception as error:  # including the deadline: warn, never block on a lookup
+        print(f"Warning from the agent PR review pre-push hook: could not check {branch} for commits added "
+              f"after a review, so the push goes ahead: {error}", file=sys.stderr)
     return None
 
 
+def forgejo_open_pulls(repo, cache):
+    """Return every open PR of a Forgejo repository, cached per hook run."""
+    key = ("forgejo", repository_key(repo))
+    if key not in cache:
+        pulls = []
+        for page in range(1, MAX_COMMIT_PAGES + 1):
+            batch = forgejo_request(repo, f"pulls?state=open&limit={COMMIT_PAGE}&page={page}")
+            if not isinstance(batch, list):
+                raise ReviewError(f"unexpected pull request list for {repository_key(repo)}")
+            pulls.extend(batch)
+            if len(batch) < COMMIT_PAGE:
+                break
+        else:
+            raise ReviewError(f"{repository_key(repo)} has more open pull requests than the guard checks")
+        cache[key] = pulls
+    return cache[key]
+
+
+def forgejo_protected(repo, branch, cache):
+    """A Forgejo branch the fixup check leaves alone: main, the default branch, or any open PR's base."""
+    if branch == "main" or any((pull.get("base") or {}).get("ref") == branch
+                               for pull in forgejo_open_pulls(repo, cache)):
+        return True
+    key = ("forgejo-repository", repository_key(repo))
+    if key not in cache:
+        cache[key] = forgejo_request(repo, "")
+    return cache[key].get("default_branch") == branch
+
+
+def head_pulls(repo, branch, cache):
+    """Return (PR, base branch) for each open PR from `branch` of the same repository."""
+    if repo.forge == "github":
+        head = urllib.parse.quote(f"{repo.owner}:{branch}", safe="")
+        pulls = github_list(f"{repo.owner}/{repo.repo}", f"pulls?state=open&head={head}", cache, 1)
+    else:
+        pulls = forgejo_open_pulls(repo, cache)
+    found = []
+    for pull in pulls:
+        head = pull.get("head") or {}
+        source = str((head.get("repo") or {}).get("full_name") or "").lower()
+        if head.get("ref") != branch or source != f"{repo.owner}/{repo.repo}".lower():
+            continue
+        found.append((PR(repo.forge, repo.host, repo.owner, repo.repo, str(pull.get("number"))),
+                      (pull.get("base") or {}).get("ref")))
+    return found
+
+
+def local_commit(cwd, name):
+    """Return the full SHA of a commit this clone has, or None."""
+    result = subprocess.run([*GIT, "rev-parse", "--verify", "--quiet", f"{name}^{{commit}}"], cwd=cwd,
+                            capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def reviewed_heads(pr, base, cwd):
+    """Return the heads of `pr` with a completed review on `base` that this clone has.
+
+    A review comment counts unless it records a skip; so does a local round
+    that every reviewer of its role completed. Raises when every reviewed head
+    is missing from this clone, since nothing can then be compared.
+    """
+    heads, missing = set(), []
+    for body in comment_bodies(pr):
+        text = body.lstrip()
+        match = PINNED.match(text)
+        if not match or match[2] != base or text[match.end():].strip().lower().startswith("skipped"):
+            continue
+        sha = local_commit(cwd, match[1])
+        if sha:
+            heads.add(sha)
+        else:
+            missing.append(match[1])
+    try:
+        config = load_config()
+        parent = os.path.dirname(state_dir(pr, "head"))
+        names = os.listdir(parent)
+    except (ReviewError, OSError, ValueError, KeyError, TypeError):
+        names = []
+    for name in names:
+        status = load_status(os.path.join(parent, name))
+        if SHA.match(name) and status.get("head") == name and complete(config, status, base) \
+                and commit_exists(cwd, name):
+            heads.add(name)
+    if missing and not heads:
+        raise ReviewError(f"this clone lacks {pr}'s reviewed head {missing[0]}; fetch it")
+    return heads
+
+
+# Fix commits the pre-push hook accepts after a review. `amend!` is left out:
+# folding it rewrites its target's message, which the subject comparison
+# would then refuse, so it goes through `pr-review curate` instead.
+FIXUP_PREFIXES = ("fixup! ", "squash! ")
+
+
+def kept_subjects(cwd, revisions):
+    """Return (sha, subject) of the commits in a revision range other than fixups, oldest first."""
+    output = run([*GIT, "log", "--reverse", "--format=%H %s", revisions, "--"], cwd=cwd)
+    commits = [line.split(" ", 1) + [""] for line in output.splitlines() if line]
+    return [(sha, subject) for sha, subject, *_ in commits if not subject.startswith(FIXUP_PREFIXES)]
+
+
+def reviewed_push_problem(pr, base, branch, local_sha, cwd, remote):
+    """Return why pushing `local_sha` to the head branch of `pr` adds unreviewed non-fixup commits, or None."""
+    curation = load_status_file(curation_path(pr, local_sha))
+    if curation.get("head") == local_sha:
+        print(f"The agent PR review pre-push hook accepts {local_sha[:12]} as curated history of {pr}: "
+              f"{curation.get('reason') or 'no reason given'}.", file=sys.stderr)
+        return None
+    reviewed = reviewed_heads(pr, base, cwd)
+    if not reviewed or local_sha in reviewed:
+        return None
+    hint = CURATE_HINT.format(number=pr.number)
+    added, rewritten = None, False
+    for sha in sorted(reviewed):
+        if is_ancestor(cwd, sha, local_sha):
+            extra = kept_subjects(cwd, f"{sha}..{local_sha}")
+            if not extra:
+                return None
+            added = extra[0]
+        else:
+            rewritten = True
+    # A fold of a later review's fixups can still descend from an earlier
+    # reviewed head, so compare the whole branch with every review before
+    # refusing.
+    tracking = local_commit(cwd, f"refs/remotes/{remote}/{base}")
+    if tracking is None:
+        name = matching_remote(pr, cwd)
+        tracking = name and local_commit(cwd, f"refs/remotes/{name}/{base}")
+    if tracking:
+        pushed = [subject for _, subject in kept_subjects(cwd, f"{tracking}..{local_sha}")]
+        if any([subject for _, subject in kept_subjects(cwd, f"{tracking}..{sha}")] == pushed for sha in reviewed):
+            return None  # a rebase, a fold, or both: the reviewed commits in their order
+    if not tracking and rewritten:
+        # Only a reviewed head the push does not descend from can match it.
+        raise ReviewError(f"this clone has no remote-tracking branch for {base} to compare the rewritten {branch} "
+                          "with; fetch it")
+    if added:
+        return (f"{pr} has a completed review, and {added[0][:12]} `{added[1]}` is a new commit that is not a "
+                f"fixup. In a fast-forward repository, push review fixes to {branch} as `fixup!` or `squash!` "
+                "commits (`git commit --fixup=<reviewed commit>`), so they fold into the reviewed commits before "
+                f"the merge. {hint}")
+    return (f"{pr} has a completed review, and {local_sha[:12]} rewrites {branch} so that its commits other "
+            "than fixups no longer match the reviewed ones: only a rebase or a fixup fold keeps the reviewed "
+            f"commits, and review fixes go in as `fixup!` or `squash!` commits. {hint}")
+
+
+def curation_path(pr, sha):
+    return os.path.join(os.path.dirname(state_dir(pr, sha)), "curated", f"{sha}.json")
+
+
+def load_status_file(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def cmd_curate(args):
+    """Record that the agent pre-push hook may accept one rewritten commit of a reviewed PR."""
+    pr, _ = resolve(args.pr, args.cwd, args.remote)
+    reason = args.reason.strip()
+    if not reason:
+        raise ReviewError("the reason is empty")
+    sha = local_commit(args.cwd, args.commit)
+    if sha is None:
+        raise ReviewError(f"{args.commit!r} is not a commit in this clone")
+    path = curation_path(pr, sha)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"pr": str(pr), "head": sha, "reason": reason, "at": time.time()}, handle, indent=2)
+    print(f"The agent pre-push hook will accept {sha[:12]} as curated history of {pr} ({reason}). Push it, then "
+          f"review it with `pr-review run {args.pr}`; any other commit is checked as before.")
+    return 0
+
+
+# The merge class a session starts with: the same list the merge guard and the
+# pre-push hook read, so the hint cannot disagree with them.
+FAST_FORWARD_HINT = (
+    "Merge class: {name} merges fast-forward only, so curate its commits locally. After a review, push fixes "
+    "only as `fixup!` or `squash!` commits (`git commit --fixup=<commit>`); fold them with "
+    "`git rebase -i --autosquash` before the merge, and merge so that the forge writes no commit ({how}). "
+    "Never use the forge's squash, merge, rebase or Update branch, promotions included."
+)
+FAST_FORWARD_HOW = {
+    "forgejo": "the Forgejo merge style fast-forward-only",
+    "github": "push the reviewed head to the base branch",
+}
+SQUASH_HINT = (
+    "Merge class: {name} squash-merges feature pull requests, with an explicit message, and promotes long-lived "
+    "branches (for example dev to main) with a merge commit, unless the repository documents another release model."
+)
+
+
+def merge_class_hint(cwd):
+    """Return the merge-class hint for the repository at `cwd`, or None when it is not ours or nothing is listed."""
+    repositories, _identities = guard_settings()
+    if not repositories:
+        return None
+    urls = remote_urls(cwd)
+    url = urls.get("origin") or next(iter(urls.values()), None)
+    repo = pushed_repository(url) if url else None
+    if repo is None:
+        return None
+    name = repository_key(repo)
+    if name in repositories:
+        return FAST_FORWARD_HINT.format(name=name, how=FAST_FORWARD_HOW[repo.forge])
+    if repo.forge == "forgejo":
+        return SQUASH_HINT.format(name=name)
+    return None  # an unlisted GitHub repository may be a fork of an upstream project: ask the operator
+
+
+def cmd_merge_class(args):
+    """Print the merge-class hint; with --hook, as SessionStart context for Claude Code and Codex. Never fails."""
+    cwd = args.cwd
+    try:
+        if args.hook:
+            payload = json.load(sys.stdin)
+            if isinstance(payload, dict) and isinstance(payload.get("cwd"), str):
+                cwd = payload["cwd"]
+        hint = merge_class_hint(cwd)
+    except Exception as error:  # a session must start even when the hint cannot be read
+        if not args.hook:
+            print(f"pr-review: {error}", file=sys.stderr)
+        return 0
+    if hint is None:
+        return 0
+    if args.hook:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": hint}}))
+    else:
+        print(hint)
+    return 0
+
+
 def cmd_pre_push(args):
-    """Git pre-push hook for agent sessions: check what Git pushes to listed GitHub repositories (ADR-0078)."""
+    """Git pre-push hook for agent sessions: check what Git pushes to listed fast-forward repositories (ADR-0078)."""
     global request_timeout
     if not (any(os.environ.get(name) == value for name, value in AGENT_MARKERS.items())
             or any(os.environ.get(name) for name in CODEX_MARKERS)):
         return 0  # the operator's own pushes are not checked
-    repository = github_repository(args.url)
-    if repository is None:
-        return 0  # not GitHub: no lookups
+    repo = pushed_repository(args.url)
+    if repo is None:
+        return 0  # neither GitHub nor our Forgejo: no lookups
     request_timeout = 15
     signal.signal(signal.SIGALRM, guard_deadline)
     signal.alarm(GUARD_DEADLINE)
     try:
-        reason = pre_push_problem(repository, sys.stdin.read().splitlines(), os.getcwd())
-    except Exception as error:  # any failure must refuse the push, not let it through
-        reason = f"could not verify the push: {error}."
+        reason, guidance = pre_push_problem(repo, sys.stdin.read().splitlines(), os.getcwd(), args.remote)
+    except Exception as error:  # any failure must refuse a GitHub push, not let it through
+        if repo.forge == "forgejo":  # there the hook only checks fix rounds, which warn instead
+            print(f"Warning from the agent PR review pre-push hook: could not check the push, so it goes ahead: "
+                  f"{error}", file=sys.stderr)
+            return 0
+        reason, guidance = f"could not verify the push: {error}.", True
     finally:
         signal.alarm(0)
     if reason is None:
         return 0
-    print(f"Blocked by the agent PR review pre-push hook: {reason} {GUIDANCE}", file=sys.stderr)
+    print(f"Blocked by the agent PR review pre-push hook: {reason}{f' {GUIDANCE}' if guidance else ''}",
+          file=sys.stderr)
     return 1
 
 
@@ -4106,7 +4427,19 @@ def main(argv=None):
                                "than HOURS")
     selftest.set_defaults(handler=cmd_selftest)
     commands.add_parser("guard", help="PreToolUse hook for agent merges").set_defaults(handler=cmd_guard)
-    pre_push = commands.add_parser("pre-push", help="Git pre-push hook that checks pushes to listed GitHub "
+    curate = commands.add_parser("curate", help="let the agent pre-push hook accept one deliberately rewritten "
+                                                "commit of a reviewed PR")
+    curate.add_argument("pr", help="PR number (resolved through --remote) or PR URL")
+    curate.add_argument("commit", nargs="?", default="HEAD", help="the commit to push (default: HEAD)")
+    curate.add_argument("--reason", required=True, help="why the reviewed history is rewritten")
+    curate.add_argument("--remote", default="origin", help="git remote that hosts the PR (default: origin)")
+    curate.set_defaults(handler=cmd_curate, cwd=os.getcwd())
+    merge_class = commands.add_parser("merge-class", help="print how the current repository merges: fast-forward "
+                                                          "only or squash")
+    merge_class.add_argument("--hook", action="store_true",
+                             help="read SessionStart JSON on stdin and print hook output for Claude Code and Codex")
+    merge_class.set_defaults(handler=cmd_merge_class, cwd=os.getcwd())
+    pre_push = commands.add_parser("pre-push", help="Git pre-push hook that checks agent pushes to listed "
                                                     "fast-forward repositories")
     pre_push.add_argument("remote", help="remote name, as Git passes it")
     pre_push.add_argument("url", help="push URL, as Git passes it")

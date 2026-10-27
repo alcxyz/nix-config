@@ -25,13 +25,15 @@ with lib; let
     runtimeInputs = [pkgs.python3 config.programs.ai.agentGithub.agentGh pkgs.git];
     text = ''PR_REVIEW_CONFIG=${prReviewConfig} exec python3 ${./pr-review.py} "$@"'';
   };
-  # Pushes to listed GitHub repositories are checked by a pre-push hook in the
-  # user's Git configuration (ADR-0078), so it runs beside each repository's
-  # own hooks and covers pushes from scripts, aliases and runners. It checks
-  # only agent processes, which Claude Code marks with CLAUDECODE and T3's
-  # agent sessions (services.t3code runs sessionCommands) and agent-job with
-  # PR_REVIEW_AGENT_SESSION; it returns at once for other URLs.
-  githubFastForward = any (name: hasPrefix "github.com/" (toLower name)) cfg.prReview.fastForwardRepositories;
+  # Pushes to listed fast-forward repositories are checked by a pre-push hook
+  # in the user's Git configuration (ADR-0078), so it runs beside each
+  # repository's own hooks and covers pushes from scripts, aliases and
+  # runners: GitHub merges by push, and on both forges fix rounds after a
+  # review. It checks only agent processes, which Claude Code marks with
+  # CLAUDECODE and T3's agent sessions (services.t3code runs sessionCommands)
+  # and agent-job with PR_REVIEW_AGENT_SESSION; it returns at once for other
+  # URLs.
+  fastForwardListed = cfg.prReview.fastForwardRepositories != [];
   prReviewGuard = pkgs.writeShellApplication {
     name = "agent-pr-review-guard";
     runtimeInputs = [pkgs.python3 config.programs.ai.agentGithub.agentGh pkgs.git];
@@ -190,6 +192,23 @@ with lib; let
             type = "command";
             command = "${config.home.profileDirectory}/bin/t3code-restart-notice";
             timeout = 30;
+          }
+        ];
+      }
+    ];
+  };
+  # Sessions start knowing how their repository merges: fast-forward only for
+  # the listed repositories, squash for the Forgejo host's others. The hint
+  # reads the same list as the guards and never blocks a session.
+  mergeClassHooks = {
+    SessionStart = [
+      {
+        matcher = "startup|resume|compact";
+        hooks = [
+          {
+            type = "command";
+            command = "${config.home.profileDirectory}/bin/pr-review merge-class --hook";
+            timeout = 10;
           }
         ];
       }
@@ -367,7 +386,9 @@ with lib; let
   };
   claudeManagedSettings = pkgs.writeText "claude-managed-settings.json" (
     builtins.toJSON {
-      hooks = clientHooks "claude-user" // t3RestartNoticeHooks;
+      hooks =
+        clientHooks "claude-user"
+        // {SessionStart = t3RestartNoticeHooks.SessionStart ++ mergeClassHooks.SessionStart;};
       statusLine = {
         type = "command";
         command = "dankaiusage claude-statusline";
@@ -534,19 +555,23 @@ in {
           reviewed PR head to its base branch: the guard refuses GitHub-side
           merges, API ref updates and changes to the agent pre-push hook,
           which the user's Git configuration registers and which checks each
-          push from an agent process to a protected branch as the merge.
-          Other repositories are not affected.
+          push from an agent process to a protected branch as the merge. In
+          every listed repository that hook also lets agents add only
+          `fixup!` or `squash!` commits to a PR branch once the PR has a
+          completed review (`pr-review curate` lets one deliberate rewrite
+          through), and sessions start with a hint that the repository merges
+          fast-forward only; other repositories on the Forgejo host get the
+          squash hint. Other repositories are not affected.
         '';
       };
       sessionCommands = mkOption {
         type = types.lines;
         internal = true;
         readOnly = true;
-        default = optionalString (cfg.enable && githubFastForward) "export PR_REVIEW_AGENT_SESSION=1\n";
+        default = optionalString (cfg.enable && fastForwardListed) "export PR_REVIEW_AGENT_SESSION=1\n";
         description = ''
           Bash commands that mark an agent session for the agent pre-push
-          hook; empty unless a GitHub repository is in
-          `fastForwardRepositories`.
+          hook; empty unless `fastForwardRepositories` lists a repository.
         '';
       };
     };
@@ -613,7 +638,7 @@ in {
     #   enable = true;
     # };
 
-    programs.git.settings = mkIf githubFastForward {
+    programs.git.settings = mkIf fastForwardListed {
       hook.agent-pr-review = {
         command = "${prReview}/bin/pr-review pre-push";
         event = "pre-push";
@@ -629,7 +654,7 @@ in {
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file
     # serves other hosts once trusted.
-    home.file.".codex/hooks.json".text = builtins.toJSON {hooks = clientHooks "codex-user";};
+    home.file.".codex/hooks.json".text = builtins.toJSON {hooks = clientHooks "codex-user" // mergeClassHooks;};
 
     # Catches a client update or an expired sign-in that would fail every
     # review before an agent needs one (#718). Reviewers use the same clients

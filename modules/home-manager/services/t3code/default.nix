@@ -51,7 +51,7 @@ with lib; let
   # (programs.ai.agentForge, #722) and the agent GitHub App
   # (programs.ai.agentGithub, ADR-0099) apply here, after the session
   # variables, and never in login shells, and so does the agent marker that
-  # turns on the pre-push hook for GitHub fast-forward repositories
+  # turns on the pre-push hook for fast-forward repositories
   # (programs.ai.prReview, ADR-0078).
   # Empty without those modules or when disabled.
   agentSessionCommands =
