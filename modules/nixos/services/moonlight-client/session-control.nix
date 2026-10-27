@@ -269,6 +269,19 @@
     '';
   };
 
+  # Modes served by the composited session. A direct-only appliance has no
+  # couch session: its dispatcher would start the direct browser instead.
+  localModes =
+    lib.optional cfg.enableCompositedSession "couch"
+    ++ lib.optional (cfg.desktopSessionCommand != null) "desktop"
+    ++ lib.optional cfg.enableMergedProfile "merged";
+  localModePattern = lib.concatStringsSep " | " localModes;
+  directModes =
+    lib.optional directDrmStreamEnabled "direct-stream"
+    ++ lib.optional directDrmBrowserEnabled "direct-browser"
+    ++ lib.optional (directDrmBrowserEnabled && browserSelectorEnabled) "direct-private";
+  returnModes = localModes ++ lib.optional persistentDirectDrmBrowserDefault "direct-browser";
+
   sessionMode = pkgs.writeShellApplication {
     name = "nixbox-mode";
     runtimeInputs = [
@@ -289,11 +302,7 @@
       }
       current="$(tr -d '[:space:]' < "$mode_file" 2>/dev/null || true)"
       current_mode="''${current%%:*}"
-      supported_modes="couch${
-        lib.optionalString (cfg.desktopSessionCommand != null) "|desktop"
-      }${lib.optionalString cfg.enableMergedProfile "|merged"}${lib.optionalString directDrmStreamEnabled "|direct-stream"}${lib.optionalString directDrmBrowserEnabled "|direct-browser"}${
-        lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) "|direct-private"
-      }"
+      supported_modes="${lib.concatStringsSep "|" (localModes ++ directModes)}"
 
       if [ "$#" -eq 0 ]; then
         printf '%s\n' "''${current_mode:-${cfg.defaultSessionMode}}"
@@ -301,26 +310,26 @@
       fi
 
       case "$1" in
-        couch${
-        lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
-      }${lib.optionalString cfg.enableMergedProfile " | merged"})
+        ${lib.optionalString (localModes != []) ''
+        ${localModePattern})
           if [ "$1" = "$current_mode" ]; then
             printf 'Nixbox is already configured for %s mode\n' "$1"
             exit 0
           fi
           persist_state "$mode_file" "$1"
           ${lib.optionalString persistentDirectDrmBrowserDefault ''
-        case "$current_mode" in
-          direct-*)
-            # Moonlight's EGLFS process ignores the graceful signal from
-            # greetd. End only this user's local client after persisting
-            # the explicit recovery mode so the wrapper cannot overwrite it.
-            pkill -KILL -x moonlight >/dev/null 2>&1 || true
-            ;;
-        esac
-      ''}
+          case "$current_mode" in
+            direct-*)
+              # Moonlight's EGLFS process ignores the graceful signal from
+              # greetd. End only this user's local client after persisting
+              # the explicit recovery mode so the wrapper cannot overwrite it.
+              pkill -KILL -x moonlight >/dev/null 2>&1 || true
+              ;;
+          esac
+        ''}
           printf 'Switching Nixbox to %s mode\n' "$1"
           ;;
+      ''}
         ${lib.optionalString (directDrmStreamEnabled || directDrmBrowserEnabled) ''
         ${lib.optionalString directDrmStreamEnabled "direct-stream"}${
           lib.optionalString (directDrmStreamEnabled && directDrmBrowserEnabled) " | "
@@ -328,16 +337,16 @@
           lib.optionalString (directDrmBrowserEnabled && browserSelectorEnabled) " | direct-private"
         })
           case "$current_mode" in
-            couch${
-          lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
-        }${lib.optionalString cfg.enableMergedProfile " | merged"})
-              return_mode="$current_mode"
-              ${lib.getExe activeKeyboardLayout} \
-                > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
-              ${lib.optionalString cfg.directDrmAutoSelectOutput ''
-          ${lib.getExe directDrmOutputSnapshot}
+            ${lib.optionalString (localModes != []) ''
+          ${localModePattern})
+            return_mode="$current_mode"
+            ${lib.getExe activeKeyboardLayout} \
+              > ${lib.escapeShellArg directDrmKeyboardLayoutFile}
+            ${lib.optionalString cfg.directDrmAutoSelectOutput ''
+            ${lib.getExe directDrmOutputSnapshot}
+          ''}
+            ;;
         ''}
-              ;;
             direct-*)
               return_mode="$(
                 tr -d '[:space:]' \
@@ -346,11 +355,7 @@
                   || true
               )"
               case "$return_mode" in
-                couch${
-          lib.optionalString (cfg.desktopSessionCommand != null) " | desktop"
-        }${lib.optionalString cfg.enableMergedProfile " | merged"}${
-          lib.optionalString persistentDirectDrmBrowserDefault " | direct-browser"
-        }) ;;
+                ${lib.optionalString (returnModes != []) "${lib.concatStringsSep " | " returnModes}) ;;"}
                 *) return_mode=${lib.escapeShellArg cfg.defaultSessionMode} ;;
               esac
               ${lib.optionalString cfg.directDrmAutoSelectOutput ''
