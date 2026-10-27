@@ -142,7 +142,10 @@ in
               };
               # Keep the Pi 3 client as its own derivation so board-specific
               # Moonlight/FFmpeg fixes can evolve independently of rpi0.
-              moonlight-rpi3 = _prev.moonlight-qt.overrideAttrs (old: {
+              # Stay on the previous package set's Moonlight 6.1.0, the release
+              # the Qt DRM master patch was qualified on: 6.2.0 drops DRM master
+              # after its plane test, which would take it from Qt EGLFS.
+              moonlight-rpi3 = inputs.nixpkgs-azure-cli.legacyPackages.${system}.moonlight-qt.overrideAttrs (old: {
                 pname = "moonlight-rpi3";
                 patches =
                   (old.patches or [])
