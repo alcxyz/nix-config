@@ -139,7 +139,7 @@ INSERT INTO orchestration_v2_projection_threads VALUES
      {"url":"https://forge.invalid/pulls/3","number":3,"source":"stack-dismissed","snapshot":{"state":"open","baseBranch":"dev"}}]}'),
   ('dirty', 'p1', 'Dirty', '$old', '$recent', NULL, NULL,
    '{$fields,"activeProviderThreadId":null,"worktreePath":"$tmp/dirty","branch":"feat/dirty","pullRequests":[
-     {"url":"https://forge.invalid/pulls/5","number":5,"source":"agent","snapshot":{"state":"open","baseBranch":"dev"}}]}'),
+     {"url":"https://forge.invalid/pulls/5","number":5,"source":"agent","snapshot":{"state":"open","baseBranch":"dev","checksState":"pending"}}]}'),
   ('gone', 'p1', 'Gone', '$old', '$recent', NULL, NULL,
    '{$fields,"activeProviderThreadId":null,"worktreePath":"$tmp/gone","branch":"feat/gone"}'),
   ('squashed', 'p1', 'Squashed', '$old', '$recent', NULL, NULL,
@@ -184,7 +184,7 @@ INSERT INTO orchestration_v2_projection_threads VALUES
    '{$settled,"activeProviderThreadId":null,"worktreePath":"$tmp/merged","branch":"feat/merged"}'),
   ('sopen', 'p1', 'Settled, PR open', '$old', '$recent', NULL, NULL,
    '{$settled,"activeProviderThreadId":null,"worktreePath":null,"branch":null,"pullRequests":[
-     {"url":"https://forge.invalid/pulls/11","number":11,"source":"agent","snapshot":{"state":"open","baseBranch":"dev"}}]}'),
+     {"url":"https://forge.invalid/pulls/11","number":11,"source":"agent","snapshot":{"state":"open","baseBranch":"dev","checksState":"pending"}}]}'),
   ('squiet', 'p1', 'Settled, never handed off', '$old', '$old', NULL, NULL,
    '{$settled,"activeProviderThreadId":null,"worktreePath":"$tmp/dirty","branch":"feat/dirty"}'),
   ('snumbered', 'p1', 'Settled, numbered steps', '$old', '$recent', NULL, NULL,
@@ -273,6 +273,15 @@ test "$(jq -r '.database' <<<"$out")" = "$tmp/state.sqlite"
 test "$(jq -c '[.threads[].threadId]' <<<"$out")" = '["merged","dirty","gone","squashed","followup","quoted","indent","moved","switched","movedon","offbranch","unreadable","unborn","broken","removed","failed","quiet","waits","sdone","slist","sinline","sopen","squiet","snumbered","sbold","sprose","sbroken","sremoved","swrapped","snothing","sfenced","sexcept","sboth"]'
 row() { jq -c --arg id "$1" ".threads[] | select(.threadId == \$id) | $2" <<<"$out"; }
 check() { row "$1" "[.checks[] | select(.id == \"$2\") | .pass, .detail]"; }
+
+# A thread that stopped while its open PR's checks run, with no watch, is
+# flagged; the verdict does not change for it. A merged PR, or the caller's
+# own running thread, is not.
+test "$(row dirty '.unwatchedChecks')" = '[5]'
+test "$(check dirty checks-watched)" = '[false,"#5 checks pending, no watch"]'
+test "$(check merged checks-watched)" = '[true,null]'
+test "$(row sopen '.unwatchedChecks')" = '[]'
+test "$(check sopen checks-watched)" = '[null,null]'
 
 # Merged by squash and pushed: ready, with the Settle: line from the newest
 # finished message and the stack-dismissed PR left out.

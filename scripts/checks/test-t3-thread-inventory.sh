@@ -31,7 +31,7 @@ CREATE TABLE orchestration_v2_projection_turn_items (turn_item_id TEXT PRIMARY K
 INSERT INTO projection_projects VALUES ('p1', 'alpha');
 INSERT INTO orchestration_v2_projection_threads VALUES
   ('open', 'p1', 'Open work', '$old', '$recent', NULL, NULL,
-   '{"settledOverride":null,"settledAt":null,"lineage":{},"activeProviderThreadId":null,"snoozedUntil":"$old","pullRequests":[{"url":"https://forge.invalid/pulls/7","snapshot":{"state":"open"}}]}'),
+   '{"settledOverride":null,"settledAt":null,"lineage":{},"activeProviderThreadId":null,"snoozedUntil":"$old","pullRequests":[{"url":"https://forge.invalid/pulls/10","snapshot":{"state":"open","checksState":"pending"}},{"url":"https://forge.invalid/pulls/16","snapshot":{"state":"merged"}},{"url":"https://forge.invalid/pulls/15","snapshot":{"state":"merged"}},{"url":"https://forge.invalid/pulls/14","snapshot":{"state":"merged"}},{"url":"https://forge.invalid/pulls/11","snapshot":{"state":"open","checksState":"pending"},"watch":{}},{"url":"https://forge.invalid/pulls/12","snapshot":{"state":"open","checksState":"passing"}},{"url":"https://forge.invalid/pulls/13","snapshot":{"state":"open","checksState":"pending"},"source":"stack-dismissed"},{"url":"https://forge.invalid/pulls/7","snapshot":{"state":"open","checksState":"pending"}}]}'),
   ('waits', 'p1', 'Waiting work', '$old', '$old', NULL, NULL,
    '{"settledOverride":null,"settledAt":null,"lineage":{},"activeProviderThreadId":"pt-live"}'),
   ('caller', 'p1', 'This overview', '$old', '$recent', NULL, NULL, '{"settledOverride":null,"settledAt":null,"lineage":{},"activeProviderThreadId":null}'),
@@ -59,6 +59,10 @@ out=$(bash "$tmp/inventory" --thread caller)
 test "$(jq -r '.database' <<<"$out")" = "$tmp/state.sqlite"
 test "$(jq -c '[.threads[].threadId]' <<<"$out")" = '["open","waits","recent"]'
 test "$(jq -r '.threads[0] | [.project, .bucket, .status, (.snoozedUntil // "none"), .prs[0].state] | join(" ")' <<<"$out")" = 'alpha unsettled running none open'
+# Open PRs with pending checks and no watch are listed in full, beyond the
+# five newest links in prs; watched, passing and dismissed ones are not.
+test "$(jq -c '.threads[0].pendingUnwatched' <<<"$out")" = '["https://forge.invalid/pulls/10","https://forge.invalid/pulls/7"]'
+test "$(jq -c '[.threads[0].prs[].url | ltrimstr("https://forge.invalid/pulls/")]' <<<"$out")" = '["7","12","11","14","15"]'
 test "$(jq -r '.threads[2] | [.project, .bucket, .status] | join(" ")' <<<"$out")" = 'p2 recently-settled idle'
 # A PR link dismissed from a stack is left out, as in t3-thread-status.
 test "$(jq -c '[.threads[2].prs[].url]' <<<"$out")" = '["https://forge.invalid/pulls/6","https://forge.invalid/pulls/9"]'

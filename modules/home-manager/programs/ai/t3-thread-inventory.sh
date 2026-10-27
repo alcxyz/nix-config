@@ -88,6 +88,6 @@ if [ -r "$env_file" ]; then
 fi
 jq --arg db "$selected" --argjson days "$days" --argjson acks "$acks" --arg env "$env_id" \
   '{database: $db, windowDays: $days} + (if $env != "" then {environmentId: $env} else {} end)
-   + {threads: map(.prs |= fromjson | .waitingOn |= fromjson
+   + {threads: map(.prs |= fromjson | .waitingOn |= fromjson | .pendingUnwatched |= fromjson
     | if .bucket == "recently-settled" and .settledAt != null and $acks[.threadId] == .settledAt
       then .acknowledged = true else . end)}' <<<"${rows:-[]}"

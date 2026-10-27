@@ -60,6 +60,12 @@ then .[0] else error("expected one {generatedAt, threads: [{threadId, ...}]} rep
       | .phase = (if $left then "awaiting-user" else "done-not-settled" end)
       | .progressPct = 100 | .owner = "user" | .nextAction = $left
     else . end
+  # A thread that stopped while a linked PR's checks still run, with nothing
+  # to wake it, looks idle although its work is not done: flag it only.
+  | .unwatchedChecks = (if .bucket == "recently-settled" or (pending | any(.kind != "command"))
+      or (.status | IN("queued", "preparing", "starting", "running")) then []
+      else (.pendingUnwatched | if type == "array" then map(select(type == "string")) else [] end) end)
+  | del(.pendingUnwatched)
   | .progressPct |= pct
   | .waitingOn = pending
   | .group = group
@@ -71,6 +77,7 @@ then .[0] else error("expected one {generatedAt, threads: [{threadId, ...}]} rep
    summary: {unsettled: ($u | length),
      user: count(["user"]), agent: count(["agent", "waiting"]), stalled: count(["stalled"]),
      settle: count(["settle"]), settledOpen: count(["settled-open"]),
+     unwatchedChecks: ([$u[] | select(.unwatchedChecks | length > 0)] | length),
      avgPct: (if ($u | length) > 0 then ([$u[] | .progressPct // 0] | add / length | round) else null end),
      phases: ($u | map(.phase // "unknown") | group_by(.) | map({key: .[0], value: length}) | from_entries)},
    sections: ([{key: "you", title: "Waiting on you", groups: ["user"]},

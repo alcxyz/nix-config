@@ -39,6 +39,7 @@ SELECT
             'number', json_extract(pr.value, '$.number'),
             'state', json_extract(pr.value, '$.snapshot.state'),
             'baseBranch', json_extract(pr.value, '$.snapshot.baseBranch'),
+            'checks', json_extract(pr.value, '$.snapshot.checksState'),
             'watched', json(CASE WHEN json_extract(pr.value, '$.watch') IS NOT NULL THEN 'true' ELSE 'false' END)))
      FROM json_each(t.payload_json, '$.pullRequests') pr
     WHERE coalesce(json_extract(pr.value, '$.source'), '') <> 'stack-dismissed') AS prs,

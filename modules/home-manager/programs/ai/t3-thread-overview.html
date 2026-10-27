@@ -37,8 +37,9 @@
   .body { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; line-height: 1.45; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--secondary); color: var(--secondary-foreground); text-decoration: none; white-space: nowrap; flex: none; }
-  .chip.phase, .chip.live, .chip.ready, .chip.stalled { color: var(--background); font-weight: 600; }
+  .chip.phase, .chip.live, .chip.ready, .chip.stalled, .chip.unwatched { color: var(--background); font-weight: 600; }
   .chip.live { background: var(--info); } .chip.ready { background: var(--success); } .chip.stalled { background: var(--destructive); }
+  .chip.unwatched { background: var(--warning); }
   .owner { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 0 5px; border-radius: 4px; margin-right: 6px; }
   .owner.user { background: var(--warning-surface); color: var(--warning); }
   .owner.agent { background: var(--accent-surface); color: var(--accent-surface-foreground); }
@@ -148,6 +149,7 @@ if (S) {
     <div class="kpi ok"><div class="n">${num(S.settle) ?? 0}</div><div class="l">ready to settle</div></div>
     <div class="kpi bad"><div class="n">${num(S.settledOpen) ?? 0}</div><div class="l">settled, maybe not done</div></div>
     <div class="kpi info"><div class="n">${num(S.agent) ?? 0}</div><div class="l">agent side</div></div>
+    ${num(S.unwatchedChecks) ? `<div class="kpi warn"><div class="n">${num(S.unwatchedChecks)}</div><div class="l">stopped, PR checks unwatched</div></div>` : ""}
   </div>`);
   const counts = Object.keys(PHASES).map(p => [p, num(S.phases?.[p]) || 0]).filter(([, c]) => c);
   if (counts.length) parts.push(`<div>
@@ -162,11 +164,13 @@ function row(t) {
   const stalled = t.facts?.verdict === "stalled";
   const next = t.nextAction || leftOf(t) || "";
   const prs = (t.prs || []).filter(p => p.state === "open");
+  const unwatched = t.unwatchedChecks || [];
   const chips = [
     `<span class="chip phase" style="background:${ph.color}">${esc(ph.label)}</span>`,
     LIVE.has(t.status) ? `<span class="chip live">${esc(t.status)}</span>` : "",
     ...(t.waitingOn || []).map(w => `<span class="chip${w.kind === "command" ? "" : " live"}">${w.kind === "command" ? "background" : "waiting"}: ${esc(w.description || w.kind)}</span>`),
     ...prs.map(p => `<a class="chip" href="${esc(p.url)}">open PR ${esc(String(p.url || "").split("/").pop())}</a>`),
+    ...unwatched.map(u => `<a class="chip unwatched" href="${esc(u)}">PR ${esc(String(u || "").split("/").pop())}: checks pending, unwatched</a>`),
     said(t)?.verdict === "ready" ? `<span class="chip ready">Settle: ready</span>` : "",
     stalled ? `<span class="chip stalled">stalled: ${esc((t.facts.stallReasons || []).join(", ") || "check")}</span>` : "",
   ].join("");
@@ -176,6 +180,7 @@ function row(t) {
   return `<details class="row"><summary>
       <div class="l1"><a class="title" href="${link(t)}">${esc(t.title)}</a>
         ${stalled ? `<span class="chip stalled">stalled</span>` : ""}
+        ${unwatched.length ? `<span class="chip unwatched" title="Stopped while PR checks run, with no watch armed">checks unwatched</span>` : ""}
         ${LIVE.has(t.status) ? `<span class="chip live">${esc(t.status)}</span>` : ""}
         <span class="chip">${esc(t.project)}</span>
         <span class="mini"><i style="width:${pct || 0}%;background:${ph.color}"></i></span><span class="pct">${pct ?? "?"}%</span></div>

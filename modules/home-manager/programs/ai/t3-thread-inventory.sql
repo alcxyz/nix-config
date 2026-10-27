@@ -17,6 +17,14 @@ SELECT
       ORDER BY pr.key DESC LIMIT 5)) AS prs,
   (SELECT json_group_array(json_object('kind', kind, 'description', description))
      FROM t3_waiting_on w WHERE w.thread_id = t.thread_id) AS waitingOn,
+  -- Every open linked PR whose checks T3 last synced as pending and that has
+  -- no watch armed, not only the five newest links in prs.
+  (SELECT json_group_array(json_extract(pr.value, '$.url'))
+     FROM json_each(t.payload_json, '$.pullRequests') pr
+    WHERE coalesce(json_extract(pr.value, '$.source'), '') <> 'stack-dismissed'
+      AND json_extract(pr.value, '$.snapshot.state') = 'open'
+      AND json_extract(pr.value, '$.snapshot.checksState') = 'pending'
+      AND json_extract(pr.value, '$.watch') IS NULL) AS pendingUnwatched,
   t.created_at AS createdAt,
   t.updated_at AS updatedAt
 FROM t3_thread t

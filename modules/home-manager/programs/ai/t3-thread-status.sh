@@ -244,6 +244,12 @@ def name: .name // "HEAD";
 | ([$t.prs[] | select(.state == "merged")] | length > 0) as $merged
 | ([$t.waitingOn[] | select(.kind != "command")]) as $holding
 | ($t.run.status) as $run
+# A thread that stopped while a linked pull request still runs its checks,
+# with no watch or other waiting work to wake it, looks idle although its work
+# is not done. This only flags it; the verdict stays as it is.
+| ($t.state != "unsettled" or $self == 1 or $t.run.active or $run == "queued" or ($holding | length) > 0) as $notStopped
+| (if $notStopped then []
+   else [$open[] | select(.checks == "pending" and .watched != true)] end) as $unwatched
 | ($t.idleSince | if . == null then null
    else try ((now - (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) / 60 | floor) catch null end) as $idle
 | ($t.settle) as $settle
@@ -296,6 +302,10 @@ def name: .name // "HEAD";
     {id: "prs", label: "No open pull requests",
      pass: ($open | length == 0),
      detail: ($open | map("#\(.number)") | join(", ") | if . == "" then null else . end)},
+    {id: "checks-watched", label: "No pending PR checks left unwatched",
+     pass: (if $notStopped then null
+            else ($unwatched | length) == 0 end),
+     detail: ($unwatched | map("#\(.number) checks pending, no watch") | join(", ") | if . == "" then null else . end)},
     {id: "settle", label: "Agent reported Settle: ready",
      pass: (if $self == 1 or $settle == null or $settle.stale then null else $settle.verdict == "ready" end),
      detail: (if $self == 1 then "this reply" elif $settle == null then "no Settle: line"
@@ -329,6 +339,7 @@ def name: .name // "HEAD";
    elif ($stallReasons | length) > 0 then "stalled"
    else "not-yet" end) as $verdict
 | $t + {self: ($self == 1), idleMinutes: $idle, checks: $checks, verdict: $verdict,
+    unwatchedChecks: [$unwatched[] | .number],
     stallReasons: (if $verdict == "stalled" then $stallReasons else [] end)}
 '
 

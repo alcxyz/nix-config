@@ -47,6 +47,7 @@ cat >"$tmp/report.json" <<'JSON'
  "threads": [{"threadId": "mcp:t1", "title": "</script><script>alert(1)</script>", "project": "p",
    "bucket": "unsettled", "status": "idle", "updatedAt": "2026-10-10T11:00:00Z", "createdAt": "2026-10-01T00:00:00Z",
    "prs": [{"url": "https://forge.invalid/pulls/1", "state": "merged"}, {"url": "https://forge.invalid/pulls/2", "state": "open"}],
+   "pendingUnwatched": ["https://forge.invalid/pulls/2"],
    "progressPct": "40", "phase": "implementing", "owner": "agent", "goal": "Goal with <b>markup</b>",
    "nextAction": "Continue", "done": [], "remaining": [], "blocker": null, "flag": null,
    "verdict": null, "verdictReason": null,
@@ -154,6 +155,23 @@ grouped=$(bash "$tmp/group" "$tmp/facts-report.json" "$tmp/facts.json")
   fail "unexpected group report fields: $grouped"
 [[ $(jq -r '.sections[0].threads[0].facts.settle.line' <<<"$grouped") == "not yet: <deploy>, user" ]] ||
   fail "group command lost the facts"
+# A thread that stopped while an open PR's checks run, with nothing to wake
+# it, is flagged; a watch, other waiting work or a live run clears the flag.
+jq -c '.threads[0].waitingOn = []' "$tmp/report.json" >"$tmp/unwatched.json"
+flagged=$(bash "$tmp/group" "$tmp/unwatched.json")
+[[ $(jq -c '[.sections[].threads[].unwatchedChecks, .summary.unwatchedChecks]' <<<"$flagged") == '[["https://forge.invalid/pulls/2"],1]' ]] ||
+  fail "stopped thread with unwatched pending checks was not flagged: $flagged"
+for change in '.threads[0].pendingUnwatched = []' '.threads[0].status = "running"' '.threads[0].bucket = "recently-settled"'; do
+  jq -c "$change" "$tmp/unwatched.json" >"$tmp/watched.json"
+  [[ $(bash "$tmp/group" "$tmp/watched.json" | jq -c '[.sections[].threads[].unwatchedChecks, .summary.unwatchedChecks]') == '[[],0]' ]] ||
+    fail "flagged after $change"
+done
+[[ $(bash "$tmp/group" "$tmp/report.json" | jq -c '[.sections[].threads[].unwatchedChecks]') == '[[]]' ]] ||
+  fail "a thread waiting on a monitor was flagged"
+bash "$tmp/render" "$tmp/unwatched.json" "$tmp/unwatched"
+html=$(page_html "$(jq -r '.[0].file' "$tmp/unwatched/pages.json")")
+[[ "$html" == *'PR 2: checks pending, unwatched'* && "$html" == *'stopped, PR checks unwatched'* ]] ||
+  fail "page does not show the unwatched checks flag"
 echo '{"generatedAt": "2026-10-10T12:00:00Z", "windowDays": 3, "threads": []}' >"$tmp/group-empty.json"
 [[ $(bash "$tmp/group" "$tmp/group-empty.json" | jq -c '[.sections, .summary.unsettled]') == '[[],0]' ]] ||
   fail "empty report did not group to no sections"
