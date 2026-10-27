@@ -1520,6 +1520,7 @@
         "reportcraft": "reportcraft",
         "rustfs": "rustfs",
         "rustfs-app": "rustfs-app",
+        "rustfs-nixpkgs": "rustfs-nixpkgs",
         "rustfs-rust-overlay": "rustfs-rust-overlay",
         "sops-nix": "sops-nix",
         "stashdb-pop": "stashdb-pop",
@@ -1554,7 +1555,7 @@
     "rustfs": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs"
+          "rustfs-nixpkgs"
         ],
         "rust-overlay": [
           "rustfs-rust-overlay"
@@ -1578,7 +1579,7 @@
     "rustfs-app": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs"
+          "rustfs-nixpkgs"
         ],
         "rust-overlay": "rust-overlay"
       },
@@ -1597,10 +1598,26 @@
         "type": "github"
       }
     },
+    "rustfs-nixpkgs": {
+      "locked": {
+        "lastModified": 1792773339,
+        "narHash": "sha256-rZLrzrC6i+jnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+        "type": "github"
+      }
+    },
     "rustfs-rust-overlay": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs"
+          "rustfs-nixpkgs"
         ]
       },
       "locked": {
@@ -1614,6 +1631,7 @@
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
+        "rev": "c7e9d512653a35ef4d5879c3df4d44d7b78d0e6d",
         "type": "github"
       }
     },

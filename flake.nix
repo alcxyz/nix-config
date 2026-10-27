@@ -115,22 +115,25 @@
     # Application storage is qualified independently of the backup service.
     rustfs-app = {
       url = "github:rustfs/rustfs/1.0.0-rc.6";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.follows = "rustfs-nixpkgs";
     };
 
     rustfs = {
       url = "github:rustfs/rustfs/1.0.0-beta.10";
-      inputs.nixpkgs.follows = "nixpkgs";
-      # The beta's own rust-overlay pin predates the overlay's move off the
-      # deprecated stdenv.isLinux and stdenv.isDarwin.
+      inputs.nixpkgs.follows = "rustfs-nixpkgs";
       inputs.rust-overlay.follows = "rustfs-rust-overlay";
     };
 
-    # The backup service's toolchain: the beta builds with the latest stable
-    # Rust this overlay knows, so updating it rebuilds k8s-backup-rustfs.
+    # No binary cache serves the RustFS pins, so following the root nixpkgs
+    # rebuilt both Rust workspaces on every update. They build from these
+    # revision pins instead, which move only on purpose. The backup
+    # service's rust-overlay is past the deprecated stdenv.isLinux and
+    # stdenv.isDarwin, and the beta builds with its latest stable Rust.
+    rustfs-nixpkgs.url = "github:NixOS/nixpkgs/3ec636362e1816bc2f0888fa0fa2c69f1bc9e504";
+
     rustfs-rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:oxalica/rust-overlay/c7e9d512653a35ef4d5879c3df4d44d7b78d0e6d";
+      inputs.nixpkgs.follows = "rustfs-nixpkgs";
     };
 
     paperless-tools = {
