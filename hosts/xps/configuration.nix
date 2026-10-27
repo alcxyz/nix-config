@@ -46,7 +46,6 @@ in {
     ];
   };
 
-  boot.initrd.systemd.enable = true;
   # Keep the proven early display path so the diagnostic console can reach
   # external outputs without coupling boot to a graphical splash renderer.
   boot.initrd.kernelModules = lib.mkAfter [

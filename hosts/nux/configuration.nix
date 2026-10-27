@@ -66,7 +66,6 @@ in {
   alc.private.rustfsApplication.enable = true;
   alc.private.rustfsApplication.vipEnable = true;
 
-  boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   alc.distributedBuildClient.enable = true;

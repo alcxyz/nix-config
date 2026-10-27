@@ -25,7 +25,6 @@
   alc.private.rustfsApplication.enable = true;
   alc.private.rustfsApplication.vipEnable = true;
 
-  boot.initrd.systemd.enable = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   # The incoming XG6 has a single large ext4 root filesystem. Use it

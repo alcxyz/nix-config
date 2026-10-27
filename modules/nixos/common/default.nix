@@ -126,8 +126,6 @@ in {
       efi.canTouchEfiVariables = true;
     };
 
-  boot.initrd.systemd.enable = true;
-
   # ==================== Users & Shells ========================
   users = {
     users = {
