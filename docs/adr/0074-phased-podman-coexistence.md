@@ -1,58 +1,106 @@
 # ADR-0074: Qualify Podman through staged Docker coexistence
 
-- Status: Accepted; qualification in progress
-- Date: 2026-09-23
-- Area: host container runtimes, development and CI
-- Amended: 2026-10-17, any number of Podman runner identities share the one
-  Podman API, pressure controller and build slice ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
+**Status:** Accepted; Docker stays beside Podman, and no Docker engine is qualified for retirement
+**Date:** 2026-09-23
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0074-phased-podman-coexistence-history.md)
+**Area:** host container runtimes, development and CI
 
 ## Decision
 
-Qualify Podman alongside Docker, beginning with disposable rootless development
-containers on one Linux host. Keep Docker's command, API endpoints, data and
-existing workloads intact. Do not enable global Docker compatibility aliases or
-replace its socket during the trial.
+Podman runs alongside Docker on xyz, xev, nex and nux. Docker's command, API
+endpoints, data and existing workloads stay intact. Global Docker
+compatibility aliases are not enabled and Docker's socket is not replaced.
+Docker-compatible CLI syntax run against Podman is not a Docker engine
+dependency.
 
-CI adoption requires a separate opt-in runner and exclusive canary labels.
-Validate actual job, service, action and nested build paths before moving normal
-workflows. The resource and lifecycle requirements of ADR-0072 remain in force;
-this decision does not replace that implementation or authorize weaker limits.
-Controller failure and shutdown qualification precede any production CI cutover.
+### CI
+
+Podman CI uses a separate opt-in runner module (`podmanCanary`), enabled on
+xyz, xev, nex and nux. Each host's pool runner serves the shared
+`forgejo-podman` pool label and keeps the `forgejo-podman-canary` label, which
+the manual `Podman canary` workflow and this repository's workflows select.
+The extra `xyz-fast` and `xev-fast` runners carry only `ci-fast`
+([ADR-0097](0097-ci-fast-runner-label.md)). Routine
+validation and the selected image-build workflows moved to Podman after
+hosted qualification ([#436](https://git.alc.xyz/alcxyz/nix-config/issues/436),
+[#464](https://git.alc.xyz/alcxyz/nix-config/issues/464)); every workflow in
+this repository now selects the Podman label, and #464 deliberately left
+privileged updater and live-write workflows in other repositories on Docker.
+Before another workflow moves, validate its actual job, service, action and
+nested build paths. The resource and lifecycle requirements of ADR-0072
+remain in force; this decision does not
+replace that implementation or authorize weaker limits.
 
 The opt-in CI module uses separate runner identities, an account, API socket
 and storage root for Podman. A host may run any number of Podman runner
 identities, each its own unit with its own registration and state, against
-that one Podman API. Both CI runtimes share `forgejobuilds.slice` and one
-external pressure controller, retaining the existing combined CPU and memory
-budget. Admission drain ownership is tracked independently for each runner. A
-manually stopped runner is not claimed or restarted during recovery.
+that one Podman API ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
+Both CI runtimes share `forgejobuilds.slice` and one external pressure
+controller, retaining the existing combined CPU and memory budget. Admission
+drain ownership is tracked independently for each runner. A manually stopped
+runner is not claimed or restarted during recovery.
 
 The shared lifecycle boundary closes admission across both runtimes when either
 runtime or the controller is lost. Frozen teardown empties the combined worker
 aggregate before terminating waiting runner processes and resolving an owned
-freeze. This deliberately couples CI availability during the trial; independent
-freeze controllers over the same aggregate would create conflicting ownership,
-and separate full-size budgets would increase the host's maximum CI allocation.
-The application Docker daemon remains outside this boundary.
+freeze. This deliberately couples the CI availability of the two runtimes;
+independent freeze controllers over the same aggregate would create
+conflicting ownership, and separate full-size budgets would increase the
+host's maximum CI allocation. The application Docker daemon remains outside
+this boundary.
 
-The canary may select a separately qualified runner package. Its initial runner
+The Docker and Podman runners on every host build the same qualified runner
+package, `forgejo-runner-cancellation`, from the shared package input. It
 includes a bounded cleanup fix for cancelled Docker actions, whose upstream
-cleanup context otherwise prevents container removal on both engines. Keep the
-ordinary Docker runner package unchanged during this qualification. A temporary,
-source-only pin to the reusable package repository supplies only this package;
-bumping the existing shared package input would also update unrelated software.
-Remove the extra pin when the ordinary package input supplies a qualified fix.
-That pin was removed on 2026-10-02: the shared input supplies the identical
-package, and both runner identities now build it from there.
+cleanup context otherwise prevents container removal on both engines. No
+separate pin supplies it.
 
-Migrate application services individually after their own functional and lifecycle
-checks. Stateful trials use independent data copies; only one runtime may write
-the production data at a time. Streaming services require their existing GPU,
-audio and input acceptance checks. Evaluate macOS independently.
+### Wolf image build placement
 
-Retire Docker only on hosts with no remaining consumers. Keeping explicit Docker
-exceptions is an acceptable outcome. Image compatibility alone is insufficient
-evidence of API, Compose, builder, rootless or device compatibility.
+The Wolf image publisher keeps its qualified Podman runner and Buildx path.
+The Nix derivations that assemble its three deployed build contexts (`wolf`,
+`brave-origin` and `zen`) run instead on the trusted `xyz` operator's
+persistent Nix store. A local timer fetches the committed development head,
+uses the same native build lock and admission condition as other local
+promotion work, and skips commits that did not change Wolf image inputs. It
+does not process pull request code.
+
+The producer uploads one archive per product to an exact-commit version of a
+channel-specific Forgejo generic package. It uploads a checksum and revision
+receipt last, then dispatches the existing publisher at that source commit.
+Each publisher job downloads only its own archive, checks the receipt, and
+requires the checkout to match the dispatched commit in the trusted branch's
+history. Registry publication and deployed runtime references stay unchanged.
+The local producer is enabled only for `dev`; `main` can use the same
+workflow after normal branch promotion.
+
+The producer retains one local Nix GC root per channel. Package cleanup keeps
+the newest two versions and versions younger than 24 hours; it removes only
+older versions in its own channel namespace. Failed partial versions can be
+resumed by matching file checksums and age out under the same policy. No CI
+runner receives host store access or a host daemon mount.
+
+### Services, macOS and Docker retirement
+
+Migrate application services individually after their own functional and
+lifecycle checks. Stateful trials use independent data copies; only one
+runtime may write the production data at a time. Streaming services require
+their existing GPU, audio and input acceptance checks. No host service has
+been cut over: native services need no migration, and Wolf is an intentional
+Docker exception ([#437](https://git.alc.xyz/alcxyz/nix-config/issues/437)).
+Evaluate macOS independently; the Mac keeps its current runtime
+([#438](https://git.alc.xyz/alcxyz/nix-config/issues/438)).
+
+Retire Docker only on hosts with no remaining consumers. Keeping explicit
+Docker exceptions is an acceptable outcome; application, development, macOS
+and privileged updater CI consumers in other repositories remain. Image compatibility alone is
+insufficient evidence of API, Compose, builder, rootless or device
+compatibility, and a snapshot with no running containers does not establish
+that an engine has no consumers. No Docker engine is qualified for retirement.
+Before one is retired, qualify consumer absence, the disposition of its saved
+data and host acceptance, and keep a rollback
+([#439](https://git.alc.xyz/alcxyz/nix-config/issues/439)).
 
 ## Alternatives
 
@@ -78,7 +126,7 @@ is Podman-specific fixture configuration, not evidence that unchanged project
 Compose files are portable. This representative fixture does not establish
 compatibility with every development project. The canary also does not establish
 worker containment, stress behavior, host reboot behavior, production-stack
-compatibility or streaming acceptance. Those remain separate milestone gates.
+compatibility or streaming acceptance; those are qualified separately.
 
 The separate, opt-in `flake/checks/forgejo-podman-paths-vm.nix` fixture exercises a
 synthetic Forgejo local executor against a rootless Podman API beside Docker. Run
@@ -111,37 +159,12 @@ and action containers while the API remains available. Caller-created nested
 containers and builders are checked separately during aggregate teardown. The
 companion `flake/checks/forgejo-podman-coexistence-vm.nix` checks multi-runner admission,
 configuration switching, aggregate containment and failure/shutdown handling.
-These are explicit qualification runs, not automatic host activation. The
-manual `Podman canary` workflow selects only the canary label; image publishing
-and migration of ordinary workflows remain a separate phase.
+These are explicit qualification runs, not automatic host activation.
 
 Host evidence and recovery procedures belong in the private operational
 repository. Deployment manifests remain owned by GitOps; public host interfaces
 and generic qualification checks remain here.
 
-Track implementation in the [Podman adoption milestone](https://git.alc.xyz/alcxyz/nix-config/milestone/323)
-and issues #433–#439.
-
-## Wolf image build placement — 2026-09-28
-
-The Wolf image publisher keeps its qualified Podman runner and Buildx path.
-The Nix derivations that assemble its four deployed build contexts run instead
-on the trusted `xyz` operator's persistent Nix store. A local timer fetches the
-committed development head, uses the same native build lock and admission
-condition as other local promotion work, and skips commits that did not change
-Wolf image inputs. It does not process pull request code.
-
-The producer uploads one archive per product to an exact-commit version of a
-channel-specific Forgejo generic package. It uploads a checksum and revision
-receipt last, then dispatches the existing publisher at that source commit.
-Each publisher job downloads only its own archive, checks the receipt, and
-requires the checkout to match the dispatched commit in the trusted branch's
-history. Registry publication and deployed runtime references stay unchanged.
-The initial local producer is enabled only for `dev`; `main` can use the same
-workflow after normal branch promotion.
-
-The producer retains one local Nix GC root per channel. Package cleanup keeps
-the newest two versions and versions younger than 24 hours; it removes only
-older versions in its own channel namespace. Failed partial versions can be
-resumed by matching file checksums and age out under the same policy. No CI
-runner receives host store access or a host daemon mount.
+The phased adoption was tracked in the
+[Podman adoption milestone](https://git.alc.xyz/alcxyz/nix-config/milestone/323)
+(issues #433 to #439, all closed by 2026-10-09).

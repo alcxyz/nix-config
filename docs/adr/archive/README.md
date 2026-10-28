@@ -17,6 +17,10 @@ archived number.
 | [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Superseded by [ADR-0061](../0061-retire-xyz-k3s-agent.md) on 2026-08-28 |
 | [ADR-0061 history](0061-retire-xyz-k3s-agent-history.md) | Retire the xyz k3s agent | History of [ADR-0061](../0061-retire-xyz-k3s-agent.md) |
 | [ADR-0069 history](0069-maintained-project-dev-qa-history.md) | Maintained project development QA inputs | History of [ADR-0069](../0069-maintained-project-dev-qa.md) |
+| [ADR-0074 history](0074-phased-podman-coexistence-history.md) | Qualify Podman through staged Docker coexistence | History of [ADR-0074](../0074-phased-podman-coexistence.md) |
+| [ADR-0076 history](0076-dms-lock-exact-head-publication-history.md) | Validate and merge DMS lock updates at an exact head | History of [ADR-0076](../0076-dms-lock-exact-head-publication.md) |
 | [ADR-0086 history](0086-released-tool-inputs-history.md) | Refresh released platform tools with tools-update | History of [ADR-0086](../0086-released-tool-inputs.md) |
 | [ADR-0087 history](0087-side-by-side-dev-tools-history.md) | Install dev builds of released tools side by side | History of [ADR-0087](../0087-side-by-side-dev-tools.md) |
 | [ADR-0089 history](0089-released-and-dev-app-inputs-history.md) | Released and dev app inputs | History of [ADR-0089](../0089-released-and-dev-app-inputs.md) |
+| [ADR-0090 history](0090-install-bivrost-directly-history.md) | Install Bivrost directly, configured by the work flake | History of [ADR-0090](../0090-install-bivrost-directly.md) |
+| [ADR-0097 history](0097-ci-fast-runner-label-history.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | History of [ADR-0097](../0097-ci-fast-runner-label.md) |

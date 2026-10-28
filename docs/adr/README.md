@@ -79,7 +79,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0071](0071-shared-container-network-namespace-mount.md) | Establish the shared container network namespace mount before runtimes | Accepted | containers, k3s, systemd |
 | [ADR-0072](0072-isolated-runner-docker.md) | Isolate runner Docker execution in a bounded rootless service | Accepted, per-host qualification required | Forgejo runners, Docker, systemd |
 | [ADR-0073](0073-native-macos-gui-apps-with-nix-managed-settings.md) | Native macOS GUI apps with Nix-managed settings | Accepted | macOS, Homebrew, Home Manager, GUI apps |
-| [ADR-0074](0074-phased-podman-coexistence.md) | Qualify Podman through staged Docker coexistence | Accepted, qualification in progress | containers, development, CI |
+| [ADR-0074](0074-phased-podman-coexistence.md) | Qualify Podman through staged Docker coexistence | Accepted; Docker stays beside Podman, no Docker engine qualified for retirement | containers, development, CI |
 | [ADR-0075](0075-agent-turn-efficiency-reporting.md) | Start with short model-usage summaries in T3 Code | Proposed | T3 Code, agent reporting, optional skills |
 | [ADR-0076](0076-dms-lock-exact-head-publication.md) | Validate and merge DMS lock updates at an exact head | Accepted | DMS lock, Forgejo Actions |
 | [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted, amended | T3 Code, AI providers, Home Manager |
@@ -102,7 +102,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0094](0094-browser-roles.md) | One Chromium browser (Brave Origin), Zen provisional | Accepted, Zen provisional | browsers, xyz, xps, mac, Wolf |
 | [ADR-0095](0095-bounded-workspace-sync-go-pilot.md) | Evaluate Go through one bounded workspace-sync pilot | Accepted; source integration implemented, runtime qualification pending | workspace reconciliation, nix-packages, Home Manager |
 | [ADR-0096](0096-bounded-first-timer-freshness.md) | Bound the first-timer freshness exception after reboot | Accepted | storage health, timers |
-| [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted, amended 2026-10-18; xyz serves `ci-fast`, xev while xyz's fast runner is down | Forgejo runners, xyz, xev, workflows |
+| [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted; xyz serves `ci-fast`, xev while xyz's fast runner is down | Forgejo runners, xyz, xev, workflows |
 | [ADR-0098](0098-date-tagged-promotions.md) | Tag each promotion to `main` with a date version | Accepted | promotions, tags, Forgejo releases |
 | [ADR-0099](0099-agent-github-app.md) | Agent sessions act on GitHub through a GitHub App | Accepted | agent sessions, GitHub |
 | [ADR-0100](0100-instance-wide-podman-runners.md) | Register the Podman runners instance-wide | Accepted | Forgejo runners, xyz, xev, nex, nux |

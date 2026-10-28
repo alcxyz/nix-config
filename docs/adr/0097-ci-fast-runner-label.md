@@ -1,8 +1,9 @@
 # ADR-0097: Route opted-in CI jobs to fast hosts with a `ci-fast` label
 
-**Status:** Accepted, amended 2026-10-18; xyz serves `ci-fast` with a dedicated runner, and xev with a standby runner while that one is down
+**Status:** Accepted; xyz serves `ci-fast` with a dedicated runner, and xev with a standby runner while that one is down
 **Date:** 2026-10-15
-**Amended:** 2026-10-18 (the fallback reads xyz's status over NetBird instead of Forgejo's runner list)
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0097-ci-fast-runner-label-history.md)
 **Applies to:** `hosts/xyz/configuration.nix`, `hosts/xev/configuration.nix`,
 `modules/nixos/services/forgejo-actions-runner/`, platform workflows
 
@@ -47,16 +48,13 @@ instance-wide runners only to tokens with the `read:admin` scope.
   The switch is a repository Actions variable, set and cleared without commits.
   A boolean is used rather than a free-form label variable, because a mistyped
   label strands the job.
-- Rollout is staged. First, `ci-fast` is added to xyz's existing Podman runner,
-  so fast jobs share its two job slots with shared-pool jobs. Then the runner
-  module supports more than two runner units, which gives xyz a dedicated
-  `ci-fast` instance and adds the standby xev instance.
-- The dedicated xyz instance, `xyz-fast`, has one job slot. xyz's pool runner
-  keeps `ci-fast` too, so fast jobs can also start in its free slots. Forgejo
-  has no runner preference: whichever runner polls first takes a job.
+- The runner module supports more than two runner units. xyz runs a
+  dedicated `ci-fast` instance, `xyz-fast`, with one job slot. xyz's pool
+  runner keeps `ci-fast` too, so fast jobs can also start in its free slots.
+  Forgejo has no runner preference: whichever runner polls first takes a job.
   This is the one label two runners may share (`podmanCanary.sharedLabels`);
-  the Docker runner never shares a label. xyz then runs up to five jobs in
-  its one build slice: two Docker, two pool and one fast.
+  the Docker runner never shares a label. xyz runs up to five jobs in its one
+  build slice: two Docker, two pool and one fast.
 
 Workflow authors use [CI runner labels](../ci-runner-labels.md).
 
@@ -66,12 +64,12 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
   nux).** More expressive, but no workflow needs the other two labels yet.
 - **Host-class labels (`ci-workstation`, `ci-server`, `ci-cluster`).** Names
   hosts rather than needs and still requires the fallback.
-- **The controller reads Forgejo's runner status.** The original choice, and
-  it would have needed no channel between the hosts. It was dropped on
-  2026-10-18: Forgejo lists instance-wide runners only to `read:admin` tokens,
-  which would have put an admin-read token on xev for one bit of state. The
-  status endpoint replaced it because NetBird already authenticates the hosts;
-  only that authentication concern had ruled out a host-to-host channel.
+- **The controller reads Forgejo's runner status.** Needs no channel between
+  the hosts, but Forgejo lists instance-wide runners only to `read:admin`
+  tokens, which would put an admin-read token on xev for one bit of state.
+  The status endpoint is used instead because NetBird already authenticates
+  the hosts; only that authentication concern had ruled out a host-to-host
+  channel.
 - **xyz pushes a heartbeat to xev.** Gives the same answers, but needs a
   listener on xev and an expiry rule. Polling keeps xyz passive and makes "no
   answer" mean down.
@@ -112,8 +110,7 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
 - Runner labels are declared when the daemon starts, and the runner units do not
   restart on switch, so a label change takes effect only after the runner
   restarts or the host reboots.
-- Adding runner units changes the pressure guard's persisted unit registry, so
-  that step takes effect only after a reboot. Reboot each host right after
-  switching to the configuration that adds its runner (`xyz-fast`, then
-  `xev-fast`): until then the start gates refuse the new unit, and the first
-  drain would leave the runners stopped.
+- Adding a runner unit changes the pressure guard's persisted unit registry,
+  so it takes effect only after a reboot. Reboot a host right after switching
+  to a configuration that adds a runner unit: until then the start gates
+  refuse the new unit, and the first drain would leave the runners stopped.
