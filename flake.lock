@@ -1130,11 +1130,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793213242,
-        "narHash": "sha256-F/qvjsYRbU0ooJMD5vc+5RwiKL4/oO7mxZZrdXle+rk=",
+        "lastModified": 1793225968,
+        "narHash": "sha256-yg8Na36nOoVk+GU2tAHzfctot699pGjQXJPuu36tIkA=",
         "ref": "dev",
-        "rev": "7a788a0ff6ff57be3416343a919c4f4ea3133991",
-        "revCount": 862,
+        "rev": "89a2d83401dd3aa16224651364142140a2c83303",
+        "revCount": 865,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1273,6 +1273,27 @@
         "ref": "nixos-unstable",
         "repo": "nixpkgs",
         "type": "github"
+      }
+    },
+    "pandora": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793226128,
+        "narHash": "sha256-Bbvv0xCI+Q4LLVnV5fnoSCfYY+yYLVMrvz1WxM4TkfM=",
+        "ref": "dev",
+        "rev": "90dfd467b84455eb236e69df0b21347686063c47",
+        "revCount": 6,
+        "type": "git",
+        "url": "https://git.alc.xyz/alcxyz/pandora.git"
+      },
+      "original": {
+        "ref": "dev",
+        "type": "git",
+        "url": "https://git.alc.xyz/alcxyz/pandora.git"
       }
     },
     "paperflow": {
@@ -1510,6 +1531,7 @@
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-azure-cli": "nixpkgs-azure-cli",
         "nixpkgs-openbao": "nixpkgs-openbao",
+        "pandora": "pandora",
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",
         "paperless-tools-dev": "paperless-tools-dev",
