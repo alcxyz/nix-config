@@ -74,7 +74,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0066](0066-direct-umu-launchers-with-heroic-qa-fallback.md) | Use direct UMU launchers with a Heroic QA fallback | Accepted | xyz, UMU, Proton, Battle.net, Heroic |
 | [ADR-0067](0067-explicit-consumer-and-platform-validation.md) | Explicit consumer and platform validation | Accepted, public automation implemented | flake checks, Forgejo, package promotion |
 | [ADR-0068](0068-k8s-node-power-lifecycle.md) | Kubernetes node power lifecycle (formerly the duplicate ADR-0036) | Accepted | k3s, node lifecycle, maintenance helpers |
-| [ADR-0069](0069-maintained-project-dev-qa.md) | Maintained project development QA inputs | Accepted, amended | flake inputs, DMS, release workflow |
+| [ADR-0069](0069-maintained-project-dev-qa.md) | Maintained project development QA inputs | Accepted | flake inputs, DMS, release workflow |
 | [ADR-0070](0070-action-bound-credential-consent.md) | Action-bound credential consent | Accepted | Polkit, DMS, credential brokers |
 | [ADR-0071](0071-shared-container-network-namespace-mount.md) | Establish the shared container network namespace mount before runtimes | Accepted | containers, k3s, systemd |
 | [ADR-0072](0072-isolated-runner-docker.md) | Isolate runner Docker execution in a bounded rootless service | Accepted, per-host qualification required | Forgejo runners, Docker, systemd |
@@ -91,10 +91,10 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0083](0083-podman-cleanup-completion-fence.md) | Fence admission until Podman cleanup completion is known | Accepted, qualification required | Forgejo runners, Podman cleanup |
 | [ADR-0084](0084-codex-mcp-credentials-in-file.md) | Keep Codex MCP OAuth credentials in a file, not the keyring | Accepted | AI agents, Codex, Home Manager |
 | [ADR-0085](0085-one-role-vocabulary.md) | One role vocabulary for agents and tools | Accepted | AI agents, local tooling, llm config |
-| [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools with tools-update | Accepted, amended | flake inputs, release workflow |
-| [ADR-0087](0087-side-by-side-dev-tools.md) | Install dev builds of released tools side by side | Accepted, amended | flake inputs, release workflow |
+| [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools with tools-update | Accepted | flake inputs, release workflow |
+| [ADR-0087](0087-side-by-side-dev-tools.md) | Install dev builds of released tools side by side | Accepted | flake inputs, release workflow |
 | [ADR-0088](0088-tv-clients-share-one-appliance-profile.md) | TV clients share one appliance profile | Accepted | rpi0, rpi1, TV clients, Moonlight, Bluetooth audio |
-| [ADR-0089](0089-released-and-dev-app-inputs.md) | Released and dev app inputs | Accepted, amended | flake inputs, release workflow |
+| [ADR-0089](0089-released-and-dev-app-inputs.md) | Released and dev app inputs | Accepted | flake inputs, release workflow |
 | [ADR-0090](0090-install-bivrost-directly.md) | Install Bivrost directly, configured by the work flake | Accepted | Bivrost, the work flake, operator homes |
 | [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Accepted | T3 Code, agent skills, `programs.ai` |
 | [ADR-0092](0092-t3-preview-browser-from-nix.md) | Provide T3's preview browser from the Nix package | Accepted | T3 Code, previews, nix-packages |

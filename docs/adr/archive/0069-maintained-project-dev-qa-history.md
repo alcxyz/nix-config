@@ -1,0 +1,73 @@
+**History of** [ADR-0069](../0069-maintained-project-dev-qa.md): text replaced on 2026-10-28.
+
+# ADR-0069: Maintained project development QA inputs
+
+**Status:** Accepted, amended by [ADR-0086](../0086-released-tool-inputs.md) (released tools use `tools-update`) and [ADR-0089](../0089-released-and-dev-app-inputs.md) (Grove and Canopy follow `main` with `apps-update`; dev builds use `dev-apps-update`) and [ADR-0090](../0090-install-bivrost-directly.md) (Bivrost is a flake input installed here; the private work flake no longer follows it)
+**Date:** 2026-09-08
+**Applies to:** `flake.nix`, maintained project input updates
+
+## Context
+
+The maintainer needs to exercise integrated development changes before making
+official releases. A consumer pinned to a release branch cannot provide that
+feedback, and changing the consumer's own Git branch does not select matching
+branches in its dependencies. Updating a source bundle alone does not reliably
+refresh all independent overridden plugin inputs and can restore bundle pins.
+
+## Decision
+
+Use explicit GitHub `dev` inputs for Paperflow, Grove, Canopy, DankSession,
+the DMS bundle, and its maintained plugin sources. Keep exact revisions in the
+lockfile. This flake is the maintainer QA consumer; source projects retain
+`feature/*` → `dev` → `main` promotion, with releases from `main` only.
+Keep `dev` current with released fixes: after promotion, fast-forward it to the
+resulting main commit when possible, or integrate main without rewriting dev
+history. A development branch must not silently lose released fixes.
+
+Bivrost follows its canonical GitHub `dev` branch as a non-flake source input
+for maintainer QA on Linux and macOS. Its released `main` branch remains the
+default for other consumers.
+The existing package integration follows that input, separating source updates
+from packaging updates without changing its defaults for other consumers.
+`apps-update` refreshes Bivrost alongside the maintained apps; `dms-update` does
+not. The source revision remains locked, and activation remains explicit.
+
+Retain ADR-0015's aggregate source interface. Set persistent nested overrides
+in nix-config rather than changing the public aggregate's release defaults.
+Make the aggregate DankSession input follow the existing top-level input, so
+there is one revision for its source and package. Continue building each other
+plugin helper from the same source used for its widget.
+
+The `apps-update` shell shortcut (also available as `just apps-update`) explicitly
+refreshes the maintained app and nested plugin inputs from this checkout,
+without requiring a development shell. `dms-update` (or `just dms-update`)
+refreshes only the DMS subset. These names describe their scope for both QA and
+released updates; `qaup` and `just qa-update` remain compatibility names for
+the full update. The scheduled DMS updater refreshes
+the DMS subset even when the aggregate commit has not changed, then validates
+the resulting consumer.
+Rebuild and switch commands continue to use committed or reviewed lockfiles;
+they do not implicitly fetch branch heads. No source changes, branch promotion,
+release, or activation is an implicit side effect of the QA update command.
+
+Leave upstream dependencies and unrelated internal services on their existing
+policies. Additional maintained projects can be added explicitly when their
+development branch and consumer are known.
+WorldClock, DankCalculator, and DMS-Screenshot are third-party plugins and are
+excluded from the maintained development overrides and explicit QA refreshes.
+The bundle takes them from their upstream repositories at exact revisions
+(dms-plugins ADR-004, 2026-10-17), replacing the earlier forks pinned on `main`.
+
+## Alternatives and consequences
+
+- Release every change before testing: removes the useful QA stage.
+- Temporary local path overrides: do not survive normal lock refreshes and
+  cannot identify a shared, reproducible development revision.
+- Change the public aggregate's defaults to dev: changes what other consumers
+  receive and makes release consumers opt out of maintainer QA.
+- Fetch latest revisions on every rebuild: mixes update and activation and
+  makes failures harder to reproduce.
+
+Development revisions can regress. Keep QA pins reviewable and use existing
+Nix/Home Manager generations or prior lockfiles to roll back. A successful
+build is not runtime QA, and a successful QA update is not a source release.

@@ -1,7 +1,9 @@
 # ADR-0069: Maintained project development QA inputs
 
-**Status:** Accepted, amended by [ADR-0086](0086-released-tool-inputs.md) (released tools use `tools-update`) and [ADR-0089](0089-released-and-dev-app-inputs.md) (Grove and Canopy follow `main` with `apps-update`; dev builds use `dev-apps-update`) and [ADR-0090](0090-install-bivrost-directly.md) (Bivrost is a flake input installed here; the private work flake no longer follows it)
+**Status:** Accepted
 **Date:** 2026-09-08
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0069-maintained-project-dev-qa-history.md)
 **Applies to:** `flake.nix`, maintained project input updates
 
 ## Context
@@ -14,39 +16,55 @@ refresh all independent overridden plugin inputs and can restore bundle pins.
 
 ## Decision
 
-Use explicit GitHub `dev` inputs for Paperflow, Grove, Canopy, DankSession,
-the DMS bundle, and its maintained plugin sources. Keep exact revisions in the
-lockfile. This flake is the maintainer QA consumer; source projects retain
-`feature/*` → `dev` → `main` promotion, with releases from `main` only.
-Keep `dev` current with released fixes: after promotion, fast-forward it to the
-resulting main commit when possible, or integrate main without rewriting dev
-history. A development branch must not silently lose released fixes.
+This flake is the maintainer QA consumer of the maintained projects' `dev`
+branches, through explicit `dev` inputs whose exact revisions stay in the
+lockfile. Source projects retain `feature/*` to `dev` to `main` promotion,
+with releases from `main` only. Keep `dev` current with released fixes: after
+promotion, fast-forward it to the resulting main commit when possible, or
+integrate main without rewriting dev history. A development branch must not
+silently lose released fixes.
 
-Bivrost follows its canonical GitHub `dev` branch as a non-flake source input
-for maintainer QA on Linux and macOS. Its released `main` branch remains the
-default for other consumers.
-The existing package integration follows that input, separating source updates
-from packaging updates without changing its defaults for other consumers.
-`apps-update` refreshes Bivrost alongside the maintained apps; `dms-update` does
-not. The source revision remains locked, and activation remains explicit.
+Daily use runs released builds, and the `dev` inputs are the QA side of that
+split. These run `dev` daily: paw and vidown until they publish versioned
+releases, and Paperflow, DankSession and the DMS plugins, which cannot run
+twice on one host:
+
+- Released platform tools follow `main` through `tools-update`
+  ([ADR-0086](0086-released-tool-inputs.md)). Their dev builds
+  (`paperless-tools-dev`, `regnskap-dev`, `t3rry-dev`) sit next to them and
+  are refreshed by `dev-tools-update`
+  ([ADR-0087](0087-side-by-side-dev-tools.md)), not `dev-apps-update`.
+- Released apps (Grove, Canopy, Bivrost) follow `main` through `apps-update`,
+  and `dev-apps-update` refreshes the app `dev` inputs
+  ([ADR-0089](0089-released-and-dev-app-inputs.md)): the side-by-side dev
+  builds `grove-dev`, `canopy-dev` and `bivrost-dev`; paw and vidown, which
+  have no versioned releases yet; and Paperflow, DankSession, the DMS bundle
+  and its maintained plugins, which cannot run twice on one host.
+- Bivrost is a flake input installed here on Linux and macOS
+  ([ADR-0090](0090-install-bivrost-directly.md)); its released `main` branch
+  remains the default for other consumers.
 
 Retain ADR-0015's aggregate source interface. Set persistent nested overrides
-in nix-config rather than changing the public aggregate's release defaults.
-Make the aggregate DankSession input follow the existing top-level input, so
-there is one revision for its source and package. Continue building each other
-plugin helper from the same source used for its widget.
+in nix-config rather than changing the public aggregate's release defaults:
+the `dms-plugins` input follows its `dev` branch and overrides the maintained
+plugin sources (quicksearch, vault, translate, spotify, dankcalendar,
+diskusage, aiusage, displaycontrol) to their `dev` branches. Make the
+aggregate DankSession input follow the existing top-level input, so there is
+one revision for its source and package. Continue building each other plugin
+helper from the same source used for its widget.
 
-The `apps-update` shell shortcut (also available as `just apps-update`) explicitly
-refreshes the maintained app and nested plugin inputs from this checkout,
-without requiring a development shell. `dms-update` (or `just dms-update`)
-refreshes only the DMS subset. These names describe their scope for both QA and
-released updates; `qaup` and `just qa-update` remain compatibility names for
-the full update. The scheduled DMS updater refreshes
-the DMS subset even when the aggregate commit has not changed, then validates
-the resulting consumer.
+`dev-apps-update` (a shell alias, also `just dev-apps-update`) explicitly
+refreshes the maintained app `dev` inputs listed above, the nested plugin
+inputs and the private `work` input
+([ADR-0089](0089-released-and-dev-app-inputs.md)) from this checkout, without requiring a development shell; `qaup` and `just qa-update`
+remain compatibility names for it. `dms-update` (or `just dms-update`)
+refreshes only the DMS subset: the bundle, DankSession and the nested plugin
+inputs. The scheduled DMS updater (the `nix-dms-update` user service and
+timer on xyz) refreshes the DMS subset even when the aggregate commit has not
+changed, then validates the resulting consumer.
 Rebuild and switch commands continue to use committed or reviewed lockfiles;
 they do not implicitly fetch branch heads. No source changes, branch promotion,
-release, or activation is an implicit side effect of the QA update command.
+release, or activation is an implicit side effect of an update command.
 
 Leave upstream dependencies and unrelated internal services on their existing
 policies. Additional maintained projects can be added explicitly when their

@@ -16,3 +16,7 @@ archived number.
 | [ADR-0056 history](0056-containerized-remote-browser-streaming-history.md) | Containerized remote browser streaming | History of [ADR-0056](../0056-containerized-remote-browser-streaming.md) |
 | [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Superseded by [ADR-0061](../0061-retire-xyz-k3s-agent.md) on 2026-08-28 |
 | [ADR-0061 history](0061-retire-xyz-k3s-agent-history.md) | Retire the xyz k3s agent | History of [ADR-0061](../0061-retire-xyz-k3s-agent.md) |
+| [ADR-0069 history](0069-maintained-project-dev-qa-history.md) | Maintained project development QA inputs | History of [ADR-0069](../0069-maintained-project-dev-qa.md) |
+| [ADR-0086 history](0086-released-tool-inputs-history.md) | Refresh released platform tools with tools-update | History of [ADR-0086](../0086-released-tool-inputs.md) |
+| [ADR-0087 history](0087-side-by-side-dev-tools-history.md) | Install dev builds of released tools side by side | History of [ADR-0087](../0087-side-by-side-dev-tools.md) |
+| [ADR-0089 history](0089-released-and-dev-app-inputs-history.md) | Released and dev app inputs | History of [ADR-0089](../0089-released-and-dev-app-inputs.md) |
