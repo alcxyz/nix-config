@@ -39,6 +39,18 @@
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   hardware.nvidia.enable = true;
 
+  # xev freezes hard without a kernel message (gitops#1318). The SP5100 TCO
+  # watchdog resets a frozen host instead of waiting for the operator, and a
+  # detected lockup panics so its log reaches pstore before the reboot. The
+  # kubelet also sets kernel.panic to 10; set it from boot so a panic reboots
+  # while k3s is down or fenced.
+  systemd.settings.Manager.RuntimeWatchdogSec = "1min";
+  boot.kernel.sysctl = {
+    "kernel.panic" = 10;
+    "kernel.softlockup_panic" = 1;
+    "kernel.hardlockup_panic" = 1;
+  };
+
   # ADR-0062/0064 preparation only; bulk mounts and consumers are activated
   # together with the separately reviewed physical ownership cutover.
   boot.supportedFilesystems = ["xfs"];
@@ -108,8 +120,6 @@
     enable = true;
     nodeIp = "192.168.1.13";
     nodeInterface = "enp10s0";
-    # Hardware watchdog reset path has not passed qualification on this host.
-    rebootWatchdogSec = "0";
     serverAddr = "https://k8s-api.local:6443";
     extraFlags = [
       "--node-label=nixbox.alc.xyz/protected-browser-worker=true"

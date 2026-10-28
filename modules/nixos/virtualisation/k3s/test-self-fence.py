@@ -1049,13 +1049,21 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(self.agent.step(200, ISOLATED), "sysrq crash")
         self.assertEqual(self.sysrq, ["c", "c"])
 
-    def test_sysrq_crash_disables_the_panic_reboot_first(self):
+    def test_sysrq_crash_disables_the_watchdog_and_panic_reboot_first(self):
         panic = os.path.join(RUN_DIR, "panic")
         trigger = os.path.join(RUN_DIR, "sysrq-trigger")
         with open(panic, "w", encoding="ascii") as handle:
             handle.write("10")
-        with mock.patch.object(MODULE, "PANIC", panic), mock.patch.object(MODULE, "SYSRQ", trigger):
+        seen = []
+
+        def disarm():
+            with open(panic, encoding="ascii") as handle:
+                seen.append((handle.read(), os.path.exists(trigger)))
+
+        with mock.patch.object(MODULE, "PANIC", panic), mock.patch.object(MODULE, "SYSRQ", trigger), \
+                mock.patch.object(MODULE, "disarm_runtime_watchdog", disarm):
             MODULE.sysrq("c")
+        self.assertEqual(seen, [("10", False)])
         with open(panic, encoding="ascii") as handle:
             self.assertEqual(handle.read(), "0")
         with open(trigger, encoding="ascii") as handle:
@@ -1063,11 +1071,36 @@ class AgentTests(unittest.TestCase):
 
     def test_unwritable_panic_timeout_does_not_crash(self):
         trigger = os.path.join(RUN_DIR, "sysrq-trigger")
+        disarm = mock.Mock()
         with mock.patch.object(MODULE, "PANIC", os.path.join(RUN_DIR, "missing", "panic")), \
-                mock.patch.object(MODULE, "SYSRQ", trigger):
+                mock.patch.object(MODULE, "SYSRQ", trigger), \
+                mock.patch.object(MODULE, "disarm_runtime_watchdog", disarm):
             with self.assertRaises(OSError):
                 MODULE.sysrq("c")
         self.assertFalse(os.path.exists(trigger))
+        disarm.assert_called_once_with()
+
+    def test_watchdog_disarm_runs_the_systemd_property_change(self):
+        out = os.path.join(RUN_DIR, "disarm-args")
+        command = [sys.executable, "-c",
+                   f"import sys; open({out!r}, 'w').write(' '.join(sys.argv[1:]))",
+                   "RuntimeWatchdogUSec", "t", "0"]
+        with mock.patch.object(MODULE, "WATCHDOG_DISARM", command):
+            MODULE.disarm_runtime_watchdog()
+        with open(out, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "RuntimeWatchdogUSec t 0")
+        self.assertEqual(MODULE.WATCHDOG_DISARM[-3:], ["RuntimeWatchdogUSec", "t", "0"])
+
+    def test_hanging_watchdog_disarm_does_not_hold_up_the_crash(self):
+        with mock.patch.object(MODULE, "WATCHDOG_DISARM", ["sleep", "30"]), \
+                mock.patch.object(MODULE, "WATCHDOG_DISARM_TIMEOUT", 0.2):
+            started = MODULE.time.monotonic()
+            MODULE.disarm_runtime_watchdog()
+            self.assertLess(MODULE.time.monotonic() - started, 2)
+
+    def test_missing_busctl_does_not_hold_up_the_crash(self):
+        with mock.patch.object(MODULE, "WATCHDOG_DISARM", [os.path.join(RUN_DIR, "no-busctl")]):
+            MODULE.disarm_runtime_watchdog()
 
     def test_cancelled_write_does_not_replace_the_marker(self):
         import threading

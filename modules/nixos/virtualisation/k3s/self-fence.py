@@ -45,8 +45,10 @@ instead, because a reboot without a marker would start k3s again. A marker
 write that hangs for MARKER_WRITE_TIMEOUT (a stalled disk) crashes the kernel
 through /proc/sysrq-trigger ('c'): a poweroff or sync could block on the disk
 while userspace keeps running, but a panic stops every CPU at once. With the
-panic timeout set to 0 first (the kubelet sets 10) the node then stays halted
-until it is power-cycled. A
+panic timeout set to 0 first (the kubelet sets 10) and any runtime watchdog
+disarmed, the node then stays halted until it is power-cycled. The disarm
+comes first, so if the crash itself fails, the poweroff fallback also runs
+without the runtime watchdog, unless the disarm did not finish in time. A
 timed-out write is cancelled before it replaces MARKER, and no release happens
 while it is still outstanding. A marker
 from an earlier boot means the reboot happened: the phase becomes "fenced".
@@ -146,6 +148,9 @@ KUBE_CACHE = os.path.join(RUN_DIR, "kube-cache")
 BOOT_ID = "/proc/sys/kernel/random/boot_id"
 PANIC = "/proc/sys/kernel/panic"
 SYSRQ = "/proc/sysrq-trigger"
+WATCHDOG_DISARM = ["busctl", "set-property", "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+                   "org.freedesktop.systemd1.Manager", "RuntimeWatchdogUSec", "t", "0"]
+WATCHDOG_DISARM_TIMEOUT = 5.0
 OUT_OF_SERVICE = "node.kubernetes.io/out-of-service"
 REFENCE_WINDOW = 900
 JOINT_WINDOW = 60
@@ -358,10 +363,34 @@ def k3s_age() -> float | None:
     return time.monotonic() - started / 1e6  # both CLOCK_MONOTONIC
 
 
+def disarm_runtime_watchdog() -> None:
+    """Stop systemd feeding a hardware watchdog, which would reset a halted node.
+
+    Starting busctl or PID 1 answering may block on the stalled disk, and a
+    killed child may never be reaped, so run it in a daemon thread and give up
+    after WATCHDOG_DISARM_TIMEOUT; the crash then goes ahead and the watchdog
+    may reset the node."""
+    def disarm() -> None:
+        try:
+            subprocess.run(WATCHDOG_DISARM, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, check=False)
+        except OSError as error:
+            log(f"could not disarm the runtime watchdog: {error}")
+
+    worker = threading.Thread(target=disarm, daemon=True)
+    worker.start()
+    worker.join(WATCHDOG_DISARM_TIMEOUT)
+    if worker.is_alive():
+        log(f"runtime watchdog disarm did not finish in {WATCHDOG_DISARM_TIMEOUT:.0f}s")
+
+
 def sysrq(command: str) -> None:
     if command == "c":
         # The kubelet sets kernel.panic to 10; a reboot after the panic would
         # come up without the marker and start k3s again, so halt instead.
+        # Disarm a runtime watchdog first, so it resets neither the halted node
+        # nor one that falls back to a poweroff.
+        disarm_runtime_watchdog()
         with open(PANIC, "w", encoding="ascii") as handle:
             handle.write("0")
     with open(SYSRQ, "w", encoding="ascii") as handle:
