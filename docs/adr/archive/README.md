@@ -7,6 +7,10 @@ archived number.
 
 | ADR | Title | Status |
 |-----|-------|--------|
+| [ADR-0002 history](0002-nix-secrets-separate-repository-history.md) | Keep private infrastructure material outside nix-config | History of [ADR-0002](../0002-nix-secrets-separate-repository.md) |
+| [ADR-0006 history](0006-four-tier-module-layering-history.md) | Four-tier module layering | History of [ADR-0006](../0006-four-tier-module-layering.md) |
+| [ADR-0007 history](0007-filtered-nix-packages-overlay-history.md) | Custom packages in a separate repository with a filtered overlay | History of [ADR-0007](../0007-filtered-nix-packages-overlay.md) |
+| [ADR-0008 history](0008-pkgsets-centralised-package-management-history.md) | Centralised package sets via pkgsets.nix | History of [ADR-0008](../0008-pkgsets-centralised-package-management.md) |
 | [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | Retired PipeWire virtual sink for per-app audio isolation (wcap) | Retired 2026-06-04 |
 | [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Superseded by [ADR-0022](../0022-universal-agent-instructions.md) |
 | [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |

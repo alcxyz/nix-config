@@ -2,61 +2,41 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Applies to:** `flake/pkgs.nix`, `flake/per-system.nix`
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0007-filtered-nix-packages-overlay-history.md)
+**Applies to:** `flake/pkgs.nix`, `flake/core.nix`, `flake/per-system.nix`, `packages/`
 
 ## Context
 
-Several packages used in this config are not in nixpkgs: `zfs-auto-unlock`, `ndrop`, `helium`, `t3code`, `claude-code`, `paperless-review`, `paperless-filetype-index`, `leantime-tidy`. These packages are also used outside this config (in other projects, as standalone tools, or in Docker-based workflows), making it natural to maintain them independently rather than embedding them in the config repo.
+Several packages used in this config are not in nixpkgs, for example
+`zfs-auto-unlock`, `ndrop`, `zen-browser` and `nix-deploy`; nix-packages also
+carries its own builds of `t3code` and `claude-code`, which nixpkgs now packages
+too. These packages are also used outside this config (in other
+projects, as standalone tools, or in Docker-based workflows), making it natural
+to maintain them independently rather than embedding them in the config repo.
 
-Importing an entire external overlay risks shadowing or conflicting with nixpkgs packages under the same names — a subtle and hard-to-debug failure mode.
+Importing an entire external overlay risks shadowing or conflicting with nixpkgs packages under the same names, a subtle and hard-to-debug failure mode.
 
 ## Decision
 
-Custom packages live in the separate `nix-packages` flake, consumed from canonical Forgejo at `git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev`. GitHub is a mirror. Rather than applying its overlay wholesale, only explicitly named packages are extracted into a local overlay. The following illustrates that boundary; the current whitelist is implemented in `flake/pkgs.nix`:
+Custom packages live in the separate `nix-packages` flake, consumed from canonical Forgejo at `git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev`. GitHub is a mirror. Rather than applying its overlay wholesale, only explicitly named packages are extracted into a local overlay. `flake/pkgs.nix` holds the current whitelist and builds the per-system package sets (`config.alc.pkgsFor`, wired in `flake/core.nix`) that every host, Home Manager configuration and check uses. The boundary looks like this:
 
 ```nix
-overlays = [
-  (final: prev: {
-    ndrop                    = inputs.nix-packages.packages.${prev.system}.ndrop;
-    zfs-auto-unlock          = inputs.nix-packages.packages.${prev.system}.zfs-auto-unlock;
-    claude-code              = inputs.nix-packages.packages.${prev.system}.claude-code;
-    paperless-review         = inputs.nix-packages.packages.${prev.system}.paperless-review;
+(_final: _prev: let
+  np = nix-packages.packages.${system};
+  wanted = [
+    "ndrop"
+    "zfs-auto-unlock"
+    "claude-code"
     # ... etc
-  })
-];
+  ];
+in
+  lib.filterAttrs (n: _: builtins.elem n wanted) np)
 ```
 
-This makes custom packages available as `pkgs.<name>` throughout all modules, indistinguishable from nixpkgs packages in module code.
+This makes custom packages available as `pkgs.<name>` throughout all modules, indistinguishable from nixpkgs packages in module code. Packages from other package flakes reach the same overlay by explicit name as well.
 
-## Alternatives Considered
-
-- **Inline `pkgs/` or `overlays/` directory in this repo** — Rejected. Package development and config management have different cadences; keeping them together conflates concerns and makes the config repo noisier. Packages used in other contexts would need to be duplicated.
-- **Apply `inputs.nix-packages.overlays.default` wholesale** — Rejected. Exposes all packages from nix-packages into pkgs, risking silent shadowing of nixpkgs packages. The whitelist makes additions explicit and auditable.
-- **fetchurl / builtins.fetchTarball per package** — Rejected. Loses flake-pinning benefits; no lock file tracking, no content-addressed fetching, harder to update.
-
-## Consequences
-
-- Custom package development is independent of this repo. nix-packages can be iterated and tested separately; this repo adopts updates by running `nix flake update nix-packages`.
-- Adding a new custom package to the config requires changes in two repos: add the derivation to nix-packages, then add the name to the overlay whitelist in `flake/pkgs.nix`, then update and verify `flake.lock`.
-- Required packages must exist on their supported systems. The current overlay selects the intersection of its whitelist and the producer's exports; it does not itself assert a required package matrix. Platform and consumer checks must make required-package failures explicit.
-- Do not use `inputs.nix-packages.overlays.default` — only the filtered individual extraction is intentional.
-
-## September 2026 follow-through
-
-The audit found duplicate deployment implementations and reusable package code
-outside the intended package boundary. Implementation remains tracked in
-Forgejo:
-
-- [Consolidate the generic deployment implementation](https://git.alc.xyz/alcxyz/nix-packages/issues/322)
-- [Restore reusable package ownership](https://git.alc.xyz/alcxyz/nix-packages/issues/323)
-- [Validate candidate packages in the consumer context](https://git.alc.xyz/alcxyz/nix-config/issues/275)
-
-[ADR-0067](0067-explicit-consumer-and-platform-validation.md) defines explicit
-platform and consumer checks. Those checks validate the actual selected packages
-and locked consumer; they do not turn the filtered overlay into a separate
-required-export validator.
-
-### Package ownership inventory
+### Package ownership
 
 `nix-gc-maintenance` is generic Unix tooling: its user, home directory,
 profile roots, command paths, and remote target are supplied by arguments or
@@ -86,7 +66,16 @@ independent qualification:
 
 ARM media extraction is tracked in [nix-packages #334](https://git.alc.xyz/alcxyz/nix-packages/issues/334).
 
-Package movement preserves the advertised platform set. Producer evaluation and
-native builds are followed by checks against the actual consumer lock before
-that lock is promoted. Runtime qualification remains explicit for cluster,
-display, hardware decode, and input behavior.
+## Alternatives Considered
+
+- **Inline `pkgs/` or `overlays/` directory in this repo**: Rejected. Package development and config management have different cadences; keeping them together conflates concerns and makes the config repo noisier. Packages used in other contexts would need to be duplicated.
+- **Apply `inputs.nix-packages.overlays.default` wholesale**: Rejected. Exposes all packages from nix-packages into pkgs, risking silent shadowing of nixpkgs packages. The whitelist makes additions explicit and auditable.
+- **fetchurl / builtins.fetchTarball per package**: Rejected. Loses flake-pinning benefits; no lock file tracking, no content-addressed fetching, harder to update.
+
+## Consequences
+
+- Custom package development is independent of this repo. nix-packages can be iterated and tested separately; this repo adopts validated updates with `just lock-packages`, which moves the nix-packages lock to the `promoted` ref and leaves `flake.lock` to be reviewed and committed ([ADR-0080](0080-promoted-package-ref.md)).
+- Adding a new custom package to the config requires changes in two repos: add the derivation to nix-packages, then add the name to the overlay whitelist in `flake/pkgs.nix`, then update and verify `flake.lock`.
+- Required packages must exist on their supported systems. The overlay selects the intersection of its whitelist and the producer's exports; it does not itself assert a required package matrix. Platform and consumer checks ([ADR-0067](0067-explicit-consumer-and-platform-validation.md)) validate the actual selected packages and locked consumer and make required-package failures explicit; they do not turn the filtered overlay into a separate required-export validator.
+- Package movement preserves the advertised platform set. Producer evaluation and native builds are followed by checks against the actual consumer lock before that lock is promoted. Runtime qualification remains explicit for cluster, display, hardware decode, and input behavior.
+- Do not use `inputs.nix-packages.overlays.default`: only the filtered individual extraction is intentional.

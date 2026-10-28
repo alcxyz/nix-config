@@ -14,13 +14,13 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 |-----|-------|--------|------|
 | [ADR-0000](0000-adr-template.md) | Template | Accepted / Proposed (archived ADRs: Superseded / Retired) | — |
 | [ADR-0001](0001-nixos-unstable-channel.md) | Use nixos-unstable as the primary nixpkgs channel | Accepted | `flake.nix` |
-| [ADR-0002](0002-nix-secrets-separate-repository.md) | Keep private infrastructure material outside nix-config | Accepted, amended | `flake.nix`, private material |
+| [ADR-0002](0002-nix-secrets-separate-repository.md) | Keep private infrastructure material outside nix-config | Accepted | `flake.nix`, private material |
 | [ADR-0003](0003-sops-nix-age-ssh-host-key-secrets.md) | Runtime secret deployment with sops-nix | Accepted, redacted | secrets, common |
 | [ADR-0004](0004-zfs-autounlock-age-yubikey.md) | Private encrypted pool unlock boundary | Accepted, redacted | encrypted storage, private runbooks |
 | [ADR-0005](0005-gpu-passthrough-dynamic-bind.md) | GPU passthrough via dynamic driver bind/unbind | Accepted | xyz, virtualisation |
 | [ADR-0006](0006-four-tier-module-layering.md) | Four-tier module layering | Accepted | `modules/`, `hosts/` |
 | [ADR-0007](0007-filtered-nix-packages-overlay.md) | Custom packages in a separate repo with filtered overlay | Accepted | `flake.nix`, packages |
-| [ADR-0008](0008-pkgsets-centralised-package-management.md) | Centralised package sets via pkgsets.nix | Accepted, amended | `modules/shared/` |
+| [ADR-0008](0008-pkgsets-centralised-package-management.md) | Centralised package sets via pkgsets.nix | Accepted | `modules/shared/` |
 | [ADR-0009](0009-xyz-as-distributed-build-host.md) | Distributed build roles and explicit client opt-in | Accepted, redacted | distributed builds |
 | [ADR-0010](0010-amd-igpu-forced-primary-display-nvidia-workaround.md) | Force AMD iGPU as primary display device on dual-GPU workstation | Accepted | xyz, desktop |
 | [ADR-0011](0011-unified-keyboard-remapping-kanata.md) | Unified keyboard remapping via kanata across all hosts and keyboards | Accepted, amended | kanata, desktop, mac |

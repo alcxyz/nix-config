@@ -1,8 +1,10 @@
 # ADR-0002: Keep private infrastructure material outside nix-config
 
-**Status:** Accepted, amended 2026-05-14
+**Status:** Accepted
 **Date:** 2026-04-18
-**Applies to:** `flake.nix`, `modules/nixos/common/default.nix`, private runbooks
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0002-nix-secrets-separate-repository-history.md)
+**Applies to:** `flake.nix`, `flake/hosts/`, `modules/nixos/common/default.nix`, `users/`, private runbooks
 
 ## Context
 
@@ -22,6 +24,11 @@ Private infrastructure material lives in a separate private Git repository
 for private path metadata, helper packages, runbook references, and private
 NixOS/Home Manager modules.
 
+The NixOS host builder (`flake/hosts/nixos.nix`) and the common base module
+import private modules for every NixOS host. The Mac and standalone Home Manager
+builders add no private modules; host and user files import further private
+modules only where they need them.
+
 The public repo may reference stable private module and path outputs, but should
 not duplicate private runbook details, secret metadata beyond what is required
 for declarative wiring, or sensitive operational assumptions.
@@ -37,15 +44,17 @@ than duplicated in public host or user configuration.
   this config publicly and expose private metadata.
 - **agenix-style secrets committed to the config repo** - rejected. The
   separation of access control between config and private material is lost.
-- **HTTPS URL for nix-secrets** - rejected. SSH is cleaner and consistent with
-  how the machines already authenticate to private Git.
+- **HTTPS URL for nix-secrets** - rejected at adoption, as SSH matched how the
+  machines already authenticated to private Git. `flake.nix` has fetched the
+  input over HTTPS since 2026-08-19; no ADR records that change.
 - **Keep nix-secrets as YAML-only forever** - rejected. Private modules and
   runbooks need the same access boundary as encrypted secret files.
 
 ## Consequences
 
 - This repo can be shared or published with less private operational context.
-- Deployments require SSH access to `nix-secrets`.
+- Deployments require authenticated access to `nix-secrets`, which `flake.nix`
+  fetches over HTTPS.
 - `flake.lock` pins `nix-secrets` to a specific commit; private material changes
   require a lock update to take effect in dependent builds.
 - Agents must never add SOPS YAML files, secret content, private runbooks, or
