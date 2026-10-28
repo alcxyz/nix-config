@@ -209,6 +209,106 @@ hl.window_rule({
 	opacity = "1.0 override 1.0 override 1.0 override",
 })
 
+-- Zen maps extension popouts (such as Bitwarden's) with the same title and
+-- a full-size buffer, and names them only afterwards. Every Zen window
+-- therefore opens on a hidden staging workspace. Once its title settles, a
+-- popout is floated and sized before it is shown over the window that opened
+-- it; any other Zen window moves straight to the active workspace. Staging is
+-- a regular workspace: emptying a special one closes whichever special
+-- workspace (such as a scratchpad) is open on its monitor.
+hl.window_rule({ name = "zen-staging", match = { class = "^zen$" }, workspace = "name:zenstage silent" })
+local zenPending = {}
+local zenOpener
+local function placeZenPopout(w, opener)
+	local at, size = opener and opener.at, opener and opener.size
+	if at and size then
+		local own = w.size
+		hl.dispatch(hl.dsp.window.move({
+			x = at.x + (size.x - own.x) // 2,
+			y = at.y + (size.y - own.y) // 2,
+			window = w,
+		}))
+	else
+		hl.dispatch(hl.dsp.window.center({ window = w }))
+	end
+end
+local function showZenWindow(w, popout, opener)
+	local workspace = hl.get_active_special_workspace() or hl.get_active_workspace()
+	-- Relative workspace navigation can land on staging; leave it again.
+	-- "previous" recreates that workspace if it was destroyed meanwhile.
+	if workspace and workspace.name == "zenstage" then
+		workspace = "previous"
+	end
+	if not workspace then
+		return
+	end
+	-- Move silently, since a following move warps the cursor. Place a popout
+	-- after the move, as staging may sit on another monitor, and before the
+	-- focus, which warps the cursor to it. All of it applies before the next
+	-- frame.
+	hl.dispatch(hl.dsp.window.move({ workspace = workspace, follow = false, window = w }))
+	if popout then
+		placeZenPopout(w, opener)
+	end
+	hl.dispatch(hl.dsp.focus({ window = w }))
+end
+local function settleZenWindow(w, popout)
+	local pending = zenPending[w.stable_id]
+	if not pending then
+		return
+	end
+	zenPending[w.stable_id] = nil
+	if not popout then
+		showZenWindow(w)
+		return
+	end
+	hl.dispatch(hl.dsp.window.float({ action = "enable", window = w }))
+	if w.title:find("^Extension: %(Bitwarden") then
+		hl.dispatch(hl.dsp.window.resize({ x = 480, y = 720, window = w }))
+	end
+	-- Let Zen redraw at the new size while the popout is still hidden.
+	hl.timer(function()
+		if w.mapped then
+			showZenWindow(w, true, pending.opener)
+		end
+	end, { timeout = 400, type = "oneshot" })
+end
+local function classifyZenWindow(w)
+	if not zenPending[w.stable_id] then
+		return
+	end
+	if w.title:find("^Extension: %(") then
+		settleZenWindow(w, true)
+	elseif w.title ~= "" and w.title ~= "Zen Browser" and not w.title:find("^about:blank") then
+		settleZenWindow(w, false)
+	end
+end
+hl.on("window.open_early", function(w)
+	if w.class ~= "zen" then
+		return
+	end
+	local active = hl.get_active_window()
+	zenOpener = active and active.class == "zen" and active or nil
+end)
+hl.on("window.open", function(w)
+	if w.class ~= "zen" then
+		return
+	end
+	local id = w.stable_id
+	zenPending[id] = { opener = zenOpener }
+	zenOpener = nil
+	-- A window still unnamed after two seconds is no popout.
+	hl.timer(function()
+		if w.mapped then
+			settleZenWindow(w, false)
+		else
+			zenPending[id] = nil
+		end
+	end, { timeout = 2000, type = "oneshot" })
+	classifyZenWindow(w)
+end)
+hl.on("window.title", classifyZenWindow)
+
 -- Layout switching. The Lua callback updates the live config without the
 -- deprecated hyprctl keyword interface.
 hl.bind("SUPER + CTRL + S", function()
