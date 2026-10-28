@@ -11,9 +11,13 @@ archived number.
 | [ADR-0006 history](0006-four-tier-module-layering-history.md) | Four-tier module layering | History of [ADR-0006](../0006-four-tier-module-layering.md) |
 | [ADR-0007 history](0007-filtered-nix-packages-overlay-history.md) | Custom packages in a separate repository with a filtered overlay | History of [ADR-0007](../0007-filtered-nix-packages-overlay.md) |
 | [ADR-0008 history](0008-pkgsets-centralised-package-management-history.md) | Centralised package sets via pkgsets.nix | History of [ADR-0008](../0008-pkgsets-centralised-package-management.md) |
+| [ADR-0011 history](0011-unified-keyboard-remapping-kanata-history.md) | Unified keyboard remapping via kanata across all hosts and keyboards | History of [ADR-0011](../0011-unified-keyboard-remapping-kanata.md) |
+| [ADR-0013 history](0013-safe-nix-gc-no-generation-deletion-history.md) | Safe Nix GC with guarded generation retention | History of [ADR-0013](../0013-safe-nix-gc-no-generation-deletion.md) |
+| [ADR-0016 history](0016-devlog-go-binary-with-weekly-hedgedoc-history.md) | Devlog as Go binary with weekly summaries | History of [ADR-0016](../0016-devlog-go-binary-with-weekly-hedgedoc.md) |
 | [ADR-0017 history](0017-k3s-cluster-topology-history.md) | k3s cluster topology for the current homelab phase | History of [ADR-0017](../0017-k3s-cluster-topology.md) |
 | [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | Retired PipeWire virtual sink for per-app audio isolation (wcap) | Retired 2026-06-04 |
 | [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Superseded by [ADR-0022](../0022-universal-agent-instructions.md) |
+| [ADR-0035 history](0035-host-kernel-policy-history.md) | Host kernel policy | History of [ADR-0035](../0035-host-kernel-policy.md) |
 | [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |
 | [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by [ADR-0052](../0052-xev-primary-k8s-backup-target.md) |
 | [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |
