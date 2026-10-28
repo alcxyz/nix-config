@@ -44,8 +44,8 @@ in
     imports = [
       inputs.nix-secrets.homeManagerModules.gitIdentityPolicy
       inputs.nix-secrets.homeManagerModules.sshIdentityPolicy
-      # The agent rules and roles, and on hosts with programs.ai the skills
-      # and merge guard lists.
+      # The agent rules and roles, and on hosts with programs.ai the skills,
+      # the description-format trial and the review inventory.
       inputs.pandora.homeManagerModules.default
       # These are modules that are guaranteed to work on both OSes
       # or handle their own platform differences internally if needed
