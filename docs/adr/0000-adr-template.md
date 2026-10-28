@@ -1,7 +1,9 @@
 # ADR-0000: Template
 
-**Status:** Accepted | Superseded by [ADR-NNNN](NNNN-title.md) | Deprecated
+**Status:** Accepted | Proposed | Superseded by [ADR-NNNN](../NNNN-title.md) | Retired (once archived)
 **Date:** YYYY-MM-DD
+**Amended:** YYYY-MM-DD (only once rewritten)
+**History:** [replaced text](archive/NNNN-title-history.md) (only once rewritten)
 **Applies to:** `path/to/relevant/file` (or component name)
 
 ## Context

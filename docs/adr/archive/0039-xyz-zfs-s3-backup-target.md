@@ -1,6 +1,6 @@
 # ADR-0039: xyz ZFS-backed S3 target for cluster backups
 
-**Status:** Superseded by [ADR-0052](0052-xev-primary-k8s-backup-target.md)
+**Status:** Superseded by [ADR-0052](../0052-xev-primary-k8s-backup-target.md)
 **Date:** 2026-05-06
 **Applies to:** host-level object storage and Kubernetes backup posture
 
@@ -22,7 +22,7 @@ object storage remains a separate in-cluster service.
 
 Enforce a storage bound so backup growth cannot consume unrelated host storage.
 Defer application-aware database backup automation until the database topology
-is decided in [ADR-0024](0024-shared-postgres-cluster.md).
+is decided in [ADR-0024](../0024-shared-postgres-cluster.md).
 
 ADR-0052 later superseded the target placement while retaining these dependency
 and bounded-growth requirements.

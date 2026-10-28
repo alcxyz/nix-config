@@ -27,7 +27,7 @@ Forgejo issues.
 Any approved migration needs independent application acceptance, recoverable
 state transitions and validated application-aware restores. Backup storage must
 follow [ADR-0052](0052-xev-primary-k8s-backup-target.md), outside the database's
-cluster-storage dependency path. [ADR-0039](0039-xyz-zfs-s3-backup-target.md)
+cluster-storage dependency path. [ADR-0039](archive/0039-xyz-zfs-s3-backup-target.md)
 is the superseded historical backup placement.
 
 Concrete migration and recovery procedures belong to private operational

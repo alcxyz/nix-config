@@ -1,6 +1,6 @@
 # ADR-0038: UniFi native NixOS active/passive runtime
 
-**Status:** Retired (2026-08-19; superseded by ADR-0060)
+**Status:** Retired (2026-08-19; superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md))
 **Date:** 2026-05-06
 **Applies to:** `modules/nixos/services/unifi-native/`, `hosts/nux`, `hosts/rpi0`
 
@@ -62,7 +62,7 @@ renamed-option module during transition.
 - Because the standby service unit exists but is not wanted at boot, failover can
   start UniFi manually after restore without rebuilding just to create the unit.
 - The operational fallback flow is documented in
-  [`../unifi-native-fallback-runbook.md`](../unifi-native-fallback-runbook.md).
+  [`../../unifi-native-fallback-runbook.md`](../../unifi-native-fallback-runbook.md).
 - Automatic HA is a separate target tracked by
   [ADR-0040](0040-unifi-automatic-ha-target.md). This ADR describes the current
   native active/passive runtime, not the final automated failover design.

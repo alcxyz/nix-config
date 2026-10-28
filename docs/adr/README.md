@@ -2,9 +2,17 @@
 
 Non-obvious decisions in this repo are documented here. Before changing architecture, infrastructure, deployment, library choices, or any area with a clear trade-off — read the relevant ADR first.
 
+Each ADR here states the decision that is true now. When an accepted decision
+changes, the ADR is rewritten in place, with an `**Amended:**` date and a
+`**History:**` line linking the replaced text in
+`archive/<file stem>-history.md`. Superseded and retired ADRs move to
+[`archive/`](archive/README.md) with their numbers kept; numbers are never
+reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
+`git grep` to search it.
+
 | ADR | Title | Status | Area |
 |-----|-------|--------|------|
-| [ADR-0000](0000-adr-template.md) | Template | Accepted / Superseded / Deprecated | — |
+| [ADR-0000](0000-adr-template.md) | Template | Accepted / Proposed (archived ADRs: Superseded / Retired) | — |
 | [ADR-0001](0001-nixos-unstable-channel.md) | Use nixos-unstable as the primary nixpkgs channel | Accepted | `flake.nix` |
 | [ADR-0002](0002-nix-secrets-separate-repository.md) | Keep private infrastructure material outside nix-config | Accepted, amended | `flake.nix`, private material |
 | [ADR-0003](0003-sops-nix-age-ssh-host-key-secrets.md) | Runtime secret deployment with sops-nix | Accepted, redacted | secrets, common |
@@ -31,8 +39,6 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0024](0024-shared-postgres-cluster.md) | Shared Postgres cluster for k8s services | Proposed | k3s, databases |
 | [ADR-0025](0025-tooling-service-discovery-post-k8s.md) | Tooling service discovery after Docker-to-k8s migration | Accepted | tooling, gitops |
 | [ADR-0026](0026-unified-source-directory-layout.md) | Unified source directory layout across machines | Accepted, implemented on xyz | all hosts, home-manager |
-| [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | Retired PipeWire virtual sink for per-app audio isolation (wcap) | Retired | `modules/nixos/common/`, hyprland |
-| [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Superseded by ADR-0022 | agent instructions, nix-packages, nix-secrets |
 | [ADR-0029](0029-shared-xdg-llm-config.md) | Shared XDG LLM config for local tooling | Accepted, amended | local tooling, llm config, xdg |
 | [ADR-0030](0030-declarative-shared-user-policy-configs.md) | Declarative deployment for shared user policy configs | Accepted, amended | home-manager, shared policy, config deployment |
 | [ADR-0031](0031-kubernetes-client-wrappers.md) | Kubernetes client wrappers with per-command kubeconfig | Accepted | k3s, home-manager, client tooling |
@@ -42,11 +48,7 @@ Non-obvious decisions in this repo are documented here. Before changing architec
 | [ADR-0035](0035-host-kernel-policy.md) | Host kernel policy | Accepted | kernels, hosts, k3s |
 | [ADR-0036](0036-host-inventory-source-of-truth.md) | Host inventory as source of truth | Accepted | hosts, roles, packages, workspace, k3s |
 | [ADR-0037](0037-flake-parts-output-structure.md) | Flake output structure via flake-parts | Accepted | `flake.nix`, `flake/` |
-| [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Retired | unifi, nux, rpi0 |
-| [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by ADR-0052 | xyz, ZFS, k3s backups |
-| [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Retired | unifi, nux, rpi0, failover |
 | [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Implemented | forgejo, runners, systemd, docker |
-| [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Superseded by the `tank` storage rebuild | media, torrent, stash, xyz |
 | [ADR-0043](0043-selective-external-nix-config-pattern-adoption.md) | Selective external nix-config pattern adoption | Accepted, partially implemented | modules, hosts, checks, workflow |
 | [ADR-0044](0044-host-inventory-role-model-for-new-machines.md) | Host inventory role model for new machines | Accepted, partially implemented; amended by ADR-0088 | inventory, hosts, roles |
 | [ADR-0045](0045-xev-and-xps-kubernetes-node-onboarding.md) | xev and xps Kubernetes node onboarding | Accepted, xev promoted to k3s server; xps workstation-only | xev, xps, k3s, Longhorn, Forgejo |

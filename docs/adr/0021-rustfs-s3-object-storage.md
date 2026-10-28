@@ -27,7 +27,7 @@ independent backups or restore qualification.
 
 Keep backup storage separate under
 [ADR-0052](0052-xev-primary-k8s-backup-target.md).
-[ADR-0039](0039-xyz-zfs-s3-backup-target.md) records the superseded first placement
+[ADR-0039](archive/0039-xyz-zfs-s3-backup-target.md) records the superseded first placement
 of that backup role. Do not use the application object store as its own sole
 recovery target.
 

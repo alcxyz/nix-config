@@ -3,7 +3,7 @@
 **Status:** Accepted, amended by [ADR-0064](0064-keep-secure-storage-on-xyz.md) and the 2026-10-23 amendment to [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md)
 **Date:** 2026-07-18
 **Applies to:** host-level S3 backups, replica storage, and backup clients
-**Supersedes:** [ADR-0039](0039-xyz-zfs-s3-backup-target.md)
+**Supersedes:** [ADR-0039](archive/0039-xyz-zfs-s3-backup-target.md)
 
 ## Context
 

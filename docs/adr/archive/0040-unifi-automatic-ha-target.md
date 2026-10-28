@@ -1,6 +1,6 @@
 # ADR-0040: UniFi automatic HA target
 
-**Status:** Retired (2026-08-19; superseded by ADR-0060)
+**Status:** Retired (2026-08-19; superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md))
 **Date:** 2026-05-07
 **Applies to:** `modules/nixos/services/unifi-native/`, `hosts/nux`, `hosts/rpi0`, UniFi fallback automation
 
