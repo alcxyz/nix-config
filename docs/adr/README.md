@@ -59,7 +59,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted | xyz, ZFS, backups |
 | [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) | xev replaces rpi0 as a k3s server | Accepted | k3s, xev, rpi0, etcd |
 | [ADR-0052](0052-xev-primary-k8s-backup-target.md) | xev primary Kubernetes backup target with xyz ZFS replica | Accepted | xev, xyz, k3s backups |
-| [ADR-0053](0053-controller-first-xps-couch-session.md) | Controller-first XPS couch session | Accepted, amended | xps, couch, Moonlight, SteamHeadless |
+| [ADR-0053](0053-controller-first-xps-couch-session.md) | Controller-first XPS couch session | Accepted | xps, couch, Moonlight, SteamHeadless |
 | [ADR-0054](0054-mac-hosted-synergy1-with-waynergy-clients.md) | Mac-hosted Synergy 1 with Waynergy clients | Accepted | mac, xps, xyz, Synergy, Waynergy |
 | [ADR-0055](0055-nixbox-session-and-system-splash-boundary.md) | Stage the NIXBOX splash across boot and graphical session | Accepted | xps, couch, Plymouth, Quickshell |
 | [ADR-0056](0056-containerized-remote-browser-streaming.md) | Containerized remote browser streaming | Accepted, implemented | xev, xps, Wolf, Moonlight, browsers |
@@ -72,12 +72,12 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0064](0064-keep-secure-storage-on-xyz.md) | Keep secure storage on xyz while moving bulk storage to xev | Accepted, staged | xyz, xev, secure storage, bulk storage, media services |
 | [ADR-0065](0065-narrow-xyz-game-session-compatibility-repairs.md) | Keep xyz game-session compatibility repairs narrow and event-scoped | Accepted | xyz, Hyprland, XWayland, DMS, Heroic |
 | [ADR-0066](0066-direct-umu-launchers-with-heroic-qa-fallback.md) | Use direct UMU launchers with a Heroic QA fallback | Accepted | xyz, UMU, Proton, Battle.net, Heroic |
-| [ADR-0067](0067-explicit-consumer-and-platform-validation.md) | Explicit consumer and platform validation | Accepted, public automation implemented | flake checks, Forgejo, package promotion |
+| [ADR-0067](0067-explicit-consumer-and-platform-validation.md) | Explicit consumer and platform validation | Accepted | flake checks, Forgejo, package promotion |
 | [ADR-0068](0068-k8s-node-power-lifecycle.md) | Kubernetes node power lifecycle (formerly the duplicate ADR-0036) | Accepted | k3s, node lifecycle, maintenance helpers |
 | [ADR-0069](0069-maintained-project-dev-qa.md) | Maintained project development QA inputs | Accepted | flake inputs, DMS, release workflow |
 | [ADR-0070](0070-action-bound-credential-consent.md) | Action-bound credential consent | Accepted | Polkit, DMS, credential brokers |
 | [ADR-0071](0071-shared-container-network-namespace-mount.md) | Establish the shared container network namespace mount before runtimes | Accepted | containers, k3s, systemd |
-| [ADR-0072](0072-isolated-runner-docker.md) | Isolate runner Docker execution in a bounded rootless service | Accepted, per-host qualification required | Forgejo runners, Docker, systemd |
+| [ADR-0072](0072-isolated-runner-docker.md) | Isolate runner Docker execution in a bounded rootless service | Accepted | Forgejo runners, Docker, systemd |
 | [ADR-0073](0073-native-macos-gui-apps-with-nix-managed-settings.md) | Native macOS GUI apps with Nix-managed settings | Accepted | macOS, Homebrew, Home Manager, GUI apps |
 | [ADR-0074](0074-phased-podman-coexistence.md) | Qualify Podman through staged Docker coexistence | Accepted; Docker stays beside Podman, no Docker engine qualified for retirement | containers, development, CI |
 | [ADR-0075](0075-agent-turn-efficiency-reporting.md) | Start with short model-usage summaries in T3 Code | Proposed | T3 Code, agent reporting, optional skills |

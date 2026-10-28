@@ -2,7 +2,8 @@
 
 **Status:** Accepted
 **Date:** 2026-07-16
-**Amended:** 2026-10-13 by [ADR-0094](0094-browser-roles.md): the public and local couch browsers named Helium here are now Brave Origin.
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0053-controller-first-xps-couch-session-history.md)
 **Applies to:** `hosts/xps`, `modules/nixos/services/moonlight-client`, SteamHeadless integration
 
 ## Context
@@ -25,6 +26,10 @@ Boot the XPS couch session into the public remote browser when its independent
 Wolf host is reachable, with an ordinary tiled local XWayland browser as the
 bounded startup fallback. Do not make SteamHeadless availability a login
 dependency or continually relaunch a failed Moonlight client.
+
+The couch browsers are Brave Origin ([ADR-0094](0094-browser-roles.md)): the
+public remote browser is the Wolf catalog's public lobby browser, and the local
+fallback and protected couch browsers run Brave Origin on XPS.
 
 Run a non-grabbing controller listener that survives controller reconnects and
 recognises deliberately held shortcuts:
@@ -49,11 +54,11 @@ input path. Keep the normal desktop session as a separately persisted boot
 mode.
 
 Retain the composited `merged` session as the XPS default, but also offer
-one-shot direct-display sessions for public Helium, the protected browser
+one-shot direct-display sessions for the public browser, the protected browser
 selector, and Steam. Direct-display Moonlight owns DRM through Qt EGLFS, so
 only one such client can run at a time and host-local compositor-bound DMS, KDE
 Connect, and Waynergy input is deliberately unavailable until the stream exits.
-KDE Connect inside the remote Helium capsule remains available through the
+KDE Connect inside the remote public browser capsule remains available through the
 stream. Physical keyboard, pointer, and controller input continue to reach
 Moonlight directly. A normal exit returns to the previous couch, merged, or
 desktop session; the persisted session-mode command and greetd restart remain
@@ -70,12 +75,12 @@ Intel. It also preserves the deliberately selected 1080p or 1440p TV mode
 instead of allowing EGLFS to choose a different preferred mode.
 
 Treat the remote stream resolution independently from the physical mode.
-Helium, protected browsers, and Steam may continue rendering at 1440p while
+The public browser, protected browsers, and Steam may continue rendering at 1440p while
 Moonlight presents them on the selected XPS output. Entering direct display
 restarts the local graphical session, so concurrent local XWayland Moonlight
 clients close. Their remote Wolf capsules retain their configured grace and
-persistent profiles; returning to merged mode automatically restores public
-Helium, while a protected client is reopened deliberately.
+persistent profiles; returning to merged mode automatically restores
+the public browser, while a protected client is reopened deliberately.
 
 Launch Moonlight explicitly in windowed mode and let Hyprland tile it. Do not
 add a compositor fullscreen rule: browser-level or compositor fullscreen is
@@ -160,13 +165,13 @@ context as presentation only: it must never participate in the authorization
 decision.
 
 Keep attached secondary and tertiary displays independent in the all-output
-layout. Assign persistent workspaces 1–3, 4–6, and 7–9 across the three external
+layout. Assign persistent workspaces 1 to 3, 4 to 6, and 7 to 9 across the three external
 output roles. Expose only the workspace set belonging to each active logical
-display: a solo output has workspaces 1–3, two independent outputs have two
+display: a solo output has workspaces 1 to 3, two independent outputs have two
 sets, and all three independent outputs have all three sets. A mirrored second
 TV is a presentation target rather than another logical desktop and therefore
 does not add workspaces. When an output disappears, fold windows from its
-inactive workspace set into the corresponding primary workspace 1–3 so they
+inactive workspace set into the corresponding primary workspace 1 to 3 so they
 remain reachable. Direct and relative workspace shortcuts must reject or skip
 inactive sets.
 Park inactive-but-connected outputs outside the usable desktop before powering
@@ -179,8 +184,8 @@ provide an explicit dual-TV layout that activates the two largest TV-class
 outputs while parking an attached auxiliary display. Also provide explicit
 primary-TV-plus-auxiliary and secondary-TV-plus-auxiliary layouts. Classify the
 second TV and auxiliary output by physical role instead of merely taking the
-next ranked connector; this preserves workspaces 4–6 for the second TV and
-7–9 for the auxiliary display, and prevents a persisted TV-mirror request from
+next ranked connector; this preserves workspaces 4 to 6 for the second TV and
+7 to 9 for the auxiliary display, and prevents a persisted TV-mirror request from
 targeting the auxiliary display when only one TV is selected. Keep all-output
 and ranked solo-output modes as deterministic recovery controls. Cycle those
 modes with held controller Select plus the north face button or
@@ -231,7 +236,7 @@ pointer: either path can interfere with the qualified Waynergy cursor over
 Moonlight, while root polling also reacts to physical pointer movement.
 Rate-limit phone wheel steps without changing physical scroll input, keep
 touch-classified network motion visible, and retain the XPS couch cursor for
-twelve seconds after activity.
+eight seconds after activity.
 
 Waynergy uses an output-bound WLR virtual pointer for accurate movement across
 dynamic couch layouts. That path is the accepted tracking baseline. On XPS,
@@ -317,7 +322,7 @@ Moonlight uses XWayland in couch mode to support phone input. Hardware decoding
 remains enabled, but the XWayland presentation path should be retained only
 while it meets latency and rendering expectations.
 
-Direct-display mode provides the same low-overhead Helium, protected-browser,
+Direct-display mode provides the same low-overhead public-browser, protected-browser,
 and Steam choices as the compact client while retaining XPS's multi-output
 composited mode as the normal experience. Only the selected physical output is
 active during a direct session. Phone and Synergy input require returning to
@@ -339,9 +344,21 @@ attached to the container's X server.
 
 ## Tracking
 
-- Issue #140 tracks the controller-first rollout, XPS direct-display
-  qualification, and remaining live display validation.
+- Unresolved: `hosts/xps/configuration.nix` sets `defaultSessionMode = "couch"`
+  (since 2026-07-16). That value seeds the session-mode file when it is absent
+  and is the fallback in the session-mode recovery paths (a stale direct-mode
+  token at boot, an invalid return mode, an empty mode query), while this ADR
+  names `merged` as the XPS default. Which default is intended is
+  tracked in [#854](https://git.alc.xyz/alcxyz/nix-config/issues/854) until the
+  owner settles it.
+- Issue #140 tracks the remaining live display and recovery validation:
+  mismatched-display mirroring after a reboot, the cable-removal fallback,
+  display, pointer and audio cycling after a reboot, and protected-browser
+  isolation through a direct-display cycle. The direct-display modes on the
+  primary TV are qualified.
 - Issue #141 tracks optional controller-native browser navigation, a proper
   controller shutdown action, and optional clipboard transfer. The
   Wayland-compatible KDE Connect phone pointer path is implemented and
   qualified.
+- Issue #548 tracks xps's planned direction (media modes and an isolated
+  agent mode, no operator workstation); its decision is still open.

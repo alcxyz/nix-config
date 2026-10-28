@@ -31,13 +31,17 @@ archived number.
 | [ADR-0050 history](0050-xyz-appstate-and-local-backup-boundary-history.md) | xyz appstate and local backup boundary | History of [ADR-0050](../0050-xyz-appstate-and-local-backup-boundary.md) |
 | [ADR-0051 history](0051-xev-replaces-rpi0-k3s-server-history.md) | xev replaces rpi0 as a k3s server | History of [ADR-0051](../0051-xev-replaces-rpi0-k3s-server.md) |
 | [ADR-0052 history](0052-xev-primary-k8s-backup-target-history.md) | xev primary Kubernetes backup target with xyz ZFS replica | History of [ADR-0052](../0052-xev-primary-k8s-backup-target.md) |
+| [ADR-0053 history](0053-controller-first-xps-couch-session-history.md) | Controller-first XPS couch session | History of [ADR-0053](../0053-controller-first-xps-couch-session.md) |
 | [ADR-0056 history](0056-containerized-remote-browser-streaming-history.md) | Containerized remote browser streaming | History of [ADR-0056](../0056-containerized-remote-browser-streaming.md) |
 | [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Superseded by [ADR-0061](../0061-retire-xyz-k3s-agent.md) on 2026-08-28 |
 | [ADR-0058 history](0058-xyz-dedicated-runtime-storage-history.md) | Dedicated xyz runtime storage | History of [ADR-0058](../0058-xyz-dedicated-runtime-storage.md) |
 | [ADR-0059 history](0059-file-selective-home-backup-and-storage-monitoring-history.md) | File-selective home backup and host storage monitoring | History of [ADR-0059](../0059-file-selective-home-backup-and-storage-monitoring.md) |
 | [ADR-0061 history](0061-retire-xyz-k3s-agent-history.md) | Retire the xyz k3s agent | History of [ADR-0061](../0061-retire-xyz-k3s-agent.md) |
 | [ADR-0062 history](0062-xev-tank-storage-and-media-service-migration-history.md) | Move bulk storage ownership and media services to xev | History of [ADR-0062](../0062-xev-tank-storage-and-media-service-migration.md) |
+| [ADR-0065 history](0065-narrow-xyz-game-session-compatibility-repairs-history.md) | Keep xyz game-session compatibility repairs narrow and event-scoped | History of [ADR-0065](../0065-narrow-xyz-game-session-compatibility-repairs.md) |
+| [ADR-0067 history](0067-explicit-consumer-and-platform-validation-history.md) | Explicit consumer and platform validation | History of [ADR-0067](../0067-explicit-consumer-and-platform-validation.md) |
 | [ADR-0069 history](0069-maintained-project-dev-qa-history.md) | Maintained project development QA inputs | History of [ADR-0069](../0069-maintained-project-dev-qa.md) |
+| [ADR-0072 history](0072-isolated-runner-docker-history.md) | Isolate runner Docker execution in a bounded rootless service | History of [ADR-0072](../0072-isolated-runner-docker.md) |
 | [ADR-0074 history](0074-phased-podman-coexistence-history.md) | Qualify Podman through staged Docker coexistence | History of [ADR-0074](../0074-phased-podman-coexistence.md) |
 | [ADR-0076 history](0076-dms-lock-exact-head-publication-history.md) | Validate and merge DMS lock updates at an exact head | History of [ADR-0076](../0076-dms-lock-exact-head-publication.md) |
 | [ADR-0086 history](0086-released-tool-inputs-history.md) | Refresh released platform tools with tools-update | History of [ADR-0086](../0086-released-tool-inputs.md) |

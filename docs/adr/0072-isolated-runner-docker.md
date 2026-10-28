@@ -1,8 +1,10 @@
 # ADR-0072: Isolate runner Docker execution in a bounded rootless service
 
-- Status: Accepted; amended 2026-09-27, 2026-10-12 and 2026-10-27; per-host rollout requires qualification
-- Date: 2026-09-10
-- Area: Forgejo runners, Docker, systemd
+**Status:** Accepted
+**Date:** 2026-09-10
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0072-isolated-runner-docker-history.md)
+**Area:** Forgejo runners, Docker, systemd
 
 ## Context
 
@@ -70,7 +72,7 @@ drained, and only after pressure stays low and the runner is fully inactive.
 The graceful service stop signals the runner's main process first and retains
 the existing service timeout as the eventual whole-cgroup termination boundary.
 
-A drain must not outlast its cause (amended 2026-10-12, #646). Host-wide PSI
+A drain must not outlast its cause (#646). Host-wide PSI
 does not attribute pressure: unrelated load that stays between the resume and
 drain thresholds once held both runners drained for hours with no CI job
 running. Owned drains therefore also resume after a longer settled interval
@@ -161,7 +163,7 @@ condition can acquire the lock. A skipped start is not an automatic restart
 failure and leaves ownership markers unchanged.
 
 A resume is owned until the runner is active, not only until its start is
-queued (amended 2026-10-27, #844). A unit condition, such as a temporary
+queued (#844). A unit condition, such as a temporary
 runtime hold, or the start gate can skip the queued start, and the guard once
 forgot the runner as soon as the request was accepted, leaving it stopped for
 hours after the hold cleared. The guard therefore records the unit's condition
@@ -186,7 +188,10 @@ again. A persistent metadata failure still stops the guard
 and invokes the destructive controller-loss boundary.
 
 All runner clients, mounted sockets and cache maintenance use the dedicated
-endpoint. The module stays disabled by default; enable each host after runtime qualification.
+endpoint. The module stays disabled by default; enable each host after runtime
+qualification. xyz, nex, nux and xev run it, each enabled after its
+qualification between 2026-09-10 and 2026-09-12 (#345), and all four opt into
+the retention policy.
 The daemon gives containers a 65,536 default open-file limit and has a separate
 1,048,576 service limit. Docker's embedded build executor can inherit the daemon
 limit instead of the container default. These bounds keep inherited host limits
@@ -295,5 +300,7 @@ do not guarantee immediate relief from already queued buffered writes, nor do
 they enforce filesystem capacity. Qualify pressure behavior on the actual
 backing filesystem. Shared-job credential isolation remains separate work.
 
-Tracks [#345](https://git.alc.xyz/alcxyz/nix-config/issues/345). Do not close it or
-enable hosts on the strength of synthetic tests alone.
+The per-host rollout was tracked in
+[#345](https://git.alc.xyz/alcxyz/nix-config/issues/345), closed on 2026-09-12
+once all four runner hosts were qualified and enabled. Do not enable a further
+host on the strength of synthetic tests alone.
