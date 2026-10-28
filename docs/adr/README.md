@@ -63,11 +63,10 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0054](0054-mac-hosted-synergy1-with-waynergy-clients.md) | Mac-hosted Synergy 1 with Waynergy clients | Accepted | mac, xps, xyz, Synergy, Waynergy |
 | [ADR-0055](0055-nixbox-session-and-system-splash-boundary.md) | Stage the NIXBOX splash across boot and graphical session | Accepted | xps, couch, Plymouth, Quickshell |
 | [ADR-0056](0056-containerized-remote-browser-streaming.md) | Containerized remote browser streaming | Accepted, implemented | xev, xps, Wolf, Moonlight, browsers |
-| [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Superseded by ADR-0061 | xev, Wolf, Kubernetes, Longhorn; historical xyz placement |
 | [ADR-0058](0058-xyz-dedicated-runtime-storage.md) | Dedicated xyz runtime storage | Accepted, amended | xyz, Docker, k3s, Steam-headless, ZFS |
 | [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) | File-selective home backup and host storage monitoring | Accepted, amended | xyz, home backup, storage monitoring |
 | [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md) | Gateway-owned UniFi and independent DNS pair | Accepted | unifi, dns, network services |
-| [ADR-0061](0061-retire-xyz-k3s-agent.md) | Retire the xyz k3s agent | Accepted | xyz, k3s, browsers, Longhorn |
+| [ADR-0061](0061-retire-xyz-k3s-agent.md) | Retire the xyz k3s agent | Accepted | xyz, xev, k3s, Wolf, browsers, Longhorn |
 | [ADR-0062](0062-xev-tank-storage-and-media-service-migration.md) | Move bulk storage ownership and media services to xev | Accepted, amended by ADR-0064; preparation in progress | xev, xyz, storage, media services |
 | [ADR-0063](0063-split-replaceable-bulk-and-secure-storage.md) | Split replaceable bulk data from secure storage | Accepted, implemented | xyz, bulk storage, ZFS, media services |
 | [ADR-0064](0064-keep-secure-storage-on-xyz.md) | Keep secure storage on xyz while moving bulk storage to xev | Accepted, staged | xyz, xev, secure storage, bulk storage, media services |

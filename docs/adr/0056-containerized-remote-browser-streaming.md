@@ -2,29 +2,13 @@
 
 **Status:** Accepted, implemented
 
+**Date:** 2026-07-20
+
+**Amended:** 2026-10-28
+
+**History:** [replaced text](archive/0056-containerized-remote-browser-streaming-history.md)
+
 **Applies to:** Wolf, Moonlight, browser sessions
-
-**Lifecycle amendments:**
-[ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) moved the
-coordinators under Kubernetes while preserving the independent public and
-protected identities established here.
-[ADR-0061](0061-retire-xyz-k3s-agent.md) later retired the workstation worker
-and its fallback placement.
-
-**Artifact ownership amendment (implemented):**
-[GitOps ADR-052](https://git.alc.xyz/alcxyz/gitops/src/branch/dev/docs/adr/ADR-052-registry-backed-runtime-images.md)
-and
-[nix-config issue #372](https://git.alc.xyz/alcxyz/nix-config/issues/372)
-replace node-local image builds and mutable aliases with immutable registry
-artifacts. The producer changes were accepted through
-[PR #373](https://git.alc.xyz/alcxyz/nix-config/pulls/373),
-[PR #374](https://git.alc.xyz/alcxyz/nix-config/pulls/374), and
-[PR #376](https://git.alc.xyz/alcxyz/nix-config/pulls/376); the host consumer
-change was accepted through
-[PR #377](https://git.alc.xyz/alcxyz/nix-config/pulls/377); and the GitOps
-consumer change was accepted through
-[GitOps PR #1193](https://git.alc.xyz/alcxyz/gitops/pulls/1193). That adoption
-did not include a new end-to-end Moonlight streaming test.
 
 ## Context
 
@@ -52,7 +36,9 @@ identities. They have separate state, pairings, catalogs, lifecycle, and
 recovery boundaries. The public identity exposes only its reviewed cooperative
 application; protected applications remain behind the protected coordinator's
 private policy. A failure or restart in one coordinator must not stop sessions
-owned by the other.
+owned by the other. Both coordinators run as independent Kubernetes singletons
+on one qualified GPU worker; their placement, volumes and Services are set by
+[ADR-0061](0061-retire-xyz-k3s-agent.md).
 
 Clients choose their connection class explicitly. Fixed clients use a local
 route policy; roaming clients may use another declared policy. Launchers update
@@ -81,7 +67,16 @@ Nix owns the pinned browser inputs, build contexts, and runtime behavior.
 Trusted Forgejo CI builds and publishes immutable registry artifacts, verifies
 registry read-back, and makes those exact references available to host and
 GitOps consumers. Consumers use immutable references and do not rebuild images
-at startup.
+at startup. This follows
+[GitOps ADR-052](https://git.alc.xyz/alcxyz/gitops/src/branch/dev/docs/adr/ADR-052-registry-backed-runtime-images.md);
+[nix-config issue #372](https://git.alc.xyz/alcxyz/nix-config/issues/372)
+records the adoption through producer changes
+[PR #373](https://git.alc.xyz/alcxyz/nix-config/pulls/373),
+[PR #374](https://git.alc.xyz/alcxyz/nix-config/pulls/374) and
+[PR #376](https://git.alc.xyz/alcxyz/nix-config/pulls/376), the host consumer
+change [PR #377](https://git.alc.xyz/alcxyz/nix-config/pulls/377), and the
+GitOps consumer change
+[GitOps PR #1193](https://git.alc.xyz/alcxyz/gitops/pulls/1193).
 
 The game-streaming deployment remains a separate lifecycle and regression
 boundary. Browser startup, cleanup, or failure must not mutate it.
@@ -108,7 +103,8 @@ boundary. Browser startup, cleanup, or failure must not mutate it.
 
 The original implementation passed its historical streaming acceptance. The
 September 2026 registry migration passed producer and consumer acceptance, but
-its end-to-end Moonlight streaming gate remains unclaimed.
+it did not include a new end-to-end Moonlight streaming test, and that gate
+remains unclaimed.
 
 ## Alternatives considered
 
@@ -129,8 +125,9 @@ boundaries.
 
 ### Build mutable images on each runtime host
 
-Superseded by the artifact ownership amendment. Trusted CI now publishes the
-immutable images consumed by hosts and GitOps.
+The original implementation built images on each runtime host behind mutable
+aliases. Replaced in September 2026 by immutable registry artifacts published
+by trusted CI and consumed by hosts and GitOps (issue #372).
 
 ## Consequences
 

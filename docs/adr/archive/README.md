@@ -13,3 +13,6 @@ archived number.
 | [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by [ADR-0052](../0052-xev-primary-k8s-backup-target.md) |
 | [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Superseded by the `tank` storage rebuild |
+| [ADR-0056 history](0056-containerized-remote-browser-streaming-history.md) | Containerized remote browser streaming | History of [ADR-0056](../0056-containerized-remote-browser-streaming.md) |
+| [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Superseded by [ADR-0061](../0061-retire-xyz-k3s-agent.md) on 2026-08-28 |
+| [ADR-0061 history](0061-retire-xyz-k3s-agent-history.md) | Retire the xyz k3s agent | History of [ADR-0061](../0061-retire-xyz-k3s-agent.md) |

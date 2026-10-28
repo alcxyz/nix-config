@@ -4,18 +4,15 @@
 
 **Date:** 2026-08-26
 
-**Applies to:** `hosts/xyz`, k3s worker topology, protected browser placement,
-and cluster storage workloads
+**Amended:** 2026-10-28
 
-**Artifact ownership amendment:** GitOps ADR-052 and
-[nix-config issue #372](https://git.alc.xyz/alcxyz/nix-config/issues/372)
-supersede the original node-local image build and mutable alias ownership.
-Issue #372 records completed registry adoption through the producer and consumer
-changes, including [PR #377](https://git.alc.xyz/alcxyz/nix-config/pulls/377).
-Nix owns browser inputs, build contexts and runtime behavior; trusted Forgejo CI
-publishes immutable registry artifacts for hosts and GitOps to consume. The
-worker, storage, input and placement decisions here remain active. That recorded
-acceptance did not include end-to-end Moonlight streaming qualification.
+**History:** [replaced text](archive/0061-retire-xyz-k3s-agent-history.md)
+
+**Supersedes:** [ADR-0057](archive/0057-kubernetes-managed-protected-browser-mobility.md)
+(two-worker Wolf browser placement with `xyz` as preferred worker and fallback)
+
+**Applies to:** `hosts/xyz`, `hosts/xev`, k3s worker topology, public and
+protected browser placement, and cluster storage workloads
 
 ## Context
 
@@ -34,15 +31,84 @@ topology, and removal or recovery procedures are private in accordance with
 
 ## Decision
 
-Retire `xyz` from k3s. Run the protected browser workloads on one explicitly
-qualified stable GPU worker, accepting that worker as a single availability
+Retire `xyz` from k3s. Run the browser workloads on one explicitly qualified
+stable GPU worker, `xev`, accepting that worker as a single availability
 boundary. Remove workstation eligibility from cluster system workloads and
 remove the placement automation that existed only to support fallback to
 `xyz`.
 
+### Browser placement on xev
+
+Run the public and private (protected) Wolf coordinators as independent
+Kubernetes singletons pinned to `xev`, the only node carrying the
+protected-browser worker label. Each keeps its separate identity, namespace,
+Service, Longhorn RWO volume, backup identity, and trust boundary, as
+[ADR-0056](0056-containerized-remote-browser-streaming.md) requires. Each is a
+one-replica Deployment with a `Recreate` rollout, so two coordinators never run
+against the same state, and rollback selects one authoritative copy rather than
+merging two writable browser trees.
+
+Each coordinator is exposed through its own LAN `LoadBalancer` Service. A
+stable VIP follows the ready singleton endpoint, and private DNS gives that VIP
+a durable client name; clients do not carry worker addresses.
+
+`xev` advertises two time-sliced GPU shares on its one physical GPU. Each
+coordinator requests one share, and requests larger than one are rejected. A
+third Kubernetes GPU workload is not admitted without a new capacity decision.
+Time-slicing is scheduler overcommit, not partitioning: it does not isolate
+VRAM, faults, or performance, so concurrent sessions may degrade one another.
+Protected Wolf has the higher scheduling priority if the shares are exhausted.
+
+There is no alternate Wolf worker, placement controller, worker qualification
+DaemonSet, or automatic failover or failback. Loss of `xev` makes both
+browsers unavailable until it returns. Longhorn replication (three replicas on
+the stable storage nodes) and recurring off-volume backups protect their
+persistent state; replication is not a backup.
+
+Each coordinator has one expandable Longhorn RWO volume for its Wolf
+configuration, pairings, and browser homes: 10 GiB for the protected
+coordinator and 5 GiB for the public one. Container images and build caches
+stay outside both volumes. Expand a filesystem before sustained usage exceeds
+roughly 70 to 75 percent.
+
+Wolf keeps its node-local Docker runner: each supervisor starts its coordinator
+and browser containers through `xev`'s Docker API. This broad capability is an
+explicit trusted-host boundary:
+
+- only the public-browser and private-browser namespaces may run their
+  respective supervisors;
+- the workload is restricted to declared protected-browser workers, now `xev`;
+- the Docker socket and host devices are never exposed through a network
+  service;
+- the supervisor removes only its known coordinator and runner containers; and
+- a later native runner may supersede this boundary in a separate ADR.
+
+Wolf passes browser home directories to sibling Docker containers as host bind
+mounts, so a versioned launcher resolves the volume mount belonging to its own
+Pod and passes that node-visible path as Wolf's host application-state folder.
+It derives the path from the Pod identity and mounted volume, validates that it
+resolves to the expected Longhorn filesystem, and fails closed instead of
+falling back to node-local state. GitOps does not embed a transient kubelet
+mount path.
+
+`xev` prepares the pinned Wolf and browser images, separate public and
+protected runtime roots, NVIDIA CDI support, virtual-input devices, and both
+isolated Moonlight port sets (`hosts/xev/configuration.nix`,
+`modules/nixos/services/wolf-streaming/default.nix`,
+`modules/nixos/services/wolf-streaming/worker-runtime.nix` and
+`modules/nixos/virtualisation/k3s/nvidia-runtime.nix`). Worker preparation does
+not start either coordinator outside its Kubernetes supervisor.
+
+### Artifacts and backups
+
 Keep Nix as the source of truth for browser inputs, build contexts, and runtime
-behavior. Under the artifact-ownership amendment above, trusted CI publishes
-immutable images and hosts and GitOps consume them.
+behavior. Under GitOps ADR-052 and
+[nix-config issue #372](https://git.alc.xyz/alcxyz/nix-config/issues/372),
+which replace the original node-local image builds and mutable aliases, trusted
+Forgejo CI publishes immutable registry artifacts and hosts and GitOps consume
+them. Issue #372 records completed registry adoption through the producer and
+consumer changes, including
+[PR #377](https://git.alc.xyz/alcxyz/nix-config/pulls/377).
 
 Host-native backup responsibilities remain independent of Kubernetes
 membership. Their concrete storage and recovery design belongs in the private
@@ -59,14 +125,19 @@ eligible on stable nodes. Retire passive rollback artifacts through ordinary sto
 Artifact-ownership acceptance requires immutable images to be
 published by trusted CI, consumed by the host and GitOps definitions, deployed,
 and checked against the declared browser contract. Issue #372 records the
-completed checks and the separate streaming-qualification limitation.
+completed checks and the separate streaming-qualification limitation: that
+recorded acceptance did not include end-to-end Moonlight streaming
+qualification.
 
 ## Consequences
 
 - Interactive workstation restarts and load no longer affect Kubernetes.
 - Cluster workloads can no longer execute on `xyz`.
-- Loss or maintenance of the sole qualified GPU worker interrupts the protected
-  browser services until it returns or another worker is deliberately qualified.
+- Loss or maintenance of `xev`, the sole qualified GPU worker, interrupts both
+  browser services until it returns or another worker is deliberately
+  qualified.
+- Both coordinators share one physical GPU, so one browser session or a
+  host-native GPU workload can degrade the other.
 - Browser persistence and host-native backups remain separate from worker
   membership.
 - Artifact distribution follows the registry contract; its recorded acceptance

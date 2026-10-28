@@ -71,4 +71,5 @@ trust and privacy advantage Helium had. On macOS Origin is a paid product.
 - Until #662 lands, Zen's memory use is accepted as the cost of keeping a
   second engine.
 - ADR-0053 named Helium as the public and local couch browser and is amended
-  to point here. ADR-0057 is superseded and keeps its Helium wording as history.
+  to point here. [ADR-0057](archive/0057-kubernetes-managed-protected-browser-mobility.md)
+  is superseded and keeps its Helium wording as history.

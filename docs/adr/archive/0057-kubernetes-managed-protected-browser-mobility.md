@@ -1,6 +1,8 @@
 # ADR-0057: Kubernetes-managed Wolf browser mobility
 
-**Status:** Superseded by ADR-0061
+**Status:** Superseded by [ADR-0061](../0061-retire-xyz-k3s-agent.md) on
+2026-08-28: xyz left k3s, so both browser coordinators run only on xev and the
+two-worker placement, fallback and failover design below is retired
 
 **Date:** 2026-07-30
 
