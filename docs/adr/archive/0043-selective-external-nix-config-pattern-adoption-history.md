@@ -1,0 +1,208 @@
+**History of** [ADR-0043](../0043-selective-external-nix-config-pattern-adoption.md): text replaced on 2026-10-28.
+
+# ADR-0043: Selective external nix-config pattern adoption
+
+**Status:** Accepted (partially implemented 2026-05-12)
+**Date:** 2026-05-11
+**Applies to:** `docs/adr/`, `inventory.nix`, `flake/`, `modules/`, `hosts/`, `users/`
+
+## Context
+
+`~/src/clones/emergenmind-config` has several useful operational patterns that
+could improve this repository. It also carries heavier framework choices that
+would make this repo less explicit if copied wholesale.
+
+This repo already has good local foundations:
+
+- `flake-parts` output separation under `flake/`
+- `inventory.nix` as host source of truth
+- explicit four-tier module layering
+- ADRs for architecture and operational decisions
+- focused service modules for k3s, Netbird, ZFS auto-unlock, Forgejo runners,
+  NFS, UniFi, Pi-hole, Kubernetes wrappers, and workspace bootstrap
+
+The useful external concepts are mostly validation, bootstrap, and operator
+workflow patterns rather than direct module reuse.
+
+## Decision
+
+Adopt selected concepts from the external config incrementally, while keeping
+this repository's explicit import and inventory-first model.
+
+Adopt:
+
+1. **Typed host metadata exposed through the module system.** Keep
+   `inventory.nix` as the source of truth, but project the selected host's
+   inventory into a typed module namespace such as `alc.host`. Modules should
+   be able to ask for facts like platform, role, k8s role, remote-management
+   posture, gaming posture, and operator access without relying only on
+   `specialArgs`.
+2. **A small operator command surface.** Add a `justfile` or equivalent wrapper
+   for common tasks: format, check, rebuild, deploy, Home Manager switch,
+   workspace status, and targeted flake-input updates.
+3. **Flake checks and pre-commit coverage.** Add formatting, shell formatting,
+   shell linting where practical, destroyed-symlink detection, and a submodule
+   guard. Checks should be useful locally and in CI without forcing a large
+   policy migration in one step.
+4. **Generated SSH client entries from inventory.** Use inventory facts to
+   generate normal SSH match blocks for managed hosts. Keep special entries,
+   Cloudflare fallback behavior, and one-off external machines explicit.
+5. **File-based public key catalogs.** Move hardcoded public SSH keys out of
+   shared NixOS modules into a private catalog grouped by purpose. The private
+   SSH policy supplies concrete account membership through standard NixOS options.
+6. **Host-local file splitting for large hosts.** Split oversized host configs,
+   especially `xyz`, into local files such as `storage.nix`, `services.nix`,
+   `virtualisation.nix`, `networking.nix`, and `users.nix`.
+7. **Minimal install/recovery outputs.** Add minimal host configurations only
+   when there is a concrete install or recovery workflow, not as an abstract
+   framework exercise.
+8. **Declarative disk layout evaluation.** Evaluate disko for new hosts and
+   reinstalls, but do not migrate existing working storage layouts without a
+   host-specific reason.
+
+## Implementation Status
+
+Implemented in `feat/adr-0043-0046-implementation`:
+
+- typed host metadata projection through `alc.host` for both NixOS and Home
+  Manager
+- `justfile` command surface for checks, formatting, rebuilds, deploys,
+  workspace status, and input updates
+- flake checks for targeted Nix formatting, check-script formatting,
+  shellcheck, and submodule hygiene
+- local pre-commit hooks for targeted Nix formatting, repository hygiene,
+  destroyed symlink detection, and shellcheck
+- inventory-generated SSH client match blocks for managed hosts, while keeping
+  special Cloudflare, Git, and external entries explicit
+- behavior-preserving SSH key catalog and access assignments owned by the
+  private `sshAccessPolicy` module (ADR-0032)
+- shared package-set and host-metadata ownership under `modules/shared/`
+- an explicit Linux operator Home Manager layer for infrastructure secrets,
+  Kubernetes credentials, and Forgejo/Grove automation
+- an explicit distributed-build client module, so server roles do not
+  automatically imply remote-build credentials
+
+Still pending:
+
+- further host-local splits after the xyz storage responsibility was extracted
+- install or recovery outputs for hosts that need them
+- any disko adoption for new hosts or reinstalls
+- broader migration of modules from loose `specialArgs` reads to `alc.host`
+  facts where that reduces duplication
+- first-class inventory facts for operator access, support posture, and
+  distributed-build eligibility
+
+Do not adopt:
+
+- broad auto-import patterns such as recursive `scanPaths` for normal host
+  imports
+- experimental Nix pipe-operator syntax as a repo-wide style
+- an external personal framework dependency equivalent to `introdus`
+- impermanence as a default posture
+- a wholesale directory restructure
+
+## Formatting follow-up
+
+[Issue #281](https://git.alc.xyz/alcxyz/nix-config/issues/281) consolidates
+formatter selection in `treefmt.toml`. `just fmt`, `just fmt-check`, the
+pre-commit formatting hook, and the flake formatting checks consume that same
+configuration. All Nix files are covered; shell coverage remains explicitly
+listed. Historical formatting is normalized separately from behavior changes.
+
+## Alternatives Considered
+
+**Copy the external structure directly** - rejected. It would replace explicit
+local decisions with a larger framework and would make host composition less
+visible.
+
+**Ignore the external config entirely** - rejected. The comparison found
+practical improvements around validation, checks, bootstrap, and generated
+metadata.
+
+**Move all host metadata into NixOS module options and remove `inventory.nix`** -
+rejected. `inventory.nix` is already documented as the source of truth and is a
+good flake-level data model. The useful change is typed projection into module
+config, not replacing the inventory.
+
+## Consequences
+
+The repo keeps its current shape, but gains stronger guardrails.
+
+Host-related modules can become less ad hoc because they can consume typed
+`alc.host` facts instead of parallel role checks or loose arguments.
+
+The operator workflow becomes easier to repeat on new machines.
+
+The first implementation should be small: checks, a command surface, and typed
+host metadata before broader host refactors.
+
+Explicit imports remain the default for host composition. This keeps security,
+storage, k3s, and remote-management behavior reviewable from each host file.
+
+## September 2026 follow-through
+
+The [repository audit milestone](https://git.alc.xyz/alcxyz/nix-config/milestone/283)
+tracks the remaining implementation work. The accepted direction above remains
+in force; these links do not imply completion.
+
+- [Complete configuration evaluation and PR coverage](https://git.alc.xyz/alcxyz/nix-config/issues/274)
+- [Extract large host and streaming modules](https://git.alc.xyz/alcxyz/nix-config/issues/279)
+- [Separate role composition from host hardware policy](https://git.alc.xyz/alcxyz/nix-config/issues/280)
+- [Unify formatting scope](https://git.alc.xyz/alcxyz/nix-config/issues/281)
+- [Reconcile documentation and obsolete configuration](https://git.alc.xyz/alcxyz/nix-config/issues/282)
+
+[ADR-0067](../0067-explicit-consumer-and-platform-validation.md) defines the
+producer/consumer validation contract used by the public gates.
+
+The #280 display-policy extraction supplies host-specific hardware through the
+private boundary and leaves the shared desktop role independently reusable. The
+common audio, Bluetooth, and container review retains the accepted baseline in
+[ADR-0006](../0006-four-tier-module-layering.md); larger host and streaming file
+decomposition remains tracked by #279.
+
+Named private host modules also supply filesystem device identities and the
+workstation network profile. Public hardware composition retains generic
+filesystem types and kernel settings; the consumer lock and complete deployment
+checks validate the private boundary together.
+
+Private modules are consumed through named `nix-secrets` flake outputs. The
+minimum interface required here includes `nixosModules.nixboxClientPrivate`,
+`nixosModules.operatorLogin`, `homeManagerModules.linuxOperator`, and
+`homeManagerModules.darwinOperator`.
+Optional bootstrap tooling is imported only by the explicit Linux and Darwin
+operator compositions, so appliance and family profiles do not carry unused
+operator option schemas.
+
+The old `operatorLogin` availability guard is removed: private revisions that
+lack it also predate the now-required client export. Guards inside the private
+operator modules remain intentional: they allow the shared private defaults to
+compose with public profiles that do not import every optional service module.
+Required named interfaces above are unguarded and fail during evaluation when
+absent.
+
+The xyz storage split follows the same pattern. `hosts/xyz/storage.nix` owns
+the generic host-local assembly and declares required typed policy fields
+without public defaults. The private `xyzStoragePolicy` flake output composes
+the existing unlock/bootstrap and mergerfs modules, supplies those fields, and
+owns sensitive storage, backup, and export policy. The public host keeps one
+explicit import for each side of that boundary.
+
+## September 2026 Hyprland source disposition
+
+The `alc` workstation profile uses the immutable Lua configuration. Retire its
+unused Hyprlang files, host fragment and legacy-only parity conditions while
+retaining the Lua behavior assertions and helper-script contracts. Keeping an
+unconsumed second configuration requires duplicate edits without validating the
+configuration that the declared session actually uses.
+
+This is a profile-specific retirement, not removal of shared legacy support.
+The `madsil` profile still consumes its own Hyprlang source through the existing
+module. Removing the shared option, activation path or legacy key helper would
+break that consumer and requires a separate migration. The shared live-migration
+mechanism remains available for profiles that retain both source formats; it is
+not a rollback contract for the retired `alc` files.
+
+Keep desktop helper composition and policy binding in the workstation module,
+with ordinary shell bodies in adjacent sources. A future language replacement
+is evaluated separately in issue #412. Source cleanup neither activates a
+compositor configuration nor substitutes for runtime qualification.

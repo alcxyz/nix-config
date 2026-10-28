@@ -48,11 +48,11 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0035](0035-host-kernel-policy.md) | Host kernel policy | Accepted | kernels, hosts, k3s |
 | [ADR-0036](0036-host-inventory-source-of-truth.md) | Host inventory as source of truth | Accepted | hosts, roles, packages, workspace, k3s |
 | [ADR-0037](0037-flake-parts-output-structure.md) | Flake output structure via flake-parts | Accepted | `flake.nix`, `flake/` |
-| [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Implemented | forgejo, runners, systemd, docker |
-| [ADR-0043](0043-selective-external-nix-config-pattern-adoption.md) | Selective external nix-config pattern adoption | Accepted, partially implemented | modules, hosts, checks, workflow |
-| [ADR-0044](0044-host-inventory-role-model-for-new-machines.md) | Host inventory role model for new machines | Accepted, partially implemented; amended by ADR-0088 | inventory, hosts, roles |
+| [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Accepted | forgejo, runners, systemd, docker |
+| [ADR-0043](0043-selective-external-nix-config-pattern-adoption.md) | Selective external nix-config pattern adoption | Accepted, partially implemented (first-class inventory facts and broader `alc.host` adoption remain) | modules, hosts, checks, workflow |
+| [ADR-0044](0044-host-inventory-role-model-for-new-machines.md) | Host inventory role model for new machines | Accepted, partially implemented (richer inventory dimensions remain); amended by ADR-0088 | inventory, hosts, roles |
 | [ADR-0045](0045-xev-and-xps-kubernetes-node-onboarding.md) | xev and xps Kubernetes node onboarding | Accepted | xev, xps, k3s, Longhorn, Forgejo |
-| [ADR-0046](0046-remotely-managed-family-gaming-laptop.md) | Remotely managed family gaming laptop | Accepted, prepared | remote support, Netbird, gaming |
+| [ADR-0046](0046-remotely-managed-family-gaming-laptop.md) | Remotely managed family gaming laptop | Accepted; onboarded, `family-gaming` package set and Netbird-only SSH not yet in place | remote support, Netbird, gaming |
 | [ADR-0047](0047-k8s-api-vip.md) | Kubernetes API floating VIP | Accepted | k3s, keepalived, hosts |
 | [ADR-0048](0048-xyz-small-nvme-retirement.md) | xyz storage maintenance private runbook boundary | Accepted, redacted | xyz, private runbooks |
 | [ADR-0049](0049-xyz-sensitive-host-bootstrap-boundary.md) | xyz sensitive host bootstrap boundary | Accepted | xyz, private runbooks |
@@ -67,7 +67,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) | File-selective home backup and host storage monitoring | Accepted | xyz, home backup, storage monitoring |
 | [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md) | Gateway-owned UniFi and independent DNS pair | Accepted | unifi, dns, network services |
 | [ADR-0061](0061-retire-xyz-k3s-agent.md) | Retire the xyz k3s agent | Accepted | xyz, xev, k3s, Wolf, browsers, Longhorn |
-| [ADR-0062](0062-xev-tank-storage-and-media-service-migration.md) | Move bulk storage ownership and media services to xev | Accepted, amended by ADR-0064; preparation in progress | xev, xyz, storage, media services |
+| [ADR-0062](0062-xev-tank-storage-and-media-service-migration.md) | Move bulk storage ownership and media services to xev | Accepted, amended by ADR-0064; staged (destination preparation in progress, no stage complete) | xev, xyz, storage, media services |
 | [ADR-0063](0063-split-replaceable-bulk-and-secure-storage.md) | Split replaceable bulk data from secure storage | Accepted, implemented | xyz, bulk storage, ZFS, media services |
 | [ADR-0064](0064-keep-secure-storage-on-xyz.md) | Keep secure storage on xyz while moving bulk storage to xev | Accepted, staged | xyz, xev, secure storage, bulk storage, media services |
 | [ADR-0065](0065-narrow-xyz-game-session-compatibility-repairs.md) | Keep xyz game-session compatibility repairs narrow and event-scoped | Accepted | xyz, Hyprland, XWayland, DMS, Heroic |

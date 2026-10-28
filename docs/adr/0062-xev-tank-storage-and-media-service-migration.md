@@ -1,10 +1,11 @@
 # ADR-0062: Move bulk storage ownership and media services to xev
 
-**Status:** Accepted, amended by ADR-0064; preparation in progress
+**Status:** Accepted, amended by ADR-0064; staged (destination preparation in progress, no stage complete)
 **Date:** 2026-08-23
-**Amended:** 2026-09-07
+**Amended:** 2026-09-07, 2026-10-28
+**History:** [replaced text](archive/0062-xev-tank-storage-and-media-service-migration-history.md)
 **Applies to:** `xev`, `xyz`, replaceable bulk storage and dependent media services
-**Amended by:** ADR-0064
+**Amended by:** [ADR-0064](0064-keep-secure-storage-on-xyz.md)
 
 ## Context
 
@@ -14,8 +15,8 @@ interactive workstation. Moving ownership and dependent services to an
 always-on server reduces that availability coupling and avoids sustained remote
 I/O between the services and their data.
 
-The original decision also proposed moving secure storage. ADR-0064 superseded
-that part and keeps secure storage in a separate ownership and failure domain.
+Secure storage is not part of this move: ADR-0064 keeps it in a separate
+ownership and failure domain.
 
 Concrete device inventory, storage identifiers, exports, endpoints, service
 state locations, and operational procedures are private under
@@ -49,10 +50,17 @@ required.
 
 ## Remaining stages and gates
 
+Bulk storage and its media services are still owned by `xyz`. `xev` carries
+XFS filesystem support and the XFS and mergerfs tools as preparation only; its
+bulk mounts and consumers are activated together with the reviewed ownership
+cutover.
+
 1. **Prepare the destination
    ([#233](https://git.alc.xyz/alcxyz/nix-config/issues/233)).** Qualify storage
    attachment, health, controller suitability, inactive mounts, and monitoring
-   on the running host. A successful build alone is insufficient.
+   on the running host. A successful build alone is insufficient. The gated
+   mount, mergerfs and health configuration and the hardware, reboot and
+   missing-storage qualification remain.
 2. **Move bulk ownership
    ([#236](https://git.alc.xyz/alcxyz/nix-config/issues/236)).** Quiesce all
    writers, transfer the complete ownership unit, prove single-host ownership,

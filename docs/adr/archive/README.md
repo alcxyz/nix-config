@@ -21,8 +21,12 @@ archived number.
 | [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |
 | [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by [ADR-0052](../0052-xev-primary-k8s-backup-target.md) |
 | [ADR-0040](0040-unifi-automatic-ha-target.md) | UniFi automatic HA target | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |
+| [ADR-0041 history](0041-native-forgejo-actions-runners-history.md) | Native Forgejo Actions runners | History of [ADR-0041](../0041-native-forgejo-actions-runners.md) |
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Superseded by the `tank` storage rebuild |
+| [ADR-0043 history](0043-selective-external-nix-config-pattern-adoption-history.md) | Selective external nix-config pattern adoption | History of [ADR-0043](../0043-selective-external-nix-config-pattern-adoption.md) |
+| [ADR-0044 history](0044-host-inventory-role-model-for-new-machines-history.md) | Host inventory role model for new machines | History of [ADR-0044](../0044-host-inventory-role-model-for-new-machines.md) |
 | [ADR-0045 history](0045-xev-and-xps-kubernetes-node-onboarding-history.md) | xev and xps Kubernetes node onboarding | History of [ADR-0045](../0045-xev-and-xps-kubernetes-node-onboarding.md) |
+| [ADR-0046 history](0046-remotely-managed-family-gaming-laptop-history.md) | Remotely managed family gaming laptop | History of [ADR-0046](../0046-remotely-managed-family-gaming-laptop.md) |
 | [ADR-0047 history](0047-k8s-api-vip-history.md) | Kubernetes API floating VIP | History of [ADR-0047](../0047-k8s-api-vip.md) |
 | [ADR-0050 history](0050-xyz-appstate-and-local-backup-boundary-history.md) | xyz appstate and local backup boundary | History of [ADR-0050](../0050-xyz-appstate-and-local-backup-boundary.md) |
 | [ADR-0051 history](0051-xev-replaces-rpi0-k3s-server-history.md) | xev replaces rpi0 as a k3s server | History of [ADR-0051](../0051-xev-replaces-rpi0-k3s-server.md) |
@@ -32,6 +36,7 @@ archived number.
 | [ADR-0058 history](0058-xyz-dedicated-runtime-storage-history.md) | Dedicated xyz runtime storage | History of [ADR-0058](../0058-xyz-dedicated-runtime-storage.md) |
 | [ADR-0059 history](0059-file-selective-home-backup-and-storage-monitoring-history.md) | File-selective home backup and host storage monitoring | History of [ADR-0059](../0059-file-selective-home-backup-and-storage-monitoring.md) |
 | [ADR-0061 history](0061-retire-xyz-k3s-agent-history.md) | Retire the xyz k3s agent | History of [ADR-0061](../0061-retire-xyz-k3s-agent.md) |
+| [ADR-0062 history](0062-xev-tank-storage-and-media-service-migration-history.md) | Move bulk storage ownership and media services to xev | History of [ADR-0062](../0062-xev-tank-storage-and-media-service-migration.md) |
 | [ADR-0069 history](0069-maintained-project-dev-qa-history.md) | Maintained project development QA inputs | History of [ADR-0069](../0069-maintained-project-dev-qa.md) |
 | [ADR-0074 history](0074-phased-podman-coexistence-history.md) | Qualify Podman through staged Docker coexistence | History of [ADR-0074](../0074-phased-podman-coexistence.md) |
 | [ADR-0076 history](0076-dms-lock-exact-head-publication-history.md) | Validate and merge DMS lock updates at an exact head | History of [ADR-0076](../0076-dms-lock-exact-head-publication.md) |
