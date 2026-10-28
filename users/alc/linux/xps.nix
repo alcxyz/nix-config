@@ -24,8 +24,6 @@ in {
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
     "${configDir}/modules/home-manager/programs/ai/default.nix"
-    # Skills that call programs.ai's commands (nix-secrets ADR-0016).
-    inputs.nix-secrets.homeManagerModules.agentSkills
 
     inputs.hyprscratch.homeModules.default
   ];

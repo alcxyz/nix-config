@@ -44,7 +44,9 @@ in
     imports = [
       inputs.nix-secrets.homeManagerModules.gitIdentityPolicy
       inputs.nix-secrets.homeManagerModules.sshIdentityPolicy
-      inputs.nix-secrets.homeManagerModules.agentRoles
+      # The agent rules and roles, and on hosts with programs.ai the skills
+      # and merge guard lists.
+      inputs.pandora.homeManagerModules.default
       # These are modules that are guaranteed to work on both OSes
       # or handle their own platform differences internally if needed
       "${configDir}/modules/home-manager/shell/default.nix"
@@ -106,15 +108,6 @@ in
     # ==================== Symlinked configs (live editing, all hosts) ====================
     xdg.configFile."television".source =
       config.lib.file.mkOutOfStoreSymlink "${configDir}/users/alc/configs/television";
-
-    home.file.".claude/CLAUDE.md".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/src/infra/nix-secrets/shared/claude/CLAUDE.md";
-
-    home.file.".codex/AGENTS.md".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/AGENTS.md";
-
-    home.file."AGENTS.md".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/src/infra/nix-secrets/shared/AGENTS.md";
 
     # ==================== Files ====================
     home.file = {

@@ -27,6 +27,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The private agent stack: rules, skills and their Home Manager module,
+    # fetched like nix-secrets.
+    pandora = {
+      url = "git+https://git.alc.xyz/alcxyz/pandora.git?ref=dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nix-packages = {
       # Public HTTPS keeps the lock refresh usable by unattended CI without
       # distributing an SSH identity merely to read public package sources.

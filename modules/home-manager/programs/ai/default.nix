@@ -647,9 +647,8 @@ in {
 
     home.packages = [agentJob backlogInventory backlogOverviewRender evidenceInventory descriptionFormat descriptionGuard prReview prReviewGuard t3RestartNotice t3ThreadInventory t3ThreadMessages t3ThreadOverviewAck t3ThreadOverviewGroup t3ThreadOverviewRender t3ThreadStatus t3ThreadStatusRender t3ThreadTime t3ThreadTimeRender worktreeAudit];
 
-    # The agent skills that call these commands live in nix-secrets
-    # shared/skills and are linked by its agentSkills module (nix-secrets
-    # ADR-0016, amended 2026-10-11).
+    # The agent skills that call these commands live in the private pandora
+    # flake, whose module links them where programs.ai is enabled.
 
     # Codex runs user hooks only after they are trusted in /hooks. NixOS hosts
     # enforce the guard through security.agentPrReviewGuard instead; this file
