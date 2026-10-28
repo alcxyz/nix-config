@@ -1,8 +1,12 @@
 # ADR-0050: xyz appstate and local backup boundary
 
-**Status:** Accepted, amended by ADR-0059 and the 2026-10-23 backup-role simplification
+**Status:** Accepted
 
 **Date:** 2026-05-18
+
+**Amended:** 2026-10-28
+
+**History:** [replaced text](archive/0050-xyz-appstate-and-local-backup-boundary-history.md)
 
 **Applies to:** `xyz`, durable application state, local host backups
 
@@ -13,6 +17,11 @@ well as container, desktop, and package state that can be rebuilt. Backing up a
 broad system directory treats these different recovery classes alike and either
 copies too much transient data or risks omitting important application state.
 
+The host also holds the independent replica of the Kubernetes backup target,
+whose authoritative copy is on another host
+([ADR-0052](0052-xev-primary-k8s-backup-target.md)). Local-data protection and
+that replica have different roles and are kept apart.
+
 ## Decision
 
 Give selected durable service state its own ZFS appstate boundary while
@@ -21,13 +30,17 @@ replaceable bulk content outside that boundary unless a later decision promotes
 them.
 
 Replicate the appstate subtree with ZFS to encrypted local backup storage on a
-schedule. Keep local application and home backups on storage physically
-separate from their live source. The Kubernetes backup target instead has a
-single independent replica on another host, with snapshots at that replica's
-destination. Do not add a further intra-host copy of that replica. Host-local
-copies provide fast recovery and do not replace off-host protection. Home-directory protection follows the
-file-selective model in
+schedule. Keep local application and home backups on mirrored storage,
+physically separate from their live source. Host-local copies provide fast
+recovery and do not replace off-host protection. Home-directory protection
+follows the file-selective model in
 [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md).
+
+The Kubernetes backup target instead has a single independent replica on a
+dedicated device, on a different host from its authoritative copy, with
+snapshots at that replica's destination. Do not add a further intra-host copy
+of that replica: the optional local Kubernetes replication leg in the public
+storage interface stays disabled on `xyz`.
 
 Public configuration owns the typed storage and service interfaces. Concrete
 datasets, service selections, schedules, encryption policy, and recovery
@@ -50,6 +63,10 @@ procedures belong in the private infrastructure repository under
 - Services retain their normal paths rather than adopting a backup-specific
   layout.
 - Local backup storage remains in the same host failure domain.
+- Scheduled local replication no longer makes a second full copy of the
+  Kubernetes object collection.
+- Loss of the dedicated replica disk temporarily leaves the authoritative host
+  as the only location of Kubernetes backups.
 - Private configuration is the source of truth for the concrete inventory and
   recovery procedure.
 
@@ -65,20 +82,9 @@ data and makes recovery scope unclear.
 Rejected because small application databases and configuration may not be
 reconstructible from declarative configuration alone.
 
-## Backup-role simplification, 2026-10-23
+### Keep a local copy of the Kubernetes replica
 
-Separate local-data protection from the independent Kubernetes backup replica.
-The original local replication chain was retained when the Kubernetes primary
-moved to another host. Keeping both intra-host copies now costs another full
-object collection and couples scheduled replication to activation without
-adding a host failure domain.
-
-Use mirrored storage for backups of local durable data and a dedicated device
-for the Kubernetes replica. Preserve existing repository and snapshot history
-during migration, verify the replacement copies and representative restores,
-and retain the old recovery copy until acceptance.
-
-Keeping the additional replica copy was considered: it tolerates loss of the
-replica's entire pool, but its storage and lifecycle cost are not justified
-alongside the authoritative copy on a separate host. Loss of the dedicated
-replica disk temporarily leaves the authoritative host as the only location.
+Rejected: it tolerates loss of the replica's entire pool, but it costs another
+full object collection and couples scheduled replication to activation without
+adding a host failure domain. That storage and lifecycle cost is not justified
+alongside the authoritative copy on a separate host.

@@ -20,9 +20,13 @@ archived number.
 | [ADR-0042](0042-shared-media-group-permissions.md) | Shared media group permissions for torrent and Stash storage | Superseded by the `tank` storage rebuild |
 | [ADR-0045 history](0045-xev-and-xps-kubernetes-node-onboarding-history.md) | xev and xps Kubernetes node onboarding | History of [ADR-0045](../0045-xev-and-xps-kubernetes-node-onboarding.md) |
 | [ADR-0047 history](0047-k8s-api-vip-history.md) | Kubernetes API floating VIP | History of [ADR-0047](../0047-k8s-api-vip.md) |
+| [ADR-0050 history](0050-xyz-appstate-and-local-backup-boundary-history.md) | xyz appstate and local backup boundary | History of [ADR-0050](../0050-xyz-appstate-and-local-backup-boundary.md) |
 | [ADR-0051 history](0051-xev-replaces-rpi0-k3s-server-history.md) | xev replaces rpi0 as a k3s server | History of [ADR-0051](../0051-xev-replaces-rpi0-k3s-server.md) |
+| [ADR-0052 history](0052-xev-primary-k8s-backup-target-history.md) | xev primary Kubernetes backup target with xyz ZFS replica | History of [ADR-0052](../0052-xev-primary-k8s-backup-target.md) |
 | [ADR-0056 history](0056-containerized-remote-browser-streaming-history.md) | Containerized remote browser streaming | History of [ADR-0056](../0056-containerized-remote-browser-streaming.md) |
 | [ADR-0057](0057-kubernetes-managed-protected-browser-mobility.md) | Kubernetes-managed Wolf browser mobility | Superseded by [ADR-0061](../0061-retire-xyz-k3s-agent.md) on 2026-08-28 |
+| [ADR-0058 history](0058-xyz-dedicated-runtime-storage-history.md) | Dedicated xyz runtime storage | History of [ADR-0058](../0058-xyz-dedicated-runtime-storage.md) |
+| [ADR-0059 history](0059-file-selective-home-backup-and-storage-monitoring-history.md) | File-selective home backup and host storage monitoring | History of [ADR-0059](../0059-file-selective-home-backup-and-storage-monitoring.md) |
 | [ADR-0061 history](0061-retire-xyz-k3s-agent-history.md) | Retire the xyz k3s agent | History of [ADR-0061](../0061-retire-xyz-k3s-agent.md) |
 | [ADR-0069 history](0069-maintained-project-dev-qa-history.md) | Maintained project development QA inputs | History of [ADR-0069](../0069-maintained-project-dev-qa.md) |
 | [ADR-0074 history](0074-phased-podman-coexistence-history.md) | Qualify Podman through staged Docker coexistence | History of [ADR-0074](../0074-phased-podman-coexistence.md) |

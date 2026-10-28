@@ -1,8 +1,12 @@
 # ADR-0059: File-selective home backup and host storage monitoring
 
-**Status:** Accepted, amended 2026-09-10
+**Status:** Accepted
 
 **Date:** 2026-08-11
+
+**Amended:** 2026-10-28
+
+**History:** [replaced text](archive/0059-file-selective-home-backup-and-storage-monitoring-history.md)
 
 **Applies to:** `xyz`, home backup, local backup storage, host storage monitoring
 

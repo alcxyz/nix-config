@@ -32,7 +32,7 @@ ownership and migration units.
 Keep the Kubernetes backup replica on `xyz`, in a different host failure domain
 from the authoritative target governed by
 [ADR-0052](0052-xev-primary-k8s-backup-target.md). This is a host separation requirement, not a requirement to put that replica
-on the mirrored secure pool. The backup-role amendment to
+on the mirrored secure pool.
 [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) assigns mirrored
 storage to local-data backups and dedicated storage to the Kubernetes replica.
 The secure-storage host is not part of the bulk-storage ownership unit and is

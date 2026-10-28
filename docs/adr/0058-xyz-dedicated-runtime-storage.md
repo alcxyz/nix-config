@@ -1,8 +1,12 @@
 # ADR-0058: Dedicated xyz runtime storage
 
-**Status:** Accepted, amended by ADR-0061 and on 2026-09-10
+**Status:** Accepted
 
 **Date:** 2026-07-30
+
+**Amended:** 2026-10-28
+
+**History:** [replaced text](archive/0058-xyz-dedicated-runtime-storage-history.md)
 
 **Applies to:** `xyz`, container runtime and game-session state, backups
 
@@ -27,10 +31,10 @@ Classify container, build-daemon, and game-session state as rebuildable. Do not
 include it in routine application-state backups. Temporary migration protection
 may be retained only through a bounded validation window.
 
-Keep durable cluster-replica scheduling disabled on the workstation. ADR-0061
-later retired its Kubernetes worker role; the retired agent state is no longer
-active and remains outside routine backups pending ordinary storage
-housekeeping.
+Keep durable cluster-replica scheduling disabled on the workstation.
+[ADR-0061](0061-retire-xyz-k3s-agent.md) retired its Kubernetes worker role; the
+retired agent state is no longer mounted or active and remains outside routine
+backups pending ordinary storage housekeeping.
 
 Concrete devices, datasets, quotas, encryption policy, and migration or
 recovery procedures belong in the private infrastructure repository under
@@ -40,8 +44,6 @@ recovery procedures belong in the private infrastructure repository under
 
 - Quotas must prevent one runtime class from consuming all shared device
   capacity.
-- Migration must preserve source snapshots and a bounded rollback point until
-  the new mounts, services, backup replication, and a restore check pass.
 - The storage must not become a durable cluster-replica location.
 
 ## Consequences
