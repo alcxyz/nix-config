@@ -1,7 +1,9 @@
 # ADR-0045: xev and xps Kubernetes node onboarding
 
-**Status:** Accepted (amended by [ADR-0061](0061-retire-xyz-k3s-agent.md): xyz retired; xps workstation-only)
+**Status:** Accepted
 **Date:** 2026-05-11
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0045-xev-and-xps-kubernetes-node-onboarding-history.md)
 **Applies to:** host inventory, Kubernetes roles, storage eligibility, and runner capacity
 
 ## Context
@@ -17,14 +19,17 @@ information is private in accordance with
 
 ## Decision
 
-Onboard `xev` as a stable Kubernetes server-worker. It may run normal workloads,
-provide cluster storage, and add native runner capacity after each capability
-passes its own readiness checks. Its promotion to the server set is recorded by
+`xev` is a stable Kubernetes server-worker (`k8sRole = "server-worker"` in
+`inventory.nix`). It runs normal workloads, provides cluster storage, and adds
+native runner capacity; each capability is enabled only after it passes its
+own readiness checks. Its membership of the server set is recorded by
 [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md).
 
-Keep `xps` workstation-first and outside Kubernetes. Any future worker or GPU
-role requires a separate decision based on its availability and operating
-characteristics. Do not use it for cluster storage under this decision.
+Keep `xps` workstation-first and outside Kubernetes (`k8sRole = null`). Any
+future worker or GPU role requires a separate decision based on its
+availability and operating characteristics. Do not use it for cluster storage
+under this decision. Workstations stay outside cluster membership in steady
+state ([ADR-0061](0061-retire-xyz-k3s-agent.md)).
 
 Public Nix configuration owns generic role declarations and host-readiness
 interfaces. Runtime workload placement remains owned by GitOps, and private
@@ -39,22 +44,21 @@ clear qualification boundary.
 
 ## Alternatives Considered
 
-**Add another server without preserving the intended quorum shape** — rejected.
+**Add another server without preserving the intended quorum shape**: rejected.
 Server membership changes must preserve the deliberate odd-sized control plane.
 
-**Treat stable capacity as ephemeral** — rejected because the stable host is
+**Treat stable capacity as ephemeral**: rejected because the stable host is
 intended to carry normal cluster workloads.
 
-**Join the workstation immediately** — rejected because mobility and variable
+**Join the workstation immediately**: rejected because mobility and variable
 availability make it unsuitable as a default cluster dependency.
 
-**Enable cluster storage on every compatible machine** — rejected because
+**Enable cluster storage on every compatible machine**: rejected because
 storage eligibility requires stronger availability and capacity guarantees than
 compute eligibility.
 
 ## Consequences
 
-The stable host increases compute, storage, runner, and control-plane capacity.
-The workstation remains independently useful without becoming part of the
-cluster failure domain. ADR-0061 later confirms the steady-state separation of
-workstations from cluster membership.
+`xev` adds compute, storage, runner, and control-plane capacity. The
+workstation remains independently useful without becoming part of the cluster
+failure domain.

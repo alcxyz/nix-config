@@ -1,8 +1,9 @@
 # ADR-0017: k3s cluster topology for the current homelab phase
 
-**Status:** Accepted (amended by ADR-0051, ADR-0060, and ADR-0061)
+**Status:** Accepted
 **Date:** 2026-04-26
-**Updated:** 2026-08-20
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0017-k3s-cluster-topology-history.md)
 **Applies to:** stable k3s servers, workstation agents, independent network services
 
 ## Context
@@ -19,18 +20,20 @@ procedures are private in accordance with
 ## Decision
 
 Run a three-member embedded-etcd control plane on stable machines that also
-serve ordinary workloads. Keep interactive workstations outside the steady-state
-cluster. Keep network-critical resolver and gateway control surfaces outside
-k3s so their availability does not depend on cluster health.
+serve ordinary workloads. The members are `nux`, `nex`
+([ADR-0034](0034-nex-as-third-k3s-server.md)) and `xev`
+([ADR-0051](0051-xev-replaces-rpi0-k3s-server.md)), each with the
+`server-worker` role in `inventory.nix`.
+
+Keep interactive workstations outside the cluster
+([ADR-0061](0061-retire-xyz-k3s-agent.md)). Keep network-critical resolver and
+gateway control surfaces outside k3s so their availability does not depend on
+cluster health: the gateway console owns the UniFi Network Application, and
+Pi-hole with Unbound runs as a native resolver pair on hosts outside the
+cluster ([ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md)).
 
 GitOps may manage selected desired state for an independently hosted network
 service, but Kubernetes does not own that service's runtime lifecycle.
-
-[ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) records the control-plane
-member replacement, [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md)
-records the network-service ownership decision, and
-[ADR-0061](0061-retire-xyz-k3s-agent.md) records the retirement of the
-workstation agent.
 
 ## Acceptance Contract
 
@@ -49,12 +52,12 @@ remain in a separate failure domain.
 
 ### Run the network controller on a general-purpose cluster or workstation host
 
-Superseded by [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md). The
+Rejected by [ADR-0060](0060-gateway-owned-unifi-and-independent-dns.md). The
 network gateway owns that application's lifecycle.
 
 ### Retain a constrained server as a control-plane member
 
-Superseded by [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md). A stable server
+Rejected by [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md). A stable server
 with greater resource headroom is a better control-plane dependency.
 
 ### Count an interactive workstation as part of the cluster

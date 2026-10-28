@@ -29,7 +29,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0014](0014-self-package-zen-browser.md) | Self-package Zen Browser instead of third-party flake | Accepted | `flake.nix`, packages |
 | [ADR-0015](0015-dms-plugin-meta-flake.md) | DMS plugin meta-flake | Accepted | `flake.nix`, DMS |
 | [ADR-0016](0016-devlog-go-binary-with-weekly-hedgedoc.md) | Devlog as Go binary with weekly summaries | Accepted, amended | devlog, services |
-| [ADR-0017](0017-k3s-cluster-topology.md) | k3s cluster topology for home infrastructure | Accepted, amended | infrastructure, hosts |
+| [ADR-0017](0017-k3s-cluster-topology.md) | k3s cluster topology for home infrastructure | Accepted | infrastructure, hosts |
 | [ADR-0018](0018-flux-gitops.md) | Flux as the GitOps operator for k3s | Accepted | k3s, infrastructure |
 | [ADR-0019](0019-forge-mirror-pull-systemd-timer.md) | Periodic Forgejo/GitHub drift audit via systemd timer | Accepted | services, forge-mirror |
 | [ADR-0020](0020-sops-secrets-in-flux.md) | SOPS decryption for Kubernetes secrets via Flux | Accepted, redacted | Kubernetes, secrets, Flux |
@@ -51,13 +51,13 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0041](0041-native-forgejo-actions-runners.md) | Native Forgejo Actions runners | Implemented | forgejo, runners, systemd, docker |
 | [ADR-0043](0043-selective-external-nix-config-pattern-adoption.md) | Selective external nix-config pattern adoption | Accepted, partially implemented | modules, hosts, checks, workflow |
 | [ADR-0044](0044-host-inventory-role-model-for-new-machines.md) | Host inventory role model for new machines | Accepted, partially implemented; amended by ADR-0088 | inventory, hosts, roles |
-| [ADR-0045](0045-xev-and-xps-kubernetes-node-onboarding.md) | xev and xps Kubernetes node onboarding | Accepted, xev promoted to k3s server; xps workstation-only | xev, xps, k3s, Longhorn, Forgejo |
+| [ADR-0045](0045-xev-and-xps-kubernetes-node-onboarding.md) | xev and xps Kubernetes node onboarding | Accepted | xev, xps, k3s, Longhorn, Forgejo |
 | [ADR-0046](0046-remotely-managed-family-gaming-laptop.md) | Remotely managed family gaming laptop | Accepted, prepared | remote support, Netbird, gaming |
 | [ADR-0047](0047-k8s-api-vip.md) | Kubernetes API floating VIP | Accepted | k3s, keepalived, hosts |
 | [ADR-0048](0048-xyz-small-nvme-retirement.md) | xyz storage maintenance private runbook boundary | Accepted, redacted | xyz, private runbooks |
 | [ADR-0049](0049-xyz-sensitive-host-bootstrap-boundary.md) | xyz sensitive host bootstrap boundary | Accepted | xyz, private runbooks |
 | [ADR-0050](0050-xyz-appstate-and-local-backup-boundary.md) | xyz appstate and local backup boundary | Accepted, amended | xyz, ZFS, backups |
-| [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) | xev replaces rpi0 as a k3s server | Accepted, amended | k3s, xev, rpi0, etcd |
+| [ADR-0051](0051-xev-replaces-rpi0-k3s-server.md) | xev replaces rpi0 as a k3s server | Accepted | k3s, xev, rpi0, etcd |
 | [ADR-0052](0052-xev-primary-k8s-backup-target.md) | xev primary Kubernetes backup target with xyz ZFS replica | Accepted, amended | xev, xyz, k3s backups |
 | [ADR-0053](0053-controller-first-xps-couch-session.md) | Controller-first XPS couch session | Accepted, amended | xps, couch, Moonlight, SteamHeadless |
 | [ADR-0054](0054-mac-hosted-synergy1-with-waynergy-clients.md) | Mac-hosted Synergy 1 with Waynergy clients | Accepted | mac, xps, xyz, Synergy, Waynergy |

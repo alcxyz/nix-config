@@ -1,7 +1,9 @@
 # ADR-0047: Kubernetes API floating VIP
 
-**Status:** Accepted (amended 2026-05-31: `xev` replaced `rpi0`)
+**Status:** Accepted
 **Date:** 2026-05-12
+**Amended:** 2026-10-28
+**History:** [replaced text](archive/0047-k8s-api-vip-history.md)
 **Applies to:** Kubernetes API availability, k3s servers, and client configuration
 
 ## Context
@@ -18,32 +20,34 @@ recovery procedures are private in accordance with
 ## Decision
 
 Use a host-managed floating virtual address for the Kubernetes API. Run
-keepalived on the k3s server nodes, assign the address to one healthy server at a
-time, and move it when that server's local API is unavailable.
+keepalived on the k3s server nodes (`nux`, `nex` and `xev`, through
+`services.k8s-api-vip` in `modules/nixos/services/k8s-api-vip/`), assign the
+address to one healthy server at a time, and move it when that server's local
+API is unavailable.
 
 Clients and joining nodes use one stable API name. The k3s certificates include
-that stable identity. The endpoint follows the accepted server set, including
-the membership change recorded by
-[ADR-0051](0051-xev-replaces-rpi0-k3s-server.md).
+that stable identity. The endpoint follows the accepted server set
+([ADR-0017](0017-k3s-cluster-topology.md)), which includes `xev` in place of
+`rpi0` ([ADR-0051](0051-xev-replaces-rpi0-k3s-server.md)).
 
 The floating address provides failover, not request distribution, and does not
 change embedded-etcd quorum requirements.
 
 ## Alternatives Considered
 
-**Keep a fixed server endpoint** — rejected because client access would still
+**Keep a fixed server endpoint**: rejected because client access would still
 fail with that server even when control-plane quorum remained healthy.
 
-**Use DNS round-robin** — rejected because ordinary client and resolver behavior
+**Use DNS round-robin**: rejected because ordinary client and resolver behavior
 does not provide dependable health-aware failover.
 
-**Add a proxy tier** — rejected because direct address ownership by the API
+**Add a proxy tier**: rejected because direct address ownership by the API
 servers meets the availability requirement without another runtime component.
 
-**Manage the endpoint inside Kubernetes** — rejected because the endpoint is
+**Manage the endpoint inside Kubernetes**: rejected because the endpoint is
 needed to reach and recover Kubernetes itself.
 
-**Use a dedicated load-balancer host** — rejected because that would introduce
+**Use a dedicated load-balancer host**: rejected because that would introduce
 another machine dependency.
 
 ## Consequences
