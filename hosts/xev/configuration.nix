@@ -193,6 +193,9 @@
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
       ];
+      # Most jobs use the Podman pool, so it takes the slot the Docker runner
+      # gave up.
+      capacity = 3;
       # Serves ci-fast only while xyz-fast is down (ADR-0097), as xyz
       # reports over NetBird (100.82.168.59 is xyz's NetBird address).
       extraRunners.fast = {
@@ -207,9 +210,10 @@
     };
     resourcePolicy.enable = true;
     name = "xev";
-    # Let independent jobs share the existing aggregate resource budget; the
-    # host-wide CPU, memory, and I/O limits remain unchanged.
-    capacity = 2;
+    # Independent jobs share the existing aggregate resource budget; the
+    # host-wide CPU, memory, and I/O limits remain unchanged. One Docker slot
+    # serves the few jobs that still select a Docker label.
+    capacity = 1;
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"

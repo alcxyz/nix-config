@@ -157,10 +157,18 @@ in {
         ;
     };
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
-    # Jobs per runner: xyz and xev take two, the smaller nex and nux one.
+    # Jobs per runner (ADR-0041): xyz and xev give the Docker runner one and the
+    # Podman pool three, since most jobs select the pool; the smaller nex and
+    # nux take one per runner.
     expectedCapacity = {
-      xyz = 2;
-      xev = 2;
+      xyz = 1;
+      xev = 1;
+      nex = 1;
+      nux = 1;
+    };
+    expectedPoolCapacity = {
+      xyz = 3;
+      xev = 3;
       nex = 1;
       nux = 1;
     };
@@ -180,7 +188,7 @@ in {
       calendar == "daily" || builtins.match "\\*-\\*-\\* [0-9][0-9]:[0-9][0-9]:[0-9][0-9]" calendar != null) (lib.attrValues runnerHosts);
     assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable && runner.ioPressureGuard.enable && runner.ioPressureGuard.admissionControl.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
-    assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedCapacity.${host}) (lib.attrNames runners);
+    assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedPoolCapacity.${host}) (lib.attrNames runners);
     # xyz has a dedicated ci-fast runner, beside ci-fast overflow on its pool
     # runner (ADR-0097).
     assert lib.attrNames runners.xyz.podmanCanary.extraRunners == ["fast"];

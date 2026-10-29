@@ -2,7 +2,7 @@
 
 **Status:** Accepted; xyz serves `ci-fast` with a dedicated runner, and xev with a standby runner while that one is down
 **Date:** 2026-10-15
-**Amended:** 2026-10-28
+**Amended:** 2026-10-29
 **History:** [replaced text](archive/0097-ci-fast-runner-label-history.md)
 **Applies to:** `hosts/xyz/configuration.nix`, `hosts/xev/configuration.nix`,
 `modules/nixos/services/forgejo-actions-runner/`, platform workflows
@@ -54,7 +54,7 @@ instance-wide runners only to tokens with the `read:admin` scope.
   Forgejo has no runner preference: whichever runner polls first takes a job.
   This is the one label two runners may share (`podmanCanary.sharedLabels`);
   the Docker runner never shares a label. xyz runs up to five jobs in its one
-  build slice: two Docker, two pool and one fast.
+  build slice: one Docker, three pool and one fast.
 
 Workflow authors use [CI runner labels](../ci-runner-labels.md).
 
@@ -84,7 +84,7 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
 
 - With the variable unset, workflows behave as before.
 - `ci-fast` jobs on xyz always have the dedicated slot available to them, and
-  wait only while it and both pool slots are busy. A fast job may still take a
+  wait only while it and all three pool slots are busy. A fast job may still take a
   pool slot while `xyz-fast` is idle, which delays shared-pool jobs.
 - The build slice's CPU and memory budget is unchanged, so five concurrent
   jobs on xyz each get a smaller share under load.

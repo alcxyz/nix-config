@@ -221,6 +221,9 @@ in {
         "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
       sharedLabels = ["ci-fast"];
+      # Most jobs use the Podman pool, so it takes the slot the Docker runner
+      # gave up; the build slice's total stays at five.
+      capacity = 3;
       # A ci-fast slot pool jobs cannot take; fast jobs may still start in a
       # free pool slot, since whichever runner polls first takes the job.
       # Up to five jobs now share the build slice's budget.
@@ -236,9 +239,10 @@ in {
       };
     };
     name = "xyz";
-    capacity = 2;
-    # Bound the runner daemon and all nested workers while allowing two jobs to
-    # share the budget. Low weights make builds yield to desktop and game work.
+    # One Docker slot serves the few jobs that still select a Docker label.
+    capacity = 1;
+    # Bound the runner daemon and all nested workers within one budget. Low
+    # weights make builds yield to desktop and game work.
     resourcePolicy.enable = true;
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"

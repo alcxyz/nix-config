@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07
-**Amended:** 2026-10-28
+**Amended:** 2026-10-29
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -75,9 +75,11 @@ The default runner pool is represented with labels:
   privileged mode or by moving routine jobs onto a host execution label.
 - Host-level labels are explicit and used only for trusted infrastructure
   workflows.
-- Runner admission is explicit in per-host capacity, applied to both the Docker
-  and the Podman runner. `nex` and `nux` admit one job per runner; the larger
-  `xyz` and `xev` admit two.
+- Runner admission is explicit in per-host capacity, set for the Docker and the
+  Podman runner. `nex` and `nux` admit one job per runner. The larger `xyz` and
+  `xev` admit one Docker job and three Podman pool jobs, since most jobs select
+  the Podman pool; their `ci-fast` runners add one slot each
+  ([ADR-0097](0097-ci-fast-runner-label.md)).
 - Runner shutdown stops polling before it waits up to the normal job timeout
   (3600 seconds) for admitted work to finish. The systemd stop timeout includes
   a small margin (3660 seconds) so routine host maintenance does not cancel
@@ -175,8 +177,8 @@ limit across the containers Forgejo Runner creates.
 - `nex` and `nux` contribute one slot per runner. This spreads eligible work
   without allowing concurrent runner jobs to amplify local resource contention
   on the smaller cluster members.
-- `xev` and `xyz` contribute two slots per runner within one aggregate resource
-  budget. On `xyz`, builds can consume up to half the workstation's CPU and
+- `xev` and `xyz` contribute one Docker slot and three Podman pool slots within
+  one aggregate resource budget. On `xyz`, builds can consume up to half the workstation's CPU and
   memory, while memory reclaim and scheduling weights favor interactive
   workloads under contention.
 - The policy does not provide a hard ZFS I/O guarantee. Nested Docker work is

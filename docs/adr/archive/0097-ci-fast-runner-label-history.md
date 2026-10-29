@@ -119,3 +119,15 @@ Workflow authors use [CI runner labels](../../ci-runner-labels.md).
   switching to the configuration that adds its runner (`xyz-fast`, then
   `xev-fast`): until then the start gates refuse the new unit, and the first
   drain would leave the runners stopped.
+
+## Text replaced on 2026-10-29
+
+From the decision, the end of the paragraph on the runner module:
+
+  the Docker runner never shares a label. xyz runs up to five jobs in its one
+  build slice: two Docker, two pool and one fast.
+
+From the consequences:
+
+- `ci-fast` jobs on xyz always have the dedicated slot available to them, and
+  wait only while it and both pool slots are busy.

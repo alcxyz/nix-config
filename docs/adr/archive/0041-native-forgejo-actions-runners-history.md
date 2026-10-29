@@ -211,3 +211,16 @@ GitOps-owned coordination work:
   runner capability probe workflow.
 - [x] [alcxyz/gitops#215](https://git.alc.xyz/alcxyz/gitops/issues/215) document
   the temporary Kubernetes runner deprecation plan.
+
+## Text replaced on 2026-10-29
+
+From the decision list:
+
+- Runner admission is explicit in per-host capacity, applied to both the Docker
+  and the Podman runner. `nex` and `nux` admit one job per runner; the larger
+  `xyz` and `xev` admit two.
+
+From the consequences:
+
+- `xev` and `xyz` contribute two slots per runner within one aggregate resource
+  budget.
