@@ -23,7 +23,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0008](0008-pkgsets-centralised-package-management.md) | Centralised package sets via pkgsets.nix | Accepted | `modules/shared/` |
 | [ADR-0009](0009-xyz-as-distributed-build-host.md) | Distributed build roles and explicit client opt-in | Accepted, redacted | distributed builds |
 | [ADR-0010](0010-amd-igpu-forced-primary-display-nvidia-workaround.md) | Force AMD iGPU as primary display device on dual-GPU workstation | Accepted | xyz, desktop |
-| [ADR-0011](0011-unified-keyboard-remapping-kanata.md) | Unified keyboard remapping via kanata across all hosts and keyboards | Accepted | kanata, desktop, mac |
+| [ADR-0011](0011-unified-keyboard-remapping-kanata.md) | Keyboard remapping with one shared kanata config on Linux and Karabiner on macOS | Accepted | kanata, desktop, mac |
 | [ADR-0012](0012-remote-dev-headless-wayland-over-vm.md) | Remote development via headless Wayland session instead of a VM | Accepted | nux, remote-dev |
 | [ADR-0013](0013-safe-nix-gc-no-generation-deletion.md) | Safe Nix GC with guarded generation retention | Accepted | all hosts, home-manager, nix.gc |
 | [ADR-0014](0014-self-package-zen-browser.md) | Self-package Zen Browser instead of third-party flake | Accepted | `flake.nix`, packages |

@@ -11,7 +11,7 @@ archived number.
 | [ADR-0006 history](0006-four-tier-module-layering-history.md) | Four-tier module layering | History of [ADR-0006](../0006-four-tier-module-layering.md) |
 | [ADR-0007 history](0007-filtered-nix-packages-overlay-history.md) | Custom packages in a separate repository with a filtered overlay | History of [ADR-0007](../0007-filtered-nix-packages-overlay.md) |
 | [ADR-0008 history](0008-pkgsets-centralised-package-management-history.md) | Centralised package sets via pkgsets.nix | History of [ADR-0008](../0008-pkgsets-centralised-package-management.md) |
-| [ADR-0011 history](0011-unified-keyboard-remapping-kanata-history.md) | Unified keyboard remapping via kanata across all hosts and keyboards | History of [ADR-0011](../0011-unified-keyboard-remapping-kanata.md) |
+| [ADR-0011 history](0011-unified-keyboard-remapping-kanata-history.md) | Keyboard remapping with one shared kanata config on Linux and Karabiner on macOS | History of [ADR-0011](../0011-unified-keyboard-remapping-kanata.md) |
 | [ADR-0013 history](0013-safe-nix-gc-no-generation-deletion-history.md) | Safe Nix GC with guarded generation retention | History of [ADR-0013](../0013-safe-nix-gc-no-generation-deletion.md) |
 | [ADR-0016 history](0016-devlog-go-binary-with-weekly-hedgedoc-history.md) | Devlog as Go binary with weekly summaries | History of [ADR-0016](../0016-devlog-go-binary-with-weekly-hedgedoc.md) |
 | [ADR-0017 history](0017-k3s-cluster-topology-history.md) | k3s cluster topology for the current homelab phase | History of [ADR-0017](../0017-k3s-cluster-topology.md) |
