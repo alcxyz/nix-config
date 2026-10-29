@@ -23,12 +23,6 @@ in {
   runtime-storage-identity-contract = mkRepoCheck "runtime-storage-identity-contract" [pkgs.bash pkgs.coreutils] ''
     bash scripts/checks/test-runtime-storage-check.sh modules/nixos/services/forgejo-actions-runner/runtime-storage-check.sh
   '';
-  description-format-contract = mkRepoCheck "description-format-contract" [pkgs.python3 pkgs.git] ''
-    python3 scripts/checks/test-description-format.py
-  '';
-  repo-review-configuration-contract = assert import ./repo-review-test.nix {inherit lib pkgs;};
-    pkgs.runCommand "repo-review-configuration-contract" {} "touch $out";
-
   git-identity-configuration-contract = import ./git-identity.nix {inherit lib pkgs;};
 
   k3s-self-fence-contract = mkRepoCheck "k3s-self-fence-contract" [pkgs.python3] ''
@@ -564,64 +558,6 @@ in {
     grep -F 'kept advancing while the lock was published' "$publisher"
   '';
 
-  check-claude-settings-merge = mkRepoCheck "check-claude-settings-merge" [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.diffutils pkgs.jq pkgs.shellcheck] ''
-    shellcheck modules/home-manager/programs/ai/merge-settings.sh
-    bash scripts/checks/test-claude-settings-merge.sh
-  '';
-
-  check-agent-pr-review = mkRepoCheck "check-agent-pr-review" [pkgs.python3 pkgs.git] ''
-    python3 scripts/checks/test-pr-review.py
-  '';
-
-  check-agent-model-roles = mkRepoCheck "check-agent-model-roles" [(pkgs.python3.withPackages (ps: [ps.tomlkit])) pkgs.bash pkgs.jq pkgs.gnugrep pkgs.shellcheck] ''
-    python3 scripts/checks/test-codex-roles.py
-    python3 scripts/checks/test-claude-mcp.py
-    shellcheck modules/home-manager/programs/ai/agent-role.sh scripts/checks/test-agent-role.sh
-    bash scripts/checks/test-agent-role.sh
-  '';
-
-  check-agent-job = mkRepoCheck "check-agent-job" [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.shellcheck] ''
-    shellcheck modules/home-manager/programs/ai/agent-job.sh scripts/checks/test-agent-job.sh
-    bash scripts/checks/test-agent-job.sh
-  '';
-
-  check-t3-thread-inventory = mkRepoCheck "check-t3-thread-inventory" [pkgs.bash pkgs.coreutils pkgs.flock pkgs.git pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.nodejs pkgs.sqlite pkgs.shellcheck] ''
-    shellcheck modules/home-manager/programs/ai/t3-thread-id.sh modules/home-manager/programs/ai/t3-state-db.sh modules/home-manager/programs/ai/t3-page.sh
-    shellcheck modules/home-manager/programs/ai/t3-thread-inventory.sh scripts/checks/test-t3-thread-inventory.sh
-    bash scripts/checks/test-t3-thread-inventory.sh
-    shellcheck modules/home-manager/programs/ai/t3-thread-status.sh scripts/checks/test-t3-thread-status.sh
-    bash scripts/checks/test-t3-thread-status.sh
-    shellcheck modules/home-manager/programs/ai/t3-thread-messages.sh scripts/checks/test-t3-thread-messages.sh
-    bash scripts/checks/test-t3-thread-messages.sh
-    shellcheck modules/home-manager/programs/ai/t3-thread-overview-lib.sh modules/home-manager/programs/ai/t3-thread-overview-group.sh
-    shellcheck modules/home-manager/programs/ai/t3-thread-overview-render.sh scripts/checks/test-t3-thread-overview-render.sh
-    bash scripts/checks/test-t3-thread-overview-render.sh
-    shellcheck modules/home-manager/programs/ai/t3-thread-overview-ack.sh scripts/checks/test-t3-thread-overview-ack.sh
-    bash scripts/checks/test-t3-thread-overview-ack.sh
-    shellcheck modules/home-manager/programs/ai/t3-thread-status-render.sh scripts/checks/test-t3-thread-status-render.sh
-    bash scripts/checks/test-t3-thread-status-render.sh
-  '';
-
-  check-t3-thread-time = mkRepoCheck "check-t3-thread-time" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.nodejs pkgs.shellcheck] ''
-    python3 scripts/checks/test-t3-thread-time.py
-    shellcheck modules/home-manager/programs/ai/t3-thread-time-render.sh scripts/checks/test-t3-thread-time-render.sh
-    bash scripts/checks/test-t3-thread-time-render.sh
-  '';
-
-  check-worktree-audit = mkRepoCheck "check-worktree-audit" [pkgs.python3 pkgs.git pkgs.coreutils] ''
-    python3 scripts/checks/test-worktree-audit.py
-  '';
-
-  check-backlog-overview = mkRepoCheck "check-backlog-overview" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.nodejs pkgs.shellcheck] ''
-    python3 scripts/checks/test-backlog-inventory.py
-    shellcheck modules/home-manager/programs/ai/backlog-overview-render.sh scripts/checks/test-backlog-overview-render.sh
-    bash scripts/checks/test-backlog-overview-render.sh
-  '';
-
-  check-evidence-inventory = mkRepoCheck "check-evidence-inventory" [pkgs.python3] ''
-    python3 -I scripts/checks/test-evidence-inventory.py
-  '';
-
   check-t3code-preview-browser-link = mkRepoCheck "check-t3code-preview-browser-link" [pkgs.bash pkgs.coreutils pkgs.shellcheck] ''
     shellcheck modules/home-manager/services/t3code/link-preview-browser.sh scripts/checks/test-t3code-preview-browser-link.sh
     bash scripts/checks/test-t3code-preview-browser-link.sh
@@ -827,47 +763,52 @@ in {
         touch "$out"
       '';
 
-  # programs.ai.agentForge (#722), with dummy values: T3's session wrapper
-  # gives agent sessions the agent account after the session variables, and
-  # the Forgejo MCP server uses its token. The Git test runs the generated
-  # wrapper in temporary repositories with a fake forge-mirror.
-  agent-forge-wiring-contract = let
-    dummy = {
-      tokenFile = "/run/agent-forge-test/token";
-      user = "agent-test";
-      url = "https://forge.example.invalid";
-      sshHost = "ssh.forge.example.invalid";
-    };
-    fakeForgeMirror = pkgs.writeShellScriptBin "forge-mirror" ''exec "$AGENT_FORGE_TEST_HELPER" "$@"'';
-    # xyz enables the account privately, so both fixtures override it: off with
-    # mkForce, on with a stronger priority over that.
-    # agentGithub adds its own GIT_CONFIG entries, so it is off here too.
+  # T3's session wrapper runs the agent session commands that programs.ai
+  # declares (the agent forge account #722, the agent GitHub App and the
+  # pre-push hook's agent marker) after the Home Manager session variables
+  # and right before T3, and none while they are off. tea follows the agent
+  # forge account's token file. programs.ai's own checks test the commands.
+  t3code-agent-session-contract = let
+    # xyz enables the accounts privately, so both fixtures override them: off
+    # with mkForce, on with a stronger priority over that.
     off = self.homeConfigurations.alc-xyz.extendModules {
       modules = [
         {
           programs.ai.agentForge.enable = lib.mkForce false;
           programs.ai.agentGithub.enable = lib.mkForce false;
+          programs.ai.prReview.fastForwardRepositories = lib.mkForce [];
         }
       ];
+    };
+    forge = {
+      tokenFile = "/run/agent-forge-test/token";
+      user = "agent-test";
+      url = "https://forge.example.invalid";
+      sshHost = "ssh.forge.example.invalid";
     };
     on =
       (off.extendModules {
         modules = [
           {
-            programs.ai.agentForge = lib.mapAttrs (_: lib.mkOverride 40) (
-              dummy
-              // {
-                enable = true;
-                package = fakeForgeMirror;
-              }
-            );
+            programs.ai.agentForge = lib.mapAttrs (_: lib.mkOverride 40) (forge // {enable = true;});
+            programs.ai.agentGithub = lib.mapAttrs (_: lib.mkOverride 40) {
+              enable = true;
+              appId = 4242;
+              keyFile = "/run/agent-github-test/key.pem";
+              owner = "owner-test";
+            };
+            programs.ai.prReview.fastForwardRepositories = lib.mkOverride 40 ["github.com/owner-test/repo"];
           }
         ];
       }).config;
     sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
     sessionEnv = on.home.file.${sessionEnvLink}.source;
     offSessionEnv = off.config.home.file.${sessionEnvLink}.source;
-    commands = on.programs.ai.agentForge.sessionCommands;
+    commands = pkgs.writeText "agent-session-commands" (
+      on.programs.ai.agentForge.sessionCommands
+      + on.programs.ai.agentGithub.sessionCommands
+      + on.programs.ai.prReview.sessionCommands
+    );
     # The tea module alone, for its token file default without the session's.
     teaTokenFile = agentForge:
       (lib.evalModules {
@@ -881,165 +822,26 @@ in {
           }
         ];
       }).config.programs.tea.tokenFile;
-    # The MCP wrapper with a relative fallback token file the test provides.
-    mcpHome =
-      (off.extendModules {
-        modules = [{programs.ai.forgejoMcp.tokenFile = lib.mkForce "fallback-token";}];
-      }).config;
-    mcpActivation = pkgs.writeText "agent-mcp-servers-activation" mcpHome.home.activation.agentMcpServers.data;
-    helper = "!FORGEJO_TOKEN= FORGEJO_TOKEN_FILE=${lib.escapeShellArg dummy.tokenFile} FORGEJO_USER=${lib.escapeShellArg dummy.user} ${lib.escapeShellArg "${fakeForgeMirror}/bin/forge-mirror"} credential-helper";
   in
-    # The MCP server follows the session's variable; its fallback stays the
-    # session variables' token file whether or not the account is enabled.
-    assert on.programs.ai.forgejoMcp.tokenFile == off.config.home.sessionVariables.FORGEJO_API_TOKEN_FILE;
-    assert off.config.programs.ai.forgejoMcp.tokenFile == off.config.home.sessionVariables.FORGEJO_API_TOKEN_FILE;
-    assert off.config.programs.ai.agentForge.sessionCommands == "";
+    assert lib.all (part: off.config.programs.ai.${part}.sessionCommands == "") ["agentForge" "agentGithub" "prReview"];
+    assert lib.all (part: on.programs.ai.${part}.sessionCommands != "") ["agentForge" "agentGithub" "prReview"];
     # With the account, tea is wrapped even without a session token file.
-    assert teaTokenFile (dummy // {enable = true;}) == dummy.tokenFile;
+    assert teaTokenFile (forge // {enable = true;}) == forge.tokenFile;
     assert teaTokenFile {enable = false;} == null;
-    assert lib.hasPrefix (lib.concatStrings [
-      "FORGEJO_API_TOKEN_FILE=${lib.escapeShellArg dummy.tokenFile}\n"
-      "FORGEJO_TOKEN_FILE=${lib.escapeShellArg dummy.tokenFile}\n"
-      "export FORGEJO_API_TOKEN_FILE FORGEJO_TOKEN_FILE\n"
-      "unset FORGEJO_TOKEN\n"
-    ])
-    commands;
-    # hasInfix matches a regex, which must not refer to the fake package.
-    assert lib.all (entry: lib.hasInfix (builtins.unsafeDiscardStringContext entry) (builtins.unsafeDiscardStringContext commands)) [
-      "\"GIT_CONFIG_KEY_$agent_git_config=\"${lib.escapeShellArg "credential.${dummy.url}.helper"} \"GIT_CONFIG_VALUE_$agent_git_config=\"''\n"
-      "\"GIT_CONFIG_VALUE_$agent_git_config=\"${lib.escapeShellArg helper}\n"
-      "\"GIT_CONFIG_VALUE_$agent_git_config=\"${lib.escapeShellArg "git@${dummy.sshHost}:"}\n"
-      "\"GIT_CONFIG_VALUE_$agent_git_config=\"${lib.escapeShellArg "ssh://git@${dummy.sshHost}/"}\n"
-    ];
-      pkgs.runCommand "agent-forge-wiring-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.shellcheck];} ''
-        # Both clients start the same MCP wrapper; Codex is told to pass the
-        # session's token file variable on, Claude Code passes its environment.
-        claude=$(grep -oE '/nix/store/[^ "]+-claude-mcp-servers.json' ${mcpActivation} | head -n1)
-        codex=$(grep -oE '/nix/store/[^ "]+-codex-mcp-servers.json' ${mcpActivation} | head -n1)
-        mcp_wrapper=$(jq -er .forgejo.command "$claude")
-        test "$(jq -er .forgejo.command "$codex")" = "$mcp_wrapper"
-        test "$(jq -c .forgejo.env_vars "$codex")" = '["FORGEJO_API_TOKEN_FILE"]'
-        shellcheck ${../../scripts/checks/test-forgejo-mcp-token.sh}
-        bash ${../../scripts/checks/test-forgejo-mcp-token.sh} "$mcp_wrapper"
-
-        # The commands run after the session variables are read, right before T3.
-        sourced=$(grep -nF '. "$session_vars"' ${sessionEnv} | cut -d: -f1)
-        token=$(grep -nF 'FORGEJO_API_TOKEN_FILE=' ${sessionEnv} | cut -d: -f1)
-        count=$(grep -nxF 'export GIT_CONFIG_COUNT=$agent_git_config' ${sessionEnv} | cut -d: -f1)
-        exec_line=$(grep -nxF 'exec "$@"' ${sessionEnv} | cut -d: -f1)
-        test "$sourced" -lt "$token" && test "$token" -lt "$count" && test "$count" -lt "$exec_line"
-        if grep -E 'GIT_CONFIG|agent_git_config' ${offSessionEnv}; then
-          echo "The session wrapper changes the agent environment while agentForge is disabled" >&2
+      pkgs.runCommand "t3code-agent-session-contract" {nativeBuildInputs = [pkgs.python3 pkgs.gnugrep];} ''
+        python3 -I - ${sessionEnv} ${commands} <<'PY'
+        import sys
+        wrapper, commands = (open(path).read() for path in sys.argv[1:])
+        sourced = wrapper.index('. "$session_vars"')
+        assert wrapper.index(commands + 'exec "$@"') > sourced, "the commands do not run after the session variables, right before T3"
+        PY
+        if grep -E 'GIT_CONFIG|GH_APP_|PR_REVIEW_AGENT_SESSION' ${offSessionEnv}; then
+          echo "The session wrapper changes the agent environment while the accounts are off" >&2
           exit 1
         fi
-        shellcheck ${../../scripts/checks/test-agent-forge-git.sh}
-        bash ${../../scripts/checks/test-agent-forge-git.sh} ${sessionEnv} ${lib.escapeShellArgs [dummy.url dummy.sshHost dummy.user dummy.tokenFile]}
-        touch "$out"
-      '';
-
-  # programs.ai.agentGithub (ADR-0099), with dummy values and fake gh-app and
-  # gh: T3's session wrapper sets the App's variables and gives Git the App's
-  # helper ahead of the operator's gh login for github.com. The forge account
-  # is off, so only this module's GIT_CONFIG entries are set.
-  agent-github-wiring-contract = let
-    dummy = {
-      appId = 4242;
-      keyFile = "/run/agent-github-test/key.pem";
-      owner = "owner-test";
-    };
-    fakeApp = pkgs.writeShellScriptBin "gh-app" ''exec "$AGENT_GITHUB_TEST_APP" "$@"'';
-    fakeGh = pkgs.writeShellScriptBin "gh" ''exec "$AGENT_GITHUB_TEST_GH" "$@"'';
-    off = self.homeConfigurations.alc-xyz.extendModules {
-      modules = [
-        {
-          programs.ai.agentForge.enable = lib.mkForce false;
-          programs.ai.agentGithub.enable = lib.mkForce false;
-        }
-      ];
-    };
-    on =
-      (off.extendModules {
-        modules = [
-          {
-            programs.ai.agentGithub = lib.mapAttrs (_: lib.mkOverride 40) (
-              dummy
-              // {
-                enable = true;
-                package = fakeApp;
-                ghPackage = fakeGh;
-              }
-            );
-          }
-        ];
-      }).config;
-    sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
-    sessionEnv = on.home.file.${sessionEnvLink}.source;
-    offSessionEnv = off.config.home.file.${sessionEnvLink}.source;
-    package = config: name: lib.findFirst (package: package.name == name) null config.home.packages;
-    # agentGh around the real gh-app and gh, run without the App's variables.
-    realAgentGh =
-      (off.extendModules {
-        modules = [{programs.ai.agentGithub = lib.mapAttrs (_: lib.mkOverride 40) (dummy // {enable = true;});}];
-      }).config.programs.ai.agentGithub.agentGh;
-  in
-    assert off.config.programs.ai.agentGithub.sessionCommands == "";
-    # The xyz configuration's own gh: on other systems, this check's pkgs differ.
-    assert off.config.programs.ai.agentGithub.agentGh == off._module.args.pkgs.gh;
-      pkgs.runCommand "agent-github-wiring-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.shellcheck];} ''
-        if grep -E 'credential.https://github.com|GH_APP_' ${offSessionEnv}; then
-          echo "The session wrapper changes GitHub credentials while agentGithub is disabled" >&2
-          exit 1
-        fi
-        # pr-review and its guard use the App-aware gh, which wraps the App's
-        # gh-app around the operator's gh; the assertion above covers the
-        # disabled case.
-        grep -qF ${on.programs.ai.agentGithub.agentGh}/bin ${package on "pr-review"}/bin/pr-review
-        grep -qF ${on.programs.ai.agentGithub.agentGh}/bin ${package on "agent-pr-review-guard"}/bin/agent-pr-review-guard
-        grep -qF 'gh-app' ${on.programs.ai.agentGithub.agentGh}/bin/gh
-        grep -qF 'GH_APP_GH' ${on.programs.ai.agentGithub.agentGh}/bin/gh
-        # With the real gh-app and no App settings, it passes through to gh.
-        HOME=$TMPDIR ${realAgentGh}/bin/gh --version | grep -q '^gh version'
-        shellcheck ${../../scripts/checks/test-agent-github-git.sh}
-        bash ${../../scripts/checks/test-agent-github-git.sh} ${sessionEnv} ${lib.escapeShellArgs [dummy.owner (toString dummy.appId) dummy.keyFile]}
-        touch "$out"
-      '';
-
-  # The agent pre-push hook (ADR-0078): with a fast-forward repository listed,
-  # the user's Git configuration registers `pr-review pre-push`, T3's session
-  # wrapper marks agent sessions, and Git runs the hook; with none, neither is
-  # set. Claude Code and Codex start sessions with the merge-class hint.
-  agent-pr-review-hook-contract = let
-    listedUrl = "https://github.com/owner-test/repo.git";
-    base = self.homeConfigurations.alc-xyz.extendModules {
-      modules = [
-        {
-          programs.ai.agentForge.enable = lib.mkForce false;
-          programs.ai.agentGithub.enable = lib.mkForce false;
-        }
-      ];
-    };
-    withRepositories = repositories:
-      (base.extendModules {modules = [{programs.ai.prReview.fastForwardRepositories = lib.mkForce repositories;}];}).config;
-    on = withRepositories ["github.com/owner-test/repo" "git.example.org/owner-test/repo"];
-    off = withRepositories [];
-    sessionEnvLink = lib.head (lib.splitString " " (lib.head on.systemd.user.services.t3code.Service.ExecStart));
-    sessionEnv = on.home.file.${sessionEnvLink}.source;
-    offSessionEnv = off.home.file.${sessionEnvLink}.source;
-    gitConfig = on.xdg.configFile."git/config".source;
-    offGitConfig = off.xdg.configFile."git/config".source;
-  in
-    assert off.programs.ai.prReview.sessionCommands == "";
-    assert !(off.programs.git.settings ? hook);
-    assert (withRepositories ["git.example.org/owner-test/repo"]).programs.git.settings ? hook;
-    assert lib.any (entry: lib.any (hook: lib.hasSuffix "/bin/pr-review merge-class --hook" hook.command) entry.hooks)
-    (builtins.fromJSON on.home.file.".codex/hooks.json".text).hooks.SessionStart;
-      pkgs.runCommand "agent-pr-review-hook-contract" {nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.shellcheck];} ''
-        if grep -F 'agent-pr-review' ${offGitConfig} || grep -F PR_REVIEW_AGENT_SESSION ${offSessionEnv}; then
-          echo "The hook or the agent marker is set without a fast-forward repository" >&2
-          exit 1
-        fi
-        shellcheck ${../../scripts/checks/test-agent-pr-review-hook.sh}
-        bash ${../../scripts/checks/test-agent-pr-review-hook.sh} ${sessionEnv} ${gitConfig} ${lib.escapeShellArg listedUrl}
+        # The App-aware gh around the real gh-app passes through to gh
+        # without the App's variables.
+        HOME=$TMPDIR ${on.programs.ai.agentGithub.agentGh}/bin/gh --version | grep -q '^gh version'
         touch "$out"
       '';
 
@@ -1324,7 +1126,7 @@ in {
       && builtins.elem home.pkgs.bivrost home.config.home.packages)
     operatorHomes;
     assert lib.all (home: home.config.programs.work.boards.enable) operatorHomes;
-    # Work groups for backlog-inventory --scope come from the work flake (ADR-0093),
+    # Work groups for backlog-inventory --scope come from the work flake,
     # on the operator homes that have the backlog tools.
     assert lib.all (home: (home.options.programs.ai or {}) ? backlog -> home.config.programs.ai.backlog.scopeFile != null) operatorHomes;
     assert lib.all (home: (home.config.programs.ai.backlog.scopeFile or null) == null) nonOperatorHomes;

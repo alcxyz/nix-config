@@ -48,7 +48,6 @@ python3 scripts/checks/test-commit-status.py
 python3 scripts/checks/test-publish-dms-plugins-lock.py
 python3 scripts/checks/test-merge-dms-plugins-lock.py
 python3 scripts/checks/test-development-ci.py
-python3 scripts/checks/test-description-format.py
 python3 scripts/checks/test-first-timer-freshness.py
 python3 scripts/checks/test-podman-canary-logs.py
 python3 scripts/checks/test-local-package-promotion.py
