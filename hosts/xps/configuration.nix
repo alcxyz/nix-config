@@ -188,7 +188,7 @@ in {
     });
     autoLoginUser = username;
     desktopSessionCommand = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
-    defaultSessionMode = "couch";
+    defaultSessionMode = "merged";
     # A boot-time pipeline check hides this panel only when all three external
     # displays are connected. With fewer externals it remains available for
     # local maintenance and debugging.

@@ -354,9 +354,9 @@ Right Alt remains the LevelThree modifier, so Norwegian combinations such as
 `AltGr+2` reach the browser as `@`.
 
 XPS retains separate `couch`, `merged`, and normal `desktop` profiles. The
-merged profile is the normal media-center profile selected during operation;
-`couch` remains the declarative fallback for a stale direct-display request
-after reboot. Desktop mode remains a recovery and workstation option rather
+merged profile is the normal media-center profile and the declarative fallback
+for a stale direct-display request after reboot; `couch` remains a selectable
+profile. Desktop mode remains a recovery and workstation option rather
 than changing the couch configuration.
 
 ## Direct-display sessions
@@ -399,7 +399,7 @@ nixbox-mode merged
 ```
 
 The direct request is boot-scoped. A stale one-shot direct request cannot reopen
-after a reboot; XPS falls back to its declarative `couch` default. This
+after a reboot; XPS falls back to its declarative `merged` default. This
 boot-time fallback is distinct from a normal direct exit, which returns to the
 saved originating profile.
 

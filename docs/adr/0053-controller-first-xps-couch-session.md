@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-16
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, updated 2026-10-29 (xps sets `defaultSessionMode = "merged"`, per owner decision; open question on [#854](https://git.alc.xyz/alcxyz/nix-config/issues/854) removed)
 **History:** [replaced text](archive/0053-controller-first-xps-couch-session-history.md)
 **Applies to:** `hosts/xps`, `modules/nixos/services/moonlight-client`, SteamHeadless integration
 
@@ -344,13 +344,6 @@ attached to the container's X server.
 
 ## Tracking
 
-- Unresolved: `hosts/xps/configuration.nix` sets `defaultSessionMode = "couch"`
-  (since 2026-07-16). That value seeds the session-mode file when it is absent
-  and is the fallback in the session-mode recovery paths (a stale direct-mode
-  token at boot, an invalid return mode, an empty mode query), while this ADR
-  names `merged` as the XPS default. Which default is intended is
-  tracked in [#854](https://git.alc.xyz/alcxyz/nix-config/issues/854) until the
-  owner settles it.
 - Issue #140 tracks the remaining live display and recovery validation:
   mismatched-display mirroring after a reboot, the cable-removal fallback,
   display, pointer and audio cycling after a reboot, and protected-browser
