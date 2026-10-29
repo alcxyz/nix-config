@@ -1,6 +1,6 @@
 # ADR-0075: Start with short model-usage summaries in T3 Code
 
-**Status:** Proposed
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-09-26
 **Applies to:** T3 Code usage visibility, agent reporting, optional skill deployment
 
@@ -51,9 +51,9 @@ existing turn accounting before proposing the smallest missing integration.
 skill or config deployment belongs with the agent skills in the private pandora
 flake. Reusable tooling belongs in `nix-packages` only if a specific unmet need
 justifies it. Private wiring, if needed, belongs in `nix-secrets`. This follows
-[ADR-0030](0030-declarative-shared-user-policy-configs.md) and the archived
-[ADR-0022](archive/0022-universal-agent-instructions.md) and
-[ADR-0028](archive/0028-agent-instruction-sync-check.md), whose agent
+[ADR-0030](../0030-declarative-shared-user-policy-configs.md) and the archived
+[ADR-0022](0022-universal-agent-instructions.md) and
+[ADR-0028](0028-agent-instruction-sync-check.md), whose agent
 instructions now live in a private repository.
 
 [Issue #454](https://git.alc.xyz/alcxyz/nix-config/issues/454) tracks the trial

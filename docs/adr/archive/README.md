@@ -46,6 +46,7 @@ archived number.
 | [ADR-0069 history](0069-maintained-project-dev-qa-history.md) | Maintained project development QA inputs | History of [ADR-0069](../0069-maintained-project-dev-qa.md) |
 | [ADR-0072 history](0072-isolated-runner-docker-history.md) | Isolate runner Docker execution in a bounded rootless service | History of [ADR-0072](../0072-isolated-runner-docker.md) |
 | [ADR-0074 history](0074-phased-podman-coexistence-history.md) | Qualify Podman through staged Docker coexistence | History of [ADR-0074](../0074-phased-podman-coexistence.md) |
+| [ADR-0075](0075-agent-turn-efficiency-reporting.md) | Start with short model-usage summaries in T3 Code | Moved to a private repository on 2026-10-29 |
 | [ADR-0076 history](0076-dms-lock-exact-head-publication-history.md) | Validate and merge DMS lock updates at an exact head | History of [ADR-0076](../0076-dms-lock-exact-head-publication.md) |
 | [ADR-0077 history](0077-ai-stack-profile-outside-home-manager-history.md) | Update the AI stack in its own profile, outside Home Manager | History of [ADR-0077](../0077-ai-stack-profile-outside-home-manager.md) |
 | [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Moved to a private repository on 2026-10-29 |
