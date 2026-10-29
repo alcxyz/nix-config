@@ -111,11 +111,11 @@
     "bivrost_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1790179789,
-        "narHash": "sha256-dQou7nPQwtWx0xAKKIyWNciUwvL+nq5o/QenQ0WkEEc=",
+        "lastModified": 1792574732,
+        "narHash": "sha256-iEI7bmlL0oLq+qtUTOoPZvb2x1Qh08WnnPwIqq79RoI=",
         "owner": "alcxyz",
         "repo": "bivrost",
-        "rev": "988828b01bcf8a62abe18c49d139e50409092dcd",
+        "rev": "b1595d33e252d31ec3417dc9ed0a2fce351bb4bb",
         "type": "github"
       },
       "original": {
@@ -2043,11 +2043,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793112581,
-        "narHash": "sha256-KYAxLfNmlUuT9aR/6KIqMLWXR/x1DjpkbJuYCE0iaIs=",
+        "lastModified": 1793271855,
+        "narHash": "sha256-HAoD3YyYHvCYk2Y39vZSEhKKduoiX484FFh3vfl+ABE=",
         "ref": "dev",
-        "rev": "1e78d6f3e66c0d3fe609a4b367296bb4d8f34dae",
-        "revCount": 63,
+        "rev": "bebe97f496ab42e37636b11a403e128744739444",
+        "revCount": 72,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       },
