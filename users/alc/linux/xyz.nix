@@ -75,7 +75,6 @@ in {
 
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
 
-    "${configDir}/modules/home-manager/programs/ai/default.nix"
     # Skills that describe secrets come from nix-secrets, beside pandora's.
     inputs.nix-secrets.homeManagerModules.agentSkills
     "${configDir}/modules/home-manager/programs/moonlight-wolf-client/default.nix"
@@ -87,7 +86,6 @@ in {
     "${configDir}/modules/home-manager/services/devlog/default.nix"
     # Pushes devlog entries with a deploy key instead of the SSH agent (#805).
     inputs.nix-secrets.homeManagerModules.devlogDeployKey
-    "${configDir}/modules/home-manager/services/deck/default.nix"
     # Refreshes a deck report's data from the document portal (xyz only).
     inputs.nix-secrets.homeManagerModules.deckShareReport
     # Nightly development statistics collector and its private settings.
@@ -352,10 +350,11 @@ in {
   services.devlog.repoUrl = "git@git-ssh.alc.xyz:alcxyz/devlog.git";
   services.devstats.enable = true;
 
-  # The live T3 thread dashboard (#757), reached at deck.alc.xyz/threads/
-  # through the cluster's oauth2-proxy, which admits the Pocket ID admins
-  # group; deck checks the forwarded ID token itself as well.
-  services.deck = {
+  # The agent dashboard (#757): the thread dashboard at deck.alc.xyz/threads/
+  # and the backlog dashboard, reached through the cluster's oauth2-proxy,
+  # which admits the Pocket ID admins group; deck checks the forwarded ID
+  # token itself as well.
+  services.agent-dashboard = {
     enable = true;
     settings = {
       listen = "0.0.0.0:3775";

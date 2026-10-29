@@ -23,7 +23,6 @@ in {
     "${configDir}/modules/home-manager/profiles/nixbox-session/default.nix"
     "${configDir}/modules/home-manager/programs/foot/default.nix"
 
-    "${configDir}/modules/home-manager/programs/ai/default.nix"
     # Skills that describe secrets come from nix-secrets, beside pandora's.
     inputs.nix-secrets.homeManagerModules.agentSkills
 

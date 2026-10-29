@@ -44,8 +44,8 @@ in
     imports = [
       inputs.nix-secrets.homeManagerModules.gitIdentityPolicy
       inputs.nix-secrets.homeManagerModules.sshIdentityPolicy
-      # The agent rules and roles, and on hosts with programs.ai the skills,
-      # the description-format trial and the review inventory.
+      # The agent rules and roles everywhere; programs.ai, its skills and the
+      # agent dashboard where a host enables them.
       inputs.pandora.homeManagerModules.default
       # These are modules that are guaranteed to work on both OSes
       # or handle their own platform differences internally if needed
@@ -56,8 +56,6 @@ in
       "${configDir}/modules/home-manager/programs/ssh/default.nix"
       "${configDir}/modules/home-manager/programs/tea/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
-      # Agent model roles (ADR-0079) follow the shared agent instructions to every host.
-      "${configDir}/modules/home-manager/programs/ai/roles.nix"
       "${configDir}/modules/home-manager/services/nix-stale-gcroots/default.nix"
       "${configDir}/modules/shared/host-metadata.nix"
     ];

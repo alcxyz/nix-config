@@ -27,11 +27,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # The private agent stack: rules, skills and their Home Manager module,
-    # fetched like nix-secrets.
+    # The private agent stack: rules, skills, programs.ai and the agent
+    # modules, fetched like nix-secrets.
     pandora = {
       url = "git+https://git.alc.xyz/alcxyz/pandora.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
     };
 
     nix-packages = {

@@ -148,14 +148,14 @@ modules/
       pki.nix                      # CA bundle policy
     hardware/                      # AMD and Nvidia GPUs, display guard, ZFS kernel
     profiles/                      # Nixbox couch and TV client profiles
-    security/                      # Credential consent, agent PR review guard
+    security/                      # Credential consent
     services/                      # Opt-in services: NFS, Plex, Stash, qBittorrent,
                                    #   Forgejo runners, k8s helpers, Moonlight, Wolf, ...
     virtualisation/                # k3s, KVM and GPU passthrough, container networking
   home-manager/
     shell/                         # zsh, bash, starship
-    programs/                      # AI tools, git, ssh, Hyprland, niri, terminals, ...
-    services/                      # DMS, Paperflow, T3 Code, devlog, deck, ...
+    programs/                      # git, ssh, tea, Hyprland, niri, terminals, ...
+    services/                      # DMS, Paperflow, T3 Code, devlog, ...
     profiles/                      # Nixbox session profile
     workspace/                     # ~/src catalog selection and workspace-sync
 users/alc/

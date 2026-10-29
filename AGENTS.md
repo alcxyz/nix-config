@@ -12,10 +12,12 @@ secret wiring details, and sensitive implementation notes in the private
 
 Do not move sensitive material to `nix-packages`; that repository is public too.
 
-Agent skills (`SKILL.md` files) and the global agent rules live in the private
-pandora flake, and the skills that describe secrets in the private nix-secrets
-flake, not here; this repository keeps the commands they call, their bundled
-assets and checks (ADR-0091).
+Agent skills (`SKILL.md` files), the global agent rules and the agent modules
+(`programs.ai` with the commands the skills call, `services.agent-dashboard`
+and `security.agentPrReviewGuard`) live in the private pandora flake, and the
+skills that describe secrets in the private nix-secrets flake, not here. This
+repository keeps only the hosts' settings for them, and `services.t3code` and
+`programs.tea`, which work without `programs.ai`.
 
 ## Hosts and deploys
 

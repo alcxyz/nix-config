@@ -34,7 +34,8 @@ in {
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/desktop.nix"
     "${configDir}/modules/nixos/hardware/display-device-guard.nix"
-    "${configDir}/modules/nixos/security/agent-pr-review-guard/default.nix"
+    # The agent PR review guard as a managed Codex hook.
+    inputs.pandora.nixosModules.default
     inputs.nix-secrets.nixosModules.xyzDisplay
     inputs.nix-secrets.nixosModules.xyzInputHardwarePolicy
     inputs.nix-secrets.nixosModules.xyzNetworkIdentity
@@ -302,7 +303,7 @@ in {
       '')
       t3codeSources)
     t3codePorts)
-    # The deck dashboard (users/alc/linux/xyz.nix) is reached only through
+    # The agent dashboard (users/alc/linux/xyz.nix) is reached only through
     # the k8s oauth2-proxy route.
     + lib.concatMapStrings (source: ''
       iptables -A nixos-fw -p tcp --dport 3775 -s ${source} -j nixos-fw-accept
