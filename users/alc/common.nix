@@ -131,8 +131,8 @@ in
     # tea's stored login (#704).
     programs.tea.login.sshHost = "git-ssh.alc.xyz";
 
-    # Forgejo credential helper — moved to linux/common.nix and darwin/mac.nix
-    # where the sops secret path is available for inline injection.
+    # The Forgejo credential helper comes from the private operator modules
+    # imported by linux/operator.nix and darwin/mac.nix (ADR-0002).
 
     #programs.wezterm.enable = true;
 

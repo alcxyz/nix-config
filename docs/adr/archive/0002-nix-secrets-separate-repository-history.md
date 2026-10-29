@@ -1,4 +1,4 @@
-**History of** [ADR-0002](../0002-nix-secrets-separate-repository.md): text replaced on 2026-10-28.
+**History of** [ADR-0002](../0002-nix-secrets-separate-repository.md): text replaced on 2026-10-28 and 2026-10-29.
 
 # ADR-0002: Keep private infrastructure material outside nix-config
 
@@ -52,3 +52,16 @@ than duplicated in public host or user configuration.
   require a lock update to take effect in dependent builds.
 - Agents must never add SOPS YAML files, secret content, private runbooks, or
   sensitive host bootstrap detail to this repository.
+
+## Text replaced on 2026-10-29
+
+Alternatives Considered:
+
+- **HTTPS URL for nix-secrets** - rejected at adoption, as SSH matched how the
+  machines already authenticated to private Git. `flake.nix` has fetched the
+  input over HTTPS since 2026-08-19; no ADR records that change.
+
+Consequences:
+
+- Deployments require authenticated access to `nix-secrets`, which `flake.nix`
+  fetches over HTTPS.
