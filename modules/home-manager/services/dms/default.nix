@@ -293,6 +293,9 @@
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-focused-polkit-surface.patch}
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-credential-consent-details.patch}
           patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-configurable-external-idle-inhibitors.patch}
+          # Region screenshots otherwise refocus a stale window, often on
+          # another workspace. Upstream only guards the workspace case (v1.6).
+          patch -d "$out/share/quickshell/dms" -p2 < ${./patches/dms-screenshot-focus-restore.patch}
           substituteInPlace "$out/share/quickshell/dms/Services/IdleService.qml" \
             --subst-var-by respectExternalInhibitors ${lib.boolToString cfg.idleLock.respectExternalInhibitors}
           substituteInPlace "$out/share/quickshell/dms/Modals/PolkitAuthSurfaceModal.qml" \

@@ -1,0 +1,14 @@
+diff --git a/quickshell/Widgets/DankFocusGrab.qml b/quickshell/Widgets/DankFocusGrab.qml
+--- a/quickshell/Widgets/DankFocusGrab.qml
++++ b/quickshell/Widgets/DankFocusGrab.qml
+@@ -18,5 +18,9 @@
+             root._held = false;
+             root.active = false;
+-            root._restoreToplevel = root._compositorCleared ? null : KeyboardFocus.restoreToplevel(root._restoreToplevel);
++            // Region screenshots drop every grab, including those of hidden
++            // modals that always want focus. Restoring then would activate a
++            // stale toplevel, possibly on another workspace, under the capture.
++            const skipRestore = root._compositorCleared || PopoutManager.screenshotActive;
++            root._restoreToplevel = skipRestore ? null : KeyboardFocus.restoreToplevel(root._restoreToplevel);
+         }
+     }
