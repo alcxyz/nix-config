@@ -2,17 +2,15 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Amended:** 2026-10-02 by [ADR-0079](archive/0079-agent-model-roles.md): the shared LLM config is generated from the agent role table in nix-secrets, an exception to the non-secret placement rule because the table encodes delegation policy worded in the private agent instructions.
-**Amended:** 2026-10-29: the agent instructions, the agent role table and the agent modules, with ADR-0022 and ADR-0079, moved to the private pandora flake.
+**Amended:** 2026-10-29
+**History:** [replaced text](archive/0030-declarative-shared-user-policy-configs-history.md)
 **Applies to:** `nix-config`, `nix-secrets`, home-manager managed user config surfaces
 
 ## Context
 
 Some configuration files are not just application settings for one program.
 They are shared user-level policy surfaces consumed by multiple tools or agent
-environments.
-
-Recent examples:
+environments, for example:
 
 - `~/AGENTS.md` and `~/.claude/CLAUDE.md` as universal agent instruction
   surfaces
@@ -26,22 +24,19 @@ These files have a different role from ordinary per-app config:
 - drift or ad-hoc bootstrapping creates inconsistent behavior
 - users expect a rebuild to establish the canonical state
 
-The project needs a general rule for how such shared user policy configs are
-owned, versioned, and deployed.
-
 ## Decision
 
-Shared user policy configs should be source-controlled and deployed
-declaratively through Home Manager rather than created independently by each
-tool at runtime.
+Shared user policy configs are source-controlled and deployed declaratively
+through Home Manager rather than created independently by each tool at
+runtime.
 
-The default pattern is:
+The pattern is:
 
 1. Keep the canonical source file in version control
 2. Deploy it to the user-visible target path via Home Manager
 3. Make tools read that canonical path as their primary policy surface
-4. Use tool-local config only as fallback during migration or for explicit
-   tool-specific overrides
+4. Use tool-local config only for explicit tool-specific overrides, or as a
+   fallback while a tool migrates
 5. Keep secrets separate from the shared policy file itself
 
 ## What qualifies as a shared user policy config
@@ -73,9 +68,15 @@ Choose the source repo based on the file's nature:
 - `nix-config` for non-secret canonical policy/config files
 - `nix-secrets` for secret or security-sensitive material that must live in the
   private repo
+- the private repository that holds the agent stack for the agent
+  instructions, the agent role table and what is generated from it, including
+  the shared LLM config. These are not secret, but they encode agent
+  delegation policy worded in the private agent instructions, so they stay
+  together there (since 2026-10-29; from 2026-10-02 the role table was in
+  `nix-secrets`).
 
-Deployment still happens through Home Manager in `nix-config`, even when the
-source of truth lives in `nix-secrets`.
+Home Manager deploys the files on every host, whichever repository holds the
+source.
 
 ## Deployment rules
 
@@ -86,7 +87,7 @@ Preferred deployment shape:
 - preserve live-editing workflows using `mkOutOfStoreSymlink` when that is the
   established pattern
 
-This means a rebuild should establish the expected file path automatically.
+This means a rebuild establishes the expected file path automatically.
 
 ## Runtime behavior rules
 
@@ -94,7 +95,8 @@ Tools that consume a shared user policy config should:
 
 1. look for the shared canonical path first
 2. fail clearly if that shared file exists but is invalid
-3. fall back to older per-tool config only when the shared file is absent
+3. fall back to older per-tool config only when the shared file is absent, and
+   only while the tool migrates
 4. avoid silently generating competing canonical files at first run
 
 Per-tool bootstrap may still be acceptable for narrow single-tool config, but
@@ -104,7 +106,7 @@ it is not the default for shared policy surfaces.
 
 Shared user policy configs are not a place to embed secret values.
 
-If the policy needs secret-backed settings, the config should reference them
+If the policy needs secret-backed settings, the config references them
 indirectly, for example via:
 
 - environment variable names
@@ -118,17 +120,21 @@ the proper secret-management flow.
 
 ### Agent instructions
 
-- canonical source files live in the private pandora flake
-- Home Manager deploys them to `~/AGENTS.md` and `~/.claude/CLAUDE.md`, with
+- canonical source files live in the private repository that holds the agent
+  stack
+- Home Manager links them to `~/AGENTS.md` and `~/.claude/CLAUDE.md` from a
+  checkout of that repository, so they stay live-editable, with
   `~/.codex/AGENTS.md` linked to the canonical `~/AGENTS.md`
 - Claude imports the canonical file at startup; no mirrored copy or sync tool
-  is needed (ADR-0022, since moved to the private pandora flake)
+  is needed ([ADR-0022](archive/0022-universal-agent-instructions.md), moved
+  to a private repository)
 
 ### Shared LLM config
 
 - Home Manager generates `~/.config/llm/config.toml` from the agent role table
-  (ADR-0079); the table and the values live in the private pandora flake
-- tools prefer that path over older tool-local config files
+  ([ADR-0029](0029-shared-xdg-llm-config.md)); the table and the values live
+  in the private repository that holds the agent stack
+- tools read that path and no longer read their older tool-local config files
 
 ## Alternatives Considered
 
@@ -139,15 +145,15 @@ location.
 **Keep all such files in `nix-secrets`:** Rejected. Many shared policy files
 are not secret and belong in the public config repo.
 
-**Do nothing, rely on conventions only:** Rejected. The same pattern has now
-appeared more than once, which is enough to justify an explicit rule.
+**Do nothing, rely on conventions only:** Rejected. The same pattern appeared
+more than once, which is enough to justify an explicit rule.
 
 ## Consequences
 
-- Shared user policy surfaces become predictable across machines.
+- Shared user policy surfaces are predictable across machines.
 - Rebuilds establish canonical config paths automatically.
-- Tool implementations get a clearer contract: read the shared file first,
-  then fall back only for compatibility.
+- Tool implementations get a clear contract: read the shared file first, and
+  fall back only for compatibility while migrating.
 - Secret handling stays separate from policy handling.
 - Future cross-tool policy configs have a reusable standard instead of ad-hoc
   bootstrap behavior.

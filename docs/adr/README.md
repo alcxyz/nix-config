@@ -38,8 +38,8 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0024](0024-shared-postgres-cluster.md) | Shared Postgres cluster for k8s services | Proposed | k3s, databases |
 | [ADR-0025](0025-tooling-service-discovery-post-k8s.md) | Tooling service discovery after Docker-to-k8s migration | Accepted | tooling, gitops |
 | [ADR-0026](0026-unified-source-directory-layout.md) | Unified source directory layout across machines | Accepted, implemented on xyz | all hosts, home-manager |
-| [ADR-0029](0029-shared-xdg-llm-config.md) | Shared XDG LLM config for local tooling | Accepted, amended | local tooling, llm config, xdg |
-| [ADR-0030](0030-declarative-shared-user-policy-configs.md) | Declarative deployment for shared user policy configs | Accepted, amended | home-manager, shared policy, config deployment |
+| [ADR-0029](0029-shared-xdg-llm-config.md) | Shared XDG LLM config for local tooling | Accepted | local tooling, llm config, xdg |
+| [ADR-0030](0030-declarative-shared-user-policy-configs.md) | Declarative deployment for shared user policy configs | Accepted | home-manager, shared policy, config deployment |
 | [ADR-0031](0031-kubernetes-client-wrappers.md) | Kubernetes client wrappers with per-command kubeconfig | Accepted | k3s, home-manager, client tooling |
 | [ADR-0032](0032-ssh-key-ownership-and-deployment.md) | SSH key ownership and deployment | Accepted | ssh, nixos, home-manager, sops |
 | [ADR-0033](0033-dms-hyprland-layer-recovery-watcher.md) | DMS Hyprland layer recovery watcher | Accepted | Hyprland, DMS, home-manager |
@@ -81,7 +81,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0074](0074-phased-podman-coexistence.md) | Qualify Podman through staged Docker coexistence | Accepted; Docker stays beside Podman, no Docker engine qualified for retirement | containers, development, CI |
 | [ADR-0075](0075-agent-turn-efficiency-reporting.md) | Start with short model-usage summaries in T3 Code | Proposed | T3 Code, agent reporting, optional skills |
 | [ADR-0076](0076-dms-lock-exact-head-publication.md) | Validate and merge DMS lock updates at an exact head | Accepted | DMS lock, Forgejo Actions |
-| [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted, amended | T3 Code, AI providers, Home Manager |
+| [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted | T3 Code, AI providers, Home Manager |
 | [ADR-0080](0080-promoted-package-ref.md) | Promote validated package revisions as a ref, lock them on demand | Accepted | package promotion, T3 Code, deploy |
 | [ADR-0082](0082-fence-release-on-peer-evidence.md) | Release a self-fence only on positive peer evidence | Accepted | k3s, self-fence, kreboot |
 | [ADR-0083](0083-podman-cleanup-completion-fence.md) | Fence admission until Podman cleanup completion is known | Accepted, qualification required | Forgejo runners, Podman cleanup |

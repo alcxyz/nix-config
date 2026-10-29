@@ -2,77 +2,67 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Amended:** 2026-10-02 by [ADR-0079](archive/0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
-**Amended:** 2026-10-29: ADR-0079 and ADR-0085 moved with the agent modules to the private pandora flake, which now holds the agent role table and generates the config.
-**Amended:** 2026-10-09, `leantime-tidy` was deprecated and its repository archived; it no longer consumes the shared config.
-**Amended:** 2026-10-09 by [ADR-0085](archive/0085-one-role-vocabulary.md): the config has one entry per agent role (`light`, `standard`, `deep`) instead of `fast` and `strong`, and tools no longer read tool-local config files.
+**Amended:** 2026-10-29
+**History:** [replaced text](archive/0029-shared-xdg-llm-config-history.md)
 **Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/paperless-tools`
 
 ## Context
 
-Several local tools now support configurable providers and models, but they do
-so through separate config files and slightly different resolution rules:
+Several local tools support configurable providers and models. Each first did
+so through its own config file with slightly different resolution rules, which
+is the wrong shape for a user-level policy: the default provider stack should
+be changeable in one place, not once per tool.
 
-- `devlog` reads `~/.config/devlog/config.toml`
-- `leantime-tidy` reads `~/.config/leantime-tidy/config.toml`
-- `paperless-tools` reads `~/.config/paperweight/config.toml`
-
-That solved the immediate "stop hardcoding Claude everywhere" problem, but it
-is the wrong shape for a user-level policy change. The desired steady state is:
-
-- OpenAI via local CLI as the primary provider for local tooling
-- Anthropic via local CLI as the backup provider
-- Optional API support for both providers when explicitly configured
-- Per-tool config as a fallback or exceptional override, not the primary policy
-  surface
-
-This is a user-level concern, not a tool-level concern. The default provider
-stack should be changeable in one place.
+The desired posture is OpenAI through its local CLI as the primary provider,
+Anthropic through its local CLI as the backup, and optional API support for
+both when explicitly configured.
 
 ## Decision
 
-Adopt a shared XDG config at `~/.config/llm/config.toml` as the preferred
-source of truth for user-level LLM provider policy across local tools.
-
-Tools should migrate to the following precedence order:
+`~/.config/llm/config.toml` is the source of truth for user-level LLM provider
+policy across local tools. Tools resolve a model in this order:
 
 1. Explicit tool invocation overrides, if the tool exposes them
-2. Shared XDG LLM config at `~/.config/llm/config.toml`
-3. Existing tool-local config
-4. Tool built-in defaults
+2. The shared config at `~/.config/llm/config.toml`
+3. One built-in default keyed by role name, used only when the shared config
+   is missing
 
-If the shared config exists but is invalid, tools should fail clearly rather
-than silently falling back to lower-precedence config.
+Tool-local config files are not read. If the shared config exists but is
+invalid, or lacks the role a tool asks for, the tool fails clearly rather than
+falling back.
 
 ## Shared config shape
 
-The shared config is role-based. Tools map their own tasks onto shared roles,
-originally `fast` and `strong`; since ADR-0085 these are the agent roles
-`light`, `standard` and `deep`.
+The shared config has one entry per agent role (`light`, `standard`, `deep`),
+under the role's name. Tools request role names; tasks that used the original
+`fast` and `strong` tiers use `standard`, and moving a task to `light` is a
+separate change for each tool.
 
-`docs/llm-config.toml.example` shows the shape with placeholder models.
-Since ADR-0079, Home Manager generates `~/.config/llm/config.toml` from the
-agent role table, now in the private pandora flake; since ADR-0085 it has one
-entry per role, named after it. The hand-maintained `users/alc/configs/llm/config.toml`
-and its live-edit link are retired.
+Home Manager generates the file from the agent role table, which lives with
+the agent modules in a private repository (moved there 2026-10-29 with
+[ADR-0079](archive/0079-agent-model-roles.md) and
+[ADR-0085](archive/0085-one-role-vocabulary.md)). `docs/llm-config.toml.example`
+shows the shape with placeholder models. The hand-maintained
+`users/alc/configs/llm/config.toml` and its live-edit link are retired.
 
 ### Fields
 
 - `provider`: provider identifier such as `openai` or `anthropic`
 - `model`: provider-specific model identifier
 - `transport`: one of:
-  - `cli` — require provider CLI transport
-  - `api` — require provider API transport
-  - `prefer-cli` — use CLI when supported, otherwise API if configured
-  - `prefer-api` — use API when configured, otherwise CLI if supported
+  - `cli`: require provider CLI transport
+  - `api`: require provider API transport
+  - `prefer-cli`: use CLI when supported, otherwise API if configured
+  - `prefer-api`: use API when configured, otherwise CLI if supported
 - `api_key_env`: optional env var name for API auth
 - `effort`: optional reasoning effort for the CLI transports (Codex
   `model_reasoning_effort`, Claude Code `--effort`); empty keeps the CLI's
-  default. Generated from the mapped agent role. Added 2026-10-04.
+  default. Generated from the role. Added 2026-10-04.
 - `backup`: optional provider/model entry with the same schema
 
-The intended default posture is OpenAI primary with `cli`, Anthropic backup
-with `cli`, and API settings present only as optional future-proofing.
+Every generated role entry uses OpenAI with `cli` as the main entry and
+Anthropic with `cli` as its backup. `api_key_env` is set on both, so API
+transport remains available as optional future-proofing.
 
 ## Provider resolution rules
 
@@ -88,28 +78,12 @@ If the main entry fails, the tool may try the configured backup entry.
 
 ### Auth resolution
 
-For API transport, tools should resolve auth consistently:
+For API transport, tools resolve auth consistently:
 
 1. `<ENV_NAME>`
 2. `<ENV_NAME>_FILE`
 
-## Migration rules
-
-Tool migrations should follow this order:
-
-1. Implement shared-config loading
-2. Implement OpenAI CLI support where missing
-3. Preserve existing Anthropic CLI and optional API support
-4. Keep tool-local config as fallback while migration is in progress
-5. Only then flip operational defaults to OpenAI primary and Anthropic backup
-
-The migration should not require immediate deletion of tool-local config. Those
-files remain valid fallback layers until all tools are updated.
-
 ## Tool mapping guidance
-
-Since ADR-0085, tools name agent roles, starting with `standard` for what
-used `fast` or `strong`.
 
 This ADR does not require every tool to expose role names directly in its UI or
 CLI; it only standardizes the underlying source of provider policy.
@@ -119,24 +93,24 @@ CLI; it only standardizes the underlying source of provider policy.
 **Keep per-tool configs only:** Rejected. It duplicates user-level provider
 policy and makes a default-provider change repetitive and error-prone.
 
-**Shared config only, no tool-local fallback:** Rejected for now. It would make
-the final model cleaner, but it creates unnecessary migration pressure and
-would break tools that have not adopted the shared config yet.
+**Keep tool-local configs as a fallback layer:** Used while the tools
+migrated, then dropped on 2026-10-09 (ADR-0085): every tool reads the shared
+config, and a third layer only hid stale defaults.
 
 **Keep OpenAI as API-only:** Rejected. The desired direction is local CLI as
 the primary path, with API as optional support.
 
-**Put the shared config in `nix-secrets`:** Rejected at the time. This is
-configuration policy, not secret material. Secrets referenced by `api_key_env`
-remain separate. ADR-0079 later moved the values next to the private agent
-instructions that name the same roles, now in the private pandora
-flake.
+**Keep the values in `nix-config`:** Rejected. The values are not secret, but
+they come from the agent role table, which encodes agent delegation policy and
+is kept beside the private agent instructions that name the same roles.
+Secrets referenced by `api_key_env` remain separate.
 
 ## Consequences
 
-- One config file can switch the primary provider stack for multiple tools.
-- Tool behavior becomes more consistent across repos.
-- OpenAI CLI support becomes a concrete implementation requirement.
-- Existing tool-local configs remain useful during migration, but no longer
-  represent the long-term source of truth.
+- One generated file switches the provider stack for every tool that reads it,
+  and a role tuning applies to agents and tools at once.
+- Tool behavior is consistent across repos: shared config, else one built-in
+  default per role.
+- Tools must support the OpenAI CLI (Codex) transport, since it is the main
+  entry of every role.
 - API support remains available without forcing API billing as the default path.

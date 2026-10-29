@@ -18,6 +18,8 @@ archived number.
 | [ADR-0022](0022-universal-agent-instructions.md) | Universal agent instructions via AGENTS.md | Moved to a private repository on 2026-10-29 |
 | [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | Retired PipeWire virtual sink for per-app audio isolation (wcap) | Retired 2026-06-04 |
 | [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Superseded by [ADR-0022](0022-universal-agent-instructions.md) |
+| [ADR-0029 history](0029-shared-xdg-llm-config-history.md) | Shared XDG LLM config for local tooling | History of [ADR-0029](../0029-shared-xdg-llm-config.md) |
+| [ADR-0030 history](0030-declarative-shared-user-policy-configs-history.md) | Declarative deployment for shared user policy configs | History of [ADR-0030](../0030-declarative-shared-user-policy-configs.md) |
 | [ADR-0035 history](0035-host-kernel-policy-history.md) | Host kernel policy | History of [ADR-0035](../0035-host-kernel-policy.md) |
 | [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |
 | [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by [ADR-0052](../0052-xev-primary-k8s-backup-target.md) |
@@ -45,6 +47,7 @@ archived number.
 | [ADR-0072 history](0072-isolated-runner-docker-history.md) | Isolate runner Docker execution in a bounded rootless service | History of [ADR-0072](../0072-isolated-runner-docker.md) |
 | [ADR-0074 history](0074-phased-podman-coexistence-history.md) | Qualify Podman through staged Docker coexistence | History of [ADR-0074](../0074-phased-podman-coexistence.md) |
 | [ADR-0076 history](0076-dms-lock-exact-head-publication-history.md) | Validate and merge DMS lock updates at an exact head | History of [ADR-0076](../0076-dms-lock-exact-head-publication.md) |
+| [ADR-0077 history](0077-ai-stack-profile-outside-home-manager-history.md) | Update the AI stack in its own profile, outside Home Manager | History of [ADR-0077](../0077-ai-stack-profile-outside-home-manager.md) |
 | [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Moved to a private repository on 2026-10-29 |
 | [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Moved to a private repository on 2026-10-29 |
 | [ADR-0081](0081-forgejo-mcp-for-agents.md) | Give agents a Forgejo MCP client and guard its merges | Moved to a private repository on 2026-10-29 |
