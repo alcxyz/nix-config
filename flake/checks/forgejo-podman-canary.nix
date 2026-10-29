@@ -138,6 +138,48 @@ else let
     });
   extraConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" extraUnit.script));
   canaryConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" threeUnit.script));
+  # The Nix cache proxy (ADR-0103) gives every Podman runner's jobs its
+  # NIX_CONFIG and runs only beside the Podman pool, behind the iptables guard.
+  proxyConfig = {services.forgejo-actions-runner.nixCacheProxy.enable = true;};
+  proxied = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} (lib.recursiveUpdate sharedConfig proxyConfig);
+  proxiedConfigFiles = map (name: lib.last (lib.splitString " " (lib.removeSuffix "\n" proxied.systemd.services.${name}.script))) ["forgejo-podman-runner" "forgejo-podman-runner-fast"];
+  proxyWithoutCanary = evaluate false validLabels proxyConfig;
+  # NixOS's default cache.nixos.org entry, an explicit one without the
+  # trailing slash and one with store parameters are one upstream; entries
+  # with a port and SSH substituters are not proxied.
+  proxyFleetCaches = evaluate true validLabels (proxyConfig
+    // {
+      nix.settings.substituters = lib.mkForce [
+        "https://cache.nixos.org/"
+        "https://cache.nixos.org"
+        "https://cache.nixos.org?priority=40"
+        "https://nix-community.cachix.org/?trusted=1"
+        "https://ported.invalid:8443"
+        "ssh://builder.invalid"
+      ];
+    });
+  fleetProxy = proxyFleetCaches.services.forgejo-actions-runner.nixCacheProxy;
+  # An explicit upstream with a query, port, fragment or trailing slash is
+  # rejected; list elements are checked lazily, hence deepSeq.
+  upstreamAccepted = url: let
+    upstreams =
+      (evaluate true validLabels (lib.recursiveUpdate proxyConfig {
+        services.forgejo-actions-runner.nixCacheProxy.upstreams = [url];
+      }))
+      .services
+      .forgejo-actions-runner
+      .nixCacheProxy
+      .upstreams;
+  in
+    (builtins.tryEval (builtins.deepSeq upstreams upstreams)).success;
+  badUpstream = url: !(upstreamAccepted url);
+  proxyWithoutIPv6 = evaluate true validLabels (proxyConfig // {networking.enableIPv6 = false;});
+  proxyOnNftables = evaluate true validLabels (proxyConfig // {networking.nftables.enable = true;});
+  # firewalld does not run the NixOS firewall's hooks, whatever its backend.
+  proxyOnFirewalld = evaluate true validLabels (lib.recursiveUpdate proxyConfig {services.firewalld.enable = true;});
+  proxyWithJobNixConfig = evaluate true validLabels (lib.recursiveUpdate proxyConfig {
+    services.forgejo-actions-runner.podmanCanary.jobEnv.NIX_CONFIG = "fallback = false";
+  });
   sharedWithoutAllowance = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} {};
   sharedDifferentImage = withExtra (validLabels ++ [fastLabel]) {labels = ["ci-fast:docker://example.invalid/other:latest"];} sharedConfig;
   sharedWithDocker = withExtra validLabels {labels = ["docker-primary:docker://example.invalid/docker:latest"];} {
@@ -389,8 +431,35 @@ in
   assert failedAssertion standbyNameClash "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
   assert failedAssertion statusNameClash "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
   assert !standbyController.restartIfChanged;
+  assert failedAssertions proxied == failedAssertions three;
+  assert !proxied.services.ncps.enable && !(proxied.systemd.services ? ncps);
+  assert proxied.systemd.services.forgejo-nix-cache.wantedBy == ["multi-user.target"];
+  assert !(enabled.systemd.services ? forgejo-nix-cache);
+  assert proxied.systemd.services.forgejo-nix-cache.unitConfig.RequiresMountsFor == ["/var/lib/forgejo-nix-cache"];
+  assert proxied.services.forgejo-actions-runner.nixCacheProxy.upstreams == ["https://cache.nixos.org"];
+  assert fleetProxy.upstreams == ["https://cache.nixos.org" "https://nix-community.cachix.org"];
+  assert lib.hasInfix "extra-substituters = http://host.containers.internal:8501/cache.nixos.org?priority=10 http://host.containers.internal:8501/nix-community.cachix.org?priority=11\n" fleetProxy.jobNixConfig;
+  assert lib.hasInfix "iptables -w -t raw -A forgejo-nix-cache -p tcp --dport 8501 -m addrtype --dst-type LOCAL ! --src-type LOCAL -j DROP" proxied.networking.firewall.extraCommands;
+  assert lib.hasInfix "ip6tables -w -t raw -A forgejo-nix-cache -p tcp --dport 8501 -m addrtype --dst-type LOCAL ! --src-type LOCAL -j DROP" proxied.networking.firewall.extraCommands;
+  assert !(builtins.elem 8501 proxied.networking.firewall.allowedTCPPorts);
+  # Without IPv6 no ip6tables call can break the firewall start.
+  assert lib.hasInfix "iptables -w -t raw -A forgejo-nix-cache" proxyWithoutIPv6.networking.firewall.extraCommands;
+  assert !(lib.hasInfix "ip6tables" proxyWithoutIPv6.networking.firewall.extraCommands);
+  assert failedAssertion proxyWithoutCanary "The CI Nix cache proxy serves the Podman runner pool and requires podmanCanary.enable.";
+  assert failedAssertion proxyOnNftables "The CI Nix cache proxy requires the iptables NixOS firewall, which installs the rule refusing its port to other hosts.";
+  assert failedAssertion proxyOnFirewalld "The CI Nix cache proxy requires the iptables NixOS firewall, which installs the rule refusing its port to other hosts.";
+  assert upstreamAccepted "https://cache.example/sub/path";
+  assert lib.all badUpstream [
+    "https://cache.nixos.org?priority=40"
+    "https://cache.nixos.org:443"
+    "https://cache.nixos.org/#x"
+    "https://cache.nixos.org/"
+  ];
+  assert proxied.systemd.paths.forgejo-nix-cache-resolver.pathConfig.PathChanged == "/etc/resolv.conf";
+  assert lib.hasInfix "forgejo-nix-cache-resolver" (toString proxied.systemd.services.forgejo-nix-cache.serviceConfig.ExecStartPre);
+  assert failedAssertion proxyWithJobNixConfig "podmanCanary.jobEnv must not set NIX_CONFIG while the CI Nix cache proxy supplies it.";
     pkgs.runCommand "forgejo-podman-canary-contract" {
-      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.python3 pkgs.shellcheck pkgs.systemd pkgs.util-linux];
+      nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.python3 pkgs.shellcheck pkgs.systemd pkgs.util-linux pkgs.yq-go];
     } ''
       shellcheck ${gateSource}
       shellcheck ${controllerSource}
@@ -403,6 +472,13 @@ in
       grep -Fxq '  env_file: /run/forgejo-podman-runner/job.env' ${canaryConfigFile}
       grep -Fxq '  workdir_parent: /var/lib/forgejo-podman-runner/host-work' ${canaryConfigFile}
       if grep -Fq podman-canary ${extraConfigFile}; then exit 1; fi
+      # With the Nix cache proxy, every Podman runner hands its jobs the
+      # proxy's NIX_CONFIG; without it, no runner sets runner variables.
+      for file in ${lib.escapeShellArgs proxiedConfigFiles}; do
+        test "$(yq '.runner.envs.NIX_CONFIG' "$file")" = ${lib.escapeShellArg (lib.removeSuffix "\n" proxied.services.forgejo-actions-runner.nixCacheProxy.jobNixConfig)}
+        grep -Fq 'extra-substituters = http://host.containers.internal:8501/cache.nixos.org?priority=10' "$file"
+      done
+      if grep -Fq 'envs:' ${canaryConfigFile} ${extraConfigFile}; then exit 1; fi
       fixture="$(mktemp -d)"
       trap 'rm -rf "$fixture"' EXIT
       state="$fixture/state"

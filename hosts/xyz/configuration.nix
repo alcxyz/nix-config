@@ -209,6 +209,9 @@ in {
     };
     idlePodmanCleanup.enable = true;
     idlePodmanCleanup.pressureOnly = false;
+    # Pool jobs substitute upstream paths through a local read-only proxy
+    # (ADR-0103).
+    nixCacheProxy.enable = true;
     isolatedDocker.enable = true;
     isolatedDocker.retention.enable = true;
     podmanCanary = {
