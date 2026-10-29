@@ -1285,11 +1285,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793265389,
-        "narHash": "sha256-Dfq61QQPenjhlmH6Id+W+7KkXoLXbaxbsfg3O6mqbyc=",
+        "lastModified": 1793283821,
+        "narHash": "sha256-EKn7igR60+DyRyU8MBdKDopetl6IqnZxU9oC1H1qqq8=",
         "ref": "dev",
-        "rev": "14c6880bd20d55e498637bb6bb6b79d3b3fb6dce",
-        "revCount": 14,
+        "rev": "3c18227a41f21c9f136e49d8345972ee80eec986",
+        "revCount": 19,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
