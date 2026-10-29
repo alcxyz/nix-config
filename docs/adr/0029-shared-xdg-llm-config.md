@@ -2,9 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
+**Amended:** 2026-10-02 by [ADR-0079](archive/0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
 **Amended:** 2026-10-09, `leantime-tidy` was deprecated and its repository archived; it no longer consumes the shared config.
-**Amended:** 2026-10-09 by [ADR-0085](0085-one-role-vocabulary.md): the config has one entry per agent role (`light`, `standard`, `deep`) instead of `fast` and `strong`, and tools no longer read tool-local config files.
+**Amended:** 2026-10-09 by [ADR-0085](archive/0085-one-role-vocabulary.md): the config has one entry per agent role (`light`, `standard`, `deep`) instead of `fast` and `strong`, and tools no longer read tool-local config files.
 **Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/paperless-tools`
 
 ## Context

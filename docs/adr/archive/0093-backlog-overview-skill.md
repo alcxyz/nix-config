@@ -1,6 +1,6 @@
 # ADR-0093: Triage open issues and pull requests from one computed inventory
 
-**Status:** Accepted, amended 2026-10-16 (scopes, related items, branch lane, thorough mode; local worktrees, #701), 2026-10-19 (inventory accuracy, #739) and 2026-10-24 (deck's backlog view)
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-10-12
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`, `modules/home-manager/services/deck/`

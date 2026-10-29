@@ -1,6 +1,6 @@
 # ADR-0099: Agent sessions act on GitHub through a GitHub App
 
-**Status:** Accepted
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-10-19
 **Applies to:** `modules/home-manager/programs/ai/agent-github.nix`, T3 Code's
 session wrapper

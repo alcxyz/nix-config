@@ -15,8 +15,9 @@ archived number.
 | [ADR-0013 history](0013-safe-nix-gc-no-generation-deletion-history.md) | Safe Nix GC with guarded generation retention | History of [ADR-0013](../0013-safe-nix-gc-no-generation-deletion.md) |
 | [ADR-0016 history](0016-devlog-go-binary-with-weekly-hedgedoc-history.md) | Devlog as Go binary with weekly summaries | History of [ADR-0016](../0016-devlog-go-binary-with-weekly-hedgedoc.md) |
 | [ADR-0017 history](0017-k3s-cluster-topology-history.md) | k3s cluster topology for the current homelab phase | History of [ADR-0017](../0017-k3s-cluster-topology.md) |
+| [ADR-0022](0022-universal-agent-instructions.md) | Universal agent instructions via AGENTS.md | Moved to a private repository on 2026-10-29 |
 | [ADR-0027](0027-wcap-pipewire-virtual-sink-audio-isolation.md) | Retired PipeWire virtual sink for per-app audio isolation (wcap) | Retired 2026-06-04 |
-| [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Superseded by [ADR-0022](../0022-universal-agent-instructions.md) |
+| [ADR-0028](0028-agent-instruction-sync-check.md) | Agent instruction sync via packaged check-agent-sync tool | Superseded by [ADR-0022](0022-universal-agent-instructions.md) |
 | [ADR-0035 history](0035-host-kernel-policy-history.md) | Host kernel policy | History of [ADR-0035](../0035-host-kernel-policy.md) |
 | [ADR-0038](0038-unifi-native-active-passive.md) | UniFi native NixOS active/passive runtime | Retired 2026-08-19, superseded by [ADR-0060](../0060-gateway-owned-unifi-and-independent-dns.md) |
 | [ADR-0039](0039-xyz-zfs-s3-backup-target.md) | xyz ZFS-backed S3 target for cluster backups | Superseded by [ADR-0052](../0052-xev-primary-k8s-backup-target.md) |
@@ -44,8 +45,17 @@ archived number.
 | [ADR-0072 history](0072-isolated-runner-docker-history.md) | Isolate runner Docker execution in a bounded rootless service | History of [ADR-0072](../0072-isolated-runner-docker.md) |
 | [ADR-0074 history](0074-phased-podman-coexistence-history.md) | Qualify Podman through staged Docker coexistence | History of [ADR-0074](../0074-phased-podman-coexistence.md) |
 | [ADR-0076 history](0076-dms-lock-exact-head-publication-history.md) | Validate and merge DMS lock updates at an exact head | History of [ADR-0076](../0076-dms-lock-exact-head-publication.md) |
+| [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Moved to a private repository on 2026-10-29 |
+| [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Moved to a private repository on 2026-10-29 |
+| [ADR-0081](0081-forgejo-mcp-for-agents.md) | Give agents a Forgejo MCP client and guard its merges | Moved to a private repository on 2026-10-29 |
+| [ADR-0084](0084-codex-mcp-credentials-in-file.md) | Keep Codex MCP OAuth credentials in a file, not the keyring | Moved to a private repository on 2026-10-29 |
+| [ADR-0085](0085-one-role-vocabulary.md) | One role vocabulary for agents and tools | Moved to a private repository on 2026-10-29 |
 | [ADR-0086 history](0086-released-tool-inputs-history.md) | Refresh released platform tools with tools-update | History of [ADR-0086](../0086-released-tool-inputs.md) |
 | [ADR-0087 history](0087-side-by-side-dev-tools-history.md) | Install dev builds of released tools side by side | History of [ADR-0087](../0087-side-by-side-dev-tools.md) |
 | [ADR-0089 history](0089-released-and-dev-app-inputs-history.md) | Released and dev app inputs | History of [ADR-0089](../0089-released-and-dev-app-inputs.md) |
 | [ADR-0090 history](0090-install-bivrost-directly-history.md) | Install Bivrost directly, configured by the work flake | History of [ADR-0090](../0090-install-bivrost-directly.md) |
+| [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Moved to a private repository on 2026-10-29 |
+| [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Moved to a private repository on 2026-10-29 |
 | [ADR-0097 history](0097-ci-fast-runner-label-history.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | History of [ADR-0097](../0097-ci-fast-runner-label.md) |
+| [ADR-0099](0099-agent-github-app.md) | Agent sessions act on GitHub through a GitHub App | Moved to a private repository on 2026-10-29 |
+| [ADR-0101](0101-description-format-observation-trial.md) | Observe description formatting before deciding on enforcement | Moved to a private repository on 2026-10-29 |

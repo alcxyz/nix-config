@@ -34,7 +34,6 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0019](0019-forge-mirror-pull-systemd-timer.md) | Periodic Forgejo/GitHub drift audit via systemd timer | Accepted | services, forge-mirror |
 | [ADR-0020](0020-sops-secrets-in-flux.md) | SOPS decryption for Kubernetes secrets via Flux | Accepted, redacted | Kubernetes, secrets, Flux |
 | [ADR-0021](0021-rustfs-s3-object-storage.md) | RustFS as S3-compatible object storage | Accepted | k3s, infrastructure |
-| [ADR-0022](0022-universal-agent-instructions.md) | Universal agent instructions via AGENTS.md | Accepted, amended | nix-secrets, home-manager |
 | [ADR-0023](0023-k8s-namespace-strategy.md) | Domain-based Kubernetes namespace strategy | Accepted | k3s, gitops |
 | [ADR-0024](0024-shared-postgres-cluster.md) | Shared Postgres cluster for k8s services | Proposed | k3s, databases |
 | [ADR-0025](0025-tooling-service-discovery-post-k8s.md) | Tooling service discovery after Docker-to-k8s migration | Accepted | tooling, gitops |
@@ -83,30 +82,21 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0075](0075-agent-turn-efficiency-reporting.md) | Start with short model-usage summaries in T3 Code | Proposed | T3 Code, agent reporting, optional skills |
 | [ADR-0076](0076-dms-lock-exact-head-publication.md) | Validate and merge DMS lock updates at an exact head | Accepted | DMS lock, Forgejo Actions |
 | [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted, amended | T3 Code, AI providers, Home Manager |
-| [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Accepted, amended | AI agents, pull requests, Home Manager |
-| [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Accepted, amended | AI agents, Home Manager, Codex, Claude Code |
 | [ADR-0080](0080-promoted-package-ref.md) | Promote validated package revisions as a ref, lock them on demand | Accepted | package promotion, T3 Code, deploy |
-| [ADR-0081](0081-forgejo-mcp-for-agents.md) | Give agents a Forgejo MCP client and guard its merges | Accepted, amended | AI agents, Forgejo, Home Manager, Codex, Claude Code |
 | [ADR-0082](0082-fence-release-on-peer-evidence.md) | Release a self-fence only on positive peer evidence | Accepted | k3s, self-fence, kreboot |
 | [ADR-0083](0083-podman-cleanup-completion-fence.md) | Fence admission until Podman cleanup completion is known | Accepted, qualification required | Forgejo runners, Podman cleanup |
-| [ADR-0084](0084-codex-mcp-credentials-in-file.md) | Keep Codex MCP OAuth credentials in a file, not the keyring | Accepted | AI agents, Codex, Home Manager |
-| [ADR-0085](0085-one-role-vocabulary.md) | One role vocabulary for agents and tools | Accepted | AI agents, local tooling, llm config |
 | [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools with tools-update | Accepted | flake inputs, release workflow |
 | [ADR-0087](0087-side-by-side-dev-tools.md) | Install dev builds of released tools side by side | Accepted | flake inputs, release workflow |
 | [ADR-0088](0088-tv-clients-share-one-appliance-profile.md) | TV clients share one appliance profile | Accepted | rpi0, rpi1, TV clients, Moonlight, Bluetooth audio |
 | [ADR-0089](0089-released-and-dev-app-inputs.md) | Released and dev app inputs | Accepted | flake inputs, release workflow |
 | [ADR-0090](0090-install-bivrost-directly.md) | Install Bivrost directly, configured by the work flake | Accepted | Bivrost, the work flake, operator homes |
-| [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Accepted | T3 Code, agent skills, `programs.ai` |
 | [ADR-0092](0092-t3-preview-browser-from-nix.md) | Provide T3's preview browser from the Nix package | Accepted | T3 Code, previews, nix-packages |
-| [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Accepted, amended | agent skills, `programs.ai`, Forgejo, GitHub, Git worktrees |
 | [ADR-0094](0094-browser-roles.md) | One Chromium browser (Brave Origin), Zen provisional | Accepted, Zen provisional | browsers, xyz, xps, mac, Wolf |
 | [ADR-0095](0095-bounded-workspace-sync-go-pilot.md) | Evaluate Go through one bounded workspace-sync pilot | Accepted; source integration implemented, runtime qualification pending | workspace reconciliation, nix-packages, Home Manager |
 | [ADR-0096](0096-bounded-first-timer-freshness.md) | Bound the first-timer freshness exception after reboot | Accepted | storage health, timers |
 | [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted; xyz serves `ci-fast`, xev while xyz's fast runner is down | Forgejo runners, xyz, xev, workflows |
 | [ADR-0098](0098-date-tagged-promotions.md) | Tag each promotion to `main` with a date version | Accepted | promotions, tags, Forgejo releases |
-| [ADR-0099](0099-agent-github-app.md) | Agent sessions act on GitHub through a GitHub App | Accepted | agent sessions, GitHub |
 | [ADR-0100](0100-instance-wide-podman-runners.md) | Register the Podman runners instance-wide | Accepted | Forgejo runners, xyz, xev, nex, nux |
-| [ADR-0101](0101-description-format-observation-trial.md) | Observe description formatting before deciding on enforcement | Accepted for report-only trial | AI agents, issue and PR descriptions |
 | [ADR-0102](0102-loopback-remote-view-of-xyz.md) | View and drive xyz's live desktop through a loopback wayvnc | Accepted | xyz, mac, remote access, Home Manager |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)

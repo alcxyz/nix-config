@@ -1,6 +1,6 @@
 # ADR-0028: Agent instruction sync via packaged check-agent-sync tool
 
-**Status:** Superseded by [ADR-0022](../0022-universal-agent-instructions.md), amended 2026-09-26
+**Status:** Superseded by [ADR-0022](0022-universal-agent-instructions.md), amended 2026-09-26
 **Date:** 2026-05-02
 **Applies to:** `nix-packages/tools/agent-sync-check/`, `nix-config/modules/shared/pkgsets.nix`, `nix-secrets/shared/AGENTS.md`, `nix-secrets/shared/claude/CLAUDE.md`
 
@@ -9,7 +9,7 @@
 
 ## Context
 
-[ADR-0022](../0022-universal-agent-instructions.md) established `AGENTS.md` as
+[ADR-0022](0022-universal-agent-instructions.md) established `AGENTS.md` as
 the canonical universal instruction file and kept `CLAUDE.md` as a duplicated
 compatibility copy for Claude auto-loading.
 

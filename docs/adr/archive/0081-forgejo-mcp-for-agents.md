@@ -1,6 +1,6 @@
 # ADR-0081: Give agents a Forgejo MCP client and guard its merges
 
-**Status:** Accepted (revised 2026-10-05: every tool exposed, merges guarded; amended 2026-10-11: `tea` as the only CLI fallback, `fj` dropped; 2026-10-15: `tea` reads the activated token file; 2026-10-16: tea keeps a stored login T3 Code can match; 2026-10-17: an optional agent forge account for T3 sessions)
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-10-03
 **Applies to:** `modules/home-manager/programs/ai/`, Claude Code and Codex CLI user configuration
 

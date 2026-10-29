@@ -1,6 +1,6 @@
 # ADR-0079: Name agent model roles instead of model versions
 
-**Status:** Accepted (implemented 2026-10-02)
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-10-02
 **Amended:** 2026-10-09 by [ADR-0085](0085-one-role-vocabulary.md): `build` is renamed `standard`, and the shared LLM config uses the role names instead of `fast` and `strong`.
 **Amended:** 2026-10-22: generated `standard` and `deep` instructions delegate suitable mechanical steps to `light`, subject to client capabilities.

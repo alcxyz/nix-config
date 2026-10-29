@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Amended:** 2026-10-02 by [ADR-0079](0079-agent-model-roles.md): the shared LLM config is generated from the agent role table in nix-secrets, an exception to the non-secret placement rule because the table encodes delegation policy worded in the private agent instructions.
+**Amended:** 2026-10-02 by [ADR-0079](archive/0079-agent-model-roles.md): the shared LLM config is generated from the agent role table in nix-secrets, an exception to the non-secret placement rule because the table encodes delegation policy worded in the private agent instructions.
 **Applies to:** `nix-config`, `nix-secrets`, home-manager managed user config surfaces
 
 ## Context

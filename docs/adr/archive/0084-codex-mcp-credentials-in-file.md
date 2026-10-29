@@ -1,6 +1,6 @@
 # ADR-0084: Keep Codex MCP OAuth credentials in a file, not the keyring
 
-**Status:** Accepted
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-10-07
 **Applies to:** `modules/home-manager/programs/ai/`, Codex CLI user configuration
 

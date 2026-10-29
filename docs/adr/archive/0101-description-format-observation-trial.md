@@ -1,6 +1,6 @@
 # ADR-0101: Observe description formatting before deciding on enforcement
 
-**Status:** Accepted for a report-only trial; enforcement remains undecided
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-10-22
 **Applies to:** `programs.ai`, issue and pull request description hooks
 

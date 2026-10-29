@@ -50,7 +50,7 @@ existing turn accounting before proposing the smallest missing integration.
 `nix-config` owns this adoption decision and any optional skill/config deployment,
 not T3's accounting or UI. Reusable tooling belongs in `nix-packages` only if a
 specific unmet need justifies it. Private wiring, if needed, belongs in
-`nix-secrets`. This follows [ADR-0022](0022-universal-agent-instructions.md),
+`nix-secrets`. This follows [ADR-0022](archive/0022-universal-agent-instructions.md),
 [ADR-0028](archive/0028-agent-instruction-sync-check.md), and
 [ADR-0030](0030-declarative-shared-user-policy-configs.md).
 

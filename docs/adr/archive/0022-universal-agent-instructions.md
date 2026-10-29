@@ -1,6 +1,6 @@
 # ADR-0022: Universal Agent Instructions via AGENTS.md
 
-**Status:** Accepted, amended 2026-09-26
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-04-26
 **Applies to:** `nix-secrets/shared/AGENTS.md`, `nix-secrets/shared/claude/CLAUDE.md`, `nix-config/users/alc/common.nix`
 

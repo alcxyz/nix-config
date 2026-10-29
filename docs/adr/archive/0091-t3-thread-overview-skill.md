@@ -1,6 +1,6 @@
 # ADR-0091: Deploy a T3 thread overview skill that reads T3 state directly
 
-**Status:** Accepted
+**Status:** Moved to a private repository on 2026-10-29
 **Date:** 2026-10-10 (amended 2026-10-11 for #631, and 2026-10-11: skills move to nix-secrets; 2026-10-15 for #676; 2026-10-18: overview sections and acknowledged threads; 2026-10-20 for #757: the deck dashboard)
 **Applies to:** `modules/home-manager/programs/ai/`, `flake/checks/default.nix`,
 the user modules that enable `programs.ai`
