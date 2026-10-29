@@ -47,12 +47,14 @@ skill. Preserve the existing global delegation policy rather than copying it.
 
 Native automatic visibility belongs in T3 Code. Assess upstream #9016 and the
 existing turn accounting before proposing the smallest missing integration.
-`nix-config` owns this adoption decision and any optional skill/config deployment,
-not T3's accounting or UI. Reusable tooling belongs in `nix-packages` only if a
-specific unmet need justifies it. Private wiring, if needed, belongs in
-`nix-secrets`. This follows [ADR-0022](archive/0022-universal-agent-instructions.md),
-[ADR-0028](archive/0028-agent-instruction-sync-check.md), and
-[ADR-0030](0030-declarative-shared-user-policy-configs.md).
+`nix-config` owns this adoption decision, not T3's accounting or UI; an optional
+skill or config deployment belongs with the agent skills in the private pandora
+flake. Reusable tooling belongs in `nix-packages` only if a specific unmet need
+justifies it. Private wiring, if needed, belongs in `nix-secrets`. This follows
+[ADR-0030](0030-declarative-shared-user-policy-configs.md) and the archived
+[ADR-0022](archive/0022-universal-agent-instructions.md) and
+[ADR-0028](archive/0028-agent-instruction-sync-check.md), whose agent
+instructions now live in a private repository.
 
 [Issue #454](https://git.alc.xyz/alcxyz/nix-config/issues/454) tracks the trial
 and remaining evaluation. No installed skill or automatic tracking is implied.

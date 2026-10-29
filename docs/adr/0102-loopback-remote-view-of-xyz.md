@@ -17,9 +17,10 @@ the screen and only work nearby.
 Agents on xyz run as the operator's own Unix user. A remote view should
 therefore not let a local process drive the desktop merely because it can
 reach a local socket. That is an accident guard, not a boundary: under the
-same-user limit (ADR-0078), a process running as the operator can already
-capture the screen and inject input through the compositor's own protocols,
-read the server's key, or stop the server and listen in its place.
+same-user limit that the agent decisions accept (recorded in a private
+repository), a process running as the operator can already capture the
+screen and inject input through the compositor's own protocols, read the
+server's key, or stop the server and listen in its place.
 
 ## Decision
 

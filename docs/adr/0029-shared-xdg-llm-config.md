@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-05-02
 **Amended:** 2026-10-02 by [ADR-0079](archive/0079-agent-model-roles.md): `~/.config/llm/config.toml` is generated from the agent role table kept in nix-secrets.
+**Amended:** 2026-10-29: ADR-0079 and ADR-0085 moved with the agent modules to the private pandora flake, which now holds the agent role table and generates the config.
 **Amended:** 2026-10-09, `leantime-tidy` was deprecated and its repository archived; it no longer consumes the shared config.
 **Amended:** 2026-10-09 by [ADR-0085](archive/0085-one-role-vocabulary.md): the config has one entry per agent role (`light`, `standard`, `deep`) instead of `fast` and `strong`, and tools no longer read tool-local config files.
 **Applies to:** `nix-config`, `nix-packages/tools/devlog`, `tools/paperless-tools`
@@ -51,8 +52,8 @@ originally `fast` and `strong`; since ADR-0085 these are the agent roles
 
 `docs/llm-config.toml.example` shows the shape with placeholder models.
 Since ADR-0079, Home Manager generates `~/.config/llm/config.toml` from the
-agent role table in nix-secrets; since ADR-0085 it has one entry per role, named
-after it. The hand-maintained `users/alc/configs/llm/config.toml`
+agent role table, now in the private pandora flake; since ADR-0085 it has one
+entry per role, named after it. The hand-maintained `users/alc/configs/llm/config.toml`
 and its live-edit link are retired.
 
 ### Fields
@@ -128,7 +129,8 @@ the primary path, with API as optional support.
 **Put the shared config in `nix-secrets`:** Rejected at the time. This is
 configuration policy, not secret material. Secrets referenced by `api_key_env`
 remain separate. ADR-0079 later moved the values next to the private agent
-instructions that name the same roles.
+instructions that name the same roles, now in the private pandora
+flake.
 
 ## Consequences
 

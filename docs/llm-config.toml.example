@@ -1,6 +1,6 @@
 # Shape of ~/.config/llm/config.toml (ADR-0029). The deployed file is generated
-# from the agent role table (ADR-0079, ADR-0085): one entry per role, named
-# after it (`light`, `standard`, `deep`). The model values below are
+# from the agent role table in the private pandora flake: one entry per role,
+# named after it (`light`, `standard`, `deep`). The model values below are
 # placeholders, not the current choice.
 [roles.standard]
 provider    = "openai"

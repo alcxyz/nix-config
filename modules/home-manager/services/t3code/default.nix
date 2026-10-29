@@ -49,10 +49,10 @@ with lib; let
   sessionVariablesFile = "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh";
   # Agent sessions are the processes T3 starts, so the agent forge account
   # (programs.ai.agentForge, #722) and the agent GitHub App
-  # (programs.ai.agentGithub, ADR-0099) apply here, after the session
+  # (programs.ai.agentGithub) apply here, after the session
   # variables, and never in login shells, and so does the agent marker that
   # turns on the pre-push hook for fast-forward repositories
-  # (programs.ai.prReview, ADR-0078).
+  # (programs.ai.prReview); all three come from the private pandora flake.
   # Empty without those modules or when disabled.
   agentSessionCommands =
     (config.programs.ai.agentForge.sessionCommands or "")

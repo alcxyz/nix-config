@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-05-02
 **Amended:** 2026-10-02 by [ADR-0079](archive/0079-agent-model-roles.md): the shared LLM config is generated from the agent role table in nix-secrets, an exception to the non-secret placement rule because the table encodes delegation policy worded in the private agent instructions.
+**Amended:** 2026-10-29: the agent instructions, the agent role table and the agent modules, with ADR-0022 and ADR-0079, moved to the private pandora flake.
 **Applies to:** `nix-config`, `nix-secrets`, home-manager managed user config surfaces
 
 ## Context
@@ -117,16 +118,16 @@ the proper secret-management flow.
 
 ### Agent instructions
 
-- canonical source files live in `nix-secrets/shared/`
+- canonical source files live in the private pandora flake
 - Home Manager deploys them to `~/AGENTS.md` and `~/.claude/CLAUDE.md`, with
   `~/.codex/AGENTS.md` linked to the canonical `~/AGENTS.md`
 - Claude imports the canonical file at startup; no mirrored copy or sync tool
-  is needed (ADR-0022, amended 2026-09-26)
+  is needed (ADR-0022, since moved to the private pandora flake)
 
 ### Shared LLM config
 
 - Home Manager generates `~/.config/llm/config.toml` from the agent role table
-  (ADR-0079); the values live in nix-secrets
+  (ADR-0079); the table and the values live in the private pandora flake
 - tools prefer that path over older tool-local config files
 
 ## Alternatives Considered

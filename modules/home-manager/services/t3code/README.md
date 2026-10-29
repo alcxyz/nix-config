@@ -105,13 +105,13 @@ start, even when the login already imported an older copy, so a restart picks
 up the current values. A missing file is logged and T3 starts without it.
 
 With `programs.ai.agentForge` enabled, the wrapper then gives agent sessions
-the agent forge account (ADR-0081): `FORGEJO_API_TOKEN_FILE` names its token,
+the agent forge account: `FORGEJO_API_TOKEN_FILE` names its token,
 and `GIT_CONFIG_*` entries, appended to any already set, send pushes to the
 forge over HTTPS with only its credential helper. With
 `programs.ai.agentGithub` enabled, it also exports the GitHub App's settings
 for the `gh` in T3's package (gh-app's pass-through) and adds `GIT_CONFIG_*`
 entries for github.com, so the App's installation repositories use its token
-and everything else the operator's `gh` login (ADR-0099). Login shells keep the operator's account. Since the
+and everything else the operator's `gh` login. Login shells keep the operator's account. Since the
 link does not change, running instances pick this up at their next restart.
 
 ## Additional instances
