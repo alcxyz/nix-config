@@ -27,6 +27,11 @@ lock_budget_seconds=${LOCK_BUDGET_SECONDS:-40}
 image_limit=${IMAGE_DELETE_LIMIT:-8}
 container_limit=${CONTAINER_DELETE_LIMIT:-8}
 docker_volume_manifest=${DOCKER_VOLUME_MANIFEST:-}
+# Cleanup windows are mostly guard drains, often for I/O pressure, when API
+# requests are most likely to time out and retain the completion fence. Start,
+# and dispatch each mutation, only at or below the guard's resume threshold.
+pressure_file=${PRESSURE_FILE:-/proc/pressure/io}
+io_pressure_threshold=${IO_PRESSURE_THRESHOLD_HUNDREDTHS:-500}
 fence=$state_dir/cleanup-in-flight
 umask 077
 primary_runner=forgejo-actions-runner.service
@@ -63,6 +68,7 @@ fail() {
 [[ $lock_budget_seconds =~ ^[1-9][0-9]*$ ]] && ((lock_budget_seconds <= 40)) || exit 1
 [[ $image_limit =~ ^[1-9][0-9]*$ ]] && ((image_limit <= 8)) || exit 1
 [[ $container_limit =~ ^[1-9][0-9]*$ ]] && ((container_limit <= 8)) || exit 1
+[[ $io_pressure_threshold =~ ^[0-9]+$ ]] && ((io_pressure_threshold <= 10000)) || exit 1
 IFS=$' \t\n' read -r -d '' -a runner_units <<<"$runner_units_text" || true
 ((${#runner_units[@]} > 1)) || exit 1
 [[ ${runner_units[0]} == "$primary_runner" && ${runner_units[1]} == "$podman_runner" ]] || exit 1
@@ -116,6 +122,24 @@ available_bytes() {
   ((available <= total)) || return 1
   printf '%s %s\n' "$total" "$available"
 }
+# Sets io_pressure to the host's full avg10 stall in hundredths of a percent,
+# or to unknown, and succeeds only for a readable sample at or below the
+# threshold, as the guard counts a sample at its resume threshold as low.
+# An unreadable sample is uncertain and never permits work.
+io_pressure_low() {
+  io_pressure=$(awk '
+    $1 == "full" {
+      for (i = 2; i <= NF; i++) {
+        if ($i ~ /^avg10=[0-9]+([.][0-9]+)?$/) {
+          split($i, part, "="); printf "%.0f\n", part[2] * 100; found = 1
+        }
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "$pressure_file" 2>/dev/null) || io_pressure=unknown
+  [[ $io_pressure =~ ^[0-9]+$ ]] || io_pressure=unknown
+  [[ $io_pressure != unknown ]] && ((io_pressure <= io_pressure_threshold))
+}
 # Capacity checks need no lock. The critical floor applies in either mode;
 # pressure-only cleanup also exits before contending with runner starts.
 sample=$(available_bytes "$disk_path") || skip disk_unreadable
@@ -125,6 +149,11 @@ sample=$(available_bytes "$store_path") || skip store_unreadable
 read -r total available <<<"$sample"
 if [[ $pressure_only == 1 ]]; then
   ((available * 100 <= total * (100 - trigger_used_percent))) || skip below_trigger
+fi
+# Pressure is checked in either mode, before the lock and any API request.
+if ! io_pressure_low; then
+  [[ $io_pressure != unknown ]] || skip io_pressure_unreadable
+  skip "io_pressure full_avg10_hundredths=$io_pressure"
 fi
 
 exec 9>"$state_dir/lifecycle.lock"
@@ -234,6 +263,16 @@ destructive_request() {
   local method=$1 path=$2 max_time=$3 kind=$4 id=${5:-} record identity response filter='' socket=$podman_socket
   local -a response_options=()
   [[ ! -e $fence && ! -L $fence ]] || fail cleanup_in_flight
+  # Rising pressure ends the pass before this dispatch, with no fence created;
+  # every earlier request has already cleared its own fence.
+  if ! io_pressure_low; then
+    local step=remove_$kind
+    case $kind in
+      exited) step=remove_container ;;
+      volume) step=remove_builder_volume ;;
+    esac
+    skip "bounded_partial cause=io_pressure step=$step full_avg10_hundredths=$io_pressure"
+  fi
   mkdir -m 0700 -- "$fence" || fail cleanup_in_flight
   identity=$(stat -c '%d:%i:%u:%a' -- "$fence") || fail cleanup_fence_record
   record="cleanup-v2 $$ $BASHPID $RANDOM $method $path"

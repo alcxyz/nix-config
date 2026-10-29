@@ -57,7 +57,11 @@ in
           pingBaseFile = "/run/fixture-unused-ping";
         };
         systemd.timers.storage-health-monitor.wantedBy = lib.mkForce [];
-        systemd.services.forgejo-idle-podman-cleanup.unitConfig.StartLimitIntervalSec = 0;
+        systemd.services.forgejo-idle-podman-cleanup = {
+          unitConfig.StartLimitIntervalSec = 0;
+          # The VM's own I/O stall must not decide whether cleanup runs.
+          environment.PRESSURE_FILE = toString (pkgs.writeText "fixture-quiet-pressure" "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n");
+        };
         systemd.timers.forgejo-idle-podman-cleanup.wantedBy = lib.mkForce [];
         # Repeated lifecycle trials run faster than the normal start-limit
         # interval. Qualify admission itself without this fixture exhausting it.

@@ -181,12 +181,15 @@ esac
         self.script('df', 'printf "Size Avail\\n100 20\\n"\n')
         curl = shutil.which('curl')
         self.script('curl', f'exec {curl} --disable "$@"\n')
+        # A quiet host: the real sample must not decide whether cleanup runs.
+        (self.root / 'pressure').write_text('full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n')
         self.env = {**os.environ, 'STATE_DIR': str(self.state),
                     'SYSTEMCTL_BIN': str(self.root / 'systemctl'),
                     'DF_BIN': str(self.root / 'df'), 'CURL_BIN': str(self.root / 'curl'),
                     'DOCKER_SOCKET': str(self.root / 'docker.sock'),
                     'PODMAN_SOCKET': str(self.root / 'api.sock'),
                     'GAME_ADMISSION_ENABLED': '0', 'DISK_SPACE_ENABLED': '0',
+                    'PRESSURE_FILE': str(self.root / 'pressure'),
                     'RUNNER_UNITS': ' '.join(self.units), 'GATE_TIMEOUT_SECONDS': '2'}
 
     def script(self, name, body):

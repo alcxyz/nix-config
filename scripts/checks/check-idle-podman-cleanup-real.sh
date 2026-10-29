@@ -186,6 +186,9 @@ export PODMAN_SOCKET="$fixture/podman.sock" STORE_PATH="$fixture/graph" DISK_PAT
 export TRIGGER_USED_PERCENT=70 CRITICAL_FREE_BYTES=0 CRITICAL_FREE_PERCENT=0
 export IMAGE_MIN_AGE=1h STALE_AFTER_SECONDS=10800 LOCK_BUDGET_SECONDS=40
 export RUNNER_UNITS='forgejo-actions-runner.service forgejo-podman-runner.service'
+# A quiet host: the real sample must not decide whether cleanup runs.
+printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' >"$fixture/pressure"
+export PRESSURE_FILE="$fixture/pressure"
 chmod 700 "$STATE_DIR"
 printf '%s\n' forgejo-actions-runner.service forgejo-podman-runner.service >"$STATE_DIR/runner-units"
 cat >"$SYSTEMCTL_BIN" <<'MOCK'

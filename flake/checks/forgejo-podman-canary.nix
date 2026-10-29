@@ -89,6 +89,9 @@ else let
       pingBaseFile = "/run/fixture-unused-ping";
     };
   });
+  lowPressureCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
+    services.forgejo-actions-runner.ioPressureGuard.lowPercent = 3;
+  });
   monitorOnly = evaluate true validLabels {
     services.storage-health-monitor = {
       enable = true;
@@ -243,6 +246,9 @@ in
   assert (lib.head (cleanupUnits hourlyCleanup)).maximumAgeSeconds == 7200;
   assert hourlyCleanup.systemd.timers.forgejo-idle-podman-cleanup.timerConfig.OnUnitActiveSec == "1h";
   assert !(cleanupOnly.systemd.services.forgejo-idle-podman-cleanup.serviceConfig ? ExecStopPost);
+  # Cleanup follows the guard's resume threshold, not a separate setting.
+  assert cleanupOnly.systemd.services.forgejo-idle-podman-cleanup.environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "500";
+  assert lowPressureCleanup.systemd.services.forgejo-idle-podman-cleanup.environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "300";
   assert !failedAssertion monitoredCleanup "storage-health-monitor recent-success units must be root-run oneshot services that become inactive after completion";
   assert !failedAssertion monitoredCleanup "Idle Podman cleanup requires the isolated Docker and Podman runners with disk-space admission control.";
   assert !(disabled.systemd.services ? forgejo-podman-runner);

@@ -7,6 +7,8 @@
 **Amended:** 2026-10-17, the fence, cleanup window and recovery cover every runner in the configured list, which may hold more than one Podman runner ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
 
 **Amended:** 2026-10-25, standalone container candidates share one validated newest-first queue ([#833](https://git.alc.xyz/alcxyz/nix-config/issues/833)).
+**Amended:** 2026-10-29, cleanup starts and dispatches each destructive request only at or below the pressure guard's I/O resume threshold ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)).
+**History:** [replaced text](archive/0083-podman-cleanup-completion-fence-history.md)
 
 ## Context
 
@@ -31,6 +33,23 @@ prune's runtime grows with the number of containers it removes, so any client
 deadline can turn a completing prune into an uncertain one. Retain existing
 request and service budgets, lifecycle exclusion and terminal-job checks. A
 pass may do partial work within its budget.
+
+Cleanup starts, and dispatches each destructive request, only while the host's
+full I/O stall (`full avg10` in `/proc/pressure/io`) is at or below the aggregate
+pressure guard's resume threshold (`ioPressureGuard.lowPercent`, 5 percent by
+default), so it runs only when the guard itself would consider the host
+recovered. Cleanup windows occur mostly during guard drains, often pressure
+drains, when an API request is most likely to time out and retain the
+completion fence. A sample above the threshold before the lifecycle lock
+and any API request is a normal `io_pressure` skip that creates no fence; an
+unreadable or malformed sample is uncertain and also skips
+(`io_pressure_unreadable`). The sample is read again before each destructive
+request: a high or unreadable sample ends the pass as a normal
+`bounded_partial` skip with cause `io_pressure`, before that request's fence
+is created. Earlier requests have each already cleared their own fence or
+failed with it retained. The check never abandons a dispatched request and
+does not change when a fence is cleared. It applies to normal Podman cleanup
+and to the manual Docker volume mode.
 
 Cleanup may optionally become eligible below the filesystem-pressure trigger,
 so an existing safe idle window can remove old artifacts before the filesystem
@@ -82,9 +101,9 @@ read-only requests also check their remaining budget. Keep the existing
 40-second lock budget and 60-second service bound. A cap or insufficient budget
 for the next request is a normal `bounded_partial` result. `PRESSURE_ONLY=0`
 may bypass the ordinary pressure trigger, but never the critical capacity
-floors, lifecycle preflight, exact configured runner registry, all-runner
-terminal inactivity, healthy unfrozen aggregate or both API execution-generation
-checks. A client deadline does not cancel server-side deletion. Real Docker
+floors, the I/O pressure precondition, lifecycle preflight, exact configured
+runner registry, all-runner terminal inactivity, healthy unfrozen aggregate or
+both API execution-generation checks. A client deadline does not cancel server-side deletion. Real Docker
 qualification remains required before operational use.
 
 Before each destructive request, create an independently owned, trusted runtime
@@ -147,7 +166,10 @@ Operational qualification and recovery procedures remain private.
 
 Bounded cleanup no longer silently reopens admission while storage work may
 continue. Ambiguous completion deliberately costs CI availability until positive
-recovery or reboot. Individual deletes avoid unfiltered cache-mount cleanup and
+recovery or reboot. The I/O pressure precondition gives up cleanup windows
+during pressure drains to make uncertain requests less likely; under sustained
+I/O pressure, cleanup waits until the host is back at or below the guard's
+resume threshold. Individual deletes avoid unfiltered cache-mount cleanup and
 may reclaim less per pass. A retained fence keeps later cleanup runs failed,
 including outside a cleanup window; optional recent-success health monitoring
 checks that current failure before accepting an earlier success.

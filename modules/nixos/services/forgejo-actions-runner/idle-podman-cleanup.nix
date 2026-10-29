@@ -109,6 +109,9 @@ in {
         DISK_PATH = cfg.ioPressureGuard.diskSpace.path;
         STORE_PATH = cfg.podmanCanary.storageRoot;
         IMAGE_MIN_AGE = cleanup.imageMinAge;
+        # Cleanup starts, and dispatches each mutation, only while the guard
+        # itself would consider the host recovered from I/O pressure.
+        IO_PRESSURE_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
         RUNNER_UNITS = runnerUnits;
       };
       serviceConfig = {

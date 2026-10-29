@@ -122,6 +122,8 @@ elif [[ $method == DELETE && $args == *'/v5.0.0/libpod/containers/'*'?force=fals
     exit 0
   fi
   printf 'container %s\n' "$id" >> "$MOCK_CALLS"
+  # Pressure rising during a pass, after this removal completed.
+  [[ -z ${MOCK_PRESSURE_AFTER_REMOVAL:-} ]] || printf '%s\n' "$MOCK_PRESSURE_AFTER_REMOVAL" > "$PRESSURE_FILE"
   printf '[{"Id":"%s"}]' "$id" > "$output"
   printf 200
 elif [[ $method == GET && $args == *'/libpod/volumes/json'* ]]; then
@@ -158,6 +160,9 @@ export MOCK_CALLS="$fixture/calls" TRIGGER_USED_PERCENT=70
 export MOCK_REQUESTS="$fixture/requests"
 export RUNNER_UNITS='forgejo-actions-runner.service forgejo-podman-runner.service'
 export STORE_PATH="$fixture/store"
+export PRESSURE_FILE="$fixture/pressure"
+set_pressure() { printf 'some avg10=%s avg60=0.00 avg300=0.00 total=0\nfull avg10=%s avg60=0.00 avg300=0.00 total=0\n' "$1" "$1" >"$PRESSURE_FILE"; }
+set_pressure 0.00
 a=$(printf 'a%.0s' {1..64})
 b=$(printf 'b%.0s' {1..64})
 c=$(printf 'c%.0s' {1..64})
@@ -487,6 +492,53 @@ for invalid in '{"Id":"../x","Created":0,"State":"exited"}' '{"Created":0,"State
   [[ $(MOCK_PODMAN_CONTAINERS='[{"Id":"'"$b"'","Created":0,"State":"exited"},'"$invalid"']' run_cleanup) == 'skipped reason=engine_api_invalid engine=podman' ]]
   [[ ! -s $MOCK_CALLS && ! -e $STATE_DIR/cleanup-in-flight ]]
 done
+
+# Cleanup starts only at or below the guard's resume threshold (full avg10 in
+# hundredths), before the lock and any API request, and creates no fence.
+for sample in 5.01 30.25; do
+  set_pressure "$sample"
+  : >"$MOCK_CALLS"
+  : >"$MOCK_REQUESTS"
+  [[ $(run_cleanup) == "skipped reason=io_pressure full_avg10_hundredths=$(awk -v v="$sample" 'BEGIN { printf "%.0f", v * 100 }')" ]]
+  [[ ! -s $MOCK_CALLS && ! -s $MOCK_REQUESTS && ! -e $STATE_DIR/cleanup-in-flight ]]
+done
+set_pressure 5.00
+: >"$MOCK_CALLS"
+[[ $(run_cleanup) == *'pruned leftovers=0'* && $(cat "$MOCK_CALLS") == images ]]
+set_pressure 4.00
+[[ $(IO_PRESSURE_THRESHOLD_HUNDREDTHS=300 run_cleanup) == 'skipped reason=io_pressure full_avg10_hundredths=400' ]]
+for threshold in x -1 10001 ' 5'; do
+  if IO_PRESSURE_THRESHOLD_HUNDREDTHS=$threshold run_cleanup >/dev/null 2>&1; then exit 1; fi
+done
+# The pressure skip precedes waiting for the lifecycle lock.
+set_pressure 50.00
+exec 8>"$fixture/state/lifecycle.lock"
+flock -x 8
+[[ $(run_cleanup) == 'skipped reason=io_pressure full_avg10_hundredths=5000' ]]
+flock -u 8
+exec 8>&-
+# An unreadable or malformed sample is uncertain and never permits cleanup.
+for content in missing '' 'some avg10=0.00 avg60=0.00 avg300=0.00 total=0' 'full avg10=x avg60=0.00'; do
+  rm -f "$PRESSURE_FILE"
+  [[ $content == missing ]] || printf '%s\n' "$content" >"$PRESSURE_FILE"
+  : >"$MOCK_REQUESTS"
+  [[ $(run_cleanup) == 'skipped reason=io_pressure_unreadable' ]]
+  [[ ! -s $MOCK_REQUESTS && ! -e $STATE_DIR/cleanup-in-flight ]]
+done
+# Pressure rising mid-pass stops it cleanly before the next mutating request:
+# the completed removal cleared its own fence and no new fence is created.
+for after in 'full avg10=20.00 avg60=0.00 avg300=0.00 total=0' unreadable; do
+  set_pressure 0.00
+  : >"$MOCK_CALLS"
+  : >"$MOCK_REQUESTS"
+  output=$(MOCK_PRESSURE_AFTER_REMOVAL=$after MOCK_PODMAN_CONTAINERS=$exited run_cleanup)
+  expected_value=2000
+  [[ $after != unreadable ]] || expected_value=unknown
+  [[ $(cat "$MOCK_CALLS") == "container ${ids[2]}" && ! -e $STATE_DIR/cleanup-in-flight ]]
+  [[ $output == "removed_container id=${ids[2]}"$'\n'"skipped reason=bounded_partial cause=io_pressure step=remove_container full_avg10_hundredths=$expected_value" ]]
+  [[ $(rg --count -- '-X DELETE' "$MOCK_REQUESTS") == 1 ]]
+done
+set_pressure 0.00
 
 # The companion uses real UNIX HTTP/curl for completion ambiguity and signals.
 python3 "$(dirname "${BASH_SOURCE[0]}")/test-idle-podman-cleanup-fence.py" "$source_file"

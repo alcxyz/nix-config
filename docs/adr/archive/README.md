@@ -52,6 +52,7 @@ archived number.
 | [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Moved to a private repository on 2026-10-29 |
 | [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Moved to a private repository on 2026-10-29 |
 | [ADR-0081](0081-forgejo-mcp-for-agents.md) | Give agents a Forgejo MCP client and guard its merges | Moved to a private repository on 2026-10-29 |
+| [ADR-0083 history](0083-podman-cleanup-completion-fence-history.md) | Fence admission until Podman cleanup completion is known | History of [ADR-0083](../0083-podman-cleanup-completion-fence.md) |
 | [ADR-0084](0084-codex-mcp-credentials-in-file.md) | Keep Codex MCP OAuth credentials in a file, not the keyring | Moved to a private repository on 2026-10-29 |
 | [ADR-0085](0085-one-role-vocabulary.md) | One role vocabulary for agents and tools | Moved to a private repository on 2026-10-29 |
 | [ADR-0086 history](0086-released-tool-inputs-history.md) | Refresh released platform tools with tools-update | History of [ADR-0086](../0086-released-tool-inputs.md) |
