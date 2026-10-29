@@ -22,6 +22,7 @@ inputs=(
   videdupe
   t3rry
   hedgedoc
+  devstats
 )
 
 if "$list_only"; then

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-09
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, updated 2026-10-29 (devstats added to the tool list, per owner decision)
 **History:** [replaced text](archive/0086-released-tool-inputs-history.md)
 **Applies to:** `flake.nix`, `scripts/update-inputs/update-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069
 
@@ -21,8 +21,8 @@ the accounts, so they should run released code.
 
 `tools-update` (a shell alias, also `just tools-update`) refreshes one explicit
 list of tool inputs, each following its repository's released `main` branch:
-paperless-tools, regnskap, reportcraft, stashdb-pop, videdupe, t3rry and
-hedgedoc. `scripts/update-inputs/update-tools.sh` is the current list. Tools on
+paperless-tools, regnskap, reportcraft, stashdb-pop, videdupe, t3rry, hedgedoc
+and devstats. `scripts/update-inputs/update-tools.sh` is the current list. Tools on
 Forgejo write the branch explicitly as `?ref=main`; tools hosted on GitHub,
 such as t3rry, pin `github:alcxyz/<repo>/main` instead. The command only
 changes `flake.lock`; the owner inspects the change and activates it with
@@ -35,7 +35,9 @@ installs it next to paperweight. The documented workflow still runs it from
 the checkout's `cmd/bokfor` directory (`direnv exec . bokfor …`), which holds
 its environment and configuration. The `bokfor-dev` launcher runs the regnskap
 dev build against the sandbox (ADR-0087). hedgedoc's CLI is exposed as
-`pkgs.hedgedoc-cli`, because nixpkgs' `hedgedoc` is the server.
+`pkgs.hedgedoc-cli`, because nixpkgs' `hedgedoc` is the server. devstats
+provides a flake package and the Home Manager module that runs its nightly
+collector on xyz; tools-update refreshes both.
 
 A tool joins the list when its repository releases from `main` and has a flake
 package. vidown has no versioned releases yet, so it follows `dev` under its

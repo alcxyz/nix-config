@@ -19,9 +19,11 @@ UPDATE_DEV_TOOLS = ROOT / "scripts/update-inputs/update-dev-tools.sh"
 UPDATE_MAINTAINED = ROOT / "scripts/update-inputs/update-maintained.sh"
 UPDATE_APPS = ROOT / "scripts/update-inputs/update-apps.sh"
 
-TOOL_INPUTS = ["paperless-tools", "regnskap", "reportcraft", "stashdb-pop", "videdupe", "t3rry", "hedgedoc"]
+TOOL_INPUTS = ["paperless-tools", "regnskap", "reportcraft", "stashdb-pop", "videdupe", "t3rry", "hedgedoc", "devstats"]
 # Tools whose canonical repository is on GitHub rather than Forgejo.
 GITHUB_TOOLS = {"t3rry"}
+# Forgejo tools fetched over HTTPS rather than SSH.
+FORGEJO_HTTPS_TOOLS = {"devstats"}
 # Each dev input is the same repository as a released tool input, on `dev`.
 DEV_TOOL_INPUTS = {
     "paperless-tools-dev": "paperless-tools",
@@ -74,13 +76,14 @@ class ToolInputContracts(unittest.TestCase):
                 self.assertIn(name, dev_apps)
                 self.assert_follows(name, repository, "dev")
 
-    def assert_follows(self, name, repository, ref):
+    def assert_follows(self, name, repository, ref, https=False):
         flake = (ROOT / "flake.nix").read_text()
         lock = json.loads((ROOT / "flake.lock").read_text())
         node = lock["nodes"][lock["nodes"]["root"]["inputs"][name]]
+        host = r"git\+https://git\.alc\.xyz" if https else r"git\+ssh://git@git-ssh\.alc\.xyz"
         self.assertRegex(
             flake,
-            rf'(?m)^\s*{re.escape(name)} = \{{\n\s*url = "git\+ssh://git@git-ssh\.alc\.xyz/alcxyz/{re.escape(repository)}\.git\?ref={ref}";$',
+            rf'(?m)^\s*{re.escape(name)} = \{{\n\s*url = "{host}/alcxyz/{re.escape(repository)}\.git\?ref={ref}";$',
         )
         self.assertEqual(node["original"]["ref"], ref)
 
@@ -88,7 +91,7 @@ class ToolInputContracts(unittest.TestCase):
         if repository in GITHUB_TOOLS:
             self.assert_github_follows(name, repository, ref)
         else:
-            self.assert_follows(name, repository, ref)
+            self.assert_follows(name, repository, ref, https=repository in FORGEJO_HTTPS_TOOLS)
 
     def test_each_tool_follows_main(self):
         for name in TOOL_INPUTS:

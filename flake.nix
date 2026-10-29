@@ -48,7 +48,8 @@
     };
 
     # Nightly development statistics collector: package and Home Manager
-    # module; nix-secrets supplies its private settings.
+    # module; nix-secrets supplies its private settings. Released tool,
+    # refreshed by tools-update (ADR-0086).
     devstats = {
       url = "git+https://git.alc.xyz/alcxyz/devstats.git?ref=main";
       inputs.nixpkgs.follows = "nixpkgs";
