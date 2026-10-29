@@ -138,6 +138,8 @@ in {
 
   forgejo-podman-canary-contract = import ./forgejo-podman-canary.nix {inherit lib pkgs;};
 
+  forgejo-runner-hold-monitor-contract = import ./forgejo-runner-hold-monitor.nix {inherit lib pkgs self;};
+
   forgejo-cleanup-completion-fence-lifecycle = import ./forgejo-cleanup-fence-vm.nix {inherit pkgs;};
 
   forgejo-docker-retention = import ./forgejo-docker-retention.nix {inherit lib pkgs;};

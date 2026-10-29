@@ -184,6 +184,8 @@ in {
 
   services.forgejo-actions-runner = {
     enable = true;
+    # Alert when CI admission stays held beyond its bound (ADR-0072, #894).
+    holdMonitor.enable = true;
     package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
     ioPressureGuard = {
       enable = true;

@@ -299,3 +299,13 @@ backing filesystem. Shared-job credential isolation remains separate work.
 
 Tracks [#345](https://git.alc.xyz/alcxyz/nix-config/issues/345). Do not close it or
 enable hosts on the strength of synthetic tests alone.
+
+## Text replaced on 2026-10-29
+
+From the decision, before the hold monitor was added (#894):
+
+A drain held for longer than a bound (30 minutes by default) without a detected
+game logs one `admission_drain_prolonged` event naming the cause that claimed
+it, or `unknown` for a drain restored after a guard restart.
+
+The header read `**Amended:** 2026-10-28`.

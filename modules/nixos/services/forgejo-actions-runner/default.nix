@@ -181,6 +181,7 @@ in {
     ./isolated-docker.nix
     ./podman-canary.nix
     ./orphan-monitor.nix
+    ./hold-monitor.nix
     ../nixfleet-boot-check/default.nix
     ../storage-health-monitor/default.nix
   ];

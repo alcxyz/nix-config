@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-10
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894))
 **History:** [replaced text](archive/0072-isolated-runner-docker-history.md)
 **Area:** Forgejo runners, Docker, systemd
 
@@ -85,10 +85,29 @@ The faster low-pressure path is unchanged, and the drain rule still uses
 host-wide pressure. Sustained load at or above the drain threshold still
 withholds admission. The settled path never applies while the guard owns a
 freeze, since frozen workers report no stall time; owned thaw keeps its
-existing rule. An unreadable aggregate sample disables only the settled path. A
-drain held for longer than a bound (30 minutes by default) without a detected
-game logs one `admission_drain_prolonged` event naming the cause that claimed
-it, or `unknown` for a drain restored after a guard restart.
+existing rule. An unreadable aggregate sample disables only the settled path.
+
+A held runner must also be announced, whatever held it (#894). A manual
+maintenance stop once kept xyz's runners off for about 41 hours, and a cleanup
+completion fence ([ADR-0083](0083-podman-cleanup-completion-fence.md)) once
+withheld a resume for about 80 minutes; neither told anyone. A read-only hold
+monitor therefore checks every runner unit on each runner host every 5 minutes.
+A runner that has not been active for longer than a bound (30 minutes by
+default) is reported to Healthchecks as a failure naming the unit, how long it
+has been held, its systemd state, the guard markers present (drain, resume,
+disk, game skip, standby, cleanup fence, freeze or teardown) and the guard's
+state. A unit stopped, disabled or masked outside the guard counts as held.
+A detected game, shown by a recent guard game record, and a standby runner its
+controller has not admitted ([ADR-0097](0097-ci-fast-runner-label.md)) are
+intended holds: they are not reported and restart the count, but never excuse a
+disabled or masked unit. Otherwise each run pings success. The monitor only
+queries systemd and reads the guard's state, which systemd mounts read-only
+for it; it keeps hold start times in its own runtime directory, so a reboot
+restarts the count. It reuses the host storage monitor's private ping base
+with a `ci-runners-<host>` check, and an unreadable ping base fails the unit.
+The guard itself still logs one `admission_drain_prolonged` event for a drain
+held beyond the same default bound without a detected game, naming the cause
+that claimed it, or `unknown` for a drain restored after a guard restart.
 
 An optional game-process signal can request the same admission drain before
 resource pressure rises. Match configured game executable names for a configured
