@@ -111,7 +111,10 @@ forge over HTTPS with only its credential helper. With
 `programs.ai.agentGithub` enabled, it also exports the GitHub App's settings
 for the `gh` in T3's package (gh-app's pass-through) and adds `GIT_CONFIG_*`
 entries for github.com, so the App's installation repositories use its token
-and everything else the operator's `gh` login. Login shells keep the operator's account. Since the
+and everything else the operator's `gh` login. `agentSessionVariables` are
+exported last, as literal values that are never expanded, so an agent
+identity's credential files can replace the operator's under the same variable
+names. Login shells keep the operator's account. Since the
 link does not change, running instances pick this up at their next restart.
 
 ## Additional instances

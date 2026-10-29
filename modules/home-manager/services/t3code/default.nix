@@ -53,11 +53,16 @@ with lib; let
   # variables, and never in login shells, and so does the agent marker that
   # turns on the pre-push hook for fast-forward repositories
   # (programs.ai.prReview); all three come from the private pandora flake.
-  # Empty without those modules or when disabled.
+  # agentSessionVariables follow them. Empty without those modules or when
+  # disabled.
   agentSessionCommands =
     (config.programs.ai.agentForge.sessionCommands or "")
     + (config.programs.ai.agentGithub.sessionCommands or "")
-    + (config.programs.ai.prReview.sessionCommands or "");
+    + (config.programs.ai.prReview.sessionCommands or "")
+    + concatStrings (mapAttrsToList (name: value: ''
+        export ${name}=${escapeShellArg value}
+      '')
+      cfg.agentSessionVariables);
   sessionEnv = pkgs.writeShellApplication {
     name = "t3code-session-env";
     # The sourced file is written for login shells, not for strict mode.
@@ -633,6 +638,20 @@ in {
       '';
     };
 
+    agentSessionVariables = mkOption {
+      type = types.attrsOf types.str;
+      default = {};
+      example = literalExpression ''{ EXAMPLE_API_TOKEN_FILE = "/run/user/1000/secrets/agent-token"; }'';
+      description = ''
+        Environment variables set only in the agent sessions T3 starts, after
+        the Home Manager session variables, so an agent identity's credential
+        files can replace the operator's for the same variable names. Values
+        are literal: they are shell-quoted and never expanded, unlike
+        `home.sessionVariables`, so give absolute paths. Login shells keep the
+        session variables.
+      '';
+    };
+
     restartLog = mkOption {
       type = types.str;
       default = "${config.xdg.stateHome}/t3code/managed-restarts.log";
@@ -701,6 +720,10 @@ in {
         message = "services.t3code.autoUpdate.packageFlakeUri must not contain a fragment.";
       }
       ++ [
+        {
+          assertion = all (name: builtins.match "[A-Za-z_][A-Za-z0-9_]*" name != null) (attrNames cfg.agentSessionVariables);
+          message = "services.t3code.agentSessionVariables names must be shell variable names ([A-Za-z_][A-Za-z0-9_]*).";
+        }
         {
           assertion = all (name: builtins.match "[a-z0-9]+(-[a-z0-9]+)*" name != null && name != "auto-update") (attrNames cfg.instances);
           message = "services.t3code.instances names must match [a-z0-9]+(-[a-z0-9]+)* and must not be auto-update.";

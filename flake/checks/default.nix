@@ -777,6 +777,7 @@ in {
           programs.ai.agentForge.enable = lib.mkForce false;
           programs.ai.agentGithub.enable = lib.mkForce false;
           programs.ai.prReview.fastForwardRepositories = lib.mkForce [];
+          services.t3code.agentSessionVariables = lib.mkForce {};
         }
       ];
     };
@@ -798,6 +799,7 @@ in {
               owner = "owner-test";
             };
             programs.ai.prReview.fastForwardRepositories = lib.mkOverride 40 ["github.com/owner-test/repo"];
+            services.t3code.agentSessionVariables = lib.mkOverride 40 {AGENT_SESSION_TEST_FILE = "/run/agent-session-test/token file";};
           }
         ];
       }).config;
@@ -808,6 +810,8 @@ in {
       on.programs.ai.agentForge.sessionCommands
       + on.programs.ai.agentGithub.sessionCommands
       + on.programs.ai.prReview.sessionCommands
+      # agentSessionVariables come last, shell-quoted.
+      + "export AGENT_SESSION_TEST_FILE='/run/agent-session-test/token file'\n"
     );
     # The tea module alone, for its token file default without the session's.
     teaTokenFile = agentForge:
@@ -835,7 +839,7 @@ in {
         sourced = wrapper.index('. "$session_vars"')
         assert wrapper.index(commands + 'exec "$@"') > sourced, "the commands do not run after the session variables, right before T3"
         PY
-        if grep -E 'GIT_CONFIG|GH_APP_|PR_REVIEW_AGENT_SESSION' ${offSessionEnv}; then
+        if grep -E 'GIT_CONFIG|GH_APP_|PR_REVIEW_AGENT_SESSION|AGENT_SESSION_TEST' ${offSessionEnv}; then
           echo "The session wrapper changes the agent environment while the accounts are off" >&2
           exit 1
         fi
