@@ -491,11 +491,15 @@ exec {jq} "$@"
 
     def test_outer_deadline_during_mutation_retains_fence(self):
         self.f.delay = True
-        process = subprocess.Popen(['timeout', '-k', '1s', '1s', 'bash', str(HELPER)],
+        process = subprocess.Popen(['timeout', '-k', '1s', '30s', 'bash', str(HELPER)],
                                    env=self.f.env, start_new_session=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
-            self.assertTrue(self.f.started.wait(1))
+            # Expire GNU timeout only after the mutation is in flight. Its
+            # SIGALRM handler is also used by the real timer; a one-second
+            # startup race can otherwise expire during read-only preflight.
+            self.assertTrue(self.f.started.wait(10))
+            process.send_signal(signal.SIGALRM)
             process.communicate(timeout=4)
             self.assertEqual(process.returncode, 124)
             self.assert_fenced()
