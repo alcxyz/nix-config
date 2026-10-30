@@ -63,6 +63,7 @@ in
           environment.PRESSURE_FILE = toString (pkgs.writeText "fixture-quiet-pressure" "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n");
         };
         systemd.timers.forgejo-idle-podman-cleanup.wantedBy = lib.mkForce [];
+        systemd.timers.forgejo-runner-cleanup-fence-auto-recover.wantedBy = lib.mkForce [];
         # Repeated lifecycle trials run faster than the normal start-limit
         # interval. Qualify admission itself without this fixture exhausting it.
         systemd.sockets.forgejo-runner-podman.unitConfig.StartLimitIntervalSec = 0;
@@ -293,6 +294,30 @@ in
           machine.succeed(f"test -d {fence}")
           machine.succeed(recover)
           resume()
+
+      # Automatic recovery leaves a fence alone until it has settled, then
+      # stops both real APIs, passes the unchanged proof and starts them again.
+      auto = "forgejo-runner-cleanup-fence-auto-recover.service"
+      machine.succeed("systemctl stop " + " ".join(runners))
+      make_fence()
+      generations = {api: machine.succeed(f"systemctl show -p ExecMainStartTimestampMonotonic --value {api}").strip() for api in apis}
+      machine.succeed(f"systemctl start {auto}")
+      machine.wait_until_succeeds(f"journalctl -u {auto} -o cat | grep -q 'skipped reason=settling'", timeout=10)
+      machine.succeed(f"test -d {fence}")
+      for api in apis:
+          machine.succeed(f"systemctl is-active --quiet {api}")
+      machine.succeed(f"touch -h -d '-10 min' {fence} {fence}/*")
+      machine.succeed(f"systemctl start {auto}", timeout=900)
+      machine.wait_until_succeeds(f"journalctl -u {auto} -o cat | grep -qF 'recovered owner=cleanup-v2 '", timeout=10)
+      machine.succeed(f"test ! -e {fence}")
+      for api in apis:
+          machine.wait_for_unit(api)
+          assert machine.succeed(f"systemctl show -p ExecMainStartTimestampMonotonic --value {api}").strip() != generations[api]
+      machine.wait_for_unit("forgejo-runner-aggregate-lifecycle.service")
+      machine.succeed("docker -H unix:///run/forgejo-podman/podman.sock info >/dev/null")
+      machine.succeed("systemctl start " + cleanup)
+      machine.succeed("fixture-cleanup-health")
+      resume()
 
       # Gate passed, then a queued start remains activating in ExecStartPre.
       make_fence()

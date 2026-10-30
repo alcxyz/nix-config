@@ -543,5 +543,6 @@ set_pressure 0.00
 # The companion uses real UNIX HTTP/curl for completion ambiguity and signals.
 python3 "$(dirname "${BASH_SOURCE[0]}")/test-idle-podman-cleanup-fence.py" "$source_file"
 python3 "$(dirname "${BASH_SOURCE[0]}")/test-cleanup-fence-recovery.py" "$(dirname "$source_file")"
+python3 "$(dirname "${BASH_SOURCE[0]}")/test-cleanup-fence-auto-recover.py" "$(dirname "$source_file")"
 
 python3 "$(dirname "${BASH_SOURCE[0]}")/test-docker-volume-cleanup.py" "$source_file"

@@ -89,6 +89,9 @@ else let
       pingBaseFile = "/run/fixture-unused-ping";
     };
   });
+  manualRecoveryCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
+    services.forgejo-actions-runner.idlePodmanCleanup.autoRecovery.enable = false;
+  });
   lowPressureCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
     services.forgejo-actions-runner.ioPressureGuard.lowPercent = 3;
   });
@@ -260,7 +263,9 @@ else let
     };
   };
   controllerSource = ../../modules/nixos/services/forgejo-actions-runner/standby-controller.sh;
-  recoveryText = config: (lib.findFirst (package: (package.name or "") == "forgejo-runner-cleanup-fence-recover") null config.environment.systemPackages).text;
+  recoveryPackage = config: lib.findFirst (package: (package.name or "") == "forgejo-runner-cleanup-fence-recover") null config.environment.systemPackages;
+  recoveryText = config: (recoveryPackage config).text;
+  autoRecovery = config: config.systemd.services.forgejo-runner-cleanup-fence-auto-recover;
   labelOverlapMessage = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
   dockerOverlapMessage = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
 in
@@ -351,6 +356,15 @@ in
   # Fence recovery bakes the configured list in at build time.
   assert lib.hasInfix "\nRUNNER_UNITS=${lib.escapeShellArg three-units}\n" (recoveryText threeCleanup);
   assert lib.hasInfix "\nRUNNER_UNITS=${lib.escapeShellArg both}\n" (recoveryText cleanupOnly);
+  # Automatic recovery hands the fence to that same installed command.
+  assert (autoRecovery threeCleanup).environment.RUNNER_UNITS == three-units;
+  assert (autoRecovery cleanupOnly).environment.RUNNER_UNITS == both;
+  assert (autoRecovery cleanupOnly).environment.RECOVER_BIN == lib.getExe (recoveryPackage cleanupOnly);
+  assert (autoRecovery cleanupOnly).environment.SETTLE_SECONDS == "300";
+  assert cleanupOnly.systemd.timers.forgejo-runner-cleanup-fence-auto-recover.timerConfig.OnUnitActiveSec == "5min";
+  assert !(manualRecoveryCleanup.systemd.services ? forgejo-runner-cleanup-fence-auto-recover);
+  assert !(manualRecoveryCleanup.systemd.timers ? forgejo-runner-cleanup-fence-auto-recover);
+  assert recoveryPackage manualRecoveryCleanup != null;
   assert extraUnit.environment.RUNNER_UNIT == extra;
   assert threeUnit.environment.RUNNER_UNIT == canary;
   assert extraUnit.description == "Forgejo Podman runner fast (fixture-fast)";

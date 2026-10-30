@@ -8,6 +8,7 @@
 
 **Amended:** 2026-10-25, standalone container candidates share one validated newest-first queue ([#833](https://git.alc.xyz/alcxyz/nix-config/issues/833)).
 **Amended:** 2026-10-29, cleanup starts and dispatches each destructive request only at or below the pressure guard's I/O resume threshold ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)).
+**Amended:** 2026-10-30, a timer recovers a settled Podman cleanup fence by stopping both APIs and running the unchanged recovery proof ([#914](https://git.alc.xyz/alcxyz/nix-config/issues/914)).
 **History:** [replaced text](archive/0083-podman-cleanup-completion-fence-history.md)
 
 ## Context
@@ -61,7 +62,8 @@ That cutoff applies only to images: eligible disposable Buildx builders,
 terminal containers and unused Buildx state volumes retain their existing
 selection rules and can be removed sooner. More eligible windows also create
 more opportunities for an uncertain deletion to retain the completion fence;
-recovery remains explicit even when the filesystem has plenty of free space.
+recovery still requires the terminal proof below, even when the filesystem has
+plenty of free space.
 
 Validate the complete compatible and native container snapshots before any
 container mutation. Exclude native pod members and infra containers from both
@@ -130,8 +132,8 @@ validation and recovery. V2 Podman acknowledgements retain their existing
 validation rules.
 
 Record both API execution generations before mutation. Do not infer recovery
-from elapsed time, attempts, read-only API success or PID changes. An explicit
-operator-invoked recovery command verifies trusted fence ownership and format,
+from elapsed time, attempts, read-only API success or PID changes. The recovery
+command (`forgejo-runner-cleanup-fence-recover`) verifies trusted fence ownership and format,
 the exact runner registry against the runner list built into the command,
 terminal API generation evidence, and fully terminal runners and APIs without
 main/control processes or pending jobs. It requires positive
@@ -144,14 +146,45 @@ fence intact. Systemd clears its execution timestamp after a clean stop: a zero
 current generation is accepted only with complete terminal unit proof and
 positive empty-worker evidence, never on its own. A different positive generation
 withholds recovery. Clear only verified owned fence files, preserving independent
-freeze, drain and teardown ownership. The command never stops, starts or resets
-units and provides no automatic recovery. Reboot clears runtime state.
-Operational qualification and recovery procedures remain private.
+freeze, drain and teardown ownership. The command itself never stops, starts or
+resets units. Reboot clears runtime state.
+
+Automatic recovery runs that command without an operator for a fence left by
+normal Podman cleanup (a `cleanup-v2` record). A root oneshot,
+`forgejo-runner-cleanup-fence-auto-recover`, runs every five minutes, on by
+default through `idlePodmanCleanup.autoRecovery.enable`. It acts only when the
+fence and every file in it have been unchanged for
+`autoRecovery.settleSeconds` (300 by default), every configured runner is
+terminal with no pending job, no transition marker exists, no cache prune that
+requires the lifecycle boundary is running, the aggregate is unfrozen and the
+guard is active; otherwise it skips without changing a unit. These read-only
+checks are not atomic with the stop: a freeze in between turns the stop into
+the lifecycle's forced teardown, which keeps operator recovery.
+It then stops both dedicated APIs, which also stops the lifecycle teardown
+boundary bound to them, runs the unchanged recovery, and starts both APIs only
+after the recovery has cleared the fence, checking that both are active. The
+guard then resumes the runners it drained. Stopping the APIs is what ends any server-side mutation still running;
+the recovery's terminal and empty-cgroup proof, not the settle time, is the
+completion evidence. The settle time only makes it likely that a removal which
+outlived its client finished before its API is stopped. A failed stop never
+reaches the recovery. A refusal leaves the fence in place, and with it both
+APIs stopped, for the next run or the operator. Fences from the manual Docker volume mode (`cleanup-v3`)
+keep explicit operator recovery. Operational qualification and recovery
+procedures remain private.
 
 ## Alternatives Considered
 
 - Longer client deadlines or presumed request cancellation do not establish
-  storage completion and increase the blocked admission interval.
+  storage completion and increase the blocked admission interval. On xyz in
+  October 2026 two exited-container removals finished about 21 and 43 seconds
+  after dispatch; the 40-second lock budget caps any deadline below the second
+  ([#914](https://git.alc.xyz/alcxyz/nix-config/issues/914)).
+- Leaving every recovery to the operator kept xyz's runners offline for about
+  75 and 120 minutes after those two removals, although the proof the operator
+  ran is the one automatic recovery now runs.
+- Waiting for pressure to settle before each removal would not have prevented
+  either timeout: both removals were dispatched at or below the resume
+  threshold.
 - Holding locks indefinitely conflicts with bounded lifecycle and service
   budgets and still cannot survive helper death.
 - A server completion protocol would establish a stronger boundary, but stock
@@ -166,7 +199,13 @@ Operational qualification and recovery procedures remain private.
 
 Bounded cleanup no longer silently reopens admission while storage work may
 continue. Ambiguous completion deliberately costs CI availability until positive
-recovery or reboot. The I/O pressure precondition gives up cleanup windows
+recovery or reboot: for a Podman cleanup fence, normally the settle time plus up
+to one timer interval and the API restart; for a refused proof or a manual
+Docker volume fence, until the operator acts. Stopping an API can interrupt a
+removal that is still running and leave Podman to reconcile a partly removed
+container; the settle time makes that unlikely. Restarting the Podman API makes
+it refresh its container state from a new runtime directory, as any API restart
+does. The I/O pressure precondition gives up cleanup windows
 during pressure drains to make uncertain requests less likely; under sustained
 I/O pressure, cleanup waits until the host is back at or below the guard's
 resume threshold. Individual deletes avoid unfiltered cache-mount cleanup and

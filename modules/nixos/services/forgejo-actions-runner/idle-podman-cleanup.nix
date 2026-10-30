@@ -34,6 +34,11 @@
       ''
       + builtins.readFile ./cleanup-fence-recover.sh;
   };
+  autoRecovery = pkgs.writeShellApplication {
+    name = "forgejo-runner-cleanup-fence-auto-recover";
+    runtimeInputs = with pkgs; [coreutils systemd];
+    text = builtins.readFile ./cleanup-fence-auto-recover.sh;
+  };
 in {
   options.services.forgejo-actions-runner.idlePodmanCleanup = {
     enable = lib.mkEnableOption "bounded Podman CI cache cleanup while every runner is inactive";
@@ -62,6 +67,29 @@ in {
       # misses most cleanup windows. Checks outside a window exit immediately.
       default = "5min";
       description = "Interval between idle cleanup checks. Set healthMaximumAgeSeconds to cover this interval, scheduling delay and cleanup runtime when health monitoring is enabled.";
+    };
+    autoRecovery = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Recover a completion fence left by an uncertain Podman cleanup request
+          without an operator: while every runner is terminal, stop both
+          dedicated APIs, run the unchanged fence recovery and its terminal
+          proof, then start the APIs again. Fences from the manual Docker volume
+          mode keep manual recovery.
+        '';
+      };
+      settleSeconds = lib.mkOption {
+        type = lib.types.ints.unsigned;
+        default = 300;
+        description = ''
+          Time the fence must stay unchanged before automatic recovery stops the
+          APIs, so a removal that outlived its client has most likely finished
+          rather than being killed. This is not completion evidence; the
+          recovery's terminal proof is.
+        '';
+      };
     };
     healthMaximumAgeSeconds = lib.mkOption {
       type = lib.types.ints.positive;
@@ -120,6 +148,36 @@ in {
         TimeoutStartSec = "65s";
         Nice = 10;
         IOSchedulingClass = "idle";
+      };
+    };
+    systemd.services.forgejo-runner-cleanup-fence-auto-recover = lib.mkIf cleanup.autoRecovery.enable {
+      description = "Recover a Podman cleanup completion fence once terminal proof holds";
+      after = [
+        "forgejo-runner-io-pressure-guard.service"
+        "forgejo-idle-podman-cleanup.service"
+      ];
+      restartIfChanged = false;
+      environment = {
+        RECOVER_BIN = lib.getExe recovery;
+        SETTLE_SECONDS = toString cleanup.autoRecovery.settleSeconds;
+        RUNNER_UNITS = runnerUnits;
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        # Stopping the APIs (with the lifecycle teardown boundary), the
+        # recovery and the API starts each have their own shorter bound.
+        ExecStart = "${pkgs.coreutils}/bin/timeout -k 5s 900s ${lib.getExe autoRecovery}";
+        TimeoutStartSec = "910s";
+      };
+    };
+    systemd.timers.forgejo-runner-cleanup-fence-auto-recover = lib.mkIf cleanup.autoRecovery.enable {
+      description = "Check for a settled Podman cleanup completion fence";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "20min";
+        OnUnitActiveSec = "5min";
+        RandomizedDelaySec = "30s";
+        Persistent = false;
       };
     };
     systemd.timers.forgejo-idle-podman-cleanup = {
