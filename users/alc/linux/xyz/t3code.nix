@@ -29,6 +29,12 @@
     if cfg.autoUpdate.enable
     then "${config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/bin/t3code-desktop"
     else "${cfg.package}/bin/t3code-desktop";
+  # The ai-stack profile's share/ is not on XDG_DATA_DIRS, so name its icon
+  # by path rather than relying on a t3code package in the home profile.
+  desktopIcon =
+    if cfg.autoUpdate.enable
+    then "${config.home.homeDirectory}/.local/state/nix/profiles/ai-stack/share/icons/hicolor/scalable/apps/t3code.svg"
+    else "${cfg.package}/share/icons/hicolor/scalable/apps/t3code.svg";
   desktopLauncher = pkgs.writeShellApplication {
     name = "t3code-desktop";
     text = ''
@@ -81,7 +87,7 @@ in {
   xdg.desktopEntries.t3code = {
     name = "T3 Code (xyz)";
     comment = "T3 Code desktop app for the headless servers on xyz";
-    icon = "t3code";
+    icon = desktopIcon;
     exec = "${desktopLauncher}/bin/t3code-desktop";
     categories = ["Development"];
     settings = {
@@ -92,7 +98,7 @@ in {
   xdg.desktopEntries.t3code-web = {
     name = "T3 Code web (xyz)";
     comment = "Open the headless T3 Code service on xyz in the browser";
-    icon = "t3code";
+    icon = desktopIcon;
     exec = "${webLauncher}/bin/t3code-web";
     categories = ["Development"];
     settings.TryExec = "${webLauncher}/bin/t3code-web";
@@ -100,7 +106,7 @@ in {
   xdg.desktopEntries.t3code-bn = {
     name = "T3 Code work web (xyz)";
     comment = "Open the work T3 Code instance on xyz in the browser";
-    icon = "t3code";
+    icon = desktopIcon;
     exec = "${bnWebLauncher}/bin/t3code-bn-web";
     categories = ["Development"];
     settings.TryExec = "${bnWebLauncher}/bin/t3code-bn-web";

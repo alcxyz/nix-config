@@ -105,7 +105,14 @@ in {
   services.nixPackagePromotion.dms.admissionUnit = "forgejo-podman-runner.service";
   services.nixPackagePromotion.wolf.enable = true;
 
+  # With services.t3code.autoUpdate, the ai-stack profile provides t3 and
+  # t3code-desktop here; the set's own t3code would only shadow it.
   home.packages =
+    (
+      if config.services.t3code.autoUpdate.enable
+      then lib.remove pkgs.t3code
+      else lib.id
+    )
     pkgsets.home.${hostRole.homePackageSet}
     ++ [
       closeActiveWindow
