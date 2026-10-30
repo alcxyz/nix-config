@@ -1132,11 +1132,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793359519,
-        "narHash": "sha256-FUdwQ9vwv6cHArYzfyC7tuW0qRKfRtasUWmUqbsZc28=",
+        "lastModified": 1793395017,
+        "narHash": "sha256-vME34SWK176+gZSTogoE44iehhsmOxYBadsCxJDvS2s=",
         "ref": "dev",
-        "rev": "ea6e3ff7d7707e598257bdfd0a77fb335ba347a9",
-        "revCount": 890,
+        "rev": "1275df99975ef7e33634c25a6102df13f8f8310b",
+        "revCount": 894,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1271,11 +1271,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793353773,
-        "narHash": "sha256-nDhu5v5nui9qZUoAZ+Jdb5sdkjLHMwpRbTAFxU2LW90=",
+        "lastModified": 1793395000,
+        "narHash": "sha256-aIbNxJjA/8gA1QYQ5B0drwciqkH8lA3cleZ+RgUX7eg=",
         "ref": "dev",
-        "rev": "8b5a54c07cefb595e395b59132ab3ec8d3275f22",
-        "revCount": 26,
+        "rev": "c5286d7bcb846ffb6f8ff948a23c17b12ed58216",
+        "revCount": 29,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
