@@ -515,13 +515,101 @@ esac
         self.assertTrue(self.drain_owned)
 
     def test_settled_path_never_resumes_into_owned_freeze(self):
+        # A second runner that can still admit work keeps the freeze for
+        # longer than the settled interval.
         self.assertEqual(self.run_guard([1000] * 6, initial='frozen', owned=True,
                                         admission=True, drain_owned=True,
                                         runner_state='inactive',
+                                        second_runner={'active': 'activating'},
+                                        runner_units=[PRIMARY, SECOND],
                                         slice_values=[0] * 6),
                          (0, [], True, False))
         self.assertEqual(self.runner_actions, [])
         self.assertTrue(self.drain_owned)
+
+    def test_settled_thaw_releases_owned_freeze_and_keeps_drain(self):
+        # Unrelated load between the resume and drain thresholds once held a
+        # freeze for hours, so a draining runner's jobs could not finish (#908).
+        self.assertEqual(self.run_guard([1000] * 4, initial='frozen', owned=True,
+                                        admission=True, drain_owned=True,
+                                        runner_state='deactivating',
+                                        slice_values=[0] * 4),
+                         (0, ['thaw'], False, False))
+        self.assertEqual(self.runner_actions, [])
+        self.assertTrue(self.drain_owned)
+        thawed = [line for line in self.events if line.startswith('event=thawed')]
+        self.assertEqual(len(thawed), 1)
+        self.assertIn('thaw_path=settled', thawed[0])
+
+    def test_low_thaw_reports_its_path(self):
+        self.run_guard([0, 0], initial='frozen', owned=True)
+        self.assertIn('thaw_path=low', self.events[-1])
+
+    def test_settled_resume_counts_only_after_settled_thaw(self):
+        values = [1000] * 7
+        self.run_guard(values, initial='frozen', owned=True, admission=True,
+                       drain_owned=True, runner_state='inactive',
+                       slice_values=[0] * len(values))
+        self.assertEqual(self.runner_actions, [])
+        values.append(1000)
+        self.assertEqual(self.run_guard(values, initial='frozen', owned=True,
+                                        admission=True, drain_owned=True,
+                                        runner_state='inactive',
+                                        slice_values=[0] * len(values)),
+                         (0, ['thaw'], False, False))
+        self.assertEqual(self.runner_actions, ['start'])
+        events = [line.split()[0] for line in self.events]
+        self.assertLess(events.index('event=thawed'),
+                        events.index('event=admission_resume_requested'))
+        self.assertIn('resume_path=settled', next(
+            line for line in self.events
+            if line.startswith('event=admission_resume_requested')))
+
+    def test_settled_thaw_streak_resets_at_drain_threshold(self):
+        self.assertEqual(self.run_guard([1000, 1000, 1000, 2000, 1000, 1000, 1000],
+                                        initial='frozen', owned=True, admission=True,
+                                        drain_owned=True, runner_state='deactivating'),
+                         (0, [], True, False))
+
+    def test_settled_thaw_needs_admission_control(self):
+        self.assertEqual(self.run_guard([1000] * 6, initial='frozen', owned=True),
+                         (0, [], True, False))
+
+    def test_settled_thaw_waits_while_a_runner_can_admit(self):
+        self.assertEqual(self.run_guard([1000] * 6, initial='frozen', owned=True,
+                                        admission=True, runner_state='active'),
+                         (0, [], True, False))
+        self.assertEqual(self.runner_actions, [])
+
+    def test_settled_thaw_waits_for_every_drained_runner_set(self):
+        # A second runner that is still polling keeps the freeze.
+        self.assertEqual(self.run_guard([1000] * 6, initial='frozen', owned=True,
+                                        admission=True, drain_owned=True,
+                                        runner_state='deactivating',
+                                        second_runner={'active': 'activating'},
+                                        runner_units=[PRIMARY, SECOND]),
+                         (0, [], True, False))
+        self.assertEqual(self.run_guard([1000] * 4, initial='frozen', owned=True,
+                                        admission=True, drain_owned=True,
+                                        runner_state='deactivating',
+                                        second_runner={'active': 'failed',
+                                                       'result': 'timeout'},
+                                        runner_units=[PRIMARY, SECOND]),
+                         (0, ['thaw'], False, False))
+
+    def test_critical_disk_blocks_settled_thaw(self):
+        self.assertEqual(self.run_guard([1000] * 6, initial='frozen', owned=True,
+                                        admission=True, drain_owned=True,
+                                        runner_state='deactivating',
+                                        disk_values=['10 5'] * 6),
+                         (0, [], True, False))
+
+    def test_severe_pressure_refreezes_after_settled_thaw(self):
+        self.assertEqual(self.run_guard([1000] * 4 + [6500] * 3, initial='frozen',
+                                        owned=True, admission=True, drain_owned=True,
+                                        runner_state='deactivating'),
+                         (0, ['thaw', 'freeze'], True, False))
+        self.assertEqual(self.runner_actions, [])
 
     def test_settled_path_waits_for_game_cooldown(self):
         values = [1000] * 5

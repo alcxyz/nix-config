@@ -254,7 +254,7 @@ freeze_owned() {
 }
 
 thaw_owned() {
-  local started duration=unknown
+  local path=$1 started duration=unknown
   lock_lifecycle
   [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
   [[ -e $state_dir/owned ]] || fail "aggregate thaw lacks ownership"
@@ -267,7 +267,7 @@ thaw_owned() {
   [[ $(freezer_state) == running ]] || fail "aggregate did not thaw; ownership requires recovery"
   rm "$state_dir/owned" "$state_dir/pending"
   if [[ -n $frozen_since ]]; then duration=$((SECONDS - frozen_since)); fi
-  report_transition thawed "transition_seconds=$((SECONDS - started)) frozen_seconds=$duration"
+  report_transition thawed "thaw_path=$path transition_seconds=$((SECONDS - started)) frozen_seconds=$duration"
   frozen_since=""
   unlock_lifecycle
 }
@@ -538,6 +538,17 @@ drained_runners_idle() {
   done
 }
 
+# Succeeds when no runner can admit a job: each one is drained by the guard or
+# is not running. The jobs a draining runner already admitted still count.
+admission_withheld() {
+  local unit active
+  for unit in "${runner_units[@]}"; do
+    [[ ! -e $(runner_state_dir "$unit")/drain-owned ]] || continue
+    active=$(metadata show --property=ActiveState --value "$unit") || return 1
+    [[ $active == inactive || $active == failed || $active == deactivating ]] || return 1
+  done
+}
+
 actual=$(freezer_state) || fail "cannot inspect build aggregate at startup"
 if [[ -e $state_dir/owned ]]; then
   [[ $actual == frozen ]] || fail "prior freeze ownership no longer matches aggregate"
@@ -564,6 +575,7 @@ severe=0
 low=0
 recovered=0
 settled=0
+frozen_settled=0
 drained=0
 prolonged_reported=0
 # A drain restored from persistent state has no recorded cause.
@@ -619,14 +631,28 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
   # indefinitely, so the drain also recovers after a longer settled interval
   # below the drain threshold. The interval starts only once every drained
   # runner has finished its admitted jobs, so load that CI writeback leaves
-  # behind is not mistaken for unrelated load. An owned freeze keeps the
-  # stricter path: frozen workers report no stall time.
+  # behind is not mistaken for unrelated load. It never counts during an owned
+  # freeze, since frozen workers report no stall time; the freeze has its own
+  # settled thaw below, and this interval starts after it.
   if ((pressure < high_threshold && disk_status == 0)) &&
     [[ $slice_pressure != unknown && ! -e $state_dir/owned ]] &&
     ((slice_pressure <= low_threshold)) && drained_runners_idle; then
     settled=$((settled + 1))
   else
     settled=0
+  fi
+  # A freeze must not outlast its cause either (#908). Unrelated load can hold
+  # host pressure above the resume threshold for hours while the frozen jobs
+  # can neither finish nor be cancelled, and a draining runner then dies at its
+  # stop timeout. With admission withheld, an owned freeze therefore also thaws
+  # after the settled interval below the drain threshold: the admitted jobs
+  # then run under the same pressure that never freezes running jobs, and
+  # severe pressure freezes them again.
+  if [[ $admission_control == 1 && -e $state_dir/owned ]] &&
+    ((pressure < high_threshold && disk_status != 2)) && admission_withheld; then
+    frozen_settled=$((frozen_settled + 1))
+  else
+    frozen_settled=0
   fi
   if ((pressure >= severe_threshold)); then
     severe=$((severe + 1))
@@ -644,7 +670,9 @@ while ((max_iterations == 0 || iteration < max_iterations)); do
     freeze_owned
     # A critical disk keeps active workers frozen until space is recovered.
     if ((low >= low_required && disk_status != 2)); then
-      thaw_owned
+      thaw_owned low
+    elif ((frozen_settled >= settled_required)); then
+      thaw_owned settled
     fi
   elif ((disk_status == 2)) ||
     { [[ $admission_control == 1 ]] && ((severe >= severe_required)); } ||

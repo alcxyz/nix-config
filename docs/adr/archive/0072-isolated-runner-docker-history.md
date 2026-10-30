@@ -309,3 +309,19 @@ game logs one `admission_drain_prolonged` event naming the cause that claimed
 it, or `unknown` for a drain restored after a guard restart.
 
 The header read `**Amended:** 2026-10-28`.
+
+## Text replaced on 2026-10-30
+
+From the decision, before the settled thaw was added (#908):
+
+Thawing an owned freeze requires only low
+pressure and space above the critical floors: a frozen daemon cannot run the
+cleanup that would restore headroom, so waiting for recovery would hold the
+freeze indefinitely.
+
+The settled path never applies while the guard owns a
+freeze, since frozen workers report no stall time; owned thaw keeps its
+existing rule. An unreadable aggregate sample disables only the settled path.
+
+The header read `**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor
+reports runner admission held beyond a bound (#894)`.

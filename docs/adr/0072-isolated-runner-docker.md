@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-10
-**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894))
+**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)); 2026-10-30, an owned freeze also thaws after a settled interval while admission is drained ([#908](https://git.alc.xyz/alcxyz/nix-config/issues/908))
 **History:** [replaced text](archive/0072-isolated-runner-docker-history.md)
 **Area:** Forgejo runners, Docker, systemd
 
@@ -52,8 +52,9 @@ ownership state for isolated runners. Falling below either the byte or percent
 admission floor gracefully drains every runner; falling below either critical
 floor freezes the aggregate to stop active worker writes. Resuming admission
 requires both byte and percent headroom to remain above their recovery floors
-for the normal low-pressure interval. Thawing an owned freeze requires only low
-pressure and space above the critical floors: a frozen daemon cannot run the
+for the normal low-pressure interval. Thawing an owned freeze requires only
+pressure recovery (low pressure, or the settled thaw below) and space above the
+critical floors: a frozen daemon cannot run the
 cleanup that would restore headroom, so waiting for recovery would hold the
 freeze indefinitely. The runner start gate checks space independently
 so boot and configuration switches cannot bypass a drain. An unreadable or
@@ -84,8 +85,23 @@ has finished its admitted jobs, and work they leave behind must also settle.
 The faster low-pressure path is unchanged, and the drain rule still uses
 host-wide pressure. Sustained load at or above the drain threshold still
 withholds admission. The settled path never applies while the guard owns a
-freeze, since frozen workers report no stall time; owned thaw keeps its
-existing rule. An unreadable aggregate sample disables only the settled path.
+freeze, since frozen workers report no stall time. An unreadable aggregate
+sample disables only the settled path.
+
+A freeze must not outlast its cause either (#908). On xyz, unrelated load during
+the daily backup mirror once held host pressure between the resume and drain
+thresholds for 3.5 hours after a severe spike froze the aggregate: the frozen
+jobs could neither finish nor be cancelled, and a draining runner was killed at
+its one-hour stop timeout. With admission draining enabled, an owned freeze
+therefore also thaws once host pressure has stayed below the drain threshold
+for the settled interval while no runner can admit work (each is drained by
+the guard, or inactive, failed or deactivating) and free space is above the
+critical floors. The drain stays owned, so only jobs already admitted continue,
+under pressure that never freezes running jobs; sustained severe pressure
+freezes them again. The settled resume interval starts only after the thaw.
+The `thawed` event names its path (`thaw_path=low` or `settled`). Without
+admission draining the freeze is the only control, and it keeps the
+low-pressure thaw alone.
 
 A held runner must also be announced, whatever held it (#894). A manual
 maintenance stop once kept xyz's runners off for about 41 hours, and a cleanup

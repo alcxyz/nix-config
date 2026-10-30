@@ -421,6 +421,8 @@ in {
             at or below lowPercent, counted once every drained runner has
             finished its admitted jobs. Unrelated host load can then not hold a
             drain indefinitely; the faster lowPercent recovery still applies.
+            The same duration below highPercent also thaws an owned freeze
+            while no runner can admit work; the drain stays in place.
           '';
         };
 
