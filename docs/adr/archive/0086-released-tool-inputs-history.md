@@ -1,4 +1,4 @@
-**History of** [ADR-0086](../0086-released-tool-inputs.md): text replaced on 2026-10-28.
+**History of** [ADR-0086](../0086-released-tool-inputs.md): text replaced on 2026-10-28 and 2026-10-30.
 
 # ADR-0086: Refresh released platform tools with tools-update
 
@@ -49,3 +49,19 @@ their own deployment paths.
 A tool's flake must keep building at `main`. For Go tools, a stale `vendorHash`
 after a dependency change breaks the next build after `tools-update`; the
 previous lock and generation remain the rollback.
+
+## Text replaced on 2026-10-30
+
+From the status block:
+
+  **Amended:** 2026-10-28, updated 2026-10-29 (devstats added to the tool list, per owner decision)
+
+From the decision, the tool list:
+
+  `tools-update` (a shell alias, also `just tools-update`) refreshes one explicit
+  list of tool inputs, each following its repository's released `main` branch:
+  paperless-tools, regnskap, reportcraft, stashdb-pop, videdupe, t3rry, hedgedoc
+  and devstats.
+
+videdupe was removed from nix-config: vidown ADR-023 moved its duplicate review
+into vidown, which `dev-apps-update` refreshes (ADR-0089).

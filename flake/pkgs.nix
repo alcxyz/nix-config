@@ -51,7 +51,6 @@ in
             t3rry = inputs.t3rry.packages.${system} or {};
             t3rryDev = inputs.t3rry-dev.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
-            videdupe = inputs.videdupe.packages.${system} or {};
           in
             (lib.filterAttrs (n: _: builtins.elem n wanted) np)
             // (lib.filterAttrs (
@@ -67,9 +66,6 @@ in
             }
             // lib.optionalAttrs (vidown ? default) {
               vidown = vidown.default;
-            }
-            // lib.optionalAttrs (videdupe ? default) {
-              videdupe = videdupe.default;
             }
             # nixpkgs' hedgedoc is the server; this is the posting CLI.
             // lib.optionalAttrs (hedgedoc ? default) {

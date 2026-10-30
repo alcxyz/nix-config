@@ -19,7 +19,6 @@ inputs=(
   regnskap
   reportcraft
   stashdb-pop
-  videdupe
   t3rry
   hedgedoc
   devstats

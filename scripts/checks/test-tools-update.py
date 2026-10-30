@@ -19,7 +19,7 @@ UPDATE_DEV_TOOLS = ROOT / "scripts/update-inputs/update-dev-tools.sh"
 UPDATE_MAINTAINED = ROOT / "scripts/update-inputs/update-maintained.sh"
 UPDATE_APPS = ROOT / "scripts/update-inputs/update-apps.sh"
 
-TOOL_INPUTS = ["paperless-tools", "regnskap", "reportcraft", "stashdb-pop", "videdupe", "t3rry", "hedgedoc", "devstats"]
+TOOL_INPUTS = ["paperless-tools", "regnskap", "reportcraft", "stashdb-pop", "t3rry", "hedgedoc", "devstats"]
 # Tools whose canonical repository is on GitHub rather than Forgejo.
 GITHUB_TOOLS = {"t3rry"}
 # Forgejo tools fetched over HTTPS rather than SSH.

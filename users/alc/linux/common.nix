@@ -15,7 +15,6 @@ in {
   imports = [
     "${configDir}/users/alc/common.nix"
     "${configDir}/modules/home-manager/programs/vidown/default.nix"
-    "${configDir}/modules/home-manager/programs/videdupe/default.nix"
   ];
 
   # ==================== Common Linux Packages ====================
@@ -25,7 +24,6 @@ in {
   # ==================== Common Linux Programs & Services ====================
   programs.atuin.daemon.enable = true;
   programs.vidown.enable = true;
-  programs.videdupe.enable = true;
 
   programs.bash.initExtra = ''
     if [ -z "''${SSH_AUTH_SOCK:-}" ] && [ -n "''${XDG_RUNTIME_DIR:-}" ]; then

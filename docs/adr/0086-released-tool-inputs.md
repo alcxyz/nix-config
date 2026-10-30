@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-09
-**Amended:** 2026-10-28, updated 2026-10-29 (devstats added to the tool list, per owner decision)
+**Amended:** 2026-10-28, updated 2026-10-29 (devstats added to the tool list, per owner decision), updated 2026-10-30 (videdupe removed from the tool list: vidown ADR-023 replaces it, per owner decision)
 **History:** [replaced text](archive/0086-released-tool-inputs-history.md)
 **Applies to:** `flake.nix`, `scripts/update-inputs/update-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069
 
@@ -21,8 +21,8 @@ the accounts, so they should run released code.
 
 `tools-update` (a shell alias, also `just tools-update`) refreshes one explicit
 list of tool inputs, each following its repository's released `main` branch:
-paperless-tools, regnskap, reportcraft, stashdb-pop, videdupe, t3rry, hedgedoc
-and devstats. `scripts/update-inputs/update-tools.sh` is the current list. Tools on
+paperless-tools, regnskap, reportcraft, stashdb-pop, t3rry, hedgedoc and
+devstats. `scripts/update-inputs/update-tools.sh` is the current list. Tools on
 Forgejo write the branch explicitly as `?ref=main`; tools hosted on GitHub,
 such as t3rry, pin `github:alcxyz/<repo>/main` instead. The command only
 changes `flake.lock`; the owner inspects the change and activates it with

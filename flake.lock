@@ -1551,7 +1551,6 @@
         "stashdb-pop": "stashdb-pop",
         "t3rry": "t3rry",
         "t3rry-dev": "t3rry-dev",
-        "videdupe": "videdupe",
         "vidown": "vidown",
         "work": "work"
       }
@@ -1991,27 +1990,6 @@
         "ref": "dev",
         "repo": "DankVault",
         "type": "github"
-      }
-    },
-    "videdupe": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1791169488,
-        "narHash": "sha256-jyK0WOZkhVuWBQ8f+mQpNe1rrXgpRi+BTtlBdXhyW24=",
-        "ref": "main",
-        "rev": "c3ea2da427f045bf3cb003089f0b1972c7a24335",
-        "revCount": 7,
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git"
-      },
-      "original": {
-        "ref": "main",
-        "type": "git",
-        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git"
       }
     },
     "vidown": {

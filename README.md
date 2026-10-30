@@ -15,7 +15,7 @@ promotion with its date, such as `v2026.10.18`
 
 | Command | Branch | Refreshes |
 |---|---|---|
-| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, videdupe, t3rry, hedgedoc, devstats |
+| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, t3rry, hedgedoc, devstats |
 | `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev`, `t3rry-dev` |
 | `apps-update` | `main` | Grove, Canopy, Bivrost, and the private work flake `work` (on `dev`) |
 | `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, `work`, Paperflow, DankSession, the DMS bundle and its maintained plugins |

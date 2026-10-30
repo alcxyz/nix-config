@@ -192,11 +192,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    videdupe = {
-      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/videdupe.git?ref=main";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     # Released apps follow main and are refreshed by apps-update; their dev
     # builds sit next to them and are refreshed by dev-apps-update (ADR-0089).
     grove = {
