@@ -1,4 +1,4 @@
-**History of** [ADR-0077](../0077-ai-stack-profile-outside-home-manager.md): text replaced on 2026-10-29.
+**History of** [ADR-0077](../0077-ai-stack-profile-outside-home-manager.md): text replaced on 2026-10-29 and 2026-10-30.
 
 # ADR-0077: Update the AI stack in its own profile, outside Home Manager
 
@@ -86,3 +86,24 @@ running AI versions can differ from what a fresh Home Manager build would seed;
 the updater and its downgrade guard own the profile after seeding. The skew
 guard from 6c42f109 is removed with the snapshot activation it protected. The
 macOS host keeps its existing update mechanism until it gets the same split.
+
+## Replaced on 2026-10-30
+
+The T3 Code desktop app, launched from the profile since nix-config #902,
+loads the system's graphics driver, which disproved the premise below
+([ADR-0104](../0104-ai-stack-on-system-nixpkgs.md), nix-config #901 and #904).
+
+From the decision, the updater bullet read:
+
+> `t3code-auto-update` follows the nix-packages branch moved by local package
+> promotion, normally `promoted` ([ADR-0080](../0080-promoted-package-ref.md)),
+> pins its current revision for each run, builds the bundle into the profile,
+> and restarts `t3code.service` only through the idle-session and downgrade
+> guards. It never activates Home Manager.
+
+From the consequences:
+
+> The bundle is self-contained, so its nixpkgs does not need to match the
+> system: none of its programs load system graphics drivers.
+
+The status block read `**Amended:** 2026-10-29`.

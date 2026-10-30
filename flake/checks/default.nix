@@ -735,6 +735,20 @@ in {
           exit 1
         fi
         grep -F "ai-stack-$channel" ${updater}
+        # ADR-0104: the bundle is built against the system's nixpkgs, and a
+        # host without it in the system registry refuses rather than drifts.
+        grep -F -- '--override-input nixpkgs "path:$system_nixpkgs"' ${updater}
+        grep -F -- '--override-input nixpkgs-unstable "path:$system_nixpkgs"' ${updater}
+        echo '{"version":2,"flakes":[{"from":{"type":"indirect","id":"home-manager"},"to":{"type":"path","path":"/nix/store/x-source"}}]}' > no-nixpkgs.json
+        for registry in missing.json no-nixpkgs.json; do
+          status=0
+          T3CODE_SYSTEM_REGISTRY=$PWD/$registry ${updater} > updater.log 2>&1 || status=$?
+          if [[ "$status" != 76 ]] || ! grep -qF "cannot be built against the system's nixpkgs" updater.log; then
+            echo "Expected exit 76 for $registry, got $status:" >&2
+            cat updater.log >&2
+            exit 1
+          fi
+        done
         if grep -F "activate" ${updater}; then
           echo "The unattended updater must not activate Home Manager" >&2
           exit 1

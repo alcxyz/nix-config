@@ -1105,14 +1105,16 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "nixpkgs-unstable": "nixpkgs-unstable"
+        "nixpkgs-unstable": [
+          "nixpkgs"
+        ]
       },
       "locked": {
-        "lastModified": 1793173916,
-        "narHash": "sha256-91M2nEyDxHMTk06hym4MLpq6qpl4gdwvtmBInOSKS5I=",
+        "lastModified": 1793363449,
+        "narHash": "sha256-DspluYjvM4/vI8hDRzyM0TVbwzQ85ft3k9oCsDmJ5iY=",
         "ref": "dev",
-        "rev": "bccc7b98fbe4ab6ba5812ac608c394e3fb459466",
-        "revCount": 875,
+        "rev": "4e53ef181ebfaaaf0c5b437741cc469cf2845357",
+        "revCount": 896,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1240,22 +1242,6 @@
         "owner": "NixOS",
         "repo": "nixpkgs",
         "rev": "6774f7bc253789b113a4f39285dc0fa100abeacc",
-        "type": "github"
-      }
-    },
-    "nixpkgs-unstable": {
-      "locked": {
-        "lastModified": 1783522502,
-        "narHash": "sha256-iffAls3iaNTyJC2faYcUXSI+Gp02cDjYl+MygxKl2GI=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
         "type": "github"
       }
     },

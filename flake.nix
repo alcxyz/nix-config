@@ -39,7 +39,10 @@
       # Public HTTPS keeps the lock refresh usable by unattended CI without
       # distributing an SSH identity merely to read public package sources.
       url = "git+https://git.alc.xyz/alcxyz/nix-packages.git?ref=dev";
+      # Both nixpkgs inputs, so its packages run on the hosts' own nixpkgs
+      # (ADR-0104).
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs-unstable.follows = "nixpkgs";
     };
 
     reportcraft = {

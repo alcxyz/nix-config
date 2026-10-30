@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-30
-**Amended:** 2026-10-29
+**Amended:** 2026-10-30
 **History:** [replaced text](archive/0077-ai-stack-profile-outside-home-manager-history.md)
 **Applies to:** `modules/home-manager/services/t3code/`, nix-packages `ai-stack-*` outputs
 
@@ -39,8 +39,9 @@ without running Home Manager activation.
   change, not a downgrade.
 - `t3code-auto-update` follows the nix-packages branch moved by local package
   promotion, normally `promoted` ([ADR-0080](0080-promoted-package-ref.md)),
-  pins its current revision for each run, builds the bundle into the profile,
-  and restarts `t3code.service` only through the idle-session and downgrade
+  pins its current revision for each run, builds the bundle against the
+  running system's nixpkgs ([ADR-0104](0104-ai-stack-on-system-nixpkgs.md))
+  into the profile, and restarts `t3code.service` only through the idle-session and downgrade
   guards. It never activates Home Manager.
 - Home Manager keeps the stable parts: the service unit (which runs
   `<profile>/bin/t3`), provider settings, and the profile on `PATH`. Activation
@@ -74,9 +75,10 @@ without running Home Manager activation.
 Unattended updates touch only the AI stack and cannot change the desktop,
 drivers, or other Home Manager programs. The update timer runs daily at 04:00
 with up to 30 minutes of randomized delay by default; xyz's private
-configuration runs it hourly at minute 45 with up to 10 minutes of delay. The bundle is self-contained, so its nixpkgs
-does not need to match the system: none of its programs load system graphics
-drivers. The profile keeps its own generations, so
+configuration runs it hourly at minute 45 with up to 10 minutes of delay. The
+bundle's nixpkgs must match the system's: the T3 desktop app launched from the
+profile loads the system's graphics driver, so ADR-0104 builds the bundle
+against the running system's nixpkgs. The profile keeps its own generations, so
 `nix-env --profile ~/.local/state/nix/profiles/ai-stack --rollback` undoes a bad
 update.
 

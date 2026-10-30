@@ -577,10 +577,21 @@ with lib; let
     text = ''
       channel=${escapeShellArg managedChannel}
       package_flake_default=${escapeShellArg cfg.autoUpdate.packageFlakeUri}
+      # Build against the running system's nixpkgs (ADR-0104): the desktop app
+      # loads the system's graphics driver, which needs the system's glibc.
+      # NixOS points the system registry's nixpkgs at the source it was built
+      # from.
+      registry=''${T3CODE_SYSTEM_REGISTRY:-/etc/nix/registry.json}
+      if ! system_nixpkgs=$(jq -er '[.flakes[]? | select(.from.id == "nixpkgs" and .to.type == "path") | .to.path] | first // empty' "$registry"); then
+        echo "No nixpkgs path in $registry, so the AI stack cannot be built against the system's nixpkgs." >&2
+        exit 76
+      fi
       # Pin the moving ref once, so the build and the log name one revision.
       package_flake=$(nix flake metadata --refresh --json "''${T3CODE_PACKAGE_FLAKE:-$package_flake_default}" | jq -er .url)
-      echo "Building ai-stack-$channel from $package_flake"
-      candidate=$(nix build --no-link --print-out-paths "$package_flake#ai-stack-$channel")
+      echo "Building ai-stack-$channel from $package_flake with the system's nixpkgs $system_nixpkgs"
+      candidate=$(nix build --no-link --print-out-paths "$package_flake#ai-stack-$channel" \
+        --override-input nixpkgs "path:$system_nixpkgs" \
+        --override-input nixpkgs-unstable "path:$system_nixpkgs")
       exec ${aiStackSwitch}/bin/t3code-ai-stack-switch "$candidate"
     '';
   };
@@ -691,7 +702,7 @@ in {
     };
 
     autoUpdate = {
-      enable = mkEnableOption "unattended T3 Code and provider updates through the ai-stack profile (ADR-0077)";
+      enable = mkEnableOption "unattended T3 Code and provider updates through the ai-stack profile (ADR-0077), built against the system's nixpkgs from the NixOS flake registry (ADR-0104)";
 
       packageFlakeUri = mkOption {
         type = types.str;
