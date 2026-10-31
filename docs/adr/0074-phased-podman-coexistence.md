@@ -2,7 +2,7 @@
 
 **Status:** Accepted; Docker stays beside Podman, and no Docker engine is qualified for retirement
 **Date:** 2026-09-23
-**Amended:** 2026-10-28
+**Amended:** 2026-10-31, both runtimes share the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) instead of a pressure controller and teardown boundary
 **History:** [replaced text](archive/0074-phased-podman-coexistence-history.md)
 **Area:** host container runtimes, development and CI
 
@@ -36,19 +36,13 @@ The opt-in CI module uses separate runner identities, an account, API socket
 and storage root for Podman. A host may run any number of Podman runner
 identities, each its own unit with its own registration and state, against
 that one Podman API ([#680](https://git.alc.xyz/alcxyz/nix-config/issues/680)).
-Both CI runtimes share `forgejobuilds.slice` and one external pressure
-controller, retaining the existing combined CPU and memory budget. Admission
-drain ownership is tracked independently for each runner. A manually stopped
-runner is not claimed or restarted during recovery.
-
-The shared lifecycle boundary closes admission across both runtimes when either
-runtime or the controller is lost. Frozen teardown empties the combined worker
-aggregate before terminating waiting runner processes and resolving an owned
-freeze. This deliberately couples the CI availability of the two runtimes;
-independent freeze controllers over the same aggregate would create
-conflicting ownership, and separate full-size budgets would increase the
-host's maximum CI allocation. The application Docker daemon remains outside
-this boundary.
+Both CI runtimes share `forgejobuilds.slice` and one runner hold
+([ADR-0106](0106-runner-hold-for-games-and-low-disk.md)), retaining the
+existing combined CPU and memory budget. The hold marks each runner it stops
+on its own, and a manually stopped runner is not marked or restarted. One
+budget for both runtimes deliberately couples their CI capacity: separate
+full-size budgets would increase the host's maximum CI allocation. The
+application Docker daemon remains outside this boundary.
 
 The Docker and Podman runners on every host build the same qualified runner
 package, `forgejo-runner-cancellation`, from the shared package input. It
@@ -156,10 +150,11 @@ The executor-path fixture accepts `productionModule = true` to exercise the
 same paths against the opt-in module, and `runnerPackage` to select the
 qualified runner. It verifies graceful cancellation removes native job, service
 and action containers while the API remains available. Caller-created nested
-containers and builders are checked separately during aggregate teardown. The
-companion `flake/checks/forgejo-podman-coexistence-vm.nix` checks multi-runner admission,
-configuration switching, aggregate containment and failure/shutdown handling.
-These are explicit qualification runs, not automatic host activation.
+containers and builders are checked separately. The flake check
+`forgejo-runner-hold-lifecycle` (`flake/checks/forgejo-runner-hold-vm.nix`)
+runs the Docker runner and two Podman runners beside both engines through the
+runner hold. The executor-path fixtures are explicit qualification runs, not
+automatic host activation.
 
 Host evidence and recovery procedures belong in the private operational
 repository. Deployment manifests remain owned by GitOps; public host interfaces

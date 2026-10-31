@@ -92,13 +92,14 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0094](0094-browser-roles.md) | One Chromium browser (Brave Origin), Zen provisional | Accepted, Zen provisional | browsers, xyz, xps, mac, Wolf |
 | [ADR-0095](0095-bounded-workspace-sync-go-pilot.md) | Evaluate Go through one bounded workspace-sync pilot | Accepted; source integration implemented, runtime qualification pending | workspace reconciliation, nix-packages, Home Manager |
 | [ADR-0096](0096-bounded-first-timer-freshness.md) | Bound the first-timer freshness exception after reboot | Accepted | storage health, timers |
-| [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted; xyz serves `ci-fast`, xev while xyz's fast runner is down | Forgejo runners, xyz, xev, workflows |
+| [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted; xyz and xev each serve `ci-fast` with a dedicated runner | Forgejo runners, xyz, xev, workflows |
 | [ADR-0098](0098-date-tagged-promotions.md) | Tag each promotion to `main` with a date version | Accepted | promotions, tags, Forgejo releases |
 | [ADR-0100](0100-instance-wide-podman-runners.md) | Register the Podman runners instance-wide | Accepted | Forgejo runners, xyz, xev, nex, nux |
 | [ADR-0102](0102-loopback-remote-view-of-xyz.md) | View and drive xyz's live desktop through a loopback wayvnc | Accepted | xyz, mac, remote access, Home Manager |
 | [ADR-0103](0103-ci-nix-cache-proxy.md) | Give CI jobs a read-only pull-through cache of the upstream Nix caches | Accepted | Forgejo runners, xyz, xev, nex, nux |
 | [ADR-0104](0104-ai-stack-on-system-nixpkgs.md) | Build nix-packages for the hosts with the hosts' own nixpkgs | Accepted | nix-packages, T3 Code, AI stack profile |
 | [ADR-0105](0105-offline-podman-store-reset.md) | Reset the Podman CI store offline while the runners are idle | Accepted | Forgejo runners, Podman, xyz, xev, nex, nux |
+| [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) | Hold the CI runners while a game runs or the disk is low | Accepted | Forgejo runners, xyz, xev, nex, nux, games |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

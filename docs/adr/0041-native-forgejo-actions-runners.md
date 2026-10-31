@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07
-**Amended:** 2026-10-29
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -76,14 +76,17 @@ The default runner pool is represented with labels:
 - Host-level labels are explicit and used only for trusted infrastructure
   workflows.
 - Runner admission is explicit in per-host capacity, set for the Docker and the
-  Podman runner. `nex` and `nux` admit one job per runner. The larger `xyz` and
-  `xev` admit one Docker job and three Podman pool jobs, since most jobs select
-  the Podman pool; their `ci-fast` runners add one slot each
-  ([ADR-0097](0097-ci-fast-runner-label.md)).
-- Runner shutdown stops polling before it waits up to the normal job timeout
-  (3600 seconds) for admitted work to finish. The systemd stop timeout includes
-  a small margin (3660 seconds) so routine host maintenance does not cancel
-  in-progress CI work.
+  Podman runner. Every Docker runner admits one job. The Podman pool admits
+  one job on `xyz`, which also runs games and media services, two on `xev`,
+  and one on `nex` and `nux`; the `ci-fast` runners on `xyz` and `xev` add one
+  slot each ([ADR-0097](0097-ci-fast-runner-label.md),
+  [ADR-0106](0106-runner-hold-for-games-and-low-disk.md)).
+- Runner shutdown stops polling before it waits up to `shutdownTimeoutSeconds`
+  for admitted work to finish, then cancels it. That is the normal job timeout
+  (3600 seconds) on `xev`, `nex` and `nux`, so routine host maintenance does
+  not cancel in-progress CI work, and 120 seconds on `xyz`, so a game gets the
+  disk back quickly. The systemd stop timeout adds 300 seconds for the
+  cancellation and container cleanup.
 - Forgejo runners pull work independently and provide no strict round-robin
   placement guarantee. Shared labels make all four hosts eligible, while the
   per-host caps prevent one server-worker from accepting a concurrent build
@@ -93,7 +96,9 @@ The default runner pool is represented with labels:
   top-level systemd slice, `forgejobuilds.slice`. The slice has an aggregate CPU
   ceiling equal to 50% of the host's online logical processors, a low CPU
   scheduling weight (10) under contention, a 40% memory throttling threshold,
-  and a 50% hard memory limit. Its I/O weight (10) is best effort. With the
+  and a 50% hard memory limit; `xyz`, with three slots beside the nix-daemon's
+  40G cap and the ZFS ARC, uses 25% and 35%. Its I/O weight (10) is best
+  effort. With the
   dedicated CI daemon of ADR-0072, the daemon and its workers run below that
   slice; a runner that uses the shared host daemon instead passes the slice as
   the cgroup parent, and Docker uses the systemd cgroup driver so the parent
@@ -104,40 +109,23 @@ The default runner pool is represented with labels:
 - Keep workstation protection contention-aware. The build slice may use its
   bounded CPU budget while the machine is idle, and its low CPU and I/O weights
   make it yield when interactive work competes. The resource policy itself
-  watches no game process; the optional game-process admission drain is
-  ADR-0072's, enabled on `xyz`.
+  watches no game process; the runner hold of
+  [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) stops `xyz`'s
+  runners while a game runs.
 - Resource controls on Forgejo-created containers do not cover containers or
   BuildKit workers started through a mounted shared host Docker socket. Such
   workflows need the isolated CI Docker daemon of ADR-0072, or equivalent
   daemon-side enforcement, before they can rely on the aggregate policy.
 - Linux cgroup writeback does not support buffered ZFS writeback. The I/O weight
-  therefore cannot guarantee protection from ZFS-backed write saturation; keep
-  this limitation visible and qualify a stronger pressure or storage boundary
-  separately.
+  therefore cannot guarantee protection from ZFS-backed write saturation; the
+  slot counts are the lever that works.
 - Build cache is preserved while the host filesystem is healthy. Under moderate
   pressure, only cache unused for the configured grace period is eligible for
   removal; under critical pressure, all unused cache may be reclaimed. Running
   containers, images needed by containers, and volumes are outside this policy.
-- Runner hosts enable a system I/O pressure guard, and runner startup requires
-  it to be healthy. On isolated hosts, which are all four runner hosts, it is
-  ADR-0072's aggregate guard, which drains admission and freezes the whole
-  aggregate. A runner on the shared host daemon uses the per-container guard
-  below.
-- The per-container guard labels containers created by the runner and pauses
-  them after full I/O PSI remains at or above 20% for 20 seconds. It resumes
-  the complete guard-owned container batch only after PSI remains at or below
-  5% for 60 seconds, keeping a job and its runner-created step and service
-  containers together.
-- That guard records a container as owned only after a successful pause and
-  resumes only recorded containers. A crash between the Docker pause and the
-  ownership record, or a failed pause request whose effect cannot be proven,
-  deliberately leaves that container under uncertain ownership for operator
-  review. Docker reporting the container as unpaused is not sufficient proof
-  after a failed request. Ambiguous pause or resume ownership remains degraded
-  until an operator resolves it.
-- A hard guard failure stops the bound runner service so it cannot admit
-  unprotected work; this can interrupt job orchestration and requires operator
-  recovery.
+- No guard pauses or freezes runner containers under I/O pressure. On the
+  isolated hosts the runner hold holds admission for a game or a low disk; a
+  runner on the shared host daemon has no hold.
 
 ## Alternatives Considered
 
@@ -155,8 +143,8 @@ clean per-job environments. Host-level jobs should be explicit exceptions.
 resource policy. It couples build admission to compositor- and game-specific
 state, while aggregate CPU and memory limits plus low contention weights protect
 interactive work regardless of which foreground application creates pressure.
-ADR-0072 later added an optional game signal that drains admission rather than
-pausing work.
+ADR-0106 later stops `xyz`'s runners while a game runs, rather than pausing
+work.
 
 **Set CPU and memory limits on each container independently** - rejected because
 two admitted jobs, their service containers, and their step containers could
@@ -177,26 +165,14 @@ limit across the containers Forgejo Runner creates.
 - `nex` and `nux` contribute one slot per runner. This spreads eligible work
   without allowing concurrent runner jobs to amplify local resource contention
   on the smaller cluster members.
-- `xev` and `xyz` contribute one Docker slot and three Podman pool slots within
-  one aggregate resource budget. On `xyz`, builds can consume up to half the workstation's CPU and
-  memory, while memory reclaim and scheduling weights favor interactive
-  workloads under contention.
+- `xyz` contributes three slots (one Docker, one pool, one `ci-fast`) and
+  `xev` four (one Docker, two pool, one `ci-fast`), each within one aggregate
+  resource budget. On `xyz`, builds can consume up to half the workstation's
+  CPU and 35% of its memory, while memory reclaim and scheduling weights favor
+  interactive workloads under contention.
 - The policy does not provide a hard ZFS I/O guarantee. Nested Docker work is
   contained only through the dedicated CI daemon of ADR-0072, not by limits on
   the runner service process.
-- I/O PSI is a host-wide congestion signal, not attribution of pressure to the
-  runner. The guard is an emergency circuit breaker scoped to runner
-  containers or the runner aggregate; it does not guarantee an I/O rate, and
-  workflow wall-clock timeouts continue while work is paused or frozen.
-  Because unrelated host load can hold host-wide PSI between the drain and
-  resume thresholds indefinitely, the isolated aggregate's admission drain also
-  recovers after its drained jobs have finished, its own I/O PSI stays quiet
-  and host pressure stays below the drain threshold for a settled interval
-  (ADR-0072).
-- On a runner that uses the shared host daemon, containers started through a
-  job's mounted Docker socket do not inherit the runner label and remain
-  outside the per-container pressure guard. Such workflows must bound their own
-  resource use.
 - Nix-heavy workflows remain Docker-backed. Their verification scripts isolate
   build stages and may clean Nix's fake build home only after positively
   identifying an explicitly opted-in ephemeral job container.

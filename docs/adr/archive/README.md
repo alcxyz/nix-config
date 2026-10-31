@@ -66,3 +66,4 @@ archived number.
 | [ADR-0097 history](0097-ci-fast-runner-label-history.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | History of [ADR-0097](../0097-ci-fast-runner-label.md) |
 | [ADR-0099](0099-agent-github-app.md) | Agent sessions act on GitHub through a GitHub App | Moved to a private repository on 2026-10-29 |
 | [ADR-0101](0101-description-format-observation-trial.md) | Observe description formatting before deciding on enforcement | Moved to a private repository on 2026-10-29 |
+| [ADR-0105 history](0105-offline-podman-store-reset-history.md) | Reset the Podman CI store offline while the runners are idle | History of [ADR-0105](../0105-offline-podman-store-reset.md) |

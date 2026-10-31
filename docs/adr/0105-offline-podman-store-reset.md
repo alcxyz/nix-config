@@ -2,9 +2,11 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
+**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle
+**History:** [replaced text](archive/0105-offline-podman-store-reset-history.md)
 **Supersedes:** [ADR-0083](archive/0083-podman-cleanup-completion-fence.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-store-reset.{nix,sh}`,
-the runner start gates and hold monitor, the runner pool on xyz, xev, nex and nux
+the runner start gates and the runner hold, the runner pool on xyz, xev, nex and nux
 
 ## Context
 
@@ -24,10 +26,11 @@ Buildx state volumes in every idle window.
 
 The runner (forgejo-runner v13.2.0 as built here) shuts down gracefully on
 SIGTERM: it stops polling and waits for running jobs up to
-`runner.shutdown_timeout` (3600 seconds here, as long as the job timeout)
-before it cancels them (`internal/app/cmd/daemon.go` and
-`internal/app/poll/poller.go`; the local patch does not touch this path). So a
-runner stop never kills a job the runner already admitted; it only waits for it.
+`runner.shutdown_timeout` before it cancels them
+(`internal/app/cmd/daemon.go` and `internal/app/poll/poller.go`; the local
+patch does not touch this path). That timeout is 3600 seconds on xev, nex and
+nux and 120 seconds on xyz ([ADR-0106](0106-runner-hold-for-games-and-low-disk.md)),
+so a runner stop on xyz cancels a job that runs longer than two minutes.
 
 ## Decision
 
@@ -41,22 +44,25 @@ the host is idle.
   (`triggerUsedPercent`) and the last reset is at least six hours old. The
   first run only starts the age clock, kept in the unit's root-owned state
   directory.
-- **Idle:** no game is detected and host I/O pressure is at or below the
-  guard's resume threshold; the guard is active and the build aggregate is not
-  frozen; the guard's runner registry matches the configured runner list (after
-  a switch that changed the list, the start gates refuse every start until a
-  reboot clears the preserved registry; a guard restart alone refuses the
-  changed list); no guard transition marker is present; no Docker cache prune runs;
-  both APIs are active; every runner is either running with no pending systemd
-  job, or stopped by whoever stopped it; and neither API runs a
-  `FORGEJO-ACTIONS-TASK-*` container. This check only keeps the stop short. A
-  job admitted after it still finishes, because the runner's shutdown waits.
-- **Stop:** record the APIs and the running runners in a runtime list, stop
-  those runners, check again that the aggregate is not frozen, the guard is
-  active and every runner is stopped (a standby controller or a guard resume
-  may have started one meanwhile), then stop both APIs (an ordinary graceful
-  lifecycle stop).
-- **Rename:** under the lifecycle lock, which every runner and API start gate
+- **Idle:** the game signal reports no game (on a game host) and host I/O
+  pressure is at or below `ioPressurePercent` (5 percent); the runner hold is
+  active and every runner has its hold state directory; no Docker cache prune
+  runs; both APIs are active; every runner is either running with no pending
+  systemd job, or stopped by whoever stopped it; neither API runs a
+  `FORGEJO-ACTIONS-TASK-*` container; and no runner to be stopped has logged a
+  job start in the last `quietMinutes` (15 minutes), since a job that is still
+  pulling its image or setting up has no task container yet. A reset stops no
+  runner with a job it can see: on xyz the stop would cancel it after two
+  minutes. A job still pulling its image more than 15 minutes after it
+  started shows neither sign and remains a gap.
+- **Stop:** record the APIs and the running runners in a runtime list, then
+  stop the runners one at a time, checking right before each stop that
+  neither API runs a task container and that the runner has logged no recent
+  job start. A job admitted between that check and the stop is the one window
+  left. Then check again that the runner hold is
+  active and every runner is stopped (the hold may have released one
+  meanwhile), and stop both APIs (an ordinary graceful stop).
+- **Rename:** under the start lock, which every runner and API start gate
   takes first, prove every runner and both APIs stopped with no pending job and
   empty API cgroups, and that nothing is mounted at or below the store. Then
   rename the store directory to a hidden trash name beside it, on the same
@@ -66,14 +72,12 @@ the host is idle.
   filesystem. Sync the rename and the age stamp, then release the lock.
 - **Start:** start both APIs at once, and with them only the runners the reset
   stopped. The start gates still decide each start. A runner whose gate refuses
-  the start (for a freeze or a guard transition, say) gets a
-  `reset-start-skipped` hold marker, and the pressure guard resumes it through
-  its normal resume path, as for disk and game skips, once its conditions
-  allow. This needs the guard's admission control, which every runner host
-  enables.
+  the start (for a game that began meanwhile, say) keeps the gate's `held`
+  marker, and the runner hold starts it once its hold reason ends. Every
+  runner host runs the hold.
 - **Delete:** remove the old store at the lowest CPU and I/O priority, through
   a descriptor opened on it so the API user cannot redirect the removal. Stop
-  while a game is detected, pressure rises above the resume threshold or 30
+  while a game is detected, pressure rises above `ioPressurePercent` or 30
   minutes pass. Leftover trash is garbage that the next check deletes first; a
   due reset waits until it is gone. The API user can create entries with the
   trash name: one that is not a directory is unlinked without being followed,
@@ -81,18 +85,19 @@ the host is idle.
   so neither stops or holds a reset.
 
 The rename is the only mutation that needs exclusion, and it cannot outlive the
-process that holds the lock, so no completion fence exists. The unit's
+process that holds the lock, so no completion fence exists. The lock is
+`/run/forgejo-runner-hold/start.lock`. The unit's
 `ExecStopPost` starts every unit on the runtime list in the same way, so a
 failed, skipped or killed run leaves no runner stopped without an owner. After a reboot the store is
 either the old one, unchanged, or a new empty one; the boot needs no recovery
 step. No systemd `Conflicts=` or ordering dependency excludes the reset: a start
 of a conflicting unit would stop it mid-run.
 
-The hold monitor treats a runner on the reset's runtime list as an intended
-hold while the reset runs, so a job that finishes before its runner stops (up
-to an hour) does not report the other stopped runners. A completion fence left
-from before this decision blocks nothing: the gates, guard and hold monitor
-ignore it, and the next check resets the store at once and removes it.
+The runner hold's left-off check treats a runner on the reset's runtime list
+as an intended hold while the reset runs. A completion fence left from before
+this decision, in `/run/forgejo-runner-aggregate-pressure`, blocks nothing:
+the gates and the hold ignore it, and the next check resets the store at once
+and removes it.
 
 The dedicated Docker daemon keeps its own retention
 ([ADR-0072](0072-isolated-runner-docker.md)): native BuildKit GC and the daily
@@ -116,25 +121,23 @@ manual Docker volume mode of the old cleanup is retired with the fences.
   1 GiB in the VM test, longer for a real store of tens of GiB).
 - Order the units with `Conflicts=` or `After=` against the reset: a start of a
   conflicting unit would stop the reset mid-run, and ordering only applies to
-  queued jobs; the lifecycle lock already orders every start gate.
-- Drain the runners through the I/O pressure guard first: couples the reset to
-  the drain states that a later step of #916 removes.
+  queued jobs; the start lock already orders every start gate.
 
 ## Consequences
 
 A reset costs CI about 3 to 4 seconds of downtime in the VM test, plus the time
 any running job needs to finish. Jobs after a reset pull their images again,
 through the LAN cache, and rebuild BuildKit state. Between resets nothing is
-deleted from the store, so it grows until the next reset; the disk-space
-admission and critical floors of [ADR-0072](0072-isolated-runner-docker.md)
-still apply, and a disk drain is an idle window in which a reset can run. On a
+deleted from the store, so it grows until the next reset; the disk floor of
+[ADR-0106](0106-runner-hold-for-games-and-low-disk.md) still applies, and a
+disk hold is an idle window in which a reset can run. On a
 host whose root filesystem is mostly other data, the use trigger can reset at
 most every six hours.
 
 The VM check `forgejo-podman-store-reset-lifecycle` runs the reset with both
 production API units: a due reset, an API start waiting on the lock and
 preventing the rename, a run killed while it holds the lock, a crash after the
-rename, and a leftover fence. Unit tests cover the skip matrix, the restart list
-and the bounded trash deletion.
+rename, and a leftover fence. Unit tests cover the skip matrix, a job that
+appears between runner stops, the restart list and the bounded trash deletion.
 
 Tracks [#916](https://git.alc.xyz/alcxyz/nix-config/issues/916) (step 2).
