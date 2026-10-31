@@ -115,7 +115,18 @@ else let
 
   # A docker.io pull-through cache for both dedicated engines (#917).
   mirrorHost = "registry-cache.example.org";
-  mirrored = evaluate true validLabels {services.forgejo-actions-runner.registryMirror = mirrorHost;};
+  mirrorCa = ../../modules/nixos/services/forgejo-actions-runner/registry-cache-ca.crt;
+  mirrored = evaluate true validLabels {
+    services.forgejo-actions-runner = {
+      registryMirror = mirrorHost;
+      registryMirrorCaFile = mirrorCa;
+    };
+  };
+  mirrorWithoutCa = evaluate true validLabels {services.forgejo-actions-runner.registryMirror = mirrorHost;};
+  caWithoutMirror = evaluate true validLabels {services.forgejo-actions-runner.registryMirrorCaFile = mirrorCa;};
+  dockerCaSetup = config: config.systemd.services.forgejo-runner-docker.serviceConfig.ExecStartPre;
+  podmanCaSetup = config: config.systemd.services.forgejo-runner-podman.serviceConfig.ExecStartPre;
+  etcCertsDirs = config: lib.filterAttrs (name: _: lib.hasInfix "certs.d" name) config.environment.etc;
   mirroredApi = mirrored.systemd.services.forgejo-runner-podman;
   v1Mirrored = evaluate true validLabels {
     services.forgejo-actions-runner.registryMirror = mirrorHost;
@@ -488,6 +499,11 @@ in
   assert failedAssertions mirrored == failedAssertions enabled;
   assert failedAssertion v1Mirrored "services.forgejo-actions-runner.registryMirror requires virtualisation.containers.registries.settings in the version 2 format.";
   assert !mirroredApi.restartIfChanged;
+  # The CA is trusted for the mirror host only, in each engine's own certs.d,
+  # never in /etc or the system trust store.
+  assert etcCertsDirs mirrored == {};
+  assert mirrored.security.pki.certificateFiles == enabled.security.pki.certificateFiles;
+  assert failedAssertion caWithoutMirror "services.forgejo-actions-runner.registryMirrorCaFile requires registryMirror.";
   assert !mirrored.systemd.services.forgejo-runner-docker.restartIfChanged;
     pkgs.runCommand "forgejo-podman-canary-contract" {
       nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.python3 pkgs.shellcheck pkgs.systemd pkgs.util-linux pkgs.yq-go];
@@ -523,6 +539,26 @@ in
       PY
       test "$(yq -o json -I0 '."registry-mirrors"' ${dockerConfigFile mirrored})" = '["https://${mirrorHost}"]'
       test "$(yq '."registry-mirrors"' ${dockerConfigFile enabled})" = null
+      # Each engine rebuilds its per-host certs.d at start: with the CA for
+      # the mirror host when set, and empty otherwise.
+      check_ca_setup() {
+        local script=$1 dir=$2 ca=$3
+        grep -Fq "rm -rf -- $dir" "$script"
+        if [[ -n $ca ]]; then
+          grep -Fq "install -D -m 0644 $ca" "$script"
+          grep -Fq "$dir/${mirrorHost}/ca.crt" "$script"
+        elif grep -Fq install "$script"; then
+          exit 1
+        fi
+      }
+      docker_certs=/var/lib/forgejo-docker/.config/docker/certs.d
+      podman_certs=/var/lib/forgejo-podman/.config/containers/certs.d
+      check_ca_setup ${dockerCaSetup mirrored} "$docker_certs" ${mirrorCa}
+      check_ca_setup ${podmanCaSetup mirrored} "$podman_certs" ${mirrorCa}
+      check_ca_setup ${dockerCaSetup mirrorWithoutCa} "$docker_certs" ""
+      check_ca_setup ${podmanCaSetup mirrorWithoutCa} "$podman_certs" ""
+      check_ca_setup ${dockerCaSetup enabled} "$docker_certs" ""
+      check_ca_setup ${podmanCaSetup enabled} "$podman_certs" ""
       fixture="$(mktemp -d)"
       trap 'rm -rf "$fixture"' EXIT
       state="$fixture/state"

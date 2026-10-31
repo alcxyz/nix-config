@@ -263,6 +263,17 @@ in {
       '';
     };
 
+    registryMirrorCaFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = ''
+        PEM CA certificate that the dedicated runner engines trust for the
+        registryMirror host only, through their per-host certs.d directories.
+        The system trust store is unchanged. null verifies the mirror against
+        the system trust store.
+      '';
+    };
+
     resourcePolicy = {
       enable = lib.mkEnableOption "aggregate resource controls for Forgejo-created containers";
 
@@ -543,6 +554,10 @@ in {
       {
         assertion = cfg.labels != [];
         message = "services.forgejo-actions-runner.labels must not be empty.";
+      }
+      {
+        assertion = cfg.registryMirrorCaFile == null || cfg.registryMirror != null;
+        message = "services.forgejo-actions-runner.registryMirrorCaFile requires registryMirror.";
       }
       {
         assertion = isolated || config.virtualisation.docker.enable;

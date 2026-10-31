@@ -127,6 +127,7 @@ in {
     # Engines pull docker.io images through the LAN cache, falling back to
     # docker.io when it is down (#917).
     registryMirror = "registry-cache.alc.xyz";
+    registryMirrorCaFile = ../../modules/nixos/services/forgejo-actions-runner/registry-cache-ca.crt;
     isolatedDocker.enable = true;
     isolatedDocker.retention.enable = true;
     podmanCanary = {

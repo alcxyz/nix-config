@@ -219,6 +219,7 @@
   # through CONTAINERS_REGISTRIES_CONF, which takes precedence over both the
   # system file and a per-user one, so other Podman users are unaffected.
   registrySettings = config.virtualisation.containers.registries.settings;
+  mirrorCaSetup = import ./registry-mirror-ca.nix {inherit cfg lib pkgs;};
   isDockerHub = registry: (registry.prefix or registry.location or "") == "docker.io";
   hostRegistries = registrySettings.registry or [];
   mirroredRegistry = registry:
@@ -807,6 +808,12 @@ in {
           TimeoutStopSec = "90s";
           LimitCORE = 0;
           ExecCondition = "+${lib.getExe apiStartGate}";
+          # containers/image takes the first existing per-host directory of
+          # ~/.config/containers/certs.d, /etc/containers/certs.d and
+          # /etc/docker/certs.d and adds its *.crt to the system roots for
+          # that host only. The builder's own directory keeps the CA to this
+          # service, and rewriting it at each start drops an unset one.
+          ExecStartPre = "${mirrorCaSetup "forgejo-podman-mirror-ca" "${builderState}/.config/containers/certs.d"}";
           ExecStart = "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay --root=${canary.storageRoot} --runroot=${builderRuntime}/storage system service --time=0";
         };
       };

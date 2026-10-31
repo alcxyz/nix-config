@@ -41,8 +41,10 @@ docker.io images and fall back to docker.io when it is unreachable or lacks an
 image, so the cache stays a soft dependency. A cache that answers the first
 request but fails later in a pull, for example on a platform manifest, can
 still fail that pull in Podman, which keeps using the source that served the
-image index. Pulls stay anonymous over verified TLS, and
-the cache runs on the same home infrastructure the runners already trust; it
+image index. Pulls stay anonymous over TLS verified against the cache's own
+CA (`registryMirrorCaFile`), which each engine trusts for the cache's host name
+only, through its per-host `certs.d` directory, not the system trust store. The
+cache runs on the same home infrastructure the runners already trust, and it
 may resolve a tag to its cached digest until it refreshes the tag. Buildx
 `docker-container` builders that jobs create keep their own registry
 configuration and are not covered.

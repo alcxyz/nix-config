@@ -15,6 +15,8 @@
   runnerUnits = lib.concatStringsSep " " cfg.runnerUnits;
   stateDir = "/var/lib/forgejo-docker";
   runtimeDir = "/run/forgejo-docker";
+  dockerCertsDir = "${stateDir}/.config/docker/certs.d";
+  mirrorCaSetup = import ./registry-mirror-ca.nix {inherit cfg lib pkgs;};
   diskSpaceEnvironment = {
     DISK_HELPER_FILE = "${./disk-space-admission.sh}";
     DISK_SPACE_ENABLED =
@@ -190,6 +192,13 @@ in {
         RuntimeDirectoryMode = "0750";
         ExecStart = "${pkgs.docker}/bin/dockerd-rootless --config-file=${daemonConfig}";
         ExecCondition = "+${lib.getExe apiStartGate}";
+        # A rootless daemon reads per-host CAs only from
+        # $XDG_CONFIG_HOME/docker/certs.d, here $HOME/.config/docker/certs.d
+        # (CertsDir in moby v29 daemon/pkg/registry), never /etc/docker/certs.d.
+        # Rewriting it at each start, after the state mount is up, keeps
+        # XDG_CONFIG_HOME and the rest of the daemon's state where they are
+        # and drops a CA that is no longer configured.
+        ExecStartPre = "${mirrorCaSetup "forgejo-docker-mirror-ca" dockerCertsDir}";
         Slice = "forgejobuilds.slice";
         Delegate = true;
         NotifyAccess = "all";
