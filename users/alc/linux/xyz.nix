@@ -82,7 +82,6 @@ in {
     "${configDir}/modules/home-manager/programs/stashdb-pop/default.nix"
 
     "${configDir}/modules/home-manager/services/paperflow/default.nix"
-    "${configDir}/modules/home-manager/services/paperless-filetype-index/default.nix"
     "${configDir}/modules/home-manager/services/devlog/default.nix"
     # Pushes devlog entries with a deploy key instead of the SSH agent (#805).
     inputs.nix-secrets.homeManagerModules.devlogDeployKey

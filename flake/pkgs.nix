@@ -57,7 +57,6 @@ in
                 n: _:
                   builtins.elem n [
                     "paperweight"
-                    "paperless-filetype-index"
                   ]
               )
               pt)
