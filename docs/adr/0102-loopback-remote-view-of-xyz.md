@@ -4,6 +4,7 @@
 **Date:** 2026-10-26
 **Amended:** 2026-10-31, start on another output when the preferred one is missing.
 **Amended:** 2026-10-31, `remote-desk` moves the desktop to a virtual output sized for the Mac.
+**Amended:** 2026-10-31, the virtual output follows the viewer's window size.
 **Applies to:** `modules/home-manager/services/remote-view/`, `users/alc/linux/xyz.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`
 
 ## Context
@@ -43,15 +44,18 @@ Run wayvnc in the Hyprland session through a small Home Manager module,
    `wayvncctl output-set` or `output-cycle` switches outputs while connected.
 4. The Mac uses TigerVNC Viewer (Homebrew cask), which supports RSA-AES.
 5. The 5120x1440 ultrawide is too wide to work on from the Mac's screen, so
-   `remote-desk on` (run over SSH) creates a virtual output named `REMOTE`
-   in a fixed mode matching the Mac (`deskMode`, 1728x1117 on xyz), points
-   wayvnc at it and disables the physical outputs, including the known ones
+   `remote-desk on` (run over SSH) creates a virtual output named
+   `HEADLESS-REMOTE`, starting in `deskMode` (2056x1262 on xyz, TigerVNC's
+   picture area when tiled on the Mac), points wayvnc at it and disables the
+   physical outputs, including the known ones
    that are disconnected at the time (`physicalOutputs`), so a display that
    wakes stays dark. Hyprland then moves every workspace to it, and nothing
    shows at home. `remote-desk off` reloads the compositor config, which
    restores the physical outputs with their own rules and returns each
-   workspace to its monitor, then removes `REMOTE`; if no display is
-   connected yet, it keeps `REMOTE` until the next `off`. On xyz,
+   workspace to its monitor (after restarting wayvnc, see Consequences), then removes the virtual output; if no display
+   is connected yet, it keeps it until the next `off`. wayvnc resizes
+   outputs named `HEADLESS-*` to the viewer's window when the viewer asks,
+   which TigerVNC does by default, so the desk follows the window. On xyz,
    Super+Ctrl+Shift+Escape runs `remote-desk off`, also from the lock
    screen, for getting the displays back without seeing them.
 
@@ -82,10 +86,10 @@ request, not against a deliberately hostile process running as the operator.
   of the operator's reach, but needs cross-user access to the Wayland socket,
   and same-user processes would still have the compositor's own capture and
   input protocols. Not worth it while the same-user limit stands.
-- **A virtual output that follows the viewer's window size.** wayvnc can
-  resize a `HEADLESS-*` output on the viewer's request, but it also moves
-  it to 0,0, over the other outputs, which needs a local patch. A fixed mode
-  for the one viewer that matters is simpler.
+- **A fixed mode only.** The viewer's picture area changes with its window
+  state (tiled, resized, full screen), and a fixed mode that is too large
+  means scrolling. wayvnc's resize also moves the output to 0,0, but that
+  only overlaps the physical outputs, which are off while the desk is on.
 - **Keeping the physical outputs on and moving chosen workspaces.** Dialogs
   and new windows could open on an output the viewer cannot see, and the
   pointer could leave the view.
@@ -102,16 +106,24 @@ request, not against a deliberately hostile process running as the operator.
   wake them through the same idle path as local input; if it does not, they
   can be woken over SSH through Hyprland's DPMS dispatch. Verify this, and
   typing into Hyprlock through the view, before relying on it.
-- While `remote-desk` is on, a config reload (for example a Home Manager
-  deploy) or a Hyprland restart brings the physical outputs back, and the
-  reload resets `REMOTE` to a default mode; run `remote-desk on` again.
-  Removing the last output makes wayvnc exit and drop the viewer, so
-  `remote-desk` never removes `REMOTE` while the physical outputs are off.
-  Whether the lock screen and the consent dialog appear on `REMOTE` is to
-  be verified. Hyprlock's display-off helper remembers the outputs of the
-  lock it started in, so switching `remote-desk` while locked can leave
-  displays it no longer covers on, or retry ones that are disabled, until
-  the next unlock.
+- Every resize wayvnc applies through output management also marks the
+  outputs that are off at the time as disabled, and Hyprland keeps that mark
+  over the config rules for as long as wayvnc stays connected, across
+  reloads and reconnects. `remote-desk off` therefore restarts wayvnc before
+  reloading, which drops the viewer. The same mark means a config reload
+  while the desk is on (for example a Home Manager deploy) usually keeps the
+  physical outputs off and the desk at the viewer's size; before the viewer
+  has resized the desk, a reload brings the physical outputs back and
+  resets the desk's mode. A Hyprland restart always brings them back and
+  removes the desk. Either way, run `remote-desk on` again.
+- Removing the last output makes wayvnc exit and drop the viewer, so
+  `remote-desk` never removes the virtual output while the physical outputs
+  are off.
+- Unlocking the lock screen and approving the consent dialog through the
+  desk were verified on 2026-10-31. Hyprlock's display-off helper remembers
+  the outputs of the lock it started in, so switching `remote-desk` while
+  locked can leave displays it no longer covers on, or retry ones that are
+  disabled, until the next unlock.
 - Only one output is visible at a time, and viewing quality depends on the
   link; VNC sends only changed regions. When the captured output disappears,
   wayvnc moves to another one and stays there after the first returns, so

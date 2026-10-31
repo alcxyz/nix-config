@@ -43,13 +43,15 @@
   );
 
   # The remote desk: a virtual output sized for the viewer that takes every
-  # workspace while the physical outputs are off. `off` reloads the
+  # workspace while the physical outputs are off. wayvnc resizes outputs named
+  # `HEADLESS-*` to the viewer's window on request (and moves them to 0,0,
+  # which nothing else occupies while the physical outputs are off). `off` reloads the
   # compositor config, which re-enables the physical outputs with their own
   # rules; Hyprland then returns each workspace to its monitor.
-  desk = "REMOTE";
+  desk = "HEADLESS-REMOTE";
   remoteDesk = pkgs.writeShellApplication {
     name = "remote-desk";
-    runtimeInputs = [pkgs.hyprland pkgs.jq pkgs.coreutils pkgs.gnugrep pkgs.wlr-randr config.services.wayvnc.package];
+    runtimeInputs = [pkgs.hyprland pkgs.jq pkgs.coreutils pkgs.gnugrep pkgs.wlr-randr pkgs.systemd config.services.wayvnc.package];
     text = ''
       desk=${lib.escapeShellArg desk}
       mode=${lib.escapeShellArg cfg.deskMode}
@@ -108,16 +110,21 @@
           else
             hypr output create headless "$desk"
           fi
-          # wayvnc may be restarting, which takes a few seconds.
-          for _ in $(seq 40); do
-            if wayvncctl output-set "$desk" >/dev/null 2>&1; then break; fi
-            sleep 0.25
-          done
+          # Disable the physical outputs in one request, before wayvnc moves to
+          # the desk: a viewer resize commits the state of every output at
+          # that moment.
+          rules=""
           for name in $( (physical_enabled; tr ' ' '\n' <<<"$known_outputs") | sort -u); do
             case "$name" in
               *[!A-Za-z0-9_-]*) die "unexpected output name: $name" ;;
             esac
-            hypr eval "hl.monitor({ output = \"$name\", disabled = true })"
+            rules+="hl.monitor({ output = \"$name\", disabled = true }) "
+          done
+          if [ -n "$rules" ]; then hypr eval "$rules"; fi
+          # wayvnc may be restarting, which takes a few seconds.
+          for _ in $(seq 40); do
+            if wayvncctl output-set "$desk" >/dev/null 2>&1; then break; fi
+            sleep 0.25
           done
           hypr dispatch "hl.dsp.focus({ monitor = \"$desk\" })"
           if ! wayvncctl output-list 2>/dev/null | grep -q "^\* $desk:"; then
@@ -125,6 +132,11 @@
           fi
           ;;
         off)
+          # Every resize wayvnc applies also marks the outputs that are off at
+          # the time as disabled, and Hyprland keeps that mark over the config
+          # for as long as wayvnc stays connected. Restarting wayvnc drops it
+          # (and the viewer, which is done by now).
+          systemctl --user try-restart wayvnc.service || true
           hypr reload
           for _ in $(seq 40); do
             if [ -n "$(physical_enabled)" ]; then break; fi
@@ -185,8 +197,10 @@ in {
       default = "1920x1080@60";
       example = "1728x1117@60";
       description = ''
-        Mode of the virtual output that `remote-desk on` creates, matching the
-        viewer's screen. While it is on, the physical outputs are disabled.
+        Mode the virtual output that `remote-desk on` creates starts in; a
+        viewer that asks to resize the desktop (TigerVNC does by default)
+        then sets it to its window. While it is on, the physical outputs are
+        disabled.
       '';
     };
 

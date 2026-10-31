@@ -289,8 +289,9 @@ in {
   services.remoteView = {
     enable = true;
     output = "DP-1";
-    # The Mac's 16" display at its default scaled resolution.
-    deskMode = "1728x1117@60";
+    # TigerVNC's picture area when tiled on the Mac's display (2056x1329
+    # points, less the menu bar and the window's title bar).
+    deskMode = "2056x1262@60";
     physicalOutputs = ["DP-1" "HDMI-A-1"];
   };
   services.waynergy = {
