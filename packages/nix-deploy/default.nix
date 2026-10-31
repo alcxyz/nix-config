@@ -104,6 +104,28 @@
     nixosHostNames
   ));
 
+  # nixfleet triage starts this agent in the flake checkout. It resolves the
+  # deep agent role when it runs, so no model is pinned here; agent-role and
+  # claude come from the user's PATH, where the agent stack installs them.
+  triageAgent = writeShellScript "nixfleet-triage-agent" ''
+    for tool in agent-role claude; do
+      if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "nixfleet-triage-agent: $tool is not on PATH; install the agent stack to launch the triage agent" >&2
+        exit 127
+      fi
+    done
+    model="$(agent-role deep claude model)" || {
+      echo "nixfleet-triage-agent: agent-role could not resolve the deep role's model" >&2
+      exit 1
+    }
+    # Effort is optional for a role; without one, Claude keeps its default.
+    effort="$(agent-role deep claude effort 2>/dev/null)" || effort=""
+    if [ -n "$effort" ]; then
+      exec claude --model "$model" --effort "$effort" "$@"
+    fi
+    exec claude --model "$model" "$@"
+  '';
+
   config = {
     schemaVersion = 1;
     operatorHost = "xyz";
@@ -135,6 +157,37 @@
       hosts = dnsServerHostNames;
       readyCommand = "${dnsReady} {host}";
       readyTimeoutSeconds = 300;
+    };
+    # Read only by nixfleet triage (nix-packages ADR-0016): the agent it
+    # launches and the local checkouts of the operator's own flake inputs.
+    # Inputs without a local checkout are not mapped.
+    triage = {
+      agentCommand = ["${triageAgent}"];
+      inputCheckouts = {
+        bivrost = "~/src/apps/bivrost";
+        bivrost-dev = "~/src/apps/bivrost";
+        canopy = "~/src/apps/canopy";
+        canopy-dev = "~/src/apps/canopy";
+        devstats = "~/src/personal/devstats";
+        dms-plugins = "~/src/tools/dms-plugins";
+        grove = "~/src/apps/grove";
+        grove-dev = "~/src/apps/grove";
+        hedgedoc = "~/src/tools/hedgedoc";
+        nix-packages = "~/src/infra/nix-packages";
+        nix-secrets = "~/src/infra/nix-secrets";
+        pandora = "~/src/infra/pandora";
+        paperflow = "~/src/apps/paperflow";
+        paperless-tools = "~/src/tools/paperless-tools";
+        paperless-tools-dev = "~/src/tools/paperless-tools";
+        paw = "~/src/apps/paw";
+        regnskap = "~/src/platform/regnskap";
+        regnskap-dev = "~/src/platform/regnskap";
+        reportcraft = "~/src/tools/reportcraft";
+        stashdb-pop = "~/src/tools/stashdb-pop";
+        t3rry = "~/src/apps/t3rry";
+        t3rry-dev = "~/src/apps/t3rry";
+        vidown = "~/src/apps/vidown";
+      };
     };
     hostColors = {
       xyz = "137;180;250";
