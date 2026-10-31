@@ -20,6 +20,7 @@
       touch "$out"
     '';
 in {
+  isolated-agent-contract = import ./isolated-agent.nix {inherit inputs pkgs;};
   runtime-storage-identity-contract = mkRepoCheck "runtime-storage-identity-contract" [pkgs.bash pkgs.coreutils] ''
     bash scripts/checks/test-runtime-storage-check.sh modules/nixos/services/forgejo-actions-runner/runtime-storage-check.sh
   '';
