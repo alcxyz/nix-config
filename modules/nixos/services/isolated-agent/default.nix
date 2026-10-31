@@ -79,7 +79,7 @@ in {
       createHome = true;
       homeMode = "0700";
       shell = pkgs.bashInteractive;
-      packages = cfg.providerPackages;
+      packages = [cfg.package] ++ cfg.providerPackages;
     };
 
     # Order denials around extraConfig grants. Separately installed policy
@@ -98,15 +98,20 @@ in {
         XDG_CONFIG_HOME = "${account.home}/.config";
         XDG_STATE_HOME = "${account.home}/.local/state";
         XDG_CACHE_HOME = "${account.home}/.cache";
+        T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = "false";
       };
       serviceConfig = {
         User = cfg.user;
         Group = cfg.user;
         WorkingDirectory = account.home;
-        ExecStart = "${cfg.package}/bin/t3 serve --host 127.0.0.1 --port ${toString cfg.port} --base-dir ${account.home}/.t3";
+        ExecStart = "${cfg.package}/bin/t3 start --mode desktop --no-browser --host 127.0.0.1 --port ${toString cfg.port} --base-dir ${account.home}/.t3";
         Restart = "on-failure";
         RestartSec = 15;
         SuccessExitStatus = 130;
+        # Provider/server startup may contain pairing material. Keep it out of
+        # the shared journal; unit state and exit status remain observable.
+        StandardOutput = "null";
+        StandardError = "null";
         UMask = "0077";
         NoNewPrivileges = true;
         CapabilityBoundingSet = "";

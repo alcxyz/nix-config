@@ -52,9 +52,9 @@ each answers locally and resolves a fresh public name before the next
 
 `xps` is a battery-less laptop that stays docked in the living room. In
 network and secret designs, group it with the stationary Pis rather than with
-mobile clients. Its planned direction (media modes and an isolated agent mode,
-no operator workstation) is tracked in #548; until then its current
-configuration still includes a source workspace.
+mobile clients. It keeps its media use, owner account and source workspace.
+The isolated agent mode tracked in [#548](https://git.alc.xyz/alcxyz/nix-config/issues/548)
+uses a separate unprivileged account rather than removing the workspace.
 
 ## Wolf browser input changes
 

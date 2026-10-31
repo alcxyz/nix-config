@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-07-16
 **Amended:** 2026-10-28, updated 2026-10-29 (xps sets `defaultSessionMode = "merged"`, per owner decision; open question on [#854](https://git.alc.xyz/alcxyz/nix-config/issues/854) removed)
+**Tracking updated:** 2026-10-31, owner retains the media use and workspace in [#548](https://git.alc.xyz/alcxyz/nix-config/issues/548).
 **History:** [replaced text](archive/0053-controller-first-xps-couch-session-history.md)
 **Applies to:** `hosts/xps`, `modules/nixos/services/moonlight-client`, SteamHeadless integration
 
@@ -353,5 +354,6 @@ attached to the container's X server.
   controller shutdown action, and optional clipboard transfer. The
   Wayland-compatible KDE Connect phone pointer path is implemented and
   qualified.
-- Issue #548 tracks xps's planned direction (media modes and an isolated
-  agent mode, no operator workstation); its decision is still open.
+- [Issue #548](https://git.alc.xyz/alcxyz/nix-config/issues/548) tracks the isolated
+  agent mode. xps retains its media use, owner account and source workspace;
+  agent isolation uses a separate unprivileged account.

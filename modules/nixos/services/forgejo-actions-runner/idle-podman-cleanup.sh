@@ -218,7 +218,7 @@ for unit in "${runner_units[@]}"; do
   [[ $(printf '%s\n' "$metadata" | wc -l) == 5 ]] || preflight_skip "runner_active unit=$unit"
   # systemctl renders the absence of a pending job as an empty Job= field.
   for expected in ActiveState=inactive SubState=dead MainPID=0 ControlPID=0 Job=; do
-    printf '%s\n' "$metadata" | rg --quiet --fixed-strings --line-regexp "$expected" || preflight_skip "runner_active unit=$unit"
+    rg --quiet --fixed-strings --line-regexp "$expected" <<<"$metadata" || preflight_skip "runner_active unit=$unit"
   done
 done
 

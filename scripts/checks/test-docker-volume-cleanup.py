@@ -195,6 +195,23 @@ esac
                     self.assertIn('engine_api_invalid', self.run_ok())
                     self.assertEqual(self.f.mutations, [])
 
+    def test_runner_metadata_match_does_not_depend_on_producer_pipe_completion(self):
+        split_output = self.f.root / 'split-output.sh'
+        split_output.write_text(r'''printf() {
+  if [[ $1 == '%s\n' && ${2-} == $'ActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\nJob=' ]]; then
+    builtin printf '%s\n' 'ActiveState=inactive'
+    sleep 0.05
+    builtin printf '%s\n' $'SubState=dead\nMainPID=0\nControlPID=0\nJob='
+  else
+    builtin printf "$@"
+  fi
+}
+''')
+        # A quiet matcher may close after the first record. Under pipefail,
+        # the remaining producer write must not turn inactive into active.
+        self.assertIn('bounded_partial cause=cap', self.run_ok(BASH_ENV=str(split_output)))
+        self.assertEqual(len(self.f.mutations), 2)
+
     def test_inspect_identity_driver_scope_options_and_absence(self):
         self.allow('fixture_one')
         original = self.f.docker_volumes['fixture_one'].copy()

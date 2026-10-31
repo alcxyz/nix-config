@@ -7,6 +7,9 @@ The consumer supplies `package` and `providerPackages` explicitly, so the
 generic module does not require a particular overlay or unfree package policy.
 
 The server binds loopback, has no capabilities and cannot elevate privileges.
+It starts without browser launch, automatic project creation or printing
+headless pairing credentials into the service journal. Pairing is an explicit
+operator action.
 Its service cannot access home directories, devices or the standard activated
 secret directories. Its only persistent writable directory is the account's
 home under `/var/lib`. The account has no supplementary groups, sudo grants

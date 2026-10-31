@@ -28,12 +28,15 @@
     builtins.any (entry: !entry.assertion && pkgs.lib.hasInfix "isolated agent" entry.message) configuration.assertions;
 in
   assert base.users.users.isolated-agent.extraGroups == [];
+  assert builtins.elem base.services.isolated-agent.package base.users.users.isolated-agent.packages;
   assert base.users.users.isolated-agent.homeMode == "0700";
   assert service.wantedBy == [];
   assert service.serviceConfig.NoNewPrivileges;
   assert service.serviceConfig.ProtectHome;
   assert service.serviceConfig.PrivateDevices;
   assert service.serviceConfig.CapabilityBoundingSet == "";
+  assert pkgs.lib.hasInfix " start --mode desktop --no-browser " service.serviceConfig.ExecStart;
+  assert service.serviceConfig.StandardOutput == "null" && service.serviceConfig.StandardError == "null";
   assert builtins.elem "/run/secrets" (map (builtins.replaceStrings ["-"] [""]) service.serviceConfig.InaccessiblePaths);
   assert hasFailure (evaluate {users.users.isolated-agent.extraGroups = ["wheel"];});
   assert hasFailure (evaluate {users.groups.docker.members = ["isolated-agent"];});

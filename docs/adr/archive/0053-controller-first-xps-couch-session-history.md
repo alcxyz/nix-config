@@ -1,4 +1,4 @@
-**History of** [ADR-0053](../0053-controller-first-xps-couch-session.md): text replaced on 2026-10-28.
+**History of** [ADR-0053](../0053-controller-first-xps-couch-session.md): text replaced on 2026-10-28 and 2026-10-31.
 
 # ADR-0053: Controller-first XPS couch session
 
@@ -347,3 +347,10 @@ attached to the container's X server.
   controller shutdown action, and optional clipboard transfer. The
   Wayland-compatible KDE Connect phone pointer path is implemented and
   qualified.
+
+## Tracking text replaced on 2026-10-31
+
+The owner retained the media use, account and workspace; the separate agent account provides isolation. The previous open placement wording was:
+
+- [Issue #548](https://git.alc.xyz/alcxyz/nix-config/issues/548) tracks xps's planned direction (media modes and an isolated
+  agent mode, no operator workstation); its decision is still open.
