@@ -5,7 +5,8 @@
 **Amended:** 2026-10-31, start on another output when the preferred one is missing.
 **Amended:** 2026-10-31, `remote-desk` moves the desktop to a virtual output sized for the Mac.
 **Amended:** 2026-10-31, the virtual output follows the viewer's window size.
-**Applies to:** `modules/home-manager/services/remote-view/`, `users/alc/linux/xyz.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`
+**Amended:** 2026-10-31, the Mac's `desk xyz` runs a session in one step.
+**Applies to:** `modules/home-manager/services/remote-view/`, `users/alc/linux/xyz.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`, `modules/shared/pkgsets.nix` (`desk`), `inventory.nix` (`xyz-lan`)
 
 ## Context
 
@@ -43,6 +44,11 @@ Run wayvnc in the Hyprland session through a small Home Manager module,
    removes its output, and wayvnc refuses to start on a missing output.
    `wayvncctl output-set` or `output-cycle` switches outputs while connected.
 4. The Mac uses TigerVNC Viewer (Homebrew cask), which supports RSA-AES.
+   `desk xyz` (nix-packages) runs a session in one step: it opens the tunnel
+   through `xyz-lan` (the LAN address from the inventory) and falls back to
+   `xyz` over NetBird, runs `remote-desk on`, starts the viewer and, when
+   the viewer exits, runs `remote-desk off` and closes the tunnel.
+   `remote-desk` stays the only place that changes the desktop.
 5. The 5120x1440 ultrawide is too wide to work on from the Mac's screen, so
    `remote-desk on` (run over SSH) creates a virtual output named
    `HEADLESS-REMOTE`, starting in `deskMode` (2056x1262 on xyz, TigerVNC's

@@ -28,6 +28,7 @@ in
               "codex-app-server"
               "codex-cli"
               "deck"
+              "desk"
               "devlog"
               "omniwm"
               "zen-browser"

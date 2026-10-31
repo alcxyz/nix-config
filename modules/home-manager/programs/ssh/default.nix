@@ -13,14 +13,25 @@
   mkManagedHostBlock = name: hostAttrs: let
     aliases = hostAttrs.aliases or [];
     hostPatterns = [name] ++ aliases;
-  in {
-    ${name} = {
-      header = "Host ${lib.concatStringsSep " " hostPatterns}";
-      HostName = hostAttrs.sshHostname or name;
-      User = hostAttrs.sshUser or username;
-      ForwardAgent = hostAttrs.forwardAgent or false;
+  in
+    {
+      ${name} = {
+        header = "Host ${lib.concatStringsSep " " hostPatterns}";
+        HostName = hostAttrs.sshHostname or name;
+        User = hostAttrs.sshUser or username;
+        ForwardAgent = hostAttrs.forwardAgent or false;
+      };
+    }
+    # The host's LAN address under its own name, for clients that try the LAN
+    # first (such as desk); it shares the host's known key.
+    // optionalAttrs (hostAttrs ? lanSshHostname) {
+      "${name}-lan" = {
+        HostName = hostAttrs.lanSshHostname;
+        HostKeyAlias = name;
+        User = hostAttrs.sshUser or username;
+        ForwardAgent = hostAttrs.forwardAgent or false;
+      };
     };
-  };
   managedHostSettings = lib.attrsets.mergeAttrsList (lib.mapAttrsToList mkManagedHostBlock managedHosts);
 in {
   imports = [inputs.nix-secrets.homeManagerModules.sshClientPolicy];

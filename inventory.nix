@@ -94,6 +94,9 @@
       role = "workstation";
       k8sRole = null;
       configuration = ./hosts/xyz/configuration.nix;
+      # SSH clients get `xyz-lan` for this address; the bare name resolves
+      # over NetBird.
+      lanSshHostname = "192.168.1.10";
       osIcon = "";
     };
 

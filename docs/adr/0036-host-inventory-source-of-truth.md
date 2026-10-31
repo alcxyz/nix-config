@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-05
+**Amended:** 2026-10-31, optional `lanSshHostname` for a `<name>-lan` SSH name.
 **Applies to:** `inventory.nix`, `flake.nix`, package roles, workspace roles, k3s roles
 
 ## Context
@@ -33,6 +34,9 @@ The inventory owns stable host facts:
 - `sshHostname` — optional stable SSH endpoint for deploy and client config,
   used when the deploy path should target something other than the canonical
   inventory name
+- `lanSshHostname`: optional LAN address, which SSH clients get as
+  `<name>-lan` with the host's known key (`HostKeyAlias`), for clients that
+  try the LAN before the canonical name
 
 The inventory also defines role metadata:
 

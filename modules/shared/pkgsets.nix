@@ -201,6 +201,8 @@ in rec {
     # macOS-only CLI additions
     mac = with pkgs; [
       mas
+      # One-step remote-desk session on xyz (ADR-0102).
+      desk
     ];
 
     /*
