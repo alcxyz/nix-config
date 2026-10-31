@@ -214,6 +214,10 @@ in {
       ${gamingDesktop.luaRules}
 
       hl.bind("CTRL + SHIFT + R", hl.dsp.exec_cmd("private-browser-stream"))
+
+      -- Bring the physical displays back after `remote-desk on` without
+      -- seeing them, also from the lock screen (ADR-0102).
+      hl.bind("SUPER + CTRL + SHIFT + Escape", hl.dsp.exec_cmd("remote-desk off"), { locked = true })
     '';
   };
   programs.niri.managed.enable = true;
@@ -285,6 +289,9 @@ in {
   services.remoteView = {
     enable = true;
     output = "DP-1";
+    # The Mac's 16" display at its default scaled resolution.
+    deskMode = "1728x1117@60";
+    physicalOutputs = ["DP-1" "HDMI-A-1"];
   };
   services.waynergy = {
     enable = true;
