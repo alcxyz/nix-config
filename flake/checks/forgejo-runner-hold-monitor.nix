@@ -56,7 +56,7 @@ in
   assert service.environment.STANDBY_UNITS == "";
   assert service.serviceConfig.Type == "oneshot";
   assert service.serviceConfig.RuntimeDirectoryPreserve == "yes";
-  assert service.serviceConfig.ReadOnlyPaths == ["-/run/forgejo-runner-aggregate-pressure"];
+  assert service.serviceConfig.ReadOnlyPaths == ["-/run/forgejo-runner-aggregate-pressure" "-/run/forgejo-podman-store-reset"];
   assert !(service.serviceConfig ? User);
   assert timer.timerConfig.OnUnitActiveSec == "5m";
   # Every runner host reports holds through its storage monitor's ping base.

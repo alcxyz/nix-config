@@ -61,11 +61,10 @@ class DevelopmentCI(unittest.TestCase):
             "modules/home-manager/programs/tea/ensure-login.sh",
             "scripts/checks/test-configuration-ci.py",
             "scripts/checks/test-publish-wolf-images.sh",
-            "scripts/checks/check-idle-podman-cleanup.sh",
         ]:
             destination = self.repository / path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(":\n" if path.endswith(("test-publish-wolf-images.sh", "check-idle-podman-cleanup.sh")) else "fixture\n")
+            destination.write_text(":\n" if path.endswith("test-publish-wolf-images.sh") else "fixture\n")
 
         self.bin = self.repository / "bin"
         self.bin.mkdir()
@@ -109,7 +108,7 @@ class DevelopmentCI(unittest.TestCase):
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
         self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 8)
         self.assertEqual(calls.count("shellcheck:--shell=bash --exclude=SC2034 -"), 2)
-        self.assertEqual(sum(call.startswith("python3:") for call in calls), 14)
+        self.assertEqual(sum(call.startswith("python3:") for call in calls), 15)
         self.assertIn(
             "python3:flake/checks/test-forgejo-standby-controller.py "
             "modules/nixos/services/forgejo-actions-runner/standby-controller.sh", calls)

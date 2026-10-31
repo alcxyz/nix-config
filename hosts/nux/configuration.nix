@@ -118,8 +118,8 @@ in {
     ioPressureGuard.enable = true;
     ioPressureGuard.admissionControl.enable = true;
     ioPressureGuard.diskSpace.enable = true;
-    idlePodmanCleanup.enable = true;
-    idlePodmanCleanup.pressureOnly = false;
+    # Reset the Podman store offline while the runners are idle (ADR-0105).
+    podmanStoreReset.enable = true;
     # Pool jobs substitute upstream paths through a local read-only proxy
     # (ADR-0103).
     nixCacheProxy.enable = true;

@@ -5,7 +5,8 @@ set -euo pipefail
 # whatever held them (ADR-0072, #894). Read-only towards the runners and the
 # pressure guard: it only queries systemd and reads the guard's markers, and
 # writes nothing but its own state directory. Intended holds are excluded: a
-# detected game, and a standby runner its controller has not admitted.
+# detected game, a standby runner its controller has not admitted, and a
+# runner the Podman store reset stopped and will start again (ADR-0105).
 
 state_dir=${STATE_DIR:-/run/forgejo-runner-aggregate-pressure}
 monitor_dir=${MONITOR_STATE_DIR:-/run/forgejo-runner-hold-monitor}
@@ -19,12 +20,14 @@ standby_units_text=${STANDBY_UNITS:-}
 max_hold_seconds=${MAX_HOLD_SECONDS:-1800}
 game_admission=${GAME_ADMISSION_ENABLED:-0}
 game_hold_seconds=${GAME_HOLD_SECONDS:-90}
+reset_unit=${RESET_UNIT:-forgejo-podman-store-reset.service}
+reset_restart_file=${RESET_RESTART_FILE:-/run/forgejo-podman-store-reset/restart}
 ping_base_file=${PING_BASE_FILE:?}
 slug=${SLUG:?}
 
 runner_markers=(drain-owned drain-pending drain-disowned resume-pending resume-queued
-  resume-blocked-reported disk-start-skipped game-start-skipped standby-held)
-aggregate_markers=(cleanup-in-flight owned pending teardown-required)
+  resume-blocked-reported disk-start-skipped game-start-skipped reset-start-skipped standby-held)
+aggregate_markers=(owned pending teardown-required)
 
 for value in "$max_hold_seconds" "$game_hold_seconds"; do
   [[ $value =~ ^[1-9][0-9]*$ ]] || { echo "invalid numeric setting" >&2; exit 1; }
@@ -34,7 +37,7 @@ done
 read -r -a runner_units <<< "$runner_units_text"
 read -r -a standby_units <<< "$standby_units_text"
 ((${#runner_units[@]} > 0)) || { echo "runner unit list is empty" >&2; exit 1; }
-for unit in "${runner_units[@]}" "${standby_units[@]}" "$guard_unit"; do
+for unit in "${runner_units[@]}" "${standby_units[@]}" "$guard_unit" "$reset_unit"; do
   [[ $unit =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || { echo "invalid unit name" >&2; exit 1; }
 done
 
@@ -78,6 +81,18 @@ fi
 
 guard_state=$(timeout 10s "$systemctl_bin" show --property=ActiveState --value "$guard_unit" 2> /dev/null) ||
   guard_state=unknown
+
+# The reset lists the runners it stopped until it has started them again. A
+# list is trusted only while the reset is still running.
+reset_held=()
+if [[ -f $reset_restart_file && ! -L $reset_restart_file ]]; then
+  reset_state=$(timeout 10s "$systemctl_bin" show --property=ActiveState --value "$reset_unit" 2> /dev/null) ||
+    reset_state=unknown
+  if [[ $reset_state == activating || $reset_state == deactivating ]]; then
+    # The reset may remove its list between the check and the read.
+    mapfile -t reset_held < "$reset_restart_file" 2> /dev/null || reset_held=()
+  fi
+fi
 
 aggregate_found=()
 for marker in "${aggregate_markers[@]}"; do
@@ -136,6 +151,11 @@ check_runner() {
     if contains "$unit" "${standby_units[@]}" && [[ ! -e $runner_state/standby-admitted ]]; then
       rm -f "$held_file"
       printf '%s: standby, not admitted\n' "$unit" >> "$report"
+      return
+    fi
+    if contains "$unit" "${reset_held[@]}"; then
+      rm -f "$held_file"
+      printf '%s: stopped for a Podman store reset\n' "$unit" >> "$report"
       return
     fi
   fi

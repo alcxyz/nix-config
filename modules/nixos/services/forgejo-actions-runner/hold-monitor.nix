@@ -42,7 +42,8 @@ in {
       default = 30;
       description = ''
         Report a runner that has not been active for this long, unless a
-        detected game or an unadmitted standby holds it on purpose.
+        detected game, an unadmitted standby or a running Podman store reset
+        holds it on purpose.
       '';
     };
     interval = lib.mkOption {
@@ -86,7 +87,7 @@ in {
         # Hold start times must survive between runs.
         RuntimeDirectoryPreserve = "yes";
         # The guard's state is only read, never written.
-        ReadOnlyPaths = ["-/run/forgejo-runner-aggregate-pressure"];
+        ReadOnlyPaths = ["-/run/forgejo-runner-aggregate-pressure" "-/run/forgejo-podman-store-reset"];
         UMask = "0077";
         NoNewPrivileges = true;
         PrivateTmp = true;

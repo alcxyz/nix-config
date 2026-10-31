@@ -48,7 +48,6 @@ exec 9>"$state_dir/lifecycle.lock"
 remaining=$((deadline - SECONDS))
 ((remaining > 0)) || exit 1
 flock -w "$remaining" -x 9 || exit 1
-[[ ! -e $state_dir/cleanup-in-flight && ! -L $state_dir/cleanup-in-flight ]] || exit 1
 
 if [[ -e $state_dir/runner-units ]]; then
   [[ $(cat "$state_dir/runner-units") == "$(printf '%s\n' "${runner_units[@]}")" ]] || exit 1
@@ -139,3 +138,5 @@ timeout --foreground "${query_timeout}s" "$systemctl_bin" is-active --quiet \
   forgejo-runner-io-pressure-guard.service || exit 1
 rm -f "$runner_state/game-start-skipped"
 rm -f "$runner_state/disk-start-skipped"
+# A start that passes also ends a Podman store reset's handover (ADR-0105).
+rm -f "$runner_state/reset-start-skipped"

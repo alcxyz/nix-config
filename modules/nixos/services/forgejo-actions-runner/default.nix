@@ -175,7 +175,7 @@
   };
 in {
   imports = [
-    ./idle-podman-cleanup.nix
+    ./podman-store-reset.nix
     ./podman-storage.nix
     ./docker-storage.nix
     ./isolated-docker.nix

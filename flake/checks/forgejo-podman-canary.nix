@@ -66,33 +66,18 @@ else let
   };
   overlap = evaluate true ["docker-primary:docker://example.invalid/different-image:latest"] {};
   hostLabel = evaluate true ["podman-canary:host"] {};
-  cleanupConfig = {
-    services.forgejo-actions-runner = {
-      idlePodmanCleanup.enable = true;
-      ioPressureGuard.diskSpace.enable = true;
-    };
+  resetConfig = {
+    services.forgejo-actions-runner.podmanStoreReset.enable = true;
   };
-  cleanupOnly = evaluate true validLabels cleanupConfig;
-  monitoredCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
+  resetOnly = evaluate true validLabels resetConfig;
+  resetWithoutPodman = evaluate false validLabels resetConfig;
+  monitoredReset = evaluate true validLabels (lib.recursiveUpdate resetConfig {
     services.storage-health-monitor = {
       enable = true;
       pingBaseFile = "/run/fixture-unused-ping";
     };
   });
-  hourlyCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
-    services.forgejo-actions-runner.idlePodmanCleanup = {
-      interval = "1h";
-      healthMaximumAgeSeconds = 7200;
-    };
-    services.storage-health-monitor = {
-      enable = true;
-      pingBaseFile = "/run/fixture-unused-ping";
-    };
-  });
-  manualRecoveryCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
-    services.forgejo-actions-runner.idlePodmanCleanup.autoRecovery.enable = false;
-  });
-  lowPressureCleanup = evaluate true validLabels (lib.recursiveUpdate cleanupConfig {
+  lowPressureReset = evaluate true validLabels (lib.recursiveUpdate resetConfig {
     services.forgejo-actions-runner.ioPressureGuard.lowPercent = 3;
   });
   monitorOnly = evaluate true validLabels {
@@ -101,7 +86,8 @@ else let
       pingBaseFile = "/run/fixture-unused-ping";
     };
   };
-  cleanupUnits = config: builtins.filter (unit: unit.name == "forgejo-idle-podman-cleanup.service") config.services.storage-health-monitor.units;
+  resetUnits = config: builtins.filter (unit: unit.name == "forgejo-podman-store-reset.service") config.services.storage-health-monitor.units;
+  resetService = config: config.systemd.services.forgejo-podman-store-reset;
   unit = enabled.systemd.services.forgejo-podman-runner;
   api = enabled.systemd.services.forgejo-runner-podman;
   socket = enabled.systemd.sockets.forgejo-runner-podman;
@@ -146,7 +132,7 @@ else let
       overrides);
   sharedConfig = {services.forgejo-actions-runner.podmanCanary.sharedLabels = ["ci-fast"];};
   three = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} sharedConfig;
-  threeCleanup = withExtra validLabels {labels = [fastLabel];} cleanupConfig;
+  threeReset = withExtra validLabels {labels = [fastLabel];} resetConfig;
   extraUnit = three.systemd.services.forgejo-podman-runner-fast;
   threeUnit = three.systemd.services.forgejo-podman-runner;
   # An instance token on the canary carries over to the extra unless it sets
@@ -285,9 +271,6 @@ else let
     };
   };
   controllerSource = ../../modules/nixos/services/forgejo-actions-runner/standby-controller.sh;
-  recoveryPackage = config: lib.findFirst (package: (package.name or "") == "forgejo-runner-cleanup-fence-recover") null config.environment.systemPackages;
-  recoveryText = config: (recoveryPackage config).text;
-  autoRecovery = config: config.systemd.services.forgejo-runner-cleanup-fence-auto-recover;
   labelOverlapMessage = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
   dockerOverlapMessage = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
 in
@@ -299,27 +282,41 @@ in
   assert dedicatedStorage.systemd.services.forgejo-podman-storage-ready.serviceConfig.RemainAfterExit;
   assert lib.hasInfix "CI\\\\x20Storage" escapedStorage.systemd.services.forgejo-podman-storage-ready.serviceConfig.ExecStart;
   assert failedAssertion missingStorage "Dedicated Podman storage requires an explicit /var/lib/forgejo-podman filesystem.";
-  assert cleanupUnits cleanupOnly == [];
-  assert cleanupUnits monitorOnly == [];
-  assert cleanupUnits monitoredCleanup
+  assert resetUnits resetOnly == [];
+  assert resetUnits monitorOnly == [];
+  assert resetUnits monitoredReset
   == [
     {
-      name = "forgejo-idle-podman-cleanup.service";
+      name = "forgejo-podman-store-reset.service";
       mode = "recent-success";
-      maximumAgeSeconds = 1800;
+      maximumAgeSeconds = 10800;
       pendingFirstTimerMaximumAgeSeconds = 1320;
       allowPendingFirstTimer = true;
     }
   ];
-  assert builtins.length monitoredCleanup.systemd.services.forgejo-idle-podman-cleanup.serviceConfig.ExecStopPost == 1;
-  assert (lib.head (cleanupUnits hourlyCleanup)).maximumAgeSeconds == 7200;
-  assert hourlyCleanup.systemd.timers.forgejo-idle-podman-cleanup.timerConfig.OnUnitActiveSec == "1h";
-  assert !(cleanupOnly.systemd.services.forgejo-idle-podman-cleanup.serviceConfig ? ExecStopPost);
-  # Cleanup follows the guard's resume threshold, not a separate setting.
-  assert cleanupOnly.systemd.services.forgejo-idle-podman-cleanup.environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "500";
-  assert lowPressureCleanup.systemd.services.forgejo-idle-podman-cleanup.environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "300";
-  assert !failedAssertion monitoredCleanup "storage-health-monitor recent-success units must be root-run oneshot services that become inactive after completion";
-  assert !failedAssertion monitoredCleanup "Idle Podman cleanup requires the isolated Docker and Podman runners with disk-space admission control.";
+  # The restart of what a failed run stopped comes first, then the health record.
+  assert (resetService resetOnly).serviceConfig.ExecStopPost == ["${(resetService resetOnly).serviceConfig.ExecStart} restart"];
+  assert builtins.length (resetService monitoredReset).serviceConfig.ExecStopPost == 2;
+  assert lib.head (resetService monitoredReset).serviceConfig.ExecStopPost == "${(resetService monitoredReset).serviceConfig.ExecStart} restart";
+  # The reset follows the guard's resume threshold, not a separate setting.
+  assert (resetService resetOnly).environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "500";
+  assert (resetService lowPressureReset).environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "300";
+  assert (resetService resetOnly).environment.STORE_PATH == resetOnly.services.forgejo-actions-runner.podmanCanary.storageRoot;
+  assert (resetService resetOnly).environment.MAX_AGE_SECONDS == "604800";
+  assert (resetService resetOnly).environment.TRIGGER_USED_PERCENT == "70";
+  assert !(resetService resetOnly).restartIfChanged;
+  # Systemd ordering never excludes the reset: the lifecycle lock does, so a
+  # start of another unit can never stop it mid-run.
+  assert (resetService resetOnly).conflicts == [];
+  assert (resetService resetOnly).after == [];
+  assert !((resetService resetOnly).unitConfig ? Conflicts);
+  assert resetOnly.systemd.timers.forgejo-podman-store-reset.timerConfig.OnUnitActiveSec == "15min";
+  assert !(resetOnly.systemd.services ? forgejo-idle-podman-cleanup);
+  assert !(resetOnly.systemd.services ? forgejo-runner-cleanup-fence-auto-recover);
+  assert !(resetOnly.systemd.timers ? forgejo-runner-cleanup-fence-auto-recover);
+  assert !failedAssertion monitoredReset "storage-health-monitor recent-success units must be root-run oneshot services that become inactive after completion";
+  assert !failedAssertion resetOnly "The Podman store reset requires the isolated Docker and Podman runners with admission control.";
+  assert failedAssertion resetWithoutPodman "The Podman store reset requires the isolated Docker and Podman runners with admission control.";
   assert !(disabled.systemd.services ? forgejo-podman-runner);
   assert !(disabled.systemd.services ? forgejo-runner-podman);
   assert !(disabled.systemd.sockets ? forgejo-runner-podman);
@@ -373,20 +370,8 @@ in
     "forgejo-podman-runner-fast"
     "forgejo-runner-podman"
   ];
-  assert threeCleanup.systemd.services.forgejo-idle-podman-cleanup.environment.RUNNER_UNITS == three-units;
-  assert cleanupOnly.systemd.services.forgejo-idle-podman-cleanup.environment.RUNNER_UNITS == both;
-  # Fence recovery bakes the configured list in at build time.
-  assert lib.hasInfix "\nRUNNER_UNITS=${lib.escapeShellArg three-units}\n" (recoveryText threeCleanup);
-  assert lib.hasInfix "\nRUNNER_UNITS=${lib.escapeShellArg both}\n" (recoveryText cleanupOnly);
-  # Automatic recovery hands the fence to that same installed command.
-  assert (autoRecovery threeCleanup).environment.RUNNER_UNITS == three-units;
-  assert (autoRecovery cleanupOnly).environment.RUNNER_UNITS == both;
-  assert (autoRecovery cleanupOnly).environment.RECOVER_BIN == lib.getExe (recoveryPackage cleanupOnly);
-  assert (autoRecovery cleanupOnly).environment.SETTLE_SECONDS == "300";
-  assert cleanupOnly.systemd.timers.forgejo-runner-cleanup-fence-auto-recover.timerConfig.OnUnitActiveSec == "5min";
-  assert !(manualRecoveryCleanup.systemd.services ? forgejo-runner-cleanup-fence-auto-recover);
-  assert !(manualRecoveryCleanup.systemd.timers ? forgejo-runner-cleanup-fence-auto-recover);
-  assert recoveryPackage manualRecoveryCleanup != null;
+  assert (resetService threeReset).environment.RUNNER_UNITS == three-units;
+  assert (resetService resetOnly).environment.RUNNER_UNITS == both;
   assert extraUnit.environment.RUNNER_UNIT == extra;
   assert threeUnit.environment.RUNNER_UNIT == canary;
   assert extraUnit.description == "Forgejo Podman runner fast (fixture-fast)";
@@ -587,14 +572,15 @@ in
       printf '%s\n' ${lib.escapeShellArg primary} > "$state/runner-units"
       if run_gate; then exit 1; fi
       printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} > "$state/runner-units"
-      for marker in owned pending teardown-required cleanup-in-flight; do
+      for marker in owned pending teardown-required; do
         touch "$state/$marker"
         if run_gate; then exit 1; fi
         rm "$state/$marker"
       done
-      ln -s "$state/missing" "$state/cleanup-in-flight"
-      if run_gate; then exit 1; fi
-      rm "$state/cleanup-in-flight"
+      # A completion fence left from before ADR-0105 no longer holds a start.
+      mkdir "$state/cleanup-in-flight"
+      run_gate
+      rmdir "$state/cleanup-in-flight"
       if MOCK_GUARD_ACTIVE=0 run_gate; then exit 1; fi
       if MOCK_FREEZER=frozen run_gate; then exit 1; fi
       run_gate
@@ -612,9 +598,6 @@ in
       mkdir "$state/runners/${extra}"
       GATE_UNITS=${lib.escapeShellArg three-units} run_gate
       if run_gate; then exit 1; fi
-      touch "$state/cleanup-in-flight"
-      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
-      rm "$state/cleanup-in-flight"
       rmdir "$state/runners/${canary}"
       if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
       mkdir "$state/runners/${canary}"

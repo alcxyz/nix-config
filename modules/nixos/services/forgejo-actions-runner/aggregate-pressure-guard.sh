@@ -350,16 +350,13 @@ resume_admissions() {
     marker=disk-start-skipped
   elif [[ -e $runner_state/game-start-skipped ]]; then
     marker=game-start-skipped
+  elif [[ -e $runner_state/reset-start-skipped ]]; then
+    # A runner the Podman store reset stopped and could not start (ADR-0105).
+    marker=reset-start-skipped
   else
     return 0
   fi
   lock_lifecycle
-  # Cleanup can outlive its client and lifecycle flock. Withhold admission
-  # without failing the guard or changing independent drain/freeze ownership.
-  if [[ -e $state_dir/cleanup-in-flight || -L $state_dir/cleanup-in-flight ]]; then
-    unlock_lifecycle
-    return 0
-  fi
   [[ ! -e $state_dir/teardown-required ]] || fail "aggregate teardown is in progress"
 
   load_state=$(runner_property LoadState) || fail "cannot inspect runner load state"
@@ -500,8 +497,7 @@ confirm_resume() {
   count=${resume_retry_count[$runner_unit]}
   next=${resume_retry_next[$runner_unit]}
   delay=${resume_retry_delay[$runner_unit]}
-  if ((ready != 1 || iteration < next)) ||
-    [[ -e $state_dir/cleanup-in-flight || -L $state_dir/cleanup-in-flight || -e $state_dir/owned ]]; then
+  if ((ready != 1 || iteration < next)) || [[ -e $state_dir/owned ]]; then
     unlock_lifecycle
     return 0
   fi

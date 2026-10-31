@@ -66,5 +66,5 @@ python3 flake/checks/test-forgejo-runner-aggregate-pressure.py \
   modules/nixos/services/forgejo-actions-runner/aggregate-pressure-guard.sh
 python3 flake/checks/test-forgejo-standby-controller.py \
   modules/nixos/services/forgejo-actions-runner/standby-controller.sh
-bash scripts/checks/check-idle-podman-cleanup.sh \
-  modules/nixos/services/forgejo-actions-runner/idle-podman-cleanup.sh
+python3 flake/checks/test-forgejo-podman-store-reset.py \
+  modules/nixos/services/forgejo-actions-runner/podman-store-reset.sh

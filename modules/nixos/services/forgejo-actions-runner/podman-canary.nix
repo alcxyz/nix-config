@@ -360,8 +360,8 @@ in {
     description = ''
       Runner units sharing the dedicated CI aggregate: the primary Docker
       runner first, then the existing Podman runner, then extra Podman runners
-      sorted by name. The pressure guard, start gates, lifecycle teardown, idle
-      cleanup and fence recovery all take this list.
+      sorted by name. The pressure guard, start gates, lifecycle teardown and
+      the Podman store reset all take this list.
     '';
   };
 

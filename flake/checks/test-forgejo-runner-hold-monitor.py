@@ -13,6 +13,7 @@ PRIMARY = 'forgejo-actions-runner.service'
 POOL = 'forgejo-podman-runner.service'
 STANDBY = 'forgejo-podman-runner-fast.service'
 GUARD = 'forgejo-runner-io-pressure-guard.service'
+RESET = 'forgejo-podman-store-reset.service'
 PING_BASE = 'https://hc.example.invalid/ping/fixture-key'
 
 FAKE_SYSTEMCTL = r'''#!/usr/bin/env python3
@@ -121,6 +122,7 @@ class HoldMonitorTests(unittest.TestCase):
                    MAX_HOLD_SECONDS='1800',
                    GAME_ADMISSION_ENABLED=game,
                    GAME_HOLD_SECONDS='90',
+                   RESET_RESTART_FILE=str(self.root / 'reset-restart'),
                    PING_BASE_FILE=str(self.ping_base),
                    SLUG='ci-runners-fixture',
                    FAKE_UNITS=str(self.units),
@@ -195,16 +197,36 @@ class HoldMonitorTests(unittest.TestCase):
         ping = self.assert_success(result, pings)
         self.assertIn(f'{PRIMARY}: held for 29m, under bound', ping['body'])
 
-    def test_cleanup_fence_is_a_cause(self):
-        (self.state / 'cleanup-in-flight').write_text('fixture\n')
-        (self.state / 'runners' / POOL / 'resume-queued').write_text('100\n')
-        self.set_unit(POOL, unit_state('inactive', result='exec-condition'))
+    def test_running_reset_holds_the_runners_it_listed(self):
+        (self.root / 'reset-restart').write_text(
+            f'forgejo-runner-docker.service\nforgejo-runner-podman.service\n{PRIMARY}\n')
+        self.set_unit(RESET, unit_state('activating', sub='start'))
+        self.set_unit(PRIMARY, unit_state('inactive'))
+        self.set_unit(POOL, unit_state('inactive'))
         self.run_monitor()
+        result, pings = self.run_monitor(advance=3600)
+        ping = self.assert_failure(result, pings)
+        self.assertIn(f'{PRIMARY}: stopped for a Podman store reset', ping['body'])
+        # Only listed runners are excused.
+        self.assertIn(f'{POOL}: held for 60m', ping['body'])
+        # A list left behind by a finished reset excuses nothing.
+        self.set_unit(RESET, unit_state('inactive'))
+        self.set_unit(POOL, unit_state())
+        self.run_monitor(advance=300)
         result, pings = self.run_monitor(advance=1800)
         ping = self.assert_failure(result, pings)
-        self.assertIn(f'{POOL}: held for 30m', ping['body'])
-        self.assertIn('markers=cleanup-in-flight,resume-queued', ping['body'])
-        self.assertNotIn(f'{PRIMARY}: held', ping['body'])
+        self.assertIn(f'{PRIMARY}: held for 30m', ping['body'])
+
+    def test_a_restart_list_that_vanishes_before_its_read_is_empty(self):
+        restart = self.root / 'reset-restart'
+        restart.write_text(f'{PRIMARY}\n')
+        # Readable at the check, unreadable at the read, like a list removed
+        # in between.
+        restart.chmod(0)
+        self.set_unit(RESET, unit_state('activating', sub='start'))
+        result, pings = self.run_monitor()
+        ping = self.assert_success(result, pings)
+        self.assertIn(f'{PRIMARY}: admitting', ping['body'])
 
     def test_manual_stop_and_mask_are_held(self):
         self.set_unit(PRIMARY, unit_state('inactive'))

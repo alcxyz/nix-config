@@ -143,7 +143,7 @@ in {
 
   forgejo-runner-hold-monitor-contract = import ./forgejo-runner-hold-monitor.nix {inherit lib pkgs self;};
 
-  forgejo-cleanup-completion-fence-lifecycle = import ./forgejo-cleanup-fence-vm.nix {inherit pkgs;};
+  forgejo-podman-store-reset-lifecycle = import ./forgejo-podman-store-reset-vm.nix {inherit pkgs;};
 
   forgejo-docker-retention = import ./forgejo-docker-retention.nix {inherit lib pkgs;};
 
@@ -182,8 +182,8 @@ in {
     hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:docker://" label) runner.labels;
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
-    assert lib.all (runner: runner.idlePodmanCleanup.enable && runner.ioPressureGuard.diskSpace.enable) (lib.attrValues runners);
-    assert lib.all (runner: !runner.idlePodmanCleanup.pressureOnly && runner.idlePodmanCleanup.imageMinAge == "48h") (lib.attrValues runners);
+    assert lib.all (runner: runner.podmanStoreReset.enable && runner.ioPressureGuard.diskSpace.enable) (lib.attrValues runners);
+    assert lib.all (runner: runner.podmanStoreReset.triggerUsedPercent == 70 && runner.podmanStoreReset.maxAgeDays == 7) (lib.attrValues runners);
     assert lib.all (runner: runner.isolatedDocker.retention.enable && runner.isolatedDocker.retention.budget == "20GiB" && runner.isolatedDocker.retention.unusedAge == "48h") (lib.attrValues runners);
     # Private scheduling may stagger the times, but must not retain a weekly
     # calendar that overrides the retention policy's daily cleanup.

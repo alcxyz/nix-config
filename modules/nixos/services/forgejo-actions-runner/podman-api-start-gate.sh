@@ -14,10 +14,10 @@ podman_admission=${PODMAN_ADMISSION:-1}
 [[ $(stat -c '%u:%a' -- "$state_dir") == "$EUID:700" ]] || exit 1
 [[ ! -L $state_dir/lifecycle.lock ]] || exit 1
 exec 9>"$state_dir/lifecycle.lock"
+# The lock also orders both API starts after a store reset's rename.
 flock -w 60 -x 9 || exit 1
-[[ ! -e $state_dir/cleanup-in-flight && ! -L $state_dir/cleanup-in-flight ]] || exit 1
 # Docker-only boot needs neither a multi-runner registry nor an armed lifecycle
-# service (which starts after Docker). Both APIs still exclude fence recovery.
+# service (which starts after Docker).
 [[ $podman_admission == 1 ]] || exit 0
 [[ -n $runner_units_text ]] || exit 1
 IFS=$' \t\n' read -r -d '' -a runner_units <<< "$runner_units_text" || true

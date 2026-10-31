@@ -36,7 +36,7 @@ class GuardTests(unittest.TestCase):
                   second_marker='', runner_units=None, persisted_units=None,
                   unknown_state=False, game_states=None, game_times=None,
                   game_start_skipped=False, disk_start_skipped=False,
-                  disk_values=None, cleanup_fence=None, slice_values=None,
+                  disk_values=None, slice_values=None,
                   prolonged='100', inactive_after='', third_runner=None,
                   third_marker='', start_outcomes=(), resume_retry_max='60',
                   runner_markers=(), resume_queued=None, condition_stamp='100',
@@ -45,12 +45,6 @@ class GuardTests(unittest.TestCase):
             root = Path(directory)
             state = root / 'state'
             state.mkdir()
-            if cleanup_fence is not None:
-                fence = state / 'cleanup-in-flight'
-                if cleanup_fence == 'symlink':
-                    fence.symlink_to(state / 'missing')
-                else:
-                    fence.write_text(cleanup_fence)
             if owned:
                 (state / 'owned').touch()
             if pending:
@@ -323,25 +317,6 @@ esac
             self.final_runner_state = (root / 'runner-active').read_text()
             self.state_markers = sorted(path.name for path in state.iterdir())
             return result.returncode, actions, (state / 'owned').exists(), (state / 'pending').exists()
-
-    def test_cleanup_fence_withholds_both_owned_resumes_and_keeps_guard_healthy(self):
-        for fence in ('malformed', 'symlink'):
-            self.assertEqual(self.run_guard(
-                [0, 0], admission=True, drain_owned=True, runner_state='inactive',
-                runner_generation='0', drain_generation='123', cleanup_fence=fence,
-                second_runner={'active': 'inactive', 'generation': '0'},
-                second_marker='drain-owned', runner_units=[PRIMARY, SECOND]),
-                (0, [], False, False))
-            self.assertEqual(self.runner_unit_actions, [])
-            self.assertTrue(self.drain_owned and self.second_drain_owned)
-
-    def test_cleanup_fence_preserves_owned_thaw_and_manual_stop(self):
-        self.assertEqual(self.run_guard(
-            [0, 0], initial='frozen', owned=True, admission=True,
-            cleanup_fence='malformed', runner_state='inactive'),
-            (0, ['thaw'], False, False))
-        self.assertEqual(self.runner_unit_actions, [])
-        self.assertFalse(self.drain_owned)
 
     def test_hysteresis_freezes_and_thaws_aggregate(self):
         self.assertEqual(self.run_guard([2500, 2500, 1000, 0, 0]), (0, ['freeze', 'thaw'], False, False))
@@ -779,16 +754,13 @@ esac
         self.assertEqual(self.final_runner_state, 'active')
         self.assertNotIn('resume-queued', self.state_markers)
 
-    def test_cleanup_fence_and_owned_freeze_withhold_resume_retries(self):
-        for options in ({'cleanup_fence': 'malformed'},
-                        {'initial': 'frozen', 'owned': True}):
-            with self.subTest(options=options):
-                self.assertEqual(self.run_guard(
-                    [6500, 6500, 6500], admission=True, runner_state='inactive',
-                    runner_generation='0', resume_queued='100', condition_stamp='101',
-                    condition_result='no', **options)[0], 0)
-                self.assertEqual(self.runner_actions, [])
-                self.assertIn('resume-queued', self.state_markers)
+    def test_owned_freeze_withholds_resume_retries(self):
+        self.assertEqual(self.run_guard(
+            [6500, 6500, 6500], admission=True, runner_state='inactive',
+            runner_generation='0', resume_queued='100', condition_stamp='101',
+            condition_result='no', initial='frozen', owned=True)[0], 0)
+        self.assertEqual(self.runner_actions, [])
+        self.assertIn('resume-queued', self.state_markers)
 
     def test_disabled_runner_with_skipped_resume_is_reported_not_started(self):
         for enabled in ('disabled', 'masked'):
@@ -1030,6 +1002,21 @@ esac
                        game_states=['absent', 'absent'], game_times=[100, 100])
         self.assertEqual(self.runner_actions, [])
         self.assertTrue(self.game_start_skipped)
+
+    def test_reset_start_skip_resumes_through_the_guard(self):
+        # The Podman store reset hands over a runner its start gate refused.
+        self.run_guard([0, 0], admission=True, runner_state='inactive',
+                       runner_generation='0', runner_result='exec-condition',
+                       runner_markers=['reset-start-skipped'])
+        self.assertEqual(self.runner_actions, ['start'])
+        self.assertNotIn('reset-start-skipped', self.state_markers)
+        # Pressure that keeps the aggregate frozen keeps it held.
+        self.run_guard([6500, 6500], admission=True, runner_state='inactive',
+                       runner_generation='0', runner_result='exec-condition',
+                       initial='frozen', owned=True,
+                       runner_markers=['reset-start-skipped'])
+        self.assertEqual(self.runner_actions, [])
+        self.assertIn('reset-start-skipped', self.state_markers)
 
     def test_game_scanner_error_drains_without_guard_failure(self):
         self.assertEqual(self.run_guard([0, 0], admission=True,
@@ -1337,6 +1324,7 @@ exit 2
             self.game_start_skipped = (candidate_state / 'game-start-skipped').exists()
             self.disk_start_skipped = (candidate_state / 'disk-start-skipped').exists()
             self.standby_held = (candidate_state / 'standby-held').exists()
+            self.reset_start_skipped = (candidate_state / 'reset-start-skipped').exists()
             return result.returncode, bool(marker and (state / marker).exists())
 
     def test_clear_healthy_start_is_admitted(self):
@@ -1444,12 +1432,16 @@ exit 2
         self.assertEqual(self.run_gate(marker='resume-pending', clear_under_lock=True),
                          (0, False))
 
-    def test_cleanup_fence_blocks_both_runner_starts(self):
+    def test_a_passing_start_ends_a_reset_handover(self):
         for unit in (PRIMARY, SECOND):
-            self.assertEqual(self.run_gate(
-                marker='cleanup-in-flight', runner_unit=unit,
-                runner_units=[PRIMARY, SECOND], persisted_units=[PRIMARY, SECOND]),
-                (1, True))
+            with self.subTest(unit=unit):
+                state_marker = 'reset-start-skipped' if unit == PRIMARY else ''
+                second_marker = 'reset-start-skipped' if unit == SECOND else ''
+                self.assertEqual(self.run_gate(
+                    marker=state_marker, second_marker=second_marker, runner_unit=unit,
+                    runner_units=[PRIMARY, SECOND], persisted_units=[PRIMARY, SECOND]),
+                    (0, False))
+                self.assertFalse(self.reset_start_skipped)
 
     def test_owned_freeze_is_skipped(self):
         self.assertEqual(self.run_gate(marker='owned'), (1, True))
@@ -1496,9 +1488,6 @@ exit 2
             self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
                                            persisted_units=units,
                                            missing_third=True), (1, False))
-            self.assertEqual(self.run_gate(runner_unit=unit, runner_units=units,
-                                           persisted_units=units,
-                                           marker='cleanup-in-flight'), (1, True))
 
     def test_game_and_disk_skips_are_recorded_for_the_extra_runner(self):
         units = [PRIMARY, SECOND, THIRD]
