@@ -72,11 +72,9 @@ in
     (prune c).environment.DOCKER_HOST
     == "unix:///run/forgejo-docker/docker.sock"
     && !(lib.hasInfix "--volumes" (prune c).serviceConfig.ExecStart)
-    && lib.elem "forgejo-runner-aggregate-lifecycle.service" (prune c).requires
+    && lib.elem "forgejo-runner-docker.service" (prune c).requires
     && lib.elem "forgejo-runner-docker.service" (prune c).after
-    && lib.hasInfix "aggregate-lifecycle-ready" (toString (lib.head (prune c).serviceConfig.ExecStartPre))
     && !services.forgejo-runner-docker.restartIfChanged
-    && !services.forgejo-runner-aggregate-lifecycle.restartIfChanged
     && services.host-docker-cache-prune.serviceConfig == defaults.systemd.services.host-docker-cache-prune.serviceConfig
     && services.host-docker-cache-prune.requires == defaults.systemd.services.host-docker-cache-prune.requires
     && services.host-docker-cache-prune.environment == defaults.systemd.services.host-docker-cache-prune.environment

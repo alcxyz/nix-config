@@ -177,12 +177,13 @@
 
   services.forgejo-actions-runner = {
     enable = true;
-    # Alert when CI admission stays held beyond its bound (ADR-0072, #894).
-    holdMonitor.enable = true;
     package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
-    ioPressureGuard.enable = true;
-    ioPressureGuard.admissionControl.enable = true;
-    ioPressureGuard.diskSpace.enable = true;
+    # Hold the runners while the disk is low, and report a runner left off
+    # (ADR-0106).
+    runnerHold = {
+      diskSpace.enable = true;
+      alert.enable = true;
+    };
     # Reset the Podman store offline while the runners are idle (ADR-0105).
     podmanStoreReset.enable = true;
     # Pool jobs substitute upstream paths through a local read-only proxy
@@ -202,19 +203,17 @@
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
       ];
-      # Most jobs use the Podman pool, so it takes the slot the Docker runner
-      # gave up.
-      capacity = 3;
-      # Serves ci-fast only while xyz-fast is down (ADR-0097), as xyz
-      # reports over NetBird (100.82.168.59 is xyz's NetBird address).
+      # Most jobs use the Podman pool. Four slots in all, down from five
+      # while the standby fast runner ran: from 2026-10-24 to 2026-10-31
+      # xev's jobs ran three or more at once for about a third of its busy
+      # time, and fewer slots keep CI off its cluster and Wolf work
+      # (ADR-0106).
+      capacity = 2;
+      # Serves ci-fast beside xyz-fast (ADR-0097): whichever polls first
+      # takes the job, so fast jobs also run while xyz holds its runners.
       extraRunners.fast = {
         labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
         capacity = 1;
-        standby = {
-          enable = true;
-          statusUrl = "http://100.82.168.59:9478/";
-          statusInterface = "wt0";
-        };
       };
     };
     resourcePolicy.enable = true;

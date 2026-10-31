@@ -9,28 +9,12 @@
   enabled = cfg.enable && canary.enable;
   apiUnit = "forgejo-runner-podman.service";
   socketUnit = "forgejo-runner-podman.socket";
-  guardUnit = "forgejo-runner-io-pressure-guard.service";
   policyUnit = "forgejo-runner-resource-policy.service";
-  lifecycleUnit = "forgejo-runner-aggregate-lifecycle.service";
-  runnerUnit = "forgejo-podman-runner.service";
+  holdUnit = "forgejo-runner-hold.service";
   builderState = "/var/lib/forgejo-podman";
   builderRuntime = "/run/forgejo-podman";
   socketPath = "${builderRuntime}/podman.sock";
   runnerState = "/var/lib/forgejo-podman-runner";
-  diskSpaceEnvironment = {
-    DISK_HELPER_FILE = "${./disk-space-admission.sh}";
-    DISK_SPACE_ENABLED =
-      if cfg.ioPressureGuard.diskSpace.enable
-      then "1"
-      else "0";
-    DISK_SPACE_PATH = cfg.ioPressureGuard.diskSpace.path;
-    DISK_DRAIN_BYTES = toString (cfg.ioPressureGuard.diskSpace.drainFreeGiB * 1024 * 1024 * 1024);
-    DISK_DRAIN_PERCENT = toString cfg.ioPressureGuard.diskSpace.drainFreePercent;
-    DISK_CRITICAL_BYTES = toString (cfg.ioPressureGuard.diskSpace.criticalFreeGiB * 1024 * 1024 * 1024);
-    DISK_CRITICAL_PERCENT = toString cfg.ioPressureGuard.diskSpace.criticalFreePercent;
-    DISK_RECOVERY_BYTES = toString (cfg.ioPressureGuard.diskSpace.recoveryFreeGiB * 1024 * 1024 * 1024);
-    DISK_RECOVERY_PERCENT = toString cfg.ioPressureGuard.diskSpace.recoveryFreePercent;
-  };
   settingsFormat = pkgs.formats.yaml {};
   labelName = label: builtins.head (lib.splitString ":" label);
   labelNames = labels: map labelName labels;
@@ -49,8 +33,8 @@
     labels;
   uniqueLabelNames = labels: builtins.length (lib.unique (labelNames labels)) == builtins.length labels;
 
-  # Every Podman runner unit shares the one Podman API, pressure guard,
-  # lifecycle boundary and build slice, and runs as the one runner account.
+  # Every Podman runner unit shares the one Podman API, runner hold and build
+  # slice, and runs as the one runner account.
   # Each has its own registration, state and runtime directories. The
   # existing runner keeps its unit, paths and configuration file name, so
   # its Forgejo identity survives; extra runners derive theirs from their
@@ -63,10 +47,8 @@
     name,
     registrationTokenFile,
     registrationScope,
-    standby ? null,
-    status ? null,
   }: rec {
-    inherit serviceName description labels capacity name registrationTokenFile registrationScope standby status;
+    inherit serviceName description labels capacity name registrationTokenFile registrationScope;
     unit = "${serviceName}.service";
     state = "/var/lib/${serviceName}";
     runtime = "/run/${serviceName}";
@@ -79,7 +61,7 @@
           inherit capacity labels;
           env_file = envFile;
           timeout = "3600s";
-          shutdown_timeout = "3600s";
+          shutdown_timeout = "${toString cfg.shutdownTimeoutSeconds}s";
           insecure = false;
           fetch_timeout = "5s";
           fetch_interval = "2s";
@@ -112,23 +94,9 @@
       serviceName = "forgejo-podman-runner-${key}";
       description = "Forgejo Podman runner ${key} (${extra.name})";
       inherit (extra) labels capacity name registrationTokenFile registrationScope;
-      standby =
-        if extra.standby.enable
-        then extra.standby
-        else null;
-      status =
-        if extra.status.enable
-        then extra.status
-        else null;
     })
   canary.extraRunners;
   instances = [canaryInstance] ++ extraInstances;
-  standbyInstances = builtins.filter (instance: instance.standby != null) extraInstances;
-  statusInstances = builtins.filter (instance: instance.status != null) extraInstances;
-  pollSeconds = 15;
-  # Consecutive polls spanning at least the given time: the first poll that
-  # sees a change starts the span.
-  polls = seconds: (seconds + pollSeconds - 1) / pollSeconds + 1;
   podmanLabels = lib.concatMap (instance: instance.labels) instances;
   # A label name served by more than one Podman runner must be listed in
   # sharedLabels and carry the same image on each of them.
@@ -148,67 +116,10 @@
     runtimeInputs = [pkgs.coreutils];
     text = builtins.readFile ./register-from-file.sh;
   };
-  runnerStartGate = pkgs.writeShellApplication {
-    name = "forgejo-podman-runner-start-gate";
-    runtimeInputs = with pkgs; [
-      coreutils
-      procps
-      systemd
-      util-linux
-    ];
-    text = builtins.readFile ./runner-start-gate.sh;
-  };
   apiStartGate = pkgs.writeShellApplication {
     name = "forgejo-podman-api-start-gate";
     runtimeInputs = with pkgs; [coreutils systemd util-linux];
     text = builtins.readFile ./podman-api-start-gate.sh;
-  };
-  standbyController = pkgs.writeShellApplication {
-    name = "forgejo-podman-standby-controller";
-    runtimeInputs = with pkgs; [
-      coreutils
-      curl
-      systemd
-      util-linux
-    ];
-    text = builtins.readFile ./standby-controller.sh;
-  };
-  # Answers one HTTP request per connection with the runner unit's systemd
-  # state, for the standby controller on another host.
-  statusResponder = instance:
-    pkgs.writeShellApplication {
-      name = "${instance.serviceName}-status";
-      runtimeInputs = [pkgs.systemd];
-      text = ''
-        while IFS= read -r -t 5 line; do
-          line=''${line%$'\r'}
-          [[ -n $line ]] || break
-        done
-        state=$(systemctl is-active ${instance.unit} || true)
-        [[ -n $state ]] || state=unknown
-        printf 'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s\n' \
-          "$((''${#state} + 1))" "$state"
-      '';
-    };
-  lifecycleReady = pkgs.writeShellApplication {
-    name = "forgejo-podman-lifecycle-ready";
-    runtimeInputs = with pkgs; [
-      coreutils
-      systemd
-    ];
-    text = ''
-      deadline=$((SECONDS + 60))
-      while ((remaining = deadline - SECONDS, remaining > 0)); do
-        attempt_timeout=5
-        ((remaining < attempt_timeout)) && attempt_timeout=$remaining
-        if timeout --foreground "''${attempt_timeout}s" systemctl is-active --quiet ${lifecycleUnit}; then
-          exit 0
-        fi
-        sleep 1
-      done
-      echo "dedicated aggregate lifecycle did not become active" >&2
-      exit 1
-    '';
   };
   containersConf = pkgs.writeText "forgejo-podman-containers.conf" ''
     [containers]
@@ -244,38 +155,21 @@
   runnerService = instance: {
     inherit (instance) description;
     wantedBy = ["multi-user.target"];
-    wants = ["network-online.target"];
-    requires = [
-      apiUnit
-      lifecycleUnit
-    ];
-    bindsTo = [guardUnit];
+    requires = [apiUnit];
+    wants = ["network-online.target" holdUnit];
     after = [
       "network-online.target"
       apiUnit
-      guardUnit
+      holdUnit
     ];
     restartIfChanged = false;
     path = [canary.package] ++ canary.extraPackages;
     environment =
-      diskSpaceEnvironment
+      cfg.runnerHold.gateEnvironment
       // {
         HOME = instance.state;
         DOCKER_HOST = "unix://${socketPath}";
         RUNNER_UNIT = instance.unit;
-        RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
-        RUNNER_STANDBY =
-          if instance.standby != null
-          then "1"
-          else "0";
-        GAME_HELPER_FILE = "${./game-admission.sh}";
-        GAME_ADMISSION_ENABLED =
-          if cfg.ioPressureGuard.admissionControl.gameProcess.enable
-          then "1"
-          else "0";
-        GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
-        GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
-        GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
       };
     serviceConfig = {
       User = "forgejo-podman-runner";
@@ -284,15 +178,15 @@
       RuntimeDirectory = instance.serviceName;
       RuntimeDirectoryMode = "0750";
       # Retry transient runner process failures only. ExecCondition still
-      # gates each start on drain ownership, game admission and guard health.
+      # gates each start on the runner hold's reasons.
       Restart = "on-failure";
       RestartSec = "30s";
       TimeoutStartSec = "90s";
-      TimeoutStopSec = "3660s";
+      # The runner's shutdown timeout, then its job cancellation and cleanup.
+      TimeoutStopSec = "${toString (cfg.shutdownTimeoutSeconds + 300)}s";
       KillMode = "mixed";
       NoNewPrivileges = true;
-      ExecCondition = "+${lib.getExe runnerStartGate}";
-      ExecStartPre = [(lib.getExe lifecycleReady)];
+      ExecCondition = "+${lib.getExe cfg.runnerHold.gate}";
     };
     preStart = ''
       set -euo pipefail
@@ -319,36 +213,6 @@
       exec forgejo-runner daemon --config ${instance.config}
     '';
   };
-  standbyService = instance: {
-    description = "Run ${instance.unit} while the primary host's runner is down";
-    # Stopping the controller releases the standby, which would end a running
-    # fallback for as long as its job runs; a changed controller takes effect
-    # at the next boot or an explicit restart.
-    restartIfChanged = false;
-    wantedBy = ["multi-user.target"];
-    wants = ["network-online.target"];
-    after = [
-      "network-online.target"
-      guardUnit
-      lifecycleUnit
-    ];
-    environment = {
-      RUNNER_UNIT = instance.unit;
-      STATUS_URL = instance.standby.statusUrl;
-      STATUS_INTERFACE = lib.optionalString (instance.standby.statusInterface != null) instance.standby.statusInterface;
-      POLL_SECONDS = toString pollSeconds;
-      START_AFTER_POLLS = toString (polls instance.standby.startAfterSeconds);
-      STOP_AFTER_POLLS = toString (polls instance.standby.stopAfterSeconds);
-    };
-    serviceConfig = {
-      ExecStart = lib.getExe standbyController;
-      Restart = "always";
-      RestartSec = "30s";
-      NoNewPrivileges = true;
-      PrivateTmp = true;
-      ProtectHome = true;
-    };
-  };
 in {
   options.services.forgejo-actions-runner.runnerUnits = lib.mkOption {
     type = lib.types.listOf lib.types.str;
@@ -360,8 +224,8 @@ in {
     description = ''
       Runner units sharing the dedicated CI aggregate: the primary Docker
       runner first, then the existing Podman runner, then extra Podman runners
-      sorted by name. The pressure guard, start gates, lifecycle teardown and
-      the Podman store reset all take this list.
+      sorted by name. The runner hold and the Podman store reset take this
+      list.
     '';
   };
 
@@ -487,71 +351,6 @@ in {
             defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.registrationScope";
             description = "Scope this runner's registration token grants; the canary's by default.";
           };
-          standby = {
-            enable = lib.mkEnableOption ''
-              standby mode: the runner runs only while the matching runner on
-              another host is down, as that host's status endpoint reports.
-              The start gate holds the unit until a controller admits it; the
-              unit stays enabled so pressure and disk drains still cover it.
-              The controller restarts a stopped, enabled standby while the
-              primary is down. Stopping its `-standby` unit releases the
-              standby until the next switch or boot starts that unit again;
-              masking the runner unit keeps it off for good. A switch does not
-              restart a running controller'';
-            statusUrl = lib.mkOption {
-              type = lib.types.strMatching "http://[^ ]+";
-              example = "http://192.0.2.10:9478/";
-              description = ''
-                Status endpoint of the primary runner (`status` on its host).
-                Any answer other than `active`, including none, counts as down.
-              '';
-            };
-            statusInterface = lib.mkOption {
-              type = lib.types.nullOr (lib.types.strMatching "[A-Za-z0-9_.-]+");
-              default = null;
-              example = "wt0";
-              description = ''
-                Network interface the polls must leave through, such as the
-                overlay that authenticates the primary host. Null uses the
-                routing table.
-              '';
-            };
-            startAfterSeconds = lib.mkOption {
-              type = lib.types.ints.positive;
-              default = 60;
-              description = "How long the primary runner must have been seen down before this runner starts; rounded up to the 15-second poll.";
-            };
-            stopAfterSeconds = lib.mkOption {
-              type = lib.types.ints.positive;
-              default = 300;
-              description = ''
-                How long the primary runner must have been seen back before
-                this runner stops; rounded up to the 15-second poll. The stop
-                is graceful: running jobs finish here.
-              '';
-            };
-          };
-          status = {
-            enable = lib.mkEnableOption ''
-              a read-only endpoint that reports this runner unit's systemd
-              state (`active`, `inactive` and so on) to standby runners on
-              other hosts'';
-            port = lib.mkOption {
-              type = lib.types.port;
-              example = 9478;
-              description = "TCP port of the status endpoint.";
-            };
-            interface = lib.mkOption {
-              type = lib.types.str;
-              example = "wt0";
-              description = "The only network interface whose firewall admits the endpoint.";
-            };
-            allowedAddresses = lib.mkOption {
-              type = lib.types.nonEmptyListOf lib.types.str;
-              default = ["100.64.0.0/10"];
-              description = "Source address prefixes the endpoint's socket accepts; all others are dropped.";
-            };
-          };
         };
       }));
       default = {};
@@ -567,10 +366,8 @@ in {
         Additional Podman runner units. Entry `<name>` becomes
         `forgejo-podman-runner-<name>.service` with its own Forgejo
         registration and state, run by the canary's runner account against the
-        same Podman API. Every runner shares the one pressure guard, lifecycle
-        boundary and build slice, so the slice's budget is split across all of
-        their jobs. Adding or removing an entry changes the guard's runner
-        registry, which takes effect only after a reboot.
+        same Podman API. Every runner shares the one runner hold and build
+        slice, so the slice's budget is split across all of their jobs.
       '';
     };
     sharedLabels = lib.mkOption {
@@ -598,12 +395,8 @@ in {
     (lib.mkIf enabled {
       assertions = [
         {
-          assertion =
-            cfg.isolatedDocker.enable
-            && cfg.resourcePolicy.enable
-            && cfg.ioPressureGuard.enable
-            && cfg.ioPressureGuard.admissionControl.enable;
-          message = "Podman CI canary requires isolated Docker, aggregate resource policy, pressure guard, and admission control.";
+          assertion = cfg.isolatedDocker.enable && cfg.resourcePolicy.enable;
+          message = "Podman CI canary requires isolated Docker and the aggregate resource policy.";
         }
         {
           assertion = validLabels canary.labels;
@@ -659,27 +452,6 @@ in {
           message = "Extra Podman runners require an absolute registrationTokenFile path.";
         }
         {
-          assertion = let
-            names =
-              map (instance: instance.serviceName) instances
-              ++ map (instance: "${instance.serviceName}-standby") standbyInstances
-              ++ map (instance: "${instance.serviceName}-status") statusInstances;
-          in
-            builtins.length (lib.unique names) == builtins.length names;
-          message = "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
-        }
-        {
-          assertion = lib.all (instance: instance.status == null) standbyInstances;
-          message = "A standby Podman runner cannot also publish a status endpoint.";
-        }
-        {
-          assertion = let
-            ports = map (instance: instance.status.port) statusInstances;
-          in
-            builtins.length (lib.unique ports) == builtins.length ports;
-          message = "Podman runner status endpoints need distinct ports.";
-        }
-        {
           # Version 1 tables cannot be mixed with the [[registry]] mirror entry.
           assertion = cfg.registryMirror == null || !(registrySettings ? registries);
           message = "services.forgejo-actions-runner.registryMirror requires virtualisation.containers.registries.settings in the version 2 format.";
@@ -707,34 +479,20 @@ in {
         ])
         instances;
 
-      # This socket is pulled in by the API service. Stopping that service,
-      # guard, or lifecycle also closes the listener so a late client cannot
-      # reactivate workers after aggregate teardown.
+      # This socket is pulled in by the API service. Stopping that service
+      # also closes the listener, so a late client cannot reactivate it.
       systemd.sockets.forgejo-runner-podman = {
-        requires = [
-          guardUnit
-          policyUnit
-        ];
-        bindsTo = [
-          guardUnit
-          apiUnit
-        ];
-        after = [
-          guardUnit
-          policyUnit
-        ];
-        partOf = [
-          apiUnit
-          lifecycleUnit
-        ];
+        requires = [policyUnit];
+        bindsTo = [apiUnit];
+        after = [policyUnit];
+        partOf = [apiUnit];
         unitConfig = {
-          # The guard must start before the listener. The default socket
-          # sockets.target dependency would reverse that order through
+          # The resource policy must start before the listener. The default
+          # socket sockets.target dependency would reverse that order through
           # basic.target and create a boot transaction cycle.
           DefaultDependencies = false;
           Before = ["shutdown.target"];
           Conflicts = ["shutdown.target"];
-          ConditionPathExists = "/run/forgejo-runner-aggregate-pressure/runners/${runnerUnit}";
         };
         socketConfig = {
           ListenStream = socketPath;
@@ -752,15 +510,11 @@ in {
         requires = [
           socketUnit
           policyUnit
-          guardUnit
-          lifecycleUnit
         ];
-        bindsTo = [guardUnit];
         after = [
           "network-online.target"
           socketUnit
           policyUnit
-          guardUnit
         ];
         wants = ["network-online.target"];
         restartIfChanged = false;
@@ -773,7 +527,6 @@ in {
         environment = {
           HOME = builderState;
           XDG_RUNTIME_DIR = builderRuntime;
-          RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
           CONTAINERS_CONF_OVERRIDE = lib.mkIf (canary.dnsServers != []) "${containersConf}";
           CONTAINERS_REGISTRIES_CONF = lib.mkIf (cfg.registryMirror != null) "${registriesConf}";
           # Netavark must spawn DNS inside this delegated service. systemd-run
@@ -817,71 +570,11 @@ in {
           ExecStart = "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay --root=${canary.storageRoot} --runroot=${builderRuntime}/storage system service --time=0";
         };
       };
-
-      services.nixfleet-boot-check.runnerUnits =
-        map (instance: {
-          inherit (instance) unit;
-          holdMarkerDirectory = "/run/forgejo-runner-aggregate-pressure/runners/${instance.unit}";
-        })
-        instances;
     })
     (lib.mkIf enabled {
       systemd.services = lib.listToAttrs (
         map (instance: lib.nameValuePair instance.serviceName (runnerService instance)) instances
-        ++ map (instance: lib.nameValuePair "${instance.serviceName}-standby" (standbyService instance)) standbyInstances
-        ++ map (instance:
-          lib.nameValuePair "${instance.serviceName}-status@" {
-            description = "Report ${instance.unit} state to a standby host";
-            # Collect instances that hit the runtime limit instead of keeping
-            # them as failed units.
-            unitConfig.CollectMode = "inactive-or-failed";
-            serviceConfig = {
-              ExecStart = lib.getExe (statusResponder instance);
-              StandardInput = "socket";
-              StandardOutput = "socket";
-              StandardError = "journal";
-              RuntimeMaxSec = "15s";
-              DynamicUser = true;
-              CapabilityBoundingSet = "";
-              LockPersonality = true;
-              MemoryDenyWriteExecute = true;
-              NoNewPrivileges = true;
-              PrivateDevices = true;
-              PrivateTmp = true;
-              ProtectHome = true;
-              ProtectSystem = "strict";
-              ProtectKernelTunables = true;
-              ProtectKernelModules = true;
-              ProtectControlGroups = true;
-              # The accepted connection is inherited; systemctl needs only
-              # the system bus.
-              RestrictAddressFamilies = "AF_UNIX";
-              RestrictNamespaces = true;
-              SystemCallArchitectures = "native";
-            };
-          })
-        statusInstances
       );
-
-      systemd.sockets = lib.listToAttrs (map (instance:
-        lib.nameValuePair "${instance.serviceName}-status" {
-          description = "Status endpoint of ${instance.unit}";
-          wantedBy = ["sockets.target"];
-          listenStreams = [(toString instance.status.port)];
-          socketConfig = {
-            Accept = true;
-            MaxConnections = 8;
-            MaxConnectionsPerSource = 2;
-            IPAddressAllow = instance.status.allowedAddresses;
-            IPAddressDeny = "any";
-          };
-        })
-      statusInstances);
-
-      networking.firewall.interfaces = lib.mkMerge (map (instance: {
-          ${instance.status.interface}.allowedTCPPorts = [instance.status.port];
-        })
-        statusInstances);
     })
   ];
 }

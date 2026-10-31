@@ -129,12 +129,6 @@ in
         };
         # Exercise only the local executor; never register or contact Forgejo.
         systemd.services.forgejo-actions-runner.wantedBy = lib.mkForce [];
-        systemd.services.forgejo-runner-io-pressure-guard.environment = {
-          PRESSURE_FILE = "/run/fixture-pressure";
-          SAMPLE_SECONDS = lib.mkForce "1";
-          HIGH_SAMPLES_REQUIRED = lib.mkForce "2";
-          LOW_SAMPLES_REQUIRED = lib.mkForce "2";
-        };
         environment.systemPackages = [
           pkgs.docker
           pkgs.forgejo-runner
@@ -145,7 +139,6 @@ in
     testScript = ''
       start_all()
       machine.wait_for_unit("multi-user.target")
-      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0\\n' > /run/fixture-pressure")
       machine.succeed("systemctl start forgejo-runner-docker.service", timeout=150)
       machine.wait_for_unit("forgejo-runner-docker.service")
 
@@ -206,20 +199,6 @@ in
       assert int(machine.succeed(f"awk '{{print $14 + $15}}' /proc/{child_pid}/stat")) > child_initial
       assert int(machine.succeed(f"cat /proc/{build_worker_pid}/root/qualification-build-worker-progress")) > worker_initial
 
-      machine.succeed("printf 'full avg10=99.00 avg60=99.00 avg300=99.00 total=1\\n' > /run/fixture-pressure")
-      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = frozen", timeout=30)
-      child_frozen = int(machine.succeed(f"awk '{{print $14 + $15}}' /proc/{child_pid}/stat"))
-      worker_frozen = int(machine.succeed(f"cat /proc/{build_worker_pid}/root/qualification-build-worker-progress"))
-      host_frozen = int(machine.succeed("cat /run/forgejo-qualification/host-application.progress"))
-      machine.sleep(3)
-      assert int(machine.succeed(f"awk '{{print $14 + $15}}' /proc/{child_pid}/stat")) == child_frozen
-      assert int(machine.succeed(f"cat /proc/{build_worker_pid}/root/qualification-build-worker-progress")) == worker_frozen
-      assert int(machine.succeed("cat /run/forgejo-qualification/host-application.progress")) > host_frozen
-
-      machine.succeed("printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=1\\n' > /run/fixture-pressure")
-      machine.wait_until_succeeds("test $(systemctl show forgejobuilds.slice -p FreezerState --value) = running", timeout=30)
-      machine.wait_until_succeeds(f"test $(awk '{{print $14 + $15}}' /proc/{child_pid}/stat) -gt {child_frozen}", timeout=30)
-      machine.wait_until_succeeds(f"test $(cat /proc/{build_worker_pid}/root/qualification-build-worker-progress) -gt {worker_frozen}", timeout=30)
       assert machine.succeed("docker inspect --format '{{.State.Paused}}' host-manual-pause").strip() == "true"
 
       output = machine.succeed("journalctl -u qualification-runner.service --no-pager")

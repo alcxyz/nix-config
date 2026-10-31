@@ -169,7 +169,6 @@ in
             labels = ["docker-fixture:docker://example.invalid/unused:local"];
             secretsFile = pkgs.writeText "unused-dummy-secrets" "dummy";
             isolatedDocker.enable = true;
-            ioPressureGuard.admissionControl.enable = true;
             resourcePolicy = {
               memoryHigh = "1200M";
               memoryMax = "1536M";
@@ -188,15 +187,6 @@ in
           systemd.services.forgejo-podman-runner = {
             preStart = lib.mkForce "";
             script = lib.mkForce "exec ${pkgs.coreutils}/bin/sleep infinity";
-          };
-          systemd.services.fixture-pressure-init = {
-            serviceConfig.Type = "oneshot";
-            script = "echo 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0' > /run/fixture-pressure";
-          };
-          systemd.services.forgejo-runner-io-pressure-guard = {
-            requires = ["fixture-pressure-init.service"];
-            after = ["fixture-pressure-init.service"];
-            environment.PRESSURE_FILE = "/run/fixture-pressure";
           };
           environment.systemPackages = [pkgs.docker pkgs.docker-buildx pkgs.forgejo-runner pkgs.git pkgs.podman];
         };

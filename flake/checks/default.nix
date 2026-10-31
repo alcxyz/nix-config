@@ -141,9 +141,9 @@ in {
 
   forgejo-nix-cache-proxy = import ./forgejo-nix-cache-proxy-vm.nix {inherit pkgs;};
 
-  forgejo-runner-hold-monitor-contract = import ./forgejo-runner-hold-monitor.nix {inherit lib pkgs self;};
-
   forgejo-podman-store-reset-lifecycle = import ./forgejo-podman-store-reset-vm.nix {inherit pkgs;};
+
+  forgejo-runner-hold-lifecycle = import ./forgejo-runner-hold-vm.nix {inherit pkgs;};
 
   forgejo-docker-retention = import ./forgejo-docker-retention.nix {inherit lib pkgs;};
 
@@ -162,9 +162,9 @@ in {
         ;
     };
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
-    # Jobs per runner (ADR-0041): xyz and xev give the Docker runner one and the
-    # Podman pool three, since most jobs select the pool; the smaller nex and
-    # nux take one per runner.
+    # Jobs per runner (ADR-0041, ADR-0106): every Docker runner takes one; the
+    # Podman pool takes one on xyz, which also runs games and media, two on
+    # xev and one on the smaller nex and nux. xyz and xev add a ci-fast slot.
     expectedCapacity = {
       xyz = 1;
       xev = 1;
@@ -172,17 +172,35 @@ in {
       nux = 1;
     };
     expectedPoolCapacity = {
-      xyz = 3;
-      xev = 3;
+      xyz = 1;
+      xev = 2;
       nex = 1;
       nux = 1;
     };
     runnerUnits = lib.mapAttrs (_: host: host.config.systemd.services.forgejo-actions-runner) runnerHosts;
-    runnerStarts = map (unit: lib.removeSuffix " " unit.serviceConfig.ExecStart) (lib.attrValues runnerUnits);
+    runnerStarts = lib.mapAttrs (_: unit: lib.removeSuffix " " unit.serviceConfig.ExecStart) runnerUnits;
+    # Only xyz, where a game holds the runners, gives running jobs two minutes.
+    expectedShutdown = {
+      xyz = 120;
+      xev = 3600;
+      nex = 3600;
+      nux = 3600;
+    };
+    podmanRunnerUnits = host:
+      map (unit: host.config.systemd.services.${lib.removeSuffix ".service" unit})
+      (lib.tail host.config.services.forgejo-actions-runner.runnerUnits);
     hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:docker://" label) runner.labels;
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
-    assert lib.all (runner: runner.podmanStoreReset.enable && runner.ioPressureGuard.diskSpace.enable) (lib.attrValues runners);
+    assert lib.all (runner: runner.podmanStoreReset.enable && runner.runnerHold.diskSpace.enable && runner.runnerHold.alert.enable) (lib.attrValues runners);
+    # Only xyz holds its runners for games (ADR-0106).
+    assert lib.all (host: runners.${host}.runnerHold.game.enable == (host == "xyz")) (lib.attrNames runners);
+    assert runnerHosts.xyz.config.services.gameSignal.enable;
+    assert lib.all (host: !runnerHosts.${host}.config.services.gameSignal.enable) ["xev" "nex" "nux"];
+    assert lib.all (host: runners.${host}.shutdownTimeoutSeconds == expectedShutdown.${host}) (lib.attrNames runners);
+    assert lib.all (host: lib.all (unit: unit.serviceConfig.TimeoutStopSec == "${toString (expectedShutdown.${host} + 300)}s") ([runnerUnits.${host}] ++ podmanRunnerUnits runnerHosts.${host})) (lib.attrNames runners);
+    # The pressure guard, freeze, standby and hold monitor are retired.
+    assert lib.all (host: !(host.config.systemd.services ? forgejo-runner-io-pressure-guard) && !(host.config.systemd.services ? forgejo-runner-aggregate-lifecycle) && !(host.config.systemd.services ? forgejo-runner-hold-monitor) && host.config.systemd.services ? forgejo-runner-hold) (lib.attrValues runnerHosts);
     assert lib.all (runner: runner.podmanStoreReset.triggerUsedPercent == 70 && runner.podmanStoreReset.maxAgeDays == 7) (lib.attrValues runners);
     assert lib.all (runner: runner.isolatedDocker.retention.enable && runner.isolatedDocker.retention.budget == "20GiB" && runner.isolatedDocker.retention.unusedAge == "48h") (lib.attrValues runners);
     # Private scheduling may stagger the times, but must not retain a weekly
@@ -197,7 +215,7 @@ in {
     assert lib.all (runner: runner.registryMirrorCaFile != null) (lib.attrValues runners);
     assert lib.all (host: lib.hasSuffix "-forgejo-docker-mirror-ca" host.config.systemd.services.forgejo-runner-docker.serviceConfig.ExecStartPre) (lib.attrValues runnerHosts);
     assert lib.all (host: lib.hasSuffix "-forgejo-podman-mirror-ca" host.config.systemd.services.forgejo-runner-podman.serviceConfig.ExecStartPre) (lib.attrValues runnerHosts);
-    assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable && runner.ioPressureGuard.enable && runner.ioPressureGuard.admissionControl.enable) (lib.attrValues runners);
+    assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedPoolCapacity.${host}) (lib.attrNames runners);
     # xyz has a dedicated ci-fast runner, beside ci-fast overflow on its pool
@@ -207,34 +225,27 @@ in {
     assert runners.xyz.podmanCanary.extraRunners.fast.name == "xyz-fast";
     assert hasLabel "ci-fast" runners.xyz.podmanCanary.extraRunners.fast;
     assert hasLabel "ci-fast" runners.xyz.podmanCanary;
-    assert !runners.xyz.podmanCanary.extraRunners.fast.standby.enable;
-    assert runners.xyz.podmanCanary.extraRunners.fast.status.enable;
-    assert runners.xyz.podmanCanary.extraRunners.fast.status.interface == "wt0";
-    # xev's fast runner is a standby that runs only while xyz-fast is down,
-    # read from xyz's status endpoint; nex and nux never serve ci-fast.
+    # xev's fast runner serves ci-fast beside xyz-fast all the time; nex and
+    # nux never serve ci-fast.
     assert lib.attrNames runners.xev.podmanCanary.extraRunners == ["fast"];
     assert runners.xev.podmanCanary.extraRunners.fast.capacity == 1;
     assert runners.xev.podmanCanary.extraRunners.fast.name == "xev-fast";
     assert hasLabel "ci-fast" runners.xev.podmanCanary.extraRunners.fast;
     assert !(hasLabel "ci-fast" runners.xev.podmanCanary);
-    assert runners.xev.podmanCanary.extraRunners.fast.standby.enable;
-    assert runners.xev.podmanCanary.extraRunners.fast.standby.statusInterface == runners.xyz.podmanCanary.extraRunners.fast.status.interface;
-    assert !runners.xev.podmanCanary.extraRunners.fast.status.enable;
-    assert lib.hasSuffix ":${toString runners.xyz.podmanCanary.extraRunners.fast.status.port}/" runners.xev.podmanCanary.extraRunners.fast.standby.statusUrl;
+    assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
     assert lib.all (host: runners.${host}.podmanCanary.extraRunners == {}) ["nex" "nux"];
     assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
     assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
     assert lib.all (hasLabel "docker") (lib.attrValues runners);
-    assert lib.all (unit: unit.serviceConfig.TimeoutStopSec == "3660s") (lib.attrValues runnerUnits);
       pkgs.runCommand "forgejo-runner-pool-contract" {
         nativeBuildInputs = [pkgs.gawk pkgs.gnugrep];
       } ''
-        ${lib.concatMapStringsSep "\n" (runnerStart: ''
-            runner_config="$(awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStart})"
+        ${lib.concatMapStringsSep "\n" (host: ''
+            runner_config="$(awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStarts.${host}})"
             grep -Fxq '  timeout: 3600s' "$runner_config"
-            grep -Fxq '  shutdown_timeout: 3600s' "$runner_config"
+            grep -Fxq '  shutdown_timeout: ${toString expectedShutdown.${host}}s' "$runner_config"
           '')
-          runnerStarts}
+          (lib.attrNames runnerStarts)}
         touch "$out"
       '';
 
@@ -244,7 +255,6 @@ in {
     runnerUnit = xyz.systemd.services.forgejo-actions-runner;
     policyUnit = xyz.systemd.services.forgejo-runner-resource-policy;
     daemonUnit = xyz.systemd.services.forgejo-runner-docker;
-    pressureGuardUnit = xyz.systemd.services.forgejo-runner-io-pressure-guard;
     buildSlice = xyz.systemd.slices.forgejobuilds.sliceConfig;
     serverConfigs = [
       self.nixosConfigurations.xev.config
@@ -264,30 +274,19 @@ in {
     assert runner.isolatedDocker.enable;
     assert !(builtins.elem "--cgroup-parent=forgejobuilds.slice" runner.containerOptions);
     assert daemonUnit.serviceConfig.Slice == "forgejobuilds.slice";
-    assert runner.ioPressureGuard.highPercent == 20;
-    assert runner.ioPressureGuard.highDurationSeconds == 20;
-    assert runner.ioPressureGuard.lowPercent == 5;
-    assert runner.ioPressureGuard.lowDurationSeconds == 60;
-    assert runner.ioPressureGuard.admissionControl.enable;
-    assert runner.ioPressureGuard.admissionControl.severePercent == 60;
-    assert runner.ioPressureGuard.admissionControl.severeDurationSeconds == 30;
-    assert pressureGuardUnit.environment.ADMISSION_CONTROL_ENABLED == "1";
-    assert pressureGuardUnit.environment.HIGH_SAMPLES_REQUIRED == "5";
-    assert pressureGuardUnit.environment.LOW_SAMPLES_REQUIRED == "13";
-    assert pressureGuardUnit.environment.SEVERE_SAMPLES_REQUIRED == "7";
     assert runnerUnit.serviceConfig.KillMode == "mixed";
     assert lib.all (serverRunner: serverRunner.resourcePolicy.enable && serverRunner.isolatedDocker.enable) serverRunners;
-    assert lib.all (serverRunner: serverRunner.ioPressureGuard.admissionControl.enable) serverRunners;
     assert lib.all (serverRunner: serverRunner.dockerHost == "unix:///run/forgejo-docker/docker.sock") serverRunners;
     assert lib.all (host: builtins.elem "forgejo-runner-docker.service" host.systemd.services.forgejo-actions-runner.requires) serverConfigs;
     assert lib.all (host: !(builtins.elem "docker.service" host.systemd.services.forgejo-actions-runner.requires)) serverConfigs;
     assert lib.all (host: host.users.users.forgejo-runner.extraGroups == []) serverConfigs;
     assert lib.all (host: host.systemd.services.forgejo-actions-runner.serviceConfig.KillMode == "mixed") serverConfigs;
-    assert lib.all (host: host.systemd.services.forgejo-runner-io-pressure-guard.environment.ADMISSION_CONTROL_ENABLED == "1") serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
-    assert buildSlice.MemoryHigh == "40%";
-    assert buildSlice.MemoryMax == "50%";
+    # xyz's three slots share less memory beside the nix-daemon and the ARC.
+    assert buildSlice.MemoryHigh == "25%";
+    assert buildSlice.MemoryMax == "35%";
+    assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "40%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;
     assert !(xyz.virtualisation.docker.daemon.settings ? "exec-opts");
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.after;
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.requires;
@@ -321,75 +320,6 @@ in {
         touch "$out"
       '';
 
-  forgejo-runner-io-pressure-guard-contract = let
-    hostNames = [
-      "nex"
-      "nux"
-      "xev"
-      "xyz"
-    ];
-    hostConfigs = lib.genAttrs hostNames (name: self.nixosConfigurations.${name}.config);
-    guards = map (name: hostConfigs.${name}.systemd.services.forgejo-runner-io-pressure-guard) hostNames;
-    legacyConfig =
-      (import (pkgs.path + "/nixos/lib/eval-config.nix") {
-        # This fixture evaluates a NixOS service even when the surrounding
-        # flake check is instantiated for a non-Linux system.
-        system = "x86_64-linux";
-        specialArgs.inputs = {};
-        modules = [
-          ../../modules/nixos/services/forgejo-actions-runner
-          ({lib, ...}: {
-            options.sops.secrets = lib.mkOption {
-              type = lib.types.attrs;
-              default = {};
-            };
-            config = {
-              system.stateVersion = "25.11";
-              virtualisation.docker.enable = true;
-              services.forgejo-actions-runner = {
-                enable = true;
-                ioPressureGuard.enable = true;
-                labels = ["test:docker://example.invalid/test:latest"];
-                secretsFile = pkgs.writeText "dummy-runner-secrets.yaml" "dummy: encrypted-fixture";
-              };
-            };
-          })
-        ];
-      }).config;
-    legacyGuard = legacyConfig.systemd.services.forgejo-runner-io-pressure-guard;
-    guardStart = legacyGuard.serviceConfig.ExecStart;
-    runners = map (name: hostConfigs.${name}.systemd.services.forgejo-actions-runner) hostNames;
-    legacyRunnerStart = lib.removeSuffix " " legacyConfig.systemd.services.forgejo-actions-runner.serviceConfig.ExecStart;
-    guardSource = ../../modules/nixos/services/forgejo-actions-runner/io-pressure-guard.sh;
-    guardTest = ./test-forgejo-runner-io-pressure-guard.sh;
-  in
-    assert legacyGuard.wantedBy == ["multi-user.target"];
-    assert lib.hasPrefix "io.alc.forgejo-runner=" legacyGuard.environment.RUNNER_CONTAINER_LABEL;
-    assert legacyGuard.environment.HIGH_SAMPLES_REQUIRED == "5";
-    assert legacyGuard.environment.LOW_SAMPLES_REQUIRED == "13";
-    assert legacyGuard.environment.DOCKER_TIMEOUT_SECONDS == "3";
-    assert legacyGuard.environment.DOCKER_TRANSITION_TIMEOUT_SECONDS == "15";
-    assert lib.all (guard: guard.wantedBy == []) guards;
-    assert lib.all (guard: !(guard.environment ? RUNNER_CONTAINER_LABEL)) guards;
-    assert lib.all (guard: guard.environment.HIGH_SAMPLES_REQUIRED == "5") guards;
-    assert lib.all (guard: guard.environment.LOW_SAMPLES_REQUIRED == "13") guards;
-    assert lib.all (guard: guard.environment.TRANSITION_TIMEOUT_SECONDS == "120") guards;
-    # A drain held by unrelated load in the hysteresis band resumes once the
-    # aggregate is idle (#646).
-    assert lib.all (guard: guard.environment.SETTLED_SAMPLES_REQUIRED == "61") guards;
-    assert lib.all (guard: guard.environment.PROLONGED_DRAIN_SAMPLES == "360") guards;
-    assert lib.all (guard: guard.environment.SLICE_PRESSURE_FILE == "/sys/fs/cgroup/forgejobuilds.slice/io.pressure") guards;
-    assert lib.all (runner: builtins.elem "forgejo-runner-io-pressure-guard.service" runner.requires) runners;
-    assert lib.all (runner: runner.bindsTo == ["forgejo-runner-io-pressure-guard.service"]) runners;
-      pkgs.runCommand "forgejo-runner-io-pressure-guard-contract" {
-        nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.ripgrep pkgs.shellcheck];
-      } ''
-        shellcheck ${guardSource} ${guardTest}
-        bash ${guardTest} ${guardStart}
-        runner_config="$(${pkgs.gawk}/bin/awk '/--config/ { print $NF }' ${lib.escapeShellArg legacyRunnerStart})"
-        grep -Fq -- '--label=io.alc.forgejo-runner=' "$runner_config"
-        touch "$out"
-      '';
   forgejo-runner-registration-contract = let
     source = ../../modules/nixos/services/forgejo-actions-runner/register-from-file.sh;
     test = ./test-forgejo-runner-registration.sh;
@@ -465,20 +395,27 @@ in {
     host = self.nixosConfigurations.xyz.config;
     monitored = host.services.storage-health-monitor.units;
     recent = builtins.filter (unit: unit.mode == "recent-success") monitored;
-    pressureGuards = builtins.filter (unit: unit.name == "forgejo-runner-io-pressure-guard.service") monitored;
+    holdUnits = builtins.filter (unit: unit.name == "forgejo-runner-hold.service" || unit.name == "game-signal.service") monitored;
     serviceFor = unit: host.systemd.services.${lib.removeSuffix ".service" unit.name};
   in
-    assert lib.all (unit: builtins.length (serviceFor unit).serviceConfig.ExecStopPost == 1) recent;
-    assert pressureGuards
-    == [
-      {
-        name = "forgejo-runner-io-pressure-guard.service";
-        mode = "active-not-degraded";
-        maximumAgeSeconds = 129600;
-        allowPendingFirstTimer = false;
-        pendingFirstTimerMaximumAgeSeconds = 129600;
-      }
-    ];
+    # The Podman store reset first starts what a failed run stopped
+    # (ADR-0105); every other recent-success unit only records its success.
+    assert lib.all (unit:
+      builtins.length (serviceFor unit).serviceConfig.ExecStopPost
+      == (
+        if unit.name == "forgejo-podman-store-reset.service"
+        then 2
+        else 1
+      ))
+    recent;
+    assert lib.sort (a: b: a.name < b.name) holdUnits
+    == map (name: {
+      inherit name;
+      mode = "active-not-degraded";
+      maximumAgeSeconds = 129600;
+      allowPendingFirstTimer = false;
+      pendingFirstTimerMaximumAgeSeconds = 129600;
+    }) ["forgejo-runner-hold.service" "game-signal.service"];
       mkRepoCheck "storage-health-monitor-contract" [pkgs.bash pkgs.coreutils pkgs.gawk pkgs.gnugrep pkgs.python3] ''
         bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.sh \
           modules/nixos/services/storage-health-monitor/record-success.sh \

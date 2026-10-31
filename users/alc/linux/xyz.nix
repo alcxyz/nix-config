@@ -101,7 +101,9 @@ in {
   # ==================== XYZ-Specific Settings ====================
 
   services.nixPackagePromotion.dms.enable = true;
-  services.nixPackagePromotion.dms.admissionUnit = "forgejo-podman-runner.service";
+  # Neither DMS updates nor Wolf builds run while a game runs (the system's
+  # services.gameSignal, ADR-0106); the Wolf build follows the DMS file.
+  services.nixPackagePromotion.dms.holdFile = "/run/game-signal/active";
   services.nixPackagePromotion.wolf.enable = true;
 
   # With services.t3code.autoUpdate, the ai-stack profile provides t3 and

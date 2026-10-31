@@ -62,9 +62,9 @@ bash modules/nixos/services/storage-health-monitor/test-storage-health-monitor.s
   modules/nixos/services/storage-health-monitor/check-recent-success.sh \
   modules/nixos/services/storage-health-monitor/check-active-unit.sh
 
-python3 flake/checks/test-forgejo-runner-aggregate-pressure.py \
-  modules/nixos/services/forgejo-actions-runner/aggregate-pressure-guard.sh
-python3 flake/checks/test-forgejo-standby-controller.py \
-  modules/nixos/services/forgejo-actions-runner/standby-controller.sh
+python3 flake/checks/test-forgejo-runner-hold.py \
+  modules/nixos/services/forgejo-actions-runner/runner-hold.sh \
+  modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh \
+  modules/nixos/services/game-signal/game-signal.sh
 python3 flake/checks/test-forgejo-podman-store-reset.py \
   modules/nixos/services/forgejo-actions-runner/podman-store-reset.sh

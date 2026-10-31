@@ -11,26 +11,10 @@
     if retention.enable
     then retention.unusedAge
     else "168h";
-  # The primary runner first, then every Podman runner, as the guard expects.
-  runnerUnits = lib.concatStringsSep " " cfg.runnerUnits;
   stateDir = "/var/lib/forgejo-docker";
   runtimeDir = "/run/forgejo-docker";
   dockerCertsDir = "${stateDir}/.config/docker/certs.d";
   mirrorCaSetup = import ./registry-mirror-ca.nix {inherit cfg lib pkgs;};
-  diskSpaceEnvironment = {
-    DISK_HELPER_FILE = "${./disk-space-admission.sh}";
-    DISK_SPACE_ENABLED =
-      if cfg.ioPressureGuard.diskSpace.enable
-      then "1"
-      else "0";
-    DISK_SPACE_PATH = cfg.ioPressureGuard.diskSpace.path;
-    DISK_DRAIN_BYTES = toString (cfg.ioPressureGuard.diskSpace.drainFreeGiB * 1024 * 1024 * 1024);
-    DISK_DRAIN_PERCENT = toString cfg.ioPressureGuard.diskSpace.drainFreePercent;
-    DISK_CRITICAL_BYTES = toString (cfg.ioPressureGuard.diskSpace.criticalFreeGiB * 1024 * 1024 * 1024);
-    DISK_CRITICAL_PERCENT = toString cfg.ioPressureGuard.diskSpace.criticalFreePercent;
-    DISK_RECOVERY_BYTES = toString (cfg.ioPressureGuard.diskSpace.recoveryFreeGiB * 1024 * 1024 * 1024);
-    DISK_RECOVERY_PERCENT = toString cfg.ioPressureGuard.diskSpace.recoveryFreePercent;
-  };
   daemonConfig = (pkgs.formats.json {}).generate "forgejo-docker.json" ({
       hosts = ["unix://${runtimeDir}/docker.sock"];
       "data-root" = "${stateDir}/overlay2";
@@ -73,48 +57,10 @@
         ];
       };
     });
-  guard = pkgs.writeShellApplication {
-    name = "forgejo-runner-aggregate-pressure-guard";
-    runtimeInputs = with pkgs; [coreutils gawk procps systemd util-linux];
-    text = builtins.readFile ./aggregate-pressure-guard.sh;
-  };
-  lifecycleStop = pkgs.writeShellApplication {
-    name = "forgejo-runner-aggregate-lifecycle-stop";
-    runtimeInputs = with pkgs; [bash coreutils gawk systemd util-linux];
-    text = builtins.readFile ./aggregate-lifecycle-stop.sh;
-  };
-  lifecycleReady = pkgs.writeShellApplication {
-    name = "forgejo-runner-aggregate-lifecycle-ready";
-    runtimeInputs = with pkgs; [coreutils systemd];
-    text = ''
-      deadline=$((SECONDS + 60))
-      while ((remaining = deadline - SECONDS, remaining > 0)); do
-        attempt_timeout=5
-        ((remaining < attempt_timeout)) && attempt_timeout=$remaining
-        if timeout --foreground "''${attempt_timeout}s" systemctl is-active --quiet \
-          forgejo-runner-aggregate-lifecycle.service; then
-          exit 0
-        fi
-        sleep 1
-      done
-      echo "dedicated aggregate lifecycle did not become active" >&2
-      exit 1
-    '';
-  };
-  runnerStartGate = pkgs.writeShellApplication {
-    name = "forgejo-runner-start-gate";
-    runtimeInputs = with pkgs; [coreutils procps systemd util-linux];
-    text = builtins.readFile ./runner-start-gate.sh;
-  };
   apiStartGate = pkgs.writeShellApplication {
     name = "forgejo-docker-api-start-gate";
     runtimeInputs = with pkgs; [coreutils systemd util-linux];
     text = builtins.readFile ./podman-api-start-gate.sh;
-  };
-  gameBypass = pkgs.writeShellApplication {
-    name = "forgejo-runner-game-bypass";
-    runtimeInputs = [pkgs.coreutils];
-    text = builtins.readFile ./game-bypass-control.sh;
   };
 in {
   options.services.forgejo-actions-runner.isolatedDocker = {
@@ -146,21 +92,17 @@ in {
   };
 
   config = lib.mkIf enabled {
-    environment.systemPackages = [gameBypass];
     assertions = [
       {
-        assertion = cfg.resourcePolicy.enable && cfg.ioPressureGuard.enable;
-        message = "Isolated runner Docker requires aggregate resource policy and pressure guard.";
+        assertion = cfg.resourcePolicy.enable;
+        message = "Isolated runner Docker requires the aggregate resource policy.";
       }
       {
         assertion = cfg.dockerHost == "unix://${runtimeDir}/docker.sock";
         message = "Isolated runner Docker requires its dedicated socket.";
       }
     ];
-    services.forgejo-actions-runner = {
-      resourcePolicy.enable = lib.mkDefault true;
-      ioPressureGuard.enable = lib.mkDefault true;
-    };
+    services.forgejo-actions-runner.resourcePolicy.enable = lib.mkDefault true;
     users.users.forgejo-builder = {
       isSystemUser = true;
       group = "forgejo-runner";
@@ -169,18 +111,14 @@ in {
     };
     systemd.services.forgejo-runner-docker = {
       description = "Dedicated rootless Forgejo build daemon";
-      # The lifecycle service starts after the daemon so its stop runs first.
-      # No consumer may use the socket until that service is armed.
-      requires = ["forgejo-runner-resource-policy.service" "forgejo-runner-io-pressure-guard.service" "forgejo-runner-aggregate-lifecycle.service"];
-      bindsTo = ["forgejo-runner-io-pressure-guard.service"];
-      after = ["network-online.target" "forgejo-runner-resource-policy.service" "forgejo-runner-io-pressure-guard.service"];
+      requires = ["forgejo-runner-resource-policy.service"];
+      after = ["network-online.target" "forgejo-runner-resource-policy.service"];
       restartIfChanged = false;
       wants = ["network-online.target"];
       path = ["/run/wrappers"];
       environment = {
         HOME = stateDir;
         XDG_RUNTIME_DIR = runtimeDir;
-        PODMAN_ADMISSION = "0";
       };
       serviceConfig = {
         Type = "notify";
@@ -214,104 +152,29 @@ in {
         LimitCORE = 0;
       };
     };
-    systemd.services.forgejo-runner-aggregate-lifecycle = {
-      description = "Teardown boundary for the dedicated CI aggregate";
-      bindsTo =
-        ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"]
-        ++ lib.optional cfg.podmanCanary.enable "forgejo-runner-podman.service";
-      after =
-        ["forgejo-runner-docker.service" "forgejo-runner-io-pressure-guard.service"]
-        ++ lib.optional cfg.podmanCanary.enable "forgejo-runner-podman.service";
-      restartIfChanged = false;
-      environment.RUNNER_UNITS = runnerUnits;
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = "${pkgs.coreutils}/bin/true";
-        ExecStop = lib.getExe lifecycleStop;
-        TimeoutStopSec = "300s";
-      };
-    };
-    systemd.services.forgejo-runner-io-pressure-guard = {
-      description = "Freeze the dedicated CI build aggregate under I/O pressure";
-      # Watch the slice before admitting daemon workers. Losing the guard stops
-      # the daemon and its descendants, including jobs not owned by the runner.
-      requires = ["forgejo-runner-resource-policy.service"];
-      after = ["forgejo-runner-resource-policy.service"];
-      restartIfChanged = false;
-      environment =
-        diskSpaceEnvironment
-        // {
-          RUNNER_UNITS = runnerUnits;
-          ADMISSION_CONTROL_ENABLED =
-            if cfg.ioPressureGuard.admissionControl.enable
-            then "1"
-            else "0";
-          GAME_HELPER_FILE = "${./game-admission.sh}";
-          GAME_ADMISSION_ENABLED =
-            if cfg.ioPressureGuard.admissionControl.gameProcess.enable
-            then "1"
-            else "0";
-          GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
-          GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
-          GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
-          HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
-          LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
-          HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-          LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-          SEVERE_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.admissionControl.severePercent * 100);
-          SEVERE_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.admissionControl.severeDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-          SETTLED_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.admissionControl.settledResumeSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-          PROLONGED_DRAIN_SAMPLES = toString (cfg.ioPressureGuard.admissionControl.prolongedDrainSeconds / cfg.ioPressureGuard.sampleSeconds);
-          SLICE_PRESSURE_FILE = "/sys/fs/cgroup/forgejobuilds.slice/io.pressure";
-          SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
-          TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.transitionTimeoutSeconds;
-        };
-      serviceConfig = {
-        Type = "notify";
-        NotifyAccess = "all";
-        ExecStart = lib.getExe guard;
-        RuntimeDirectory = "forgejo-runner-aggregate-pressure";
-        RuntimeDirectoryMode = "0700";
-        RuntimeDirectoryPreserve = "yes";
-        Restart = "no";
-      };
-    };
     systemd.services.forgejo-actions-runner = {
-      serviceConfig.KillMode = lib.mkIf cfg.ioPressureGuard.admissionControl.enable "mixed";
-      requires = ["forgejo-runner-aggregate-lifecycle.service"];
+      # The stop signals only the runner, which stops polling and waits for
+      # its running jobs up to its shutdown timeout before it cancels them.
+      serviceConfig.KillMode = "mixed";
+      wants = ["forgejo-runner-hold.service"];
+      after = ["forgejo-runner-hold.service"];
       restartIfChanged = false;
       environment =
-        diskSpaceEnvironment
+        cfg.runnerHold.gateEnvironment
         // {
           RUNNER_UNIT = "forgejo-actions-runner.service";
-          GAME_HELPER_FILE = "${./game-admission.sh}";
-          GAME_ADMISSION_ENABLED =
-            if cfg.ioPressureGuard.admissionControl.gameProcess.enable
-            then "1"
-            else "0";
-          GAME_USER = cfg.ioPressureGuard.admissionControl.gameProcess.user;
-          GAME_ARGV0_BASENAMES = lib.concatStringsSep " " cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames;
-          GAME_COOLDOWN_SECONDS = toString cfg.ioPressureGuard.admissionControl.gameProcess.cooldownSeconds;
-          RUNNER_UNITS = runnerUnits;
         };
-      # The state directory is root-only; only this fixed condition command
-      # runs as root. A skipped start must not trigger Restart=on-failure.
-      serviceConfig.ExecCondition = "+${lib.getExe runnerStartGate}";
-      serviceConfig.ExecStartPre = lib.mkBefore [(lib.getExe lifecycleReady)];
-    };
-    systemd.services.forgejo-runner-cache-pressure-prune = lib.mkIf cfg.cachePressure.enable {
-      requires = ["forgejo-runner-aggregate-lifecycle.service"];
-      serviceConfig.ExecStartPre = lib.mkBefore [(lib.getExe lifecycleReady)];
+      # The hold state is root-only; only this fixed condition command runs
+      # as root. A skipped start must not trigger Restart=on-failure.
+      serviceConfig.ExecCondition = "+${lib.getExe cfg.runnerHold.gate}";
     };
     systemd.services.forgejo-runner-cache-prune = {
       description = "Prune unused dedicated CI Docker cache and images";
       after = ["forgejo-runner-docker.service"];
-      requires = ["forgejo-runner-aggregate-lifecycle.service"];
+      requires = ["forgejo-runner-docker.service"];
       environment.DOCKER_HOST = cfg.dockerHost;
       serviceConfig = {
         Type = "oneshot";
-        ExecStartPre = lib.mkBefore [(lib.getExe lifecycleReady)];
         ExecStart = "${pkgs.docker}/bin/docker system prune --force --all --filter=until=${pruneAge}";
       };
     };

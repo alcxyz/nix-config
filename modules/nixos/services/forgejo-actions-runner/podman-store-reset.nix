@@ -7,13 +7,14 @@
   cfg = config.services.forgejo-actions-runner;
   reset = cfg.podmanStoreReset;
   enabled = cfg.enable && reset.enable;
-  game = cfg.ioPressureGuard.admissionControl.gameProcess;
+  game = config.services.gameSignal;
   helper = pkgs.writeShellApplication {
     name = "forgejo-podman-store-reset";
     runtimeInputs = with pkgs; [
       coreutils
       curl
       gawk
+      gnugrep
       jq
       procps
       systemd
@@ -29,6 +30,20 @@ in {
       under the lifecycle lock, start them again and delete the old store at
       the lowest priority (ADR-0105)
     '';
+    ioPressurePercent = lib.mkOption {
+      type = lib.types.ints.between 0 100;
+      default = 5;
+      description = "Start a reset, and keep deleting the old store, only while full I/O PSI avg10 stays at or below this percentage.";
+    };
+    quietMinutes = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 15;
+      description = ''
+        Stop a runner only if it has started no job for this long. A job
+        that is still pulling its image has no task container yet, and a
+        runner stop would cancel it once the runner's shutdown timeout passes.
+      '';
+    };
     triggerUsedPercent = lib.mkOption {
       type = lib.types.ints.between 1 99;
       default = 70;
@@ -49,10 +64,9 @@ in {
   config = lib.mkIf enabled {
     assertions = [
       {
-        # The guard's admission control resumes a runner whose restart a
-        # start gate refused.
-        assertion = cfg.podmanCanary.enable && cfg.isolatedDocker.enable && cfg.ioPressureGuard.admissionControl.enable;
-        message = "The Podman store reset requires the isolated Docker and Podman runners with admission control.";
+        # The runner hold starts a runner whose restart a start gate refused.
+        assertion = cfg.podmanCanary.enable && cfg.isolatedDocker.enable;
+        message = "The Podman store reset requires the isolated Docker and Podman runners.";
       }
     ];
 
@@ -77,27 +91,26 @@ in {
         STORE_PATH = cfg.podmanCanary.storageRoot;
         TRIGGER_USED_PERCENT = toString reset.triggerUsedPercent;
         MAX_AGE_SECONDS = toString (reset.maxAgeDays * 86400);
-        # Reset starts, and trash deletion continues, only while the guard
-        # itself would consider the host recovered from I/O pressure.
-        IO_PRESSURE_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
+        IO_PRESSURE_THRESHOLD_HUNDREDTHS = toString (reset.ioPressurePercent * 100);
+        QUIET_SECONDS = toString (reset.quietMinutes * 60);
+        # The longest runner stop: its shutdown timeout and the cleanup after.
+        RUNNER_STOP_TIMEOUT_SECONDS = toString (cfg.shutdownTimeoutSeconds + 300);
         RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
-        GAME_HELPER_FILE = "${./game-admission.sh}";
-        GAME_ADMISSION_ENABLED =
-          if game.enable
+        GAME_ENABLED =
+          if cfg.runnerHold.game.enable
           then "1"
           else "0";
-        GAME_USER = game.user;
-        GAME_ARGV0_BASENAMES = lib.concatStringsSep " " game.argv0Basenames;
-        GAME_COOLDOWN_SECONDS = toString game.cooldownSeconds;
+        GAME_FILE = game.file;
+        GAME_UNIT = game.unit;
       };
       serviceConfig = {
         Type = "oneshot";
         ExecStart = lib.getExe helper;
         # Starts whatever a failed or killed run left stopped.
         ExecStopPost = lib.mkBefore ["${lib.getExe helper} restart"];
-        # Leftover trash (30 minutes), a job admitted just before its runner's
-        # stop (up to an hour), the API stop and start, and the new trash
-        # (30 minutes).
+        # Leftover trash (30 minutes), runner stops (bounded by the runners'
+        # stop timeouts, normally seconds since the runners are idle), the API
+        # stop and start, and the new trash (30 minutes).
         TimeoutStartSec = "140min";
         # ExecStopPost waits for the starts it requests (up to 5 minutes).
         TimeoutStopSec = "10min";
@@ -105,7 +118,7 @@ in {
         StateDirectoryMode = "0700";
         RuntimeDirectory = "forgejo-podman-store-reset";
         RuntimeDirectoryMode = "0700";
-        # ExecStopPost and the hold monitor read the restart list.
+        # ExecStopPost and the runner hold read the restart list.
         RuntimeDirectoryPreserve = "yes";
       };
     };

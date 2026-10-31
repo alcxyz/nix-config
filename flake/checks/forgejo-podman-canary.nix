@@ -32,7 +32,6 @@ else let
               secretsFile = pkgs.writeText "dummy-runner-secrets.yaml" "dummy: encrypted-fixture";
               secretEnv.FIXTURE_SECRET = "runner_token";
               isolatedDocker.enable = true;
-              ioPressureGuard.admissionControl.enable = true;
               podmanCanary = {
                 enable = enabled;
                 name = "fixture-podman";
@@ -78,8 +77,24 @@ else let
     };
   });
   lowPressureReset = evaluate true validLabels (lib.recursiveUpdate resetConfig {
-    services.forgejo-actions-runner.ioPressureGuard.lowPercent = 3;
+    services.forgejo-actions-runner.podmanStoreReset.ioPressurePercent = 3;
   });
+  # A game host: the runners get two minutes to finish, and the reset and the
+  # gates read the game signal.
+  gameReset = evaluate true validLabels (lib.recursiveUpdate resetConfig {
+    services.gameSignal = {
+      enable = true;
+      user = "player";
+      processNames = ["reaper"];
+    };
+    services.forgejo-actions-runner = {
+      runnerHold.game.enable = true;
+      shutdownTimeoutSeconds = 120;
+    };
+  });
+  gameWithoutSignal = evaluate true validLabels {
+    services.forgejo-actions-runner.runnerHold.game.enable = true;
+  };
   monitorOnly = evaluate true validLabels {
     services.storage-health-monitor = {
       enable = true;
@@ -91,8 +106,7 @@ else let
   unit = enabled.systemd.services.forgejo-podman-runner;
   api = enabled.systemd.services.forgejo-runner-podman;
   socket = enabled.systemd.sockets.forgejo-runner-podman;
-  guard = enabled.systemd.services.forgejo-runner-io-pressure-guard;
-  lifecycle = enabled.systemd.services.forgejo-runner-aggregate-lifecycle;
+  hold = enabled.systemd.services.forgejo-runner-hold;
   dockerRunner = enabled.systemd.services.forgejo-actions-runner;
   failedAssertion = config: message:
     lib.any (entry: !entry.assertion && entry.message == message) config.assertions;
@@ -210,67 +224,6 @@ else let
   extraWithoutCanary = evaluate false validLabels {
     services.forgejo-actions-runner.podmanCanary.extraRunners.fast.labels = [fastLabel];
   };
-  # A standby runner on one host and the status endpoint it reads on another.
-  standbyUrl = "http://192.0.2.10:9478/";
-  standby = withExtra validLabels {
-    labels = [fastLabel];
-    standby = {
-      enable = true;
-      statusUrl = standbyUrl;
-    };
-  } {};
-  standbyUnit = standby.systemd.services.forgejo-podman-runner-fast;
-  standbyController = standby.systemd.services.forgejo-podman-runner-fast-standby;
-  status = withExtra validLabels {
-    labels = [fastLabel];
-    status = {
-      enable = true;
-      port = 9478;
-      interface = "wt0";
-    };
-  } {};
-  statusSocket = status.systemd.sockets.forgejo-podman-runner-fast-status;
-  statusService = status.systemd.services."forgejo-podman-runner-fast-status@";
-  standbyWithStatus = withExtra validLabels {
-    labels = [fastLabel];
-    standby = {
-      enable = true;
-      statusUrl = standbyUrl;
-    };
-    status = {
-      enable = true;
-      port = 9478;
-      interface = "wt0";
-    };
-  } {};
-  standbyNameClash = evaluate true validLabels {
-    networking.hostName = "fixture";
-    services.forgejo-actions-runner.podmanCanary.extraRunners = {
-      fast = {
-        labels = [fastLabel];
-        standby = {
-          enable = true;
-          statusUrl = standbyUrl;
-        };
-      };
-      fast-standby.labels = ["other:docker://example.invalid/other:latest"];
-    };
-  };
-  statusNameClash = evaluate true validLabels {
-    networking.hostName = "fixture";
-    services.forgejo-actions-runner.podmanCanary.extraRunners = {
-      fast = {
-        labels = [fastLabel];
-        status = {
-          enable = true;
-          port = 9478;
-          interface = "wt0";
-        };
-      };
-      fast-status.labels = ["other:docker://example.invalid/other:latest"];
-    };
-  };
-  controllerSource = ../../modules/nixos/services/forgejo-actions-runner/standby-controller.sh;
   labelOverlapMessage = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
   dockerOverlapMessage = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
 in
@@ -298,14 +251,27 @@ in
   assert (resetService resetOnly).serviceConfig.ExecStopPost == ["${(resetService resetOnly).serviceConfig.ExecStart} restart"];
   assert builtins.length (resetService monitoredReset).serviceConfig.ExecStopPost == 2;
   assert lib.head (resetService monitoredReset).serviceConfig.ExecStopPost == "${(resetService monitoredReset).serviceConfig.ExecStart} restart";
-  # The reset follows the guard's resume threshold, not a separate setting.
   assert (resetService resetOnly).environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "500";
   assert (resetService lowPressureReset).environment.IO_PRESSURE_THRESHOLD_HUNDREDTHS == "300";
   assert (resetService resetOnly).environment.STORE_PATH == resetOnly.services.forgejo-actions-runner.podmanCanary.storageRoot;
   assert (resetService resetOnly).environment.MAX_AGE_SECONDS == "604800";
   assert (resetService resetOnly).environment.TRIGGER_USED_PERCENT == "70";
+  assert (resetService resetOnly).environment.QUIET_SECONDS == "900";
+  # The reset waits for a runner stop as long as the stop itself may take.
+  assert (resetService resetOnly).environment.RUNNER_STOP_TIMEOUT_SECONDS == "3900";
+  assert (resetService gameReset).environment.RUNNER_STOP_TIMEOUT_SECONDS == "420";
+  assert (resetService resetOnly).environment.GAME_ENABLED == "0";
+  assert (resetService gameReset).environment.GAME_ENABLED == "1";
+  assert (resetService gameReset).environment.GAME_FILE == "/run/game-signal/active";
+  assert gameReset.systemd.services.forgejo-podman-runner.serviceConfig.TimeoutStopSec == "420s";
+  assert gameReset.systemd.services.forgejo-actions-runner.serviceConfig.TimeoutStopSec == "420s";
+  assert gameReset.systemd.services.forgejo-podman-runner.environment.GAME_ENABLED == "1";
+  assert gameReset.systemd.services.forgejo-runner-hold.environment.GAME_ENABLED == "1";
+  assert gameReset.systemd.services.forgejo-runner-hold.after == ["game-signal.service"];
+  assert gameReset.systemd.services.game-signal.serviceConfig.Restart == "always";
+  assert failedAssertion gameWithoutSignal "services.forgejo-actions-runner.runnerHold.game needs services.gameSignal.";
   assert !(resetService resetOnly).restartIfChanged;
-  # Systemd ordering never excludes the reset: the lifecycle lock does, so a
+  # Systemd ordering never excludes the reset: the start lock does, so a
   # start of another unit can never stop it mid-run.
   assert (resetService resetOnly).conflicts == [];
   assert (resetService resetOnly).after == [];
@@ -315,8 +281,8 @@ in
   assert !(resetOnly.systemd.services ? forgejo-runner-cleanup-fence-auto-recover);
   assert !(resetOnly.systemd.timers ? forgejo-runner-cleanup-fence-auto-recover);
   assert !failedAssertion monitoredReset "storage-health-monitor recent-success units must be root-run oneshot services that become inactive after completion";
-  assert !failedAssertion resetOnly "The Podman store reset requires the isolated Docker and Podman runners with admission control.";
-  assert failedAssertion resetWithoutPodman "The Podman store reset requires the isolated Docker and Podman runners with admission control.";
+  assert !failedAssertion resetOnly "The Podman store reset requires the isolated Docker and Podman runners.";
+  assert failedAssertion resetWithoutPodman "The Podman store reset requires the isolated Docker and Podman runners.";
   assert !(disabled.systemd.services ? forgejo-podman-runner);
   assert !(disabled.systemd.services ? forgejo-runner-podman);
   assert !(disabled.systemd.sockets ? forgejo-runner-podman);
@@ -335,11 +301,16 @@ in
   assert socket.socketConfig.ListenStream == "/run/forgejo-podman/podman.sock";
   assert unit.environment.DOCKER_HOST == "unix://${socket.socketConfig.ListenStream}";
   assert unit.environment.DOCKER_HOST != dockerRunner.environment.DOCKER_HOST;
-  assert guard.environment.RUNNER_UNITS == both;
-  assert lifecycle.environment.RUNNER_UNITS == both;
-  assert dockerRunner.environment.RUNNER_UNITS == both;
-  assert unit.environment.RUNNER_UNITS == both;
-  assert api.environment.RUNNER_UNITS == both;
+  assert hold.environment.RUNNER_UNITS == both;
+  # Nothing binds to the runner hold: losing it stops no runner or engine.
+  assert lib.all (service: service.bindsTo == []) [unit dockerRunner api];
+  assert socket.bindsTo == ["forgejo-runner-podman.service"];
+  assert !(socket.unitConfig ? ConditionPathExists);
+  assert unit.requires == ["forgejo-runner-podman.service"];
+  assert builtins.elem "forgejo-runner-hold.service" unit.wants;
+  assert unit.serviceConfig.TimeoutStopSec == "3900s";
+  assert unit.serviceConfig.KillMode == "mixed";
+  assert unit.environment.STATE_DIR == "/run/forgejo-runner-hold";
   assert dockerRunner.environment.RUNNER_UNIT == primary;
   assert unit.environment.RUNNER_UNIT == canary;
   assert lib.hasPrefix "+" dockerRunner.serviceConfig.ExecCondition;
@@ -347,8 +318,7 @@ in
   assert lib.hasPrefix "+" api.serviceConfig.ExecCondition;
   assert lib.hasPrefix "+" enabled.systemd.services.forgejo-runner-docker.serviceConfig.ExecCondition;
   assert lib.hasPrefix "+" disabled.systemd.services.forgejo-runner-docker.serviceConfig.ExecCondition;
-  assert disabled.systemd.services.forgejo-runner-docker.environment.PODMAN_ADMISSION == "0";
-  assert !(lib.elem "forgejo-runner-aggregate-lifecycle.service" disabled.systemd.services.forgejo-runner-docker.after);
+  assert !(disabled.systemd.services.forgejo-runner-docker.environment ? PODMAN_ADMISSION);
   assert !enabled.virtualisation.podman.dockerSocket.enable;
   assert !(unit.environment ? FIXTURE_SECRET);
   assert !(lib.hasInfix "FIXTURE_SECRET" unit.preStart);
@@ -357,19 +327,13 @@ in
   # Without extra runners the list is the primary and the canary only.
   assert enabled.services.forgejo-actions-runner.runnerUnits == [primary canary];
   assert disabled.services.forgejo-actions-runner.runnerUnits == [primary];
-  assert map (runner: runner.unit) enabled.services.nixfleet-boot-check.runnerUnits == [canary primary];
+  assert map (runner: runner.unit) enabled.services.nixfleet-boot-check.runnerUnits == [primary canary];
   # An extra runner joins every runner list after the canary, has its own
   # identity, state and configuration, and shares the account and API.
   assert failedAssertions three == failedAssertions enabled;
   assert three.services.forgejo-actions-runner.runnerUnits == [primary canary extra];
-  assert lib.all (service: three.systemd.services.${service}.environment.RUNNER_UNITS == three-units) [
-    "forgejo-runner-io-pressure-guard"
-    "forgejo-runner-aggregate-lifecycle"
-    "forgejo-actions-runner"
-    "forgejo-podman-runner"
-    "forgejo-podman-runner-fast"
-    "forgejo-runner-podman"
-  ];
+  assert three.systemd.services.forgejo-runner-hold.environment.RUNNER_UNITS == three-units;
+  assert builtins.elem "d /run/forgejo-runner-hold/runners/${extra} 0700 root root -" three.systemd.tmpfiles.rules;
   assert (resetService threeReset).environment.RUNNER_UNITS == three-units;
   assert (resetService resetOnly).environment.RUNNER_UNITS == both;
   assert extraUnit.environment.RUNNER_UNIT == extra;
@@ -402,7 +366,7 @@ in
   assert builtins.elem "d /var/lib/forgejo-podman-runner-fast 0750 forgejo-podman-runner forgejo-podman -" three.systemd.tmpfiles.rules;
   assert builtins.elem {
     unit = extra;
-    holdMarkerDirectory = "/run/forgejo-runner-aggregate-pressure/runners/${extra}";
+    holdMarkerDirectory = "/run/forgejo-runner-hold/runners/${extra}";
   }
   three.services.nixfleet-boot-check.runnerUnits;
   # ci-fast may be shared between Podman runners only when allowed and with
@@ -415,43 +379,6 @@ in
   assert failedAssertion extraBadName "Extra Podman runner names must match ^[a-z0-9-]+$.";
   assert failedAssertion extraDuplicateName "Docker and Podman runner registration names must be distinct.";
   assert failedAssertion extraWithoutCanary "Extra Podman runners require the Podman CI canary.";
-  # Only a standby runner's start gate waits for admission; its controller
-  # reads the other host's status endpoint and keeps the unit enabled.
-  assert failedAssertions standby == failedAssertions enabled;
-  assert standbyUnit.environment.RUNNER_STANDBY == "1";
-  assert standby.systemd.services.forgejo-podman-runner.environment.RUNNER_STANDBY == "0";
-  assert extraUnit.environment.RUNNER_STANDBY == "0";
-  assert standbyUnit.wantedBy == ["multi-user.target"];
-  assert standbyUnit.serviceConfig.ExecCondition == threeUnit.serviceConfig.ExecCondition;
-  assert standby.services.forgejo-actions-runner.runnerUnits == [primary canary extra];
-  assert standbyController.environment.RUNNER_UNIT == extra;
-  assert standbyController.environment.STATUS_URL == standbyUrl;
-  assert standbyController.environment.STATUS_INTERFACE == "";
-  assert standbyController.environment.POLL_SECONDS == "15";
-  assert standbyController.environment.START_AFTER_POLLS == "5";
-  assert standbyController.environment.STOP_AFTER_POLLS == "21";
-  assert standbyController.serviceConfig.Restart == "always";
-  assert standbyController.wantedBy == ["multi-user.target"];
-  assert !(three.systemd.services ? forgejo-podman-runner-fast-standby);
-  assert !(standby.systemd.sockets ? forgejo-podman-runner-fast-status);
-  # The status endpoint answers only on the named interface and from the
-  # allowed prefixes, in a throwaway unprivileged service.
-  assert failedAssertions status == failedAssertions enabled;
-  assert !(status.systemd.services ? forgejo-podman-runner-fast-standby);
-  assert status.systemd.services.forgejo-podman-runner-fast.environment.RUNNER_STANDBY == "0";
-  assert statusSocket.listenStreams == ["9478"];
-  assert statusSocket.socketConfig.Accept;
-  assert statusSocket.socketConfig.IPAddressAllow == ["100.64.0.0/10"];
-  assert statusSocket.socketConfig.IPAddressDeny == "any";
-  assert status.networking.firewall.interfaces.wt0.allowedTCPPorts == [9478];
-  assert !(builtins.elem 9478 status.networking.firewall.allowedTCPPorts);
-  assert statusService.serviceConfig.DynamicUser;
-  assert statusService.serviceConfig.StandardInput == "socket";
-  assert statusService.serviceConfig.RestrictAddressFamilies == "AF_UNIX";
-  assert failedAssertion standbyWithStatus "A standby Podman runner cannot also publish a status endpoint.";
-  assert failedAssertion standbyNameClash "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
-  assert failedAssertion statusNameClash "A standby controller's or status endpoint's unit name must not match a Podman runner's.";
-  assert !standbyController.restartIfChanged;
   assert failedAssertions proxied == failedAssertions three;
   assert !proxied.services.ncps.enable && !(proxied.systemd.services ? ncps);
   assert proxied.systemd.services.forgejo-nix-cache.wantedBy == ["multi-user.target"];
@@ -494,8 +421,6 @@ in
       nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.python3 pkgs.shellcheck pkgs.systemd pkgs.util-linux pkgs.yq-go];
     } ''
       shellcheck ${gateSource}
-      shellcheck ${controllerSource}
-      python3 ${./test-forgejo-standby-controller.py} ${controllerSource}
       # Each Podman runner has its own capacity, labels, state and env file.
       grep -Fxq '  capacity: 1' ${extraConfigFile}
       grep -Fxq '  - ${fastLabel}' ${extraConfigFile}
@@ -544,63 +469,21 @@ in
       check_ca_setup ${podmanCaSetup mirrorWithoutCa} "$podman_certs" ""
       check_ca_setup ${dockerCaSetup enabled} "$docker_certs" ""
       check_ca_setup ${podmanCaSetup enabled} "$podman_certs" ""
+      # The API gate creates the hold state, refuses a symlink in its place
+      # and waits for the start lock, which a store reset holds across its
+      # rename.
       fixture="$(mktemp -d)"
       trap 'rm -rf "$fixture"' EXIT
       state="$fixture/state"
-      mkdir -p "$state/runners/${canary}"
-      chmod 700 "$state"
-      printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} > "$state/runner-units"
-      cat > "$fixture/systemctl" <<'SH'
-      #!${pkgs.bash}/bin/bash
-      set -euo pipefail
-      if [[ $1 == is-active && $2 == --quiet ]]; then
-        [[ ''${MOCK_GUARD_ACTIVE:-1} == 1 && $3 == forgejo-runner-io-pressure-guard.service ]]
-      elif [[ $1 == show && $2 == --property=FreezerState && $3 == --value && $4 == forgejobuilds.slice ]]; then
-        printf '%s\n' "''${MOCK_FREEZER:-running}"
-      else
-        exit 2
-      fi
-      SH
-      chmod +x "$fixture/systemctl"
-      run_gate() {
-        STATE_DIR="$state" SYSTEMCTL_BIN="$fixture/systemctl" RUNNER_UNITS="''${GATE_UNITS:-${both}}" \
-          bash ${gateSource} >/dev/null 2>&1
-      }
-      run_gate
-      rm "$state/runner-units"
-      if run_gate; then exit 1; fi
-      printf '%s\n' ${lib.escapeShellArg primary} > "$state/runner-units"
-      if run_gate; then exit 1; fi
-      printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} > "$state/runner-units"
-      for marker in owned pending teardown-required; do
-        touch "$state/$marker"
-        if run_gate; then exit 1; fi
-        rm "$state/$marker"
-      done
-      # A completion fence left from before ADR-0105 no longer holds a start.
-      mkdir "$state/cleanup-in-flight"
-      run_gate
-      rmdir "$state/cleanup-in-flight"
-      if MOCK_GUARD_ACTIVE=0 run_gate; then exit 1; fi
-      if MOCK_FREEZER=frozen run_gate; then exit 1; fi
-      run_gate
-
-      # The primary runner leads and the existing Podman runner follows; any
-      # extra Podman runner needs its own guard state directory.
-      for units in ${lib.escapeShellArg primary} ${lib.escapeShellArg "${canary} ${primary}"} \
-        ${lib.escapeShellArg "${primary} ${extra} ${canary}"}; do
-        if GATE_UNITS=$units run_gate; then exit 1; fi
-      done
-      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
-      printf '%s\n' ${lib.escapeShellArg primary} ${lib.escapeShellArg canary} ${lib.escapeShellArg extra} > "$state/runner-units"
-      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
-      if run_gate; then exit 1; fi
-      mkdir "$state/runners/${extra}"
-      GATE_UNITS=${lib.escapeShellArg three-units} run_gate
-      if run_gate; then exit 1; fi
-      rmdir "$state/runners/${canary}"
-      if GATE_UNITS=${lib.escapeShellArg three-units} run_gate; then exit 1; fi
-      mkdir "$state/runners/${canary}"
-      GATE_UNITS=${lib.escapeShellArg three-units} run_gate
+      STATE_DIR="$state" bash ${gateSource}
+      test "$(stat -c %a "$state")" = 700
+      ln -s "$state" "$fixture/link"
+      if STATE_DIR="$fixture/link" bash ${gateSource}; then exit 1; fi
+      flock "$state/start.lock" sleep 3 &
+      sleep 1
+      started=$SECONDS
+      STATE_DIR="$state" bash ${gateSource}
+      ((SECONDS - started >= 1))
+      wait
       touch "$out"
     ''

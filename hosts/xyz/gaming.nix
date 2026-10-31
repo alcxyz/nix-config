@@ -1,5 +1,7 @@
 # Host-local gaming services and streaming integration.
 {
+  config,
+  lib,
   pkgs,
   username,
   ...
@@ -11,9 +13,25 @@
   # Steam Stream
   # Keep Sunshine's fixed service ports out of the ephemeral client-port pool.
   boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" = "47984,47989-47990,47998-48000,48002,48010";
-  # Sunshine (host networking) binds its video port only while a client
-  # streams, so the reboot guard reads a stream from it.
-  services.nixfleet-reboot-guard.streamServerUdpPorts = [47998];
+
+  # One definition of "a game runs here" (ADR-0106) for the CI runner hold,
+  # the Podman store reset, background builds and the reboot guard.
+  services.gameSignal = {
+    enable = true;
+    user = username;
+    # Heroes of the Storm and the sideloaded Heroic games, by the executable
+    # each runs under Wine; the Battle.net launcher is no game.
+    wineArgv0Basenames = lib.unique (["HeroesOfTheStorm_x64.exe"]
+      ++ lib.mapAttrsToList (_: app: app.executable)
+      (lib.filterAttrs (name: _: name != "battle-net") config.services.heroicSideload.apps));
+    # Steam runs each game under reaper, alive only while the game runs, also
+    # inside SteamHeadless, whose games run as this user's uid. Not
+    # wineserver: non-game Wine apps keep one here too.
+    processNames = ["reaper"];
+    # Sunshine, here SteamHeadless on the host network, binds its video port
+    # only while a client streams, whoever runs the game.
+    streamUdpPorts = [47998];
+  };
 
   users.groups.steamheadless = {
     gid = 2001;

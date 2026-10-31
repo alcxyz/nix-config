@@ -1,142 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-state_dir=${STATE_DIR:-/run/forgejo-runner-aggregate-pressure}
+# ExecCondition of every runner unit (ADR-0106). Exit 1 skips the start
+# without a restart attempt. It refuses while a hold reason applies and then
+# leaves the runner's `held` marker, so the runner hold starts the runner once
+# the reason ends: boot, a switch or a Podman store reset cannot start a
+# runner behind a game or a full disk. The start lock orders every start after
+# a store reset's rename.
+
+state_dir=${STATE_DIR:-/run/forgejo-runner-hold}
+runner_unit=${RUNNER_UNIT:?}
+timeout_seconds=${GATE_TIMEOUT_SECONDS:-60}
+game_enabled=${GAME_ENABLED:-0}
+game_file=${GAME_FILE:-/run/game-signal/active}
+game_unit=${GAME_UNIT:-game-signal.service}
 systemctl_bin=${SYSTEMCTL_BIN:-systemctl}
 # shellcheck disable=SC1090
-source "${GAME_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/game-admission.sh}"
-# shellcheck disable=SC1090
 source "${DISK_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/disk-space-admission.sh}"
-timeout_seconds=${GATE_TIMEOUT_SECONDS:-60}
-primary_runner=forgejo-actions-runner.service
-runner_unit=${RUNNER_UNIT:-$primary_runner}
-runner_units_text=${RUNNER_UNITS:-$primary_runner}
+
 [[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || exit 1
-IFS=$' \t\n' read -r -d '' -a runner_units <<< "$runner_units_text" || true
-((${#runner_units[@]} > 0)) || exit 1
-[[ ${runner_units[0]} == "$primary_runner" ]] || exit 1
 [[ $runner_unit =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || exit 1
-runner_known=0
-seen_units=()
-for candidate in "${runner_units[@]}"; do
-  [[ $candidate =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || exit 1
-  for previous in "${seen_units[@]}"; do
-    [[ $candidate != "$previous" ]] || exit 1
-  done
-  seen_units+=("$candidate")
-  [[ $runner_unit != "$candidate" ]] || runner_known=1
-done
-((runner_known == 1)) || exit 1
+[[ $game_enabled == 0 || $game_enabled == 1 ]] || exit 1
+[[ ! -L $state_dir ]] || exit 1
+runner_state=$state_dir/runners/$runner_unit
+install -d -m 0700 "$state_dir" "$state_dir/runners" "$runner_state"
+[[ ! -L $state_dir/start.lock ]] || exit 1
+exec 9>"$state_dir/start.lock"
+flock -w "$timeout_seconds" -x 9 || exit 1
 
-# ExecCondition exits 1 to skip a start without turning it into a restart
-# failure. Boot may reach the daemon before the lifecycle service is armed.
-deadline=$((SECONDS + timeout_seconds))
-while :; do
-  remaining=$((deadline - SECONDS))
-  ((remaining > 0)) || exit 1
-  attempt_timeout=5
-  ((remaining < attempt_timeout)) && attempt_timeout=$remaining
-  if timeout --foreground "${attempt_timeout}s" "$systemctl_bin" is-active --quiet \
-    forgejo-runner-aggregate-lifecycle.service; then
-    break
-  fi
-  sleep 1
-done
-
-[[ -d $state_dir ]] || exit 1
-exec 9>"$state_dir/lifecycle.lock"
-remaining=$((deadline - SECONDS))
-((remaining > 0)) || exit 1
-flock -w "$remaining" -x 9 || exit 1
-
-if [[ -e $state_dir/runner-units ]]; then
-  [[ $(cat "$state_dir/runner-units") == "$(printf '%s\n' "${runner_units[@]}")" ]] || exit 1
-else
-  ((${#runner_units[@]} == 1)) || exit 1
-fi
-for path in "$state_dir"/runners/*; do
-  [[ -e $path || -L $path ]] || continue
-  [[ -d $path && ! -L $path ]] || exit 1
-  known=0
-  for candidate in "${runner_units[@]:1}"; do
-    [[ $path != "$state_dir/runners/$candidate" ]] || known=1
-  done
-  ((known == 1)) || exit 1
-done
-for marker in owned pending teardown-required; do
-  [[ ! -e $state_dir/$marker ]] || exit 1
-done
-for candidate in "${runner_units[@]}"; do
-  if [[ $candidate == "$primary_runner" ]]; then
-    candidate_state=$state_dir
-  else
-    candidate_state=$state_dir/runners/$candidate
-    [[ -d $candidate_state ]] || exit 1
-  fi
-  for marker in drain-pending resume-pending drain-disowned; do
-    [[ ! -e $candidate_state/$marker ]] || exit 1
-  done
-done
-if [[ $runner_unit == "$primary_runner" ]]; then
-  runner_state=$state_dir
-else
-  runner_state=$state_dir/runners/$runner_unit
-fi
-[[ ! -e $runner_state/drain-owned ]] || exit 1
-# A standby runner starts only while its controller admits it. The skip
-# leaves a hold marker for the boot check; the controller starts the runner
-# itself once it admits it.
-runner_standby=${RUNNER_STANDBY:-0}
-[[ $runner_standby == 0 || $runner_standby == 1 ]] || exit 1
-if [[ $runner_standby == 1 ]]; then
-  [[ $runner_unit != "$primary_runner" ]] || exit 1
-  if [[ ! -e $runner_state/standby-admitted ]]; then
-    : > "$runner_state/standby-held"
-    exit 1
-  fi
-  # The guard drains only running units, so a drain of the other runners
-  # must also keep a stopped standby from starting.
-  for candidate in "${runner_units[@]}"; do
-    if [[ $candidate == "$primary_runner" ]]; then
-      candidate_state=$state_dir
-    else
-      candidate_state=$state_dir/runners/$candidate
-    fi
-    if [[ -e $candidate_state/drain-owned ]]; then
-      : > "$runner_state/standby-held"
-      exit 1
-    fi
-  done
-  rm -f "$runner_state/standby-held"
+hold() {
+  : >"$runner_state/held"
+  echo "runner start held: $1"
+  exit 1
+}
+if ((game_enabled == 1)); then
+  timeout --foreground 5s "$systemctl_bin" is-active --quiet "$game_unit" || hold game_signal_unavailable
+  [[ ! -e $game_file ]] || hold game
 fi
 if disk_space_status; then disk_status=0; else disk_status=$?; fi
-if ((disk_status != 0)); then
-  : > "$runner_state/disk-start-skipped"
-  exit 1
+# Below the floor the gate starts the disk hold itself, which the runner hold
+# ends only above the recovery floors; between the floors a hold continues.
+if ((disk_status == 1 || disk_status == 4)); then
+  : >"$state_dir/disk-held"
+  hold disk_space
 fi
-if game_admission_status; then
-  : > "$runner_state/game-start-skipped"
-  exit 1
-else
-  scan_result=$?
-  if ((scan_result != 1)); then
-    : > "$runner_state/game-start-skipped"
-    exit 1
-  fi
+if ((disk_status == 3)) && [[ -e $state_dir/disk-held ]]; then
+  hold disk_space
 fi
-
-remaining=$((deadline - SECONDS))
-((remaining > 0)) || exit 1
-((remaining < 5)) && query_timeout=$remaining || query_timeout=5
-[[ $(timeout --foreground "${query_timeout}s" "$systemctl_bin" \
-  show --property=FreezerState --value forgejobuilds.slice) == running ]] || exit 1
-
-remaining=$((deadline - SECONDS))
-((remaining > 0)) || exit 1
-((remaining < 5)) && query_timeout=$remaining || query_timeout=5
-timeout --foreground "${query_timeout}s" "$systemctl_bin" is-active --quiet \
-  forgejo-runner-io-pressure-guard.service || exit 1
-rm -f "$runner_state/game-start-skipped"
-rm -f "$runner_state/disk-start-skipped"
-# A start that passes also ends a Podman store reset's handover (ADR-0105).
-rm -f "$runner_state/reset-start-skipped"
+exit 0

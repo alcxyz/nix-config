@@ -122,21 +122,20 @@ readable_pgrep() {
   done
 }
 
-# Reuses the CI runner's game detector. Its state directory is a scratch
-# copy, so the check writes nothing of the runner's and ignores the runner's
-# admission bypass and cooldown: only a game running now counts.
+# Reuses the game signal's scan for one Wine game. Unlike the signal it has
+# no cooldown: only a game running now counts.
 # shellcheck disable=SC2034
 wine_game_running() (
-  state_dir=$(mktemp -d -p "$scratch")
-  GAME_ADMISSION_ENABLED=1
   GAME_USER=$game_user
-  GAME_ARGV0_BASENAMES=$1
+  GAME_WINE_ARGV0_BASENAMES=$1
+  GAME_PROCESS_NAMES=
+  GAME_STREAM_UDP_PORTS=
   if ((self_uid != 0)); then
     PGREP_BIN=readable_pgrep
   fi
   # shellcheck source=/dev/null
   source "$game_helper"
-  game_admission_status
+  game_scan
 )
 
 check_games() {

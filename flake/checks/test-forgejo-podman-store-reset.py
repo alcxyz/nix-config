@@ -10,11 +10,12 @@ import time
 import unittest
 
 SCRIPT = Path(sys.argv.pop(1)).resolve()
-GAME_HELPER = SCRIPT.parent / 'game-admission.sh'
 PRIMARY = 'forgejo-actions-runner.service'
 POOL = 'forgejo-podman-runner.service'
 FAST = 'forgejo-podman-runner-fast.service'
-GUARD = 'forgejo-runner-io-pressure-guard.service'
+HOLD = 'forgejo-runner-hold.service'
+GAME = 'game-signal.service'
+RUNNERS = [PRIMARY, POOL, FAST]
 DOCKER = 'forgejo-runner-docker.service'
 PODMAN = 'forgejo-runner-podman.service'
 APIS = [DOCKER, PODMAN]
@@ -22,7 +23,8 @@ PRUNES = ['forgejo-runner-cache-prune.service', 'forgejo-runner-cache-pressure-p
 DAY = 86400
 
 # Units live in one JSON file. Stops and starts change it; the fixture may
-# ask for a freeze or an API restart to happen during a stop.
+# ask for a job or an API restart to appear during a stop. A refused start
+# leaves the start gate's held marker, as the real gate does.
 FAKE_SYSTEMCTL = r'''#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -55,12 +57,17 @@ elif args[0] in ('stop', 'start'):
         elif name in state.get('refuse', []):
             # A start gate's ExecCondition skips the start without failing it.
             unit(name).update(ActiveState='inactive', SubState='dead', MainPID='0')
+            (Path(os.environ['FAKE_HOLD_DIR']) / 'runners' / name / 'held').touch()
         else:
             unit(name).update(ActiveState='active', SubState='running', MainPID='42')
     if args[0] == 'stop' and state.get('start_on_stop'):
         unit(state.pop('start_on_stop')).update(ActiveState='active', SubState='running', MainPID='43')
-    if args[0] == 'stop' and state.get('freeze_on_stop'):
-        state['freezer'] = 'frozen'
+    if args[0] == 'stop' and state.get('journal_on_stop'):
+        Path(os.environ['FAKE_JOURNALS'], state.pop('journal_on_stop')).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+    if args[0] == 'stop' and state.get('job_on_stop'):
+        Path(os.environ['FAKE_ENGINES'], 'podman.sock').write_text(
+            '[{"Names": ["/FORGEJO-ACTIONS-TASK-99_job"]}]')
     if args[0] == 'stop' and DOCKER in names and state.get('restart_api'):
         unit(state['restart_api']).update(ActiveState='activating', SubState='start', Job='9')
     path.write_text(json.dumps(state))
@@ -76,6 +83,16 @@ reply = Path(os.environ['FAKE_ENGINES']) / Path(socket).name
 if not reply.exists():
     sys.exit(7)
 sys.stdout.write(reply.read_text())
+'''
+
+# Each unit's journal is a file; a missing one is an empty journal.
+FAKE_JOURNALCTL = r'''#!/usr/bin/env python3
+import os, sys
+from pathlib import Path
+unit = next(arg.split('=', 1)[1] for arg in sys.argv[1:] if arg.startswith('--unit='))
+journal = Path(os.environ['FAKE_JOURNALS']) / unit
+if journal.exists():
+    sys.stdout.write(journal.read_text())
 '''
 
 FAKE_DF = r'''#!/bin/sh
@@ -97,11 +114,15 @@ class StoreResetTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.state_dir = self.root / 'guard'
-        for unit in (POOL, FAST):
+        self.state_dir = self.root / 'hold'
+        for unit in RUNNERS:
             (self.state_dir / 'runners' / unit).mkdir(parents=True)
-        (self.state_dir / 'runner-units').write_text(f'{PRIMARY}\n{POOL}\n{FAST}\n')
         self.state_dir.chmod(0o700)
+        self.game_file = self.root / 'game-signal' / 'active'
+        self.game_file.parent.mkdir()
+        self.journals = self.root / 'journals'
+        self.journals.mkdir()
+        self.legacy_fence = self.root / 'old-guard' / 'cleanup-in-flight'
         self.parent = self.root / 'podman'
         self.store = self.parent / 'storage'
         (self.store / 'overlay' / 'layer').mkdir(parents=True)
@@ -129,13 +150,13 @@ class StoreResetTests(unittest.TestCase):
         self.uptime.write_text('1000.00 1.00\n')
         self.log = self.root / 'systemctl.log'
         self.fake_state = self.root / 'units.json'
-        units = {unit: running() for unit in [GUARD, PRIMARY, POOL, FAST] + APIS}
+        units = {unit: running() for unit in [HOLD, GAME] + RUNNERS + APIS}
         units.update({unit: stopped() for unit in PRUNES})
-        self.write_state({'freezer': 'running', 'units': units})
+        self.write_state({'units': units})
         self.bin = self.root / 'bin'
         self.bin.mkdir()
         for name, text in (('systemctl', FAKE_SYSTEMCTL), ('curl', FAKE_CURL),
-                           ('df', FAKE_DF), ('pgrep', '#!/bin/sh\nexit 1\n')):
+                           ('df', FAKE_DF), ('journalctl', FAKE_JOURNALCTL)):
             path = self.bin / name
             path.write_text(text.replace('#!/usr/bin/env python3', f'#!{sys.executable}', 1))
             path.chmod(0o755)
@@ -175,9 +196,9 @@ class StoreResetTests(unittest.TestCase):
                    PATH=f'{self.bin}:{os.environ["PATH"]}',
                    STATE_DIR=str(self.state_dir),
                    SYSTEMCTL_BIN=str(self.bin / 'systemctl'),
+                   JOURNALCTL_BIN=str(self.bin / 'journalctl'),
                    CURL_BIN=str(self.bin / 'curl'),
                    DF_BIN=str(self.bin / 'df'),
-                   PGREP_BIN=str(self.bin / 'pgrep'),
                    MOUNTINFO_FILE=str(self.mountinfo),
                    CGROUP_ROOT=str(self.cgroups),
                    DOCKER_SOCKET=str(self.root / 'run' / 'docker.sock'),
@@ -188,12 +209,13 @@ class StoreResetTests(unittest.TestCase):
                    PRESSURE_FILE=str(self.pressure),
                    IO_PRESSURE_THRESHOLD_HUNDREDTHS='500',
                    RUNNER_UNITS=f'{PRIMARY} {POOL} {FAST}',
-                   GAME_HELPER_FILE=str(GAME_HELPER),
-                   GAME_ADMISSION_ENABLED='0',
-                   GAME_UPTIME_FILE=str(self.uptime),
-                   GAME_USER='fixture',
-                   GAME_COOLDOWN_SECONDS='30',
+                   GAME_ENABLED='0',
+                   GAME_FILE=str(self.game_file),
+                   LEGACY_FENCE=str(self.legacy_fence),
+                   QUIET_SECONDS='900',
                    POLL_SECONDS='1',
+                   FAKE_HOLD_DIR=str(self.state_dir),
+                   FAKE_JOURNALS=str(self.journals),
                    FAKE_STATE=str(self.fake_state),
                    FAKE_LOG=str(self.log),
                    FAKE_ENGINES=str(self.engines),
@@ -209,12 +231,8 @@ class StoreResetTests(unittest.TestCase):
         return [line for line in lines if kind is None or line.split()[0] == kind]
 
     def markers(self):
-        found = []
-        for unit in (PRIMARY, POOL, FAST):
-            directory = self.state_dir if unit == PRIMARY else self.state_dir / 'runners' / unit
-            if (directory / 'reset-start-skipped').exists():
-                found.append(unit)
-        return found
+        return [unit for unit in RUNNERS
+                if (self.state_dir / 'runners' / unit / 'held').exists()]
 
     def mutations(self):
         return self.calls('stop') + self.calls('start')
@@ -244,7 +262,7 @@ class StoreResetTests(unittest.TestCase):
         self.assertIn('reset due=store_age', result.stdout)
         self.assertIn('trash_deleted seconds=', result.stdout)
         self.assertEqual(self.mutations(), [
-            f'stop {PRIMARY} {POOL} {FAST}',
+            f'stop {PRIMARY}', f'stop {POOL}', f'stop {FAST}',
             f'stop {DOCKER} {PODMAN}',
             f'start {DOCKER} {PODMAN} {PRIMARY} {POOL} {FAST}',
         ])
@@ -261,7 +279,7 @@ class StoreResetTests(unittest.TestCase):
         self.age_stamp(8 * DAY)
         self.update_units(**{POOL: stopped(),
                              FAST: dict(stopped(), ActiveState='failed', SubState='failed')})
-        (self.state_dir / 'runners' / POOL / 'drain-owned').write_text('123\n')
+        (self.state_dir / 'runners' / POOL / 'held').touch()
         result = self.run_reset()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.mutations(), [
@@ -279,14 +297,8 @@ class StoreResetTests(unittest.TestCase):
     def test_busy_or_held_hosts_are_skipped_without_any_stop(self):
         cases = {
             'io_pressure full_avg10_hundredths=600': lambda: self.set_pressure(600),
-            'guard_inactive': lambda: self.update_units(**{GUARD: stopped()}),
-            'aggregate_frozen': lambda: self.set_fake(freezer='frozen'),
-            'guard_marker marker=owned': lambda: (self.state_dir / 'owned').touch(),
-            'guard_marker marker=teardown-required': lambda: (self.state_dir / 'teardown-required').touch(),
-            f'guard_marker marker=resume-queued unit={POOL}':
-                lambda: (self.state_dir / 'runners' / POOL / 'resume-queued').touch(),
-            f'guard_marker marker=drain-pending unit={PRIMARY}':
-                lambda: (self.state_dir / 'drain-pending').touch(),
+            'hold_inactive': lambda: self.update_units(**{HOLD: stopped()}),
+            f'runner_state_missing unit={FAST}': lambda: (self.state_dir / 'runners' / FAST).rmdir(),
             f'prune_active unit={PRUNES[0]}': lambda: self.update_units(**{PRUNES[0]: running()}),
             f'api_inactive unit={PODMAN}': lambda: self.update_units(**{PODMAN: stopped()}),
             f'runner_job unit={FAST}': lambda: self.update_units(**{FAST: dict(running(), Job='7')}),
@@ -296,6 +308,9 @@ class StoreResetTests(unittest.TestCase):
                 '[{"Names": ["/FORGEJO-ACTIONS-TASK-12_job"]}]'),
             'engine_api_invalid': lambda: (self.engines / 'docker.sock').write_text('{}'),
             'engine_api_unavailable': lambda: (self.engines / 'docker.sock').unlink(),
+            # A job still pulling its image has no container yet.
+            f'recent_job unit={POOL}': lambda: (self.journals / POOL).write_text(
+                'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n'),
         }
         for reason, arrange in cases.items():
             with self.subTest(reason=reason):
@@ -307,12 +322,42 @@ class StoreResetTests(unittest.TestCase):
                 self.assertEqual(self.mutations(), [])
                 self.assert_untouched()
 
-    def test_a_game_holds_the_reset(self):
+    def test_a_game_or_a_missing_game_signal_holds_the_reset(self):
         self.age_stamp(8 * DAY)
-        (self.state_dir / 'game-last-seen').write_text('990\n')
-        result = self.run_reset(GAME_ADMISSION_ENABLED='1')
-        self.assert_skipped(result, 'game reason=game_cooldown')
+        self.game_file.write_text('wine:Game.exe\n')
+        self.assert_skipped(self.run_reset(GAME_ENABLED='1'), 'game')
         self.assertEqual(self.mutations(), [])
+        self.game_file.unlink()
+        self.update_units(**{GAME: stopped()})
+        self.assert_skipped(self.run_reset(GAME_ENABLED='1'), 'game_signal_unavailable')
+        self.assertEqual(self.mutations(), [])
+        # Without game holds the signal is not consulted.
+        self.assertIn('reset due=store_age', self.run_reset().stdout)
+
+    def test_a_job_admitted_during_the_stops_stops_no_further_runner(self):
+        self.age_stamp(8 * DAY)
+        self.set_fake(job_on_stop=True)
+        result = self.run_reset()
+        self.assert_skipped(result, 'job_running')
+        # Only the runner stopped before the job appeared is stopped; the
+        # restart list brings it back.
+        self.assertEqual(self.mutations(), [f'stop {PRIMARY}'])
+        self.assert_untouched()
+        self.assertEqual(self.restart.read_text().split(), APIS + RUNNERS)
+
+    def test_a_job_started_during_the_stops_stops_no_further_runner(self):
+        # A job still pulling its image has no container yet.
+        self.age_stamp(8 * DAY)
+        self.set_fake(journal_on_stop=FAST)
+        result = self.run_reset()
+        self.assert_skipped(result, f'recent_job unit={FAST}')
+        self.assertEqual(self.mutations(), [f'stop {PRIMARY}', f'stop {POOL}'])
+        self.assert_untouched()
+
+    def test_an_old_job_start_does_not_hold_the_reset(self):
+        self.age_stamp(8 * DAY)
+        (self.journals / POOL).write_text('level=info msg="[poller] launched"\n')
+        self.assertIn('reset due=store_age', self.run_reset().stdout)
 
     def test_leftover_containers_that_are_not_jobs_do_not_block(self):
         self.age_stamp(8 * DAY)
@@ -320,33 +365,27 @@ class StoreResetTests(unittest.TestCase):
             '[{"Names": ["/buildx_buildkit_builder0"]}, {"Names": null}]')
         self.assertIn('reset due=store_age', self.run_reset().stdout)
 
-    def test_freeze_after_the_runner_stop_leaves_the_apis_running(self):
-        self.age_stamp(8 * DAY)
-        self.set_fake(freeze_on_stop=True)
-        result = self.run_reset()
-        self.assert_skipped(result, 'aggregate_frozen')
-        self.assertEqual(self.mutations(), [f'stop {PRIMARY} {POOL} {FAST}'])
-        self.assert_untouched()
-        # ExecStopPost starts everything the run stopped. The owned freeze
-        # makes every runner's start gate refuse, so the guard takes them over
-        # and resumes them after its thaw.
-        self.assertEqual(self.restart.read_text().split(), APIS + [PRIMARY, POOL, FAST])
-        self.set_fake(refuse=[PRIMARY, POOL, FAST])
+    def test_restart_hands_refused_runners_to_the_hold(self):
+        self.restart.write_text('\n'.join(APIS + RUNNERS) + '\n')
+        self.update_units(**{unit: stopped() for unit in APIS + RUNNERS})
+        # A game started during the run: every runner's start gate refuses
+        # and leaves its marker, and the runner hold starts them later.
+        self.set_fake(refuse=RUNNERS)
         result = self.run_reset('restart')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.mutations(), [f'start {DOCKER} {PODMAN} {PRIMARY} {POOL} {FAST}'])
         self.assertFalse(self.restart.exists())
-        self.assertEqual(self.markers(), [PRIMARY, POOL, FAST])
-        for unit in (PRIMARY, POOL, FAST):
-            self.assertIn(f'handed_to_guard unit={unit} state=inactive', result.stdout)
+        self.assertEqual(self.markers(), RUNNERS)
+        for unit in RUNNERS:
+            self.assertIn(f'handed_to_hold unit={unit} state=inactive', result.stdout)
 
-    def test_a_refused_start_after_the_reset_is_handed_to_the_guard(self):
+    def test_a_refused_start_after_the_reset_is_handed_to_the_hold(self):
         self.age_stamp(8 * DAY)
         self.set_fake(refuse=[POOL])
         result = self.run_reset()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('reset due=store_age', result.stdout)
-        self.assertIn(f'handed_to_guard unit={POOL} state=inactive', result.stdout)
+        self.assertIn(f'handed_to_hold unit={POOL} state=inactive', result.stdout)
         self.assertEqual(self.markers(), [POOL])
         self.assertFalse(self.restart.exists())
 
@@ -357,28 +396,10 @@ class StoreResetTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn(f'start_failed unit={POOL} state=failed', result.stderr)
         self.assertIn('failed step=start', result.stderr)
-        self.assertNotIn('handed_to_guard', result.stdout)
+        self.assertNotIn('handed_to_hold', result.stdout)
         self.assertEqual(self.markers(), [])
         # ExecStopPost tries the recorded starts once more.
         self.assertTrue(self.restart.exists())
-
-    def test_a_guard_registry_from_another_runner_list_holds_the_reset(self):
-        cases = {
-            'runner_registry_missing': lambda: (self.state_dir / 'runner-units').unlink(),
-            'runner_registry_mismatch': lambda: (self.state_dir / 'runner-units').write_text(
-                f'{PRIMARY}\n{POOL}\n'),
-            'runner_registry_mismatch ': lambda: (self.state_dir / 'runners' / 'forgejo-podman-runner-old.service').mkdir(),
-            'runner_registry_missing ': lambda: (self.state_dir / 'runners' / FAST).rmdir(),
-        }
-        for reason, arrange in cases.items():
-            with self.subTest(reason=reason):
-                self.tearDown()
-                self.setUp()
-                self.age_stamp(8 * DAY)
-                arrange()
-                self.assert_skipped(self.run_reset(), reason.strip())
-                self.assertEqual(self.mutations(), [])
-                self.assert_untouched()
 
     def test_a_runner_started_during_the_stop_keeps_the_apis_running(self):
         self.age_stamp(8 * DAY)
@@ -386,7 +407,7 @@ class StoreResetTests(unittest.TestCase):
         self.set_fake(start_on_stop=FAST)
         result = self.run_reset()
         self.assert_skipped(result, f'runner_started unit={FAST}')
-        self.assertEqual(self.mutations(), [f'stop {PRIMARY} {POOL}'])
+        self.assertEqual(self.mutations(), [f'stop {PRIMARY}', f'stop {POOL}'])
         self.assert_untouched()
 
     def test_restart_without_a_list_does_nothing(self):
@@ -431,8 +452,8 @@ class StoreResetTests(unittest.TestCase):
         self.assertIn('reset due=store_age', result.stdout)
 
     def test_a_leftover_fence_is_reset_at_once_and_removed(self):
-        fence = self.state_dir / 'cleanup-in-flight'
-        fence.mkdir()
+        fence = self.legacy_fence
+        fence.mkdir(parents=True)
         (fence / 'owner').write_text('cleanup-v2 1 1 0 DELETE /images/x\n')
         result = self.run_reset()
         self.assertIn('reset due=legacy_fence', result.stdout)
@@ -443,12 +464,13 @@ class StoreResetTests(unittest.TestCase):
         self.age_stamp(8 * DAY)
         trash = self.parent / '.storage.trash.100'
         (trash / 'overlay' / 'old').mkdir(parents=True)
-        (self.state_dir / 'game-last-seen').write_text('990\n')
-        result = self.run_reset(GAME_ADMISSION_ENABLED='1')
+        self.game_file.write_text('process:reaper\n')
+        result = self.run_reset(GAME_ENABLED='1')
         self.assert_skipped(result, 'trash_left')
-        self.assertIn('trash_left reason=game reason=game_cooldown', result.stdout)
+        self.assertIn('trash_left reason=game', result.stdout)
         self.assertTrue(trash.exists())
         self.assertEqual(self.mutations(), [])
+        self.game_file.unlink()
         result = self.run_reset()
         self.assertIn('trash_deleted', result.stdout)
         self.assertIn('reset due=store_age', result.stdout)
@@ -461,7 +483,7 @@ class StoreResetTests(unittest.TestCase):
         result = self.run_reset()
         self.assertEqual(result.returncode, 1)
         self.assertIn('trash_deleted', result.stdout)
-        self.assertIn('failed step=runner_stop', result.stderr)
+        self.assertIn(f'failed step=runner_stop unit={PRIMARY}', result.stderr)
 
     def test_pressure_stops_the_trash_deletion_after_the_restart(self):
         self.age_stamp(8 * DAY)

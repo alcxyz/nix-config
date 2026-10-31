@@ -3,18 +3,19 @@ set -euo pipefail
 
 # Resets the dedicated Podman CI store offline (ADR-0105). While every runner
 # is idle or held by its owner, stop the running runners and both APIs, then
-# under the lifecycle lock rename the store aside. The rename is the only
+# under the start lock rename the store aside. The rename is the only
 # exclusive mutation and cannot outlive this process, so no fence is needed.
 # The renamed store is garbage that no API uses; it is deleted afterwards at
 # the lowest priority, and whatever is left is deleted by a later run.
 #
 # `podman-store-reset restart` is the unit's ExecStopPost: it starts the units
 # recorded before the first stop, so a failed or killed run does not leave them
-# stopped. A runner whose start gate refuses that start is handed to the
-# pressure guard, which resumes it once its own conditions allow.
+# stopped. A runner whose start gate refuses that start keeps the gate's `held`
+# marker, and the runner hold starts it once its hold reason ends (ADR-0106).
 
-state_dir=${STATE_DIR:-/run/forgejo-runner-aggregate-pressure}
+state_dir=${STATE_DIR:-/run/forgejo-runner-hold}
 systemctl_bin=${SYSTEMCTL_BIN:-systemctl}
+journalctl_bin=${JOURNALCTL_BIN:-journalctl}
 curl_bin=${CURL_BIN:-curl}
 df_bin=${DF_BIN:-df}
 jq_bin=${JQ_BIN:-jq}
@@ -34,14 +35,20 @@ max_age_seconds=${MAX_AGE_SECONDS:-604800}
 min_age_seconds=${MIN_AGE_SECONDS:-21600}
 pressure_file=${PRESSURE_FILE:-/proc/pressure/io}
 io_pressure_threshold=${IO_PRESSURE_THRESHOLD_HUNDREDTHS:-500}
-# A runner that admitted a job just before its stop finishes it first: the
-# runner's shutdown waits up to its job timeout of one hour.
+# A runner stop waits for its running jobs up to the runner's shutdown timeout
+# (one hour, or two minutes on a game host) and then cancels them. The idle
+# check below keeps a reset from stopping a runner that has a job.
 runner_stop_timeout=${RUNNER_STOP_TIMEOUT_SECONDS:-3700}
+# A runner must have started no job for this long: a job that is still
+# pulling its image or setting up has no task container yet.
+quiet_seconds=${QUIET_SECONDS:-900}
 trash_seconds=${TRASH_SECONDS:-1800}
 poll_seconds=${POLL_SECONDS:-2}
 runner_units_text=${RUNNER_UNITS:-}
-# shellcheck disable=SC1090
-source "${GAME_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/game-admission.sh}"
+hold_unit=${HOLD_UNIT:-forgejo-runner-hold.service}
+game_enabled=${GAME_ENABLED:-0}
+game_file=${GAME_FILE:-/run/game-signal/active}
+game_unit=${GAME_UNIT:-game-signal.service}
 
 api_units=(forgejo-runner-docker.service forgejo-runner-podman.service)
 prune_units=(forgejo-runner-cache-prune.service forgejo-runner-cache-pressure-prune.service)
@@ -49,7 +56,7 @@ store_parent=${store_path%/*}
 store_name=${store_path##*/}
 trash_prefix=$store_parent/.$store_name.trash.
 # Left by the cleanup this replaced (ADR-0083). Its store is reset at once.
-legacy_fence=$state_dir/cleanup-in-flight
+legacy_fence=${LEGACY_FENCE:-/run/forgejo-runner-aggregate-pressure/cleanup-in-flight}
 
 skip() {
   printf 'skipped reason=%s\n' "$*"
@@ -62,44 +69,43 @@ fail() {
 valid_unit() { [[ $1 =~ ^[A-Za-z0-9_.@-]+\.service$ ]]; }
 
 umask 077
-for value in "$max_age_seconds" "$min_age_seconds" "$runner_stop_timeout" "$trash_seconds" "$poll_seconds" "$io_pressure_threshold"; do
+for value in "$max_age_seconds" "$min_age_seconds" "$runner_stop_timeout" "$quiet_seconds" "$trash_seconds" "$poll_seconds" "$io_pressure_threshold"; do
   [[ $value =~ ^[0-9]+$ ]] || exit 1
 done
 [[ $trigger_used_percent =~ ^[1-9][0-9]?$ ]] || exit 1
+[[ $game_enabled == 0 || $game_enabled == 1 ]] || exit 1
 [[ $store_path == /*/* && $store_name =~ ^[A-Za-z0-9_.-]+$ ]] || exit 1
 IFS=$' \t\n' read -r -d '' -a runner_units <<<"$runner_units_text" || true
 ((${#runner_units[@]} > 1)) || exit 1
 [[ ${runner_units[0]} == forgejo-actions-runner.service &&
   ${runner_units[1]} == forgejo-podman-runner.service ]] || exit 1
-for unit in "${runner_units[@]}"; do
+for unit in "${runner_units[@]}" "$hold_unit" "$game_unit"; do
   valid_unit "$unit" || exit 1
 done
+is_runner() {
+  local runner
+  for runner in "${runner_units[@]}"; do
+    [[ $1 != "$runner" ]] || return 0
+  done
+  return 1
+}
 
-# Starts the given APIs and runners, then hands every runner its start gate
-# refused to the guard's resume path through a hold marker: a skipped start
-# does not fail `systemctl start`, and nothing else would start it again.
+# Starts the given APIs and runners. A runner whose start gate refused the
+# start is inactive with the gate's `held` marker, which hands it to the
+# runner hold: a skipped start does not fail `systemctl start`.
 start_again() {
-  local status=0 unit runner directory active
+  local status=0 unit active
   timeout -k 5s 300s "$systemctl_bin" start "$@" || status=1
   for unit in "$@"; do
-    directory=
-    if [[ $unit == "${runner_units[0]}" ]]; then
-      directory=$state_dir
-    else
-      for runner in "${runner_units[@]:1}"; do
-        [[ $unit != "$runner" ]] || directory=$state_dir/runners/$unit
-      done
-    fi
-    [[ -n $directory ]] || continue
+    is_runner "$unit" || continue
     active=$(timeout -k 2s 10s "$systemctl_bin" show --property=ActiveState --value "$unit") || active=unknown
     case $active in
       active | activating | reloading) ;;
       inactive)
-        # The guard resumes only an inactive runner.
-        if [[ -d $directory && ! -L $directory ]]; then
-          : >"$directory/reset-start-skipped" || status=1
-          printf 'handed_to_guard unit=%s state=%s\n' "$unit" "$active"
+        if [[ -e $state_dir/runners/$unit/held ]]; then
+          printf 'handed_to_hold unit=%s state=%s\n' "$unit" "$active"
         else
+          printf 'start_skipped unit=%s state=%s\n' "$unit" "$active" >&2
           status=1
         fi
         ;;
@@ -127,11 +133,11 @@ if [[ ${1:-} == restart ]]; then
   exit "$status"
 fi
 [[ -d $state_dir && ! -L $state_dir && $(stat -c '%u:%a' -- "$state_dir") == "$EUID:700" ]] ||
-  skip aggregate_state_missing
+  skip hold_state_missing
 [[ -d $store_parent && ! -L $store_parent ]] || skip store_parent_missing
 
 # Sets io_pressure to the host's full avg10 stall in hundredths of a percent
-# and succeeds only for a readable sample at or below the guard's resume
+# and succeeds only for a readable sample at or below the reset's
 # threshold. An unreadable sample never permits work.
 io_pressure_low() {
   io_pressure=$(awk '
@@ -146,15 +152,18 @@ io_pressure_low() {
   ' "$pressure_file" 2>/dev/null) || io_pressure=unknown
   [[ $io_pressure =~ ^[0-9]+$ ]] && ((io_pressure <= io_pressure_threshold))
 }
-# Sets hold_reason and succeeds while a game, an uncertain game scan or I/O
-# pressure asks this unit to stay out of the way.
+# Sets hold_reason and succeeds while a game, an unavailable game signal or
+# I/O pressure asks this unit to stay out of the way.
 host_busy() {
-  local status=0
-  game_admission_status || status=$?
-  if ((status != 1)); then
-    # shellcheck disable=SC2154 # game_admission_status sets game_reason.
-    hold_reason="game reason=$game_reason"
-    return 0
+  if ((game_enabled == 1)); then
+    if ! timeout -k 2s 10s "$systemctl_bin" is-active --quiet "$game_unit"; then
+      hold_reason=game_signal_unavailable
+      return 0
+    fi
+    if [[ -e $game_file ]]; then
+      hold_reason=game
+      return 0
+    fi
   fi
   if ! io_pressure_low; then
     hold_reason="io_pressure full_avg10_hundredths=$io_pressure"
@@ -268,41 +277,13 @@ else
   skip "not_due used_percent=$used_percent age_seconds=$age"
 fi
 
-# 3. Host, guard and aggregate. A frozen aggregate would turn the API stop
-#    into the lifecycle's forced teardown.
+# 3. Host and runner hold. The hold starts any runner whose start a gate
+#    refuses, so it must run.
 if host_busy; then skip "$hold_reason"; fi
 query() { timeout -k 2s 10s "$systemctl_bin" "$@"; }
-query is-active --quiet forgejo-runner-io-pressure-guard.service || skip guard_inactive
-aggregate_running() {
-  [[ $(query show --property=FreezerState --value forgejobuilds.slice) == running ]]
-}
-aggregate_running || skip aggregate_frozen
-# The guard's registry decides every start gate. After a switch that changed
-# the runner list, the preserved registry keeps the old list until a reboot
-# (a restarted guard refuses the changed list), and the gates refuse every
-# start: a reset must not stop what it cannot start again.
-[[ -f $state_dir/runner-units && ! -L $state_dir/runner-units ]] || skip runner_registry_missing
-[[ $(cat "$state_dir/runner-units") == "$(printf '%s\n' "${runner_units[@]}")" ]] || skip runner_registry_mismatch
-for unit in "${runner_units[@]:1}"; do
-  [[ -d $state_dir/runners/$unit && ! -L $state_dir/runners/$unit ]] || skip runner_registry_missing
-done
-for path in "$state_dir"/runners/*; do
-  [[ -e $path || -L $path ]] || continue
-  known=0
-  for unit in "${runner_units[@]:1}"; do
-    [[ $path != "$state_dir/runners/$unit" ]] || known=1
-  done
-  ((known == 1)) && [[ -d $path && ! -L $path ]] || skip runner_registry_mismatch
-done
-for marker in owned pending teardown-required; do
-  [[ ! -e $state_dir/$marker && ! -L $state_dir/$marker ]] || skip "guard_marker marker=$marker"
-done
+query is-active --quiet "$hold_unit" || skip hold_inactive
 for unit in "${runner_units[@]}"; do
-  directory=$state_dir/runners/$unit
-  [[ $unit != "${runner_units[0]}" ]] || directory=$state_dir
-  for marker in drain-pending resume-pending resume-queued drain-disowned; do
-    [[ ! -e $directory/$marker && ! -L $directory/$marker ]] || skip "guard_marker marker=$marker unit=$unit"
-  done
+  [[ -d $state_dir/runners/$unit && ! -L $state_dir/runners/$unit ]] || skip "runner_state_missing unit=$unit"
 done
 
 # Reads ActiveState, SubState, MainPID, ControlPID and Job of a unit.
@@ -331,7 +312,7 @@ for unit in "${api_units[@]}"; do
   [[ -z $job && $active == active ]] || skip "api_inactive unit=$unit"
 done
 # A running runner is stopped and started again; a stopped one belongs to
-# whoever stopped it (the guard, a start gate or the operator) and stays so.
+# whoever stopped it (the runner hold, a start gate or the operator) and stays so.
 to_stop=()
 for unit in "${runner_units[@]}"; do
   unit_state "$unit" || skip "runner_unreadable unit=$unit"
@@ -342,18 +323,40 @@ for unit in "${runner_units[@]}"; do
     *) skip "runner_transition unit=$unit state=$active:$sub" ;;
   esac
 done
-# Idleness only keeps the stop short: a job admitted after this check still
-# finishes, because the runner's shutdown waits for it.
-for socket in "$docker_socket" "$podman_socket"; do
-  containers=$("$curl_bin" --silent --show-error --fail --max-time 10 --connect-timeout 2 \
-    --unix-socket "$socket" http://localhost/containers/json) || skip "engine_api_unavailable socket=$socket"
-  status=0
-  "$jq_bin" -e 'if type != "array" then error("not a container list") else
-    any(.[]; (.Names // []) | any(.[]; type == "string" and
-      (ltrimstr("/") | startswith("FORGEJO-ACTIONS-TASK-")))) end' <<<"$containers" >/dev/null 2>&1 ||
-    status=$?
-  ((status != 0)) || skip "job_running socket=$socket"
-  ((status == 1)) || skip "engine_api_invalid socket=$socket"
+# Succeeds while either engine runs a job container.
+job_containers() {
+  local socket containers status
+  for socket in "$docker_socket" "$podman_socket"; do
+    containers=$("$curl_bin" --silent --show-error --fail --max-time 10 --connect-timeout 2 \
+      --unix-socket "$socket" http://localhost/containers/json) || skip "engine_api_unavailable socket=$socket"
+    status=0
+    "$jq_bin" -e 'if type != "array" then error("not a container list") else
+      any(.[]; (.Names // []) | any(.[]; type == "string" and
+        (ltrimstr("/") | startswith("FORGEJO-ACTIONS-TASK-")))) end' <<<"$containers" >/dev/null 2>&1 ||
+      status=$?
+    if ((status == 0)); then
+      job_socket=$socket
+      return 0
+    fi
+    ((status == 1)) || skip "engine_api_invalid socket=$socket"
+  done
+  return 1
+}
+# Succeeds when the runner logged a job start within the quiet interval, or
+# when its journal is unreadable. forgejo-runner logs every task it takes at
+# info level as `task <id> repo is ...` (internal/app/run/runner.go).
+recent_job() {
+  local since lines
+  since=$(($(date +%s) - quiet_seconds))
+  lines=$("$journalctl_bin" --unit="$1" --since="@$since" --output=cat --no-pager --quiet 2>/dev/null) || return 0
+  grep -Eq 'msg="task [0-9]+ repo is ' <<<"$lines"
+}
+# The reset never stops a runner with a job: the stop would cancel it once the
+# runner's shutdown timeout passes. Both checks run again right before each
+# stop; a job admitted between that check and the stop is the one window left.
+if job_containers; then skip "job_running socket=$job_socket"; fi
+for unit in "${to_stop[@]}"; do
+  if recent_job "$unit"; then skip "recent_job unit=$unit"; fi
 done
 
 # 4. Stop. From here on the unit's ExecStopPost starts these units again.
@@ -362,24 +365,24 @@ mv -f -- "$restart_file.new" "$restart_file"
 printf 'stopping due=%s used_percent=%s age_seconds=%s runners=%s\n' \
   "$due" "$used_percent" "$age" "${to_stop[*]:-none}"
 stop_started=$SECONDS
-if ((${#to_stop[@]} > 0)); then
-  timeout -k 5s "${runner_stop_timeout}s" "$systemctl_bin" stop "${to_stop[@]}" || fail runner_stop
-fi
-# Checked again right before the stop that the lifecycle teardown observes.
-aggregate_running || skip aggregate_frozen
-query is-active --quiet forgejo-runner-io-pressure-guard.service || skip guard_inactive
-# A runner started meanwhile (a standby controller or a guard resume) may have
-# admitted a job, which the API stop would then wait for.
+for unit in "${to_stop[@]}"; do
+  if job_containers; then skip "job_running socket=$job_socket"; fi
+  if recent_job "$unit"; then skip "recent_job unit=$unit"; fi
+  timeout -k 5s "${runner_stop_timeout}s" "$systemctl_bin" stop "$unit" || fail "runner_stop unit=$unit"
+done
+query is-active --quiet "$hold_unit" || skip hold_inactive
+# A runner started meanwhile (the runner hold releasing a held runner) may
+# have admitted a job, which the API stop would then wait for.
 for unit in "${runner_units[@]}"; do
   unit_state "$unit" || skip "runner_unreadable unit=$unit"
   [[ -z $job && ($active == inactive || $active == failed) ]] || skip "runner_started unit=$unit"
 done
 timeout -k 5s 300s "$systemctl_bin" stop "${api_units[@]}" || fail api_stop
 
-# 5. Rename under the lifecycle lock. Every runner and API start gate takes the
+# 5. Rename under the start lock. Every runner and API start gate takes the
 #    same lock first, so none can start between this proof and the rename.
-exec 9>"$state_dir/lifecycle.lock"
-flock -w 60 -x 9 || skip lifecycle_locked
+exec 9>"$state_dir/start.lock"
+flock -w 60 -x 9 || skip start_locked
 for unit in "${runner_units[@]}" "${api_units[@]}"; do
   unit_state "$unit" || skip "unit_unreadable unit=$unit"
   [[ -z $job && $main == 0 && $control == 0 ]] || skip "unit_not_stopped unit=$unit"

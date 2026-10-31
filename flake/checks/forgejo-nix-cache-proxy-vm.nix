@@ -84,7 +84,6 @@ in
           labels = ["fixture:docker://example.invalid/unused:local"];
           secretsFile = pkgs.writeText "nix-cache-proxy-secrets" "fixture-only";
           isolatedDocker.enable = true;
-          ioPressureGuard.admissionControl.enable = true;
           podmanCanary = {
             enable = true;
             registrationTokenFile = toString registrationToken;
@@ -111,17 +110,6 @@ in
             script = lib.mkForce "while :; do sleep 1; done";
           })
           // {
-            fixture-pressure-init = {
-              serviceConfig.Type = "oneshot";
-              script = ''
-                printf 'full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > /run/fixture-pressure
-              '';
-            };
-            forgejo-runner-io-pressure-guard = {
-              requires = ["fixture-pressure-init.service"];
-              after = ["fixture-pressure-init.service"];
-              environment.PRESSURE_FILE = "/run/fixture-pressure";
-            };
             plain-upstream = {
               wantedBy = ["multi-user.target"];
               serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server ${toString plainPort} --bind :: --directory /srv/upstream";

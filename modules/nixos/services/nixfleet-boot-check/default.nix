@@ -27,9 +27,9 @@
         type = lib.types.nullOr (lib.types.strMatching "/[^ =]*");
         default = null;
         description = ''
-          Directory where the runner's start gate leaves drain-owned,
-          game-start-skipped, disk-start-skipped or standby-held while it
-          holds the runner back on purpose; a held runner is no failure.
+          Directory where the runner hold or its start gate leaves `held`
+          while it keeps the runner stopped on purpose; a held runner is no
+          failure.
         '';
       };
     };

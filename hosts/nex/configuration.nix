@@ -63,12 +63,13 @@
 
   services.forgejo-actions-runner = {
     enable = true;
-    # Alert when CI admission stays held beyond its bound (ADR-0072, #894).
-    holdMonitor.enable = true;
     package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
-    ioPressureGuard.enable = true;
-    ioPressureGuard.admissionControl.enable = true;
-    ioPressureGuard.diskSpace.enable = true;
+    # Hold the runners while the disk is low, and report a runner left off
+    # (ADR-0106).
+    runnerHold = {
+      diskSpace.enable = true;
+      alert.enable = true;
+    };
     # Reset the Podman store offline while the runners are idle (ADR-0105).
     podmanStoreReset.enable = true;
     # Pool jobs substitute upstream paths through a local read-only proxy

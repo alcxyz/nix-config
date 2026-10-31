@@ -24,7 +24,7 @@
       then "block"
       else "busy"
     }
-    game_helper=${../forgejo-actions-runner/game-admission.sh}
+    game_helper=${../game-signal/game-scan.sh}
     game_wine_argv0_basenames=(${lib.escapeShellArgs cfg.game.wineArgv0Basenames})
     game_process_names=(${lib.escapeShellArgs cfg.game.processNames})
     moonlight_user=${lib.escapeShellArg cfg.moonlightClient.user}
@@ -93,7 +93,7 @@ in {
       wineArgv0Basenames = lib.mkOption {
         type = lib.types.listOf word;
         default = [];
-        description = "Wine game executables, detected with the CI runner's game detector.";
+        description = "Wine game executables, detected with the game signal's scan.";
       };
       processNames = lib.mkOption {
         type = lib.types.listOf word;

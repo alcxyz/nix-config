@@ -36,17 +36,12 @@ in
           labels = ["fixture:docker://example.invalid/unused:local"];
           secretsFile = pkgs.writeText "fixture-secrets" "unused";
           isolatedDocker.enable = true;
-          ioPressureGuard = {
-            admissionControl.enable = true;
-            diskSpace = {
-              enable = true;
-              drainFreeGiB = 2;
-              criticalFreeGiB = 1;
-              recoveryFreeGiB = 3;
-              drainFreePercent = 2;
-              criticalFreePercent = 1;
-              recoveryFreePercent = 3;
-            };
+          runnerHold.diskSpace = {
+            enable = true;
+            drainFreeGiB = 2;
+            recoveryFreeGiB = 3;
+            drainFreePercent = 2;
+            recoveryFreePercent = 3;
           };
           podmanStoreReset.enable = true;
           podmanCanary = {
@@ -71,7 +66,6 @@ in
         systemd.sockets.forgejo-runner-podman.unitConfig.StartLimitIntervalSec = 0;
         systemd.services.forgejo-runner-docker.unitConfig.StartLimitIntervalSec = 0;
         systemd.services.forgejo-runner-podman.unitConfig.StartLimitIntervalSec = 0;
-        systemd.services.forgejo-runner-io-pressure-guard.environment.PRESSURE_FILE = toString quietPressure;
         systemd.services.forgejo-actions-runner = {
           unitConfig.StartLimitIntervalSec = 0;
           preStart = lib.mkForce "";
@@ -96,7 +90,7 @@ in
           })
           # Pauses the reset at a chosen systemd call (`on`), or at the call
           # after it (`after`), so the test can act while the reset holds the
-          # lifecycle lock or right after the rename.
+          # start lock or right after the rename.
           (pkgs.writeShellApplication {
             name = "fixture-reset-systemctl";
             runtimeInputs = [pkgs.coreutils pkgs.systemd];
@@ -150,7 +144,8 @@ in
     testScript = {nodes, ...}: ''
       import re
       import shlex
-      state = "/run/forgejo-runner-aggregate-pressure"
+      state = "/run/forgejo-runner-hold"
+      legacy_state = "/run/forgejo-runner-aggregate-pressure"
       runners = ${builtins.toJSON nodes.machine.services.forgejo-actions-runner.runnerUnits}
       assert runners == ["forgejo-actions-runner.service", "forgejo-podman-runner.service"]
       apis = ["forgejo-runner-docker.service", "forgejo-runner-podman.service"]
@@ -218,9 +213,9 @@ in
       machine.wait_for_unit("multi-user.target")
       wait_units()
       # Ordinary Docker-only boot and switch keep their original dependency
-      # order and do not need the dual-runner registry or Podman health gate.
+      # order and need no Podman unit.
       dockerOnly.wait_for_unit("forgejo-actions-runner.service")
-      dockerOnly.succeed(f'test "$(cat {state}/runner-units)" = forgejo-actions-runner.service')
+      dockerOnly.succeed(f"test -d {state}/runners/forgejo-actions-runner.service")
       dockerOnly.succeed("systemctl stop forgejo-actions-runner.service forgejo-runner-docker.service", timeout=120)
       dockerOnly.succeed("/run/current-system/specialisation/changed/bin/switch-to-configuration test", timeout=180)
       dockerOnly.wait_for_unit("forgejo-actions-runner.service")
@@ -271,7 +266,7 @@ in
       with subtest("an API start waits for the lock, and its pending start prevents the rename"):
           make_due()
           pause("after", "stop forgejo-runner-docker.service forgejo-runner-podman.service")
-          # The reset now holds the lifecycle lock, both APIs are stopped.
+          # The reset now holds the start lock, both APIs are stopped.
           for api in apis:
               machine.succeed(f"test $(systemctl show -p ActiveState --value {api}) = inactive")
           machine.succeed("systemctl start --no-block forgejo-runner-podman.service")
@@ -324,13 +319,13 @@ in
           populate()
 
       with subtest("a completion fence from before ADR-0105 holds nothing and resets the store"):
-          machine.succeed(f"mkdir -m 700 {state}/cleanup-in-flight; echo 'cleanup-v2 1 1 0 DELETE /images/x' > {state}/cleanup-in-flight/owner")
+          machine.succeed(f"mkdir -p -m 700 {legacy_state}/cleanup-in-flight; echo 'cleanup-v2 1 1 0 DELETE /images/x' > {legacy_state}/cleanup-in-flight/owner")
           machine.succeed("systemctl restart forgejo-podman-runner.service")
           machine.wait_for_unit("forgejo-podman-runner.service")
           mark = cursor()
           machine.succeed(f"systemctl start {reset}", timeout=600)
           assert "reset due=legacy_fence" in journal_since(mark)
-          machine.fail(f"test -e {state}/cleanup-in-flight")
+          machine.fail(f"test -e {legacy_state}/cleanup-in-flight")
           wait_units()
           store_empty()
     '';

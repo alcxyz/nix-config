@@ -184,29 +184,16 @@ in {
 
   services.forgejo-actions-runner = {
     enable = true;
-    # Alert when CI admission stays held beyond its bound (ADR-0072, #894).
-    holdMonitor.enable = true;
     package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
-    ioPressureGuard = {
-      enable = true;
+    # Hold the runners while a game runs or the disk is low, and report a
+    # runner left off (ADR-0106). A game gives running jobs two minutes,
+    # then cancels them.
+    runnerHold = {
+      game.enable = true;
       diskSpace.enable = true;
-      highPercent = 20;
-      highDurationSeconds = 20;
-      lowPercent = 5;
-      lowDurationSeconds = 60;
-      # Trial admission drain: stop polling at moderate pressure, reserving the
-      # aggregate freeze for sustained severe pressure.
-      admissionControl = {
-        enable = true;
-        severePercent = 60;
-        severeDurationSeconds = 30;
-        gameProcess = {
-          enable = true;
-          user = "alc";
-          argv0Basenames = ["HeroesOfTheStorm_x64.exe"];
-        };
-      };
+      alert.enable = true;
     };
+    shutdownTimeoutSeconds = 120;
     # Reset the Podman store offline while the runners are idle (ADR-0105).
     podmanStoreReset.enable = true;
     # Pool jobs substitute upstream paths through a local read-only proxy
@@ -230,29 +217,27 @@ in {
         "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
       sharedLabels = ["ci-fast"];
-      # Most jobs use the Podman pool, so it takes the slot the Docker runner
-      # gave up; the build slice's total stays at five.
-      capacity = 3;
+      # Three CI slots in all, down from five, so CI stops saturating the
+      # disk that Plex, qBittorrent, Stash and Calibre share (ADR-0106).
+      capacity = 1;
       # A ci-fast slot pool jobs cannot take; fast jobs may still start in a
       # free pool slot, since whichever runner polls first takes the job.
-      # Up to five jobs now share the build slice's budget.
       extraRunners.fast = {
         labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
         capacity = 1;
-        # xev's standby xev-fast runs while this runner is down.
-        status = {
-          enable = true;
-          port = 9478;
-          interface = "wt0";
-        };
       };
     };
     name = "xyz";
     # One Docker slot serves the few jobs that still select a Docker label.
     capacity = 1;
     # Bound the runner daemon and all nested workers within one budget. Low
-    # weights make builds yield to desktop and game work.
-    resourcePolicy.enable = true;
+    # weights make builds yield to desktop, game and media work. Beside the
+    # nix-daemon's 40G cap and the ZFS ARC, three slots need less memory.
+    resourcePolicy = {
+      enable = true;
+      memoryHigh = "25%";
+      memoryMax = "35%";
+    };
     labels = [
       "forgejo-docker-primary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"
@@ -264,22 +249,15 @@ in {
   # xyz is the fleet's controller, so its own reboot also interrupts what the
   # operator and the other hosts run here.
   services.nixfleet-reboot-guard = let
-    gameProcess = config.services.forgejo-actions-runner.ioPressureGuard.admissionControl.gameProcess;
     t3code = configDir.homeConfigurations."${username}-${hostName}".config.services.t3code.idleCheck;
   in {
-    # The agreed rule: a running game on the controller blocks its self reboot.
+    # The agreed rule: a running game on the controller blocks its self
+    # reboot. The games are the game signal's (gaming.nix).
     game = {
       blocksReboot = true;
-      inherit (gameProcess) user;
-      # The runner's games and the sideloaded Heroic games, by the
-      # executable each runs under Wine; the Battle.net launcher is no game.
-      wineArgv0Basenames = lib.unique (gameProcess.argv0Basenames
-        ++ lib.mapAttrsToList (_: app: app.executable)
-        (lib.filterAttrs (name: _: name != "battle-net") config.services.heroicSideload.apps));
-      # Steam runs each game under reaper, alive only while the game runs.
-      # Not wineserver: non-game Wine apps keep one here too.
-      processNames = ["reaper"];
+      inherit (config.services.gameSignal) user wineArgv0Basenames processNames;
     };
+    streamServerUdpPorts = config.services.gameSignal.streamUdpPorts;
     backupUnits = [
       "xyz-appstate-backup.service"
       "xyz-k8s-backup.service"

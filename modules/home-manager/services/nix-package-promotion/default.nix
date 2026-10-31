@@ -43,6 +43,8 @@
       exec ${../../../../scripts/ci/run-local-dms-update.sh}
     '';
   };
+  # ExecCondition: a run is skipped, not failed, while the file exists.
+  holdCondition = file: "${pkgs.coreutils}/bin/test ! -e ${file}";
   wolfContexts = pkgs.writeShellApplication {
     name = "nix-wolf-contexts";
     runtimeInputs = with pkgs; [
@@ -151,10 +153,11 @@ in {
         default = "30m";
         description = "Maximum randomized delay applied to the DMS update timer.";
       };
-      admissionUnit = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
+      holdFile = lib.mkOption {
+        type = lib.types.nullOr (lib.types.strMatching "/[A-Za-z0-9_./-]+");
         default = null;
-        description = "Optional system unit that must be active before a DMS update starts.";
+        example = "/run/game-signal/active";
+        description = "Optional file whose presence skips a DMS update run, such as the host's game signal.";
       };
     };
 
@@ -165,10 +168,11 @@ in {
         default = "*:0/15";
         description = "Schedule for preparing committed Wolf image contexts.";
       };
-      admissionUnit = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = cfg.dms.admissionUnit;
-        description = "Optional system unit that must be active before a native Wolf build starts.";
+      holdFile = lib.mkOption {
+        type = lib.types.nullOr (lib.types.strMatching "/[A-Za-z0-9_./-]+");
+        default = cfg.dms.holdFile;
+        defaultText = lib.literalExpression "config.services.nixPackagePromotion.dms.holdFile";
+        description = "Optional file whose presence skips a native Wolf build run, such as the host's game signal.";
       };
       dockerConfigFile = lib.mkOption {
         type = lib.types.str;
@@ -260,8 +264,8 @@ in {
             "FORGEJO_API_TOKEN_FILE=${cfg.forgejo.apiTokenFile}"
           ];
         }
-        // lib.optionalAttrs (cfg.dms.admissionUnit != null) {
-          ExecCondition = "${pkgs.systemd}/bin/systemctl --system is-active --quiet ${lib.escapeShellArg cfg.dms.admissionUnit}";
+        // lib.optionalAttrs (cfg.dms.holdFile != null) {
+          ExecCondition = holdCondition cfg.dms.holdFile;
         };
     };
 
@@ -306,8 +310,8 @@ in {
             "WOLF_CONTEXT_STATE_DIRECTORY=${cfg.wolf.stateDirectory}"
           ];
         }
-        // lib.optionalAttrs (cfg.wolf.admissionUnit != null) {
-          ExecCondition = "${pkgs.systemd}/bin/systemctl --system is-active --quiet ${lib.escapeShellArg cfg.wolf.admissionUnit}";
+        // lib.optionalAttrs (cfg.wolf.holdFile != null) {
+          ExecCondition = holdCondition cfg.wolf.holdFile;
         };
     };
 

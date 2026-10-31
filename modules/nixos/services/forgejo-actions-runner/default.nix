@@ -19,13 +19,17 @@
   runtimeDir = "/run/forgejo-runner";
   envFile = "${runtimeDir}/${cfg.name}.env";
   nameFile = "${stateDir}/.runner-name";
-  pressureGuardLabel = "io.alc.forgejo-runner=${cfg.name}";
+  # Marks every job container as this runner's, for the orphan monitor.
+  runnerContainerLabel = "io.alc.forgejo-runner=${cfg.name}";
 
   secretName = key: "forgejo_runner_${key}";
   secretPath = key: "/run/secrets/${secretName key}";
 
   jobTimeout = "3600s";
-  serviceStopTimeout = "3660s";
+  shutdownTimeout = "${toString cfg.shutdownTimeoutSeconds}s";
+  # After the shutdown timeout the runner cancels its jobs and removes their
+  # containers, each removal bounded to a minute.
+  serviceStopTimeout = "${toString (cfg.shutdownTimeoutSeconds + 300)}s";
 
   secretKeys = lib.unique (["runner_token"] ++ lib.attrValues cfg.secretEnv);
 
@@ -33,7 +37,7 @@
   containerRuntimeOptions = lib.concatStringsSep " " (
     (map (name: "-e ${name}") allEnvNames)
     ++ cfg.containerOptions
-    ++ lib.optional cfg.ioPressureGuard.enable "--label=${pressureGuardLabel}"
+    ++ ["--label=${runnerContainerLabel}"]
   );
 
   runnerConfig = settingsFormat.generate "forgejo-runner-config.yaml" {
@@ -44,7 +48,7 @@
       labels = cfg.labels;
       env_file = envFile;
       timeout = jobTimeout;
-      shutdown_timeout = jobTimeout;
+      shutdown_timeout = shutdownTimeout;
       insecure = false;
       fetch_timeout = "5s";
       fetch_interval = "2s";
@@ -157,17 +161,6 @@
       docker builder prune "''${prune_args[@]}"
     '';
   };
-  ioPressureGuard = pkgs.writeShellApplication {
-    name = "forgejo-runner-io-pressure-guard";
-    runtimeInputs = with pkgs; [
-      coreutils
-      docker
-      gawk
-      systemd
-      util-linux
-    ];
-    text = builtins.readFile ./io-pressure-guard.sh;
-  };
   registerFromFile = pkgs.writeShellApplication {
     name = "forgejo-runner-register-from-file";
     runtimeInputs = [pkgs.coreutils];
@@ -175,6 +168,7 @@
   };
 in {
   imports = [
+    ./runner-hold.nix
     ./podman-store-reset.nix
     ./podman-storage.nix
     ./docker-storage.nix
@@ -182,7 +176,7 @@ in {
     ./podman-canary.nix
     ./nix-cache-proxy.nix
     ./orphan-monitor.nix
-    ./hold-monitor.nix
+    ../game-signal/default.nix
     ../nixfleet-boot-check/default.nix
     ../storage-health-monitor/default.nix
   ];
@@ -208,6 +202,16 @@ in {
       type = lib.types.ints.positive;
       default = 1;
       description = "Maximum number of concurrent jobs accepted by this runner.";
+    };
+
+    shutdownTimeoutSeconds = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 3600;
+      description = ''
+        How long a stopping runner, Docker or Podman, waits for its running
+        jobs before it cancels them. A runner stops for a hold, a Podman store
+        reset, a restart or shutdown.
+      '';
     };
 
     labels = lib.mkOption {
@@ -312,152 +316,6 @@ in {
         type = lib.types.str;
         default = "50%";
         description = "Aggregate hard memory limit for runner containers.";
-      };
-    };
-
-    ioPressureGuard = {
-      enable = lib.mkEnableOption "host I/O pressure guard for owned runner containers";
-
-      diskSpace = {
-        enable = lib.mkEnableOption "root filesystem space admission and critical aggregate freeze";
-        path = lib.mkOption {
-          type = lib.types.str;
-          default = "/";
-          description = "Filesystem path whose free space protects runner storage.";
-        };
-        drainFreeGiB = lib.mkOption {
-          type = lib.types.ints.positive;
-          default = 30;
-          description = "Drain runner admissions when available bytes fall below this many GiB.";
-        };
-        drainFreePercent = lib.mkOption {
-          type = lib.types.ints.between 1 99;
-          default = 15;
-          description = "Drain runner admissions when free space falls below this percentage.";
-        };
-        criticalFreeGiB = lib.mkOption {
-          type = lib.types.ints.positive;
-          default = 15;
-          description = "Freeze the aggregate when available bytes fall below this many GiB.";
-        };
-        criticalFreePercent = lib.mkOption {
-          type = lib.types.ints.between 1 99;
-          default = 8;
-          description = "Freeze the aggregate when free space falls below this percentage.";
-        };
-        recoveryFreeGiB = lib.mkOption {
-          type = lib.types.ints.positive;
-          default = 40;
-          description = "Require at least this many available GiB before resuming admissions.";
-        };
-        recoveryFreePercent = lib.mkOption {
-          type = lib.types.ints.between 1 99;
-          default = 20;
-          description = "Require at least this free percentage before resuming admissions.";
-        };
-      };
-
-      highPercent = lib.mkOption {
-        type = lib.types.ints.between 1 99;
-        default = 20;
-        description = "Full I/O PSI avg10 percentage that starts the high-pressure timer.";
-      };
-
-      lowPercent = lib.mkOption {
-        type = lib.types.ints.between 0 98;
-        default = 5;
-        description = "Full I/O PSI avg10 percentage that starts the recovery timer.";
-      };
-
-      highDurationSeconds = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 20;
-        description = "Sustained high-pressure duration before owned containers are paused.";
-      };
-
-      lowDurationSeconds = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 60;
-        description = "Sustained low-pressure duration before the owned container batch is resumed.";
-      };
-
-      sampleSeconds = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 5;
-        description = "Interval between I/O PSI samples.";
-      };
-
-      dockerTimeoutSeconds = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 3;
-        description = "Deadline for read-only Docker API operations.";
-      };
-
-      dockerTransitionTimeoutSeconds = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 15;
-        description = "Deadline for Docker pause and unpause operations.";
-      };
-
-      transitionTimeoutSeconds = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 120;
-        description = "Deadline for aggregate freeze and thaw transitions.";
-      };
-
-      admissionControl = {
-        enable = lib.mkEnableOption "pressure-based admission draining for an isolated runner";
-
-        gameProcess = {
-          enable = lib.mkEnableOption "exact game process admission drain for the local user";
-          user = lib.mkOption {
-            type = lib.types.str;
-            default = "";
-            description = "Local account whose game processes block runner admission.";
-          };
-          argv0Basenames = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            default = [];
-            description = "Exact argv0 basenames for the local user's wine64-preloader processes that block runner admission.";
-          };
-          cooldownSeconds = lib.mkOption {
-            type = lib.types.ints.positive;
-            default = 30;
-            description = "Delay after the last game process match before owned drains may resume.";
-          };
-        };
-
-        severePercent = lib.mkOption {
-          type = lib.types.ints.between 2 100;
-          default = 60;
-          description = "Full I/O PSI avg10 percentage that freezes the aggregate after admissions are drained.";
-        };
-
-        severeDurationSeconds = lib.mkOption {
-          type = lib.types.ints.positive;
-          default = 30;
-          description = "Sustained severe-pressure duration before the aggregate is frozen.";
-        };
-
-        settledResumeSeconds = lib.mkOption {
-          type = lib.types.ints.positive;
-          default = 300;
-          description = ''
-            Duration after which owned drains also resume while host pressure
-            stays below highPercent and the aggregate's own full I/O PSI stays
-            at or below lowPercent, counted once every drained runner has
-            finished its admitted jobs. Unrelated host load can then not hold a
-            drain indefinitely; the faster lowPercent recovery still applies.
-            The same duration below highPercent also thaws an owned freeze
-            while no runner can admit work; the drain stays in place.
-          '';
-        };
-
-        prolongedDrainSeconds = lib.mkOption {
-          type = lib.types.ints.positive;
-          default = 1800;
-          description = "Drain duration without a detected game after which the guard logs one admission_drain_prolonged event.";
-        };
       };
     };
 
@@ -571,81 +429,6 @@ in {
         assertion = cfg.cachePressure.criticalPercent > cfg.cachePressure.triggerPercent;
         message = "services.forgejo-actions-runner.cachePressure.criticalPercent must exceed triggerPercent.";
       }
-      {
-        assertion = cfg.ioPressureGuard.lowPercent < cfg.ioPressureGuard.highPercent;
-        message = "services.forgejo-actions-runner.ioPressureGuard.lowPercent must be below highPercent.";
-      }
-      {
-        assertion = !cfg.ioPressureGuard.diskSpace.enable || (isolated && cfg.ioPressureGuard.admissionControl.enable);
-        message = "Runner disk-space protection requires isolated Docker and admission draining.";
-      }
-      {
-        assertion =
-          cfg.ioPressureGuard.diskSpace.criticalFreeGiB
-          < cfg.ioPressureGuard.diskSpace.drainFreeGiB
-          && cfg.ioPressureGuard.diskSpace.drainFreeGiB < cfg.ioPressureGuard.diskSpace.recoveryFreeGiB
-          && cfg.ioPressureGuard.diskSpace.criticalFreePercent < cfg.ioPressureGuard.diskSpace.drainFreePercent
-          && cfg.ioPressureGuard.diskSpace.drainFreePercent < cfg.ioPressureGuard.diskSpace.recoveryFreePercent;
-        message = "Runner disk-space thresholds must order critical < drain < recovery for both GiB and percent.";
-      }
-      {
-        assertion = lib.mod cfg.ioPressureGuard.highDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
-        message = "services.forgejo-actions-runner.ioPressureGuard.highDurationSeconds must be divisible by sampleSeconds.";
-      }
-      {
-        assertion = lib.mod cfg.ioPressureGuard.lowDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
-        message = "services.forgejo-actions-runner.ioPressureGuard.lowDurationSeconds must be divisible by sampleSeconds.";
-      }
-      {
-        assertion = !cfg.ioPressureGuard.admissionControl.enable || isolated;
-        message = "Pressure-based runner admission control requires isolated Docker.";
-      }
-      {
-        assertion =
-          !cfg.ioPressureGuard.admissionControl.gameProcess.enable
-          || cfg.ioPressureGuard.admissionControl.enable;
-        message = "Game process admission requires runner admission control.";
-      }
-      {
-        assertion =
-          !cfg.ioPressureGuard.admissionControl.gameProcess.enable
-          || (builtins.match "[a-z_][a-z0-9_-]*" cfg.ioPressureGuard.admissionControl.gameProcess.user
-            != null
-            && cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames != []
-            && lib.all (name: builtins.match "[A-Za-z0-9_.-]+" name != null)
-            cfg.ioPressureGuard.admissionControl.gameProcess.argv0Basenames);
-        message = "Game process admission needs a local user and exact Wine argv0 basenames.";
-      }
-      {
-        assertion =
-          !cfg.ioPressureGuard.admissionControl.enable
-          || cfg.ioPressureGuard.admissionControl.severePercent > cfg.ioPressureGuard.highPercent;
-        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.severePercent must exceed highPercent.";
-      }
-      {
-        assertion =
-          !cfg.ioPressureGuard.admissionControl.enable
-          || lib.mod cfg.ioPressureGuard.admissionControl.severeDurationSeconds cfg.ioPressureGuard.sampleSeconds == 0;
-        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.severeDurationSeconds must be divisible by sampleSeconds.";
-      }
-      {
-        assertion =
-          !cfg.ioPressureGuard.admissionControl.enable
-          || lib.mod cfg.ioPressureGuard.admissionControl.settledResumeSeconds cfg.ioPressureGuard.sampleSeconds == 0;
-        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.settledResumeSeconds must be divisible by sampleSeconds.";
-      }
-      {
-        assertion =
-          !cfg.ioPressureGuard.admissionControl.enable
-          || cfg.ioPressureGuard.admissionControl.settledResumeSeconds > cfg.ioPressureGuard.lowDurationSeconds;
-        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.settledResumeSeconds must exceed lowDurationSeconds.";
-      }
-      {
-        assertion =
-          !cfg.ioPressureGuard.admissionControl.enable
-          || lib.mod cfg.ioPressureGuard.admissionControl.prolongedDrainSeconds cfg.ioPressureGuard.sampleSeconds == 0;
-        message = "services.forgejo-actions-runner.ioPressureGuard.admissionControl.prolongedDrainSeconds must be divisible by sampleSeconds.";
-      }
     ];
 
     users.groups.forgejo-runner = {};
@@ -692,10 +475,6 @@ in {
 
     systemd.slices.forgejobuilds = lib.mkIf resourcePolicyCfg.enable {
       description = "Aggregate Forgejo Actions build resources";
-      # The external lifecycle service must thaw an owned freezer before the
-      # aggregate gets a stop job. systemd's implicit shutdown stop job would
-      # reject ThawUnit even after every descendant has exited.
-      unitConfig = lib.mkIf isolated {DefaultDependencies = false;};
       sliceConfig = {
         CPUWeight = resourcePolicyCfg.cpuWeight;
         IOWeight = resourcePolicyCfg.ioWeight;
@@ -729,50 +508,11 @@ in {
       };
     };
 
-    systemd.services.forgejo-runner-io-pressure-guard = lib.mkIf (cfg.ioPressureGuard.enable && !isolated) {
-      description = "Pause owned Forgejo runner containers under sustained I/O pressure";
-      after = [dockerService];
-      requires = [dockerService];
-      wantedBy = ["multi-user.target"];
-      environment = {
-        DOCKER_HOST = cfg.dockerHost;
-        RUNNER_CONTAINER_LABEL = pressureGuardLabel;
-        HIGH_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.highPercent * 100);
-        LOW_THRESHOLD_HUNDREDTHS = toString (cfg.ioPressureGuard.lowPercent * 100);
-        HIGH_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.highDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-        LOW_SAMPLES_REQUIRED = toString (cfg.ioPressureGuard.lowDurationSeconds / cfg.ioPressureGuard.sampleSeconds + 1);
-        SAMPLE_SECONDS = toString cfg.ioPressureGuard.sampleSeconds;
-        DOCKER_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.dockerTimeoutSeconds;
-        DOCKER_TRANSITION_TIMEOUT_SECONDS = toString cfg.ioPressureGuard.dockerTransitionTimeoutSeconds;
-      };
-      serviceConfig = {
-        Type = "notify";
-        NotifyAccess = "all";
-        ExecStart = lib.getExe ioPressureGuard;
-        Restart = "always";
-        RestartSec = "2s";
-        RuntimeDirectory = "forgejo-runner-pressure";
-        RuntimeDirectoryMode = "0700";
-        RuntimeDirectoryPreserve = "yes";
-      };
-    };
-
-    # The aggregate pressure guard's start gate leaves its hold markers in
-    # its runtime directory; a runner it holds back is no failed boot.
-    services.nixfleet-boot-check.runnerUnits = [
+    # The isolated runners take their hold markers from the runner hold.
+    services.nixfleet-boot-check.runnerUnits = lib.mkIf (!isolated) [
       {
         unit = "forgejo-actions-runner.service";
-        holdMarkerDirectory =
-          if isolated
-          then "/run/forgejo-runner-aggregate-pressure"
-          else null;
-      }
-    ];
-
-    services.storage-health-monitor.units = lib.mkIf (cfg.ioPressureGuard.enable && config.services.storage-health-monitor.enable) [
-      {
-        name = "forgejo-runner-io-pressure-guard.service";
-        mode = "active-not-degraded";
+        holdMarkerDirectory = null;
       }
     ];
 
@@ -786,8 +526,8 @@ in {
           owner = "forgejo-runner";
           group = "forgejo-runner";
           mode = "0400";
-          # The isolated runner may be intentionally drained by the pressure
-          # guard. Apply rotated credentials at its next planned start.
+          # The isolated runner may be held on purpose. Apply rotated
+          # credentials at its next planned start.
           restartUnits = lib.optional (!isolated) "forgejo-actions-runner.service";
         };
       })
@@ -808,15 +548,12 @@ in {
           "network-online.target"
           dockerService
         ]
-        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"]
-        ++ lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
+        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"];
       requires =
         [
           dockerService
         ]
-        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"]
-        ++ lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
-      bindsTo = lib.optional cfg.ioPressureGuard.enable "forgejo-runner-io-pressure-guard.service";
+        ++ lib.optionals resourcePolicyCfg.enable ["forgejo-runner-resource-policy.service"];
       wantedBy = ["multi-user.target"];
       path = [cfg.package] ++ cfg.extraPackages;
       environment = {
