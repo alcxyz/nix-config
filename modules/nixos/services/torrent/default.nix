@@ -157,7 +157,6 @@ in {
       unitConfig.RequiresMountsFor = map (directory: directory.path) sharedMediaDirs;
       requires = storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
       after = storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
-      conflicts = ["docker-qbittorrent.service"];
       path = [
         pkgs.coreutils
         pkgs.crudini

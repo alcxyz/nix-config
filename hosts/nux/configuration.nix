@@ -49,7 +49,6 @@ in {
     "${configDir}/modules/nixos/common/default.nix"
     "${configDir}/modules/nixos/common/server.nix"
     "${configDir}/modules/nixos/services/forge-mirror-audit/default.nix"
-    "${configDir}/modules/nixos/services/nfs/default.nix"
     "${configDir}/modules/nixos/services/forgejo-actions-runner/default.nix"
     "${configDir}/modules/nixos/services/k8s-api-vip/default.nix"
     inputs.nix-secrets.nixosModules.k8sApiVipPolicy
@@ -168,22 +167,7 @@ in {
     ];
   };
 
-  # NFS server — export /mnt/shared for paperless-ingest (and future services)
-  services.nfs.managed = {
-    enable = true;
-    allowedClients = [
-      "192.168.1.10" # xyz
-      "192.168.1.24" # mac
-    ];
-    shares = [
-      {path = "/mnt/shared";}
-    ];
-  };
-
-  # Ensure /mnt/shared/paperless-ingest exists
   systemd.tmpfiles.rules = [
-    "d /mnt/shared 0755 root root -"
-    "d /mnt/shared/paperless-ingest 0777 root root -"
     # k3s Traefik manifest
     "d /var/lib/rancher/k3s/server/manifests 0755 root root -"
     "L+ /var/lib/rancher/k3s/server/manifests/traefik-config.yaml - - - - ${traefikConfig}"

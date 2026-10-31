@@ -62,7 +62,6 @@ in {
       unitConfig.RequiresMountsFor = [cfg.mediaDir];
       requires = cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
       after = cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
-      conflicts = ["docker-plex.service"];
       environment = {
         LD_LIBRARY_PATH = mkForce "";
         PLEX_MEDIA_SERVER_TMPDIR = mkForce cfg.transcodeDir;

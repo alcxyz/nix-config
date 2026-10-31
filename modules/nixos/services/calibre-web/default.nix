@@ -85,7 +85,6 @@ in {
     };
 
     systemd.services.calibre-web = {
-      conflicts = ["docker-calibre-web.service"];
       serviceConfig.ExecStartPre = lib.mkBefore ["+${calibreWebStateSetup}"];
     };
   };

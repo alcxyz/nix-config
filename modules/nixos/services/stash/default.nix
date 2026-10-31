@@ -125,7 +125,6 @@ in {
       unitConfig.RequiresMountsFor = [cfg.mediaDir];
       requires = cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
       after = ["network.target"] ++ cfg.storageDependencyUnits ++ ["torrent-shared-media-permissions.service"];
-      conflicts = ["docker-stash.service"];
 
       path = with pkgs; [
         ffmpeg-full

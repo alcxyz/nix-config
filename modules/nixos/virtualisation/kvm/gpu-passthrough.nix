@@ -25,6 +25,21 @@ with lib; let
 
     log() { echo "gpu-passthrough: $*"; }
 
+    # Run compose against the stack's own file, so compose never falls back to
+    # a compose file in a parent directory.
+    stack_compose() {
+      local stack=$1 file
+      shift
+      for file in compose.yaml compose.yml docker-compose.yaml docker-compose.yml; do
+        if [ -f "$stack/$file" ]; then
+          ${pkgs.docker}/bin/docker compose -f "$stack/$file" "$@"
+          return
+        fi
+      done
+      log "no compose file in $stack"
+      return 1
+    }
+
     stop_gpu_consumers() {
       log "stopping GPU consumer containers..."
       ${concatMapStringsSep "\n      " (service: ''
@@ -33,7 +48,7 @@ with lib; let
 
       ${concatMapStringsSep "\n      " (stack: ''
       if [ -d "${stack}" ]; then
-        ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" down --timeout 30 || true
+        stack_compose "${stack}" down --timeout 30 || true
       fi'')
     cfg.gpuContainerStacks}
 
@@ -100,7 +115,7 @@ with lib; let
 
       ${concatMapStringsSep "\n      " (stack: ''
       if [ -d "${stack}" ]; then
-        ${pkgs.docker}/bin/docker compose -f "${stack}/docker-compose.yml" up -d || true
+        stack_compose "${stack}" up -d || true
       fi'')
     cfg.gpuContainerStacks}
     }
