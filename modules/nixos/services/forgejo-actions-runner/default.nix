@@ -247,6 +247,22 @@ in {
       '';
     };
 
+    registryMirror = lib.mkOption {
+      type = lib.types.nullOr (lib.types.strMatching "[A-Za-z0-9.-]+(:[0-9]+)?");
+      default = null;
+      example = "registry-cache.example.org";
+      description = ''
+        Host of an HTTPS pull-through cache that serves docker.io
+        repositories at its root. The dedicated runner engines, the isolated
+        Docker daemon and the Podman API, try it first for docker.io images
+        and fall back to docker.io when it is unreachable or lacks the image.
+        A cache that fails partway through a pull, after serving the image
+        index, can still fail that pull in Podman. Builders
+        that jobs create, such as Buildx docker-container builders, use their
+        own registry configuration. null pulls from docker.io directly.
+      '';
+    };
+
     resourcePolicy = {
       enable = lib.mkEnableOption "aggregate resource controls for Forgejo-created containers";
 

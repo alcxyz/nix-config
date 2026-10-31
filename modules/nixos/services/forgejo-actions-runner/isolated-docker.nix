@@ -43,6 +43,13 @@
         Hard = 65536;
       };
     }
+    // lib.optionalAttrs (cfg.registryMirror != null) {
+      # Docker mirrors only docker.io and falls back to it when a mirror
+      # fails (daemon/internal/distribution in moby v29). The explicit overlay2
+      # storage-driver above selects that graphdriver pull path rather than
+      # the containerd image store (daemon/image_store_choice.go).
+      "registry-mirrors" = ["https://${cfg.registryMirror}"];
+    }
     // lib.optionalAttrs retention.enable {
       # Docker 29's BuilderGCRule uses filter=until, not keepDuration:
       # https://github.com/moby/moby/blob/docker-v29.9.1/daemon/config/builder.go

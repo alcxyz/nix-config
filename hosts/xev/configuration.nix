@@ -188,6 +188,9 @@
     # Pool jobs substitute upstream paths through a local read-only proxy
     # (ADR-0103).
     nixCacheProxy.enable = true;
+    # Engines pull docker.io images through the LAN cache, falling back to
+    # docker.io when it is down (#917).
+    registryMirror = "registry-cache.alc.xyz";
     isolatedDocker.enable = true;
     isolatedDocker.retention.enable = true;
     podmanCanary = {

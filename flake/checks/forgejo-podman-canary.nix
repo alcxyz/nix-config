@@ -113,6 +113,17 @@ else let
   failedAssertions = config: map (entry: entry.message) (builtins.filter (entry: !entry.assertion) config.assertions);
   gateSource = ../../modules/nixos/services/forgejo-actions-runner/podman-api-start-gate.sh;
 
+  # A docker.io pull-through cache for both dedicated engines (#917).
+  mirrorHost = "registry-cache.example.org";
+  mirrored = evaluate true validLabels {services.forgejo-actions-runner.registryMirror = mirrorHost;};
+  mirroredApi = mirrored.systemd.services.forgejo-runner-podman;
+  v1Mirrored = evaluate true validLabels {
+    services.forgejo-actions-runner.registryMirror = mirrorHost;
+    virtualisation.containers.registries.search = ["docker.io"];
+  };
+  dockerConfigFile = config:
+    lib.removePrefix "--config-file=" (lib.last (lib.splitString " " config.systemd.services.forgejo-runner-docker.serviceConfig.ExecStart));
+
   # An extra Podman runner beside the canary, with ci-fast as a shared
   # overflow label on both (ADR-0097).
   fastLabel = "ci-fast:docker://example.invalid/fast:latest";
@@ -472,6 +483,12 @@ in
   assert proxied.systemd.paths.forgejo-nix-cache-resolver.pathConfig.PathChanged == "/etc/resolv.conf";
   assert lib.hasInfix "forgejo-nix-cache-resolver" (toString proxied.systemd.services.forgejo-nix-cache.serviceConfig.ExecStartPre);
   assert failedAssertion proxyWithJobNixConfig "podmanCanary.jobEnv must not set NIX_CONFIG while the CI Nix cache proxy supplies it.";
+  assert !(api.environment ? CONTAINERS_REGISTRIES_CONF);
+  assert lib.hasPrefix "/nix/store/" mirroredApi.environment.CONTAINERS_REGISTRIES_CONF;
+  assert failedAssertions mirrored == failedAssertions enabled;
+  assert failedAssertion v1Mirrored "services.forgejo-actions-runner.registryMirror requires virtualisation.containers.registries.settings in the version 2 format.";
+  assert !mirroredApi.restartIfChanged;
+  assert !mirrored.systemd.services.forgejo-runner-docker.restartIfChanged;
     pkgs.runCommand "forgejo-podman-canary-contract" {
       nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.python3 pkgs.shellcheck pkgs.systemd pkgs.util-linux pkgs.yq-go];
     } ''
@@ -493,6 +510,19 @@ in
         grep -Fq 'extra-substituters = http://host.containers.internal:8501/cache.nixos.org?priority=10' "$file"
       done
       if grep -Fq 'envs:' ${canaryConfigFile} ${extraConfigFile}; then exit 1; fi
+      # The cache is a docker.io mirror in front of docker.io itself, so both
+      # engines fall back to it; the host's other registries stay as they are.
+      python3 - ${mirroredApi.environment.CONTAINERS_REGISTRIES_CONF} <<'PY'
+      import sys, tomllib
+      conf = tomllib.load(open(sys.argv[1], "rb"))
+      assert conf["registry"] == [
+          {"location": "docker.io", "mirror": [{"location": "${mirrorHost}"}]},
+          {"location": "quay.io"},
+      ], conf
+      assert "unqualified-search-registries" not in conf, conf
+      PY
+      test "$(yq -o json -I0 '."registry-mirrors"' ${dockerConfigFile mirrored})" = '["https://${mirrorHost}"]'
+      test "$(yq '."registry-mirrors"' ${dockerConfigFile enabled})" = null
       fixture="$(mktemp -d)"
       trap 'rm -rf "$fixture"' EXIT
       state="$fixture/state"

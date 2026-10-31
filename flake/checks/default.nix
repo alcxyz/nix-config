@@ -191,6 +191,9 @@ in {
       calendar = host.config.systemd.timers.forgejo-runner-cache-prune.timerConfig.OnCalendar;
     in
       calendar == "daily" || builtins.match "\\*-\\*-\\* [0-9][0-9]:[0-9][0-9]:[0-9][0-9]" calendar != null) (lib.attrValues runnerHosts);
+    # Every runner host pulls docker.io through the LAN cache (#917).
+    assert lib.all (runner: runner.registryMirror == "registry-cache.alc.xyz") (lib.attrValues runners);
+    assert lib.all (host: host.config.systemd.services.forgejo-runner-podman.environment ? CONTAINERS_REGISTRIES_CONF) (lib.attrValues runnerHosts);
     assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable && runner.ioPressureGuard.enable && runner.ioPressureGuard.admissionControl.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedPoolCapacity.${host}) (lib.attrNames runners);

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-10
-**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)); 2026-10-30, an owned freeze also thaws after a settled interval while admission is drained ([#908](https://git.alc.xyz/alcxyz/nix-config/issues/908))
+**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)); 2026-10-30, an owned freeze also thaws after a settled interval while admission is drained ([#908](https://git.alc.xyz/alcxyz/nix-config/issues/908)); 2026-10-31, updated (the dedicated engines pull docker.io through a LAN mirror with upstream fallback, [#917](https://git.alc.xyz/alcxyz/nix-config/issues/917))
 **History:** [replaced text](archive/0072-isolated-runner-docker-history.md)
 **Area:** Forgejo runners, Docker, systemd
 
@@ -34,6 +34,18 @@ The option stays disabled by default. Fleet hosts explicitly opt in, and the
 runner-pool check verifies their shared settings. Changing daemon GC settings
 requires a controlled application to the running daemon; switching a unit with
 `restartIfChanged = false` alone does not establish runtime activation.
+
+Where a host sets `registryMirror` (xyz, xev, nex and nux), the dedicated
+Docker daemon and the Podman API try that LAN pull-through cache first for
+docker.io images and fall back to docker.io when it is unreachable or lacks an
+image, so the cache stays a soft dependency. A cache that answers the first
+request but fails later in a pull, for example on a platform manifest, can
+still fail that pull in Podman, which keeps using the source that served the
+image index. Pulls stay anonymous over verified TLS, and
+the cache runs on the same home infrastructure the runners already trust; it
+may resolve a tag to its cached digest until it refreshes the tag. Buildx
+`docker-container` builders that jobs create keep their own registry
+configuration and are not covered.
 
 Use a dedicated rootless Docker daemon in a delegated systemd service below the
 existing aggregate build slice. Its daemon and worker descendants inherit the

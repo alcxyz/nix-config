@@ -214,6 +214,26 @@
     [containers]
     dns_servers = [${lib.concatMapStringsSep ", " builtins.toJSON canary.dnsServers}]
   '';
+  # The host's registries.conf with the cache as a docker.io mirror. Podman
+  # tries mirrors in order and then docker.io itself. The service reads it
+  # through CONTAINERS_REGISTRIES_CONF, which takes precedence over both the
+  # system file and a per-user one, so other Podman users are unaffected.
+  registrySettings = config.virtualisation.containers.registries.settings;
+  isDockerHub = registry: (registry.prefix or registry.location or "") == "docker.io";
+  hostRegistries = registrySettings.registry or [];
+  mirroredRegistry = registry:
+    if isDockerHub registry
+    then registry // {mirror = (registry.mirror or []) ++ [{location = cfg.registryMirror;}];}
+    else registry;
+  registriesConf = (pkgs.formats.toml {}).generate "forgejo-podman-registries.conf" (registrySettings
+    // {
+      registry =
+        map mirroredRegistry hostRegistries
+        ++ lib.optional (!lib.any isDockerHub hostRegistries) {
+          location = "docker.io";
+          mirror = [{location = cfg.registryMirror;}];
+        };
+    });
   literalEnvScript = lib.concatLines (
     lib.mapAttrsToList (name: value: ''
       printf '%s=%s\n' ${lib.escapeShellArg name} ${lib.escapeShellArg value} >> "$env_tmp"
@@ -658,6 +678,11 @@ in {
             builtins.length (lib.unique ports) == builtins.length ports;
           message = "Podman runner status endpoints need distinct ports.";
         }
+        {
+          # Version 1 tables cannot be mixed with the [[registry]] mirror entry.
+          assertion = cfg.registryMirror == null || !(registrySettings ? registries);
+          message = "services.forgejo-actions-runner.registryMirror requires virtualisation.containers.registries.settings in the version 2 format.";
+        }
       ];
 
       virtualisation.containers.enable = true;
@@ -749,6 +774,7 @@ in {
           XDG_RUNTIME_DIR = builderRuntime;
           RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
           CONTAINERS_CONF_OVERRIDE = lib.mkIf (canary.dnsServers != []) "${containersConf}";
+          CONTAINERS_REGISTRIES_CONF = lib.mkIf (cfg.registryMirror != null) "${registriesConf}";
           # Netavark must spawn DNS inside this delegated service. systemd-run
           # would create a user scope outside the aggregate resource boundary.
           PATH = lib.mkForce (
