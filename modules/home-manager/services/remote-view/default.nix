@@ -23,6 +23,24 @@
       ${pkgs.coreutils}/bin/rm -f ${lib.escapeShellArg "${rsaKey}.pub"}
     fi
   '';
+
+  wayvnc = lib.getExe config.services.wayvnc.package;
+
+  # A display that sleeps deeply enough to disconnect removes its output, and
+  # wayvnc refuses to start on a missing one. Prefer the configured output when
+  # it is there and otherwise let wayvnc pick, so the view stays reachable.
+  start = pkgs.writeShellScript "remote-view-start" (
+    lib.optionalString (cfg.output != null) ''
+      if ${lib.getExe pkgs.wlr-randr} --json \
+        | ${lib.getExe pkgs.jq} -e --arg output ${lib.escapeShellArg cfg.output} \
+          'any(.[]; .name == $output and .enabled)' >/dev/null; then
+        exec ${wayvnc} --output=${lib.escapeShellArg cfg.output}
+      fi
+    ''
+    + ''
+      exec ${wayvnc}
+    ''
+  );
 in {
   # ADR-0102: view and drive the live Wayland desktop from another machine.
   # The server listens on loopback only and is reached through SSH; every
@@ -46,8 +64,10 @@ in {
       default = null;
       example = "DP-1";
       description = ''
-        Output captured at start. wayvnc captures one output at a time;
-        `wayvncctl output-cycle` switches while connected.
+        Output captured at start when it is present; otherwise wayvnc picks
+        one. wayvnc captures one output at a time, moves to another when its
+        output disappears and does not move back; `wayvncctl output-set` or
+        `output-cycle` switches while connected.
       '';
     };
   };
@@ -68,12 +88,7 @@ in {
     systemd.user.services.wayvnc = {
       Service = {
         ExecStartPre = ["${ensureKey}"];
-        ExecStart = lib.mkForce [
-          (lib.escapeShellArgs (
-            [(lib.getExe config.services.wayvnc.package)]
-            ++ lib.optional (cfg.output != null) "--output=${cfg.output}"
-          ))
-        ];
+        ExecStart = lib.mkForce ["${start}"];
         # wayvnc exits cleanly when the compositor goes away; come back with
         # the next session instead of staying stopped.
         Restart = "always";

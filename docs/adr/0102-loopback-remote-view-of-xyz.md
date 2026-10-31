@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-26
+**Amended:** 2026-10-31, start on another output when the preferred one is missing.
 **Applies to:** `modules/home-manager/services/remote-view/`, `users/alc/linux/xyz.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`
 
 ## Context
@@ -35,7 +36,10 @@ Run wayvnc in the Hyprland session through a small Home Manager module,
    RSA key is generated on xyz at first start and never leaves it; the viewer
    pins it on first use.
 3. It starts with the graphical session and captures the primary ultrawide
-   (`DP-1`); `wayvncctl output-cycle` switches outputs while connected.
+   (`DP-1`) when that output is present, and otherwise the output wayvnc
+   picks. The ultrawide disconnects when it sleeps deeply enough, which
+   removes its output, and wayvnc refuses to start on a missing output.
+   `wayvncctl output-set` or `output-cycle` switches outputs while connected.
 4. The Mac uses TigerVNC Viewer (Homebrew cask), which supports RSA-AES.
 
 The consent dialog keeps its rules. The request still comes from the active
@@ -79,7 +83,10 @@ request, not against a deliberately hostile process running as the operator.
   can be woken over SSH through Hyprland's DPMS dispatch. Verify this, and
   typing into Hyprlock through the view, before relying on it.
 - Only one output is visible at a time, and viewing quality depends on the
-  link; VNC sends only changed regions.
+  link; VNC sends only changed regions. When the captured output disappears,
+  wayvnc moves to another one and stays there after the first returns, so
+  switch back with `wayvncctl output-set DP-1` over SSH. Whether the view
+  still works with every display asleep and disconnected is not yet verified.
 - The service runs, and restarts, whenever the session is up. Its exposure is
   the loopback socket, guarded by the operator's password; there is no
   lockout after failed attempts.
