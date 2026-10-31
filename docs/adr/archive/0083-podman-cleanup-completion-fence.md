@@ -1,6 +1,6 @@
 # ADR-0083: Fence admission until Podman cleanup completion is known
 
-**Status:** Accepted; recovery and deployment require qualification
+**Status:** Superseded by [ADR-0105](../0105-offline-podman-store-reset.md) on 2026-10-31: the Podman store is reset offline while the runners are idle, so no cleanup mutates storage through a live API and no completion fence remains ([#916](https://git.alc.xyz/alcxyz/nix-config/issues/916)). Before that: Accepted; recovery and deployment require qualification
 **Date:** 2026-10-06
 **Applies to:** idle runner cleanup and aggregate admission
 **Amended:** 2026-10-17, exited containers outside pods follow capped per-ID deletion like images, newest first ([#719](https://git.alc.xyz/alcxyz/nix-config/issues/719)).
@@ -9,7 +9,7 @@
 **Amended:** 2026-10-25, standalone container candidates share one validated newest-first queue ([#833](https://git.alc.xyz/alcxyz/nix-config/issues/833)).
 **Amended:** 2026-10-29, cleanup starts and dispatches each destructive request only at or below the pressure guard's I/O resume threshold ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)).
 **Amended:** 2026-10-30, a timer recovers a settled Podman cleanup fence by stopping both APIs and running the unchanged recovery proof ([#914](https://git.alc.xyz/alcxyz/nix-config/issues/914)).
-**History:** [replaced text](archive/0083-podman-cleanup-completion-fence-history.md)
+**History:** [replaced text](0083-podman-cleanup-completion-fence-history.md)
 
 ## Context
 
@@ -213,8 +213,8 @@ may reclaim less per pass. A retained fence keeps later cleanup runs failed,
 including outside a cleanup window; optional recent-success health monitoring
 checks that current failure before accepting an earlier success.
 Per-host qualification remains required by
-[ADR-0072](0072-isolated-runner-docker.md) and
-[ADR-0074](0074-phased-podman-coexistence.md).
+[ADR-0072](../0072-isolated-runner-docker.md) and
+[ADR-0074](../0074-phased-podman-coexistence.md).
 
 Source contract: Podman 5.8.7
 [image removal handler](https://github.com/podman-container-tools/podman/blob/v5.8.7/pkg/api/handlers/compat/images_remove.go),

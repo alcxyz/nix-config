@@ -1,4 +1,4 @@
-**History of** [ADR-0083](../0083-podman-cleanup-completion-fence.md): text replaced on 2026-10-29 and 2026-10-30.
+**History of** [ADR-0083](0083-podman-cleanup-completion-fence.md): text replaced on 2026-10-29 and 2026-10-30.
 
 # ADR-0083: Fence admission until Podman cleanup completion is known
 

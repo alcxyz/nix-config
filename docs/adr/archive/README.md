@@ -52,7 +52,8 @@ archived number.
 | [ADR-0078](0078-agent-pr-review-guard.md) | Guard agent PR merges with automated cross-model reviews | Moved to a private repository on 2026-10-29 |
 | [ADR-0079](0079-agent-model-roles.md) | Name agent model roles instead of model versions | Moved to a private repository on 2026-10-29 |
 | [ADR-0081](0081-forgejo-mcp-for-agents.md) | Give agents a Forgejo MCP client and guard its merges | Moved to a private repository on 2026-10-29 |
-| [ADR-0083 history](0083-podman-cleanup-completion-fence-history.md) | Fence admission until Podman cleanup completion is known | History of [ADR-0083](../0083-podman-cleanup-completion-fence.md) |
+| [ADR-0083](0083-podman-cleanup-completion-fence.md) | Fence admission until Podman cleanup completion is known | Superseded by [ADR-0105](../0105-offline-podman-store-reset.md) on 2026-10-31 |
+| [ADR-0083 history](0083-podman-cleanup-completion-fence-history.md) | Fence admission until Podman cleanup completion is known | History of [ADR-0083](0083-podman-cleanup-completion-fence.md) |
 | [ADR-0084](0084-codex-mcp-credentials-in-file.md) | Keep Codex MCP OAuth credentials in a file, not the keyring | Moved to a private repository on 2026-10-29 |
 | [ADR-0085](0085-one-role-vocabulary.md) | One role vocabulary for agents and tools | Moved to a private repository on 2026-10-29 |
 | [ADR-0086 history](0086-released-tool-inputs-history.md) | Refresh released platform tools with tools-update | History of [ADR-0086](../0086-released-tool-inputs.md) |
@@ -61,6 +62,7 @@ archived number.
 | [ADR-0090 history](0090-install-bivrost-directly-history.md) | Install Bivrost directly, configured by the work flake | History of [ADR-0090](../0090-install-bivrost-directly.md) |
 | [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Moved to a private repository on 2026-10-29 |
 | [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Moved to a private repository on 2026-10-29 |
+| [ADR-0096 history](0096-bounded-first-timer-freshness-history.md) | Bound the first-timer freshness exception after reboot | History of [ADR-0096](../0096-bounded-first-timer-freshness.md) |
 | [ADR-0097 history](0097-ci-fast-runner-label-history.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | History of [ADR-0097](../0097-ci-fast-runner-label.md) |
 | [ADR-0099](0099-agent-github-app.md) | Agent sessions act on GitHub through a GitHub App | Moved to a private repository on 2026-10-29 |
 | [ADR-0101](0101-description-format-observation-trial.md) | Observe description formatting before deciding on enforcement | Moved to a private repository on 2026-10-29 |

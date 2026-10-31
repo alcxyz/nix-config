@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 **Date:** 2026-10-15
+**Amended:** 2026-10-31, the Podman store reset replaces the idle cleanup and its completion fence as the boot-timer consumer ([#916](https://git.alc.xyz/alcxyz/nix-config/issues/916))
+**History:** [replaced text](archive/0096-bounded-first-timer-freshness-history.md)
 **Applies to:** storage health recent-success checks and timer consumers
 
 ## Context
@@ -13,9 +15,9 @@ downtime. The previous missing-marker exception checked only an active timer
 with no last trigger, allowing an unscheduled or overdue timer indefinite grace.
 
 [ADR-0059](0059-file-selective-home-backup-and-storage-monitoring.md) requires
-bounded first-run exceptions without inventing success. Cleanup completion and
-admission remain governed by
-[ADR-0083](0083-podman-cleanup-completion-fence.md).
+bounded first-run exceptions without inventing success. Runner admission and
+the Podman store reset remain governed by
+[ADR-0105](0105-offline-podman-store-reset.md).
 
 ## Decision
 
@@ -39,14 +41,13 @@ wall-clock trigger from an earlier boot does not count as a current-boot trigger
 
 The generic cap defaults to the consumer's existing `maximumAgeSeconds`.
 Explicit caps for public boot timers cover their first schedule, maximum random
-delay and accuracy: cleanup 1320 seconds, namespace audit 180 seconds and orphan
+delay and accuracy: the Podman store reset 1320 seconds, namespace audit 180 seconds and orphan
 check 390 seconds. A timer restart or a later deadline cannot extend the boot
 cap. There is no exception after the first trigger, including during the first
 service execution. A successful check then restores ordinary freshness through
 the existing durable recorder.
 
-Current service failures and cleanup's retained completion-fence failure path
-continue to override success. Invalid markers or metadata, inactive timers,
+Current service failures continue to override success. Invalid markers or metadata, inactive timers,
 missed deadlines and expired caps cannot receive the exception. Consumers that
 do not opt in retain ordinary success-age checks. Private consumers and alert
 wiring remain in their owning repository.
@@ -67,12 +68,12 @@ wiring remain in their owning repository.
 Arbitrarily old but valid success can receive a bounded post-reboot exception,
 even if it was stale before shutdown. The timestamp alone cannot establish its
 freshness at shutdown. Each reboot can open a new bounded window. Reboot is
-never recorded as successful work, and completion/admission fencing is unchanged.
+never recorded as successful work, and runner admission is unchanged.
 
 Disabled or overdue timers cannot acquire grace merely by remaining loaded.
 The cap also bounds suspend and timer restarts. Timers with later first schedules
 must configure an appropriate cap explicitly. The real-systemd lifecycle test
 and deterministic matrix verify alert semantics; they do not qualify deployment
-or host-specific cleanup recovery.
+or host-specific store resets.
 
 Tracks [#565](https://git.alc.xyz/alcxyz/nix-config/issues/565).

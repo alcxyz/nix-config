@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-10
-**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)); 2026-10-30, an owned freeze also thaws after a settled interval while admission is drained ([#908](https://git.alc.xyz/alcxyz/nix-config/issues/908)); 2026-10-31, updated (the dedicated engines pull docker.io through a LAN mirror with upstream fallback, [#917](https://git.alc.xyz/alcxyz/nix-config/issues/917))
+**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)); 2026-10-30, an owned freeze also thaws after a settled interval while admission is drained ([#908](https://git.alc.xyz/alcxyz/nix-config/issues/908)); 2026-10-31, updated (the dedicated engines pull docker.io through a LAN mirror with upstream fallback, [#917](https://git.alc.xyz/alcxyz/nix-config/issues/917)); 2026-10-31, the offline Podman store reset replaces the cleanup completion fence, and Docker volumes leave the manual cleanup mode ([#916](https://git.alc.xyz/alcxyz/nix-config/issues/916))
 **History:** [replaced text](archive/0072-isolated-runner-docker-history.md)
 **Area:** Forgejo runners, Docker, systemd
 
@@ -25,10 +25,9 @@ references can retain more data. Separate `docker-container` BuildKit workers
 need their own GC settings and disposable-builder cleanup; daemon GC does not
 manage their cache volumes. Application Docker retention remains separate.
 
-A separate, manual exact-allowlist exception may remove disposable volumes
-through the dedicated Docker socket, under the lifecycle and completion fence
-contract in [ADR-0083](0083-podman-cleanup-completion-fence.md). It does not
-enable automatic volume sweeping or change retention defaults.
+Dedicated Docker volumes are never swept automatically. When one must go,
+an operator removes it with Docker's own CLI in a maintenance window with the
+runners stopped ([ADR-0105](0105-offline-podman-store-reset.md)).
 
 The option stays disabled by default. Fleet hosts explicitly opt in, and the
 runner-pool check verifies their shared settings. Changing daemon GC settings
@@ -119,20 +118,22 @@ low-pressure thaw alone.
 
 A held runner must also be announced, whatever held it (#894). A manual
 maintenance stop once kept xyz's runners off for about 41 hours, and a cleanup
-completion fence ([ADR-0083](0083-podman-cleanup-completion-fence.md)) once
-withheld a resume for about 80 minutes; neither told anyone. A read-only hold
+completion fence ([ADR-0083](archive/0083-podman-cleanup-completion-fence.md),
+since superseded) once withheld a resume for about 80 minutes; neither told anyone. A read-only hold
 monitor therefore checks every runner unit on each runner host every 5 minutes.
 A runner that has not been active for longer than a bound (30 minutes by
 default) is reported to Healthchecks as a failure naming the unit, how long it
 has been held, its systemd state, the guard markers present (drain, resume,
-disk, game skip, standby, cleanup fence, freeze or teardown) and the guard's
+disk, game or reset start skip, standby, freeze or teardown) and the guard's
 state. A unit stopped, disabled or masked outside the guard counts as held.
-A detected game, shown by a recent guard game record, and a standby runner its
-controller has not admitted ([ADR-0097](0097-ci-fast-runner-label.md)) are
+A detected game, shown by a recent guard game record, a standby runner its
+controller has not admitted ([ADR-0097](0097-ci-fast-runner-label.md)), and a
+runner that a running Podman store reset stopped and will start again
+([ADR-0105](0105-offline-podman-store-reset.md)) are
 intended holds: they are not reported and restart the count, but never excuse a
 disabled or masked unit. Otherwise each run pings success. The monitor only
-queries systemd and reads the guard's state, which systemd mounts read-only
-for it; it keeps hold start times in its own runtime directory, so a reboot
+queries systemd and reads the guard's state and the reset's list of the units
+it stopped, which systemd mounts read-only for it; it keeps hold start times in its own runtime directory, so a reboot
 restarts the count. It reuses the host storage monitor's private ping base
 with a `ci-runners-<host>` check, and an unreadable ping base fails the unit.
 The guard itself still logs one `admission_drain_prolonged` event for a drain
@@ -223,7 +224,7 @@ ownership. A skip that left a gate hold marker (disk, game or standby) passes
 ownership to that marker's owner. Any other skip is reported once and the
 start is requested again, with spacing that doubles up to a bound (5 minutes by
 default), only while a resume would be allowed: recovery and game conditions
-hold, no cleanup fence or owned freeze is present, and the unit is still
+hold, no owned freeze is present, and the unit is still
 loaded and enabled. Each retry is a new start that systemd's conditions and
 the start gate evaluate again, so no gate is bypassed. A start that ran and
 then stopped or failed, or that never reached its conditions, ends ownership

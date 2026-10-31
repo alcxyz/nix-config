@@ -27,7 +27,7 @@ manage their cache volumes. Application Docker retention remains separate.
 
 A separate, manual exact-allowlist exception may remove disposable volumes
 through the dedicated Docker socket, under the lifecycle and completion fence
-contract in [ADR-0083](../0083-podman-cleanup-completion-fence.md). It does not
+contract in [ADR-0083](0083-podman-cleanup-completion-fence.md). It does not
 enable automatic volume sweeping or change retention defaults.
 
 The option stays disabled by default. Fleet hosts explicitly opt in, and the
@@ -325,3 +325,29 @@ existing rule. An unreadable aggregate sample disables only the settled path.
 
 The header read `**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor
 reports runner admission held beyond a bound (#894)`.
+
+## Text replaced on 2026-10-31
+
+From the decision, before the offline Podman store reset ([ADR-0105](../0105-offline-podman-store-reset.md)) superseded the cleanup completion fence (#916):
+
+A separate, manual exact-allowlist exception may remove disposable volumes
+through the dedicated Docker socket, under the lifecycle and completion fence
+contract in [ADR-0083](0083-podman-cleanup-completion-fence.md). It does not
+enable automatic volume sweeping or change retention defaults.
+
+maintenance stop once kept xyz's runners off for about 41 hours, and a cleanup
+completion fence ([ADR-0083](0083-podman-cleanup-completion-fence.md)) once
+withheld a resume for about 80 minutes;
+
+disk, game skip, standby, cleanup fence, freeze or teardown) and the guard's
+state. A unit stopped, disabled or masked outside the guard counts as held.
+A detected game, shown by a recent guard game record, and a standby runner its
+controller has not admitted ([ADR-0097](../0097-ci-fast-runner-label.md)) are
+intended holds: they are not reported and restart the count, but never excuse a
+disabled or masked unit. Otherwise each run pings success. The monitor only
+queries systemd and reads the guard's state, which systemd mounts read-only
+for it;
+
+hold, no cleanup fence or owned freeze is present, and the unit is still
+
+The header read `**Amended:** 2026-10-28; 2026-10-29, a read-only hold monitor reports runner admission held beyond a bound ([#894](https://git.alc.xyz/alcxyz/nix-config/issues/894)); 2026-10-30, an owned freeze also thaws after a settled interval while admission is drained ([#908](https://git.alc.xyz/alcxyz/nix-config/issues/908)); 2026-10-31, updated (the dedicated engines pull docker.io through a LAN mirror with upstream fallback, [#917](https://git.alc.xyz/alcxyz/nix-config/issues/917))`.
