@@ -192,7 +192,7 @@ in rec {
 
     # Linux-only CLI additions
     linux = with pkgs; [
-      dgop
+      dux-gop
       nitch
       gitui
       ghostty

@@ -672,6 +672,9 @@ in {
       };
 
       enableSystemMonitoring = !compact;
+      # DMS v1.5.3 defaults this to nixpkgs' deprecated dgop alias. Releases
+      # from v1.6 drop the option, so remove this line when updating DMS.
+      dgop.package = pkgs.dux-gop;
       enableVPN = !compact;
       enableDynamicTheming = !compact;
       enableAudioWavelength = !compact;
