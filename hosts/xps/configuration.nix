@@ -21,8 +21,6 @@ in {
     "${configDir}/modules/nixos/profiles/nixbox-session/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
     "${configDir}/modules/nixos/services/steam-headless-remote/default.nix"
-    # The agent PR review guard as a managed Codex hook.
-    inputs.pandora.nixosModules.default
     inputs.nix-secrets.nixosModules.xpsPrivate
   ];
 

@@ -45,6 +45,8 @@
 in {
   inherit (hyprlandContract) assertions;
 
+  services.restricted-codex-nightly.enable = true;
+
   # Work Azure sign-in opens in the dedicated Brave Origin profile. The
   # profiles were copied from Brave with new directory names.
   programs.work.bivrost.authenticationBrowser = {

@@ -1268,14 +1268,15 @@
         ],
         "nixpkgs": [
           "nixpkgs"
-        ]
+        ],
+        "restricted-codex-nixpkgs": "restricted-codex-nixpkgs"
       },
       "locked": {
-        "lastModified": 1793576095,
-        "narHash": "sha256-64mnWr4J8nMPnERPWw4CHAterbTDeeHlm1jpef08icw=",
+        "lastModified": 1793604215,
+        "narHash": "sha256-KitqC5D4iSjk9eN+IGyHW3iV4QNTF3N+yMrf0PIWJlw=",
         "ref": "dev",
-        "rev": "7c4258e2ccc02e28689167658ecaa4daa8186673",
-        "revCount": 45,
+        "rev": "9c9e28426ab67b053cb1b552cf40142f8e621238",
+        "revCount": 46,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
@@ -1492,6 +1493,22 @@
         "ref": "main",
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/reportcraft.git"
+      }
+    },
+    "restricted-codex-nixpkgs": {
+      "locked": {
+        "lastModified": 1792502884,
+        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
+        "type": "github"
       }
     },
     "root": {

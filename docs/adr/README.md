@@ -96,7 +96,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0100](0100-instance-wide-podman-runners.md) | Register the Podman runners instance-wide | Accepted | Forgejo runners, xyz, xev, nex, nux |
 | [ADR-0102](0102-loopback-remote-view-of-xyz.md) | View and drive xyz's live desktop through a loopback wayvnc | Accepted | xyz, mac, remote access, Home Manager |
 | [ADR-0103](0103-ci-nix-cache-proxy.md) | Give CI jobs a read-only pull-through cache of the upstream Nix caches | Accepted | Forgejo runners, xyz, xev, nex, nux |
-| [ADR-0104](0104-ai-stack-on-system-nixpkgs.md) | Build nix-packages for the hosts with the hosts' own nixpkgs | Accepted | nix-packages, T3 Code, AI stack profile |
+| [ADR-0104](0104-ai-stack-on-system-nixpkgs.md) | Build nix-packages for the hosts with the hosts' own nixpkgs | Accepted | nix-packages, T3 Code, AI stack profile, frozen build toolchain |
 | [ADR-0105](0105-offline-podman-store-reset.md) | Reset the Podman CI store offline while the runners are idle | Accepted | Forgejo runners, Podman, xyz, xev, nex, nux |
 | [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) | Hold the CI runners while a game runs or the disk is low | Accepted | Forgejo runners, xyz, xev, nex, nux, games |
 

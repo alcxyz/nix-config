@@ -1,7 +1,8 @@
 # ADR-0104: Build nix-packages for the hosts with the hosts' own nixpkgs
 
 **Status:** Accepted
-**Date:** 2026-10-30
+**Date:** 2026-11-02
+**History:** [Previous decision text](archive/0104-ai-stack-on-system-nixpkgs-history.md)
 **Applies to:** `flake.nix` (`nix-packages` input), `modules/home-manager/services/t3code/` (`t3code-auto-update`); amends [ADR-0077](0077-ai-stack-profile-outside-home-manager.md)
 
 ## Context
@@ -39,8 +40,12 @@ with nix-packages' own lock.
 - Owned flakes' own locks (nix-packages, pandora, nix-secrets and the other
   owned inputs) get no scheduled bump. Every owned input nix-config consumes
   follows its `nixpkgs`, except the `bivrost` and `work` inputs, which follow
-  the deliberately pinned `nixpkgs-azure-cli`. So their own locks only govern
-  their standalone CI and dev shells, and move by hand when those need it.
+  the deliberately pinned `nixpkgs-azure-cli`. A source-built provider helper
+  also uses an independent, commit-pinned build toolchain, including its matching
+  qualification control. This build-only exception does not apply to the stock
+  authentication CLI or the AI stack bundle. Apart from these deliberate
+  exceptions, owned locks govern only standalone CI and dev shells, and move
+  by hand when those need it.
 
 ## Alternatives Considered
 
@@ -82,3 +87,8 @@ nix-packages' own `nixpkgs-unstable` and `nixpkgs` locks no longer reach any
 host. The updater therefore needs a NixOS host built from the flake; the macOS
 host does not use the profile and installs T3 Code as a Homebrew cask
 (ADR-0077).
+
+The provider helper's frozen toolchain changes deliberately. Routine host package
+set or unrelated input updates do not rebuild it; its source, build recipe,
+platform or explicit toolchain pin changes do. This exception does not change
+the AI stack bundle's system-package compatibility contract.
