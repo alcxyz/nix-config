@@ -82,6 +82,10 @@ in {
       packages = [cfg.package] ++ cfg.providerPackages;
     };
 
+    # Project context stays below its own directory, outside sibling runtime
+    # and provider state. This is a workspace boundary, not a filesystem sandbox.
+    systemd.tmpfiles.rules = ["d ${account.home}/workspace 0700 ${cfg.user} ${cfg.user} -"];
+
     # Order denials around extraConfig grants. Separately installed policy
     # files remain part of the consuming host's deployment qualification.
     security.sudo.extraConfig = lib.mkOrder 2000 sudoDenial;
