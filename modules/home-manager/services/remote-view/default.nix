@@ -5,23 +5,19 @@
   ...
 }: let
   cfg = config.services.remoteView;
+  # Only the user can open this directory, so only their processes (and an
+  # SSH session forwarding to the socket) reach the server; wayvnc's own
+  # authentication is off (ADR-0102).
   stateDir = "${config.xdg.stateHome}/wayvnc";
-  rsaKey = "${stateDir}/rsa_key.pem";
+  socket = "${stateDir}/vnc.sock";
 
-  # The RSA-AES key identifies this server to the viewer (trust on first use).
-  # It is generated on the host and never leaves it.
-  ensureKey = pkgs.writeShellScript "remote-view-ensure-key" ''
+  prepare = pkgs.writeShellScript "remote-view-prepare" ''
     set -eu
-    umask 077
     ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg stateDir}
-    if [ ! -s ${lib.escapeShellArg rsaKey} ]; then
-      # ssh-keygen refuses to overwrite an existing (even empty) file without
-      # a prompt, and systemd gives it no stdin.
-      ${pkgs.coreutils}/bin/rm -f ${lib.escapeShellArg rsaKey}
-      ${pkgs.openssh}/bin/ssh-keygen -q -m pem -t rsa -b 3072 -N "" \
-        -f ${lib.escapeShellArg rsaKey}
-      ${pkgs.coreutils}/bin/rm -f ${lib.escapeShellArg "${rsaKey}.pub"}
-    fi
+    ${pkgs.coreutils}/bin/chmod 700 ${lib.escapeShellArg stateDir}
+    # A socket left by an unclean exit would stop wayvnc from binding; the
+    # RSA-AES key is no longer used.
+    ${pkgs.coreutils}/bin/rm -f ${lib.escapeShellArg socket} ${lib.escapeShellArg "${stateDir}/rsa_key.pem"}
   '';
 
   wayvnc = lib.getExe config.services.wayvnc.package;
@@ -34,11 +30,11 @@
       if ${lib.getExe pkgs.wlr-randr} --json \
         | ${lib.getExe pkgs.jq} -e --arg output ${lib.escapeShellArg cfg.output} \
           'any(.[]; .name == $output and .enabled)' >/dev/null; then
-        exec ${wayvnc} --output=${lib.escapeShellArg cfg.output}
+        exec ${wayvnc} --unix-socket --output=${lib.escapeShellArg cfg.output}
       fi
     ''
     + ''
-      exec ${wayvnc}
+      exec ${wayvnc} --unix-socket
     ''
   );
 
@@ -61,7 +57,7 @@
       known_outputs=${lib.escapeShellArg (lib.concatStringsSep " " (lib.unique (cfg.physicalOutputs ++ lib.optional (cfg.output != null) cfg.output)))}
 
       usage() {
-        echo "usage: remote-desk on|off|status" >&2
+        echo "usage: remote-desk on|off|status|socket" >&2
         exit 2
       }
 
@@ -69,6 +65,13 @@
         echo "remote-desk: $*" >&2
         exit 1
       }
+
+      # Where the VNC server listens, for clients that tunnel to it; needs no
+      # compositor.
+      if [ "''${1:-}" = socket ]; then
+        echo ${lib.escapeShellArg socket}
+        exit 0
+      fi
 
       # SSH sessions do not inherit the compositor's environment.
       if [ -z "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || [ -z "''${WAYLAND_DISPLAY:-}" ]; then
@@ -164,21 +167,13 @@
   };
 in {
   # ADR-0102: view and drive the live Wayland desktop from another machine.
-  # The server listens on loopback only and is reached through SSH; every
-  # session authenticates with the user's own password through PAM. Within
-  # the same-user limit this stops a local process from connecting by
-  # accident, not a deliberate one, which can already use the compositor's
-  # capture and virtual-input protocols directly.
-  # The host must define the matching PAM service:
-  # `security.pam.services.wayvnc = {};`.
+  # The server listens on a Unix socket in a directory only the user can
+  # open and is reached through an SSH forward to it, so the SSH key is the
+  # only credential; wayvnc's own authentication is off. A process of the
+  # same user can connect, as it can already use the compositor's capture
+  # and virtual-input protocols directly.
   options.services.remoteView = {
     enable = lib.mkEnableOption "a loopback-only wayvnc view of the live desktop";
-
-    port = lib.mkOption {
-      type = lib.types.port;
-      default = 5900;
-      description = "Loopback port wayvnc listens on.";
-    };
 
     output = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -222,18 +217,18 @@ in {
     services.wayvnc = {
       enable = true;
       autoStart = true;
+      # With --unix-socket the address is the socket's path; the module
+      # requires a port, which wayvnc then ignores.
       settings = {
-        address = "127.0.0.1";
-        inherit (cfg) port;
-        enable_auth = true;
-        enable_pam = true;
-        rsa_private_key_file = rsaKey;
+        address = socket;
+        port = 5900;
+        enable_auth = false;
       };
     };
 
     systemd.user.services.wayvnc = {
       Service = {
-        ExecStartPre = ["${ensureKey}"];
+        ExecStartPre = ["${prepare}"];
         ExecStart = lib.mkForce ["${start}"];
         # wayvnc exits cleanly when the compositor goes away; come back with
         # the next session instead of staying stopped.

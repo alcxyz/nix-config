@@ -311,7 +311,7 @@ in {
       "freelens"
       "t3-code@nightly"
       "thunderbird"
-      # Viewer for xyz's remote view; supports wayvnc's RSA-AES (ADR-0102).
+      # Viewer for xyz's remote view, reached through desk (ADR-0102).
       "tigervnc-viewer"
       "abue-ammar/tinycast/tinycast"
       "upscayl"

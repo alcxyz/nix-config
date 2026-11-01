@@ -1,12 +1,8 @@
 # ADR-0102: View and drive xyz's live desktop through a loopback wayvnc
 
 **Status:** Accepted
-**Date:** 2026-10-26
-**Amended:** 2026-10-31, start on another output when the preferred one is missing.
-**Amended:** 2026-10-31, `remote-desk` moves the desktop to a virtual output sized for the Mac.
-**Amended:** 2026-10-31, the virtual output follows the viewer's window size.
-**Amended:** 2026-10-31, the Mac's `desk xyz` runs a session in one step.
-**Amended:** 2026-11-01, `desk xyz` tries a private `xyz-wan` route before NetBird.
+**Date:** 2026-10-26, last changed 2026-11-01 (the SSH key is the only credential: wayvnc on a private Unix socket without VNC authentication)
+**History:** [ADR-0102 history](archive/0102-loopback-remote-view-of-xyz-history.md)
 **Applies to:** `modules/home-manager/services/remote-view/`, `users/alc/linux/xyz.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`, `modules/shared/pkgsets.nix` (`desk`), `inventory.nix` (`xyz-lan`)
 
 ## Context
@@ -19,38 +15,42 @@ anywhere over NetBird, but none of these can be answered over SSH, and the
 existing ways in (Synergy, ADR-0054; KDE Connect) send input without showing
 the screen and only work nearby.
 
-Agents on xyz run as the operator's own Unix user. A remote view should
-therefore not let a local process drive the desktop merely because it can
-reach a local socket. That is an accident guard, not a boundary: under the
-same-user limit that the agent decisions accept (recorded in a private
-repository), a process running as the operator can already capture the
-screen and inject input through the compositor's own protocols, read the
-server's key, or stop the server and listen in its place.
+Agents on xyz run as the operator's own Unix user. Under the same-user
+limit that the agent decisions accept (recorded in a private repository), a
+process running as the operator can already capture the screen and inject
+input through the compositor's own protocols, or stop the server and listen
+in its place, so no setting of the remote view is a boundary against such a
+process. Other users and system services on xyz, such as CI jobs, are a
+different matter: they must not reach the view at all.
 
 ## Decision
 
 Run wayvnc in the Hyprland session through a small Home Manager module,
 `services.remoteView`:
 
-1. wayvnc listens on `127.0.0.1` only. The Mac reaches it through an SSH
-   tunnel over NetBird (`ssh -N -L 5900:127.0.0.1:5900 xyz`), so no new port
-   is exposed on any network and access rides on the existing SSH keys.
-2. Every VNC session authenticates with the operator's own password through
-   PAM (`security.pam.services.wayvnc`) and is encrypted with RSA-AES. The
-   RSA key is generated on xyz at first start and never leaves it; the viewer
-   pins it on first use.
+1. wayvnc listens on a Unix socket, `~/.local/state/wayvnc/vnc.sock`, in a
+   directory only the operator can open (mode 700, set at every start, which
+   also removes a stale socket). No TCP port is opened, so other users and
+   system services on xyz cannot connect, and nothing is exposed on any
+   network. `remote-desk socket` prints the path.
+2. The SSH key is the only credential. The Mac reaches the socket through an
+   SSH forward to it, and wayvnc's own authentication is off, so the viewer
+   asks for no password and pins no server key. SSH encrypts the session
+   between the machines.
 3. It starts with the graphical session and captures the primary ultrawide
    (`DP-1`) when that output is present, and otherwise the output wayvnc
    picks. The ultrawide disconnects when it sleeps deeply enough, which
    removes its output, and wayvnc refuses to start on a missing output.
    `wayvncctl output-set` or `output-cycle` switches outputs while connected.
-4. The Mac uses TigerVNC Viewer (Homebrew cask), which supports RSA-AES.
-   `desk xyz` (nix-packages) runs a session in one step: it opens the tunnel
-   through `xyz-lan` (the LAN address from the inventory), then `xyz-wan`
-   where the operator's private SSH configuration defines it (nix-secrets
-   ADR-0028), and falls back to `xyz` over NetBird, runs `remote-desk on`, starts the viewer and, when
-   the viewer exits, runs `remote-desk off` and closes the tunnel.
-   `remote-desk` stays the only place that changes the desktop.
+4. The Mac uses TigerVNC Viewer (Homebrew cask). `desk xyz` (nix-packages)
+   runs a session in one step: it opens the SSH connection through `xyz-lan`
+   (the LAN address from the inventory), then `xyz-wan` where the operator's
+   private SSH configuration defines it (nix-secrets ADR-0028), and falls
+   back to `xyz` over NetBird. It then asks `remote-desk socket` for the
+   socket, forwards `127.0.0.1:5900` on the Mac to it, runs `remote-desk on`,
+   starts the viewer and, when the viewer exits, runs `remote-desk off` and
+   closes the tunnel. `remote-desk` stays the only place that changes the
+   desktop.
 5. The 5120x1440 ultrawide is too wide to work on from the Mac's screen, so
    `remote-desk on` (run over SSH) creates a virtual output named
    `HEADLESS-REMOTE`, starting in `deskMode` (2056x1262 on xyz, TigerVNC's
@@ -83,15 +83,20 @@ request, not against a deliberately hostile process running as the operator.
   desktop-control service to every NetBird peer and adds a second network
   policy to maintain. The SSH tunnel reuses the access control that already
   exists.
-- **No VNC authentication on loopback.** Any process running as the operator,
-  agents included, could connect and drive the desktop by mistake. Rejected.
+- **The operator's password through PAM, with RSA-AES, on a loopback TCP
+  port** (the first form of this decision). It kept agents from connecting
+  by accident, but asked for the password at every session and still left
+  the port open to every user and service on xyz. Replaced on the operator's
+  decision (2026-11-01) by the SSH key as the only credential.
+- **No VNC authentication on a loopback TCP port.** Every user and system
+  service on xyz, CI jobs included, could connect and drive the desktop.
+  Rejected; the private socket closes that.
 - **A separate password stored for wayvnc, or legacy DES for macOS Screen
   Sharing.** A stored password is readable by every process running as the
-  operator, so it would not even stop an accidental connection; DES also
-  provides no encryption and truncates the password. PAM reuses the
-  operator's existing password, which agents are not given.
-- **wayvnc under a dedicated user.** It would keep the key and the service out
-  of the operator's reach, but needs cross-user access to the Wayland socket,
+  operator, so it adds nothing over the socket's permissions; DES also
+  provides no encryption and truncates the password.
+- **wayvnc under a dedicated user.** It would keep the service out of the
+  operator's reach, but needs cross-user access to the Wayland socket,
   and same-user processes would still have the compositor's own capture and
   input protocols. Not worth it while the same-user limit stands.
 - **A fixed mode only.** The viewer's picture area changes with its window
@@ -138,9 +143,13 @@ request, not against a deliberately hostile process running as the operator.
   switch back with `wayvncctl output-set DP-1` over SSH. Whether the view
   still works with every display asleep and disconnected is not yet verified.
 - The service runs, and restarts, whenever the session is up. Its exposure is
-  the loopback socket, guarded by the operator's password; there is no
-  lockout after failed attempts.
-- A process running as the operator could stop the server and impersonate it
-  with its key to capture what the operator types through the view, including
-  that password. This is accepted under the same-user limit, as for the
-  consent dialog, which such a process could imitate as well.
+  the private socket: any process running as the operator on xyz, agents
+  included, can connect without a password and drive the desktop. This is
+  accepted under the same-user limit, as for the consent dialog, which such a
+  process could imitate as well; approving the dialog still takes the
+  operator's password, typed through the view.
+- On the Mac, the forward listens on `127.0.0.1:5900` for the length of a
+  session, and any local process there can connect to it without a password.
+  The Mac is single-user.
+- A process running as the operator could stop the server and listen in its
+  place to capture what the operator types through the view.
