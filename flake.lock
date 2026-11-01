@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1793452254,
-        "narHash": "sha256-caLTUWpW7pfhIOJnd7TkfnQbuH6ERZqJ1x6EsHKK0S0=",
+        "lastModified": 1793526140,
+        "narHash": "sha256-RAwIwU/JrLrPa5hu4TvK1TENcsuWJ13WZgEa5eTcnIM=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "cdaef74f0d9043e02f5a6a8790fcd0467fce129d",
+        "rev": "473b838bb14a368acb43c5599846a992221ac08d",
         "type": "github"
       },
       "original": {
@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793475044,
-        "narHash": "sha256-dIu5rb1qNurW73ds/jN5660YHQeThCQfJ3ClbumoFQM=",
+        "lastModified": 1793503866,
+        "narHash": "sha256-YPOUIuAPSguz7jm51Nct5yDTHi6HoY90jZvFjY53WdE=",
         "ref": "dev",
-        "rev": "5e471f21566594547662b1bb4d5e59bcb62cd777",
-        "revCount": 910,
+        "rev": "4f6dcd091ba6f1a07f1b5e0e938a67aa0a6c8683",
+        "revCount": 913,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1271,11 +1271,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793445447,
-        "narHash": "sha256-KHxaoeN7eJTuURmKfPY04DKoopBhIN673TmLpYX5L+E=",
+        "lastModified": 1793529220,
+        "narHash": "sha256-etmWk8Kwyd8C+8bRJ8uQ9wuy21FtmjL6Bf6262LVXhY=",
         "ref": "dev",
-        "rev": "4e79ab1488795ec4c73de126b309c52950b17c9c",
-        "revCount": 34,
+        "rev": "4fd69a9e2819997a92eb0cd966389cf8f49f54d2",
+        "revCount": 35,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
