@@ -70,7 +70,7 @@
           "$dataset"
       fi
 
-      if ! findmnt -rn --target "$mountpoint" >/dev/null 2>&1; then
+      if ! findmnt -rn --mountpoint "$mountpoint" >/dev/null 2>&1; then
         zfs mount "$dataset"
       fi
       ${repositoryGuard}

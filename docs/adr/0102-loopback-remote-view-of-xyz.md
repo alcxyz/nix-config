@@ -78,7 +78,7 @@ request, not against a deliberately hostile process running as the operator.
 - **RustDesk.** On Hyprland it needs the RemoteDesktop portal for input, which
   xdg-desktop-portal-hyprland does not provide, and portal sessions are
   approved on the local screen, which is exactly what is unavailable remotely.
-  ADR-0012 already noted its weaker Wayland support.
+  [historical ADR-0012](archive/0012-remote-dev-headless-wayland-over-vm.md) already noted its weaker Wayland support.
 - **wayvnc on the NetBird interface.** Simpler to connect, but it exposes a
   desktop-control service to every NetBird peer and adds a second network
   policy to maintain. The SSH tunnel reuses the access control that already
@@ -106,7 +106,7 @@ request, not against a deliberately hostile process running as the operator.
 - **Keeping the physical outputs on and moving chosen workspaces.** Dialogs
   and new windows could open on an output the viewer cannot see, and the
   pointer could leave the view.
-- **A second, headless session (ADR-0012 style).** It cannot show the dialogs
+- **A second, headless session ([historical ADR-0012](archive/0012-remote-dev-headless-wayland-over-vm.md) style).** It cannot show the dialogs
   and lock screen of the live session, which is the point.
 
 ## Consequences

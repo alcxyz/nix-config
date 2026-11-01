@@ -1,4 +1,4 @@
-**History of** [ADR-0030](../0030-declarative-shared-user-policy-configs.md): text replaced on 2026-10-29.
+**History of** [ADR-0030](../0030-declarative-shared-user-policy-configs.md): text replaced on 2026-10-29 and 2026-11-02.
 
 # ADR-0030: Declarative deployment for shared user policy configs
 
@@ -153,3 +153,10 @@ appeared more than once, which is enough to justify an explicit rule.
 - Secret handling stays separate from policy handling.
 - Future cross-tool policy configs have a reusable standard instead of ad-hoc
   bootstrap behavior.
+
+
+## Instruction deployment wording replaced on 2026-11-02
+
+- Home Manager links them to `~/AGENTS.md` and `~/.claude/CLAUDE.md` from a
+  checkout of that repository, so they stay live-editable, with
+  `~/.codex/AGENTS.md` linked to the canonical `~/AGENTS.md`

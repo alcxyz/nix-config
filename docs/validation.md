@@ -40,7 +40,9 @@ queue and producer head immediately before moving the nix-packages `promoted`
 branch with a lease. `just lock-packages` moves the configuration lock to
 `promoted` when a deployment needs it
 ([ADR-0080](adr/0080-promoted-package-ref.md)). A package version string or a source-text match is insufficient: the
-consumer can override dependency inputs.
+consumer can override dependency inputs. Native profile consumers must also
+build their selected AI stack aggregate, since individually valid components
+can still fail during assembly.
 
 [ADR-0067](adr/0067-explicit-consumer-and-platform-validation.md) defines the
 contract. [Issue #274](https://git.alc.xyz/alcxyz/nix-config/issues/274) records

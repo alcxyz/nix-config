@@ -23,7 +23,7 @@ with lib; let
   # updater replaces without Home Manager activation (ADR-0077).
   profileMode = cfg.autoUpdate.enable;
   aiStackProfile = "${config.home.homeDirectory}/.local/state/nix/profiles/ai-stack";
-  seedBundle = pkgs."ai-stack-${managedChannel}";
+  seedBundle = cfg.aiStackPackage;
   t3Executable =
     if profileMode
     then "${aiStackProfile}/bin/t3"
@@ -604,6 +604,14 @@ in {
       default = pkgs.t3code;
       defaultText = literalExpression "pkgs.t3code";
       description = "T3 Code package to run and protect from unintended downgrades.";
+    };
+
+    aiStackPackage = mkOption {
+      type = types.package;
+      readOnly = true;
+      default = pkgs."ai-stack-${managedChannel}";
+      defaultText = literalExpression ''pkgs."ai-stack-upstream"'';
+      description = "The aggregate used to seed the managed AI stack profile, also exposed for consumer validation.";
     };
 
     port = mkOption {

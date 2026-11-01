@@ -68,6 +68,10 @@ if [[ "$1" == "eval" ]]; then
     *"#codex-app-server.version"*) printf '0.153.4' ;;
     *"#t3code.version"*) printf '0.0.38' ;;
     *"#homeConfigurations"*)
+      bundle='[{"homeName":"alc-first","drvPath":"/nix/store/consumer-ai-stack-upstream.drv","stagedDrvPaths":[]}]'
+      if [[ "${MOCK_NO_PROFILE:-0}" == "1" ]]; then
+        bundle='[]'
+      fi
       codex_cli='[{"homeName":"alc-first","drvPath":"/nix/store/consumer-codex-cli.drv","stagedDrvPaths":[]}]'
       if [[ "${MOCK_MISSING_PACKAGE:-}" == "codex-cli" ]]; then
         codex_cli='[]'
@@ -79,7 +83,8 @@ if [[ "$1" == "eval" ]]; then
         ],
         \"codex-cli\": ${codex_cli},
         \"codex-app-server\": [{\"homeName\":\"alc-first\",\"drvPath\":\"/nix/store/consumer-codex-app-server.drv\",\"stagedDrvPaths\":[]}],
-        \"t3code\": [{\"homeName\":\"alc-first\",\"drvPath\":\"/nix/store/consumer-t3code.drv\",\"stagedDrvPaths\":[\"/nix/store/consumer-t3code-pnpm-deps.drv\",\"/nix/store/consumer-t3code-resource-monitor.drv\"]}]
+        \"t3code\": [{\"homeName\":\"alc-first\",\"drvPath\":\"/nix/store/consumer-t3code.drv\",\"stagedDrvPaths\":[\"/nix/store/consumer-t3code-pnpm-deps.drv\",\"/nix/store/consumer-t3code-resource-monitor.drv\"]}],
+        \"ai-stack-upstream\": ${bundle}
       }"
       ;;
     *)
@@ -91,6 +96,10 @@ if [[ "$1" == "eval" ]]; then
 fi
 
 if [[ "$1" == "build" ]]; then
+  if [[ "$*" == *"/nix/store/consumer-ai-stack-upstream.drv^*"* && "${MOCK_BUNDLE_FAIL:-0}" == "1" ]]; then
+    echo "synthetic aggregate assembly failure" >&2
+    exit 43
+  fi
   if [[ "$*" == *"#checks.x86_64-linux.configuration-evaluation"* && "${MOCK_CONSUMER_EVAL_FAIL:-0}" == "1" ]]; then
     echo "synthetic consumer-only evaluation failure" >&2
     exit 42
@@ -196,6 +205,28 @@ rg --fixed-strings --quiet 'No native Home Manager configuration selects codex-c
 assert_log_excludes 'nix build --no-update-lock-file /nix/store/consumer-claude-code.drv^* --no-link'
 
 : >"$mock_log"
+if ! run_verifier "${candidate_dir}/flake.lock" MOCK_NO_PROFILE=1 >"${test_root}/no-profile.out" 2>&1; then
+  cat "${test_root}/no-profile.out" >&2
+  echo "Verifier rejected components when no native consumer uses an aggregate" >&2
+  exit 1
+fi
+assert_log_excludes 'nix build --no-update-lock-file /nix/store/consumer-ai-stack-upstream.drv^* --no-link'
+assert_log_contains 'nix build --no-update-lock-file /nix/store/consumer-t3code.drv^* --no-link'
+
+: >"$mock_log"
+if run_verifier "${candidate_dir}/flake.lock" MOCK_BUNDLE_FAIL=1 >"${test_root}/bundle-failure.out" 2>&1; then
+  echo "Verifier accepted passing components with a failing consumer aggregate" >&2
+  exit 1
+fi
+for package in claude-code codex-cli codex-app-server t3code ai-stack-upstream; do
+  assert_log_contains "nix build --no-update-lock-file /nix/store/consumer-${package}.drv^* --no-link"
+done
+if rg --fixed-strings --quiet 'Verified producer/consumer revisions' "${test_root}/bundle-failure.out"; then
+  echo "Verifier reported success after aggregate assembly failed" >&2
+  exit 1
+fi
+
+: >"$mock_log"
 if ! run_verifier "${candidate_dir}/flake.lock" >"${test_root}/success.out" 2>&1; then
   cat "${test_root}/success.out" >&2
   echo "Verifier rejected the complete producer/consumer fixture" >&2
@@ -203,7 +234,7 @@ if ! run_verifier "${candidate_dir}/flake.lock" >"${test_root}/success.out" 2>&1
 fi
 assert_log_contains "nix flake metadata --json --no-update-lock-file path:${candidate_dir}"
 assert_log_contains 'nix eval --no-update-lock-file --impure --json path:/nix/store/consumer-source#homeConfigurations'
-for package in claude-code codex-cli codex-app-server t3code; do
+for package in claude-code codex-cli codex-app-server t3code ai-stack-upstream; do
   assert_log_contains "nix build --no-update-lock-file /nix/store/consumer-${package}.drv^* --no-link"
 done
 assert_log_contains 'nix build --no-update-lock-file /nix/store/consumer-t3code-pnpm-deps.drv^* --no-link'

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Amended:** 2026-10-29
+**Amended:** 2026-10-29, updated 2026-11-02 (checkout-independent instructions)
 **History:** [replaced text](archive/0030-declarative-shared-user-policy-configs-history.md)
 **Applies to:** `nix-config`, `nix-secrets`, home-manager managed user config surfaces
 
@@ -122,9 +122,10 @@ the proper secret-management flow.
 
 - canonical source files live in the private repository that holds the agent
   stack
-- Home Manager links them to `~/AGENTS.md` and `~/.claude/CLAUDE.md` from a
-  checkout of that repository, so they stay live-editable, with
-  `~/.codex/AGENTS.md` linked to the canonical `~/AGENTS.md`
+- Home Manager links the locked source snapshot to `~/AGENTS.md` and
+  `~/.claude/CLAUDE.md`, with `~/.codex/AGENTS.md` linked to the canonical
+  `~/AGENTS.md`. Fresh profiles need no checkout for these instruction files;
+  rule updates require a consumer lock refresh and Home Manager activation.
 - Claude imports the canonical file at startup; no mirrored copy or sync tool
   is needed ([ADR-0022](archive/0022-universal-agent-instructions.md), moved
   to a private repository)

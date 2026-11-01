@@ -68,3 +68,6 @@ python3 flake/checks/test-forgejo-runner-hold.py \
   modules/nixos/services/game-signal/game-signal.sh
 python3 flake/checks/test-forgejo-podman-store-reset.py \
   modules/nixos/services/forgejo-actions-runner/podman-store-reset.sh
+
+python3 scripts/checks/test-storage-mount-contracts.py
+python3 scripts/checks/test-wolf-coop-manager.py

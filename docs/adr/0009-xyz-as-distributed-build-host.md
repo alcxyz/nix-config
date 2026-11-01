@@ -1,7 +1,7 @@
 # ADR-0009: Distributed build roles and explicit client opt-in
 
 **Status:** Accepted, redacted
-**Date:** 2026-04-18
+**Date:** 2026-04-18, updated 2026-11-02 (deployment contract, per [checklist](https://git.alc.xyz/alcxyz/nix-config/issues/753))
 **Applies to:** distributed-build client interface, build-capable hosts, deploy inventory, Darwin builder support
 
 ## Context
@@ -33,6 +33,24 @@ remain in `nix-packages`.
 The Darwin Linux builder remains a cold-standby coordination path, outside normal
 fleet build capacity. Expanding its supported Linux architectures requires
 separate validation.
+
+### Deployment execution
+
+The [inventory wrapper](../../packages/nix-deploy/default.nix) configures the
+reusable nixfleet implementation. Explicit targets support system-only,
+Home Manager-only and combined activation. Combined activation builds the
+changed system and Home Manager targets before activating either, then
+activates the system before Home Manager; failure stops that host's remaining
+steps. Fleet deployment retains inventory exclusions and the independent
+serial readiness groups recorded in
+[ADR-0036](0036-host-inventory-source-of-truth.md) and
+[ADR-0017](0017-k3s-cluster-topology.md). Failed prerequisites block dependent
+steps, while independent fleet branches can continue; the final result records
+failures rather than treating a partial fleet rollout as success.
+
+`boot` activation updates the next boot generation and does not claim that the
+new system is running. Build/evaluation success, activation, readiness and a
+later reboot are distinct outcomes.
 
 ## Alternatives Considered
 

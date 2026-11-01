@@ -988,6 +988,18 @@ in {
     python3 scripts/checks/check-wolf-shell-templates.py
   '';
 
+  storage-mount-contract = mkRepoCheck "storage-mount-contract" [pkgs.python3 pkgs.bash] ''
+    python3 scripts/checks/test-storage-mount-contracts.py
+  '';
+
+  home-recipe-target = mkRepoCheck "home-recipe-target" [pkgs.python3 pkgs.just pkgs.bash] ''
+    python3 scripts/checks/test-home-recipe-target.py
+  '';
+
+  wolf-coop-behavior = mkRepoCheck "wolf-coop-behavior" [pkgs.python3] ''
+    python3 scripts/checks/test-wolf-coop-manager.py
+  '';
+
   wolf-python-source-syntax = mkRepoCheck "wolf-python-source-syntax" [pkgs.python3] ''
     PYTHONPYCACHEPREFIX="$TMPDIR/pycache" python3 -m py_compile modules/nixos/services/wolf-streaming/*.py
   '';

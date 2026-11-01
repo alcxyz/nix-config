@@ -1,7 +1,7 @@
 # ADR-0017: k3s cluster topology for the current homelab phase
 
 **Status:** Accepted
-**Date:** 2026-04-26
+**Date:** 2026-04-26, updated 2026-11-02 (deployment contract, per [checklist](https://git.alc.xyz/alcxyz/nix-config/issues/753))
 **Amended:** 2026-10-28
 **History:** [replaced text](archive/0017-k3s-cluster-topology-history.md)
 **Applies to:** stable k3s servers, workstation agents, independent network services
@@ -42,6 +42,22 @@ name resolution. Admit a replacement server only after it is healthy and
 participating in consensus; remove the replaced member through the supported
 membership workflow. Verify cluster API availability, workload scheduling, and
 external network services before declaring the transition complete.
+
+### Deployment sequencing
+
+The [deployment inventory](../../packages/nix-deploy/default.nix) puts the k3s
+servers in a serial system-activation group. Before a member is activated,
+its peers must pass readiness. After activation its own API must pass
+`/readyz` (including etcd readiness) and its Kubernetes node must become Ready
+before the next member proceeds, with a 600-second gate timeout. A failed
+activation or readiness gate blocks the remaining members of that group.
+This is deployment sequencing, separate from floating API endpoint eligibility.
+
+DNS hosts form an independent serial group with a 300-second gate. Pi-hole
+must answer its local name with an address and resolve a fresh random public
+name through its upstream resolver. Failure leaves the next resolver running.
+These groups protect quorum and name resolution while independent fleet
+branches can continue and report their own failures.
 
 ## Alternatives considered
 

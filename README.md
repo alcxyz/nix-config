@@ -313,6 +313,9 @@ deploy --nixos
 # Switch one remote host
 deploy nux
 
+# Switch only the requested host's Home Manager profile
+just home nux
+
 # Switch the fleet from xyz; hosts with deployAll = false in inventory.nix
 # (madsil, rpi2, rpi3) are left out and need deploy <host>
 deploy --all

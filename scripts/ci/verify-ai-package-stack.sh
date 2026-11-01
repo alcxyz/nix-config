@@ -181,7 +181,7 @@ if ! consumer_packages_json=$(
   NIX_CONSUMER_SYSTEM="$consumer_system" nix eval --no-update-lock-file --impure --json "${consumer_snapshot_uri}#homeConfigurations" --apply '
     homes: let
       system = builtins.getEnv "NIX_CONSUMER_SYSTEM";
-      packageNames = [ "claude-code" "codex-cli" "codex-app-server" "t3code" ];
+      packageNames = [ "claude-code" "codex-cli" "codex-app-server" "t3code" "ai-stack-upstream" ];
       nativeHomeNames = builtins.filter (
         name: homes.${name}.pkgs.stdenv.hostPlatform.system == system
       ) (builtins.attrNames homes);
@@ -191,7 +191,10 @@ if ! consumer_packages_json=$(
             home = homes.${homeName};
             service = home.config.services.t3code or {};
             selectedPackages =
-              if packageName == "t3code" && (service.enable or false)
+              if packageName == "ai-stack-upstream"
+              then (if (service.enable or false) && (service.autoUpdate.enable or false)
+                    then [ service.aiStackPackage ] else [])
+              else if packageName == "t3code" && (service.enable or false)
               then [ service.package ]
               else builtins.filter (
                 selected: selected.drvPath == home.pkgs.${packageName}.drvPath
@@ -226,10 +229,14 @@ if ! consumer_selections=$(
 import json
 import sys
 
-package_names = ("claude-code", "codex-cli", "codex-app-server", "t3code")
+package_names = ("claude-code", "codex-cli", "codex-app-server", "t3code", "ai-stack-upstream")
 selections = json.load(sys.stdin)
 for package_name in package_names:
     matches = selections.get(package_name, [])
+    # An aggregate exists only for native consumers using managed profiles.
+    # Missing required components still fail regardless of profile mode.
+    if package_name == "ai-stack-upstream" and not matches:
+        continue
     if not matches:
         print(
             f"No native Home Manager configuration selects {package_name}",

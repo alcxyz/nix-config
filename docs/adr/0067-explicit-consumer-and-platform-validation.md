@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-09-07
 **Accepted:** 2026-09-08
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, updated 2026-11-02 (consumer aggregate validation)
 **History:** [replaced text](archive/0067-explicit-consumer-and-platform-validation-history.md)
 **Applies to:** `flake/`, Forgejo checks, package input promotion, cross-repository validation
 
@@ -110,6 +110,10 @@ projecting that access into hosted CI. The local job fetches only the committed
   check and the AI packages the candidate consumer lock selects for its
   native Home Manager configurations, and prints the
   consumer revision, consumer lock digest and producer revision together.
+  Native profile consumers also expose and build their selected AI stack
+  aggregate after the component builds, catching assembly failures that passing
+  components alone cannot prove. This uses the consumer package set, including
+  its system-nixpkgs follows; it does not qualify older running systems.
   What else gates moving the nix-packages `promoted` ref depends on the
   committed lock:
   - When it already selects the producer, the configuration head's receipt

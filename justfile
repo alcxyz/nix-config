@@ -72,7 +72,7 @@ rebuild HOST=`hostname`:
 
 [group("building")]
 home HOST=`hostname`:
-    home-manager switch --flake .#alc-{{HOST}}
+    nix run .#nix-deploy -- --hm {{HOST}}
 
 [group("building")]
 home-dry-run HOST=`hostname`:

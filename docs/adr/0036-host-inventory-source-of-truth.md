@@ -1,7 +1,7 @@
 # ADR-0036: Host inventory as source of truth
 
 **Status:** Accepted
-**Date:** 2026-05-05
+**Date:** 2026-05-05, updated 2026-11-02 (deployment contract, per [checklist](https://git.alc.xyz/alcxyz/nix-config/issues/753))
 **Amended:** 2026-10-31, optional `lanSshHostname` for a `<name>-lan` SSH name.
 **Applies to:** `inventory.nix`, `flake.nix`, package roles, workspace roles, k3s roles
 
@@ -62,6 +62,22 @@ agrees with inventory membership, including hosts that do not import the
 optional k3s module. A retired membership must be removed from inventory as
 well as the host configuration. This closes the drift reported in
 [#276](https://git.alc.xyz/alcxyz/nix-config/issues/276).
+
+### Deployment membership and activation
+
+The [configured wrapper](../../packages/nix-deploy/default.nix) derives the
+nixfleet inventory from this file. `deploy --all` selects NixOS hosts whose
+`deployAll` is not false, with xyz first; excluded hosts require an explicit
+target. Home Manager is included unless `homeManager = false`.
+`systemActivationMode` defaults to `switch`; an explicit `boot` selects the
+next boot generation without replacing the running system. This differs from
+Home Manager activation, which is immediate on its requested host.
+
+The wrapper exports aliases, SSH endpoints and users, remote-sudo settings,
+Kubernetes membership and independent serial groups. The reusable nixfleet
+implementation lives in nix-packages; the public wrapper supplies policy
+rather than duplicating that implementation. `deploy` and `nixfleet deploy`
+consume the same configured inventory.
 
 ## Tracking Issues
 
