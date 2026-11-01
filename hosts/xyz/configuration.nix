@@ -46,6 +46,7 @@ in {
     inputs.nix-secrets.nixosModules.xyzPrinter
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
+    inputs.nix-secrets.nixosModules.xyzDynamicDns
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/hardware/amd.nix"
     "${configDir}/modules/nixos/services/torrent/default.nix"
@@ -180,6 +181,17 @@ in {
   services.netbird.managed = {
     enable = true;
     disableDns = true;
+  };
+
+  # xyz's sshd is reachable from outside the LAN and NetBird (nix-secrets
+  # ADR-0028), so beyond the common key-only settings it also refuses
+  # keyboard-interactive logins and accepts only the accounts that log in.
+  # A new SSH account on xyz, such as a managed forward target, must be
+  # added here.
+  services.openssh.settings = {
+    KbdInteractiveAuthentication = false;
+    AllowUsers = [username "root"];
+    LoginGraceTime = 30;
   };
 
   services.forgejo-actions-runner = {
