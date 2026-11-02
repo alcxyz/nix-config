@@ -3,11 +3,11 @@
     "aiusage": {
       "flake": false,
       "locked": {
-        "lastModified": 1793627414,
-        "narHash": "sha256-L/XopasMapSbWIIYJSDgcEpn5Bbrg8sFpuNJUyL38t0=",
+        "lastModified": 1793632018,
+        "narHash": "sha256-lkuXI9cyp8bdQ0urCrHW8O8tibzIFIonX25zMdjHFJM=",
         "owner": "alcxyz",
         "repo": "DankAIUsage",
-        "rev": "fce6d90cbb109e090a7e4689e73289367ba4bb0d",
+        "rev": "34a97ae7cdeaedd9496cb1f25f6b758836eec460",
         "type": "github"
       },
       "original": {
@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793543452,
-        "narHash": "sha256-smhwg1C09gVkkcSZyfoHifU8l6Gm51kz1iYEza4aNUo=",
+        "lastModified": 1793626245,
+        "narHash": "sha256-U1Rm21cyivnxlxrUnd+vp13NGnUlMCkRUmpiOq9OP/A=",
         "ref": "dev",
-        "rev": "c844e858ce09774137b608aea70b6a5a471648d1",
-        "revCount": 915,
+        "rev": "5d062be9873c5cd76a8df42038eadbf80043039b",
+        "revCount": 919,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
