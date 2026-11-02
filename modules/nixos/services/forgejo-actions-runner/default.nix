@@ -174,7 +174,6 @@ in {
     ./docker-storage.nix
     ./isolated-docker.nix
     ./podman-canary.nix
-    ./nix-cache-proxy.nix
     ./orphan-monitor.nix
     ../game-signal/default.nix
     ../nixfleet-boot-check/default.nix

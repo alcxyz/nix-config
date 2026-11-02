@@ -70,4 +70,5 @@ archived number.
 | [ADR-0101](0101-description-format-observation-trial.md) | Observe description formatting before deciding on enforcement | Moved to a private repository on 2026-10-29 |
 | [ADR-0105 history](0105-offline-podman-store-reset-history.md) | Reset the Podman CI store offline while the runners are idle | History of [ADR-0105](../0105-offline-podman-store-reset.md) |
 | [ADR-0102 history](0102-loopback-remote-view-of-xyz-history.md) | View and drive xyz's live desktop through a loopback wayvnc | History of [ADR-0102](../0102-loopback-remote-view-of-xyz.md): the PAM password and RSA-AES on a loopback TCP port, and the dated amendment lines, replaced 2026-11-01 |
+| [ADR-0103](0103-ci-nix-cache-proxy.md) | Give CI jobs a read-only pull-through cache of the upstream Nix caches | Retired 2026-11-02, no measurable CI speedup |
 | [ADR-0104 history](0104-ai-stack-on-system-nixpkgs-history.md) | Build nix-packages for the hosts with the hosts' own nixpkgs | History of [ADR-0104](../0104-ai-stack-on-system-nixpkgs.md) |

@@ -55,22 +55,16 @@
     envFile = "${runtime}/job.env";
     config = settingsFormat.generate "${serviceName}.yaml" {
       log.level = canary.logLevel;
-      runner =
-        {
-          file = ".runner";
-          inherit capacity labels;
-          env_file = envFile;
-          timeout = "3600s";
-          shutdown_timeout = "${toString cfg.shutdownTimeoutSeconds}s";
-          insecure = false;
-          fetch_timeout = "5s";
-          fetch_interval = "2s";
-        }
-        # Jobs substitute through the host's Nix cache proxy (ADR-0103).
-        # Runner variables override workflow and job `env`, not step `env`.
-        // lib.optionalAttrs cfg.nixCacheProxy.enable {
-          envs.NIX_CONFIG = cfg.nixCacheProxy.jobNixConfig;
-        };
+      runner = {
+        file = ".runner";
+        inherit capacity labels;
+        env_file = envFile;
+        timeout = "3600s";
+        shutdown_timeout = "${toString cfg.shutdownTimeoutSeconds}s";
+        insecure = false;
+        fetch_timeout = "5s";
+        fetch_interval = "2s";
+      };
       container = {
         network = "";
         privileged = false;

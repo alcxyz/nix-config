@@ -140,8 +140,6 @@ in {
 
   forgejo-podman-canary-contract = import ./forgejo-podman-canary.nix {inherit lib pkgs;};
 
-  forgejo-nix-cache-proxy = import ./forgejo-nix-cache-proxy-vm.nix {inherit pkgs;};
-
   forgejo-podman-store-reset-lifecycle = import ./forgejo-podman-store-reset-vm.nix {inherit pkgs;};
 
   forgejo-runner-hold-lifecycle = import ./forgejo-runner-hold-vm.nix {inherit pkgs;};

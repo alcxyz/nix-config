@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle
+**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths
 **History:** [replaced text](archive/0105-offline-podman-store-reset-history.md)
 **Supersedes:** [ADR-0083](archive/0083-podman-cleanup-completion-fence.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-store-reset.{nix,sh}`,
@@ -20,9 +20,8 @@ On xyz in October 2026 two exited-container removals outlived their client and
 kept the runners offline for about 75 and 120 minutes. The fence and recovery
 states came from mutating storage through a live API, not from the store
 itself, which is disposable: the LAN registry cache (#917) makes re-pulls
-cheap, Nix paths come through the CI cache proxy
-([ADR-0103](0103-ci-nix-cache-proxy.md)), and the cleanup already deleted the
-Buildx state volumes in every idle window.
+cheap, Nix paths come from the public binary caches, and the cleanup already
+deleted the Buildx state volumes in every idle window.
 
 The runner (forgejo-runner v13.2.0 as built here) shuts down gracefully on
 SIGTERM: it stops polling and waits for running jobs up to

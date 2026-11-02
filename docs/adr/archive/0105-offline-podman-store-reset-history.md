@@ -25,7 +25,7 @@ kept the runners offline for about 75 and 120 minutes. The fence and recovery
 states came from mutating storage through a live API, not from the store
 itself, which is disposable: the LAN registry cache (#917) makes re-pulls
 cheap, Nix paths come through the CI cache proxy
-([ADR-0103](../0103-ci-nix-cache-proxy.md)), and the cleanup already deleted the
+([ADR-0103](0103-ci-nix-cache-proxy.md)), and the cleanup already deleted the
 Buildx state volumes in every idle window.
 
 The runner (forgejo-runner v13.2.0 as built here) shuts down gracefully on
@@ -144,3 +144,12 @@ rename, and a leftover fence. Unit tests cover the skip matrix, the restart list
 and the bounded trash deletion.
 
 Tracks [#916](https://git.alc.xyz/alcxyz/nix-config/issues/916) (step 2).
+
+## Text replaced on 2026-11-02 (ADR-0103 retired)
+
+In the context, the reason the store is disposable read:
+
+> the LAN registry cache (#917) makes re-pulls
+> cheap, Nix paths come through the CI cache proxy
+> ([ADR-0103](0103-ci-nix-cache-proxy.md)), and the cleanup already deleted the
+> Buildx state volumes in every idle window.

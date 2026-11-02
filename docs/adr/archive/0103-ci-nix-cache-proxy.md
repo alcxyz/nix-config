@@ -1,10 +1,28 @@
 # ADR-0103: Give CI jobs a read-only pull-through cache of the upstream Nix caches
 
-**Status:** Accepted
+**Status:** Retired on 2026-11-02 (no measurable CI speedup)
 **Date:** 2026-10-30
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/nix-cache-proxy.nix`,
 `modules/nixos/services/forgejo-actions-runner/podman-canary.nix`, the Podman
 runner pool on xyz, xev, nex and nux
+
+## Disposition
+
+The proxy ran on xyz, xev, nex and nux from 2026-10-30 to 2026-11-02 and was
+then removed with its module, host settings and checks. The measurement this
+ADR asked for ([#897](https://git.alc.xyz/alcxyz/nix-config/issues/897#issuecomment-48869))
+found no speedup: nix-packages `ci.yml` job time had a median of 14.7 minutes
+before and 14.4 after (10 against 31 runs); its t3code pin refresh runs, which
+repeat the same work, went from 15.1 to 16.0; pandora `check.yml` stayed at a
+2.1 minute median (10 against 69 runs). The upstream caches it fronted are
+already served from a CDN, and the time in these jobs goes elsewhere, so the
+proxy saved little while adding a service, a firewall chain and a VM test on
+four hosts. Nothing in the fleet depends on it. Removing the module leaves the
+`raw` table's `forgejo-nix-cache` chain on each host until its next reboot,
+where it only refuses other hosts' traffic to the now unused port 8501, and
+leaves `/var/lib/forgejo-nix-cache` to delete by hand. The signed cache of the
+fleet's own build outputs, which this ADR deferred, remains undecided. The
+original decision below is retained as history.
 
 ## Context
 
