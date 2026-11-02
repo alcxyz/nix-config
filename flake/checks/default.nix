@@ -200,6 +200,19 @@ in {
     assert lib.all (host: lib.all (unit: unit.serviceConfig.TimeoutStopSec == "${toString (expectedShutdown.${host} + 300)}s") ([runnerUnits.${host}] ++ podmanRunnerUnits runnerHosts.${host})) (lib.attrNames runners);
     # The pressure guard, freeze, standby and hold monitor are retired.
     assert lib.all (host: !(host.config.systemd.services ? forgejo-runner-io-pressure-guard) && !(host.config.systemd.services ? forgejo-runner-aggregate-lifecycle) && !(host.config.systemd.services ? forgejo-runner-hold-monitor) && host.config.systemd.services ? forgejo-runner-hold) (lib.attrValues runnerHosts);
+    # Every unit a switch does not restart records its start for nixfleet,
+    # and the restart unit is there to restart it once idle (ADR-0041).
+    assert lib.all (host: let
+      services = host.config.systemd.services;
+      tracked = host.config.services.forgejo-actions-runner.runnerUnits ++ ["forgejo-runner-docker.service" "forgejo-runner-podman.service" "forgejo-runner-resource-policy.service"];
+    in
+      lib.all (unit: let
+        service = services.${lib.removeSuffix ".service" unit};
+      in
+        !service.restartIfChanged && lib.any (lib.hasSuffix "/bin/forgejo-runner-record %n") service.serviceConfig.ExecStartPost)
+      tracked
+      && !services.forgejo-runner-restart.restartIfChanged
+      && lib.any (package: (package.name or "") == "nixfleet-runner-status") host.config.environment.systemPackages) (lib.attrValues runnerHosts);
     assert lib.all (runner: runner.podmanStoreReset.triggerUsedPercent == 70 && runner.podmanStoreReset.maxAgeDays == 7) (lib.attrValues runners);
     assert lib.all (runner: runner.isolatedDocker.retention.enable && runner.isolatedDocker.retention.budget == "20GiB" && runner.isolatedDocker.retention.unusedAge == "48h") (lib.attrValues runners);
     # Private scheduling may stagger the times, but must not retain a weekly

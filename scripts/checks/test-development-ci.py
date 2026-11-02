@@ -108,12 +108,17 @@ class DevelopmentCI(unittest.TestCase):
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
         self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 8)
         self.assertEqual(calls.count("shellcheck:--shell=bash --exclude=SC2034 -"), 2)
-        self.assertEqual(sum(call.startswith("python3:") for call in calls), 16)
+        self.assertEqual(sum(call.startswith("python3:") for call in calls), 17)
         self.assertIn(
             "python3:flake/checks/test-forgejo-runner-hold.py "
             "modules/nixos/services/forgejo-actions-runner/runner-hold.sh "
             "modules/nixos/services/forgejo-actions-runner/runner-start-gate.sh "
             "modules/nixos/services/game-signal/game-signal.sh", calls)
+        self.assertIn(
+            "python3:flake/checks/test-forgejo-runner-restart.py "
+            "modules/nixos/services/forgejo-actions-runner/runner-record.sh "
+            "modules/nixos/services/forgejo-actions-runner/runner-status.sh "
+            "modules/nixos/services/forgejo-actions-runner/runner-restart.sh", calls)
         self.assertIn("python3:scripts/checks/test-podman-canary-logs.py", calls)
         self.assertIn("shellcheck:--shell=bash --exclude=SC2154,SC2034 modules/nixos/services/moonlight-client/display-mode.sh", calls)
         self.assertIn("shellcheck:--shell=bash modules/nixos/services/moonlight-client/hdmi-audio.sh", calls)

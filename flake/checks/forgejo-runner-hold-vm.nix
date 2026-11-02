@@ -181,5 +181,44 @@ in
           machine.succeed("journalctl -u forgejo-runner-hold.service | grep -q 'event=hold reason=game_signal_unavailable'")
           machine.succeed("systemctl start game-signal.service")
           machine.wait_until_succeeds(all_active, timeout=30)
+
+      # nixfleet's view (nix-packages ADR-0017): start records, the non-root
+      # status and the restart once the runners are idle.
+      def runner_status():
+          rows = machine.succeed("su -s /bin/sh nobody -c nixfleet-runner-status").splitlines()
+          return {row.split("\t")[2]: row.split("\t") for row in rows if row.startswith("unit\t")}
+
+      with subtest("each tracked unit records its start, readable without root"):
+          tracked = runners + ["forgejo-runner-docker.service", "forgejo-runner-resource-policy.service"]
+          machine.wait_until_succeeds(" && ".join(f"test -f /run/nixfleet-runners/started/{unit}" for unit in tracked), timeout=30)
+          units = runner_status()
+          for unit in tracked:
+              assert units[unit][3] == "active" and units[unit][5] == "no", units[unit]
+
+      with subtest("the hold's reason explains a stopped runner"):
+          game_on("wine")
+          machine.wait_until_succeeds(all_inactive, timeout=30)
+          units = runner_status()
+          for unit in runners:
+              assert units[unit][8] == "held by the runner hold (game); it starts when that ends", units[unit]
+          game_off()
+          machine.wait_until_succeeds(all_active, timeout=30)
+          machine.wait_until_succeeds(none_held, timeout=15)
+
+      with subtest("a changed definition is flagged and restarted once idle"):
+          machine.succeed("mkdir -p /run/systemd/system/forgejo-podman-runner-fast.service.d")
+          machine.succeed("printf '[Service]\\nEnvironment=FIXTURE_CHANGE=1\\n' > /run/systemd/system/forgejo-podman-runner-fast.service.d/fixture.conf")
+          machine.succeed("systemctl daemon-reload")
+          units = runner_status()
+          assert units["forgejo-podman-runner-fast.service"][5:7] == ["yes", "started from an older definition"], units
+          assert units["forgejo-podman-runner.service"][5] == "no"
+          before = machine.succeed("systemctl show -p InvocationID --value forgejo-podman-runner.service")
+          machine.succeed("systemctl start forgejo-runner-restart.service")
+          result = machine.succeed("cat /run/nixfleet-runners/restart")
+          assert "status=done" in result and "unit=forgejo-podman-runner-fast.service" in result, result
+          assert runner_status()["forgejo-podman-runner-fast.service"][5] == "no"
+          assert machine.succeed("systemctl show -p InvocationID --value forgejo-podman-runner.service") == before
+          machine.succeed("systemctl start forgejo-runner-restart.service")
+          assert "status=nothing" in machine.succeed("cat /run/nixfleet-runners/restart")
     '';
   }

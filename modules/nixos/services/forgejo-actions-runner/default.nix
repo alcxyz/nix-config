@@ -169,6 +169,7 @@
 in {
   imports = [
     ./runner-hold.nix
+    ./runner-restart.nix
     ./podman-store-reset.nix
     ./podman-storage.nix
     ./docker-storage.nix

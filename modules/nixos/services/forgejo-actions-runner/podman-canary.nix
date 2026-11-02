@@ -223,8 +223,25 @@ in {
     '';
   };
 
+  options.services.forgejo-actions-runner.runnerLabelNames = lib.mkOption {
+    type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+    readOnly = true;
+    internal = true;
+    default =
+      {"forgejo-actions-runner.service" = labelNames cfg.labels;}
+      // lib.optionalAttrs canary.enable (lib.listToAttrs (map (instance: lib.nameValuePair instance.unit (labelNames instance.labels)) instances));
+    description = "Label names of each runner unit, which nixfleet-runner-status reports.";
+  };
+
   options.services.forgejo-actions-runner.podmanCanary = {
     enable = lib.mkEnableOption "separate, qualified rootless Podman CI canary";
+    socketPath = lib.mkOption {
+      type = lib.types.str;
+      default = socketPath;
+      readOnly = true;
+      internal = true;
+      description = "Socket of the Podman API the Podman runners share.";
+    };
     storageRoot = lib.mkOption {
       type = lib.types.str;
       default = "${builderState}/storage";

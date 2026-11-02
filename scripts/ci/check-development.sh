@@ -22,6 +22,7 @@ shellcheck \
   scripts/forgejo/merge-dms-plugins-lock.sh \
   scripts/ops/*.sh \
   scripts/update-inputs/lock-promoted-packages.sh \
+  modules/nixos/services/forgejo-actions-runner/runner-state.sh \
   modules/nixos/services/storage-health-monitor/*.sh \
   modules/nixos/services/wolf-streaming/browser-image/*.sh
 shellcheck --shell=bash hosts/xyz/xyz-*.sh
@@ -68,6 +69,10 @@ python3 flake/checks/test-forgejo-runner-hold.py \
   modules/nixos/services/game-signal/game-signal.sh
 python3 flake/checks/test-forgejo-podman-store-reset.py \
   modules/nixos/services/forgejo-actions-runner/podman-store-reset.sh
+python3 flake/checks/test-forgejo-runner-restart.py \
+  modules/nixos/services/forgejo-actions-runner/runner-record.sh \
+  modules/nixos/services/forgejo-actions-runner/runner-status.sh \
+  modules/nixos/services/forgejo-actions-runner/runner-restart.sh
 
 python3 scripts/checks/test-storage-mount-contracts.py
 python3 scripts/checks/test-wolf-coop-manager.py

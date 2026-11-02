@@ -1,7 +1,7 @@
 # ADR-0041: Native Forgejo Actions runners
 
 **Status:** Accepted
-**Date:** 2026-05-07
+**Date:** 2026-05-07, updated 2026-11-02 (start records and restart once idle for nixfleet, per nix-packages ADR-0017)
 **Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
@@ -89,6 +89,21 @@ The default runner pool is represented with labels:
   not cancel in-progress CI work, and 120 seconds on `xyz`, so a game gets the
   disk back quickly. The systemd stop timeout adds 300 seconds for the
   cancellation and container cleanup.
+- A switch restarts none of the runner units, the engine APIs or the
+  resource policy (`restartIfChanged = false`), so a running job is never cut
+  short by a deploy. Each of them records, when it starts, the resolved store
+  paths of the unit file it started from, in a world-readable file under
+  `/run/nixfleet-runners/started`. `nixfleet-runner-status` reports without
+  root which of them runs an older definition than the deployed one, and why
+  each stopped runner is down. `forgejo-runner-restart.service` restarts the
+  flagged units once the host is idle: no Podman store reset, no runner
+  starting or stopping, no job container on a running engine and no task
+  taken in the last 5 minutes (`restartWhenIdle.quietMinutes`). It waits up
+  to 60 minutes (`restartWhenIdle.waitMinutes`), then gives up without
+  restarting, so it never cancels a job on purpose. The whole host must be
+  idle because restarting the resource policy or an API also restarts the
+  runners that require it. `nixfleet runners restart` starts it on each
+  host (nix-packages ADR-0017); it changes nothing about the runner hold.
 - Forgejo runners pull work independently and provide no strict round-robin
   placement guarantee. Shared labels make all four hosts eligible, while the
   per-host caps prevent one server-worker from accepting a concurrent build
