@@ -762,6 +762,8 @@ in {
       (off.extendModules {
         modules = [
           {
+            # The fixture substitutes a fake forge identity, so it cannot run real updater jobs.
+            services.restricted-codex-nightly.updates.enable = lib.mkForce false;
             programs.ai.agentForge = lib.mapAttrs (_: lib.mkOverride 40) (forge // {enable = true;});
             programs.ai.agentGithub = lib.mapAttrs (_: lib.mkOverride 40) {
               enable = true;
