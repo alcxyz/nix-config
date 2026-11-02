@@ -195,10 +195,8 @@
     podmanCanary = {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
-      # Preserve the manual canary workflow while jobs adopt the shared label.
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
-        "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
       ];
       # Most jobs use the Podman pool. Four slots in all, down from five
       # while the standby fast runner ran: from 2026-10-24 to 2026-10-31

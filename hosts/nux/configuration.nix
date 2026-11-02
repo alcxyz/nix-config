@@ -130,10 +130,8 @@ in {
     podmanCanary = {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
-      # Preserve the manual canary workflow while jobs adopt the shared label.
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
-        "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
       ];
       # nux resolves through NetBird DNS, whose oversized UDP answers
       # aardvark-dns cannot decode; jobs use the LAN resolvers instead.

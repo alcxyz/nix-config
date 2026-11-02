@@ -330,3 +330,12 @@ From the CI decision ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)):
 > Each host's pool runner serves the shared
 > `forgejo-podman` pool label and keeps the `forgejo-podman-canary` label, which
 > the manual `Podman canary` workflow and this repository's workflows select.
+
+Later the same day, when the canary label was removed from the runners:
+
+> Podman CI uses a separate opt-in runner module (`podmanCanary`), enabled on
+> xyz, xev, nex and nux. Each host's pool runner serves the shared
+> `forgejo-podman` pool label. The manual `Podman canary` workflow and this
+> repository's workflows select `forgejo-podman`; the pool runners keep the
+> `forgejo-podman-canary` alias only until the remaining workflows elsewhere
+> move off it ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).

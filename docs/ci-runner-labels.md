@@ -12,7 +12,6 @@ Forgejo Actions runners for the alcxyz repositories are configured in
 | `forgejo-podman` | xyz, xev, nex, nux | The default shared pool for container jobs. |
 | `ci-fast` | xyz and xev (a dedicated runner each; xyz's pool runner takes overflow) | Heavy jobs on a project you are iterating on. Never runs on nex or nux; the job waits instead. |
 | `forgejo-docker` | the Docker runners on xyz, xev, nex and nux | Jobs that need the Docker engine rather than Podman. Prefer `forgejo-podman`. |
-| `forgejo-podman-canary` | xyz, xev, nex, nux | Being retired ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)); use `forgejo-podman`, which reaches the same runners. |
 | `forgejo-docker-primary`, `forgejo-docker-secondary`, `ubuntu-latest`, `docker` | the Docker runners | Being retired ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)); use `forgejo-docker`. |
 
 Jobs on xyz yield to desktop work and stop being admitted while a game runs,

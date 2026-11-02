@@ -81,10 +81,8 @@
     podmanCanary = {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
-      # Preserve the manual canary workflow while jobs adopt the shared label.
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
-        "forgejo-podman-canary:docker://docker.io/library/docker:27-cli"
       ];
     };
     resourcePolicy.enable = true;
