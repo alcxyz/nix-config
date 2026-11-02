@@ -203,7 +203,7 @@ flowchart TD
   edit["Change on a topic branch<br/>(on xyz or the Mac)"]
   local["Local checks<br/>just check, affected configurations"]
   prDev["Pull request into dev"]
-  light["Hosted CI on forgejo-podman-canary<br/>format, shell lint, hygiene, credential-free tests"]
+  light["Hosted CI on forgejo-podman<br/>format, shell lint, hygiene, credential-free tests"]
   review["pr-review"]
   dev[("dev")]
   full["Scheduled local validation<br/>scripts/ci/check-configurations.sh<br/>native checks, then all systems"]

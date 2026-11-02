@@ -7,7 +7,7 @@ on:
 jobs:
   candidate:
     name: Validate candidate
-    runs-on: forgejo-podman-canary
+    runs-on: forgejo-podman
     container:
       image: docker.io/library/node:20-bookworm
     timeout-minutes: 60

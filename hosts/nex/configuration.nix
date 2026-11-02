@@ -88,10 +88,13 @@
       ];
     };
     resourcePolicy.enable = true;
+    # k3s leaves headroom on this host; raised from the 50% default (#957).
+    resourcePolicy.cpuQuotaPercent = 75;
     name = "nex";
     # 8 threads shared with k3s and storage: one job per runner (ADR-0041).
     capacity = 1;
     labels = [
+      "forgejo-docker:docker://node:20-bookworm"
       "forgejo-docker-primary:docker://node:20-bookworm"
       "forgejo-docker-secondary:docker://node:20-bookworm"
       "ubuntu-latest:docker://node:20-bookworm"

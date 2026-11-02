@@ -233,6 +233,7 @@ in {
     assert !(hasLabel "ci-fast" runners.xev.podmanCanary);
     assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
     assert lib.all (host: runners.${host}.podmanCanary.extraRunners == {}) ["nex" "nux"];
+    assert lib.all (hasLabel "forgejo-docker") (lib.attrValues runners);
     assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
     assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
     assert lib.all (hasLabel "docker") (lib.attrValues runners);

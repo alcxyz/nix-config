@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07
-**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -52,10 +52,12 @@ runner and the shared runner lifecycle and resource policy.
 
 The default runner pool is represented with labels:
 
-- `forgejo-docker-primary`, `ubuntu-latest`, and `docker` are exposed by `xyz`,
-  `xev`, `nux`, and `nex`, allowing routine jobs to use every runner.
-- `forgejo-docker-secondary` remains on `nux` and `nex` as a compatibility
-  label for workflows that explicitly request it.
+- `forgejo-docker` is exposed by `xyz`, `xev`, `nux`, and `nex`, allowing
+  Docker jobs to use every runner. It is the one Docker pool label.
+- `forgejo-docker-primary`, `ubuntu-latest`, and `docker` on all four hosts,
+  and `forgejo-docker-secondary` on `nux` and `nex`, are older aliases for the
+  same pool. They stay only until the workflows that request them move to
+  `forgejo-docker` ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).
 - host-specific Docker labels (`xyz`, `xev`, `nux`, `nex`) remain available for
   workflows that intentionally need one host.
 
@@ -97,7 +99,9 @@ The default runner pool is represented with labels:
   ceiling equal to 50% of the host's online logical processors, a low CPU
   scheduling weight (10) under contention, a 40% memory throttling threshold,
   and a 50% hard memory limit; `xyz`, with three slots beside the nix-daemon's
-  40G cap and the ZFS ARC, uses 25% and 35%. Its I/O weight (10) is best
+  40G cap and the ZFS ARC, uses 25% and 35%. `nux` and `nex` raise the CPU
+  ceiling to 75%, since k3s leaves them headroom; their storage latency
+  decides whether they go further. Its I/O weight (10) is best
   effort. With the
   dedicated CI daemon of ADR-0072, the daemon and its workers run below that
   slice; a runner that uses the shared host daemon instead passes the slice as

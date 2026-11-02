@@ -6,7 +6,7 @@ on:
 
 jobs:
   local-instructions:
-    runs-on: forgejo-podman-canary
+    runs-on: forgejo-podman
     container:
       image: docker.io/library/node:20-bookworm
     steps:

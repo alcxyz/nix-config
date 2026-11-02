@@ -25,7 +25,7 @@ on:
 jobs:
   build:
     name: Publish exact Nix-owned contexts
-    runs-on: forgejo-podman-canary
+    runs-on: forgejo-podman
     container:
       image: docker.io/library/node:20-bookworm
     timeout-minutes: 180

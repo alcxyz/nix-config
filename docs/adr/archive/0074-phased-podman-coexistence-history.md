@@ -322,3 +322,11 @@ and generic qualification checks remain here.
 The phased adoption was tracked in the
 [Podman adoption milestone](https://git.alc.xyz/alcxyz/nix-config/milestone/323)
 (issues #433 to #439, all closed by 2026-10-09).
+
+## Text replaced on 2026-11-02
+
+From the CI decision ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)):
+
+> Each host's pool runner serves the shared
+> `forgejo-podman` pool label and keeps the `forgejo-podman-canary` label, which
+> the manual `Podman canary` workflow and this repository's workflows select.

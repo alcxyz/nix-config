@@ -447,3 +447,12 @@ limit across the containers Forgejo Runner creates.
   [#53](https://git.alc.xyz/alcxyz/nix-config/issues/53): post-rebuild
   registration and heartbeat checks, and capability probes covering every
   advertised label.
+
+## Text replaced on 2026-11-02
+
+From the decision's pool labels ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)):
+
+- `forgejo-docker-primary`, `ubuntu-latest`, and `docker` are exposed by `xyz`,
+  `xev`, `nux`, and `nex`, allowing routine jobs to use every runner.
+- `forgejo-docker-secondary` remains on `nux` and `nex` as a compatibility
+  label for workflows that explicitly request it.

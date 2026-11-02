@@ -7,7 +7,7 @@ on:
       runner_label:
         description: "Trusted runner label to qualify"
         required: false
-        default: "forgejo-podman-canary"
+        default: "forgejo-podman"
       engine:
         description: "Runtime backend: podman or docker"
         required: false
@@ -19,7 +19,7 @@ on:
 
 jobs:
   canary:
-    runs-on: ${{ inputs.runner_label || 'forgejo-podman-canary' }}
+    runs-on: ${{ inputs.runner_label || 'forgejo-podman' }}
     container: docker.io/library/docker:27-cli
     timeout-minutes: 15
     env:
