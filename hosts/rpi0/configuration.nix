@@ -192,5 +192,11 @@
     rateLimitCount = 10000;
     rateLimitInterval = 60;
     stateDirectory = "/var/lib/pihole/etc";
+    blocklists = [
+      {
+        url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.samsung.txt";
+        comment = "HaGeZi native Samsung tracker";
+      }
+    ];
   };
 }

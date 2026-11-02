@@ -11,6 +11,13 @@
     inputs.nix-secrets.nixosModules.rpi1Pihole
   ];
 
+  services.pihole-native.blocklists = [
+    {
+      url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.samsung.txt";
+      comment = "HaGeZi native Samsung tracker";
+    }
+  ];
+
   services.nixbox-direct-client = {
     room = "Bedroom";
     streamFps = 30;

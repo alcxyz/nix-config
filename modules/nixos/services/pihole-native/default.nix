@@ -25,6 +25,128 @@
     exit 1
   '';
 
+  gravityDatabase = "${cfg.stateDirectory}/gravity.db";
+  blocklistStamp = "${cfg.stateDirectory}/nixos-blocklists.stamp";
+
+  sqlString = value: "'" + lib.replaceStrings ["'"] ["''"] value + "'";
+
+  # Additive only: INSERT OR IGNORE keeps every row already in the adlist
+  # table, including lists added in the web interface, and never changes the
+  # enabled state or comment of a list that is already present.
+  blocklistSql = pkgs.writeText "pihole-blocklists.sql" (''
+      .timeout 30000
+      BEGIN;
+    ''
+    + lib.concatMapStrings (list: ''
+      INSERT OR IGNORE INTO adlist (address, enabled, comment, type) VALUES (${sqlString list.url}, ${
+        if list.enabled
+        then "1"
+        else "0"
+      }, ${
+        if list.comment == null
+        then "NULL"
+        else sqlString list.comment
+      }, 0);
+    '')
+    cfg.blocklists
+    + ''
+      COMMIT;
+    '');
+
+  # Counts enabled declared lists that the last gravity run did not load:
+  # gravity.sh records status 1 (updated), 2 (unchanged) or 3 (unavailable,
+  # cached copy used) for a list it loaded, and 4 when it has nothing.
+  blocklistPendingSql = pkgs.writeText "pihole-blocklists-pending.sql" ''
+    .timeout 30000
+    SELECT COUNT(*) FROM adlist WHERE type = 0 AND enabled = 1
+      AND address IN (${lib.concatMapStringsSep ", " (list: sqlString list.url) cfg.blocklists})
+      AND (status IS NULL OR status NOT IN (1, 2, 3));
+  '';
+
+  # Runs as the pihole user. gravity.sh resolves the database through
+  # `pihole-FTL --config`, which reads /etc/pihole/pihole.toml rather than the
+  # FTLCONF_ variables of the FTL unit; /etc/pihole links to stateDirectory, so
+  # both name the same gravity.db.
+  gravityUpdate = pkgs.writeShellScript "pihole-gravity-update" ''
+    set -euo pipefail
+
+    exec 9>${lib.escapeShellArg "${cfg.stateDirectory}/nixos-gravity.lock"}
+    flock 9
+
+    if [[ ! -e ${lib.escapeShellArg gravityDatabase} ]]; then
+      # gravity.sh creates and migrates the database on its first run.
+      pihole -g
+    fi
+
+    ${lib.optionalString (cfg.blocklists != []) ''
+      pihole-FTL sqlite3 -ni ${lib.escapeShellArg gravityDatabase} < ${blocklistSql}
+    ''}
+
+    pihole -g
+
+    failed=0
+    ${lib.optionalString (cfg.blocklists != []) ''
+      # Record the declared set as loaded only when every enabled declared
+      # list was loaded, so a failed download is retried at the next boot or
+      # switch instead of being treated as done.
+      pending="$(pihole-FTL sqlite3 -ni ${lib.escapeShellArg gravityDatabase} < ${blocklistPendingSql})"
+      if [[ "$pending" == 0 ]]; then
+        printf '%s\n' ${blocklistSql} > ${lib.escapeShellArg blocklistStamp}
+      else
+        echo "pihole-gravity: $pending declared blocklist(s) could not be loaded" >&2
+        rm -f ${lib.escapeShellArg blocklistStamp}
+        failed=1
+      fi
+    ''}
+
+    # Ask FTL to reload the new gravity database, as `pihole reloadlists`
+    # does; FTL has no PID file under this module's sandbox.
+    pid="$(systemctl show --property MainPID --value pihole-ftl.service)"
+    if [[ "$pid" =~ ^[0-9]+$ && "$pid" != 0 ]]; then
+      signal="$(pihole-FTL sigrtmin 2>/dev/null || true)"
+      [[ "$signal" =~ ^[0-9]+$ ]] || signal=RTMIN
+      kill "-$signal" "$pid"
+    fi
+
+    exit "$failed"
+  '';
+
+  # Runs as root because it starts a unit. Queues a gravity update when the
+  # declared lists differ from the ones the last successful update loaded.
+  blocklistTrigger = pkgs.writeShellScript "pihole-blocklists-trigger" ''
+    set -euo pipefail
+
+    if [[ "$(cat ${lib.escapeShellArg blocklistStamp} 2>/dev/null || true)" != ${lib.escapeShellArg "${blocklistSql}"} ]]; then
+      systemctl start --no-block pihole-gravity.service
+    fi
+  '';
+
+  blocklistOptions = {
+    options = {
+      url = lib.mkOption {
+        type = lib.types.str;
+        description = "Address of the blocklist.";
+      };
+
+      comment = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Comment shown for the list in the Pi-hole web interface.";
+      };
+
+      enabled = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Enabled state for the list when it is first added. A list that is
+          already in gravity keeps its current state, so disable it in the web
+          interface. Deleting a list that is still declared does not last: the
+          next gravity update adds it again.
+        '';
+      };
+    };
+  };
+
   piholeStart = pkgs.writeShellScript "pihole-ftl-start" ''
     set -euo pipefail
 
@@ -138,6 +260,32 @@ in {
       description = "Set an explicitly empty Pi-hole web/API password.";
     };
 
+    blocklists = lib.mkOption {
+      type = lib.types.listOf (lib.types.submodule blocklistOptions);
+      default = [];
+      description = ''
+        Blocklists added to gravity when missing. Seeding is additive: lists
+        already in gravity, including ones added in the web interface, are
+        kept unchanged, and removing an entry here does not remove the list.
+        To retire a declared list, remove it here and then delete or disable
+        it in the web interface. A change to this set queues a gravity update.
+      '';
+    };
+
+    gravityUpdate = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether to refresh gravity from its lists on a timer.";
+      };
+
+      onCalendar = lib.mkOption {
+        type = lib.types.str;
+        default = "weekly";
+        description = "systemd OnCalendar expression for the gravity update.";
+      };
+    };
+
     webAcl = lib.mkOption {
       type = lib.types.str;
       default = "";
@@ -160,6 +308,10 @@ in {
       {
         assertion = lib.all (domain: domain != "" && !(lib.hasInfix "/" domain) && !(lib.hasInfix ";" domain) && !(lib.hasInfix "\n" domain)) cfg.localDomains;
         message = "services.pihole-native.localDomains entries must be non-empty DNS names without '/', ';', or newlines.";
+      }
+      {
+        assertion = lib.all (list: list.url != "" && !(lib.hasInfix "\n" list.url) && (list.comment == null || !(lib.hasInfix "\n" list.comment))) cfg.blocklists;
+        message = "services.pihole-native.blocklists entries need a non-empty url, and url and comment must not contain newlines.";
       }
     ];
 
@@ -271,6 +423,73 @@ in {
         RestrictSUIDSGID = true;
         MemoryDenyWriteExecute = true;
         LockPersonality = true;
+      };
+    };
+
+    systemd.services.pihole-gravity = {
+      description = "Update Pi-hole gravity from its lists";
+      after = [
+        "network-online.target"
+        "pihole-ftl.service"
+      ];
+      wants = ["network-online.target"];
+      path = [
+        pkgs.pihole
+        pkgs.pihole-ftl
+        pkgs.systemd
+        pkgs.util-linux
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "pihole";
+        Group = "pihole";
+        ExecStart = gravityUpdate;
+        TimeoutStartSec = "30min";
+        Nice = 10;
+        IOSchedulingClass = "idle";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        PrivateDevices = true;
+        ProtectSystem = "strict";
+        ProtectHome = "read-only";
+        ProtectControlGroups = true;
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        ReadWritePaths = [
+          "/etc/pihole"
+          cfg.stateDirectory
+        ];
+        RestrictAddressFamilies = "AF_UNIX AF_INET AF_INET6 AF_NETLINK";
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+      };
+    };
+
+    systemd.timers.pihole-gravity = lib.mkIf cfg.gravityUpdate.enable {
+      description = "Update Pi-hole gravity from its lists";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnCalendar = cfg.gravityUpdate.onCalendar;
+        Persistent = true;
+        RandomizedDelaySec = "1h";
+      };
+    };
+
+    # Restarted on switch when the declared lists change, since its script
+    # names them; a failed or interrupted update is retried at the next boot.
+    systemd.services.pihole-blocklists = lib.mkIf (cfg.blocklists != []) {
+      description = "Queue a Pi-hole gravity update when declared lists change";
+      after = ["pihole-ftl.service"];
+      wantedBy = [
+        "multi-user.target"
+        "pihole-ftl.service"
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = blocklistTrigger;
       };
     };
 
