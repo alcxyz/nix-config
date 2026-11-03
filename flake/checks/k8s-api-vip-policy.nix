@@ -27,9 +27,16 @@
         }
       ];
     };
+  keepalived = (evaluate policy).config.services.keepalived;
+  script = keepalived.vrrpScripts.k3s_api;
+  instance = keepalived.vrrpInstances.k8s_api;
   force = settings: (evaluate settings).config.system.build.toplevel.drvPath;
   fails = settings: !(builtins.tryEval (builtins.deepSeq (force settings) true)).success;
 in
+  assert script.weight == 0 && script.fall == 2 && script.rise == 2;
+  assert script.interval == 2 && script.timeout == 5;
+  assert script.extraConfig == "init_fail";
+  assert instance.trackScripts == ["k3s_api"] && instance.noPreempt;
   assert builtins.deepSeq [(force policy) (force {enable = false;})] true;
   assert builtins.all (name: fails (builtins.removeAttrs policy [name])) [
     "vip"

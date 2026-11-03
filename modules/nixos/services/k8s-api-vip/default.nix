@@ -7,6 +7,36 @@
 }:
 with lib; let
   cfg = config.services.k8s-api-vip;
+  # K3s generates the non-admin kube-proxy identity in its local agent state.
+  # Prefer anonymous readiness, and use only that existing identity on denial.
+  readyProbe = pkgs.writeShellScript "k3s-api-ready" ''
+    request() {
+      ${pkgs.curl}/bin/curl -q --silent --show-error \
+        --noproxy '*' --proto '=https' --connect-timeout 1 --max-time 2 \
+        --cacert ${escapeShellArg cfg.readinessCaFile} \
+        --output /dev/null --write-out '%{http_code}' "$@" \
+        https://127.0.0.1:6443/readyz
+    }
+    status="$(request)" || exit 1
+    case "$status" in
+      200) exit 0 ;;
+      401|403) ;;
+      *) exit 1 ;;
+    esac
+    ${
+      if cfg.readinessClient == null
+      then ''
+        echo "Anonymous API readiness denied; no local readiness client configured" >&2
+        exit 1
+      ''
+      else ''
+        status="$(request \
+          --cert ${escapeShellArg cfg.readinessClient.certificateFile} \
+          --key ${escapeShellArg cfg.readinessClient.keyFile})" || exit 1
+        test "$status" = 200
+      ''
+    }
+  '';
 in {
   options.services.k8s-api-vip = {
     enable = mkEnableOption "a floating LAN VIP for the k3s API server";
@@ -42,6 +72,33 @@ in {
       description = "VRRP router ID for the Kubernetes API VIP.";
     };
 
+    readinessCaFile = mkOption {
+      type = types.str;
+      default = "/var/lib/rancher/k3s/agent/server-ca.crt";
+      description = "Existing local API server CA file, verified for every readiness request.";
+    };
+
+    readinessClient = mkOption {
+      type = types.nullOr (types.submodule {
+        options = genAttrs ["certificateFile" "keyFile"] (name:
+          mkOption {
+            type = types.str;
+            description = "Existing local readiness TLS ${name}; contents stay outside the Nix store.";
+          });
+      });
+      # These are upstream K3s-generated paths, not newly provisioned secrets.
+      default = {
+        certificateFile = "/var/lib/rancher/k3s/agent/client-kube-proxy.crt";
+        keyFile = "/var/lib/rancher/k3s/agent/client-kube-proxy.key";
+      };
+      description = ''
+        Least privileged existing local client for /readyz when anonymous access
+        returns 401 or 403. Defaults to K3s's non-admin kube-proxy identity.
+        Override for a nonstandard data directory; null requires anonymous
+        readiness. Never supply file contents or administrator credentials.
+      '';
+    };
+
     priority = mkOption {
       type = types.ints.between 1 255;
       default = 100;
@@ -56,15 +113,15 @@ in {
       enableScriptSecurity = true;
 
       vrrpScripts.k3s_api = {
-        script = "${pkgs.netcat-openbsd}/bin/nc -z -w 1 127.0.0.1 6443";
+        script = toString readyProbe;
         interval = 2;
-        timeout = 1;
+        timeout = 5;
         fall = 2;
         rise = 2;
-        # A zero-weight track script puts the instance into FAULT when the
-        # local API listener fails. A negative weight only lowers election
-        # priority; with nopreempt, backups will not take the VIP from an
-        # unhealthy master.
+        # Start ineligible, then require two successes before joining election.
+        extraConfig = "init_fail";
+        # FAULT removes this instance from election, rather than just lowering
+        # its priority. When all APIs are unready, no instance holds the VIP.
         weight = 0;
         user = "root";
       };

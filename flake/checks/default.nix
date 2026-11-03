@@ -138,6 +138,8 @@ in {
         touch "$out"
       '';
 
+  k8s-api-vip-readiness = import ./k8s-api-vip-readiness.nix {inherit pkgs;};
+
   forgejo-docker-storage-contract = import ./forgejo-docker-storage.nix {inherit lib pkgs;};
 
   forgejo-runner-isolated-docker-contract = import ./forgejo-isolated-docker.nix {inherit lib pkgs;};
