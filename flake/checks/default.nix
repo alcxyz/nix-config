@@ -167,7 +167,8 @@ in {
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
     # Jobs per runner (ADR-0041, ADR-0106): every Docker runner takes one; the
     # Podman pool takes one on xyz, which also runs games and media, two on
-    # xev and one on the smaller nex and nux. xyz and xev add a ci-fast slot.
+    # xev and one on the smaller nex and nux. The xyz and xev pool runners
+    # also serve ci-fast in those slots.
     expectedCapacity = {
       xyz = 1;
       xev = 1;
@@ -234,22 +235,12 @@ in {
     assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedPoolCapacity.${host}) (lib.attrNames runners);
-    # xyz has a dedicated ci-fast runner, beside ci-fast overflow on its pool
-    # runner (ADR-0097).
-    assert lib.attrNames runners.xyz.podmanCanary.extraRunners == ["fast"];
-    assert runners.xyz.podmanCanary.extraRunners.fast.capacity == 1;
-    assert runners.xyz.podmanCanary.extraRunners.fast.name == "xyz-fast";
-    assert hasLabel "ci-fast" runners.xyz.podmanCanary.extraRunners.fast;
-    assert hasLabel "ci-fast" runners.xyz.podmanCanary;
-    # xev's fast runner serves ci-fast beside xyz-fast all the time; nex and
-    # nux never serve ci-fast.
-    assert lib.attrNames runners.xev.podmanCanary.extraRunners == ["fast"];
-    assert runners.xev.podmanCanary.extraRunners.fast.capacity == 1;
-    assert runners.xev.podmanCanary.extraRunners.fast.name == "xev-fast";
-    assert hasLabel "ci-fast" runners.xev.podmanCanary.extraRunners.fast;
-    assert !(hasLabel "ci-fast" runners.xev.podmanCanary);
-    assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
-    assert lib.all (host: runners.${host}.podmanCanary.extraRunners == {}) ["nex" "nux"];
+    # The xyz and xev pool runners serve ci-fast in their pool slots; nex and
+    # nux never serve it, and no host runs an extra Podman runner (ADR-0097).
+    assert lib.all (host: hasLabel "ci-fast" runners.${host}.podmanCanary) ["xyz" "xev"];
+    assert lib.all (host: !(hasLabel "ci-fast" runners.${host}.podmanCanary)) ["nex" "nux"];
+    assert lib.all (host: host.config.services.forgejo-actions-runner.runnerUnits == ["forgejo-actions-runner.service" "forgejo-podman-runner.service"]) (lib.attrValues runnerHosts);
+    assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast) && !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
     # The Docker runners carry one pool label and no aliases (#957).
     assert lib.all (runner: runner.labels == ["forgejo-docker:docker://node:20-bookworm"]) (lib.attrValues runners);
       pkgs.runCommand "forgejo-runner-pool-contract" {
@@ -298,7 +289,7 @@ in {
     assert lib.all (host: host.systemd.services.forgejo-actions-runner.serviceConfig.KillMode == "mixed") serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
-    # xyz's three slots share less memory beside the nix-daemon and the ARC.
+    # xyz's two slots share less memory beside the nix-daemon and the ARC.
     assert buildSlice.MemoryHigh == "25%";
     assert buildSlice.MemoryMax == "35%";
     assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "40%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;

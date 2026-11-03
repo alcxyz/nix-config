@@ -195,21 +195,17 @@
     podmanCanary = {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
+      # The pool runner also serves ci-fast beside xyz's (ADR-0097), so fast
+      # jobs still run while xyz holds its runners for a game.
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
+        "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
-      # Most jobs use the Podman pool. Four slots in all, down from five
-      # while the standby fast runner ran: from 2026-10-24 to 2026-10-31
-      # xev's jobs ran three or more at once for about a third of its busy
-      # time, and fewer slots keep CI off its cluster and Wolf work
-      # (ADR-0106).
+      # Most jobs use the Podman pool. Three slots in all (two pool, one
+      # Docker): from 2026-10-24 to 2026-10-31 xev's jobs ran three or more
+      # at once for about a third of its busy time, and fewer slots keep CI
+      # off its cluster and Wolf work (ADR-0106).
       capacity = 2;
-      # Serves ci-fast beside xyz-fast (ADR-0097): whichever polls first
-      # takes the job, so fast jobs also run while xyz holds its runners.
-      extraRunners.fast = {
-        labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
-        capacity = 1;
-      };
     };
     resourcePolicy.enable = true;
     name = "xev";

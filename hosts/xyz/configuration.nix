@@ -215,29 +215,22 @@ in {
     podmanCanary = {
       enable = true;
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
-      # ci-fast serves opted-in jobs on the fastest host (ADR-0097); this
-      # pool runner keeps it as overflow beside the dedicated xyz-fast runner.
+      # The pool runner also serves ci-fast, opted-in jobs for the fast
+      # hosts (ADR-0097), in the same slot as pool jobs.
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
-      sharedLabels = ["ci-fast"];
-      # Three CI slots in all, down from five, so CI stops saturating the
-      # disk that Plex, qBittorrent, Stash and Calibre share (ADR-0106).
+      # Two CI slots in all (one pool, one Docker), so CI stops saturating
+      # the disk that Plex, qBittorrent, Stash and Calibre share (ADR-0106).
       capacity = 1;
-      # A ci-fast slot pool jobs cannot take; fast jobs may still start in a
-      # free pool slot, since whichever runner polls first takes the job.
-      extraRunners.fast = {
-        labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
-        capacity = 1;
-      };
     };
     name = "xyz";
     # One Docker slot serves the few jobs that still select a Docker label.
     capacity = 1;
     # Bound the runner daemon and all nested workers within one budget. Low
     # weights make builds yield to desktop, game and media work. Beside the
-    # nix-daemon's 40G cap and the ZFS ARC, three slots need less memory.
+    # nix-daemon's 40G cap and the ZFS ARC, two slots need less memory.
     resourcePolicy = {
       enable = true;
       memoryHigh = "25%";
