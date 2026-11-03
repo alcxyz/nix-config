@@ -3,6 +3,10 @@
 Import `nixosModules.isolatedAgent` and enable `services.isolated-agent` to
 create a separate account with its own provider CLIs and T3 server state.
 The module does not import the operator's Home Manager profile.
+`extraAccounts` adds further accounts with the same isolation (no
+supplementary groups, sudo or Polkit grants, no Nix daemon trust, a private
+home under `/var/lib`) but no T3 server, for a consumer's own service; they
+work without `enable`.
 The consumer supplies `package` and `providerPackages` explicitly, so the
 generic module does not require a particular overlay or unfree package policy.
 
