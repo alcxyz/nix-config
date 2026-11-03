@@ -246,10 +246,8 @@ in {
     assert !(hasLabel "ci-fast" runners.xev.podmanCanary);
     assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
     assert lib.all (host: runners.${host}.podmanCanary.extraRunners == {}) ["nex" "nux"];
-    assert lib.all (hasLabel "forgejo-docker") (lib.attrValues runners);
-    assert lib.all (hasLabel "forgejo-docker-primary") (lib.attrValues runners);
-    assert lib.all (hasLabel "ubuntu-latest") (lib.attrValues runners);
-    assert lib.all (hasLabel "docker") (lib.attrValues runners);
+    # The Docker runners carry one pool label and no aliases (#957).
+    assert lib.all (runner: runner.labels == ["forgejo-docker:docker://node:20-bookworm"]) (lib.attrValues runners);
       pkgs.runCommand "forgejo-runner-pool-contract" {
         nativeBuildInputs = [pkgs.gawk pkgs.gnugrep];
       } ''

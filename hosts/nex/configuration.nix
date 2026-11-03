@@ -93,11 +93,6 @@
     capacity = 1;
     labels = [
       "forgejo-docker:docker://node:20-bookworm"
-      "forgejo-docker-primary:docker://node:20-bookworm"
-      "forgejo-docker-secondary:docker://node:20-bookworm"
-      "ubuntu-latest:docker://node:20-bookworm"
-      "docker:docker://node:20-bookworm"
-      "nex:docker://node:20-bookworm"
     ];
   };
 

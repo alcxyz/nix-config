@@ -456,3 +456,28 @@ From the decision's pool labels ([#957](https://git.alc.xyz/alcxyz/nix-config/is
   `xev`, `nux`, and `nex`, allowing routine jobs to use every runner.
 - `forgejo-docker-secondary` remains on `nux` and `nex` as a compatibility
   label for workflows that explicitly request it.
+
+## Text replaced on 2026-11-03
+
+From the decision ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)), in the module's duties:
+
+- exposes explicit host and capability labels
+
+and in the labels:
+
+The default runner pool is represented with labels:
+
+- `forgejo-docker` is exposed by `xyz`, `xev`, `nux`, and `nex`, allowing
+  Docker jobs to use every runner. It is the one Docker pool label.
+- `forgejo-docker-primary`, `ubuntu-latest`, and `docker` on all four hosts,
+  and `forgejo-docker-secondary` on `nux` and `nex`, are older aliases for the
+  same pool. They stay only until the workflows that request them move to
+  `forgejo-docker` ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).
+- host-specific Docker labels (`xyz`, `xev`, `nux`, `nex`) remain available for
+  workflows that intentionally need one host.
+
+From the consequences:
+
+- Routine workflows can run on all four native runners through the shared
+  `forgejo-docker-primary`, `ubuntu-latest`, and `docker` labels. Excess work
+  remains queued when their declared capacities are full.

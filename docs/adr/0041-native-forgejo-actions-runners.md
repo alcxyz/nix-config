@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07, updated 2026-11-02 (start records and restart once idle for nixfleet, per nix-packages ADR-0017)
-**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -33,7 +33,7 @@ The NixOS module:
 - generates runner configuration from Nix options
 - reads registration and workflow secrets from SOPS-managed files
 - verifies required runtime capabilities before registering or polling for jobs
-- exposes explicit host and capability labels
+- exposes explicit pool and capability labels, never host names
 - supports Docker-backed job labels for clean per-job containers
 - fails the systemd unit if required tools, sockets, or secrets are unavailable
 - bounds unused Docker build cache according to both filesystem pressure and
@@ -50,16 +50,11 @@ with the `ci-fast` runners of [ADR-0097](0097-ci-fast-runner-label.md). Those
 ADRs govern the Podman and `ci-fast` runners; this one governs the Docker
 runner and the shared runner lifecycle and resource policy.
 
-The default runner pool is represented with labels:
-
-- `forgejo-docker` is exposed by `xyz`, `xev`, `nux`, and `nex`, allowing
-  Docker jobs to use every runner. It is the one Docker pool label.
-- `forgejo-docker-primary`, `ubuntu-latest`, and `docker` on all four hosts,
-  and `forgejo-docker-secondary` on `nux` and `nex`, are older aliases for the
-  same pool. They stay only until the workflows that request them move to
-  `forgejo-docker` ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).
-- host-specific Docker labels (`xyz`, `xev`, `nux`, `nex`) remain available for
-  workflows that intentionally need one host.
+The Docker runners carry one label, `forgejo-docker`, on `xyz`, `xev`, `nux`
+and `nex`, so Docker jobs can use every runner. There are no aliases and no
+host-specific labels: a job that needs one host is an operator procedure that
+adds a temporary label, not a standing label
+([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).
 
 ## Required Properties
 
@@ -178,9 +173,10 @@ limit across the containers Forgejo Runner creates.
   instead of discovered after pod startup.
 - Docker-capable runners remain trusted infrastructure and must not be exposed to
   untrusted workloads.
-- Routine workflows can run on all four native runners through the shared
-  `forgejo-docker-primary`, `ubuntu-latest`, and `docker` labels. Excess work
-  remains queued when their declared capacities are full.
+- Docker jobs can run on all four native runners through the shared
+  `forgejo-docker` label. Excess work remains queued when their declared
+  capacities are full. A job that asks for a retired label waits forever,
+  since Forgejo has no label fallback.
 - `nex` and `nux` contribute one slot per runner. This spreads eligible work
   without allowing concurrent runner jobs to amplify local resource contention
   on the smaller cluster members.
