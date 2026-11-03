@@ -20,6 +20,10 @@
       touch "$out"
     '';
 in {
+  netbird-https-contract =
+    if pkgs.stdenv.hostPlatform.isLinux
+    then import ./netbird-https.nix {inherit inputs pkgs;}
+    else pkgs.runCommand "netbird-https-linux-only" {} "touch $out";
   managed-ssh-forward = import ./managed-ssh-forward.nix {inherit pkgs;};
   isolated-agent-contract = import ./isolated-agent.nix {inherit inputs pkgs;};
   runtime-storage-identity-contract = mkRepoCheck "runtime-storage-identity-contract" [pkgs.bash pkgs.coreutils] ''
