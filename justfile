@@ -55,6 +55,10 @@ k8s-node-poweron HOST:
     kon {{HOST}}
 
 [group("ops")]
+k8s-node-poweron-check HOST:
+    kon --check-only {{HOST}}
+
+[group("ops")]
 stats HOST:
     ssh root@{{HOST}} "journalctl -t moonlight-direct-drm --since '2 minutes ago' -o cat --no-pager | grep -E 'Rolling video stats|Video stream:|frame rate|Frames dropped|Average |queue overflow|IDR frame request'"
 

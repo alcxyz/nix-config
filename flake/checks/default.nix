@@ -486,11 +486,23 @@ in {
       NIX_DEPLOY_CONFIG=/missing-inventory ${pkgs.nix-deploy}/bin/nixfleet status >/dev/null 2>error.txt || status=$?
       test "$status" != 0
       grep -Fq 'cannot read inventory' error.txt
-      # Node power is refused until the Go port is qualified.
+      # nixfleet reboot reaches the Go command, which reads the inventory.
       status=0
       ${pkgs.nix-deploy}/bin/nixfleet reboot no-such-host >/dev/null 2>error.txt || status=$?
       test "$status" = 2
-      grep -Fq 'NIXFLEET_QUALIFY_POWER=1' error.txt
+      grep -Fq "unknown host 'no-such-host'; known hosts: " error.txt
+      # runners is nixfleet runners, and kreboot, koff and kon run the Go
+      # command (nix-packages#552).
+      ${pkgs.nix-deploy}/bin/runners --help >help.txt
+      grep -q '^Usage: runners ' help.txt
+      status=0
+      ${pkgs.nix-deploy}/bin/runners no-such-host >/dev/null 2>error.txt || status=$?
+      test "$status" = 2
+      grep -Fq 'known hosts: ' error.txt
+      for command in kreboot koff kon; do
+        ${pkgs.k8s-node-reboot}/bin/$command --version >version.txt
+        grep -q '^k8s-node-power ' version.txt
+      done
       touch "$out"
     '';
 

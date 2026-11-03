@@ -212,30 +212,27 @@
     ${lockCheck}/bin/nix-deploy-lock-check --check || true
     exec ${nixDeploy}/bin/deploy --config "''${NIX_DEPLOY_CONFIG:-${configFile}}" "$@"
   '';
-  # nixfleet's deploy and status read the inventory from NIX_DEPLOY_CONFIG;
-  # reboot, off and on take none and reject --config, so it is not passed as
-  # an option (nix-packages#548). Node power stays with kreboot, koff and kon
-  # until the Go port is qualified on each k3s node (ADR-0068): its
-  # subcommands run only for a deliberate qualification run.
+  # nixfleet's deploy, status, runners and reboot read the inventory from
+  # NIX_DEPLOY_CONFIG unless given --config; off and on are k8s-node-power and
+  # reject --config, so the wrapper exports it rather than passing it
+  # (nix-packages#548). Node power runs the Go
+  # command, as kreboot, koff and kon do (ADR-0068, nix-packages#552).
   nixfleet = writeShellScriptBin "nixfleet" ''
-    case "''${1:-}" in
-      deploy)
-        ${lockCheck}/bin/nix-deploy-lock-check --check || true
-        ;;
-      reboot | off | on)
-        if [ "''${NIXFLEET_QUALIFY_POWER:-}" != 1 ]; then
-          echo "nixfleet: node power still uses kreboot, koff and kon; set NIXFLEET_QUALIFY_POWER=1 only for a qualification run of the Go port" >&2
-          exit 2
-        fi
-        ;;
-    esac
+    if [ "''${1:-}" = deploy ]; then
+      ${lockCheck}/bin/nix-deploy-lock-check --check || true
+    fi
     export NIX_DEPLOY_CONFIG="''${NIX_DEPLOY_CONFIG:-${configFile}}"
     exec ${nixDeploy}/bin/nixfleet "$@"
+  '';
+  # runners is nixfleet runners.
+  runners = writeShellScriptBin "runners" ''
+    export NIX_DEPLOY_CONFIG="''${NIX_DEPLOY_CONFIG:-${configFile}}"
+    exec ${nixDeploy}/bin/runners "$@"
   '';
 in
   symlinkJoin {
     name = "nix-deploy-configured-0.3.0";
-    paths = [deploy nixfleet];
+    paths = [deploy nixfleet runners];
     passthru = {
       deployConfig = configFile;
       unconfiguredPackage = nixDeploy;

@@ -1,7 +1,7 @@
 # ADR-0082: Release a self-fence only on positive peer evidence
 
 **Status:** Accepted
-**Date:** 2026-10-04
+**Date:** 2026-10-04, updated 2026-11-03 (the heartbeat baseline when the stop has no API-server time, per nix-packages#552)
 **Applies to:** `modules/nixos/virtualisation/k3s/` (`node-self-fence`), `kreboot`, `koff`, `kon` (nix-packages `k8s-node-reboot`), ADR-0068, gitops ADR-058
 
 ## Context
@@ -120,7 +120,12 @@ no fence key. Extending ADR-0068:
   the controller does not count a long `koff` as a failure.
 - **Before uncordon:** the target's agent must report its configured mode,
   `healthy` and not fenced, with an agent heartbeat that the API server
-  recorded after the node returned.
+  recorded after the node returned. For `kreboot` (and `nixfleet reboot`),
+  the helper compares it with the API-server time of the agent's stop, or with
+  a baseline annotation it writes and removes when the stop carries no such
+  time. `koff` leaves the node cordoned, and the `kon` that later uncordons it
+  always uses that baseline, since it stops no agent. Either way, no heartbeat
+  from before the power action passes.
 
 Hosts without an enabled agent skip these gates. A server whose agent should
 run but does not answer is a hard stop.

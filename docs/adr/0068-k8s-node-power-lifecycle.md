@@ -1,8 +1,9 @@
 # ADR-0068: Kubernetes node power lifecycle
 
 **Status:** Accepted
-**Date:** 2026-07-12
-**Applies to:** k3s nodes, `kreboot`, `koff`, `kon`, and their Go port `nixfleet reboot|off|on` (nix-packages#548, under qualification)
+**Date:** 2026-07-12, amended 2026-11-03 (nixfleet's Go command replaces the Bash helpers, nix-packages#552)
+**History:** [replaced text](archive/0068-k8s-node-power-lifecycle-history.md)
+**Applies to:** k3s nodes; `kreboot`, `koff` and `kon` (nix-packages `k8s-node-reboot`), which run nixfleet's `k8s-node-power reboot|off|on`; `nixfleet off|on`; and `nixfleet reboot` for nodes (nix-packages ADR-0010)
 
 This decision was originally published as ADR-0036. It was renumbered to
 ADR-0068 to distinguish it from the host-inventory decision; the original
@@ -17,8 +18,10 @@ filesystem journal errors and returning an unchanged node to scheduling.
 
 ## Decision
 
-Routine k3s node power operations use the shared Kubernetes-aware helpers.
-Before a power action, the helper must:
+Routine k3s node power operations use the shared Kubernetes-aware helpers:
+`kreboot`, `koff` and `kon`, which run nixfleet's Go node power command
+(nix-packages#552 retired the Bash tool it was ported from), or `nixfleet
+reboot` for several hosts. Before a power action, the helper must:
 
 1. pass cluster health checks;
 2. cordon and drain application workloads unless explicitly told to skip the
@@ -45,11 +48,13 @@ Before cordoning, the helper plans CloudNativePG primary switchovers to healthy
 replicas on surviving Ready, schedulable stable nodes. A power operation uses
 the operator's supported promotion interface and waits for full cluster health
 before continuing; `--check-only` validates and reports the same plan without
-changing it. Other zero-disruption PDBs remain immediate preflight failures
-instead of consuming the full drain timeout. Pod capacity is evaluated in
-aggregate across the remaining Ready, schedulable stable nodes after accounting
-for the target's evictable pods; an individually busy node does not block
-maintenance when another stable node has the required headroom.
+changing it. Other zero-disruption PDBs that cover a Pod on the node, in that
+Pod's own namespace, remain immediate preflight failures instead of consuming
+the full drain timeout. Pod capacity is evaluated in aggregate across the
+remaining Ready, schedulable stable nodes after accounting for the target's
+evictable pods, which leave out the instance-manager that stays on the node;
+an individually busy node does not block maintenance when another stable node
+has the required headroom.
 
 The Longhorn health gate requires every attached or attaching volume to have a
 live desired replica count of at least three before it waits for `healthy`
@@ -104,16 +109,25 @@ An already cordoned node is not treated as a fresh maintenance target. Another
 power cycle requires `--resume-maintenance`, which verifies the existing
 cordon, permits only maintenance Pods, repeats storage-detach and survivor
 checks, and fails closed on ambiguity. `--check-only` runs the corresponding
-fresh or resumed preflight without changing Kubernetes or host state.
+fresh or resumed preflight without changing Kubernetes or host state. For a
+power-on, `kon --check-only` checks once, without waiting, that the node is
+cordoned, back on SSH and Ready, and that the network, storage, database and
+self-fence health gates before its uncordon pass; whether the agent's
+heartbeat is fresh needs the baseline write, so only the power-on checks it.
 
 For reboot, the helper records the host boot ID before the action. SSH must
 become unavailable, return within the configured timeout, and expose a different
 boot ID before the node can be uncordoned.
 
 After the node reports Ready, its Kubernetes InternalIP must match the Flannel
-public-IP annotation before scheduling resumes. Drain and remote reboot-command
-failures leave the node cordoned for diagnosis instead of automatically
-returning an uncertain node to service.
+public-IP annotation before scheduling resumes. A failure after the cordon but
+before storage detachment, such as a failed drain or a displaced workload that
+does not recover, uncordons the node again: nothing on it has changed beyond
+the Pods the drain moved (nix-packages#576). From storage detachment on,
+remote reboot-command failures included, the node stays cordoned for diagnosis
+instead of automatically returning an uncertain node to service, as do a node
+a resumed maintenance found cordoned, an interrupted run and a run given
+`--leave-cordoned`.
 
 K3s nodes configure a bounded systemd reboot watchdog by default. The timeout
 is host-qualified and may be disabled when that host's firmware reset path is
@@ -131,6 +145,16 @@ and before uncordon.
 ## Consequences
 
 A maintenance operation stops safely and leaves the node cordoned when storage
-detach, SSH transition, boot identity, readiness, or workload recovery cannot be
-verified. An operator must diagnose the failed gate and resume explicitly; the
-helper does not reinterpret an ambiguous power state as success.
+detach, SSH transition, boot identity, readiness, the returned node's network,
+the self-fence gates from storage detachment on (ADR-0082), or storage and database survivability after
+the power action cannot be verified. An operator must diagnose
+the failed gate and resume explicitly; the helper does not reinterpret an
+ambiguous power state as success. A drain or displaced-workload failure before
+storage detachment instead returns the node to service uncordoned, and the
+operator retries the whole operation rather than resuming it. Of the storage
+and database checks, the uncordon waits only for survivability, besides the
+boot, readiness, network and self-fence gates above; the full health checks
+that follow it (displaced workloads Ready, Longhorn rebuilt, CloudNativePG
+streaming) fail the operation without re-cordoning the node, which by then
+already serves workloads, so the operator diagnoses those from a schedulable
+node.

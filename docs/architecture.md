@@ -265,8 +265,8 @@ stops the group and leaves its remaining members untouched, so `deploy` switches
 at most one etcd member or resolver at a time and only while the others answer
 their checks. It cannot protect against a member failing for other reasons
 during the switch. Node
-reboots are separate (`kreboot`, `koff`, `kon`); `nixfleet status` only reads
-state. For a failed deploy, `nixfleet triage` launches the agent configured
+reboots are separate (`kreboot`, `koff`, `kon`, or `nixfleet reboot` for the
+fleet); `nixfleet status` only reads state. For a failed deploy, `nixfleet triage` launches the agent configured
 in the `triage` object of the generated inventory, which maps this flake's own
 inputs to their local checkouts (nix-packages ADR-0016).
 
