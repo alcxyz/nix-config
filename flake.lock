@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793626245,
-        "narHash": "sha256-U1Rm21cyivnxlxrUnd+vp13NGnUlMCkRUmpiOq9OP/A=",
+        "lastModified": 1793676645,
+        "narHash": "sha256-3wFVgDHi3hjA8GZL6rGGw3nN62DZVfkQdfY0owsiCOg=",
         "ref": "dev",
-        "rev": "5d062be9873c5cd76a8df42038eadbf80043039b",
-        "revCount": 919,
+        "rev": "c0ded3ddec080cff84941f5da07ce2c1906f7470",
+        "revCount": 924,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1272,11 +1272,11 @@
         "restricted-codex-nixpkgs": "restricted-codex-nixpkgs"
       },
       "locked": {
-        "lastModified": 1793635895,
-        "narHash": "sha256-0RXr0TntX4p4LRy+cZCuyUVFkVr3tqgt9VAAjO31Cm8=",
+        "lastModified": 1793642016,
+        "narHash": "sha256-3qBmUUEwjofMYMV7BKpy1sM5qHqtUeJm4bPCJ5BMo08=",
         "ref": "dev",
-        "rev": "5ed44b22e48635237199fb7a0f01865da3c50610",
-        "revCount": 49,
+        "rev": "af8263e11862fd15fb08d59f724300a3d83cbeec",
+        "revCount": 51,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
