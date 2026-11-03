@@ -12,10 +12,9 @@ import unittest
 SCRIPT = Path(sys.argv.pop(1)).resolve()
 PRIMARY = 'forgejo-actions-runner.service'
 POOL = 'forgejo-podman-runner.service'
-FAST = 'forgejo-podman-runner-fast.service'
 HOLD = 'forgejo-runner-hold.service'
 GAME = 'game-signal.service'
-RUNNERS = [PRIMARY, POOL, FAST]
+RUNNERS = [PRIMARY, POOL]
 DOCKER = 'forgejo-runner-docker.service'
 PODMAN = 'forgejo-runner-podman.service'
 APIS = [DOCKER, PODMAN]
@@ -208,7 +207,7 @@ class StoreResetTests(unittest.TestCase):
                    STAMP_FILE=str(self.stamp),
                    PRESSURE_FILE=str(self.pressure),
                    IO_PRESSURE_THRESHOLD_HUNDREDTHS='500',
-                   RUNNER_UNITS=f'{PRIMARY} {POOL} {FAST}',
+                   RUNNER_UNITS=f'{PRIMARY} {POOL}',
                    GAME_ENABLED='0',
                    GAME_FILE=str(self.game_file),
                    LEGACY_FENCE=str(self.legacy_fence),
@@ -262,9 +261,9 @@ class StoreResetTests(unittest.TestCase):
         self.assertIn('reset due=store_age', result.stdout)
         self.assertIn('trash_deleted seconds=', result.stdout)
         self.assertEqual(self.mutations(), [
-            f'stop {PRIMARY}', f'stop {POOL}', f'stop {FAST}',
+            f'stop {PRIMARY}', f'stop {POOL}',
             f'stop {DOCKER} {PODMAN}',
-            f'start {DOCKER} {PODMAN} {PRIMARY} {POOL} {FAST}',
+            f'start {DOCKER} {PODMAN} {PRIMARY} {POOL}',
         ])
         self.assertEqual(self.markers(), [])
         # The store is gone, its trash deleted, and no restart is left queued.
@@ -277,9 +276,17 @@ class StoreResetTests(unittest.TestCase):
 
     def test_only_running_runners_are_stopped_and_started(self):
         self.age_stamp(8 * DAY)
-        self.update_units(**{POOL: stopped(),
-                             FAST: dict(stopped(), ActiveState='failed', SubState='failed')})
+        self.update_units(**{POOL: stopped()})
         (self.state_dir / 'runners' / POOL / 'held').touch()
+        result = self.run_reset()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.mutations(), [
+            f'stop {PRIMARY}', f'stop {DOCKER} {PODMAN}',
+            f'start {DOCKER} {PODMAN} {PRIMARY}'])
+
+    def test_failed_runners_are_left_alone(self):
+        self.age_stamp(8 * DAY)
+        self.update_units(**{POOL: dict(stopped(), ActiveState='failed', SubState='failed')})
         result = self.run_reset()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.mutations(), [
@@ -298,10 +305,10 @@ class StoreResetTests(unittest.TestCase):
         cases = {
             'io_pressure full_avg10_hundredths=600': lambda: self.set_pressure(600),
             'hold_inactive': lambda: self.update_units(**{HOLD: stopped()}),
-            f'runner_state_missing unit={FAST}': lambda: (self.state_dir / 'runners' / FAST).rmdir(),
+            f'runner_state_missing unit={POOL}': lambda: (self.state_dir / 'runners' / POOL).rmdir(),
             f'prune_active unit={PRUNES[0]}': lambda: self.update_units(**{PRUNES[0]: running()}),
             f'api_inactive unit={PODMAN}': lambda: self.update_units(**{PODMAN: stopped()}),
-            f'runner_job unit={FAST}': lambda: self.update_units(**{FAST: dict(running(), Job='7')}),
+            f'runner_job unit={POOL}': lambda: self.update_units(**{POOL: dict(running(), Job='7')}),
             f'runner_transition unit={POOL} state=deactivating:stop-sigterm':
                 lambda: self.update_units(**{POOL: dict(running(), ActiveState='deactivating', SubState='stop-sigterm')}),
             'job_running': lambda: (self.engines / 'podman.sock').write_text(
@@ -348,10 +355,10 @@ class StoreResetTests(unittest.TestCase):
     def test_a_job_started_during_the_stops_stops_no_further_runner(self):
         # A job still pulling its image has no container yet.
         self.age_stamp(8 * DAY)
-        self.set_fake(journal_on_stop=FAST)
+        self.set_fake(journal_on_stop=POOL)
         result = self.run_reset()
-        self.assert_skipped(result, f'recent_job unit={FAST}')
-        self.assertEqual(self.mutations(), [f'stop {PRIMARY}', f'stop {POOL}'])
+        self.assert_skipped(result, f'recent_job unit={POOL}')
+        self.assertEqual(self.mutations(), [f'stop {PRIMARY}'])
         self.assert_untouched()
 
     def test_an_old_job_start_does_not_hold_the_reset(self):
@@ -373,7 +380,7 @@ class StoreResetTests(unittest.TestCase):
         self.set_fake(refuse=RUNNERS)
         result = self.run_reset('restart')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.mutations(), [f'start {DOCKER} {PODMAN} {PRIMARY} {POOL} {FAST}'])
+        self.assertEqual(self.mutations(), [f'start {DOCKER} {PODMAN} {PRIMARY} {POOL}'])
         self.assertFalse(self.restart.exists())
         self.assertEqual(self.markers(), RUNNERS)
         for unit in RUNNERS:
@@ -403,11 +410,11 @@ class StoreResetTests(unittest.TestCase):
 
     def test_a_runner_started_during_the_stop_keeps_the_apis_running(self):
         self.age_stamp(8 * DAY)
-        self.update_units(**{FAST: stopped()})
-        self.set_fake(start_on_stop=FAST)
+        self.update_units(**{POOL: stopped()})
+        self.set_fake(start_on_stop=POOL)
         result = self.run_reset()
-        self.assert_skipped(result, f'runner_started unit={FAST}')
-        self.assertEqual(self.mutations(), [f'stop {PRIMARY}', f'stop {POOL}'])
+        self.assert_skipped(result, f'runner_started unit={POOL}')
+        self.assertEqual(self.mutations(), [f'stop {PRIMARY}'])
         self.assert_untouched()
 
     def test_restart_without_a_list_does_nothing(self):
@@ -498,7 +505,7 @@ class StoreResetTests(unittest.TestCase):
         self.assertIn('reset due=store_age', result.stdout)
         self.assertIn('trash_left reason=io_pressure full_avg10_hundredths=9000', result.stdout)
         self.assertEqual(len(self.trashes()), 1)
-        self.assertEqual(self.calls('start')[-1], f'start {DOCKER} {PODMAN} {PRIMARY} {POOL} {FAST}')
+        self.assertEqual(self.calls('start')[-1], f'start {DOCKER} {PODMAN} {PRIMARY} {POOL}')
 
     def test_planted_trash_entries_are_unlinked_unfollowed_and_hold_nothing(self):
         self.age_stamp(8 * DAY)

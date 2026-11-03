@@ -20,8 +20,7 @@ RESTART = Path(sys.argv.pop(1)).resolve()
 STATE_HELPER = RECORD.with_name('runner-state.sh')
 PRIMARY = 'forgejo-actions-runner.service'
 POOL = 'forgejo-podman-runner.service'
-FAST = 'forgejo-podman-runner-fast.service'
-RUNNERS = [PRIMARY, POOL, FAST]
+RUNNERS = [PRIMARY, POOL]
 DOCKER = 'forgejo-runner-docker.service'
 PODMAN = 'forgejo-runner-podman.service'
 POLICY = 'forgejo-runner-resource-policy.service'
@@ -236,16 +235,20 @@ class RunnerRestartTest(unittest.TestCase):
         drop_in.write_text('[Service]\n')
         self.update_unit(DOCKER, DropInPaths=str(drop_in))
         (self.records / POLICY).unlink()
-        # A stopped unit gets the deployed definition at its next start.
-        self.deploy(FAST, 'v2')
-        self.update_unit(FAST, ActiveState='inactive', SubState='dead')
         _, units = self.status()
         self.assertEqual(units[PRIMARY][5:7], ['yes', 'started from an older definition'])
         self.assertEqual(units[POOL][5:7], ['yes', 'no start record'])
         self.assertEqual(units[DOCKER][5:7], ['yes', 'started from an older definition'])
         self.assertEqual(units[POLICY][5:7], ['yes', 'no start record'])
-        self.assertEqual(units[FAST][5:7], ['no', '-'])
         self.assertEqual(units[PODMAN][5:7], ['no', '-'])
+
+    def test_status_does_not_flag_a_stopped_runner_with_a_changed_definition(self):
+        # A stopped unit gets the deployed definition at its next start.
+        self.deploy(POOL, 'v2')
+        self.update_unit(POOL, ActiveState='inactive', SubState='dead')
+        _, units = self.status()
+        self.assertEqual(units[POOL][5:7], ['no', '-'])
+        self.assertEqual(units[PRIMARY][5:7], ['no', '-'])
 
     def test_status_explains_each_stopped_runner(self):
         cases = [
@@ -269,7 +272,7 @@ class RunnerRestartTest(unittest.TestCase):
             with self.subTest(reason=reason):
                 self.tmp.cleanup()
                 self.setUp()
-                self.update_unit(FAST, **runner)
+                self.update_unit(POOL, **runner)
                 if 'hold' in host:
                     self.update_unit(HOLD, StatusText=host['hold'])
                 if 'reset' in host:
@@ -277,7 +280,7 @@ class RunnerRestartTest(unittest.TestCase):
                 if host.get('hold_down'):
                     self.update_unit(HOLD, ActiveState='failed')
                 _, units = self.status()
-                self.assertEqual(units[FAST][8], reason)
+                self.assertEqual(units[POOL][8], reason)
                 self.assertEqual(units[PRIMARY][8], '-')
 
     def test_status_reports_the_last_restart(self):
@@ -363,22 +366,22 @@ class RunnerRestartTest(unittest.TestCase):
         state = self.state()
         state['engine_down'] = ['docker']
         state['units'][RESET]['ActiveState'] = 'activating'
-        state['units'][FAST].update(ActiveState='deactivating', SubState='stop-sigterm')
+        state['units'][POOL].update(ActiveState='deactivating', SubState='stop-sigterm')
         state['steps'] = [{}, {}, {}]
         self.write_state(state)
         result = self.restart(WAIT_SECONDS='100')
         self.assertIn('reason=store_reset_running', result.stdout)
         self.update_unit(RESET, ActiveState='inactive')
         result = self.restart(WAIT_SECONDS='0')
-        self.assertIn(f'reason=runner_transition unit={FAST} state=deactivating:stop-sigterm', result.stdout)
-        self.update_unit(FAST, ActiveState='active', SubState='running')
+        self.assertIn(f'reason=runner_transition unit={POOL} state=deactivating:stop-sigterm', result.stdout)
+        self.update_unit(POOL, ActiveState='active', SubState='running')
         result = self.restart(WAIT_SECONDS='0')
         self.assertIn(f'reason=engine_api_unavailable unit={DOCKER}', result.stdout)
         self.assertEqual(self.restarts(), [])
 
     def test_restart_does_not_wait_for_a_runner_that_restarts_after_a_failure(self):
         self.deploy(PRIMARY, 'v2')
-        self.update_unit(FAST, ActiveState='activating', SubState='auto-restart', Result='exit-code')
+        self.update_unit(POOL, ActiveState='activating', SubState='auto-restart', Result='exit-code')
         result = self.restart()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.restarts(), [[PRIMARY]])

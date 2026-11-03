@@ -33,12 +33,9 @@
     labels;
   uniqueLabelNames = labels: builtins.length (lib.unique (labelNames labels)) == builtins.length labels;
 
-  # Every Podman runner unit shares the one Podman API, runner hold and build
-  # slice, and runs as the one runner account.
-  # Each has its own registration, state and runtime directories. The
-  # existing runner keeps its unit, paths and configuration file name, so
-  # its Forgejo identity survives; extra runners derive theirs from their
-  # attribute name.
+  # The Podman runner unit uses the dedicated Podman API, runner hold and
+  # build slice, and runs as its own runner account with its own
+  # registration, state and runtime directories.
   mkInstance = {
     serviceName,
     description,
@@ -82,24 +79,7 @@
     description = "Forgejo Podman canary runner (${canary.name})";
     inherit (canary) labels capacity name registrationTokenFile registrationScope;
   };
-  # attrNames order: extra runners follow the existing one, sorted by name.
-  extraInstances = lib.mapAttrsToList (key: extra:
-    mkInstance {
-      serviceName = "forgejo-podman-runner-${key}";
-      description = "Forgejo Podman runner ${key} (${extra.name})";
-      inherit (extra) labels capacity name registrationTokenFile registrationScope;
-    })
-  canary.extraRunners;
-  instances = [canaryInstance] ++ extraInstances;
-  podmanLabels = lib.concatMap (instance: instance.labels) instances;
-  # A label name served by more than one Podman runner must be listed in
-  # sharedLabels and carry the same image on each of them.
-  labelOverlapAllowed = name: let
-    labels = builtins.filter (label: labelName label == name) podmanLabels;
-  in
-    builtins.length labels
-    <= 1
-    || (builtins.elem name canary.sharedLabels && builtins.length (lib.unique labels) == 1);
+  instances = [canaryInstance];
   # An owner token passes no scope, so registrations from before the option
   # keep their recorded identity and are not repeated.
   scopeArgument = instance:
@@ -217,9 +197,8 @@ in {
       ++ lib.optionals canary.enable (map (instance: instance.unit) instances);
     description = ''
       Runner units sharing the dedicated CI aggregate: the primary Docker
-      runner first, then the existing Podman runner, then extra Podman runners
-      sorted by name. The runner hold and the Podman store reset take this
-      list.
+      runner first, then the Podman runner. The runner hold and the Podman
+      store reset take this list.
     '';
   };
 
@@ -332,77 +311,9 @@ in {
       ];
       description = "Packages available to the Podman runner process.";
     };
-    extraRunners = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule ({name, ...}: {
-        options = {
-          labels = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            description = "Labels with execution backends, such as ci-fast:docker://image.";
-          };
-          capacity = lib.mkOption {
-            type = lib.types.ints.positive;
-            default = 1;
-            description = "Concurrent jobs of this runner, within the shared build slice.";
-          };
-          name = lib.mkOption {
-            type = lib.types.str;
-            default = "${config.networking.hostName}-${name}";
-            defaultText = lib.literalExpression ''"''${config.networking.hostName}-<name>"'';
-            description = "Distinct Forgejo registration name of this runner.";
-          };
-          registrationTokenFile = lib.mkOption {
-            type = lib.types.str;
-            default = canary.registrationTokenFile;
-            defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.registrationTokenFile";
-            description = "Absolute path to an activated registration token file; the canary's by default.";
-          };
-          registrationScope = lib.mkOption {
-            type = lib.types.enum ["owner" "instance"];
-            default = canary.registrationScope;
-            defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.registrationScope";
-            description = "Scope this runner's registration token grants; the canary's by default.";
-          };
-        };
-      }));
-      default = {};
-      example = lib.literalExpression ''
-        {
-          fast = {
-            labels = ["ci-fast:docker://docker.io/library/docker:27-cli"];
-            capacity = 1;
-          };
-        }
-      '';
-      description = ''
-        Additional Podman runner units. Entry `<name>` becomes
-        `forgejo-podman-runner-<name>.service` with its own Forgejo
-        registration and state, run by the canary's runner account against the
-        same Podman API. Every runner shares the one runner hold and build
-        slice, so the slice's budget is split across all of their jobs.
-      '';
-    };
-    sharedLabels = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [];
-      example = ["ci-fast"];
-      description = ''
-        Label names that more than one Podman runner may serve, such as a
-        label a dedicated extra runner serves while the canary keeps it as
-        overflow. A shared label must name the same image on every Podman
-        runner that serves it. The Docker runner never shares a label.
-      '';
-    };
   };
 
   config = lib.mkMerge [
-    (lib.mkIf (cfg.enable && !canary.enable) {
-      assertions = [
-        {
-          assertion = canary.extraRunners == {};
-          message = "Extra Podman runners require the Podman CI canary.";
-        }
-      ];
-    })
     (lib.mkIf enabled {
       assertions = [
         {
@@ -414,6 +325,8 @@ in {
           message = "Podman CI canary requires explicit name:docker://image labels.";
         }
         {
+          # Docker and Podman runners run jobs on different engines; a job
+          # must never land on either one by the same label.
           assertion = lib.intersectLists (labelNames canary.labels) (labelNames cfg.labels) == [];
           message = "Podman CI canary label names must not overlap Docker runner label names.";
         }
@@ -428,39 +341,6 @@ in {
         {
           assertion = lib.hasPrefix "/" canary.registrationTokenFile;
           message = "Podman CI canary requires an absolute registrationTokenFile path.";
-        }
-        {
-          assertion = lib.all (key: builtins.match "[a-z0-9-]+" key != null) (lib.attrNames canary.extraRunners);
-          message = "Extra Podman runner names must match ^[a-z0-9-]+$.";
-        }
-        {
-          assertion = lib.all (instance: validLabels instance.labels && uniqueLabelNames instance.labels) extraInstances;
-          message = "Extra Podman runners require unique, explicit name:docker://image labels.";
-        }
-        {
-          # Docker and Podman runners run jobs on different engines; a job
-          # must never land on either one by the same label.
-          assertion = lib.intersectLists (labelNames podmanLabels ++ canary.sharedLabels) (labelNames cfg.labels) == [];
-          message = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
-        }
-        {
-          assertion = lib.all labelOverlapAllowed (lib.unique (labelNames podmanLabels));
-          message = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
-        }
-        {
-          assertion = let
-            names = [cfg.name] ++ map (instance: instance.name) instances;
-          in
-            builtins.length (lib.unique names) == builtins.length names;
-          message = "Docker and Podman runner registration names must be distinct.";
-        }
-        {
-          assertion = builtins.length (lib.unique cfg.runnerUnits) == builtins.length cfg.runnerUnits;
-          message = "Runner unit names must be distinct.";
-        }
-        {
-          assertion = lib.all (instance: lib.hasPrefix "/" instance.registrationTokenFile) extraInstances;
-          message = "Extra Podman runners require an absolute registrationTokenFile path.";
         }
         {
           # Version 1 tables cannot be mixed with the [[registry]] mirror entry.

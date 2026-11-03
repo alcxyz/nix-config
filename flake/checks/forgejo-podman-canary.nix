@@ -8,8 +8,6 @@ else let
   primary = "forgejo-actions-runner.service";
   canary = "forgejo-podman-runner.service";
   both = "${primary} ${canary}";
-  extra = "forgejo-podman-runner-fast.service";
-  three-units = "${both} ${extra}";
   evaluate = enabled: labels: extra:
     (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       system = pkgs.stdenv.hostPlatform.system;
@@ -135,55 +133,19 @@ else let
   dockerConfigFile = config:
     lib.removePrefix "--config-file=" (lib.last (lib.splitString " " config.systemd.services.forgejo-runner-docker.serviceConfig.ExecStart));
 
-  # An extra Podman runner beside the canary, with ci-fast as a shared
-  # overflow label on both (ADR-0097).
+  # The Podman runner serves ci-fast beside its pool label (ADR-0097) in one
+  # registration, state and configuration.
   fastLabel = "ci-fast:docker://example.invalid/fast:latest";
-  withExtra = canaryLabels: extraRunner: overrides:
-    evaluate true canaryLabels (lib.recursiveUpdate {
-        networking.hostName = "fixture";
-        services.forgejo-actions-runner.podmanCanary.extraRunners.fast = extraRunner;
-      }
-      overrides);
-  sharedConfig = {services.forgejo-actions-runner.podmanCanary.sharedLabels = ["ci-fast"];};
-  three = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} sharedConfig;
-  threeReset = withExtra validLabels {labels = [fastLabel];} resetConfig;
-  extraUnit = three.systemd.services.forgejo-podman-runner-fast;
-  threeUnit = three.systemd.services.forgejo-podman-runner;
-  # An instance token on the canary carries over to the extra unless it sets
-  # its own scope.
-  instanceScoped = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} (lib.recursiveUpdate sharedConfig {
+  twoLabels = evaluate true (validLabels ++ [fastLabel]) {};
+  twoLabelsUnit = twoLabels.systemd.services.forgejo-podman-runner;
+  instanceScoped = evaluate true (validLabels ++ [fastLabel]) {
     services.forgejo-actions-runner.podmanCanary.registrationScope = "instance";
-  });
-  ownerExtra =
-    withExtra (validLabels ++ [fastLabel]) {
-      labels = [fastLabel];
-      registrationScope = "owner";
-    } (lib.recursiveUpdate sharedConfig {
-      services.forgejo-actions-runner.podmanCanary.registrationScope = "instance";
-    });
-  extraConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" extraUnit.script));
-  canaryConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" threeUnit.script));
-  sharedWithoutAllowance = withExtra (validLabels ++ [fastLabel]) {labels = [fastLabel];} {};
-  sharedDifferentImage = withExtra (validLabels ++ [fastLabel]) {labels = ["ci-fast:docker://example.invalid/other:latest"];} sharedConfig;
-  sharedWithDocker = withExtra validLabels {labels = ["docker-primary:docker://example.invalid/docker:latest"];} {
-    services.forgejo-actions-runner.podmanCanary.sharedLabels = ["docker-primary"];
   };
-  allowanceNamesDocker = withExtra validLabels {labels = [fastLabel];} {
-    services.forgejo-actions-runner.podmanCanary.sharedLabels = ["docker-primary"];
+  canaryConfigFile = lib.last (lib.splitString " " (lib.removeSuffix "\n" twoLabelsUnit.script));
+  duplicateLabel = evaluate true (validLabels ++ ["podman-canary:docker://example.invalid/other:latest"]) {};
+  duplicateName = evaluate true validLabels {
+    services.forgejo-actions-runner.podmanCanary.name = lib.mkForce "fixture-docker";
   };
-  extraHostLabel = withExtra validLabels {labels = ["ci-fast:host"];} {};
-  extraBadName = evaluate true validLabels {
-    services.forgejo-actions-runner.podmanCanary.extraRunners.Fast.labels = [fastLabel];
-  };
-  extraDuplicateName = withExtra validLabels {
-    labels = [fastLabel];
-    name = "fixture-podman";
-  } {};
-  extraWithoutCanary = evaluate false validLabels {
-    services.forgejo-actions-runner.podmanCanary.extraRunners.fast.labels = [fastLabel];
-  };
-  labelOverlapMessage = "A label name served by more than one Podman runner must be listed in podmanCanary.sharedLabels and name the same image on each.";
-  dockerOverlapMessage = "Podman runner label names, shared ones included, must not overlap Docker runner label names.";
 in
   assert !(enabled.systemd.services ? forgejo-podman-storage-ready);
   assert lib.elem "forgejo-podman-storage-ready.service" dedicatedStorage.systemd.services.forgejo-runner-podman.requires;
@@ -282,61 +244,41 @@ in
   assert !(lib.hasInfix "FIXTURE_SECRET" unit.preStart);
   assert failedAssertion overlap "Podman CI canary label names must not overlap Docker runner label names.";
   assert failedAssertion hostLabel "Podman CI canary requires explicit name:docker://image labels.";
-  # Without extra runners the list is the primary and the canary only.
+  # The runner lists hold the primary and the Podman runner only.
   assert enabled.services.forgejo-actions-runner.runnerUnits == [primary canary];
   assert disabled.services.forgejo-actions-runner.runnerUnits == [primary];
   assert map (runner: runner.unit) enabled.services.nixfleet-boot-check.runnerUnits == [primary canary];
-  # An extra runner joins every runner list after the canary, has its own
-  # identity, state and configuration, and shares the account and API.
-  assert failedAssertions three == failedAssertions enabled;
-  assert three.services.forgejo-actions-runner.runnerUnits == [primary canary extra];
-  assert three.systemd.services.forgejo-runner-hold.environment.RUNNER_UNITS == three-units;
-  assert builtins.elem "d /run/forgejo-runner-hold/runners/${extra} 0700 root root -" three.systemd.tmpfiles.rules;
-  assert (resetService threeReset).environment.RUNNER_UNITS == three-units;
-  assert (resetService resetOnly).environment.RUNNER_UNITS == both;
-  assert extraUnit.environment.RUNNER_UNIT == extra;
-  assert threeUnit.environment.RUNNER_UNIT == canary;
-  assert extraUnit.description == "Forgejo Podman runner fast (fixture-fast)";
-  assert extraUnit.serviceConfig.User == "forgejo-podman-runner";
-  assert extraUnit.serviceConfig.Group == "forgejo-podman";
-  assert extraUnit.serviceConfig.WorkingDirectory == "/var/lib/forgejo-podman-runner-fast";
-  assert extraUnit.environment.HOME == "/var/lib/forgejo-podman-runner-fast";
-  assert extraUnit.serviceConfig.RuntimeDirectory == "forgejo-podman-runner-fast";
-  assert extraUnit.environment.DOCKER_HOST == threeUnit.environment.DOCKER_HOST;
-  assert extraUnit.serviceConfig.ExecCondition == threeUnit.serviceConfig.ExecCondition;
-  assert extraUnit.requires == threeUnit.requires && extraUnit.bindsTo == threeUnit.bindsTo && extraUnit.after == threeUnit.after;
-  assert extraUnit.restartIfChanged == false;
-  assert threeUnit.serviceConfig.WorkingDirectory == "/var/lib/forgejo-podman-runner";
-  assert extraConfigFile != canaryConfigFile;
-  # The extra registers its own identity into its own state with the
-  # canary's token file by default.
-  assert lib.hasInfix " /var/lib/forgejo-podman-runner-fast/.runner " extraUnit.preStart;
-  assert lib.hasInfix " fixture-fast " extraUnit.preStart;
-  assert lib.hasInfix "< /run/fixture/podman-registration-token" extraUnit.preStart;
-  assert lib.hasInfix " ${fastLabel} " extraUnit.preStart;
-  # Owner tokens pass no scope, so earlier registrations are kept; an instance
-  # token passes its scope to every runner that uses it.
-  assert lib.hasInfix " ${fastLabel} \\\n" extraUnit.preStart;
-  assert lib.hasInfix " ${fastLabel} instance \\\n" instanceScoped.systemd.services.forgejo-podman-runner-fast.preStart;
-  assert lib.hasInfix ",${fastLabel} instance \\\n" instanceScoped.systemd.services.forgejo-podman-runner.preStart;
-  assert lib.hasInfix " ${fastLabel} \\\n" ownerExtra.systemd.services.forgejo-podman-runner-fast.preStart;
-  assert instanceScoped.systemd.services.forgejo-actions-runner.preStart == three.systemd.services.forgejo-actions-runner.preStart;
-  assert builtins.elem "d /var/lib/forgejo-podman-runner-fast 0750 forgejo-podman-runner forgejo-podman -" three.systemd.tmpfiles.rules;
   assert builtins.elem {
-    unit = extra;
-    holdMarkerDirectory = "/run/forgejo-runner-hold/runners/${extra}";
+    unit = canary;
+    holdMarkerDirectory = "/run/forgejo-runner-hold/runners/${canary}";
   }
-  three.services.nixfleet-boot-check.runnerUnits;
-  # ci-fast may be shared between Podman runners only when allowed and with
-  # one image; the Docker runner never shares a label.
-  assert failedAssertion sharedWithoutAllowance labelOverlapMessage;
-  assert failedAssertion sharedDifferentImage labelOverlapMessage;
-  assert failedAssertion sharedWithDocker dockerOverlapMessage;
-  assert failedAssertion allowanceNamesDocker dockerOverlapMessage;
-  assert failedAssertion extraHostLabel "Extra Podman runners require unique, explicit name:docker://image labels.";
-  assert failedAssertion extraBadName "Extra Podman runner names must match ^[a-z0-9-]+$.";
-  assert failedAssertion extraDuplicateName "Docker and Podman runner registration names must be distinct.";
-  assert failedAssertion extraWithoutCanary "Extra Podman runners require the Podman CI canary.";
+  enabled.services.nixfleet-boot-check.runnerUnits;
+  assert builtins.elem "d /run/forgejo-runner-hold/runners/${canary} 0700 root root -" enabled.systemd.tmpfiles.rules;
+  assert (resetService resetOnly).environment.RUNNER_UNITS == both;
+  # A second label joins the same runner: no new unit, identity or state.
+  assert failedAssertions twoLabels == failedAssertions enabled;
+  assert twoLabels.services.forgejo-actions-runner.runnerUnits == [primary canary];
+  assert twoLabels.systemd.services.forgejo-runner-hold.environment.RUNNER_UNITS == both;
+  assert twoLabelsUnit.environment.RUNNER_UNIT == canary;
+  assert twoLabelsUnit.description == "Forgejo Podman canary runner (fixture-podman)";
+  assert twoLabelsUnit.serviceConfig.WorkingDirectory == "/var/lib/forgejo-podman-runner";
+  assert twoLabelsUnit.environment.HOME == "/var/lib/forgejo-podman-runner";
+  assert twoLabelsUnit.serviceConfig.RuntimeDirectory == "forgejo-podman-runner";
+  assert builtins.elem "d /var/lib/forgejo-podman-runner 0750 forgejo-podman-runner forgejo-podman -" twoLabels.systemd.tmpfiles.rules;
+  # The runner registers its own identity into its own state with its token
+  # file, and passes both labels.
+  assert lib.hasInfix " /var/lib/forgejo-podman-runner/.runner " twoLabelsUnit.preStart;
+  assert lib.hasInfix " fixture-podman " twoLabelsUnit.preStart;
+  assert lib.hasInfix "< /run/fixture/podman-registration-token" twoLabelsUnit.preStart;
+  # Owner tokens pass no scope, so earlier registrations are kept; an instance
+  # token passes its scope.
+  assert lib.hasInfix " ${lib.head validLabels},${fastLabel} \\\n" twoLabelsUnit.preStart;
+  assert lib.hasInfix ",${fastLabel} instance \\\n" instanceScoped.systemd.services.forgejo-podman-runner.preStart;
+  assert instanceScoped.systemd.services.forgejo-actions-runner.preStart == twoLabels.systemd.services.forgejo-actions-runner.preStart;
+  # Label names are unique on the Podman runner, and its registration name
+  # differs from the Docker runner's.
+  assert failedAssertion duplicateLabel "Podman CI canary label names must be unique.";
+  assert failedAssertion duplicateName "Podman CI canary registration name must differ from the Docker runner name.";
   assert !(api.environment ? CONTAINERS_REGISTRIES_CONF);
   assert lib.hasPrefix "/nix/store/" mirroredApi.environment.CONTAINERS_REGISTRIES_CONF;
   assert failedAssertions mirrored == failedAssertions enabled;
@@ -352,16 +294,14 @@ in
       nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.python3 pkgs.shellcheck pkgs.systemd pkgs.util-linux pkgs.yq-go];
     } ''
       shellcheck ${gateSource}
-      # Each Podman runner has its own capacity, labels, state and env file.
-      grep -Fxq '  capacity: 1' ${extraConfigFile}
-      grep -Fxq '  - ${fastLabel}' ${extraConfigFile}
-      grep -Fxq '  env_file: /run/forgejo-podman-runner-fast/job.env' ${extraConfigFile}
-      grep -Fxq '  workdir_parent: /var/lib/forgejo-podman-runner-fast/host-work' ${extraConfigFile}
+      # The Podman runner has its own capacity, labels, state and env file.
+      grep -Fxq '  capacity: 1' ${canaryConfigFile}
+      grep -Fxq '  - ${lib.head validLabels}' ${canaryConfigFile}
+      grep -Fxq '  - ${fastLabel}' ${canaryConfigFile}
       grep -Fxq '  env_file: /run/forgejo-podman-runner/job.env' ${canaryConfigFile}
       grep -Fxq '  workdir_parent: /var/lib/forgejo-podman-runner/host-work' ${canaryConfigFile}
-      if grep -Fq podman-canary ${extraConfigFile}; then exit 1; fi
-      # No Podman runner sets runner variables.
-      if grep -Fq 'envs:' ${canaryConfigFile} ${extraConfigFile}; then exit 1; fi
+      # The Podman runner sets no runner variables.
+      if grep -Fq 'envs:' ${canaryConfigFile}; then exit 1; fi
       # The cache is a docker.io mirror in front of docker.io itself, so both
       # engines fall back to it; the host's other registries stay as they are.
       python3 - ${mirroredApi.environment.CONTAINERS_REGISTRIES_CONF} <<'PY'

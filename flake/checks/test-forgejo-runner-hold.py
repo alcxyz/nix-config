@@ -20,8 +20,7 @@ DISK_HELPER = Path(os.environ.get('DISK_HELPER_FILE', HOLD.with_name('disk-space
 GAME_SCAN = Path(os.environ.get('GAME_SCAN_FILE', SIGNAL.with_name('game-scan.sh')))
 PRIMARY = 'forgejo-actions-runner.service'
 POOL = 'forgejo-podman-runner.service'
-FAST = 'forgejo-podman-runner-fast.service'
-RUNNERS = [PRIMARY, POOL, FAST]
+RUNNERS = [PRIMARY, POOL]
 GAME_UNIT = 'game-signal.service'
 RESET_UNIT = 'forgejo-podman-store-reset.service'
 GIB = 1024 ** 3
@@ -208,33 +207,33 @@ class Fixture:
 class RunnerHoldTests(unittest.TestCase):
     def test_a_game_stops_running_runners_and_marks_only_those(self):
         fixture = Fixture(self)
-        fixture.units[FAST] = runner('inactive')
+        fixture.units[POOL] = runner('inactive')
         fixture.write()
         fixture.game_file.write_text('wine:Game.exe\n')
         result = fixture.run_hold(2)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('event=hold reason=game', result.stdout)
-        self.assertEqual(fixture.calls('stop'), [f'stop {PRIMARY}', f'stop {POOL}'])
-        self.assertTrue(fixture.held(PRIMARY) and fixture.held(POOL))
+        self.assertEqual(fixture.calls('stop'), [f'stop {PRIMARY}'])
+        self.assertTrue(fixture.held(PRIMARY))
         # A runner someone else stopped is no runner of the hold.
-        self.assertFalse(fixture.held(FAST))
+        self.assertFalse(fixture.held(POOL))
         self.assertEqual(fixture.calls('start'), [])
 
     def test_the_end_of_a_game_starts_only_held_runners(self):
         fixture = Fixture(self)
-        fixture.units[FAST] = runner('inactive')
+        fixture.units[POOL] = runner('inactive')
         fixture.write()
         fixture.game_file.write_text('wine:Game.exe\n')
         fixture.step(2, f'rm {fixture.game_file}')
         result = fixture.run_hold(5)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('event=release', result.stdout)
-        self.assertEqual(fixture.calls('start'), [f'start {PRIMARY}', f'start {POOL}'])
+        self.assertEqual(fixture.calls('start'), [f'start {PRIMARY}'])
         units = fixture.read()
-        self.assertEqual([units[unit]['ActiveState'] for unit in RUNNERS], ['active', 'active', 'inactive'])
-        self.assertFalse(fixture.held(PRIMARY) or fixture.held(POOL))
-        self.assertIn(f'event=runner_start_requested runner_unit={POOL}', result.stdout)
-        self.assertIn(f'event=runner_resumed runner_unit={POOL}', result.stdout)
+        self.assertEqual([units[unit]['ActiveState'] for unit in RUNNERS], ['active', 'inactive'])
+        self.assertFalse(fixture.held(PRIMARY))
+        self.assertIn(f'event=runner_start_requested runner_unit={PRIMARY}', result.stdout)
+        self.assertIn(f'event=runner_resumed runner_unit={PRIMARY}', result.stdout)
 
     def test_a_stop_that_timed_out_is_reset_and_started(self):
         # 2026-10-31: a runner whose stop outlived TimeoutStopSec ended failed
@@ -304,7 +303,7 @@ class RunnerHoldTests(unittest.TestCase):
         fixture.write()
         result = fixture.run_hold(1)
         self.assertIn('event=hold reason=game_signal_unavailable', result.stdout)
-        self.assertEqual(len(fixture.calls('stop')), 3)
+        self.assertEqual(len(fixture.calls('stop')), len(RUNNERS))
         # Without game holds the signal is not consulted.
         fixture = Fixture(self)
         fixture.units[GAME_UNIT] = runner('failed')
@@ -324,8 +323,8 @@ class RunnerHoldTests(unittest.TestCase):
         # Between the floors the hold stays; recovery releases it.
         self.assertEqual(result.stdout.count('event=hold'), 1)
         self.assertIn('event=release', result.stdout)
-        self.assertEqual(len(fixture.calls('stop')), 3)
-        self.assertEqual(len(fixture.calls('start')), 3)
+        self.assertEqual(len(fixture.calls('stop')), len(RUNNERS))
+        self.assertEqual(len(fixture.calls('start')), len(RUNNERS))
 
     def test_a_disk_hold_survives_a_restart_between_the_floors(self):
         fixture = Fixture(self)
@@ -361,7 +360,7 @@ class RunnerHoldTests(unittest.TestCase):
 class AlertTests(unittest.TestCase):
     def test_a_runner_left_off_fails_the_ping_after_the_bound(self):
         fixture = Fixture(self)
-        fixture.units[FAST] = runner('failed', result='exit-code')
+        fixture.units[POOL] = runner('failed', result='exit-code')
         fixture.write()
         # One check every 300 s of fake time, for 40 minutes.
         result = fixture.run_hold(9, ALERT_ENABLED='1', FAKE_STEP='300')
@@ -370,8 +369,8 @@ class AlertTests(unittest.TestCase):
         self.assertEqual(len(pings), 9)
         self.assertTrue(all(ping['url'].endswith('/ci-runners-fixture?create=1') for ping in pings[:6]))
         self.assertTrue(pings[-1]['url'].endswith('/ci-runners-fixture/fail?create=1'))
-        self.assertIn(f'{FAST}: failed (exit-code) for 30m, no hold reason or marker', pings[6]['body'])
-        self.assertIn(f'event=runner_left_off runner_unit={FAST}', result.stdout)
+        self.assertIn(f'{POOL}: failed (exit-code) for 30m, no hold reason or marker', pings[6]['body'])
+        self.assertIn(f'event=runner_left_off runner_unit={POOL}', result.stdout)
         # The private ping base reaches curl only through its stdin.
         for ping in pings:
             self.assertNotIn('private-ping-key', ' '.join(ping['argv']))
@@ -379,12 +378,12 @@ class AlertTests(unittest.TestCase):
 
     def test_held_and_reset_runners_are_intended(self):
         fixture = Fixture(self)
-        fixture.units[POOL] = runner('deactivating')
-        fixture.units[FAST] = runner('inactive')
+        fixture.units[PRIMARY] = runner('deactivating')
+        fixture.units[POOL] = runner('inactive')
         fixture.units[RESET_UNIT] = runner('activating')
         fixture.write()
-        fixture.mark(POOL)
-        (fixture.root / 'reset-restart').write_text(f'{FAST}\n')
+        fixture.mark(PRIMARY)
+        (fixture.root / 'reset-restart').write_text(f'{POOL}\n')
         result = fixture.run_hold(9, ALERT_ENABLED='1', FAKE_STEP='300')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(all('/fail' not in ping['url'] for ping in fixture.pings()))
@@ -450,7 +449,7 @@ class AlertTests(unittest.TestCase):
 
     def test_no_ping_without_alerting(self):
         fixture = Fixture(self)
-        fixture.units[FAST] = runner('failed')
+        fixture.units[POOL] = runner('failed')
         fixture.write()
         result = fixture.run_hold(9, FAKE_STEP='300')
         self.assertEqual(fixture.pings(), [])

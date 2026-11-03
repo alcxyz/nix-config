@@ -1,11 +1,11 @@
 # The runner hold (ADR-0106) with the production units: the Docker runner and
-# two Podman runners beside both dedicated engines, the game signal and the
+# the Podman runner beside both dedicated engines, the game signal and the
 # start gates. It does not register with Forgejo: the runner processes are
 # stand-ins that stop on SIGTERM, or wait while the fixture blocks their stop.
 {pkgs}: let
   unusedSecrets = pkgs.writeText "forgejo-runner-hold-secrets" "fixture-only";
   registrationToken = pkgs.writeText "forgejo-runner-hold-registration-token" "unused-fixture-token";
-  runners = ["forgejo-actions-runner" "forgejo-podman-runner" "forgejo-podman-runner-fast"];
+  runners = ["forgejo-actions-runner" "forgejo-podman-runner"];
 in
   pkgs.testers.runNixOSTest {
     name = "forgejo-runner-hold";
@@ -56,7 +56,6 @@ in
             enable = true;
             registrationTokenFile = toString registrationToken;
             labels = ["podman-fixture:docker://example.invalid/unused:local"];
-            extraRunners.fast.labels = ["fast-fixture:docker://example.invalid/unused:local"];
           };
         };
         # Keep the production units and dependencies while bypassing remote
@@ -77,7 +76,7 @@ in
     };
     testScript = ''
       state = "/run/forgejo-runner-hold/runners"
-      runners = ["forgejo-actions-runner.service", "forgejo-podman-runner.service", "forgejo-podman-runner-fast.service"]
+      runners = ["forgejo-actions-runner.service", "forgejo-podman-runner.service"]
       all_active = " && ".join(f"systemctl is-active --quiet {unit}" for unit in runners)
       all_inactive = " && ".join(f"test $(systemctl show -p ActiveState --value {unit}) = inactive" for unit in runners)
       all_held = " && ".join(f"test -e {state}/{unit}/held" for unit in runners)
@@ -161,11 +160,11 @@ in
           machine.succeed("journalctl -u forgejo-runner-hold.service | grep -q 'event=runner_start_requested runner_unit=forgejo-podman-runner.service active_state=failed result=timeout'")
 
       with subtest("a runner the operator stopped stays stopped"):
-          machine.succeed("systemctl stop forgejo-podman-runner-fast.service")
+          machine.succeed("systemctl stop forgejo-podman-runner.service")
           machine.succeed("sleep 5")
-          assert machine.succeed("systemctl show -p ActiveState --value forgejo-podman-runner-fast.service").strip() == "inactive"
-          machine.succeed(f"test ! -e {state}/forgejo-podman-runner-fast.service/held")
-          machine.succeed("systemctl start forgejo-podman-runner-fast.service")
+          assert machine.succeed("systemctl show -p ActiveState --value forgejo-podman-runner.service").strip() == "inactive"
+          machine.succeed(f"test ! -e {state}/forgejo-podman-runner.service/held")
+          machine.succeed("systemctl start forgejo-podman-runner.service")
           machine.wait_until_succeeds(all_active, timeout=30)
 
       with subtest("a restarted hold keeps its runners held and releases them"):
@@ -215,18 +214,18 @@ in
           machine.wait_until_succeeds(none_held, timeout=15)
 
       with subtest("a changed definition is flagged and restarted once idle"):
-          machine.succeed("mkdir -p /run/systemd/system/forgejo-podman-runner-fast.service.d")
-          machine.succeed("printf '[Service]\\nEnvironment=FIXTURE_CHANGE=1\\n' > /run/systemd/system/forgejo-podman-runner-fast.service.d/fixture.conf")
+          machine.succeed("mkdir -p /run/systemd/system/forgejo-podman-runner.service.d")
+          machine.succeed("printf '[Service]\\nEnvironment=FIXTURE_CHANGE=1\\n' > /run/systemd/system/forgejo-podman-runner.service.d/fixture.conf")
           machine.succeed("systemctl daemon-reload")
           units = runner_status()
-          assert units["forgejo-podman-runner-fast.service"][5:7] == ["yes", "started from an older definition"], units
-          assert units["forgejo-podman-runner.service"][5] == "no"
-          before = machine.succeed("systemctl show -p InvocationID --value forgejo-podman-runner.service")
+          assert units["forgejo-podman-runner.service"][5:7] == ["yes", "started from an older definition"], units
+          assert units["forgejo-actions-runner.service"][5] == "no"
+          before = machine.succeed("systemctl show -p InvocationID --value forgejo-actions-runner.service")
           machine.succeed("systemctl start forgejo-runner-restart.service")
           result = machine.succeed("cat /run/nixfleet-runners/restart")
-          assert "status=done" in result and "unit=forgejo-podman-runner-fast.service" in result, result
-          assert runner_status()["forgejo-podman-runner-fast.service"][5] == "no"
-          assert machine.succeed("systemctl show -p InvocationID --value forgejo-podman-runner.service") == before
+          assert "status=done" in result and "unit=forgejo-podman-runner.service" in result, result
+          assert runner_status()["forgejo-podman-runner.service"][5] == "no"
+          assert machine.succeed("systemctl show -p InvocationID --value forgejo-actions-runner.service") == before
           machine.succeed("systemctl start forgejo-runner-restart.service")
           assert "status=nothing" in machine.succeed("cat /run/nixfleet-runners/restart")
     '';
