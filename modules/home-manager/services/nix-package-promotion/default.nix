@@ -43,6 +43,11 @@
       exec ${../../../../scripts/ci/run-local-dms-update.sh}
     '';
   };
+  # Instanced by OnFailure with the failed unit's name; the notifier
+  # receives one short message as its last argument.
+  failureNotifier = pkgs.writeShellScript "nix-package-promotion-failure" ''
+    exec ${lib.escapeShellArgs cfg.failureNotification.command} "$1 failed. Inspect it with: journalctl --user -u $1"
+  '';
   # ExecCondition: a run is skipped, not failed, while the file exists.
   holdCondition = file: "${pkgs.coreutils}/bin/test ! -e ${file}";
   wolfContexts = pkgs.writeShellApplication {
@@ -141,6 +146,13 @@ in {
       description = "Maximum randomized delay applied to the timer.";
     };
 
+    failureNotification.command = lib.mkOption {
+      type = lib.types.nullOr (lib.types.nonEmptyListOf lib.types.str);
+      default = null;
+      example = lib.literalExpression ''["''${pkgs.libnotify}/bin/notify-send" "--urgency=critical"]'';
+      description = "Command run when the promotion service fails, with a one-line message naming the unit and its journal as the last argument. A deferral (exit 75) is not a failure and never runs it. Null sends nothing.";
+    };
+
     dms = {
       enable = lib.mkEnableOption "trusted local DMS plugin lock updates";
       calendar = lib.mkOption {
@@ -193,6 +205,7 @@ in {
         Description = "Validate trusted package and configuration heads locally";
         After = ["network-online.target"];
         Wants = ["network-online.target"];
+        OnFailure = lib.mkIf (cfg.failureNotification.command != null) "nix-package-promotion-failure@%n.service";
       };
       Service = {
         Type = "oneshot";
@@ -222,6 +235,14 @@ in {
           "FORGEJO_STATUS_CONTEXT=${cfg.forgejo.statusContext}"
           "CHECK_RESULTS_ROOT_DIR=${config.home.homeDirectory}/.local/state/nix-package-promotion/check-roots"
         ];
+      };
+    };
+
+    systemd.user.services."nix-package-promotion-failure@" = lib.mkIf (cfg.failureNotification.command != null) {
+      Unit.Description = "Report failed package promotion unit %i";
+      Service = {
+        Type = "oneshot";
+        ExecStart = "${failureNotifier} %i";
       };
     };
 

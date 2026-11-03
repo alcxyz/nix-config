@@ -607,6 +607,32 @@ in {
       touch "$out"
     '';
 
+  nix-package-promotion-failure-contract = let
+    home = self.homeConfigurations.alc-xyz;
+    notifying =
+      (home.extendModules {
+        modules = [{services.nixPackagePromotion.failureNotification.command = lib.mkForce ["/test/notify" "--class" "job"];}];
+      }).config;
+    service = notifying.systemd.user.services.nix-package-promotion;
+    failure = notifying.systemd.user.services."nix-package-promotion-failure@";
+    notifier = lib.head (lib.splitString " " (lib.head failure.Service.ExecStart));
+    silent =
+      (home.extendModules {
+        modules = [{services.nixPackagePromotion.failureNotification.command = lib.mkForce null;}];
+      }).config.systemd.user.services;
+  in
+    assert home.config.services.nixPackagePromotion.enable;
+    # A deferral (exit 75) succeeds, so it never starts the failure unit.
+    assert service.Service.SuccessExitStatus == "75";
+    assert service.Unit.OnFailure == "nix-package-promotion-failure@%n.service";
+    assert failure.Service.ExecStart == ["${notifier} %i"];
+    assert !(silent.nix-package-promotion.Unit ? OnFailure);
+    assert !(silent ? "nix-package-promotion-failure@");
+      pkgs.runCommand "nix-package-promotion-failure-contract" {nativeBuildInputs = [pkgs.gnugrep];} ''
+        grep -F "exec /test/notify --class job \"\$1 failed. Inspect it with: journalctl --user -u \$1\"" ${notifier}
+        touch "$out"
+      '';
+
   t3code-auto-update-contract = let
     home = self.homeConfigurations.alc-xyz;
     upstreamHome = home.extendModules {
