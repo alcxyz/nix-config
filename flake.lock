@@ -1272,11 +1272,11 @@
         "restricted-codex-nixpkgs": "restricted-codex-nixpkgs"
       },
       "locked": {
-        "lastModified": 1793690048,
-        "narHash": "sha256-YKQTUoCeMWR/LnKTSk2+dZ+KC/MjxraV9JZwfbg+Yho=",
+        "lastModified": 1793694605,
+        "narHash": "sha256-ju0sXT3VcQbOqMoqHraNUzsqpa0P+nTy55owvdDssfU=",
         "ref": "dev",
-        "rev": "cb01c9be31a54421f3f8bbe1a3fd4c78f8b01dc4",
-        "revCount": 56,
+        "rev": "0fa3123d85535632d9dc02e17aa3b4246a369291",
+        "revCount": 58,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
