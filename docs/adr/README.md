@@ -91,7 +91,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0094](0094-browser-roles.md) | One Chromium browser (Brave Origin), Zen provisional | Accepted, Zen provisional | browsers, xyz, xps, mac, Wolf |
 | [ADR-0095](0095-bounded-workspace-sync-go-pilot.md) | Evaluate Go through one bounded workspace-sync pilot | Accepted; source integration implemented, runtime qualification pending | workspace reconciliation, nix-packages, Home Manager |
 | [ADR-0096](0096-bounded-first-timer-freshness.md) | Bound the first-timer freshness exception after reboot | Accepted | storage health, timers |
-| [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted; xyz and xev each serve `ci-fast` with a dedicated runner | Forgejo runners, xyz, xev, workflows |
+| [ADR-0097](0097-ci-fast-runner-label.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | Accepted; xyz and xev serve `ci-fast` from their pool runners | Forgejo runners, xyz, xev, workflows |
 | [ADR-0098](0098-date-tagged-promotions.md) | Tag each promotion to `main` with a date version | Accepted | promotions, tags, Forgejo releases |
 | [ADR-0100](0100-instance-wide-podman-runners.md) | Register the Podman runners instance-wide | Accepted | Forgejo runners, xyz, xev, nex, nux |
 | [ADR-0102](0102-loopback-remote-view-of-xyz.md) | View and drive xyz's live desktop through a loopback wayvnc | Accepted | xyz, mac, remote access, Home Manager |

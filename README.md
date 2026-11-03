@@ -261,9 +261,10 @@ private ([ADR-0002](docs/adr/0002-nix-secrets-separate-repository.md)).
   mac remains an emergency deploy operator through its nix-darwin Linux
   builder.
 - **Forgejo Actions runners**: `forgejo-podman` is the shared container pool
-  on xyz, xev, nex and nux; `ci-fast` sends heavy jobs to xyz, with xev
-  standing in while xyz cannot take them; the older Docker labels remain on
-  the same four hosts. See [CI runner labels](docs/ci-runner-labels.md).
+  on xyz, xev, nex and nux; `ci-fast` sends heavy jobs to the pool runners of
+  the fast hosts, xyz and xev; `forgejo-docker` serves the few jobs that need
+  the Docker engine on the same four hosts. See
+  [CI runner labels](docs/ci-runner-labels.md).
 - **Encrypted storage**: host storage integration with private bootstrap and
   recovery runbooks.
 - **Native media services**: Plex, Stash and qBittorrent run as NixOS

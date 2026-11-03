@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 **Date:** 2026-10-20
+**Amended:** 2026-11-03, one Podman runner per host, which on xyz and xev also serves `ci-fast`
+**History:** [replaced text](archive/0100-instance-wide-podman-runners-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/`, the Forgejo
 runner registrations of xyz, xev, nex and nux
 
@@ -21,13 +23,13 @@ own job slots.
 - The Podman runners (ADR-0074, ADR-0097) register instance-wide, so they take
   jobs from every repository on the instance: the `alcxyz` user's and every
   organisation's, present and future. Each host keeps its Podman pool runner,
-  plus the `ci-fast` runners of ADR-0097, and every owner can use all four
-  hosts.
+  which on xyz and xev also serves `ci-fast` (ADR-0097), and every owner can
+  use all four hosts.
 - The Docker runners keep their per-owner registration; this decision covers
   only the Podman runners. The private flake records the trust boundary and
   the registration tokens.
-- `podmanCanary.registrationScope` (and each extra runner's, which follows the
-  canary's) records the scope of the registration token. The registration
+- `podmanCanary.registrationScope` records the scope of the registration
+  token. The registration
   helper records it beside the runner name and registers anew when it
   changes. The default, `owner`, passes no scope, so existing registrations
   are kept until a host opts in.

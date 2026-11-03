@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
+**Amended:** 2026-11-03, the xyz and xev pool runners serve `ci-fast` instead of dedicated runners ([ADR-0097](0097-ci-fast-runner-label.md))
+**History:** [replaced text](archive/0106-runner-hold-for-games-and-low-disk-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/runner-hold.{nix,sh}`,
 `runner-start-gate.sh`, `modules/nixos/services/game-signal/`, the runner pool
 on xyz, xev, nex and nux, and the Wolf and DMS background builds on xyz
@@ -88,11 +90,11 @@ carries a marker while it drains its jobs. After a hold ends the count starts
 again, so a runner whose start keeps failing, is refused or crash-loops is
 reported 30 minutes later.
 
-**Fewer slots.** xyz runs three CI slots instead of five (one Docker, one
-pool, one `ci-fast`) with a 25% memory throttle and a 35% hard limit. xev runs
-four (one Docker, two pool, one `ci-fast`): from 2026-10-24 to 2026-10-31 its
-jobs ran three or more at once for about a third of its busy time. nex and nux
-keep one slot per runner. `xev-fast` now runs all the time beside `xyz-fast`
+**Fewer slots.** xyz runs two CI slots instead of five (one Docker, one
+pool) with a 25% memory throttle and a 35% hard limit. xev runs three (one
+Docker, two pool): from 2026-10-24 to 2026-10-31 its jobs ran three or more at
+once for about a third of its busy time. nex and nux keep one slot per runner.
+The xyz and xev pool runners also serve `ci-fast` in those slots
 ([ADR-0097](0097-ci-fast-runner-label.md)).
 
 **Background builds follow the signal.** On xyz the Wolf image context
@@ -113,13 +115,14 @@ exists, instead of waiting for a runner to be active.
   a runner would then stop the game target, so a switch or a manual start
   would end the hold.
 - **Keep the standby controller for `ci-fast`.** With xyz holding its runners
-  only during games, an always-on `xev-fast` serves fast jobs at least as well
-  and needs no status endpoint.
+  only during games, a runner on xev that serves `ci-fast` all the time (now
+  xev's pool runner) serves fast jobs at least as well and needs no status
+  endpoint.
 
 ## Consequences
 
 - During a game on xyz, CI moves to xev, nex and nux; `ci-fast` jobs run on
-  `xev-fast`. Wolf images do not publish and DMS does not update.
+  xev's pool runner. Wolf images do not publish and DMS does not update.
 - A job running on xyz when a game starts finishes if it can within two
   minutes, and is cancelled otherwise; Forgejo shows it failed or cancelled,
   and it must be re-run. The same applies to a reboot or a Podman store reset on xyz,

@@ -10,7 +10,7 @@ Forgejo Actions runners for the alcxyz repositories are configured in
 | Label | Served by | Use for |
 |-------|-----------|---------|
 | `forgejo-podman` | xyz, xev, nex, nux | The default shared pool for container jobs. |
-| `ci-fast` | xyz and xev (a dedicated runner each; xyz's pool runner takes overflow) | Heavy jobs on a project you are iterating on. Never runs on nex or nux; the job waits instead. |
+| `ci-fast` | xyz and xev (their pool runners, in the same slots as `forgejo-podman`) | Heavy jobs on a project you are iterating on. Never runs on nex or nux; the job waits instead. |
 | `forgejo-docker` | the Docker runners on xyz, xev, nex and nux | Jobs that need the Docker engine rather than Podman. Prefer `forgejo-podman`. |
 
 No other labels exist. The Docker aliases `forgejo-docker-primary`,
@@ -36,15 +36,15 @@ jobs:
 Leave light jobs on `forgejo-podman`. With the variable unset, the job uses the
 shared pool as before.
 
-`ci-fast` jobs run on a dedicated one-slot runner on xyz (`xyz-fast`) or on
-xev (`xev-fast`), or on a free slot of xyz's pool runner, which also serves
-`ci-fast`. Whichever runner polls first takes the job, so a fast job may land
-on xev or take xyz's pool slot while `xyz-fast` is idle. A fast job never
-waits while any of these slots is free, and the dedicated slots mean it does
-not have to wait for shared-pool jobs.
+`ci-fast` jobs run on the pool runners of xyz (one slot) and xev (two slots),
+which serve `forgejo-podman` jobs in the same slots. Whichever runner polls
+first takes the job, so a fast job may land on xev while xyz is free. A fast
+job never waits while one of these slots is free, but it waits while all
+three are busy, shared-pool jobs included. Most jobs take about 2 minutes, so
+a slot frees quickly.
 
-While a game runs on xyz, or xyz is off, its runners take no jobs and
-`xev-fast` serves fast jobs alone.
+While a game runs on xyz, or xyz is off, its runners take no jobs and xev
+serves fast jobs alone.
 
 To turn fast CI on for a repository while you iterate, create the Actions
 variable `CI_FAST` with the value `true` under the repository's Settings >

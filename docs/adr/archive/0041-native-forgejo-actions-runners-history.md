@@ -481,3 +481,24 @@ From the consequences:
 - Routine workflows can run on all four native runners through the shared
   `forgejo-docker-primary`, `ubuntu-latest`, and `docker` labels. Excess work
   remains queued when their declared capacities are full.
+
+## Text replaced on 2026-11-03 (ci-fast)
+
+When the dedicated `ci-fast` runners were retired ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)), from the decision:
+
+> with the `ci-fast` runners of [ADR-0097](../0097-ci-fast-runner-label.md). Those
+> ADRs govern the Podman and `ci-fast` runners; this one governs the Docker
+> runner and the shared runner lifecycle and resource policy.
+
+From the required properties:
+
+> and one on `nex` and `nux`; the `ci-fast` runners on `xyz` and `xev` add one
+> slot each ([ADR-0097](../0097-ci-fast-runner-label.md),
+> [ADR-0106](../0106-runner-hold-for-games-and-low-disk.md)).
+
+> and a 50% hard memory limit; `xyz`, with three slots beside the nix-daemon's
+
+From the consequences:
+
+> - `xyz` contributes three slots (one Docker, one pool, one `ci-fast`) and
+>   `xev` four (one Docker, two pool, one `ci-fast`), each within one aggregate

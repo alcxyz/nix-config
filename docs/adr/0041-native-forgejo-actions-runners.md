@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07, updated 2026-11-02 (start records and restart once idle for nixfleet, per nix-packages ADR-0017)
-**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -46,9 +46,10 @@ its Docker runner against the dedicated rootless CI daemon of
 [ADR-0072](0072-isolated-runner-docker.md) (`isolatedDocker.enable`), and also
 runs a Podman pool runner ([ADR-0074](0074-phased-podman-coexistence.md)),
 registered instance-wide ([ADR-0100](0100-instance-wide-podman-runners.md)),
-with the `ci-fast` runners of [ADR-0097](0097-ci-fast-runner-label.md). Those
-ADRs govern the Podman and `ci-fast` runners; this one governs the Docker
-runner and the shared runner lifecycle and resource policy.
+which on `xyz` and `xev` also serves `ci-fast`
+([ADR-0097](0097-ci-fast-runner-label.md)). Those ADRs govern the Podman runner
+and `ci-fast`; this one governs the Docker runner and the shared runner
+lifecycle and resource policy.
 
 The Docker runners carry one label, `forgejo-docker`, on `xyz`, `xev`, `nux`
 and `nex`, so Docker jobs can use every runner. There are no aliases and no
@@ -75,8 +76,8 @@ adds a temporary label, not a standing label
 - Runner admission is explicit in per-host capacity, set for the Docker and the
   Podman runner. Every Docker runner admits one job. The Podman pool admits
   one job on `xyz`, which also runs games and media services, two on `xev`,
-  and one on `nex` and `nux`; the `ci-fast` runners on `xyz` and `xev` add one
-  slot each ([ADR-0097](0097-ci-fast-runner-label.md),
+  and one on `nex` and `nux`; the `xyz` and `xev` pool slots also serve
+  `ci-fast` ([ADR-0097](0097-ci-fast-runner-label.md),
   [ADR-0106](0106-runner-hold-for-games-and-low-disk.md)).
 - Runner shutdown stops polling before it waits up to `shutdownTimeoutSeconds`
   for admitted work to finish, then cancels it. That is the normal job timeout
@@ -108,7 +109,7 @@ adds a temporary label, not a standing label
   top-level systemd slice, `forgejobuilds.slice`. The slice has an aggregate CPU
   ceiling equal to 50% of the host's online logical processors, a low CPU
   scheduling weight (10) under contention, a 40% memory throttling threshold,
-  and a 50% hard memory limit; `xyz`, with three slots beside the nix-daemon's
+  and a 50% hard memory limit; `xyz`, with two slots beside the nix-daemon's
   40G cap and the ZFS ARC, uses 25% and 35%. `nux` and `nex` raise the CPU
   ceiling to 75%, since k3s leaves them headroom; their storage latency
   decides whether they go further. Its I/O weight (10) is best
@@ -180,8 +181,8 @@ limit across the containers Forgejo Runner creates.
 - `nex` and `nux` contribute one slot per runner. This spreads eligible work
   without allowing concurrent runner jobs to amplify local resource contention
   on the smaller cluster members.
-- `xyz` contributes three slots (one Docker, one pool, one `ci-fast`) and
-  `xev` four (one Docker, two pool, one `ci-fast`), each within one aggregate
+- `xyz` contributes two slots (one Docker, one pool) and `xev` three (one
+  Docker, two pool), each within one aggregate
   resource budget. On `xyz`, builds can consume up to half the workstation's
   CPU and 35% of its memory, while memory reclaim and scheduling weights favor
   interactive workloads under contention.

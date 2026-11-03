@@ -339,3 +339,10 @@ Later the same day, when the canary label was removed from the runners:
 > repository's workflows select `forgejo-podman`; the pool runners keep the
 > `forgejo-podman-canary` alias only until the remaining workflows elsewhere
 > move off it ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).
+
+## Text replaced on 2026-11-03
+
+From the CI decision, when the dedicated `ci-fast` runners were retired ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)):
+
+> The extra `xyz-fast` and `xev-fast` runners carry only `ci-fast`
+> ([ADR-0097](../0097-ci-fast-runner-label.md)).

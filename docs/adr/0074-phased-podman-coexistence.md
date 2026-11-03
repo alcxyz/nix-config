@@ -2,7 +2,7 @@
 
 **Status:** Accepted; Docker stays beside Podman, and no Docker engine is qualified for retirement
 **Date:** 2026-09-23
-**Amended:** 2026-10-31, both runtimes share the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) instead of a pressure controller and teardown boundary; 2026-11-02, workflows select `forgejo-podman` and the canary label is retired
+**Amended:** 2026-10-31, both runtimes share the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) instead of a pressure controller and teardown boundary; 2026-11-02, workflows select `forgejo-podman` and the canary label is retired; 2026-11-03, the xyz and xev pool runners serve `ci-fast`
 **History:** [replaced text](archive/0074-phased-podman-coexistence-history.md)
 **Area:** host container runtimes, development and CI
 
@@ -22,7 +22,7 @@ xyz, xev, nex and nux. Each host's pool runner serves the shared
 every workflow that wants the pool select. The earlier `forgejo-podman-canary`
 label was retired once no workflow used it
 ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).
-The extra `xyz-fast` and `xev-fast` runners carry only `ci-fast`
+The xyz and xev pool runners also serve `ci-fast`
 ([ADR-0097](0097-ci-fast-runner-label.md)). Routine
 validation and the selected image-build workflows moved to Podman after
 hosted qualification ([#436](https://git.alc.xyz/alcxyz/nix-config/issues/436),
