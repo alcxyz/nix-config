@@ -132,9 +132,18 @@ in
           game_on("wine")
           machine.wait_until_succeeds(all_inactive, timeout=30)
           machine.succeed("rm /run/forgejo-runner-hold/runners/forgejo-podman-runner.service/held")
-          machine.succeed("systemctl start forgejo-podman-runner.service")
-          assert machine.succeed("systemctl show -p ActiveState --value forgejo-podman-runner.service").strip() == "inactive"
-          machine.succeed(f"test -e {state}/forgejo-podman-runner.service/held")
+          # The gate refuses the start, and systemctl start exits 0. If the
+          # hold samples while the gate runs, it sees the runner activating
+          # during a game and stops it, which cancels the start job: then
+          # systemctl start fails. Either way the runner ends inactive and
+          # held. The runner must never have become active: the hold's stop
+          # alone would also leave it inactive and held.
+          entered = "systemctl show -p ActiveEnterTimestampMonotonic --value forgejo-podman-runner.service"
+          before = machine.succeed(entered).strip()
+          machine.execute("systemctl start forgejo-podman-runner.service")
+          machine.wait_until_succeeds("test $(systemctl show -p ActiveState --value forgejo-podman-runner.service) = inactive", timeout=15)
+          machine.wait_until_succeeds(f"test -e {state}/forgejo-podman-runner.service/held", timeout=15)
+          assert machine.succeed(entered).strip() == before, "the runner started during a game"
           game_off()
           machine.wait_until_succeeds(all_active, timeout=30)
           machine.wait_until_succeeds(none_held, timeout=15)
