@@ -208,7 +208,6 @@
       capacity = 2;
     };
     resourcePolicy.enable = true;
-    name = "xev";
     # Independent jobs share the existing aggregate resource budget; the
     # host-wide CPU, memory, and I/O limits remain unchanged. One Docker slot
     # serves the few jobs that still select a Docker label.

@@ -140,7 +140,6 @@ in {
     resourcePolicy.enable = true;
     # k3s leaves headroom on this host; raised from the 50% default (#957).
     resourcePolicy.cpuQuotaPercent = 75;
-    name = "nux";
     # 8 threads shared with k3s and storage: one job per runner (ADR-0041).
     capacity = 1;
     labels = [

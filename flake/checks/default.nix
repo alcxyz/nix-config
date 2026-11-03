@@ -241,6 +241,8 @@ in {
     assert lib.all (host: !(hasLabel "ci-fast" runners.${host}.podmanCanary)) ["nex" "nux"];
     assert lib.all (host: host.config.services.forgejo-actions-runner.runnerUnits == ["forgejo-actions-runner.service" "forgejo-podman-runner.service"]) (lib.attrValues runnerHosts);
     assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast) && !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
+    # Runners are named host-engine (ADR-0041).
+    assert lib.all (host: runners.${host}.name == "${host}-docker" && runners.${host}.podmanCanary.name == "${host}-podman") (lib.attrNames runners);
     # The Docker runners carry one pool label and no aliases (#957).
     assert lib.all (runner: runner.labels == ["forgejo-docker:docker://node:20-bookworm"]) (lib.attrValues runners);
       pkgs.runCommand "forgejo-runner-pool-contract" {

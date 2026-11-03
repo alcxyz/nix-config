@@ -188,8 +188,8 @@ in {
 
     name = lib.mkOption {
       type = lib.types.str;
-      default = config.networking.hostName;
-      description = "Runner name registered with Forgejo.";
+      default = "${config.networking.hostName}-docker";
+      description = "Runner name registered with Forgejo, host-engine (ADR-0041).";
     };
 
     url = lib.mkOption {

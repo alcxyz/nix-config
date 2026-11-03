@@ -76,7 +76,7 @@
   };
   canaryInstance = mkInstance {
     serviceName = "forgejo-podman-runner";
-    description = "Forgejo Podman canary runner (${canary.name})";
+    description = "Forgejo Podman pool runner (${canary.name})";
     inherit (canary) labels capacity name registrationTokenFile registrationScope;
   };
   instances = [canaryInstance];
@@ -235,8 +235,8 @@ in {
     };
     name = lib.mkOption {
       type = lib.types.str;
-      default = "${cfg.name}-podman";
-      description = "Distinct Forgejo registration name for the Podman canary.";
+      default = "${config.networking.hostName}-podman";
+      description = "Forgejo registration name for the Podman pool runner, host-engine (ADR-0041).";
     };
     url = lib.mkOption {
       type = lib.types.str;

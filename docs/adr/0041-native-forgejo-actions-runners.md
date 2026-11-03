@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07, updated 2026-11-02 (start records and restart once idle for nixfleet, per nix-packages ADR-0017)
-**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -56,6 +56,13 @@ and `nex`, so Docker jobs can use every runner. There are no aliases and no
 host-specific labels: a job that needs one host is an operator procedure that
 adds a temporary label, not a standing label
 ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)).
+
+Runners are named host-engine: `<host>-docker` and `<host>-podman`, the
+module defaults. A changed name registers the runner again at its next start,
+and the operator deletes the old entry in Forgejo. The Docker runners stay
+registered to the `alcxyz` user, not instance-wide like the Podman runners:
+the runner injects deploy credentials into every Docker job, and a user
+registration keeps those jobs to that user's repositories.
 
 ## Required Properties
 

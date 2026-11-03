@@ -260,7 +260,7 @@ in
   assert twoLabels.services.forgejo-actions-runner.runnerUnits == [primary canary];
   assert twoLabels.systemd.services.forgejo-runner-hold.environment.RUNNER_UNITS == both;
   assert twoLabelsUnit.environment.RUNNER_UNIT == canary;
-  assert twoLabelsUnit.description == "Forgejo Podman canary runner (fixture-podman)";
+  assert twoLabelsUnit.description == "Forgejo Podman pool runner (fixture-podman)";
   assert twoLabelsUnit.serviceConfig.WorkingDirectory == "/var/lib/forgejo-podman-runner";
   assert twoLabelsUnit.environment.HOME == "/var/lib/forgejo-podman-runner";
   assert twoLabelsUnit.serviceConfig.RuntimeDirectory == "forgejo-podman-runner";

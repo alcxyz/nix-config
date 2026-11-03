@@ -225,7 +225,6 @@ in {
       # the disk that Plex, qBittorrent, Stash and Calibre share (ADR-0106).
       capacity = 1;
     };
-    name = "xyz";
     # One Docker slot serves the few jobs that still select a Docker label.
     capacity = 1;
     # Bound the runner daemon and all nested workers within one budget. Low
