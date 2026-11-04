@@ -33,7 +33,7 @@ DEV_TOOL_INPUTS = {
 APP_INPUTS = ["grove", "canopy", "bivrost"]
 # Inputs both apps-update and dev-apps-update refresh (ADR-0089), by input and
 # repository name. They follow `dev` on Forgejo.
-SHARED_INPUTS = {"work": "bn-bootstrap"}
+SHARED_INPUTS = {"work": "bn-bootstrap", "teams-chat": "teams-chat"}
 # Dev builds of released apps; dev-apps-update (update-maintained.sh) refreshes them.
 DEV_APP_INPUTS = {"grove-dev": "grove", "canopy-dev": "canopy", "bivrost-dev": "bivrost"}
 

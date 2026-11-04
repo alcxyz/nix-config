@@ -55,10 +55,12 @@ in {
   };
 
   # Agents read and, with approval, post in Teams chats through a dedicated
-  # Brave Origin instance with its own data directory (work flake).
-  programs.work.teams = {
+  # Brave Origin instance with its own data directory (teams-chat flake). T3
+  # for this work runs from its own data directory.
+  programs.teamsChat = {
     enable = true;
     browser.executable = "brave-origin";
+    t3DataDir = "${config.home.homeDirectory}/.t3-bn";
   };
 
   # Import the common Linux configuration
@@ -168,7 +170,7 @@ in {
     remotePointerHideOnTouch = false;
     extraLuaConfig = ''
       -- The Teams browser for agents opens on its own named workspace
-      -- (programs.work.teams above).
+      -- (programs.teamsChat above).
       hl.bind("SUPER + A", hl.dsp.focus({ workspace = "name:teams" }))
       hl.bind("SUPER + SHIFT + A", hl.dsp.window.move({ workspace = "name:teams" }))
       hl.bind("SUPER + ALT + A", hl.dsp.window.move({ workspace = "name:teams", follow = false }))

@@ -1554,6 +1554,7 @@
         "stashdb-pop": "stashdb-pop",
         "t3rry": "t3rry",
         "t3rry-dev": "t3rry-dev",
+        "teams-chat": "teams-chat",
         "vidown": "vidown",
         "work": "work"
       }
@@ -1959,6 +1960,27 @@
         "ref": "dev",
         "repo": "t3rry",
         "type": "github"
+      }
+    },
+    "teams-chat": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793760841,
+        "narHash": "sha256-5Nph3hH4ALzFev20fFMMcQO5lyuSWLbL99SHz14x+Z8=",
+        "ref": "dev",
+        "rev": "e4018d6652fa63c1fc00231feef6a23a3f8f4d72",
+        "revCount": 2,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/teams-chat.git"
+      },
+      "original": {
+        "ref": "dev",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/teams-chat.git"
       }
     },
     "translate": {

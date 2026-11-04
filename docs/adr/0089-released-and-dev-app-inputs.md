@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-10
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, 2026-11-04 (the `teams-chat` input)
 **History:** [replaced text](archive/0089-released-and-dev-app-inputs-history.md)
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-apps.sh`, `scripts/update-inputs/update-maintained.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069 and ADR-0087
 
@@ -45,12 +45,14 @@ The apps use the same released and dev split as the tools.
     subset (ADR-0069).
 - The private work flake (input `work`) is in both commands. It stays one
   input on its `dev` branch, whose `main` is not promoted, so either command
-  keeps its configuration current. It is the only input the update lists
-  share. Its Forgejo SSH URL makes `apps-update` depend on Forgejo SSH
-  access, as `dev-apps-update` already does for vidown.
+  keeps its configuration current. Its Forgejo SSH URL makes `apps-update`
+  depend on Forgejo SSH access, as `dev-apps-update` already does for vidown.
+- The private `teams-chat` flake is in both commands in the same way, on its
+  `dev` branch over Forgejo SSH. `work` and `teams-chat` are the only inputs
+  the update lists share.
 
 Like the tool commands, both only change `flake.lock`, and apart from `work`
-the four update lists (`tools-update`, `dev-tools-update`, `apps-update`,
+and `teams-chat` the four update lists (`tools-update`, `dev-tools-update`, `apps-update`,
 `dev-apps-update`) do not overlap. `scripts/update-inputs/update-apps.sh` and
 `scripts/update-inputs/update-maintained.sh` are the current app lists. A
 released app gains a dev pair when its repository has a `dev` branch that

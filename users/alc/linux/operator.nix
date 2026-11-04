@@ -8,7 +8,7 @@
     inputs.work.homeManagerModules.backlog
     inputs.work.homeManagerModules.boards
     inputs.work.homeManagerModules.bivrost
-    inputs.work.homeManagerModules.teams
+    inputs.teams-chat.homeManagerModules.default
     inputs.nix-secrets.homeManagerModules.linuxOperator
     ../../../modules/home-manager/services/nix-package-promotion/default.nix
   ];

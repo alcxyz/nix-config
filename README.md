@@ -17,8 +17,8 @@ promotion with its date, such as `v2026.10.18`
 |---|---|---|
 | `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, t3rry, hedgedoc, devstats |
 | `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev`, `t3rry-dev` |
-| `apps-update` | `main` | Grove, Canopy, Bivrost, and the private work flake `work` (on `dev`) |
-| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, `work`, Paperflow, DankSession, the DMS bundle and its maintained plugins |
+| `apps-update` | `main` | Grove, Canopy, Bivrost, and the private flakes `work` and `teams-chat` (on `dev`) |
+| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, `work`, `teams-chat`, Paperflow, DankSession, the DMS bundle and its maintained plugins |
 
 `dms-update` refreshes only the DMS part of `dev-apps-update`. Each command is
 a shell alias and a `just` recipe of the same name; `qaup` and `just qa-update`

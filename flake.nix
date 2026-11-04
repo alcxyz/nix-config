@@ -77,6 +77,12 @@
       inputs.nixpkgs.follows = "nixpkgs-azure-cli";
     };
 
+    # The Teams command and its agent skills, apart from the work flake.
+    teams-chat = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/teams-chat.git?ref=dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # color schemes, small extras
     nix-colors.url = "github:Misterio77/nix-colors";
 

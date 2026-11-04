@@ -30,8 +30,8 @@ inputs=(
   dms-plugins/displaycontrol
 )
 if ! "$dms_only"; then
-  # The work flake is shared with apps-update (ADR-0089).
-  inputs+=(paperflow grove-dev canopy-dev bivrost-dev paw vidown work)
+  # The work and teams-chat flakes are shared with apps-update (ADR-0089).
+  inputs+=(paperflow grove-dev canopy-dev bivrost-dev paw vidown work teams-chat)
 fi
 
 if "$list_only"; then

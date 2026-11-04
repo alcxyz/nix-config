@@ -73,3 +73,15 @@ everything daily use depends on, since there is no dev build to fall back on.
 Each dev input adds a build to the activations that install it, and a broken
 dev build blocks `hmsw` until it is fixed or rolled back with the previous
 lock.
+
+## Text replaced on 2026-11-04
+
+- The private work flake (input `work`) is in both commands. It stays one
+  input on its `dev` branch, whose `main` is not promoted, so either command
+  keeps its configuration current. It is the only input the update lists
+  share. Its Forgejo SSH URL makes `apps-update` depend on Forgejo SSH
+  access, as `dev-apps-update` already does for vidown.
+
+Like the tool commands, both only change `flake.lock`, and apart from `work`
+the four update lists (`tools-update`, `dev-tools-update`, `apps-update`,
+`dev-apps-update`) do not overlap.
