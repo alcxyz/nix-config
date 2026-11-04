@@ -119,6 +119,11 @@ else let
       registryMirror = mirrorHost;
       registryMirrorCaFile = mirrorCa;
     };
+    # nixpkgs no longer defaults these, and the runner must keep the host's.
+    virtualisation.containers.registries.settings.registry = [
+      {location = "docker.io";}
+      {location = "quay.io";}
+    ];
   };
   mirrorWithoutCa = evaluate true validLabels {services.forgejo-actions-runner.registryMirror = mirrorHost;};
   caWithoutMirror = evaluate true validLabels {services.forgejo-actions-runner.registryMirrorCaFile = mirrorCa;};
@@ -128,7 +133,7 @@ else let
   mirroredApi = mirrored.systemd.services.forgejo-runner-podman;
   v1Mirrored = evaluate true validLabels {
     services.forgejo-actions-runner.registryMirror = mirrorHost;
-    virtualisation.containers.registries.search = ["docker.io"];
+    virtualisation.containers.registries.settings.registries.search.registries = ["docker.io"];
   };
   dockerConfigFile = config:
     lib.removePrefix "--config-file=" (lib.last (lib.splitString " " config.systemd.services.forgejo-runner-docker.serviceConfig.ExecStart));
