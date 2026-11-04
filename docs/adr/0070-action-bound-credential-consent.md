@@ -2,7 +2,8 @@
 
 **Status:** Accepted
 **Date:** 2026-09-09, amended 2026-11-04 (the prompt text travels in the Polkit
-message, since Polkit does not pass caller details to an agent)
+message, since Polkit does not pass caller details to an agent), updated
+2026-11-04 (an optional remote answer, per nix-packages ADR-0018)
 **History:** [replaced text](archive/0070-action-bound-credential-consent-history.md)
 **Applies to:** Polkit, DMS, administrative credential brokers
 
@@ -57,8 +58,18 @@ the whole request. A requester that is not a plain ID is shown as unreadable. An
 process can set the variable, so the requester identifies a thread for the
 operator and proves nothing.
 
-The helper only returns Polkit's decision. It does not elevate, execute a
+The helper only returns a decision. It does not elevate, execute a
 caller-supplied command, locate a credential, or read credential material.
+
+With `security.credentialConsent.remote` enabled, the helper also waits for a
+pinned passkey through `credential-approval`
+([nix-packages ADR-0018](https://git.alc.xyz/alcxyz/nix-packages/src/branch/dev/docs/adr/0018-passkey-credential-approvals.md)).
+Both ways of answering start together and the first answer wins: Polkit cancels
+the local prompt when its `pkcheck` ends, and the remote request is withdrawn
+when the local prompt answers. A way that cannot run is not an answer, so a local
+"no" for an inactive session, or a remote path that cannot start, leaves the other
+open. The request ends after `remote.timeoutSeconds`. A broker that waits for the
+helper must wait longer than that.
 
 The existing DMS Polkit agent reads these fields from the message lines only for
 this exact action, in a taller scrollable prompt. It treats every supplied field
@@ -98,6 +109,8 @@ details, logs, and public configuration.
 - A successful decision authorizes only the broker-defined operation in
   progress; it is not a general grant to use an administrative credential.
 - Deploying the module and connecting a private broker remain separate changes.
+- Remote answers are off by default. Enabling them needs a pinned passkey, and
+  with them on, Polkit's action defaults govern only the local prompt.
 
 ## Tracking
 

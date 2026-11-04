@@ -89,13 +89,68 @@ else let
     idCommand = mockId;
     pkcheckCommand = mockPkcheck;
   };
+  # Records how it ended, so the tests can see the loser of a race stopped.
+  mockPkcheckRacing = pkgs.writeShellScript "credential-consent-mock-pkcheck-racing" ''
+    set -uo pipefail
+    [[ "$1" == "--action-id" && "$3" == "--process" ]] || exit 64
+    IFS=, read -r subject_pid _ _ <<< "$4"
+    [[ "$subject_pid" == "$PPID" ]] || exit 65
+    trap 'echo local-stopped >> "$CONSENT_TEST_LOG"; exit 143' TERM
+    sleep "$CONSENT_TEST_LOCAL_DELAY" &
+    wait $!
+    exit "$CONSENT_TEST_LOCAL_EXIT"
+  '';
+  mockApproval = pkgs.writeShellScript "credential-consent-mock-approval" ''
+    set -uo pipefail
+    printf '%s\n' "$*" >> "$CONSENT_TEST_ARGS"
+    trap 'echo remote-stopped >> "$CONSENT_TEST_LOG"; exit 4' TERM
+    sleep "$CONSENT_TEST_REMOTE_DELAY" &
+    wait $!
+    exit "$CONSENT_TEST_REMOTE_EXIT"
+  '';
+  testHelperRemote = timeoutSeconds:
+    import ../../modules/nixos/security/credential-consent/helper.nix {
+      actionId = "xyz.alc.credentials.use-admin";
+      inherit lib pkgs;
+      ownerUsers = ["test-operator"];
+      grepCommand = lib.getExe pkgs.gnugrep;
+      idCommand = mockId;
+      pkcheckCommand = mockPkcheckRacing;
+      remote = {
+        command = mockApproval;
+        origin = "https://deck.example.com";
+        rpId = "deck.example.com";
+        publicKey = "test-key";
+        credentialId = "test-credential";
+        inherit timeoutSeconds;
+        spoolDir = "/test/spool";
+        notifyCommand = "/test/notify";
+      };
+    };
+  remoteEnabled = lib.evalModules {
+    specialArgs = {inherit pkgs;};
+    modules = [
+      ../../modules/nixos/security/credential-consent
+      testOptions
+      {
+        security.credentialConsent = {
+          enable = true;
+          ownerUsers = ["test-operator"];
+          remote.enable = true;
+        };
+        users.users.test-operator = {};
+      }
+    ];
+  };
 in
+  assert builtins.length (lib.filter (assertion: !assertion.assertion) remoteEnabled.config.assertions) == 1;
   assert evaluated.config.security.polkit.enable;
   assert builtins.elem package evaluated.config.environment.systemPackages;
   assert failedAssertions == [];
   assert builtins.length missingOwnerFailures == 1;
     pkgs.runCommand "credential-consent-contract" {
       nativeBuildInputs = [
+        pkgs.coreutils
         pkgs.gnugrep
         pkgs.libxml2
       ];
@@ -180,6 +235,55 @@ in
         --impact 'Test impact' \
         --operation 'test-operation sha256:0123'
       expect_exit 2 ${testHelper}/bin/dms-credential-consent --unknown value
+
+      # Racing: the first answer wins and the other way stops.
+      race() {
+        expected="$1" local_delay="$2" local_exit="$3" remote_delay="$4" remote_exit="$5" stopped="$6" helper="''${7:-${testHelperRemote 30}}"
+        export CONSENT_TEST_LOG="$PWD/race.log" CONSENT_TEST_ARGS="$PWD/race.args"
+        export CONSENT_TEST_LOCAL_DELAY="$local_delay" CONSENT_TEST_LOCAL_EXIT="$local_exit"
+        export CONSENT_TEST_REMOTE_DELAY="$remote_delay" CONSENT_TEST_REMOTE_EXIT="$remote_exit"
+        : > "$CONSENT_TEST_LOG"
+        : > "$CONSENT_TEST_ARGS"
+        set +e
+        "$helper/bin/dms-credential-consent" \
+          --title 'Test title' \
+          --reason 'Test reason' \
+          --impact 'Test impact' \
+          --operation 'test-operation sha256:0123' 2>/dev/null
+        actual=$?
+        set -e
+        if [[ "$actual" -ne "$expected" ]]; then
+          echo "race $*: expected exit $expected, got $actual" >&2
+          exit 1
+        fi
+        sleep 0.2
+        if [[ -n "$stopped" ]] && ! grep -Fq "$stopped" "$CONSENT_TEST_LOG"; then
+          echo "race $*: $stopped was not recorded" >&2
+          exit 1
+        fi
+      }
+      export CONSENT_TEST_UID=1000 CONSENT_TEST_USER=test-operator
+      unset T3CODE_THREAD_ID
+      #    exit  local        remote       stopped
+      race 0     30   0       0.1  0       local-stopped   # remote approves, local prompt cancelled
+      race 0     0.1  0       30   0       remote-stopped  # local approves, remote request withdrawn
+      race 3     30   0       0.1  3       local-stopped   # remote denied
+      race 3     0.1  3       30   0       remote-stopped  # local prompt dismissed
+      race 0     0    1       0.3  0       ""              # local cannot run: not a deny, remote still answers
+      race 3     0    1       0.3  3       ""              # local cannot run, remote denied
+      race 1     0    1       0.2  1       ""              # neither can run
+      race 0     0.3  0       0    1       ""              # remote cannot run: local still answers
+      race 3     0.3  3       0    1       ""              # remote cannot run, local dismissed
+      race 4     30   0       0.1  4       local-stopped   # the request ended
+      # The remote path cannot start, nobody answers: the helper's own timer ends it.
+      race 4     30   0       0    1       local-stopped   ${testHelperRemote 1}
+
+      race 0     30   0       0.1  0       local-stopped
+      expected_args='wait --spool /test/spool --origin https://deck.example.com --rp-id deck.example.com --public-key test-key --credential-id test-credential --timeout 30s --title Test title --reason Test reason --impact Test impact --operation test-operation sha256:0123 --requester No T3 thread --notify /test/notify'
+      if [[ "$(cat "$CONSENT_TEST_ARGS")" != "$expected_args" ]]; then
+        echo "unexpected remote arguments: $(cat "$CONSENT_TEST_ARGS")" >&2
+        exit 1
+      fi
 
       export CONSENT_TEST_UID=0
       expect_exit 1 ${testHelper}/bin/dms-credential-consent \
