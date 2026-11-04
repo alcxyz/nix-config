@@ -4,7 +4,7 @@
 **Date:** 2026-09-09, amended 2026-11-04 (the prompt text travels in the Polkit
 message, since Polkit does not pass caller details to an agent), updated
 2026-11-04 (an optional remote answer, per nix-packages ADR-0018; the requester's
-name and link, at the operator's request)
+name and link, at the operator's request; xyz enables remote answers)
 **History:** [replaced text](archive/0070-action-bound-credential-consent-history.md)
 **Applies to:** Polkit, DMS, administrative credential brokers
 
@@ -116,7 +116,8 @@ details, logs, and public configuration.
   progress; it is not a general grant to use an administrative credential.
 - Deploying the module and connecting a private broker remain separate changes.
 - Remote answers are off by default. Enabling them needs a pinned passkey, and
-  with them on, Polkit's action defaults govern only the local prompt.
+  with them on, Polkit's action defaults govern only the local prompt. xyz enables
+  them through a private module, which holds the pin.
 
 ## Tracking
 

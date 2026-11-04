@@ -47,6 +47,7 @@ in {
     inputs.nix-secrets.nixosModules.steamHeadlessWakeServer
     inputs.nix-secrets.nixosModules.calibreWebProxyDefaults
     inputs.nix-secrets.nixosModules.xyzDynamicDns
+    inputs.nix-secrets.nixosModules.xyzCredentialConsentRemote
     "${configDir}/modules/nixos/hardware/nvidia.nix"
     "${configDir}/modules/nixos/hardware/amd.nix"
     "${configDir}/modules/nixos/services/torrent/default.nix"
