@@ -391,6 +391,9 @@ in {
         verdictRole = "standard";
         verdictEffort = "";
       };
+      # Credential approvals with a pinned passkey (nix-packages ADR-0018). The
+      # spool is the helper's default for this user.
+      consent.spoolDir = "/run/user/1000/credential-consent";
       threads.instance = [
         {
           name = "main";

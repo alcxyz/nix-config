@@ -27,6 +27,7 @@ in
               "claude-code"
               "codex-app-server"
               "codex-cli"
+              "credential-approval"
               "deck"
               "desk"
               "devlog"
