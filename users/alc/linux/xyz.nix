@@ -384,6 +384,13 @@ in {
         clientID = "deck";
         group = "admins";
       };
+      # Summaries and verdicts are reasoning the owner acts on, so they use the
+      # standard role at its own effort (nix-packages ADR-0012).
+      threads.summaryRole = "standard";
+      backlog = {
+        verdictRole = "standard";
+        verdictEffort = "";
+      };
       threads.instance = [
         {
           name = "main";
