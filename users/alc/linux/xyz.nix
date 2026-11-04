@@ -376,6 +376,9 @@ in {
   # token itself as well.
   services.agent-dashboard = {
     enable = true;
+    # The pinned agent roles report at deck.alc.xyz/reports/, refreshed hourly
+    # (pandora ADR-0006).
+    roleReport.enable = true;
     settings = {
       listen = "0.0.0.0:3775";
       publicOrigin = "https://deck.alc.xyz";
