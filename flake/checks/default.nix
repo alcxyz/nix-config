@@ -795,6 +795,8 @@ in {
           programs.ai.agentGithub.enable = lib.mkForce false;
           programs.ai.prReview.fastForwardRepositories = lib.mkForce [];
           services.t3code.agentSessionVariables = lib.mkForce {};
+          # Both fixtures change the forge identity, so neither can run promotion jobs.
+          services.weekly-promotion.enable = lib.mkForce false;
         }
       ];
     };
