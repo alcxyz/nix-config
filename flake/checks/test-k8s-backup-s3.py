@@ -323,6 +323,7 @@ class MirrorTests(unittest.TestCase):
             bucket = call[-2].split(":", 1)[1]
             self.assertIn(bucket, self.source.buckets)
             self.assertEqual(call[-2:], [f"source:{bucket}", f"replica:{bucket}"])
+            self.assertEqual("--checksum" in call, bucket == "fixture")
             self.assertIn("--delete-after", call)
             self.assertIn("--metadata", call)
             self.assertIn("--no-unicode-normalization", call)
@@ -336,6 +337,11 @@ class MirrorTests(unittest.TestCase):
             }.items():
                 self.assertEqual(call[call.index(flag) + 1], value)
         return result, syncs
+
+    def test_sync_replaces_same_size_object_with_different_content(self):
+        self.replica.objects[KEY] = b"CHECKPOINT"
+        self.run_mirror()
+        self.assertEqual(self.replica.objects[KEY], b"checkpoint")
 
     def test_sync_deletes_and_preserves_finite_checkpoint(self):
         self.source.growing = True
@@ -503,6 +509,12 @@ class SnapshotTests(MirrorTests):
         ]
         self.snapshots.write_text(json.dumps(snapshots))
         return snapshots
+
+    def test_only_listed_buckets_compare_checksums(self):
+        self.source.buckets.append("second")
+        _, syncs = self.run_mirror()
+        checksum = {call[-2]: "--checksum" in call for call in syncs}
+        self.assertEqual(checksum, {"source:fixture": True, "source:second": False})
 
     def test_all_buckets_verify_before_single_snapshot(self):
         self.source.buckets.append("second")

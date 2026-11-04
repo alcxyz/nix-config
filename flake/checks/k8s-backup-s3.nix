@@ -33,6 +33,7 @@
     // {
       mirrorSourceEndpoint = "http://192.0.2.11:9000";
       mirrorSchedule = "*-*-* 01:00:00";
+      mirrorChecksumBuckets = ["fixture"];
     };
   evaluate = policy:
     inputs.nixpkgs.lib.nixosSystem {
@@ -57,6 +58,7 @@
   mounted = evaluate mountedPolicy;
   mirror = evaluate mirrorPolicy;
   snapshotMirror = evaluate (mirrorPolicy // {mirrorSnapshotRetention = 2;});
+  onDemandMirror = evaluate (mirrorPolicy // {alwaysOn = false;});
   disabled = evaluate {enable = false;};
   evaluateLocalBackup = localBackup:
     (zfs.extendModules {
@@ -146,6 +148,16 @@ in
   assert builtins.elem pkgs.util-linux zfs.config.systemd.services.k8s-backup-s3-storage.path;
   assert !(builtins.hasAttr "k8s-backup-s3-mirror" mounted.config.systemd.services);
   assert mirror.config.systemd.timers."k8s-backup-s3-mirror".timerConfig.OnCalendar == "*-*-* 01:00:00";
+  assert !mirror.config.systemd.services.k8s-backup-s3-mirror.restartIfChanged;
+  assert !onDemandMirror.config.systemd.services.k8s-backup-rustfs.restartIfChanged;
+  assert !onDemandMirror.config.systemd.services.k8s-backup-s3-storage.restartIfChanged;
+  assert onDemandMirror.config.systemd.services.k8s-backup-s3-storage.unitConfig.StopWhenUnneeded;
+  assert onDemandMirror.config.systemd.services.k8s-backup-s3-storage.requires == [];
+  assert builtins.elem "zfs-mount.service" onDemandMirror.config.systemd.services.k8s-backup-s3-storage.wants;
+  assert builtins.elem "zfs-mount.service" zfs.config.systemd.services.k8s-backup-s3-storage.requires;
+  assert zfs.config.systemd.services.k8s-backup-rustfs.restartIfChanged;
+  assert zfs.config.systemd.services.k8s-backup-s3-storage.restartIfChanged;
+  assert mounted.config.systemd.services.k8s-backup-s3-storage.restartIfChanged;
   assert fails (common // {storageMode = "zfs";});
   assert fails (zfsPolicy // {dataset = null;});
   assert fails (zfsPolicy // {quota = null;});

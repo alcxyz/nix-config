@@ -121,6 +121,19 @@ in {
       description = "Maximum concurrent workers used by each S3 mirror pass.";
     };
 
+    mirrorChecksumBuckets = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = ["longhorn"];
+      description = ''
+        Buckets whose mirror sync compares listing checksums instead of
+        modification times, which saves a HEAD request per object on each side.
+        rclone falls back to size alone for an object with no usable hash, such as
+        a multipart upload without MD5 metadata, so list only buckets where a key's
+        content cannot change at the same size. Longhorn names each block after
+        its content, and its small configuration files are single-part.
+      '';
+    };
+
     mirrorSnapshotRetention = lib.mkOption {
       type = lib.types.ints.unsigned;
       default = 0;
@@ -250,11 +263,21 @@ in {
       if cfg.storageMode == "zfs"
       then {
         description = "Prepare quota-limited ZFS dataset for k8s backups";
+        # An on-demand replica applies new definitions on its next start, so a
+        # deploy cannot stop a running mirror through this dependency. Its ZFS
+        # units are only ordered and wanted, since a deploy can restart them; the
+        # script below refuses to run unless the dataset is really mounted.
+        restartIfChanged = cfg.alwaysOn;
+        unitConfig.StopWhenUnneeded = !cfg.alwaysOn;
         after = [
           "zfs-auto-unlock.service"
           "zfs-mount.service"
         ];
-        requires = [
+        requires = lib.optionals cfg.alwaysOn [
+          "zfs-auto-unlock.service"
+          "zfs-mount.service"
+        ];
+        wants = lib.optionals (!cfg.alwaysOn) [
           "zfs-auto-unlock.service"
           "zfs-mount.service"
         ];
@@ -311,6 +334,10 @@ in {
       }
       else {
         description = "Validate the dedicated mounted filesystem for k8s backups";
+        # An on-demand replica applies new definitions on its next start, so a
+        # deploy cannot stop a running mirror through this dependency.
+        restartIfChanged = cfg.alwaysOn;
+        unitConfig.StopWhenUnneeded = !cfg.alwaysOn;
         after = [cfg.storageUnit];
         requires = [cfg.storageUnit];
         before = ["k8s-backup-rustfs.service"];
@@ -351,6 +378,7 @@ in {
       description = "RustFS backup target for Kubernetes";
       wantedBy = lib.optional cfg.alwaysOn "multi-user.target";
       unitConfig.StopWhenUnneeded = !cfg.alwaysOn;
+      restartIfChanged = cfg.alwaysOn;
       after = [
         "network-online.target"
         "k8s-backup-s3-storage.service"
@@ -390,6 +418,10 @@ in {
 
     systemd.services.k8s-backup-s3-mirror = lib.mkIf mirrorEnabled {
       description = "Mirror and verify the authoritative Kubernetes S3 backups";
+      # A run can take hours. Restarting it would discard that work and make
+      # switch-to-configuration wait for the whole oneshot to finish. The next
+      # timer run picks up a changed definition.
+      restartIfChanged = false;
       after = [
         "network-online.target"
         "k8s-backup-rustfs.service"
@@ -529,8 +561,15 @@ in {
             # Limit transfer/check workers and multipart fan-out independently
             # so a few large objects cannot multiply upload concurrency.
             # Preserve restoration metadata and distinguish exact S3 keys,
-            # including canonically equivalent Unicode spellings.
-            if ! rclone sync --delete-after --metadata --no-unicode-normalization \
+            # including canonically equivalent Unicode spellings. See
+            # mirrorChecksumBuckets for which buckets may compare checksums.
+            comparison=()
+            for checksum_bucket in ${lib.escapeShellArgs cfg.mirrorChecksumBuckets}; do
+              if [ "$bucket" = "$checksum_bucket" ]; then
+                comparison=(--checksum)
+              fi
+            done
+            if ! rclone sync "''${comparison[@]}" --delete-after --metadata --no-unicode-normalization \
               --transfers ${toString cfg.mirrorMaxWorkers} \
               --checkers ${toString cfg.mirrorMaxWorkers} \
               --s3-upload-concurrency 1 --multi-thread-streams 0 \
