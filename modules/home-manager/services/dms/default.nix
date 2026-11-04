@@ -267,8 +267,8 @@
     then dankaiusagePkg + "/share/dms-plugins/DankAIUsage"
     else plugins.aiusage;
   danksessionPkg = inputs.danksession.packages.${pkgs.stdenv.hostPlatform.system}.danksession;
-  # Patched in the package overlay (flake/pkgs.nix) and shared with the
-  # session splash, so the host builds quickshell once.
+  # Pinned in the package overlay (flake/pkgs.nix) and shared with the session
+  # splash, so the host builds quickshell once.
   quickshellPkg = pkgs.quickshell;
   dmsPkg =
     inputs.dankMaterialShell.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs

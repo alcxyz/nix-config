@@ -67,6 +67,17 @@ pkgs.writeShellApplication {
     validate_detail impact "$impact" 600
     validate_detail operation "$operation" 240
 
+    # Identifies the asking thread for the operator; any process can set it, so
+    # it proves nothing. Only a plain ID reaches the prompt.
+    requester="No T3 thread"
+    if [[ -n ''${T3CODE_THREAD_ID:-} ]]; then
+      if [[ "$T3CODE_THREAD_ID" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
+        requester="Requested by T3 thread $T3CODE_THREAD_ID"
+      else
+        requester="Requested by a T3 thread with an unreadable ID"
+      fi
+    fi
+
     uid="$(${idCommand} -u)"
     (( uid != 0 )) || {
       echo "dms-credential-consent: root must not request interactive credential consent" >&2
@@ -95,6 +106,13 @@ pkgs.writeShellApplication {
     }
     start_time="''${proc_fields[19]}"
 
+    # Polkit gives an agent only the message, not caller details, and expands
+    # $(key) in the message from the details. It does not rescan what it
+    # inserts, so text in a value cannot change this template.
+    newline=$'\n'
+    # shellcheck disable=SC2016
+    message='$(credential.title)'"$newline"'$(credential.reason)'"$newline"'$(credential.impact)'"$newline"'Operation: $(credential.operation)'"$newline"'$(credential.requester)'
+
     exec ${pkcheckCommand} \
       --action-id ${lib.escapeShellArg actionId} \
       --process "$$,$start_time,$uid" \
@@ -103,6 +121,8 @@ pkgs.writeShellApplication {
       --detail credential.reason "$reason" \
       --detail credential.impact "$impact" \
       --detail credential.operation "$operation" \
+      --detail credential.requester "$requester" \
+      --detail polkit.message "$message" \
       >/dev/null
   '';
 }

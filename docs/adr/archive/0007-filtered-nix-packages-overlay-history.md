@@ -92,3 +92,11 @@ Package movement preserves the advertised platform set. Producer evaluation and
 native builds are followed by checks against the actual consumer lock before
 that lock is promoted. Runtime qualification remains explicit for cluster,
 display, hardware decode, and input behavior.
+
+## Text replaced on 2026-11-04
+
+From the source ownership table, removed with the patch ([ADR-0070](../0070-action-bound-credential-consent.md)):
+
+| Source | Ownership |
+|--------|-----------|
+| `packages/quickshell` | The polkit-details patch shared by DMS and the session splash; remains with those consumers. |

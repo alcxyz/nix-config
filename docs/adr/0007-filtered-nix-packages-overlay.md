@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, 2026-11-04 (the Quickshell patch is gone, per ADR-0070)
 **History:** [replaced text](archive/0007-filtered-nix-packages-overlay-history.md)
 **Applies to:** `flake/pkgs.nix`, `flake/core.nix`, `flake/per-system.nix`, `packages/`
 
@@ -60,7 +60,6 @@ independent qualification:
 | `packages/nix-deploy` | Generates the consumer inventory and a thin wrapper under ADR-0009. The canonical executable, versioned runtime interface, and command tests live in `nix-packages`; this repository tests its generated inventory and wrapper precedence. |
 | `packages/nixbox-*` | Remain with the branded boot and session configuration they implement. |
 | DMS, RustFS, Wolf, and GStreamer patches under `modules/` | Remain with the module options, service assembly, and version-specific behavior they modify. |
-| `packages/quickshell` | The polkit-details patch shared by DMS and the session splash; remains with those consumers. |
 | Moonlight and Waynergy patches | Remain with their consumer overrides until each patched package has independent platform and input-path qualification. |
 | `packages/ffmpeg-v4l2-request` and `packages/moonlight-rpi3` | Reusable extraction candidates after native ARM builds and target hardware decode/display qualification. |
 

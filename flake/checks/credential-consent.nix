@@ -55,7 +55,7 @@ else let
   '';
   mockPkcheck = pkgs.writeShellScript "credential-consent-mock-pkcheck" ''
     set -euo pipefail
-    [[ $# -eq 17 ]]
+    [[ $# -eq 23 ]]
     [[ "$1" == "--action-id" ]]
     [[ "$2" == "xyz.alc.credentials.use-admin" ]]
     [[ "$3" == "--process" ]]
@@ -65,6 +65,12 @@ else let
     [[ "$9" == "--detail" && "''${10}" == "credential.reason" && "''${11}" == "Test reason" ]]
     [[ "''${12}" == "--detail" && "''${13}" == "credential.impact" && "''${14}" == "Test impact" ]]
     [[ "''${15}" == "--detail" && "''${16}" == "credential.operation" && "''${17}" == "test-operation sha256:0123" ]]
+    [[ "''${18}" == "--detail" && "''${19}" == "credential.requester" && "''${20}" == "''${CONSENT_TEST_REQUESTER:?}" ]]
+    [[ "''${21}" == "--detail" && "''${22}" == "polkit.message" ]]
+    # Polkit expands this template and does not rescan what it inserts.
+    newline=$'\n'
+    expected_message='$(credential.title)'"$newline"'$(credential.reason)'"$newline"'$(credential.impact)'"$newline"'Operation: $(credential.operation)'"$newline"'$(credential.requester)'
+    [[ "''${23}" == "$expected_message" ]]
 
     IFS=, read -r subject_pid subject_start subject_uid <<< "$subject"
     [[ "$subject_pid" == "$$" ]]
@@ -127,12 +133,39 @@ in
       export CONSENT_TEST_UID=1000
       export CONSENT_TEST_USER=test-operator
       export CONSENT_TEST_PKCHECK_EXIT=0
+      unset T3CODE_THREAD_ID
+      export CONSENT_TEST_REQUESTER='No T3 thread'
       ${testHelper}/bin/dms-credential-consent \
         --title 'Test title' \
         --reason 'Test reason' \
         --impact 'Test impact' \
         --operation 'test-operation sha256:0123'
 
+      export T3CODE_THREAD_ID=mcp:launch:0123abc
+      export CONSENT_TEST_REQUESTER='Requested by T3 thread mcp:launch:0123abc'
+      ${testHelper}/bin/dms-credential-consent \
+        --title 'Test title' \
+        --reason 'Test reason' \
+        --impact 'Test impact' \
+        --operation 'test-operation sha256:0123'
+
+      # A line break or template text in the variable must not reach the prompt.
+      export T3CODE_THREAD_ID=$'abc\nOperation: forged'
+      export CONSENT_TEST_REQUESTER='Requested by a T3 thread with an unreadable ID'
+      ${testHelper}/bin/dms-credential-consent \
+        --title 'Test title' \
+        --reason 'Test reason' \
+        --impact 'Test impact' \
+        --operation 'test-operation sha256:0123'
+      export T3CODE_THREAD_ID='$(credential.title)'
+      ${testHelper}/bin/dms-credential-consent \
+        --title 'Test title' \
+        --reason 'Test reason' \
+        --impact 'Test impact' \
+        --operation 'test-operation sha256:0123'
+
+      unset T3CODE_THREAD_ID
+      export CONSENT_TEST_REQUESTER='No T3 thread'
       export CONSENT_TEST_PKCHECK_EXIT=23
       expect_exit 23 ${testHelper}/bin/dms-credential-consent \
         --title 'Test title' \

@@ -173,21 +173,9 @@ in
             }
             // lib.optionalAttrs _prev.stdenv.hostPlatform.isLinux {
               # The one quickshell for DMS, xps's DMS unit and the session
-              # splash: the upstream git build plus the polkit details DMS
-              # reads. Every variant is its own C++ build, so keep one.
-              quickshell = let
-                base = inputs.quickshell.packages.${system}.default;
-                unwrapped = base.unwrapped.overrideAttrs (old: {
-                  patches = (old.patches or []) ++ [../packages/quickshell/quickshell-polkit-details.patch];
-                });
-              in
-                base.overrideAttrs (_: {
-                  installPhase = ''
-                    mkdir -p "$out"
-                    cp -r ${unwrapped}/* "$out"
-                  '';
-                  passthru = (base.passthru or {}) // {inherit unwrapped;};
-                });
+              # splash: the upstream git build, since every variant is its own
+              # C++ build.
+              quickshell = inputs.quickshell.packages.${system}.default;
             }
         )
       ];

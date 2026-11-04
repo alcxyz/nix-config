@@ -1,7 +1,9 @@
 # ADR-0070: Action-bound credential consent
 
 **Status:** Accepted
-**Date:** 2026-09-09
+**Date:** 2026-09-09, amended 2026-11-04 (the prompt text travels in the Polkit
+message, since Polkit does not pass caller details to an agent)
+**History:** [replaced text](archive/0070-action-bound-credential-consent-history.md)
 **Applies to:** Polkit, DMS, administrative credential brokers
 
 ## Context
@@ -19,6 +21,12 @@ action therefore needs an explicit list of local owner users; a broad default
 would either fail at runtime or make the prompt details spoofable by unrelated
 users.
 
+Polkit passes an authentication agent only the message and the caller and
+subject PIDs, never the caller's details (`get_localized_data_for_challenge` in
+Polkit 127; confirmed on 2026-11-04 with a process-bound test agent against the
+running daemon). It does expand `$(key)` in the message from those details, and
+does not rescan what it inserts.
+
 ## Decision
 
 Provide the Polkit action `xyz.alc.credentials.use-admin` and a
@@ -32,7 +40,7 @@ not use an authorization-retaining `_keep` result, so every credential
 operation makes a fresh request.
 
 The helper identifies its subject with the process ID, kernel process start
-time, and user ID. It passes four bounded, single-line details to Polkit:
+time, and user ID. It passes five bounded, single-line details to Polkit:
 
 | Detail | Meaning |
 |---|---|
@@ -40,13 +48,22 @@ time, and user ID. It passes four bounded, single-line details to Polkit:
 | `credential.reason` | Why the credential is needed |
 | `credential.impact` | Expected externally visible effect |
 | `credential.operation` | Reviewable operation label, including a plan identity when available |
+| `credential.requester` | The asking T3 thread from `T3CODE_THREAD_ID`, or that there is none |
+
+It also passes `polkit.message`, a fixed template of those details, one per line
+in that order. Polkit expands it, so text in a value can neither change the
+template nor hide a later line, and an agent that shows the message in full shows
+the whole request. A requester that is not a plain ID is shown as unreadable. Any
+process can set the variable, so the requester identifies a thread for the
+operator and proves nothing.
 
 The helper only returns Polkit's decision. It does not elevate, execute a
 caller-supplied command, locate a credential, or read credential material.
 
-The existing DMS Polkit agent renders these fields only for this exact action.
-It treats every supplied field as plain text and keeps ordinary Polkit and
-`dms-elevate` prompts on their existing paths.
+The existing DMS Polkit agent reads these fields from the message lines only for
+this exact action, in a taller scrollable prompt. It treats every supplied field
+as plain text and keeps ordinary Polkit and `dms-elevate` prompts on their
+existing paths.
 
 Private policy decides which credentials need consent and which broker
 operations are allowed. Private wiring must prepare an immutable or otherwise
@@ -59,8 +76,14 @@ details, logs, and public configuration.
 - **Reuse `dms-elevate` and `pkexec`.** This would couple credential use to root
   execution even when the operation needs no local privilege.
 - **Use a runtime context file.** The existing elevation context is associated
-  with `pkexec`; action-bound Polkit details bind this prompt to the request and
-  avoid another side channel.
+  with `pkexec`; the action-bound Polkit message binds this prompt to the request
+  and avoids another side channel.
+- **Read the details in the agent.** This was the first design, with a Quickshell
+  patch that exposed them, and the prompt stayed generic because Polkit never
+  sends them to the agent. Both that patch and the code reading the details are
+  gone.
+- **Build the message in the helper.** Polkit would still expand `$(key)` in it,
+  so text containing an unclosed `$(` would hide everything after it.
 - **Use `auth_self_keep`.** A cached authorization would make a later operation
   proceed without the deliberate prompt required by this policy.
 - **Embed private policy in nix-config.** This repository is public and should

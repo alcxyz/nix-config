@@ -1,8 +1,8 @@
 diff --git a/quickshell/DMSShell.qml b/quickshell/DMSShell.qml
-index 0c9768f..0026a84 100644
+index 84614d9..056c26c 100644
 --- a/quickshell/DMSShell.qml
 +++ b/quickshell/DMSShell.qml
-@@ -432,26 +432,28 @@ Item {
+@@ -432,9 +432,9 @@ Item {
      LazyLoader {
          id: polkitAuthModalLoader
          active: false
@@ -14,16 +14,7 @@ index 0c9768f..0026a84 100644
              id: polkitAuthModal
  
              Component.onCompleted: {
-                 PopoutService.polkitAuthModal = polkitAuthModal;
-             }
-         }
-     }
- 
-     Connections {
-         target: PolkitService.agent
-         enabled: PolkitService.polkitAvailable
- 
-         function onAuthenticationRequestStarted() {
+@@ -451,8 +451,10 @@ Item {
              if (PopoutService.systemUpdatePopout?.shouldBeVisible)
                  return;
              polkitAuthModalLoader.active = true;
@@ -35,8 +26,9 @@ index 0c9768f..0026a84 100644
 +            }
          }
      }
+ 
 diff --git a/quickshell/Modals/PolkitAuthContent.qml b/quickshell/Modals/PolkitAuthContent.qml
-index f72e020..b0c321a 100644
+index 8fbfc72..7371d21 100644
 --- a/quickshell/Modals/PolkitAuthContent.qml
 +++ b/quickshell/Modals/PolkitAuthContent.qml
 @@ -1,4 +1,5 @@
@@ -45,16 +37,13 @@ index f72e020..b0c321a 100644
  import Quickshell.Io
  import qs.Common
  import qs.Services
-@@ -12,6 +13,19 @@ FocusScope {
-     property bool isLoading: false
+@@ -13,6 +14,17 @@ FocusScope {
      property bool awaitingFprintForPassword: false
      property var windowControls: null
      readonly property int inputFieldHeight: Theme.fontSizeMedium + Theme.spacingL * 2
-+    readonly property var requestDetails: currentFlow?.details ?? ({})
-+    readonly property string requestCommand: requestDetails.command_line ?? requestDetails.program ?? ""
 +    readonly property string requestAction: currentFlow?.actionId ?? ""
 +    readonly property string requestIdentity: currentFlow?.selectedIdentity?.displayName ?? ""
-+    readonly property bool hasTechnicalDetails: requestAction !== "" || requestCommand !== "" || requestIdentity !== ""
++    readonly property bool hasTechnicalDetails: requestAction !== "" || requestIdentity !== ""
 +    property bool technicalDetailsExpanded: false
 +    property var elevationContext: ({})
 +    property bool elevationContextAccepted: false
@@ -65,7 +54,11 @@ index f72e020..b0c321a 100644
 +    readonly property string requestCommandLabel: hasElevationContext ? (elevationContext.commandLabel ?? "") : ""
  
      property string polkitEtcPamText: ""
-@@ -69,3 +83,7 @@ FocusScope {
+     property string polkitLibPamText: ""
+@@ -66,8 +78,12 @@ FocusScope {
+ 
+     function reset() {
+         passwordInput = "";
 +        elevationContext = ({});
 +        elevationContextAccepted = false;
 +        elevationContextFile.reload();
@@ -73,7 +66,12 @@ index f72e020..b0c321a 100644
          awaitingFprintForPassword = false;
 +        technicalDetailsExpanded = false;
      }
-@@ -122,3 +140,30 @@ FocusScope {
+ 
+     function _commitSubmit() {
+@@ -164,6 +180,33 @@ FocusScope {
+         onLoadFailed: root.passwordAuthPamText = ""
+     }
+ 
 +    FileView {
 +        id: elevationContextFile
 +
@@ -104,7 +102,9 @@ index f72e020..b0c321a 100644
      Item {
          id: headerSection
          anchors.left: parent.left
-@@ -153,6 +198,10 @@ FocusScope {
+@@ -193,14 +236,18 @@ FocusScope {
+             spacing: Theme.spacingXS
+ 
              StyledText {
 -                text: I18n.tr("Authentication Required")
 +                text: root.requestTitle
@@ -116,19 +116,17 @@ index f72e020..b0c321a 100644
 +                maximumLineCount: 2
 +                elide: Text.ElideRight
              }
-@@ -160,10 +209,19 @@ FocusScope {
+ 
              StyledText {
 -                text: root.currentFlow?.message ?? ""
 +                text: root.requestReason
                  font.pixelSize: Theme.fontSizeMedium
                  color: Theme.surfaceTextMedium
                  width: parent.width
-                 wrapMode: Text.Wrap
-                 maximumLineCount: 2
-                 elide: Text.ElideRight
+@@ -210,6 +257,15 @@ FocusScope {
                  visible: text !== ""
              }
-+
+ 
 +            StyledText {
 +                text: root.requestImpact
 +                font.pixelSize: Theme.fontSizeMedium
@@ -137,7 +135,11 @@ index f72e020..b0c321a 100644
 +                wrapMode: Text.Wrap
 +                visible: root.hasElevationContext && text !== ""
 +            }
-@@ -251,5 +309,125 @@ FocusScope {
++
+             StyledText {
+                 text: root.currentFlow?.supplementaryMessage ?? ""
+                 font.pixelSize: Theme.fontSizeSmall
+@@ -251,6 +307,116 @@ FocusScope {
          }
      }
  
@@ -240,16 +242,6 @@ index f72e020..b0c321a 100644
 +                }
 +
 +                StyledText {
-+                    text: root.requestCommand !== "" ? I18n.tr("Command: %1").arg(root.requestCommand) : ""
-+                    font.pixelSize: Theme.fontSizeSmall
-+                    font.family: "monospace"
-+                    color: Theme.surfaceText
-+                    width: parent.width
-+                    wrapMode: Text.WrapAnywhere
-+                    visible: root.technicalDetailsExpanded && root.requestCommand !== ""
-+                }
-+
-+                StyledText {
 +                    text: root.hasElevationContext && (root.currentFlow?.message ?? "") !== "" ? I18n.tr("System message: %1").arg(root.currentFlow.message) : ""
 +                    font.pixelSize: Theme.fontSizeSmall
 +                    color: Theme.surfaceTextMedium
@@ -263,7 +255,8 @@ index f72e020..b0c321a 100644
 +
      Column {
          id: bottomSection
-@@ -351,7 +529,7 @@ FocusScope {
+         anchors.left: parent.left
+@@ -350,7 +516,7 @@ FocusScope {
                      StyledText {
                          id: authText
                          anchors.centerIn: parent
@@ -273,10 +266,10 @@ index f72e020..b0c321a 100644
                          color: Theme.background
                          font.weight: Font.Medium
 diff --git a/quickshell/Modals/PolkitAuthSurfaceModal.qml b/quickshell/Modals/PolkitAuthSurfaceModal.qml
-index 94662cd..265980e 100644
+index dd25fd5..79d559b 100644
 --- a/quickshell/Modals/PolkitAuthSurfaceModal.qml
 +++ b/quickshell/Modals/PolkitAuthSurfaceModal.qml
-@@ -10,6 +10,6 @@ DankModal {
+@@ -10,8 +10,8 @@ DankModal {
      property var parentPopout: null
  
      layerNamespace: "dms:polkit-auth-surface"
@@ -285,3 +278,5 @@ index 94662cd..265980e 100644
 +    modalWidth: @polkitModalWidth@
 +    modalHeight: @polkitModalHeight@
      backgroundColor: Theme.withAlpha(Theme.surfaceContainer, Theme.popupTransparency)
+     closeOnEscapeKey: true
+     closeOnBackgroundClick: false
