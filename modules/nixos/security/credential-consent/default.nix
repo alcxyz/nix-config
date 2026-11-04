@@ -33,6 +33,7 @@
     grepCommand = lib.getExe pkgs.gnugrep;
     idCommand = lib.getExe' pkgs.coreutils "id";
     pkcheckCommand = lib.getExe' pkgs.polkit "pkcheck";
+    inherit (cfg) requesterCommand;
     remote =
       if cfg.remote.enable
       then {
@@ -68,6 +69,17 @@ in {
       readOnly = true;
       default = package;
       description = "The credential-consent helper and its Polkit action definition.";
+    };
+
+    requesterCommand = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        A program that describes the requesting T3 thread for the operator. Given
+        the thread's ID, it prints the thread's name on one line and optionally
+        an https link ending in that ID on the next, within three seconds. Without
+        it, or if it fails, the prompt shows the ID.
+      '';
     };
 
     remote = {

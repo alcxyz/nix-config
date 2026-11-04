@@ -3,7 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-09-09, amended 2026-11-04 (the prompt text travels in the Polkit
 message, since Polkit does not pass caller details to an agent), updated
-2026-11-04 (an optional remote answer, per nix-packages ADR-0018)
+2026-11-04 (an optional remote answer, per nix-packages ADR-0018; the requester's
+name and link, at the operator's request)
 **History:** [replaced text](archive/0070-action-bound-credential-consent-history.md)
 **Applies to:** Polkit, DMS, administrative credential brokers
 
@@ -41,7 +42,7 @@ not use an authorization-retaining `_keep` result, so every credential
 operation makes a fresh request.
 
 The helper identifies its subject with the process ID, kernel process start
-time, and user ID. It passes five bounded, single-line details to Polkit:
+time, and user ID. It passes up to six bounded, single-line details to Polkit:
 
 | Detail | Meaning |
 |---|---|
@@ -49,14 +50,19 @@ time, and user ID. It passes five bounded, single-line details to Polkit:
 | `credential.reason` | Why the credential is needed |
 | `credential.impact` | Expected externally visible effect |
 | `credential.operation` | Reviewable operation label, including a plan identity when available |
-| `credential.requester` | The asking T3 thread from `T3CODE_THREAD_ID`, or that there is none |
+| `credential.requester` | The asking T3 thread from `T3CODE_THREAD_ID`, by name when known, or that there is none |
+| `credential.requester_link` | A link ending in that thread's ID, only when known |
+
+The helper's optional `requesterCommand` turns the thread's ID into its name and
+link. Without a usable answer the prompt shows the ID, and a shown link holds it.
+DMS shows the link's address and opens it on a click.
 
 It also passes `polkit.message`, a fixed template of those details, one per line
 in that order. Polkit expands it, so text in a value can neither change the
 template nor hide a later line, and an agent that shows the message in full shows
 the whole request. A requester that is not a plain ID is shown as unreadable. Any
-process can set the variable, so the requester identifies a thread for the
-operator and proves nothing.
+process can set the variable, and an agent can name its thread, so the requester identifies a thread
+for the operator and proves nothing.
 
 The helper only returns a decision. It does not elevate, execute a
 caller-supplied command, locate a credential, or read credential material.

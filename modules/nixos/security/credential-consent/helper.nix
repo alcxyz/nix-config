@@ -6,6 +6,9 @@
   ownerUsers,
   pkcheckCommand,
   pkgs,
+  # A program that describes a T3 thread for the operator, or null: given the ID,
+  # it prints the thread's name, then optionally a link to it.
+  requesterCommand ? null,
   # When set, a remote answer is sought alongside the local prompt:
   # { command, origin, rpId, publicKey, credentialId, timeoutSeconds, spoolDir,
   #   notifyCommand }, with spoolDir null for the user's runtime directory.
@@ -20,6 +23,7 @@
       --detail credential.impact "$impact" \
       --detail credential.operation "$operation" \
       --detail credential.requester "$requester" \
+      "''${requester_link_details[@]}" \
       --detail polkit.message "$message"'';
 
   decide =
@@ -66,6 +70,7 @@
         --impact "$impact" \
         --operation "$operation" \
         --requester "$requester" \
+        "''${requester_link_args[@]}" \
         ${lib.optionalString (remote.notifyCommand != null) "--notify ${lib.escapeShellArg remote.notifyCommand}"} \
         </dev/null >/dev/null &
       remote_pid=$!
@@ -174,12 +179,51 @@ in
       # Identifies the asking thread for the operator; any process can set it, so
       # it proves nothing. Only a plain ID reaches the prompt.
       requester="No T3 thread"
+      requester_link=""
       if [[ -n ''${T3CODE_THREAD_ID:-} ]]; then
         if [[ "$T3CODE_THREAD_ID" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
           requester="Requested by T3 thread $T3CODE_THREAD_ID"
+          ${lib.optionalString (requesterCommand != null) ''
+        # A name is for reading, and an agent can set it, like the ID. With a link
+        # the ID is in the link; without one it stays beside the name.
+        thread_name=""
+        thread_link=""
+        if described="$(${lib.getExe' pkgs.coreutils "timeout"} -k 1 3 ${requesterCommand} "$T3CODE_THREAD_ID" 2>/dev/null)"; then
+          # One name and at most one link. More lines means the name held a line
+          # break, so neither can be told apart from the other.
+          lines=()
+          mapfile -t lines <<< "$described"
+          if (( ''${#lines[@]} <= 2 )); then
+            thread_name="''${lines[0]:-}"
+            thread_link="''${lines[1]:-}"
+          fi
+        fi
+        if [[ "$thread_link" =~ ^https://[A-Za-z0-9./:_%~-]{1,200}$ && "$thread_link" == */"$T3CODE_THREAD_ID" ]]; then
+          requester_link="$thread_link"
+        fi
+        # Only whole, valid UTF-8 with no control, format or separator characters,
+        # which could render as another line or reorder the text.
+        if [[ -n "$thread_name" ]] && (( ''${#thread_name} <= 120 )) \
+          && printf '%s\n' "$thread_name" | LC_ALL=C.UTF-8 ${grepCommand} -qaxP '[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]*'; then
+          if [[ -n "$requester_link" ]]; then
+            requester="Requested by T3 thread \"$thread_name\""
+          else
+            requester="Requested by T3 thread \"$thread_name\" ($T3CODE_THREAD_ID)"
+          fi
+        fi
+      ''}
         else
           requester="Requested by a T3 thread with an unreadable ID"
         fi
+      fi
+
+      requester_link_details=()
+      # shellcheck disable=SC2034 # Used only with a remote path.
+      requester_link_args=()
+      if [[ -n "$requester_link" ]]; then
+        requester_link_details=(--detail credential.requester_link "$requester_link")
+        # shellcheck disable=SC2034
+        requester_link_args=(--requester-url "$requester_link")
       fi
 
       uid="$(${idCommand} -u)"
@@ -216,6 +260,10 @@ in
       newline=$'\n'
       # shellcheck disable=SC2016
       message='$(credential.title)'"$newline"'$(credential.reason)'"$newline"'$(credential.impact)'"$newline"'Operation: $(credential.operation)'"$newline"'$(credential.requester)'
+      if [[ -n "$requester_link" ]]; then
+        # shellcheck disable=SC2016
+        message+="$newline"'$(credential.requester_link)'
+      fi
 
       ${decide}
     '';

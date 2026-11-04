@@ -89,6 +89,25 @@ else let
     idCommand = mockId;
     pkcheckCommand = mockPkcheck;
   };
+  # Records its arguments, for the requester's name and link.
+  mockPkcheckRecording = pkgs.writeShellScript "credential-consent-mock-pkcheck-recording" ''
+    printf '%s\n' "$@" > "$CONSENT_TEST_ARGS"
+  '';
+  mockDescribe = pkgs.writeShellScript "credential-consent-mock-describe" ''
+    [[ "$1" == "mcp:launch:0123abc" ]] || exit 64
+    [[ -z "''${CONSENT_TEST_DESCRIBE_SLEEP:-}" ]] || sleep "$CONSENT_TEST_DESCRIBE_SLEEP"
+    printf '%b' "''${CONSENT_TEST_DESCRIBE:-}"
+    exit "''${CONSENT_TEST_DESCRIBE_EXIT:-0}"
+  '';
+  testHelperDescribed = import ../../modules/nixos/security/credential-consent/helper.nix {
+    actionId = "xyz.alc.credentials.use-admin";
+    inherit lib pkgs;
+    ownerUsers = ["test-operator"];
+    grepCommand = lib.getExe pkgs.gnugrep;
+    idCommand = mockId;
+    pkcheckCommand = mockPkcheckRecording;
+    requesterCommand = toString mockDescribe;
+  };
   # Records how it ended, so the tests can see the loser of a race stopped.
   mockPkcheckRacing = pkgs.writeShellScript "credential-consent-mock-pkcheck-racing" ''
     set -uo pipefail
@@ -235,6 +254,60 @@ in
         --impact 'Test impact' \
         --operation 'test-operation sha256:0123'
       expect_exit 2 ${testHelper}/bin/dms-credential-consent --unknown value
+
+      # The requester's name and link, and what happens when they are unusable.
+      described() {
+        expected_requester="$1"
+        expected_link="$2"
+        export CONSENT_TEST_ARGS="$PWD/described.args" CONSENT_TEST_DESCRIBE="$3" CONSENT_TEST_DESCRIBE_EXIT="''${4:-0}" CONSENT_TEST_DESCRIBE_SLEEP="''${5:-}"
+        export CONSENT_TEST_UID=1000 CONSENT_TEST_USER=test-operator T3CODE_THREAD_ID=mcp:launch:0123abc
+        ${testHelperDescribed}/bin/dms-credential-consent \
+          --title 'Test title' \
+          --reason 'Test reason' \
+          --impact 'Test impact' \
+          --operation 'test-operation sha256:0123'
+        grep -Fxq "$expected_requester" "$CONSENT_TEST_ARGS" || {
+          echo "requester: expected $expected_requester, got:" >&2
+          cat "$CONSENT_TEST_ARGS" >&2
+          exit 1
+        }
+        if [[ -n "$expected_link" ]]; then
+          grep -Fxq "$expected_link" "$CONSENT_TEST_ARGS"
+          grep -Fq 'credential.requester_link' "$CONSENT_TEST_ARGS"
+        elif grep -Fq 'requester_link' "$CONSENT_TEST_ARGS"; then
+          echo "unexpected link:" >&2
+          cat "$CONSENT_TEST_ARGS" >&2
+          exit 1
+        fi
+      }
+      id_only='Requested by T3 thread mcp:launch:0123abc'
+      with_id='Requested by T3 thread "Fix the prompt" (mcp:launch:0123abc)'
+      named='Requested by T3 thread "Fix the prompt"'
+      link=https://t3.example.com/env/mcp:launch:0123abc
+      described "$named" "$link" "Fix the prompt\n$link\n"
+      described "$with_id" "" 'Fix the prompt\n'
+      described "$with_id" "" 'Fix the prompt\njavascript:alert(1)\n'
+      described "$with_id" "" 'Fix the prompt\nhttps://evil.example.com/a b\n'
+      described "$id_only" "" ""
+      described "$id_only" "" "" 1
+      described "$id_only" "" 'Bad\tname\n'
+      # A line break in the name cannot put its own link in the prompt.
+      described "$id_only" "" 'Review\nhttps://evil.example.com/mcp:launch:0123abc\n'"$link"'\n'
+      # A link to another thread, or to another site without the thread's ID.
+      described "$with_id" "" 'Fix the prompt\nhttps://t3.example.com/env/other-thread\n'
+      described "$id_only" "" "Fix the prompt\n$link\n" 1
+      # Line and paragraph separators, a direction override, a joiner, invalid UTF-8.
+      described "$id_only" "" 'Fix\0342\0200\0250the prompt\n'
+      described "$id_only" "" 'Fix\0342\0200\0251the prompt\n'
+      described "$id_only" "" 'Fix\0342\0200\0256the prompt\n'
+      described "$id_only" "" 'Fix\0342\0200\0215the prompt\n'
+      described "$id_only" "" 'Fix\0377the prompt\n'
+      # Text beyond ASCII is fine.
+      described 'Requested by T3 thread "Fiks æøå" (mcp:launch:0123abc)' "" 'Fiks æøå\n'
+      described "$id_only" "$link" "\n$link\n"
+      described "$id_only" "" "$(printf 'x%.0s' $(seq 121))\n"
+      described "$id_only" "" "Fix the prompt\n$link\n" 0 10
+      unset CONSENT_TEST_DESCRIBE_SLEEP CONSENT_TEST_DESCRIBE CONSENT_TEST_DESCRIBE_EXIT
 
       # Racing: the first answer wins and the other way stops.
       race() {

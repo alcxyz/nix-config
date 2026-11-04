@@ -68,6 +68,24 @@ in {
   security.credentialConsent = {
     enable = true;
     ownerUsers = [username];
+    # The main T3 instance's threads get a name and a link; another instance's get
+    # a name. deck's threadLink builds the same link.
+    requesterCommand = lib.getExe (pkgs.writeShellApplication {
+      name = "t3-thread-describe";
+      runtimeInputs = [pkgs.jq];
+      text = ''
+        bin="$HOME/.nix-profile/bin"
+        status="$("$bin/t3-thread-status" --self "$1")"
+        # One line, without what the helper's check refuses.
+        jq -r '(.threads[0].title // "") | gsub("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]"; " ")' <<< "$status"
+        if [[ "$(jq -r .database <<< "$status")" == "$HOME/.t3/userdata/statev2.sqlite" ]]; then
+          environment="$("$bin/t3-thread-inventory" --thread "$1" --days 0 | jq -r '.environmentId // empty')"
+          if [[ -n "$environment" ]]; then
+            printf 'https://t3code.alc.xyz/%s/%s\n' "$environment" "$1"
+          fi
+        fi
+      '';
+    });
   };
   security.agentPrReviewGuard = {
     enable = true;
