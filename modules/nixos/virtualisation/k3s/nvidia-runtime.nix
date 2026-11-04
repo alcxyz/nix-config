@@ -60,8 +60,12 @@ in {
         BinaryName = "${nvidiaContainerRuntime}"
   '';
 
+  # Order after the CDI generator but do not require it. A driver update makes
+  # the generator fail until the reboot that loads the new module (NVML version
+  # mismatch), and a hard dependency would then keep k3s stopped, leave the node
+  # NotReady and trigger the self-fence. Only GPU pods need the spec.
   systemd.services.k3s = {
     after = ["nvidia-container-toolkit-cdi-generator.service"];
-    requires = ["nvidia-container-toolkit-cdi-generator.service"];
+    wants = ["nvidia-container-toolkit-cdi-generator.service"];
   };
 }
