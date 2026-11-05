@@ -803,11 +803,11 @@
         "xdph": "xdph"
       },
       "locked": {
-        "lastModified": 1793789404,
-        "narHash": "sha256-kPq+HOlGZrZgxUmMp/2hfkYLkPX/e/fvdsAJrL/vOHg=",
+        "lastModified": 1793815543,
+        "narHash": "sha256-0vHmcnw8AgqQUig++z70GD3/BFs4wZpMmqRSnrq0kDQ=",
         "owner": "hyprwm",
         "repo": "Hyprland",
-        "rev": "0197e5708210ba2f18952330ae83978c60ddc7e1",
+        "rev": "64bde62ee467d7fe56d15431e91eaa4bb47ddd14",
         "type": "github"
       },
       "original": {
@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793851270,
-        "narHash": "sha256-1ie/g8VAcRMORr3/39ZVxMQURfFVcqJdhgdFUqYa8vY=",
+        "lastModified": 1793860270,
+        "narHash": "sha256-5QRV93jbJ7RYcIkzAaRgK9hdIa8/LkmNjFJ6KE1zxHw=",
         "ref": "dev",
-        "rev": "bd8152138ae56ff5ea9b4f6b89a5ae12cb8ea57e",
-        "revCount": 952,
+        "rev": "50e6c6962862a952e78f076bed45507edb4fddbe",
+        "revCount": 954,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1272,11 +1272,11 @@
         "restricted-codex-nixpkgs": "restricted-codex-nixpkgs"
       },
       "locked": {
-        "lastModified": 1793833343,
-        "narHash": "sha256-QsqXT1V2XsynTZDgr4pxgPzg+7PvccSqLFdvdTk1vSk=",
+        "lastModified": 1793843550,
+        "narHash": "sha256-lsOODDlCwtyln6QvblPbLAnIMsn7Anjky28nA8zZDCk=",
         "ref": "dev",
-        "rev": "df972ebbd403e1327c3757b34ecf86843c06c8ef",
-        "revCount": 83,
+        "rev": "8d9a9134c0010c0a0555011888c8f917b71fa64c",
+        "revCount": 85,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
@@ -1724,11 +1724,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779323131,
-        "narHash": "sha256-AzMZ7y0AyaOloxw9ZFwAhROxubxnyDpFuRwTKMxGZN0=",
+        "lastModified": 1793843312,
+        "narHash": "sha256-dv/N45xvdz2nupUAsf+vbkuWoQdnoCLit61/M57ZXHo=",
         "ref": "main",
-        "rev": "ca43b6f21470ddb9af7e126957d4529a3373f4e5",
-        "revCount": 5,
+        "rev": "2d05bd6d7ed596db7dc76fb38a4264d7c8589bc5",
+        "revCount": 6,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/stashdb-pop.git"
       },
