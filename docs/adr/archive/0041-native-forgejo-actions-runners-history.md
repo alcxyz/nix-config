@@ -502,3 +502,18 @@ From the consequences:
 
 > - `xyz` contributes three slots (one Docker, one pool, one `ci-fast`) and
 >   `xev` four (one Docker, two pool, one `ci-fast`), each within one aggregate
+
+## Text replaced on 2026-11-05 (#991)
+
+The text as it stood before xyz's second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)).
+
+>   Podman runner. Every Docker runner admits one job. The Podman pool admits
+>   one job on `xyz`, which also runs games and media services, two on `xev`,
+>   and one on `nex` and `nux`; the `xyz` and `xev` pool slots also serve
+>
+>
+>   and a 50% hard memory limit; `xyz`, with two slots beside the nix-daemon's
+>
+>
+> - `xyz` contributes two slots (one Docker, one pool) and `xev` three (one
+>   Docker, two pool), each within one aggregate

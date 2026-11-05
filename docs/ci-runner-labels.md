@@ -36,11 +36,11 @@ jobs:
 Leave light jobs on `forgejo-podman`. With the variable unset, the job uses the
 shared pool as before.
 
-`ci-fast` jobs run on the pool runners of xyz (one slot) and xev (two slots),
+`ci-fast` jobs run on the pool runners of xyz and xev (two slots each),
 which serve `forgejo-podman` jobs in the same slots. Whichever runner polls
 first takes the job, so a fast job may land on xev while xyz is free. A fast
 job never waits while one of these slots is free, but it waits while all
-three are busy, shared-pool jobs included. Most jobs take about 2 minutes, so
+four are busy, shared-pool jobs included. Most jobs take about 2 minutes, so
 a slot frees quickly.
 
 While a game runs on xyz, or xyz is off, its runners take no jobs and xev

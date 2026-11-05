@@ -145,3 +145,12 @@ parts of [ADR-0072](../0072-isolated-runner-docker.md) and the standby of
 [ADR-0097](../0097-ci-fast-runner-label.md), whose replaced text is in their
 history files. Tracks [#916](https://git.alc.xyz/alcxyz/nix-config/issues/916)
 (step 4) and closes [#646](https://git.alc.xyz/alcxyz/nix-config/issues/646).
+
+## Text replaced on 2026-11-05 (#991)
+
+The text as it stood before xyz's second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)).
+
+> **Fewer slots.** xyz runs two CI slots instead of five (one Docker, one
+> pool) with a 25% memory throttle and a 35% hard limit. xev runs three (one
+> Docker, two pool): from 2026-10-24 to 2026-10-31 its jobs ran three or more at
+> once for about a third of its busy time. nex and nux keep one slot per runner.

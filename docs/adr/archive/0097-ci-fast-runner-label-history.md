@@ -337,3 +337,16 @@ Workflow authors use [CI runner labels](../../ci-runner-labels.md).
   restarts or the host reboots.
 - A runner unit added by a switch starts at the switch, since the runner hold
   keeps no unit registry.
+
+## Text replaced on 2026-11-05 (#991)
+
+The text as it stood before xyz's second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)).
+
+>   `forgejo-podman` and in the same job slots: one on xyz, two on xev.
+>
+> names never overlap. xyz runs up to two jobs in its one build slice (one
+>   Docker, one pool), xev up to three (one Docker, two pool).
+>
+>
+> - Fast jobs share the pool slots: they wait while xyz's one pool slot and
+>   xev's two are all busy or held, and a running fast job delays pool jobs. A

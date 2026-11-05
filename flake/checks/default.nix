@@ -167,8 +167,9 @@ in {
     };
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
     # Jobs per runner (ADR-0041, ADR-0106): every Docker runner takes one; the
-    # Podman pool takes one on xyz, which also runs games and media, two on
-    # xev and one on the smaller nex and nux. The xyz and xev pool runners
+    # Podman pool takes two on xyz, which also runs games and media, as a
+    # trial (#991), two on xev and one on the smaller nex and nux. The xyz and
+    # xev pool runners
     # also serve ci-fast in those slots.
     expectedCapacity = {
       xyz = 1;
@@ -177,7 +178,7 @@ in {
       nux = 1;
     };
     expectedPoolCapacity = {
-      xyz = 1;
+      xyz = 2;
       xev = 2;
       nex = 1;
       nux = 1;
@@ -292,7 +293,7 @@ in {
     assert lib.all (host: host.systemd.services.forgejo-actions-runner.serviceConfig.KillMode == "mixed") serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
-    # xyz's two slots share less memory beside the nix-daemon and the ARC.
+    # xyz's slots share less memory beside the nix-daemon and the ARC.
     assert buildSlice.MemoryHigh == "25%";
     assert buildSlice.MemoryMax == "35%";
     assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "40%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;
