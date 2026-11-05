@@ -363,11 +363,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793760575,
-        "narHash": "sha256-BuBRX4Mehp0sCTrIHT6yNANniEzOtaBqbZAA3j33trg=",
+        "lastModified": 1793888667,
+        "narHash": "sha256-P8JJjissqBCEgbLtt/j1cRAFVTBoCUnWd3DgahZKPXI=",
         "owner": "AvengeMedia",
         "repo": "danksearch",
-        "rev": "362cc823a53c8c25318a10713587049a431d2118",
+        "rev": "3197b8453c31f8eaa305001bbe741048c1834a49",
         "type": "github"
       },
       "original": {
@@ -692,11 +692,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793701272,
-        "narHash": "sha256-02U6krpVjFpk7CI58RoBO1HFb8fRKp3SfRf45tRsh38=",
+        "lastModified": 1793887706,
+        "narHash": "sha256-xEsX6ns8jRmdZQPKlx/CcFS50dbTfzs8WT01gUjtPHE=",
         "ref": "main",
-        "rev": "fa561eb5ea4488d679e40cd9d1ffd02022a02dc9",
-        "revCount": 5,
+        "rev": "8f4512ba8b2dc475f24510bfc87443efd43b295f",
+        "revCount": 6,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/hedgedoc.git"
       },
@@ -1272,11 +1272,11 @@
         "restricted-codex-nixpkgs": "restricted-codex-nixpkgs"
       },
       "locked": {
-        "lastModified": 1793869958,
-        "narHash": "sha256-Q9HXmFGShzhXHO92duEpuhKV/pt4vQDf5JLER5DIB8I=",
+        "lastModified": 1793891051,
+        "narHash": "sha256-24N2dusjQdxIV2V7qLNyBudHh55D5JyNYQAZaDeteSI=",
         "ref": "dev",
-        "rev": "cc1fe69d676faf13d9ef1b1912e961bf549501b3",
-        "revCount": 87,
+        "rev": "1ef80b28a3451d666dd7838d35e3364ec417525e",
+        "revCount": 91,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
