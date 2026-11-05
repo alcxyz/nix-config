@@ -809,6 +809,7 @@ in {
           services.t3code.agentSessionVariables = lib.mkForce {};
           # Both fixtures change the forge identity, so neither can run promotion jobs.
           services.weekly-promotion.enable = lib.mkForce false;
+          services.rollout-revert.enable = lib.mkForce false;
         }
       ];
     };

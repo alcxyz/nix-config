@@ -93,6 +93,8 @@ in {
     inputs.nix-secrets.homeManagerModules.deckShareReport
     # Refreshes the deck CI runner report from the runner hosts (xyz only).
     inputs.nix-secrets.homeManagerModules.deckRunnerReport
+    # Refreshes the deck PR review service report from its journal on xps (xyz only).
+    inputs.nix-secrets.homeManagerModules.deckReviewReport
     # Nightly development statistics collector and its private settings.
     inputs.devstats.homeManagerModules.default
     inputs.nix-secrets.homeManagerModules.devstats
