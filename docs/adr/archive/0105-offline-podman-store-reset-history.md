@@ -153,3 +153,12 @@ In the context, the reason the store is disposable read:
 > cheap, Nix paths come through the CI cache proxy
 > ([ADR-0103](0103-ci-nix-cache-proxy.md)), and the cleanup already deleted the
 > Buildx state volumes in every idle window.
+
+## Text replaced on 2026-11-05 (#995)
+
+The text as it stood before xyz's Podman store moved to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)). It also predated xev's store moving to its own partition.
+
+> On xyz the
+> store is a directory in the `forgejo-podman` ZFS dataset mounted at
+> `/var/lib/forgejo-podman`; on xev, nex and nux it is a directory on the root
+> filesystem.

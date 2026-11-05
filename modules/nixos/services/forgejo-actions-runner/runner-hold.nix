@@ -38,6 +38,11 @@ in {
         default = "/";
         description = "Filesystem path whose free space protects runner storage.";
       };
+      extraPaths = lib.mkOption {
+        type = lib.types.listOf (lib.types.strMatching "[^[:space:]]+");
+        default = [];
+        description = "Further filesystems held to the same floors, for runner storage outside `path`.";
+      };
       drainFreeGiB = lib.mkOption {
         type = lib.types.ints.positive;
         default = 30;
@@ -147,6 +152,7 @@ in {
         then "1"
         else "0";
       DISK_SPACE_PATH = hold.diskSpace.path;
+      DISK_SPACE_EXTRA_PATHS = lib.concatStringsSep " " hold.diskSpace.extraPaths;
       DISK_DRAIN_BYTES = toString (hold.diskSpace.drainFreeGiB * 1024 * 1024 * 1024);
       DISK_DRAIN_PERCENT = toString hold.diskSpace.drainFreePercent;
       DISK_RECOVERY_BYTES = toString (hold.diskSpace.recoveryFreeGiB * 1024 * 1024 * 1024);

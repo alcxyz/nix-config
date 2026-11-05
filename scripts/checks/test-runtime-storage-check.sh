@@ -13,6 +13,13 @@ EOF
 chmod +x "$fixture/bin/findmnt"
 export PATH="$fixture/bin:$PATH"
 bash "$source_file" /var/lib/forgejo-docker fixture/runtime/docker
+FIXTURE_SOURCE='fixture/disk[/ci/store]' bash "$source_file" /var/lib/forgejo-docker 'fixture/disk[/ci/store]'
+for bind in 'fixture/disk[/other]' 'fixture/disk' 'fixture/other[/ci/store]'; do
+  if FIXTURE_SOURCE=$bind bash "$source_file" /var/lib/forgejo-docker 'fixture/disk[/ci/store]' >"$fixture/out" 2>&1; then
+    echo "Storage check accepted bind mount source $bind" >&2
+    exit 1
+  fi
+done
 for mode in absent wrong ambiguous; do
   case $mode in
     absent) export FIXTURE_MOUNT=absent FIXTURE_SOURCE=fixture/runtime/docker ;;

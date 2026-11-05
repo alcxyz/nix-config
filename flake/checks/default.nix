@@ -199,6 +199,7 @@ in {
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
     assert lib.all (runner: runner.podmanStoreReset.enable && runner.runnerHold.diskSpace.enable && runner.runnerHold.alert.enable) (lib.attrValues runners);
+    assert runners.xyz.runnerHold.diskSpace.path == "/" && runners.xyz.runnerHold.diskSpace.extraPaths == ["/ext4"];
     # Only xyz holds its runners for games (ADR-0106).
     assert lib.all (host: runners.${host}.runnerHold.game.enable == (host == "xyz")) (lib.attrNames runners);
     assert runnerHosts.xyz.config.services.gameSignal.enable;

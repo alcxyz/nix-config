@@ -219,7 +219,12 @@ in {
     # then cancels them.
     runnerHold = {
       game.enable = true;
-      diskSpace.enable = true;
+      # Runner caches stay on root, and the Podman store shares /ext4 with the
+      # games with no quota of its own, so the floor watches both.
+      diskSpace = {
+        enable = true;
+        extraPaths = ["/ext4"];
+      };
       alert.enable = true;
     };
     shutdownTimeoutSeconds = 120;

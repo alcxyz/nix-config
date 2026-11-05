@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-11-03, the xyz and xev pool runners serve `ci-fast` instead of dedicated runners ([ADR-0097](0097-ci-fast-runner-label.md)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991))
+**Amended:** 2026-11-03, the xyz and xev pool runners serve `ci-fast` instead of dedicated runners ([ADR-0097](0097-ci-fast-runner-label.md)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, xyz's Podman store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995))
 **History:** [replaced text](archive/0106-runner-hold-for-games-and-low-disk-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/runner-hold.{nix,sh}`,
 `runner-start-gate.sh`, `modules/nixos/services/game-signal/`, the runner pool
@@ -28,7 +28,7 @@ runners 16 times for a game and 159 times for an uncertain scan, mostly
 processes exiting during the scan. Steam games, the sideloaded Heroic games
 and SteamHeadless streams to xps went unseen.
 
-xyz's CI stores are on their own SSD pool, but ZFS ignores cgroup I/O weights
+xyz's CI stores were then on their own SSD pool, but ZFS ignores cgroup I/O weights
 for buffered writes and limits dirty data for all pools together, so heavy CI
 writes also slow the pools that Plex, qBittorrent, Stash and Calibre use. The
 number of concurrent jobs is the lever that works.
@@ -55,7 +55,8 @@ controller and the hold monitor on every runner host. Every 5 seconds it
 looks at its hold reasons: a game (xyz only, `runnerHold.game`; an inactive
 game signal counts as a game) and free space below the disk floor (every
 host, `runnerHold.diskSpace`: hold below 30 GiB or 15%, release at 40 GiB and
-20%). While a reason applies it marks each running runner `held` and stops
+20%; xyz also holds `/ext4`, where its Podman store shares a filesystem with
+the games, to those floors). While a reason applies it marks each running runner `held` and stops
 it. Once none applies, it resets and starts every marked runner that is
 inactive or failed, so a stop that timed out no longer strands a runner, and
 retries a refused start with spacing that doubles up to 5 minutes; the

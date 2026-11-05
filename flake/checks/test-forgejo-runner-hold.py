@@ -643,5 +643,44 @@ fi
         self.assertFalse(self.signal.exists())
 
 
+class DiskPathsTest(unittest.TestCase):
+    """The floor holds on the worst of several filesystems."""
+
+    def status(self, **free_gib):
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = Path(tmp) / 'df'
+            cases = ''.join(f"  '/{name}') free={gib} ;;\n" for name, gib in free_gib.items() if gib is not None)
+            primary = next(name for name in free_gib if name != 'store')
+            stub.write_text(
+                f"#!{shutil.which('bash')}\nfree=\n"
+                'for last; do :; done\n'
+                f'case $last in\n{cases}  *) exit 1 ;;\nesac\n'
+                f'echo Size Avail\necho {1000 * GIB} $((free * {GIB}))\n')
+            stub.chmod(0o755)
+            script = f'''set -u; source {DISK_HELPER}; status=0; disk_space_status || status=$?; echo "$status"'''
+            env = dict(os.environ, PATH=f"{tmp}:{os.environ['PATH']}", DISK_SPACE_ENABLED='1',
+                       DISK_SPACE_PATH=f'/{primary}', DISK_SPACE_EXTRA_PATHS='/store',
+                       DISK_DRAIN_BYTES=str(30 * GIB), DISK_DRAIN_PERCENT='1',
+                       DISK_RECOVERY_BYTES=str(40 * GIB), DISK_RECOVERY_PERCENT='2')
+            out = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, check=True).stdout
+            return int(out)
+
+    def test_both_above_the_recovery_floor_release(self):
+        self.assertEqual(self.status(root=100, store=100), 0)
+
+    def test_either_below_the_floor_holds(self):
+        self.assertEqual(self.status(root=100, store=10), 1)
+        self.assertEqual(self.status(root=10, store=100), 1)
+
+    def test_between_the_floors_continues(self):
+        self.assertEqual(self.status(root=35, store=100), 3)
+
+    def test_a_primary_path_with_a_space_stays_one_path(self):
+        self.assertEqual(self.status(**{'root data': 100, 'store': 100}), 0)
+
+    def test_an_unreadable_path_holds(self):
+        self.assertEqual(self.status(root=100, store=None), 4)
+
+
 if __name__ == '__main__':
     unittest.main()

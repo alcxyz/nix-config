@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths
+**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995))
 **History:** [replaced text](archive/0105-offline-podman-store-reset-history.md)
 **Supersedes:** [ADR-0083](archive/0083-podman-cleanup-completion-fence.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-store-reset.{nix,sh}`,
@@ -66,9 +66,9 @@ the host is idle.
   empty API cgroups, and that nothing is mounted at or below the store. Then
   rename the store directory to a hidden trash name beside it, on the same
   filesystem: a directory inside the mount, never a mount itself. On xyz the
-  store is a directory in the `forgejo-podman` ZFS dataset mounted at
-  `/var/lib/forgejo-podman`; on xev, nex and nux it is a directory on the root
-  filesystem. Sync the rename and the age stamp, then release the lock.
+  store is a directory in a bind mount from `/ext4` at
+  `/var/lib/forgejo-podman`, on xev a directory on a dedicated ext4 partition
+  mounted there, and on nex and nux a directory on the root filesystem. Sync the rename and the age stamp, then release the lock.
 - **Start:** start both APIs at once, and with them only the runners the reset
   stopped. The start gates still decide each start. A runner whose gate refuses
   the start (for a game that began meanwhile, say) keeps the gate's `held`

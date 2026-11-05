@@ -154,3 +154,12 @@ The text as it stood before xyz's second pool slot ([#991](https://git.alc.xyz/a
 > pool) with a 25% memory throttle and a 35% hard limit. xev runs three (one
 > Docker, two pool): from 2026-10-24 to 2026-10-31 its jobs ran three or more at
 > once for about a third of its busy time. nex and nux keep one slot per runner.
+
+## Text replaced on 2026-11-05 (#995)
+
+The text as it stood before xyz's Podman store moved to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)).
+
+> xyz's CI stores are on their own SSD pool, but ZFS ignores cgroup I/O weights
+> for buffered writes and limits dirty data for all pools together, so heavy CI
+> writes also slow the pools that Plex, qBittorrent, Stash and Calibre use. The
+> number of concurrent jobs is the lever that works.
