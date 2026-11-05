@@ -1,7 +1,7 @@
 # ADR-0041: Native Forgejo Actions runners
 
 **Status:** Accepted
-**Date:** 2026-05-07, updated 2026-11-02 (start records and restart once idle for nixfleet, per nix-packages ADR-0017)
+**Date:** 2026-05-07, updated 2026-11-05 (the runner restart pauses runners until their jobs finish, per nix-packages ADR-0017)
 **Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine; 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991))
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
@@ -100,14 +100,20 @@ registration keeps those jobs to that user's repositories.
   `/run/nixfleet-runners/started`. `nixfleet-runner-status` reports without
   root which of them runs an older definition than the deployed one, and why
   each stopped runner is down. `forgejo-runner-restart.service` restarts the
-  flagged units once the host is idle: no Podman store reset, no runner
-  starting or stopping, no job container on a running engine and no task
-  taken in the last 5 minutes (`restartWhenIdle.quietMinutes`). It waits up
-  to 60 minutes (`restartWhenIdle.waitMinutes`), then gives up without
-  restarting, so it never cancels a job on purpose. The whole host must be
-  idle because restarting the resource policy or an API also restarts the
-  runners that require it. `nixfleet runners restart` starts it on each
-  host (nix-packages ADR-0017); it changes nothing about the runner hold.
+  flagged units once their running jobs finish. It waits for any Podman store
+  reset or runner start or stop to end, then pauses the runners the restart
+  touches: the flagged ones, or all of them when an API or the resource policy
+  is flagged, since restarting those also restarts the runners that require
+  them. A paused runner takes no new job, finishes its running ones, and reports
+  `paused tasks=<running>` as its status text, through a patch in nix-packages'
+  `forgejo-runner-cancellation` that every runner host uses. Once each reports
+  no tasks it restarts the flagged units and ends the pauses, so a stop neither
+  cancels a job nor leaves it to the shutdown timeout, on `xyz` as elsewhere.
+  It waits up to the job timeout and 5 minutes
+  (`restartWhenIdle.waitMinutes`), then gives up without restarting, so it never
+  cancels a job on purpose. `nixfleet runners restart` starts it on each host
+  (nix-packages ADR-0017); it changes nothing about the runner hold, whose stop
+  of a paused runner is an ordinary stop.
 - Forgejo runners pull work independently and provide no strict round-robin
   placement guarantee. Shared labels make all four hosts eligible, while the
   per-host caps prevent one server-worker from accepting a concurrent build

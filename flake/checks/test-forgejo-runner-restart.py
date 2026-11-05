@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Synthetic tests of the runner start record, nixfleet-runner-status and the
-restart when idle (ADR-0041, nix-packages ADR-0017).
+restart once running jobs finish (ADR-0041, nix-packages ADR-0017).
 
-They never contact systemd or an engine: systemctl, curl, journalctl, date and
-sleep are fakes, sleep advances a fake clock, and unit files are symlinks in a
-temporary directory.
+They never contact systemd or a runner: systemctl, date and sleep are fakes,
+sleep advances a fake clock, and unit files are symlinks in a temporary
+directory.
 """
 import json
 import os
@@ -30,7 +30,9 @@ RESET = 'forgejo-podman-store-reset.service'
 
 # Units live in one JSON file. A restart gives each unit a new invocation and
 # runs the recorder as its ExecStartPost would, unless the fixture says the
-# recorder fails or the restart fails.
+# recorder fails or the restart fails. A runner whose pause file exists reports
+# it with its running tasks, as the patched runner does, unless the fixture
+# lists it under no_ack.
 FAKE_SYSTEMCTL = r'''#!/usr/bin/env python3
 import json, os, subprocess, sys
 from pathlib import Path
@@ -48,8 +50,13 @@ if args[0] == 'show':
         if arg.startswith('--property='):
             key = arg.split('=', 1)[1]
             value = unit(name).get(key, '')
+            if key == 'StatusText' and name not in state.get('no_ack', []) and (Path(os.environ['PAUSE_DIR']) / name).exists():
+                value = f"paused tasks={state.get('tasks', {}).get(name, 0)}"
             print(value if '--value' in args else f'{key}={value}')
 elif args[0] == 'restart':
+    paused = sorted(entry.name for entry in Path(os.environ['PAUSE_DIR']).iterdir())
+    with open(os.environ['FAKE_LOG'], 'a') as handle:
+        handle.write('paused ' + ' '.join(paused) + '\n')
     if state.get('restart_fails'):
         sys.exit(1)
     for name in args[1:]:
@@ -91,29 +98,6 @@ from pathlib import Path
 print(Path(os.environ['FAKE_ROOT'], 'clock').read_text())
 '''
 
-# A socket path is the engine's name; the fixture lists job containers per
-# engine, or makes an engine unreadable.
-FAKE_CURL = r'''#!/usr/bin/env python3
-import json, os, sys
-from pathlib import Path
-state = json.loads(Path(os.environ['FAKE_STATE']).read_text())
-socket = sys.argv[sys.argv.index('--unix-socket') + 1]
-engine = Path(socket).name
-if engine in state.get('engine_down', []):
-    sys.exit(7)
-names = state.get('jobs', {}).get(engine, [])
-print(json.dumps([{'Names': ['/' + name]} for name in names] + [{'Names': ['/builder-cache']}]))
-'''
-
-FAKE_JOURNALCTL = r'''#!/usr/bin/env python3
-import json, os, sys
-from pathlib import Path
-state = json.loads(Path(os.environ['FAKE_STATE']).read_text())
-unit = next(arg.split('=', 1)[1] for arg in sys.argv if arg.startswith('--unit='))
-for line in state.get('journal', {}).get(unit, []):
-    print(line)
-'''
-
 
 class RunnerRestartTest(unittest.TestCase):
     def setUp(self):
@@ -121,8 +105,7 @@ class RunnerRestartTest(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.bin = self.root / 'bin'
         self.bin.mkdir()
-        for name, text in (('systemctl', FAKE_SYSTEMCTL), ('sleep', FAKE_SLEEP), ('date', FAKE_DATE),
-                           ('curl', FAKE_CURL), ('journalctl', FAKE_JOURNALCTL)):
+        for name, text in (('systemctl', FAKE_SYSTEMCTL), ('sleep', FAKE_SLEEP), ('date', FAKE_DATE)):
             path = self.bin / name
             path.write_text(text)
             path.chmod(0o755)
@@ -132,6 +115,8 @@ class RunnerRestartTest(unittest.TestCase):
         self.etc.mkdir()
         self.records = self.root / 'run' / 'started'
         self.state_file = self.root / 'run' / 'restart'
+        self.pause_dir = self.root / 'run' / 'paused'
+        self.pause_dir.mkdir(parents=True)
         (self.root / 'clock').write_text('100000')
         self.log = self.root / 'systemctl.log'
         self.log.touch()
@@ -158,14 +143,11 @@ class RunnerRestartTest(unittest.TestCase):
         env = dict(os.environ, FAKE_ROOT=str(self.root), FAKE_STATE=str(self.root / 'state.json'),
                    FAKE_LOG=str(self.log), RECORDER=str(self.recorder), STATE_HELPER_FILE=str(STATE_HELPER),
                    RECORD_DIR=str(self.records), SYSTEMCTL_BIN=str(self.bin / 'systemctl'),
-                   JOURNALCTL_BIN=str(self.bin / 'journalctl'), CURL_BIN=str(self.bin / 'curl'),
-                   DATE_BIN=str(self.bin / 'date'), SLEEP_BIN=str(self.bin / 'sleep'),
+                   PAUSE_DIR=str(self.pause_dir), DATE_BIN=str(self.bin / 'date'), SLEEP_BIN=str(self.bin / 'sleep'),
                    RUNNERS=' '.join(f'{unit}=label-{index}' for index, unit in enumerate(RUNNERS)),
                    SERVICES=' '.join(SERVICES), RUNNER_UNITS=' '.join(RUNNERS), SERVICE_UNITS=' '.join(SERVICES),
-                   HOLD_UNIT=HOLD, RESET_UNIT=RESET, DOCKER_API_UNIT=DOCKER, PODMAN_API_UNIT=PODMAN,
-                   DOCKER_SOCKET=str(self.root / 'docker'), PODMAN_SOCKET=str(self.root / 'podman'),
-                   STATE_FILE=str(self.state_file), RESTART_STATE_FILE=str(self.state_file),
-                   WAIT_SECONDS='60', QUIET_SECONDS='300', POLL_SECONDS='10', RESTART_TIMEOUT_SECONDS='30')
+                   HOLD_UNIT=HOLD, RESET_UNIT=RESET, STATE_FILE=str(self.state_file), RESTART_STATE_FILE=str(self.state_file),
+                   WAIT_SECONDS='60', ACK_SECONDS='20', POLL_SECONDS='10', RESTART_TIMEOUT_SECONDS='30')
         env.update(extra)
         return env
 
@@ -215,6 +197,12 @@ class RunnerRestartTest(unittest.TestCase):
 
     def restarts(self):
         return [line.split()[1:] for line in self.log.read_text().splitlines() if line.startswith('restart ')]
+
+    def paused_at_restart(self):
+        return [line.split()[1:] for line in self.log.read_text().splitlines() if line.startswith('paused')]
+
+    def assert_no_pause_left(self):
+        self.assertEqual(list(self.pause_dir.iterdir()), [])
 
     def test_record_is_world_readable_and_matches_the_running_definition(self):
         record = self.records / PRIMARY
@@ -285,31 +273,32 @@ class RunnerRestartTest(unittest.TestCase):
 
     def test_status_reports_the_last_restart(self):
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
-        self.state_file.write_text(f'status=busy\ntime=123\nunit={PRIMARY}\nunit={POLICY}\nreason=job_running unit={DOCKER}\n')
+        self.state_file.write_text(f'status=busy\ntime=123\nunit={PRIMARY}\nunit={POLICY}\nreason=job_running unit={POOL}\n')
         rows, _ = self.status()
-        self.assertIn(['restart', 'inactive', 'busy', '123', f'{PRIMARY},{POLICY}', f'job_running unit={DOCKER}'], rows)
+        self.assertIn(['restart', 'inactive', 'busy', '123', f'{PRIMARY},{POLICY}', f'job_running unit={POOL}'], rows)
         # A run its timeout killed left waiting behind; that reads as failed,
         # while a running one reads as it is.
-        self.state_file.write_text(f'status=waiting\ntime=124\nunit={PRIMARY}\nreason=recent_job unit={POOL}\n')
+        self.state_file.write_text(f'status=waiting\ntime=124\nunit={PRIMARY}\nreason=job_running unit={POOL}\n')
         self.update_unit('forgejo-runner-restart.service', ActiveState='failed')
         rows, _ = self.status()
         self.assertIn(['restart', 'failed', 'failed', '124', PRIMARY,
-                       f'the restart unit ended (failed) without a result, last: waiting recent_job unit={POOL}'], rows)
+                       f'the restart unit ended (failed) without a result, last: waiting job_running unit={POOL}'], rows)
         self.update_unit('forgejo-runner-restart.service', ActiveState='activating')
         rows, _ = self.status()
-        self.assertIn(['restart', 'activating', 'waiting', '124', PRIMARY, f'recent_job unit={POOL}'], rows)
+        self.assertIn(['restart', 'activating', 'waiting', '124', PRIMARY, f'job_running unit={POOL}'], rows)
         # An unreadable state may be a live run's.
         state = self.state()
         state['units']['forgejo-runner-restart.service'] = 'unreadable'
         self.write_state(state)
         rows, _ = self.status()
-        self.assertIn(['restart', 'unknown', 'waiting', '124', PRIMARY, f'recent_job unit={POOL}'], rows)
+        self.assertIn(['restart', 'unknown', 'waiting', '124', PRIMARY, f'job_running unit={POOL}'], rows)
 
     def test_restart_does_nothing_when_every_unit_runs_its_definition(self):
         result = self.restart()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.restart_state()['status'], 'nothing')
         self.assertEqual(self.restarts(), [])
+        self.assertEqual(self.paused_at_restart(), [])
 
     def test_restart_restarts_only_the_flagged_units_of_an_idle_host(self):
         self.deploy(PRIMARY, 'v2')
@@ -324,59 +313,113 @@ class RunnerRestartTest(unittest.TestCase):
         _, units = self.status()
         self.assertTrue(all(row[5] == 'no' for row in units.values()))
 
-    def test_restart_waits_for_a_job_container_and_a_recent_task(self):
+    def test_a_flagged_api_pauses_every_runner_until_its_jobs_finish(self):
         self.deploy(DOCKER, 'v2')
         state = self.state()
-        state['jobs'] = {'docker': ['FORGEJO-ACTIONS-TASK-7_WORKFLOW-ci_JOB-test']}
-        # Two samples later the container is gone, but the pool runner took a
-        # task; the journal reads empty at the next sample.
-        state['steps'] = [{}, {'jobs': {}, 'journal': {POOL: ['level=info msg="task 8 repo is alcxyz/demo"']}},
-                          {'journal': {}}]
+        state['tasks'] = {POOL: 2}
+        # Two samples later one job is done, one more later the last.
+        state['steps'] = [{}, {'tasks': {POOL: 1}}, {'tasks': {}}]
         self.write_state(state)
         result = self.restart()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.restarts(), [[DOCKER]])
-        self.assertIn(f'event=waiting units={DOCKER} reason=job_running unit={DOCKER}', result.stdout)
-        self.assertIn(f'event=waiting units={DOCKER} reason=recent_job unit={POOL}', result.stdout)
+        self.assertEqual(self.paused_at_restart(), [sorted(RUNNERS)])
+        self.assertIn(f'event=waiting units={DOCKER} reason=job_running unit={POOL}', result.stdout)
         self.assertEqual(self.restart_state()['status'], 'done')
+        self.assert_no_pause_left()
 
-    def test_restart_skips_engines_that_do_not_run(self):
+    def test_a_flagged_runner_pauses_only_itself(self):
+        # The other runner's job does not matter, since nothing restarts it.
         self.deploy(PRIMARY, 'v2')
-        self.update_unit(PODMAN, ActiveState='inactive', SubState='dead')
         state = self.state()
-        state['engine_down'] = ['podman']
+        state['tasks'] = {POOL: 1}
         self.write_state(state)
         result = self.restart()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.restarts(), [[PRIMARY]])
+        self.assertEqual(self.paused_at_restart(), [[PRIMARY]])
+        self.assert_no_pause_left()
 
-    def test_restart_gives_up_on_a_busy_host_without_restarting(self):
+    def test_a_unit_flagged_while_waiting_joins_the_restart(self):
         self.deploy(PRIMARY, 'v2')
         state = self.state()
-        state['jobs'] = {'podman': ['FORGEJO-ACTIONS-TASK-9']}
+        state['tasks'] = {PRIMARY: 1}
+        # A new invocation with no start record flags the other runner at the
+        # first sample, and the job ends at the next.
+        units = json.loads(json.dumps(state['units']))
+        units[POOL]['InvocationID'] = 'f' * 32
+        state['steps'] = [{'units': units}, {'tasks': {}}]
+        self.write_state(state)
+        result = self.restart()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.restarts(), [[PRIMARY, POOL]])
+        self.assertEqual(self.paused_at_restart(), [sorted([PRIMARY, POOL])])
+
+    def test_a_stopped_runner_has_no_job_to_wait_for(self):
+        self.deploy(POLICY, 'v2')
+        self.update_unit(POOL, ActiveState='inactive', SubState='dead')
+        state = self.state()
+        state['no_ack'] = [POOL]
+        self.write_state(state)
+        result = self.restart()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.restarts(), [[POLICY]])
+
+    def test_restart_gives_up_on_a_long_job_without_restarting(self):
+        self.deploy(PRIMARY, 'v2')
+        state = self.state()
+        state['tasks'] = {PRIMARY: 1}
         self.write_state(state)
         result = self.restart()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.restarts(), [])
         self.assertEqual(self.restart_state(), {'status': 'busy', 'time': '100060', 'unit': [PRIMARY],
-                                                'reason': f'job_running unit={PODMAN}'})
+                                                'reason': f'job_running unit={PRIMARY}'})
+        self.assert_no_pause_left()
 
-    def test_restart_waits_for_an_unreadable_engine_a_store_reset_and_a_stopping_runner(self):
+    def test_a_stopped_runner_gets_a_new_acknowledgement_window(self):
+        # It restarts unpaused at the third sample, past the window, and
+        # reports the pause at the fourth.
+        self.deploy(PRIMARY, 'v2')
+        state = self.state()
+        state['tasks'] = {PRIMARY: 1}
+        state['no_ack'] = [POOL]
+        self.deploy(POOL, 'v2')
+        units = json.loads(json.dumps(state['units']))
+        units[POOL].update(ActiveState='inactive', SubState='dead')
+        running = json.loads(json.dumps(units))
+        running[POOL].update(ActiveState='active', SubState='running')
+        state['steps'] = [{'units': units}, {}, {}, {}, {'units': running}, {'no_ack': [], 'tasks': {}}]
+        self.write_state(state)
+        result = self.restart(WAIT_SECONDS='600')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.restart_state()['status'], 'done')
+
+    def test_restart_fails_for_a_runner_that_cannot_pause(self):
+        self.deploy(PRIMARY, 'v2')
+        state = self.state()
+        state['no_ack'] = [PRIMARY]
+        self.write_state(state)
+        result = self.restart(WAIT_SECONDS='600')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f'reason=pausing unit={PRIMARY}', result.stdout)
+        self.assertEqual(self.restarts(), [])
+        self.assertEqual(self.restart_state()['status'], 'failed')
+        self.assertIn(f'{PRIMARY} did not report the pause', self.restart_state()['reason'])
+        self.assertEqual(self.restart_state()['time'], '100020')
+        self.assert_no_pause_left()
+
+    def test_restart_waits_for_a_store_reset_and_a_stopping_runner(self):
         self.deploy(POLICY, 'v2')
         state = self.state()
-        state['engine_down'] = ['docker']
         state['units'][RESET]['ActiveState'] = 'activating'
         state['units'][POOL].update(ActiveState='deactivating', SubState='stop-sigterm')
-        state['steps'] = [{}, {}, {}]
         self.write_state(state)
-        result = self.restart(WAIT_SECONDS='100')
-        self.assertIn('reason=store_reset_running', result.stdout)
+        result = self.restart(WAIT_SECONDS='0')
+        self.assertEqual(self.restart_state()['reason'], 'store_reset_running')
         self.update_unit(RESET, ActiveState='inactive')
         result = self.restart(WAIT_SECONDS='0')
         self.assertIn(f'reason=runner_transition unit={POOL} state=deactivating:stop-sigterm', result.stdout)
-        self.update_unit(POOL, ActiveState='active', SubState='running')
-        result = self.restart(WAIT_SECONDS='0')
-        self.assertIn(f'reason=engine_api_unavailable unit={DOCKER}', result.stdout)
         self.assertEqual(self.restarts(), [])
 
     def test_restart_does_not_wait_for_a_runner_that_restarts_after_a_failure(self):
@@ -418,7 +461,7 @@ class RunnerRestartTest(unittest.TestCase):
     def test_restart_and_record_refuse_bad_settings(self):
         # Each refusal replaces an earlier run's result with its own failure.
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
-        for setting in ({'RUNNER_UNITS': ''}, {'SERVICE_UNITS': 'bad unit'}, {'WAIT_SECONDS': 'soon'}):
+        for setting in ({'RUNNER_UNITS': ''}, {'SERVICE_UNITS': 'bad unit'}, {'WAIT_SECONDS': 'soon'}, {'ACK_SECONDS': 'soon'}):
             self.state_file.write_text('status=done\ntime=1\nreason=\n')
             self.assertEqual(self.restart(**setting).returncode, 1)
             self.assertEqual(self.restart_state()['status'], 'failed')

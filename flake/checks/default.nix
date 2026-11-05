@@ -208,7 +208,17 @@ in {
     # The pressure guard, freeze, standby and hold monitor are retired.
     assert lib.all (host: !(host.config.systemd.services ? forgejo-runner-io-pressure-guard) && !(host.config.systemd.services ? forgejo-runner-aggregate-lifecycle) && !(host.config.systemd.services ? forgejo-runner-hold-monitor) && host.config.systemd.services ? forgejo-runner-hold) (lib.attrValues runnerHosts);
     # Every unit a switch does not restart records its start for nixfleet,
-    # and the restart unit is there to restart it once idle (ADR-0041).
+    # and the restart unit is there to restart it once its running jobs finish,
+    # which needs the build that can pause (ADR-0041).
+    assert lib.all (runner: runner.package.pname == "forgejo-runner-cancellation" && runner.podmanCanary.package.pname == "forgejo-runner-cancellation") (lib.attrValues runners);
+    assert lib.all (host: let
+      services = host.config.systemd.services;
+    in
+      lib.all (unit: let
+        service = services.${lib.removeSuffix ".service" unit};
+      in
+        service.environment.FORGEJO_RUNNER_PAUSE_FILE == "/run/nixfleet-runners/paused/${unit}" && service.serviceConfig.NotifyAccess == "main")
+      host.config.services.forgejo-actions-runner.runnerUnits) (lib.attrValues runnerHosts);
     assert lib.all (host: let
       services = host.config.systemd.services;
       tracked = host.config.services.forgejo-actions-runner.runnerUnits ++ ["forgejo-runner-docker.service" "forgejo-runner-podman.service" "forgejo-runner-resource-policy.service"];

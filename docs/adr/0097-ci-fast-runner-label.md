@@ -2,7 +2,7 @@
 
 **Status:** Accepted; xyz and xev serve `ci-fast` from their pool runners
 **Date:** 2026-10-15
-**Amended:** 2026-10-31, the standby controller is retired ([ADR-0106](0106-runner-hold-for-games-and-low-disk.md)); 2026-11-03, the dedicated `xyz-fast` and `xev-fast` runners are retired and the pool runners serve `ci-fast` ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991))
+**Amended:** 2026-10-31, the standby controller is retired ([ADR-0106](0106-runner-hold-for-games-and-low-disk.md)); 2026-11-03, the dedicated `xyz-fast` and `xev-fast` runners are retired and the pool runners serve `ci-fast` ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, a runner restart pauses the runner instead of waiting for an idle host ([ADR-0041](0041-native-forgejo-actions-runners.md))
 **History:** [replaced text](archive/0097-ci-fast-runner-label-history.md)
 **Applies to:** `hosts/xyz/configuration.nix`, `hosts/xev/configuration.nix`,
 `modules/nixos/services/forgejo-actions-runner/`, platform workflows
@@ -79,5 +79,5 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
 - Runner labels are declared when the daemon starts, and the runner units do not
   restart on switch, so a label change takes effect only after the runner
   restarts (`forgejo-runner-restart`, started by `nixfleet runners restart`,
-  restarts it once the host is idle; [ADR-0041](0041-native-forgejo-actions-runners.md))
+  restarts it once its running jobs finish; [ADR-0041](0041-native-forgejo-actions-runners.md))
   or the host reboots.

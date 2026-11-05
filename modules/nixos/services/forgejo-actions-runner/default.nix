@@ -25,7 +25,7 @@
   secretName = key: "forgejo_runner_${key}";
   secretPath = key: "/run/secrets/${secretName key}";
 
-  jobTimeout = "3600s";
+  jobTimeout = "${toString cfg.jobTimeoutSeconds}s";
   shutdownTimeout = "${toString cfg.shutdownTimeoutSeconds}s";
   # After the shutdown timeout the runner cancels its jobs and removes their
   # containers, each removal bounded to a minute.
@@ -202,6 +202,13 @@ in {
       type = lib.types.ints.positive;
       default = 1;
       description = "Maximum number of concurrent jobs accepted by this runner.";
+    };
+
+    jobTimeoutSeconds = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 3600;
+      readOnly = true;
+      description = "How long a job may run before its runner cancels it.";
     };
 
     shutdownTimeoutSeconds = lib.mkOption {

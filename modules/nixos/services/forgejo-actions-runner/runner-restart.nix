@@ -1,10 +1,10 @@
-# Runner status and restart when idle for nixfleet (ADR-0041,
+# Runner status and restarts for nixfleet (ADR-0041,
 # nix-packages ADR-0017). The runners, the engine APIs and the resource
 # policy have restartIfChanged = false, so a switch leaves them running the
 # definition they started with. Each records that definition when it starts;
 # nixfleet-runner-status tells, without root, which runner is down and why
-# and which unit needs a restart; forgejo-runner-restart restarts those units
-# once every runner on the host is idle.
+# and which unit needs a restart; forgejo-runner-restart pauses the runners
+# those units touch and restarts the units once their running jobs finish.
 {
   config,
   lib,
@@ -16,6 +16,8 @@
   enabled = cfg.enable && cfg.isolatedDocker.enable;
   stateDir = "/run/nixfleet-runners";
   restartUnit = "forgejo-runner-restart.service";
+  pauseDir = "${stateDir}/paused";
+  pauseFile = unit: "${pauseDir}/${unit}";
   dockerApiUnit = "forgejo-runner-docker.service";
   podmanApiUnit = "forgejo-runner-podman.service";
   policyUnit = "forgejo-runner-resource-policy.service";
@@ -25,8 +27,8 @@
     ++ lib.optional cfg.podmanCanary.enable podmanApiUnit
     ++ lib.optional cfg.resourcePolicy.enable policyUnit;
   trackedUnits = cfg.runnerUnits ++ serviceUnits;
-  # The longest restart: a runner that took a job after the last idle check
-  # waits for it up to its stop timeout, then an API stops and starts.
+  # The longest restart: paused runners have no jobs left, but a runner's stop
+  # is bounded by its stop timeout, then an API stops and starts.
   restartTimeoutSeconds = cfg.shutdownTimeoutSeconds + 300 + 300;
   common = {
     STATE_HELPER_FILE = "${./runner-state.sh}";
@@ -61,25 +63,19 @@
   restarter = pkgs.writeShellApplication {
     name = "forgejo-runner-restart";
     inherit excludeShellChecks;
-    runtimeInputs = with pkgs; [coreutils curl gnugrep jq systemd];
+    runtimeInputs = with pkgs; [coreutils systemd];
     text = builtins.readFile ./runner-restart.sh;
   };
 in {
   options.services.forgejo-actions-runner.restartWhenIdle = {
     waitMinutes = lib.mkOption {
       type = lib.types.ints.positive;
-      default = 60;
+      default = cfg.jobTimeoutSeconds / 60 + 5;
+      defaultText = lib.literalExpression "config.services.forgejo-actions-runner.jobTimeoutSeconds / 60 + 5";
       description = ''
-        How long forgejo-runner-restart waits for every runner to be idle
-        before it gives up and leaves the units running.
-      '';
-    };
-    quietMinutes = lib.mkOption {
-      type = lib.types.ints.positive;
-      default = 5;
-      description = ''
-        A runner counts as idle only if it has taken no task for this long:
-        a job still pulling its image has no container yet.
+        How long forgejo-runner-restart waits for the paused runners' jobs to
+        finish before it gives up and leaves the units running. The default
+        lets a job that started just before the pause run to its timeout.
       '';
     };
   };
@@ -88,17 +84,31 @@ in {
     systemd.tmpfiles.rules = [
       "d ${stateDir} 0755 root root -"
       "d ${stateDir}/started 0755 root root -"
+      "d ${pauseDir} 0755 root root -"
     ];
 
     # Record the definition each start uses. A failed record only leaves the
     # unit flagged for a restart, so it never fails the start.
     systemd.services =
-      lib.genAttrs (map (lib.removeSuffix ".service") trackedUnits) (_: {
-        serviceConfig.ExecStartPost = ["-+${lib.getExe recorder} %n"];
+      lib.genAttrs (map (lib.removeSuffix ".service") trackedUnits) (name: let
+        isRunner = lib.elem "${name}.service" cfg.runnerUnits;
+      in {
+        # The runner watches this file, and reports the pause and its running
+        # jobs as its status text (nix-packages ADR-0017).
+        environment = lib.optionalAttrs isRunner {
+          FORGEJO_RUNNER_PAUSE_FILE = pauseFile "${name}.service";
+        };
+        serviceConfig =
+          {
+            ExecStartPost = ["-+${lib.getExe recorder} %n"];
+          }
+          // lib.optionalAttrs isRunner {
+            NotifyAccess = "main";
+          };
       })
       // {
         forgejo-runner-restart = {
-          description = "Restart the CI runner units that run an older definition, once the runners are idle";
+          description = "Restart the CI runner units that run an older definition, once their running jobs finish";
           # A switch must not cut a wait or a restart short.
           restartIfChanged = false;
           environment =
@@ -107,18 +117,16 @@ in {
               RUNNER_UNITS = lib.concatStringsSep " " cfg.runnerUnits;
               SERVICE_UNITS = lib.concatStringsSep " " serviceUnits;
               RESET_UNIT = lib.optionalString cfg.podmanStoreReset.enable resetUnit;
-              DOCKER_API_UNIT = dockerApiUnit;
-              DOCKER_SOCKET = lib.removePrefix "unix://" cfg.dockerHost;
-              PODMAN_API_UNIT = lib.optionalString cfg.podmanCanary.enable podmanApiUnit;
-              PODMAN_SOCKET = cfg.podmanCanary.socketPath;
               STATE_FILE = "${stateDir}/restart";
+              PAUSE_DIR = pauseDir;
               WAIT_SECONDS = toString (restart.waitMinutes * 60);
-              QUIET_SECONDS = toString (restart.quietMinutes * 60);
               RESTART_TIMEOUT_SECONDS = toString restartTimeoutSeconds;
             };
           serviceConfig = {
             Type = "oneshot";
             ExecStart = lib.getExe restarter;
+            # A pause ends with the unit, however it ends.
+            ExecStopPost = "${pkgs.coreutils}/bin/rm -f ${lib.concatMapStringsSep " " pauseFile cfg.runnerUnits}";
             TimeoutStartSec = "${toString (restart.waitMinutes * 60 + restartTimeoutSeconds + 300)}s";
           };
         };

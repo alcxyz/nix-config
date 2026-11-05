@@ -350,3 +350,9 @@ The text as it stood before xyz's second pool slot ([#991](https://git.alc.xyz/a
 >
 > - Fast jobs share the pool slots: they wait while xyz's one pool slot and
 >   xev's two are all busy or held, and a running fast job delays pool jobs. A
+
+## Text replaced on 2026-11-05 (#993)
+
+  restarts (`forgejo-runner-restart`, started by `nixfleet runners restart`,
+  restarts it once the host is idle; [ADR-0041](../0041-native-forgejo-actions-runners.md))
+  or the host reboots.

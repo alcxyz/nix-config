@@ -517,3 +517,20 @@ The text as it stood before xyz's second pool slot ([#991](https://git.alc.xyz/a
 >
 > - `xyz` contributes two slots (one Docker, one pool) and `xev` three (one
 >   Docker, two pool), each within one aggregate
+
+## Text replaced on 2026-11-05 (#993)
+
+Replaced because waiting for an idle host starved on a busy one: xev's restart
+gave up as busy three times in a row while its runners kept taking jobs.
+
+**Date:** 2026-05-07, updated 2026-11-02 (start records and restart once idle for nixfleet, per nix-packages ADR-0017)
+
+  each stopped runner is down. `forgejo-runner-restart.service` restarts the
+  flagged units once the host is idle: no Podman store reset, no runner
+  starting or stopping, no job container on a running engine and no task
+  taken in the last 5 minutes (`restartWhenIdle.quietMinutes`). It waits up
+  to 60 minutes (`restartWhenIdle.waitMinutes`), then gives up without
+  restarting, so it never cancels a job on purpose. The whole host must be
+  idle because restarting the resource policy or an API also restarts the
+  runners that require it. `nixfleet runners restart` starts it on each
+  host (nix-packages ADR-0017); it changes nothing about the runner hold.

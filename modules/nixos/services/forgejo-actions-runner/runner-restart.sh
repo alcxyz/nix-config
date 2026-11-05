@@ -3,19 +3,23 @@ set -euo pipefail
 
 # forgejo-runner-restart (ADR-0041, nix-packages ADR-0017): restarts the
 # runner units, engine APIs and resource policy that still run an older
-# definition, once every runner on the host is idle. These units have
-# restartIfChanged = false, so a switch leaves them running; restarting the
-# resource policy or an API also restarts the runners that require it, so the
-# whole host must be idle, not only the unit.
+# definition, once their running jobs finish. These units have
+# restartIfChanged = false, so a switch leaves them running.
 #
-# Idle means: the Podman store reset does not run, no runner is starting or
-# stopping, no job container runs on a running engine, and no runner took a
-# task within the quiet interval (a job still pulling its image has no
-# container yet). The same checks keep the store reset from stopping a busy
-# runner (ADR-0105). While the host is busy it waits, up to the wait limit;
-# then it gives up and reports busy, so it never cancels a job on purpose. A
-# job admitted between the last check and the stop gets the runner's normal
-# graceful stop.
+# It pauses the runners the restart touches: the flagged ones, or all of them
+# when an API or the resource policy is flagged, since restarting those also
+# restarts the runners that require them. A paused runner takes no new job,
+# lets its running ones finish, and reports "paused tasks=<running>" as its
+# status text. Once each reports no tasks, nothing runs that the restart could
+# cut short. The pauses stay until the restarted units have been checked, so a
+# restarted runner cannot take a job early, and end when this script exits; the
+# unit's ExecStopPost removes them if it is killed.
+#
+# It waits for a Podman store reset or a runner's start or stop to end first.
+# At the wait limit it gives up and reports busy, so it never cancels a job on
+# purpose. A running runner that has not reported the pause
+# within the acknowledgement limit runs a build that cannot pause, which fails
+# the run; a plain systemctl restart is the way through for such a runner.
 #
 # Its progress and result go to a world-readable state file that
 # nixfleet-runner-status reports: status=waiting|restarting|done|nothing|busy|
@@ -26,20 +30,14 @@ set -euo pipefail
 source "${STATE_HELPER_FILE:-$(dirname "${BASH_SOURCE[0]}")/runner-state.sh}"
 
 state_file=${STATE_FILE:-/run/nixfleet-runners/restart}
-journalctl_bin=${JOURNALCTL_BIN:-journalctl}
-curl_bin=${CURL_BIN:-curl}
-jq_bin=${JQ_BIN:-jq}
+pause_dir=${PAUSE_DIR:-/run/nixfleet-runners/paused}
 date_bin=${DATE_BIN:-date}
 sleep_bin=${SLEEP_BIN:-sleep}
 runner_units_text=${RUNNER_UNITS:-}
 service_units_text=${SERVICE_UNITS:-}
 reset_unit=${RESET_UNIT:-}
-docker_api_unit=${DOCKER_API_UNIT:-}
-docker_socket=${DOCKER_SOCKET:-/run/forgejo-docker/docker.sock}
-podman_api_unit=${PODMAN_API_UNIT:-}
-podman_socket=${PODMAN_SOCKET:-/run/forgejo-podman/podman.sock}
-wait_seconds=${WAIT_SECONDS:-3600}
-quiet_seconds=${QUIET_SECONDS:-300}
+wait_seconds=${WAIT_SECONDS:-3900}
+ack_seconds=${ACK_SECONDS:-60}
 poll_seconds=${POLL_SECONDS:-10}
 restart_timeout_seconds=${RESTART_TIMEOUT_SECONDS:-4200}
 
@@ -60,6 +58,7 @@ on_exit() {
     terminal=1
     write_state failed "ended with status $status before a result" || true
   fi
+  rm -f -- "${pause_dir:?}"/*.service
 }
 
 flagged=()
@@ -83,7 +82,7 @@ write_state() {
 }
 trap on_exit EXIT
 
-for value in "$wait_seconds" "$quiet_seconds" "$poll_seconds" "$restart_timeout_seconds"; do
+for value in "$wait_seconds" "$ack_seconds" "$poll_seconds" "$restart_timeout_seconds"; do
   [[ $value =~ ^[0-9]+$ ]] || fail "invalid numeric setting"
 done
 read -r -a runner_units <<<"$runner_units_text"
@@ -92,9 +91,7 @@ read -r -a service_units <<<"$service_units_text"
 for unit in "${runner_units[@]}" "${service_units[@]}"; do
   valid_unit "$unit" || fail "invalid unit name"
 done
-for unit in "$reset_unit" "$docker_api_unit" "$podman_api_unit"; do
-  [[ -z $unit ]] || valid_unit "$unit" || fail "invalid unit name"
-done
+[[ -z $reset_unit ]] || valid_unit "$reset_unit" || fail "invalid unit name"
 
 # Sets flagged to the tracked units that need a restart.
 find_flagged() {
@@ -108,47 +105,9 @@ find_flagged() {
   done
 }
 
-# Succeeds when the engine of an API that runs has a job container, or cannot
-# be read; sets busy_reason.
-engine_busy() {
-  local api=$1 socket=$2 state containers status=0
-  [[ -n $api ]] || return 1
-  state=$(query show --property=ActiveState --value "$api") || {
-    busy_reason="engine_unreadable unit=$api"
-    return 0
-  }
-  # An engine that does not run runs no job, and querying a socket-activated
-  # API would start it.
-  [[ $state == active ]] || return 1
-  containers=$("$curl_bin" --silent --show-error --fail --max-time 10 --connect-timeout 2 \
-    --unix-socket "$socket" http://localhost/containers/json) || {
-    busy_reason="engine_api_unavailable unit=$api"
-    return 0
-  }
-  "$jq_bin" -e 'if type != "array" then error("not a container list") else
-    any(.[]; (.Names // []) | any(.[]; type == "string" and
-      (ltrimstr("/") | startswith("FORGEJO-ACTIONS-TASK-")))) end' <<<"$containers" >/dev/null 2>&1 ||
-    status=$?
-  case $status in
-    0) busy_reason="job_running unit=$api" ;;
-    1) return 1 ;;
-    *) busy_reason="engine_api_invalid unit=$api" ;;
-  esac
-  return 0
-}
-
-# Succeeds when the runner took a task within the quiet interval, or its
-# journal is unreadable. forgejo-runner logs every task it takes as
-# `task <id> repo is ...`.
-recent_job() {
-  local since lines
-  since=$(($(now) - quiet_seconds))
-  lines=$("$journalctl_bin" --unit="$1" --since="@$since" --output=cat --no-pager --quiet 2>/dev/null) || return 0
-  grep -Eq 'msg="task [0-9]+ repo is ' <<<"$lines"
-}
-
-# Succeeds while the host is busy; sets busy_reason.
-host_busy() {
+# Succeeds while a store reset runs or a runner starts or stops; sets
+# busy_reason.
+in_transition() {
   local unit state
   busy_reason=""
   if [[ -n $reset_unit ]]; then
@@ -175,18 +134,67 @@ host_busy() {
         ;;
     esac
   done
-  if engine_busy "$docker_api_unit" "$docker_socket" || engine_busy "$podman_api_unit" "$podman_socket"; then
-    return 0
-  fi
+  return 1
+}
+
+# Pauses the runners the flagged units touch. Pauses only ever get added: a unit
+# flagged while waiting joins the same restart.
+pause_runners() {
+  local unit service
+  to_pause=("${runner_units[@]}")
+  for service in "${service_units[@]}"; do
+    for unit in "${flagged[@]}"; do
+      [[ $unit != "$service" ]] || return 0
+    done
+  done
+  to_pause=()
   for unit in "${runner_units[@]}"; do
-    unit_state "$unit" || continue
-    [[ $active == active ]] || continue
-    if recent_job "$unit"; then
-      busy_reason="recent_job unit=$unit"
-      return 0
+    if [[ -e $pause_dir/$unit ]] || [[ " ${flagged[*]} " == *" $unit "* ]]; then
+      to_pause+=("$unit")
     fi
   done
-  return 1
+}
+
+declare -A unacknowledged_since=()
+# Succeeds while a paused runner still has work or has not reported the pause;
+# sets busy_reason. A runner that does not run has no job to wait for.
+paused_runners_busy() {
+  local unit text current since
+  busy_reason=""
+  for unit in "${to_pause[@]}"; do
+    unit_state "$unit" || {
+      busy_reason="runner_unreadable unit=$unit"
+      return 0
+    }
+    case $active in
+      active | reloading) ;;
+      *)
+        unset "unacknowledged_since[$unit]"
+        continue
+        ;;
+    esac
+    text=$(query show --property=StatusText --value "$unit") || text=""
+    case $text in
+      "paused tasks=0")
+        unset "unacknowledged_since[$unit]"
+        ;;
+      "paused tasks="*)
+        unset "unacknowledged_since[$unit]"
+        [[ -n $busy_reason ]] || busy_reason="job_running unit=$unit"
+        ;;
+      *)
+        current=$(now)
+        since=${unacknowledged_since[$unit]:-$current}
+        unacknowledged_since[$unit]=$since
+        if ((current - since >= ack_seconds)); then
+          write_state failed "$unit did not report the pause, so it runs a build that cannot pause; restart it with systemctl restart"
+          exit 1
+        fi
+        [[ -n $busy_reason ]] || busy_reason="pausing unit=$unit"
+        ;;
+    esac
+  done
+  [[ -n $busy_reason ]]
 }
 
 deadline=$(($(now) + wait_seconds))
@@ -197,7 +205,17 @@ while :; do
     write_state nothing
     exit 0
   fi
-  host_busy || break
+  # A runner that starts or stops has not had the chance to report a pause.
+  if in_transition; then
+    unacknowledged_since=()
+  else
+    pause_runners
+    install -d -m 0755 -- "$pause_dir"
+    for unit in "${to_pause[@]}"; do
+      : >"$pause_dir/$unit"
+    done
+    paused_runners_busy || break
+  fi
   if (($(now) >= deadline)); then
     write_state busy "$busy_reason"
     exit 0

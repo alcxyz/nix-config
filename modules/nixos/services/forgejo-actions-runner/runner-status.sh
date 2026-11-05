@@ -8,7 +8,7 @@ set -euo pipefail
 #
 #   version       1
 #   hold          <ActiveState of the runner hold> <hold reason: none, game, ...>
-#   restart-unit  <unit> <seconds it waits for idle runners>
+#   restart-unit  <unit> <seconds it waits before it gives up>
 #   restart       <ActiveState of the restart unit> <status> <unix time>
 #                 <units, comma-separated> <reason>
 #   unit          <runner|service> <unit> <ActiveState> <SubState>

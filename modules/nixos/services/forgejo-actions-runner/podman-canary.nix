@@ -56,7 +56,7 @@
         file = ".runner";
         inherit capacity labels;
         env_file = envFile;
-        timeout = "3600s";
+        timeout = "${toString cfg.jobTimeoutSeconds}s";
         shutdown_timeout = "${toString cfg.shutdownTimeoutSeconds}s";
         insecure = false;
         fetch_timeout = "5s";

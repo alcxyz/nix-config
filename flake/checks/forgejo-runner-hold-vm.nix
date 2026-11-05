@@ -65,8 +65,20 @@ in
             preStart = lib.mkForce "";
             script = lib.mkForce ''
               trap 'while test -e /run/fixture-runner-block-stop; do sleep 1; done; exit 0' TERM
-              while :; do sleep 1; done
+              # Answers a pause as the patched runner does; a job is a file.
+              while :; do
+                tasks=0
+                test ! -e /run/fixture-runner-busy || tasks=1
+                if test -e "$FORGEJO_RUNNER_PAUSE_FILE"; then
+                  systemd-notify --status="paused tasks=$tasks"
+                else
+                  systemd-notify --status=polling
+                fi
+                sleep 1
+              done
             '';
+            # systemd-notify is a child of the stand-in, not its main process.
+            serviceConfig.NotifyAccess = lib.mkForce "all";
           }))
           # A stop that outlives its timeout ends failed, as on 2026-10-31.
           {forgejo-podman-runner.serviceConfig.TimeoutStopSec = lib.mkForce "5s";}
@@ -213,7 +225,7 @@ in
           machine.wait_until_succeeds(all_active, timeout=30)
           machine.wait_until_succeeds(none_held, timeout=15)
 
-      with subtest("a changed definition is flagged and restarted once idle"):
+      with subtest("a changed definition is flagged and restarted once its jobs finish"):
           machine.succeed("mkdir -p /run/systemd/system/forgejo-podman-runner.service.d")
           machine.succeed("printf '[Service]\\nEnvironment=FIXTURE_CHANGE=1\\n' > /run/systemd/system/forgejo-podman-runner.service.d/fixture.conf")
           machine.succeed("systemctl daemon-reload")
@@ -228,5 +240,40 @@ in
           assert machine.succeed("systemctl show -p InvocationID --value forgejo-actions-runner.service") == before
           machine.succeed("systemctl start forgejo-runner-restart.service")
           assert "status=nothing" in machine.succeed("cat /run/nixfleet-runners/restart")
+
+      with subtest("a restart waits for a paused runner's job, and only pauses what it touches"):
+          pause = "/run/nixfleet-runners/paused"
+          machine.succeed("mkdir -p /run/systemd/system/forgejo-actions-runner.service.d")
+          machine.succeed("printf '[Service]\\nEnvironment=FIXTURE_CHANGE=2\\n' > /run/systemd/system/forgejo-actions-runner.service.d/fixture.conf")
+          machine.succeed("systemctl daemon-reload")
+          before = machine.succeed("systemctl show -p InvocationID --value forgejo-actions-runner.service")
+          # The stand-in gains its job at once, unlike a runner, which takes one
+          # only when it polls, so let it report that it has left any last pause.
+          machine.wait_until_succeeds("test $(systemctl show -p StatusText --value forgejo-actions-runner.service) = polling", timeout=15)
+          machine.succeed("touch /run/fixture-runner-busy")
+          machine.succeed("systemctl start --no-block forgejo-runner-restart.service")
+          machine.wait_until_succeeds("grep -qx 'reason=job_running unit=forgejo-actions-runner.service' /run/nixfleet-runners/restart", timeout=30)
+          machine.succeed(f"test -e {pause}/forgejo-actions-runner.service")
+          machine.succeed(f"test ! -e {pause}/forgejo-podman-runner.service")
+          assert machine.succeed("systemctl show -p InvocationID --value forgejo-actions-runner.service") == before
+          assert machine.succeed("systemctl show -p StatusText --value forgejo-actions-runner.service").strip() == "paused tasks=1"
+          machine.succeed("rm /run/fixture-runner-busy")
+          machine.wait_until_succeeds("grep -qx status=done /run/nixfleet-runners/restart", timeout=60)
+          machine.wait_until_succeeds(f"test ! -e {pause}/forgejo-actions-runner.service", timeout=15)
+          assert machine.succeed("systemctl show -p InvocationID --value forgejo-actions-runner.service") != before
+
+      with subtest("a pause ends with the unit, however it ends"):
+          machine.succeed("mkdir -p /run/systemd/system/forgejo-actions-runner.service.d")
+          machine.succeed("printf '[Service]\\nEnvironment=FIXTURE_CHANGE=3\\n' > /run/systemd/system/forgejo-actions-runner.service.d/fixture-kill.conf")
+          machine.succeed("systemctl daemon-reload")
+          # The stand-in gains its job at once, unlike a runner, which takes one
+          # only when it polls, so let it report that it has left any last pause.
+          machine.wait_until_succeeds("test $(systemctl show -p StatusText --value forgejo-actions-runner.service) = polling", timeout=15)
+          machine.succeed("touch /run/fixture-runner-busy")
+          machine.succeed("systemctl start --no-block forgejo-runner-restart.service")
+          machine.wait_until_succeeds(f"test -e {pause}/forgejo-actions-runner.service", timeout=30)
+          machine.succeed("systemctl kill -s KILL forgejo-runner-restart.service")
+          machine.wait_until_succeeds(f"test ! -e {pause}/forgejo-actions-runner.service", timeout=30)
+          machine.succeed("rm /run/fixture-runner-busy")
     '';
   }
