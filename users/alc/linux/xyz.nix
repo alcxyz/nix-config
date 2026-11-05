@@ -91,6 +91,8 @@ in {
     inputs.nix-secrets.homeManagerModules.devlogDeployKey
     # Refreshes a deck report's data from the document portal (xyz only).
     inputs.nix-secrets.homeManagerModules.deckShareReport
+    # Refreshes the deck CI runner report from the runner hosts (xyz only).
+    inputs.nix-secrets.homeManagerModules.deckRunnerReport
     # Nightly development statistics collector and its private settings.
     inputs.devstats.homeManagerModules.default
     inputs.nix-secrets.homeManagerModules.devstats
