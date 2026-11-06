@@ -1969,11 +1969,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793979431,
-        "narHash": "sha256-5rKUwr4Vx6noGIt8yDQNCwA0SX6IodI+WQ+M5Q/cga0=",
+        "lastModified": 1793981838,
+        "narHash": "sha256-e1OU62qHqRCzEZRov2OTG+3ZGCYComiKPoDuBKLlcuc=",
         "ref": "dev",
-        "rev": "8d6b05b3be21fc6ee4e9f30118c2c40c189e69fa",
-        "revCount": 4,
+        "rev": "543d8b2403d6f919c1481866da84753a433b5836",
+        "revCount": 5,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/teams-chat.git"
       },
