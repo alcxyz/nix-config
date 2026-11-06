@@ -122,8 +122,8 @@ for i = 1, 10 do
 end
 
 -- Scratchpad.
-hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:" }))
-hl.bind("SUPER + ALT + ESCAPE", hl.dsp.window.move({ workspace = "special:", follow = false }))
+hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:special" }))
+hl.bind("SUPER + ALT + ESCAPE", hl.dsp.window.move({ workspace = "special:special", follow = false }))
 hl.bind("SUPER + ESCAPE", hl.dsp.workspace.toggle_special(""))
 
 -- Function keys: a single tap selects the numbered workspace and a second tap

@@ -14,7 +14,7 @@
   in [
     {
       assertion =
-        lib.hasInfix ''hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:" }))'' luaBinds
+        lib.hasInfix ''hl.bind("SUPER + SHIFT + ESCAPE", hl.dsp.window.move({ workspace = "special:special" }))'' luaBinds
         && !lib.hasInfix ''hl.bind("SUPER + SHIFT + escape", hl.dsp.exit())'' luaBinds;
       message = "Super+Shift+Escape must follow a window to the special workspace and must never exit the session.";
     }
