@@ -63,6 +63,10 @@ in {
     t3DataDir = "${config.home.homeDirectory}/.t3-bn";
   };
 
+  # Forwards watched Teams messages to T3 threads with no model in the path. The
+  # work flake names the chats and threads. It stays idle until migrated.
+  programs.work.teamsRelay.enable = true;
+
   # Import the common Linux configuration
   imports = [
     "${configDir}/users/alc/linux/operator.nix"
@@ -79,6 +83,7 @@ in {
 
     "${configDir}/modules/home-manager/programs/rclone/cloud-sync.nix"
 
+    inputs.work.homeManagerModules.teams-relay
     # Skills that describe secrets come from nix-secrets, beside pandora's.
     inputs.nix-secrets.homeManagerModules.agentSkills
     "${configDir}/modules/home-manager/programs/moonlight-wolf-client/default.nix"
