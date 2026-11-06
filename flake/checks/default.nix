@@ -443,6 +443,7 @@ in {
           modules/nixos/services/storage-health-monitor/check-recent-success.sh \
           modules/nixos/services/storage-health-monitor/check-active-unit.sh
         python3 scripts/checks/test-first-timer-freshness.py
+        python3 modules/nixos/services/storage-health-monitor/test-send-ping.py
       '';
 
   nix-deploy-inventory-contract = let

@@ -131,6 +131,7 @@
     runtimeInputs = [
       pkgs.coreutils
       pkgs.curl
+      pkgs.python3
       pkgs.gawk
       pkgs.gnugrep
       pkgs.systemd
@@ -149,17 +150,19 @@
       }
 
       send_ping() {
-        suffix="$1"
-        base="$(tr -d '\r\n' <${lib.escapeShellArg cfg.pingBaseFile})"
-        if [ -z "$base" ]; then
-          echo "healthcheck ping base is empty" >&2
-          return 1
-        fi
-        url="$base/${cfg.slug}$suffix?create=1"
-        {
-          printf 'url = "%s"\n' "$url"
-          printf 'data-binary = "@%s"\n' "$report"
-        } | curl --config - --silent --show-error --fail --max-time 10 >/dev/null
+        # Bound DNS and the whole response, including a trickling peer.
+        timeout --signal=KILL 10s python3 ${./send-ping.py} \
+          ${
+        if cfg.pingUrlFile != null
+        then "check"
+        else "base"
+      } \
+          ${lib.escapeShellArg (
+        if cfg.pingUrlFile != null
+        then cfg.pingUrlFile
+        else cfg.pingBaseFile
+      )} \
+          ${lib.escapeShellArg cfg.slug} "$1" "$report"
       }
 
       ${builtins.readFile ./check-storage.sh}
@@ -203,8 +206,24 @@ in {
   options.services.storage-health-monitor = {
     enable = lib.mkEnableOption "host storage capacity, health, and backup freshness monitoring";
     pingBaseFile = lib.mkOption {
-      type = lib.types.str;
-      description = "Runtime file containing the private Healthchecks ping base.";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Runtime file containing the private Healthchecks HTTPS ping base.
+        Embedded credentials, query strings and fragments are rejected.
+        Also supplies the default project base for separate runner alerts.
+      '';
+    };
+    pingUrlFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Runtime file containing one check's HTTPS ping URL. When set, takes
+        precedence over pingBaseFile and does not auto-provision by slug.
+        Embedded credentials, query strings and fragments are rejected.
+        Separate slug-based consumers, including runner alerts, still need
+        their own project ping base.
+      '';
     };
     slug = lib.mkOption {
       type = lib.types.strMatching "[a-z0-9-]+";
@@ -226,6 +245,10 @@ in {
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = cfg.pingUrlFile != null || cfg.pingBaseFile != null;
+        message = "storage-health-monitor requires pingUrlFile or pingBaseFile";
+      }
       {
         assertion = lib.all (unit: let
           serviceConfig = config.systemd.services.${lib.removeSuffix ".service" unit.name}.serviceConfig;

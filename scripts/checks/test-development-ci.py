@@ -108,7 +108,9 @@ class DevelopmentCI(unittest.TestCase):
         self.assertEqual(sum(call.startswith("treefmt:") for call in calls), 2)
         self.assertEqual(sum(call.startswith("shellcheck:") for call in calls), 8)
         self.assertEqual(calls.count("shellcheck:--shell=bash --exclude=SC2034 -"), 2)
-        self.assertEqual(sum(call.startswith("python3:") for call in calls), 17)
+        self.assertEqual(sum(call.startswith("python3:") for call in calls), 18)
+        self.assertIn(
+            "python3:modules/nixos/services/storage-health-monitor/test-send-ping.py", calls)
         self.assertIn(
             "python3:flake/checks/test-forgejo-runner-hold.py "
             "modules/nixos/services/forgejo-actions-runner/runner-hold.sh "

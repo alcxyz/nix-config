@@ -77,7 +77,11 @@ in {
           then storage.pingBaseFile
           else null;
         defaultText = lib.literalExpression "config.services.storage-health-monitor.pingBaseFile when that monitor is enabled, else null";
-        description = "Runtime file containing the private Healthchecks ping base.";
+        description = ''
+          Runtime file containing the private Healthchecks project ping base
+          for the separate ci-runners check. A storage pingUrlFile alone does
+          not provide this slug-provisioning capability.
+        '';
       };
       slug = lib.mkOption {
         type = lib.types.strMatching "[a-z0-9-]+";
@@ -134,7 +138,7 @@ in {
       }
       {
         assertion = !hold.alert.enable || hold.alert.pingBaseFile != null;
-        message = "services.forgejo-actions-runner.runnerHold.alert needs pingBaseFile, or an enabled storage-health-monitor to take it from.";
+        message = "services.forgejo-actions-runner.runnerHold.alert needs a project pingBaseFile, supplied explicitly or by storage-health-monitor.pingBaseFile; storage-health-monitor.pingUrlFile alone cannot provision the separate ci-runners check.";
       }
     ];
 

@@ -99,6 +99,18 @@ else let
       pingBaseFile = "/run/fixture-unused-ping";
     };
   };
+  scopedStorage = {
+    services.storage-health-monitor = {
+      enable = true;
+      pingUrlFile = "/run/fixture-check-ping";
+    };
+    services.forgejo-actions-runner.runnerHold.alert.enable = true;
+  };
+  scopedWithoutRunnerBase = evaluate true validLabels scopedStorage;
+  scopedWithRunnerBase = evaluate true validLabels (lib.recursiveUpdate scopedStorage {
+    services.forgejo-actions-runner.runnerHold.alert.pingBaseFile = "/run/fixture-project-base";
+  });
+  runnerBaseMessage = "services.forgejo-actions-runner.runnerHold.alert needs a project pingBaseFile, supplied explicitly or by storage-health-monitor.pingBaseFile; storage-health-monitor.pingUrlFile alone cannot provision the separate ci-runners check.";
   resetUnits = config: builtins.filter (unit: unit.name == "forgejo-podman-store-reset.service") config.services.storage-health-monitor.units;
   resetService = config: config.systemd.services.forgejo-podman-store-reset;
   unit = enabled.systemd.services.forgejo-podman-runner;
@@ -195,6 +207,8 @@ in
   assert gameReset.systemd.services.forgejo-runner-hold.after == ["game-signal.service"];
   assert gameReset.systemd.services.game-signal.serviceConfig.Restart == "always";
   assert failedAssertion gameWithoutSignal "services.forgejo-actions-runner.runnerHold.game needs services.gameSignal.";
+  assert failedAssertion scopedWithoutRunnerBase runnerBaseMessage;
+  assert !(failedAssertion scopedWithRunnerBase runnerBaseMessage);
   assert !(resetService resetOnly).restartIfChanged;
   # Systemd ordering never excludes the reset: the start lock does, so a
   # start of another unit can never stop it mid-run.
