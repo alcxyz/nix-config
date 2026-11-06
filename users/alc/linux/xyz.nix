@@ -55,16 +55,18 @@ in {
   };
 
   # Agents read and, with approval, post in Teams chats through a dedicated
-  # Brave Origin instance with its own data directory (teams-chat flake). T3
-  # for this work runs from its own data directory.
+  # Chromium instance with its own data directory (teams-chat flake). T3 for
+  # this work runs from its own data directory.
   programs.teamsChat = {
     enable = true;
-    browser.executable = "brave-origin";
+    browser.executable = lib.getExe pkgs.chromium;
+    dataDir = "${config.xdg.dataHome}/teams-chat/chromium";
     t3DataDir = "${config.home.homeDirectory}/.t3-bn";
   };
 
   # Forwards watched Teams messages to T3 threads with no model in the path. The
-  # work flake names the chats and threads. It stays idle until migrated.
+  # work flake holds its policy, and its ledger owns the chats and threads. The
+  # unit refuses to start until `teams-relay runtime-migrate` has seeded it.
   programs.work.teamsRelay.enable = true;
 
   # Import the common Linux configuration

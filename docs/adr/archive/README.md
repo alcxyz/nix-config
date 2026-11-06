@@ -66,6 +66,7 @@ archived number.
 | [ADR-0090 history](0090-install-bivrost-directly-history.md) | Install Bivrost directly, configured by the work flake | History of [ADR-0090](../0090-install-bivrost-directly.md) |
 | [ADR-0091](0091-t3-thread-overview-skill.md) | Deploy a T3 thread overview skill that reads T3 state directly | Moved to a private repository on 2026-10-29 |
 | [ADR-0093](0093-backlog-overview-skill.md) | Triage open issues and pull requests from one computed inventory | Moved to a private repository on 2026-10-29 |
+| [ADR-0094 history](0094-browser-roles-history.md) | One Chromium browser (Brave Origin), Zen provisional | History of [ADR-0094](../0094-browser-roles.md) |
 | [ADR-0096 history](0096-bounded-first-timer-freshness-history.md) | Bound the first-timer freshness exception after reboot | History of [ADR-0096](../0096-bounded-first-timer-freshness.md) |
 | [ADR-0097 history](0097-ci-fast-runner-label-history.md) | Route opted-in CI jobs to fast hosts with a `ci-fast` label | History of [ADR-0097](../0097-ci-fast-runner-label.md) |
 | [ADR-0099](0099-agent-github-app.md) | Agent sessions act on GitHub through a GitHub App | Moved to a private repository on 2026-10-29 |

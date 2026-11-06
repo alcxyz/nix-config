@@ -2,6 +2,8 @@
 
 **Status:** Accepted (Zen provisional, see #662)
 **Date:** 2026-10-13
+**Amended:** 2026-11-06
+**History:** [replaced text](archive/0094-browser-roles-history.md)
 **Applies to:** `modules/shared/pkgsets.nix`, `users/alc/linux/xyz.nix`,
 `users/alc/linux/xyz/hyprland-contract.nix`, `hosts/xps/configuration.nix`,
 `hosts/mac/configuration.nix`, the Wolf browser image products
@@ -30,6 +32,11 @@ trust and privacy advantage Helium had. On macOS Origin is a paid product.
   couch browser, and every Brave slot in the Wolf catalog: the public lobby
   browser and the private browser. Sync, Widevine, uBlock Origin and CDP were
   checked hands-on on xyz.
+- **One exception: the Teams browser for agents on xyz is plain Chromium**, with
+  its own data directory. Brave removes session cookies on restart even with
+  session restore, including the key that Teams needs to read its sign-in
+  cache, so every restart needed a new sign-in. Chromium keeps them without an
+  internal flag. The instance has no user role, sync, Widevine or extensions.
 - **The Mac keeps regular Brave** (the `brave-browser` cask), because Origin is
   paid there.
 - **Zen stays, provisionally, as the non-Chromium engine:** the main browser
@@ -56,13 +63,16 @@ trust and privacy advantage Helium had. On macOS Origin is a paid product.
 
 ## Consequences
 
-- One Chromium browser on Linux: one package, one Wolf image product, one
-  update stream through nixpkgs lock bumps instead of a daily AppImage updater.
+- One Chromium browser for people on Linux: one package, one Wolf image product,
+  one update stream through nixpkgs lock bumps instead of a daily AppImage
+  updater. The Teams browser adds the nixpkgs Chromium package on xyz only. Do
+  not move it back to Brave Origin without solving the session cookies first.
 - Profiles carry across without re-encryption. On xyz, Brave Origin uses the
   same "Brave Safe Storage" keyring entry as regular Brave, so copied profiles
   keep their keyring-encrypted cookies and passwords. The xps couch browsers
   pass `--password-store=basic`, which needs no keyring, so Origin opens the
-  existing encrypted profile mount in place.
+  existing encrypted profile mount in place. The Teams browser uses Chromium's
+  own keyring entry, so its profile does not carry over from Brave.
 - Brave Software's past incidents (affiliate codes in URLs, a Tor-window DNS
   leak, VPN services on Windows) remain the trust cost of this choice, reduced
   but not removed by Origin.

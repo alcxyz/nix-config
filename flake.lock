@@ -1969,11 +1969,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793981838,
-        "narHash": "sha256-e1OU62qHqRCzEZRov2OTG+3ZGCYComiKPoDuBKLlcuc=",
+        "lastModified": 1793992181,
+        "narHash": "sha256-ZQJDVpUF4jqck02IB3dF/VLBJkBhaBK7ZAD/TST3xGw=",
         "ref": "dev",
-        "rev": "543d8b2403d6f919c1481866da84753a433b5836",
-        "revCount": 5,
+        "rev": "36fb0dfdd7ceeec2df52bc363058f98c29f4ed78",
+        "revCount": 9,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/teams-chat.git"
       },
@@ -2046,11 +2046,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793979434,
-        "narHash": "sha256-cbiZ8YFU1c5DEO5KCzXrF6Lxk/HVXX8NmouNfkXqY78=",
+        "lastModified": 1793992698,
+        "narHash": "sha256-2XkxSF5geRLfw7+dnXWxxohjzz4TA/x1BF7OhsPwN9U=",
         "ref": "dev",
-        "rev": "1c9678e202a399428c111a67bfc10b9953303bce",
-        "revCount": 84,
+        "rev": "a1a41e0d25a9774c1e02d397ee4a418f150b8c46",
+        "revCount": 85,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git"
       },
