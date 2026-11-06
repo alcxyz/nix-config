@@ -54,6 +54,7 @@ in {
 
   programs.hyprscratch = {
     enable = true;
+    package = pkgs.hyprscratch;
     settings = {
       daemon_options = "clean";
 

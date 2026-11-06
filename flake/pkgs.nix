@@ -18,6 +18,7 @@ in
               "gh-app"
               "git-identity-guard"
               "ndrop"
+              "hyprscratch"
               "zfs-auto-unlock"
               "openzfs_7_3"
               "ghostty"

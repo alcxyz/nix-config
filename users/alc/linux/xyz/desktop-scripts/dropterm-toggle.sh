@@ -1,5 +1,5 @@
 target_json="$(hyprctl monitors -j | jq -ce '.[] | select(.focused)')"
-target_workspace="$(jq -r '.activeWorkspace.id' <<<"$target_json")"
+target_workspace="$(jq -r '.activeWorkspace.address' <<<"$target_json")"
 active_is_dropterm="$(
   hyprctl activewindow -j \
     | jq -r '(.initialClass == "dropterm" or .initialTitle == "dropterm") // false'
@@ -22,10 +22,10 @@ wait_for_toggle() {
   for _ in $(seq 1 80); do
     client_json="$(
       hyprctl clients -j \
-        | jq -c --argjson workspace "$target_workspace" \
+        | jq -c --arg workspace "$target_workspace" \
             '.[] | select(
               (.initialClass == "dropterm" or .initialTitle == "dropterm")
-              and .workspace.id == $workspace
+              and .workspace.address == $workspace
             )' \
         | head -n 1
     )"
