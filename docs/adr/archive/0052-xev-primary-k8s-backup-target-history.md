@@ -72,3 +72,8 @@ Routine writes depend on one stable target, while the replica provides a
 separate recovery copy. Loss of the primary pauses new backups but does not
 remove the latest verified replica. The design favors explicit recovery over
 automatic multi-writer failover.
+
+## Text replaced on 2026-11-07
+
+> A successful mirror
+> pass creates a snapshot only after all buckets have verified.

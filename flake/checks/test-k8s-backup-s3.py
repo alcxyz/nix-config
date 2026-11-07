@@ -9,7 +9,9 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -17,6 +19,7 @@ from xml.sax.saxutils import escape
 
 SCRIPT = Path(sys.argv.pop(1)).read_text()
 SNAPSHOT_SCRIPT = Path(sys.argv.pop(1)).read_text()
+INCREMENTAL_SCRIPT = Path(sys.argv.pop(1)).read_text()
 STORAGE_SCRIPT = Path(sys.argv.pop(1)).read_text()
 LOCAL_BACKUP_SCRIPT = Path(sys.argv.pop(1)).read_text()
 SNAPSHOT_PROPERTY = "org.nix-config:k8s-backup-s3-mirror"
@@ -42,6 +45,9 @@ class Store(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), Handler)
         self.objects = objects.copy()
         self.object_headers = {}
+        self.modified = {}
+        self.drop_puts = False
+        self.growing_recent = False
         self.bucket_objects = {}
         self.bucket_object_headers = {}
         self.buckets = ["fixture"]
@@ -127,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
                     for p in sorted(prefixes)
                 )
                 contents = "".join(
-                    f"<Contents><Key>{escape(k)}</Key><LastModified>{STAMP}</LastModified>"
+                    f"<Contents><Key>{escape(k)}</Key><LastModified>{store.modified.get(k, STAMP)}</LastModified>"
                     f'<ETag>"{hashlib.md5(v).hexdigest()}"</ETag><Size>{len(v)}</Size></Contents>'
                     for k, v in objects
                     if k.startswith(prefix)
@@ -140,6 +146,10 @@ class Handler(BaseHTTPRequestHandler):
                     # New source objects after each listing must not prevent
                     # verification of the finite checkpoint captured earlier.
                     bucket_objects[f"new-{store.listings}"] = b"new"
+                    if store.growing_recent:
+                        store.modified[f"new-{store.listings}"] = datetime.now(
+                            timezone.utc
+                        ).strftime("%Y-%m-%dT%H:%M:%S.000Z")
             self.reply(body=body.encode(), Content_Type="application/xml")
         elif self.command == "HEAD":
             if key in bucket_objects:
@@ -161,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
                 store.put_failures = max(0, store.put_failures - 1)
                 self.reply(403, b"<Error><Code>AccessDenied</Code></Error>")
             else:
-                if key:
+                if key and not store.drop_puts:
                     bucket_objects[key] = data
                     bucket_headers[key] = {
                         name.lower(): value
@@ -235,8 +245,9 @@ class MirrorTests(unittest.TestCase):
             "with open(state) as f: snapshots = json.load(f)\n"
             "if args[0] == 'snapshot':\n"
             "    assert args[1:3] == ['-o', prop + '=verified'], args\n"
-            "    assert args[3].startswith(dataset + '@k8s-backup-s3-mirror-'), args\n"
-            "    snapshots.append({'name': args[3], 'value': 'verified', 'source': 'local'})\n"
+            "    assert args[3] == '-o' and args[4].startswith(prop + '-scope='), args\n"
+            "    assert args[5].startswith(dataset + '@k8s-backup-s3-mirror-'), args\n"
+            "    snapshots.append({'name': args[5], 'value': 'verified', 'source': 'local'})\n"
             "    print('created verified mirror snapshot')\n"
             "elif args[0] == 'list':\n"
             "    assert args[1:] == ['-H', '-t', 'snapshot', '-o', 'name', '-s', 'creation', '-s', 'name', '-d', '1', dataset], args\n"
@@ -254,7 +265,20 @@ class MirrorTests(unittest.TestCase):
             "with open(state, 'w') as f: json.dump(snapshots, f)\n"
         )
         (self.bin / "zfs").chmod(0o755)
+        # Only the weekday is faked; ages come from the real clock.
+        (self.bin / "date").write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = "+%a" ] && [ -n "$FAKE_WEEKDAY" ]; then\n'
+            '  echo "$FAKE_WEEKDAY"\n'
+            "  exit 0\n"
+            "fi\n"
+            f'exec {shutil.which("date")} "$@"\n'
+        )
+        (self.bin / "date").chmod(0o755)
+        self.state = self.root / "state"
+        self.state.mkdir()
         self.env = {
+            "STATE_DIRECTORY": str(self.state),
             "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
             "HOME": str(self.root),
             "TMPDIR": str(self.root),
@@ -264,6 +288,9 @@ class MirrorTests(unittest.TestCase):
     def run_mirror(self, *, success=True, stat_size=None, zfs_failure=None):
         if zfs_failure:
             self.env["ZFS_FAILURE"] = zfs_failure
+        # Each assertion below is about this run alone.
+        for name in ("calls", "events"):
+            (self.root / name).write_text("")
         script = self.script.replace("http://192.0.2.11:9000", self.source.endpoint)
         script = script.replace("http://192.0.2.10:9000", self.replica.endpoint)
         if stat_size is not None:
@@ -564,6 +591,168 @@ class SnapshotTests(MirrorTests):
         before = self.seed_snapshots()
         self.run_mirror(success=False, zfs_failure="destroy")
         self.assertEqual(json.loads(self.snapshots.read_text())[:-1], before)
+
+
+class IncrementalTests(MirrorTests):
+    # Also runs the inherited tests: with no record of a verified pass, a mirror
+    # with a full verification day behaves like one without it.
+    script = INCREMENTAL_SCRIPT
+    snapshots_enabled = True
+
+    def setUp(self):
+        super().setUp()
+        self.env["FAKE_WEEKDAY"] = "Mon"
+
+    @staticmethod
+    def hours_ago(hours):
+        moment = datetime.now(timezone.utc) - timedelta(hours=hours)
+        return moment.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    def record(self, *, verified=24, full=48):
+        self.source.objects["new-block"] = b"recent"
+        self.source.modified["new-block"] = self.hours_ago(1)
+        now = int(time.time())
+        (self.state / "last-verified").write_text(f"{now - verified * 3600}\n")
+        (self.state / "last-full").write_text(f"{now - full * 3600}\n")
+
+    def recorded(self, name):
+        return int((self.state / name).read_text())
+
+    def snapshot_scopes(self):
+        events = [
+            json.loads(line) for line in (self.root / "events").read_text().splitlines()
+        ]
+        return [
+            event[5].rsplit("=", 1)[1]
+            for event in events
+            if event[:2] == ["zfs", "snapshot"]
+        ]
+
+    def test_incremental_copies_recent_objects_without_listing_replica(self):
+        self.record()
+        result, syncs = self.run_mirror()
+        self.assertEqual(syncs, [])
+        self.assertEqual(self.replica.listings, 0)
+        self.assertEqual(self.replica.objects["new-block"], b"recent")
+        self.assertNotIn(KEY, self.replica.objects)
+        self.assertIn("obsolete", self.replica.objects)
+        self.assertIn("mirror pass scope=incremental", result.stdout)
+        self.assertIn(
+            "verified-recent bucket=fixture recent_bytes=6 recent_objects=1",
+            result.stdout,
+        )
+        self.assertEqual(self.snapshot_scopes(), ["incremental"])
+
+    def test_window_starts_at_last_verified_pass(self):
+        self.source.objects.update({"in-window": b"a", "before-window": b"b"})
+        self.source.modified.update(
+            {"in-window": self.hours_ago(70), "before-window": self.hours_ago(80)}
+        )
+        self.record(verified=72, full=72)
+        self.run_mirror()
+        self.assertIn("in-window", self.replica.objects)
+        self.assertNotIn("before-window", self.replica.objects)
+
+    def test_recent_object_of_same_size_is_replaced(self):
+        self.replica.objects["new-block"] = b"RECENT"
+        self.record()
+        self.run_mirror()
+        self.assertEqual(self.replica.objects["new-block"], b"recent")
+
+    def test_lost_object_fails_and_keeps_the_window(self):
+        self.record()
+        before = self.recorded("last-verified")
+        self.replica.drop_puts = True
+        result, _ = self.run_mirror(success=False)
+        self.assertIn("recent copy failed for bucket fixture", result.stderr)
+        self.assertEqual(self.recorded("last-verified"), before)
+        self.replica.drop_puts = False
+        self.run_mirror()
+        self.assertEqual(self.replica.objects["new-block"], b"recent")
+        self.assertGreater(self.recorded("last-verified"), before)
+
+    def test_objects_arriving_during_a_pass_do_not_fail_it(self):
+        self.record()
+        self.source.growing = True
+        self.source.growing_recent = True
+        result, _ = self.run_mirror()
+        self.assertIn("verified-recent bucket=fixture", result.stdout)
+        self.assertIn("attempts=1", result.stdout)
+
+    def test_full_pass_does_not_fail_on_objects_arriving_during_recent_copy(self):
+        self.record()
+        self.env["FAKE_WEEKDAY"] = "Sat"
+        self.source.growing = True
+        self.source.growing_recent = True
+        _, syncs = self.run_mirror()
+        self.assertEqual(len(syncs), 1)
+
+    def test_incremental_advances_only_the_verified_record(self):
+        self.record()
+        verified = self.recorded("last-verified")
+        full = self.recorded("last-full")
+        self.run_mirror()
+        self.assertGreater(self.recorded("last-verified"), verified)
+        self.assertEqual(self.recorded("last-full"), full)
+
+    def test_full_day_reconciles_and_counts_what_recent_copy_missed(self):
+        self.record()
+        self.env["FAKE_WEEKDAY"] = "Sat"
+        full = self.recorded("last-full")
+        result, syncs = self.run_mirror()
+        self.assertEqual(len(syncs), 1)
+        self.assertEqual(self.replica.objects[KEY], b"checkpoint")
+        self.assertNotIn("obsolete", self.replica.objects)
+        self.assertIn("verified-recent bucket=fixture", result.stdout)
+        self.assertIn("reconciled_copies=1 reconciled_deletes=1", result.stdout)
+        self.assertGreater(self.recorded("last-full"), full)
+        self.assertEqual(self.snapshot_scopes(), ["full"])
+
+    def test_missed_full_pass_runs_on_the_next_day(self):
+        self.record(full=8 * 24)
+        self.env["FAKE_WEEKDAY"] = "Sun"
+        _, syncs = self.run_mirror()
+        self.assertEqual(len(syncs), 1)
+
+    def test_failed_full_pass_runs_on_the_next_day_after_a_recent_full(self):
+        self.record(full=4 * 24)
+        self.env["FAKE_WEEKDAY"] = "Sat"
+        self.replica.fail_put = True
+        self.run_mirror(success=False)
+        self.replica.fail_put = False
+        self.env["FAKE_WEEKDAY"] = "Sun"
+        _, syncs = self.run_mirror()
+        self.assertEqual(len(syncs), 1)
+        self.env["FAKE_WEEKDAY"] = "Mon"
+        _, syncs = self.run_mirror()
+        self.assertEqual(syncs, [])
+
+    def test_recent_full_pass_is_not_repeated_on_the_next_day(self):
+        self.record(full=24)
+        self.env["FAKE_WEEKDAY"] = "Sun"
+        _, syncs = self.run_mirror()
+        self.assertEqual(syncs, [])
+
+    def test_no_record_runs_in_full(self):
+        result, syncs = self.run_mirror()
+        self.assertEqual(len(syncs), 1)
+        self.assertNotIn("verified-recent", result.stdout)
+        self.assertGreater(self.recorded("last-verified"), 0)
+        self.assertGreater(self.recorded("last-full"), 0)
+
+    def test_damaged_or_implausible_record_runs_in_full(self):
+        future = int(time.time()) + 86400
+        for value in ("not a time", "010", "60", str(future), "9" * 30):
+            with self.subTest(value=value):
+                self.record()
+                (self.state / "last-verified").write_text(f"{value}\n")
+                _, syncs = self.run_mirror()
+                self.assertEqual(len(syncs), 1)
+
+    def test_recovered_sync_error_still_reaches_the_journal(self):
+        self.replica.put_failures = 1
+        result, _ = self.run_mirror()
+        self.assertIn("ERROR", result.stderr)
 
 
 class StorageTests(unittest.TestCase):

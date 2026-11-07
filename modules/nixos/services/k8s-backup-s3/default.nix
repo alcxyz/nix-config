@@ -134,6 +134,20 @@ in {
       '';
     };
 
+    mirrorFullVerificationDay = lib.mkOption {
+      type = lib.types.nullOr (lib.types.enum ["Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"]);
+      default = null;
+      description = ''
+        Weekday on which a mirror pass reconciles and verifies every object. A pass
+        on any other day copies and checks only what the source received since the
+        last verified pass, so it never lists the replica, and it does not remove
+        objects deleted at the source. A pass also runs in full when no verified
+        pass is recorded or the last full one is over a week old, so a failed full
+        pass is retried by the next run. With null, every pass runs in full.
+        Setting a day changes when objects are verified, not what a full pass does.
+      '';
+    };
+
     mirrorSnapshotRetention = lib.mkOption {
       type = lib.types.ints.unsigned;
       default = 0;
@@ -432,6 +446,7 @@ in {
         [
           pkgs.coreutils
           pkgs.getent
+          pkgs.gnugrep
           pkgs.jq
           pkgs.rclone
         ]
@@ -442,6 +457,7 @@ in {
           "s3_access_key:${cfg.accessKeyFile}"
           "s3_secret_key:${cfg.secretKeyFile}"
         ];
+        StateDirectory = "k8s-backup-s3-mirror";
         TimeoutStartSec = "12h";
         Nice = 15;
         IOSchedulingClass = "idle";
@@ -450,6 +466,60 @@ in {
       script = ''
         set -euo pipefail
         umask 077
+
+        pass_started="$(date -u +%s)"
+        full_verification_day=${lib.escapeShellArg (
+          if cfg.mirrorFullVerificationDay == null
+          then ""
+          else cfg.mirrorFullVerificationDay
+        )}
+
+        read_state() {
+          local value=""
+          if [ -f "$STATE_DIRECTORY/$1" ]; then
+            value="$(cat "$STATE_DIRECTORY/$1")"
+          fi
+          # A missing, damaged or implausible record only costs a full pass. A time
+          # ahead of now, say from a clock since corrected, would select nothing.
+          case "$value" in
+            "" | 0* | *[!0-9]* | ???????????*)
+              echo 0
+              ;;
+            *)
+              if [ "$value" -le 3600 ] || [ "$value" -gt "$pass_started" ]; then
+                echo 0
+              else
+                echo "$value"
+              fi
+              ;;
+          esac
+        }
+
+        write_state() {
+          printf '%s\n' "$pass_started" >"$STATE_DIRECTORY/$1.tmp"
+          mv "$STATE_DIRECTORY/$1.tmp" "$STATE_DIRECTORY/$1"
+        }
+
+        last_verified="$(read_state last-verified)"
+        last_full="$(read_state last-full)"
+        pass_scope=full
+        recent_since=0
+        if [ -n "$full_verification_day" ] && [ "$last_verified" -gt 0 ]; then
+          # Start from the last verified pass, not a fixed age, so that a killed
+          # or missed run cannot leave a gap. The hour allows for clock skew.
+          recent_since=$((last_verified - 3600))
+          if [ "$(LC_ALL=C date +%a)" != "$full_verification_day" ] \
+            && [ ! -e "$STATE_DIRECTORY/full-pending" ] \
+            && [ $((pass_started - last_full)) -lt $((7 * 86400 + 43200)) ]; then
+            pass_scope=incremental
+          fi
+        fi
+        if [ "$pass_scope" = full ]; then
+          # Stays until a full pass succeeds, so that a failed one is retried by the
+          # next run however recent the last successful one was.
+          : >"$STATE_DIRECTORY/full-pending"
+        fi
+        echo "mirror pass scope=$pass_scope"
 
         runtime_dir="$(mktemp -d)"
         trap 'rm -rf "$runtime_dir"' EXIT
@@ -471,6 +541,13 @@ in {
           command rclone --quiet --stats 0 --retries 3 --low-level-retries 10 "$@"
         }
 
+        # The same client settings, recording each object's outcome in a file.
+        rclone_logged() {
+          local log="$1"
+          shift
+          command rclone --log-level INFO --log-file "$log" --stats 0 --retries 3 --low-level-retries 10 "$@"
+        }
+
         inventory_dir="$runtime_dir/inventory"
         mkdir -p "$inventory_dir"
 
@@ -478,8 +555,9 @@ in {
           local alias="$1"
           local bucket="$2"
           local output="$3"
+          shift 3
 
-          rclone lsjson --recursive --files-only --no-modtime --no-mimetype "$alias:$bucket" \
+          rclone lsjson --recursive --files-only --no-modtime --no-mimetype "$@" "$alias:$bucket" \
             | jq -cS '.[] | select(.IsDir == false) | {key: .Path, size: .Size}' \
             | LC_ALL=C sort >"$output"
         }
@@ -520,6 +598,58 @@ in {
           printf '%s\n' "$verified_by_stat"
         }
 
+        # Measure the age as each command starts, so that both select from the same
+        # point in time.
+        recent_filter() {
+          recent_args=(
+            --max-age "$(($(date -u +%s) - recent_since))s"
+            --use-server-modtime
+            --no-unicode-normalization
+          )
+        }
+
+        # Copy what the source received since the last verified pass, then prove the
+        # captured inventory arrived. Buckets can receive objects continuously, so
+        # comparing against the live source again could fail on anything uploaded
+        # after the copy listed it. Copy unconditionally rather than comparing: a
+        # comparison could fall back to size alone and keep a stale object, and
+        # these are mostly new anyway. --no-traverse avoids listing the replica.
+        copy_recent() {
+          local bucket="$1"
+          local inventory="$2"
+          local recent="$inventory/recent.jsonl"
+          local missing="$inventory/recent-missing.jsonl"
+          local attempt recent_args recent_stats missing_objects
+
+          for attempt in $(seq 1 5); do
+            recent_filter
+            write_inventory source "$bucket" "$recent" "''${recent_args[@]}"
+            recent_stats="$(inventory_stats "$recent")"
+
+            recent_filter
+            if rclone copy --ignore-times --no-traverse --metadata "''${recent_args[@]}" \
+              --transfers ${toString cfg.mirrorMaxWorkers} \
+              --checkers ${toString cfg.mirrorMaxWorkers} \
+              --s3-upload-concurrency 1 --multi-thread-streams 0 \
+              "source:$bucket" "replica:$bucket" >/dev/null; then
+              cp "$recent" "$missing"
+              verify_listing_gaps "$bucket" "$missing" "$inventory/recent-unresolved.jsonl" >/dev/null
+              missing_objects="$(wc -l <"$missing" | tr -d ' ')"
+              if [ "$missing_objects" -eq 0 ]; then
+                echo "verified-recent bucket=$bucket recent_bytes=$(jq -r '.bytes' <<<"$recent_stats") recent_objects=$(jq -r '.objects' <<<"$recent_stats") attempts=$attempt"
+                return 0
+              fi
+              echo "recent copy of bucket $bucket left $missing_objects object(s) missing on attempt $attempt" >&2
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "recent copy failed for bucket $bucket after $attempt attempts" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+        }
+
         for attempt in $(seq 1 30); do
           if rclone lsjson --dirs-only replica: >/dev/null 2>&1; then
             break
@@ -546,6 +676,15 @@ in {
 
           bucket_inventory="$(mktemp -d "$inventory_dir/bucket.XXXXXX")"
 
+          # A full pass does this too, so that what its reconcile still has to
+          # copy shows whether the incremental passes have been missing objects.
+          if [ "$recent_since" -gt 0 ]; then
+            copy_recent "$bucket" "$bucket_inventory"
+          fi
+          if [ "$pass_scope" = incremental ]; then
+            continue
+          fi
+
           for attempt in $(seq 1 5); do
             source_checkpoint="$bucket_inventory/source-checkpoint.jsonl"
             replica_after="$bucket_inventory/replica-after.jsonl"
@@ -569,11 +708,16 @@ in {
                 comparison=(--checksum)
               fi
             done
-            if ! rclone sync "''${comparison[@]}" --delete-after --metadata --no-unicode-normalization \
+            sync_log="$bucket_inventory/sync.$attempt.log"
+            sync_status=0
+            rclone_logged "$sync_log" sync "''${comparison[@]}" --delete-after --metadata --no-unicode-normalization \
               --transfers ${toString cfg.mirrorMaxWorkers} \
               --checkers ${toString cfg.mirrorMaxWorkers} \
               --s3-upload-concurrency 1 --multi-thread-streams 0 \
-              "source:$bucket" "replica:$bucket" >/dev/null; then
+              "source:$bucket" "replica:$bucket" >/dev/null || sync_status=$?
+            # What --quiet would have shown, including errors a retry then recovered.
+            grep -E '(ERROR|CRITICAL) *:' "$sync_log" >&2 || true
+            if [ "$sync_status" -ne 0 ]; then
               if [ "$attempt" -eq 5 ]; then
                 echo "mirror failed for bucket $bucket after $attempt attempts" >&2
                 exit 1
@@ -602,7 +746,11 @@ in {
               checkpoint_stats="$(inventory_stats "$source_checkpoint")"
               checkpoint_bytes="$(jq -r '.bytes' <<<"$checkpoint_stats")"
               checkpoint_objects="$(jq -r '.objects' <<<"$checkpoint_stats")"
-              echo "verified bucket=$bucket checkpoint_bytes=$checkpoint_bytes checkpoint_objects=$checkpoint_objects direct_stat_objects=$verified_by_stat_objects attempts=$attempt"
+              # Copies here beyond objects uploaded during this pass are objects
+              # that earlier incremental passes missed.
+              reconciled_copies="$(cat "$bucket_inventory"/sync.*.log | grep -c ': Copied (' || true)"
+              reconciled_deletes="$(cat "$bucket_inventory"/sync.*.log | grep -c ': Deleted' || true)"
+              echo "verified bucket=$bucket checkpoint_bytes=$checkpoint_bytes checkpoint_objects=$checkpoint_objects direct_stat_objects=$verified_by_stat_objects attempts=$attempt reconciled_copies=$reconciled_copies reconciled_deletes=$reconciled_deletes"
               break
             fi
 
@@ -616,13 +764,21 @@ in {
           done
         done
 
+        # Every bucket passed. A snapshot failure below still fails the service,
+        # but does not make the next pass copy this one's objects again.
+        write_state last-verified
+        if [ "$pass_scope" = full ]; then
+          write_state last-full
+          rm -f "$STATE_DIRECTORY/full-pending"
+        fi
+
         ${lib.optionalString (cfg.mirrorSnapshotRetention > 0) ''
           # Snapshot only after every bucket has passed verification. Mark
           # ownership atomically with creation, independent of snapshot names.
           snapshot_dataset=${lib.escapeShellArg zfsDataset}
           snapshot_property=org.nix-config:k8s-backup-s3-mirror
           snapshot_name="$snapshot_dataset@k8s-backup-s3-mirror-$(date -u +%Y%m%dT%H%M%S.%NZ)"
-          zfs snapshot -o "$snapshot_property=verified" "$snapshot_name"
+          zfs snapshot -o "$snapshot_property=verified" -o "$snapshot_property-scope=$pass_scope" "$snapshot_name"
 
           # Use checked commands rather than process substitution so a failed
           # inventory/property read fails the service before pruning anything.

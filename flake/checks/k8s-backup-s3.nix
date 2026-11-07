@@ -59,6 +59,11 @@
   mirror = evaluate mirrorPolicy;
   snapshotMirror = evaluate (mirrorPolicy // {mirrorSnapshotRetention = 2;});
   onDemandMirror = evaluate (mirrorPolicy // {alwaysOn = false;});
+  incrementalMirror = evaluate (mirrorPolicy
+    // {
+      mirrorFullVerificationDay = "Sat";
+      mirrorSnapshotRetention = 2;
+    });
   disabled = evaluate {enable = false;};
   evaluateLocalBackup = localBackup:
     (zfs.extendModules {
@@ -148,6 +153,8 @@ in
   assert builtins.elem pkgs.util-linux zfs.config.systemd.services.k8s-backup-s3-storage.path;
   assert !(builtins.hasAttr "k8s-backup-s3-mirror" mounted.config.systemd.services);
   assert mirror.config.systemd.timers."k8s-backup-s3-mirror".timerConfig.OnCalendar == "*-*-* 01:00:00";
+  assert mirror.config.services.k8s-backup-s3.mirrorFullVerificationDay == null;
+  assert fails (mirrorPolicy // {mirrorFullVerificationDay = "Saturday";});
   assert !mirror.config.systemd.services.k8s-backup-s3-mirror.restartIfChanged;
   assert !onDemandMirror.config.systemd.services.k8s-backup-rustfs.restartIfChanged;
   assert !onDemandMirror.config.systemd.services.k8s-backup-s3-storage.restartIfChanged;
@@ -194,6 +201,7 @@ in
       timeout -k 5 180 python3 ${./test-k8s-backup-s3.py} \
         ${pkgs.writeText "k8s-backup-s3-mirror-fixture.sh" mirror.config.systemd.services.k8s-backup-s3-mirror.script} \
         ${pkgs.writeText "k8s-backup-s3-snapshot-fixture.sh" snapshotMirror.config.systemd.services.k8s-backup-s3-mirror.script} \
+        ${pkgs.writeText "k8s-backup-s3-incremental-fixture.sh" incrementalMirror.config.systemd.services.k8s-backup-s3-mirror.script} \
         ${pkgs.writeText "k8s-backup-s3-storage-fixture.sh" zfs.config.systemd.services.k8s-backup-s3-storage.script} \
         ${pkgs.writeText "xyz-local-backup-disabled-fixture.sh" (builtins.unsafeDiscardStringContext directLocalBackupPackage.text)}
       touch "$out"
