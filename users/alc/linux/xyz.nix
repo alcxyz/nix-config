@@ -384,6 +384,15 @@ in {
   services.devlog.repoUrl = "git@git-ssh.alc.xyz:alcxyz/devlog.git";
   services.devstats.enable = true;
 
+  # Browser and mail caches fill the system pool; rootless Podman images are
+  # pruned too (xyz only).
+  services.home-cache-trim = {
+    enable = true;
+    cacheDirectories = ["BraveSoftware" "zen" "net.imput.helium" "mozilla" "vivaldi" "thunderbird"];
+    maxAgeDays = 30;
+    podmanImageMaxAgeDays = 30;
+  };
+
   # The agent dashboard (#757): the thread dashboard at deck.alc.xyz/threads/
   # and the backlog dashboard, reached through the cluster's oauth2-proxy,
   # which admits the Pocket ID admins group; deck checks the forwarded ID

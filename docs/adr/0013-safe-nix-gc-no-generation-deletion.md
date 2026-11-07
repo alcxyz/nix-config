@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Amended:** 2026-10-28
+**Amended:** 2026-11-07
 **History:** [replaced text](archive/0013-safe-nix-gc-no-generation-deletion-history.md)
 **Applies to:** all managed NixOS and nix-darwin hosts, Home Manager profiles, `nix.gc`
 
@@ -57,8 +57,11 @@ dead paths until `max-free` is available. Neither path deletes generations.
 
 Stale project roots are cleaned separately. A daily Home Manager job
 (`services.nix-stale-gcroots`) on workstation profiles removes the user's own
-`result*` and nix-direnv root links whose symlink is older than 30 days. It
-never touches profiles or tool state roots under `~/.local/state` and
+`result*` and nix-direnv root links whose symlink is older than 30 days, and
+any of the user's root links in `/tmp` older than 30 days whatever their name,
+because `/tmp` survives reboots on `xyz` and out-links there with other names
+were pinning store paths indefinitely. It never touches profiles or tool
+state roots under `~/.local/state` and
 `~/.cache`; nix-direnv recreates its roots the next time a project loads.
 
 The shared `nix-gc-maintenance` command remains the explicit override. It

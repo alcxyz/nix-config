@@ -1,9 +1,11 @@
 # modules/home-manager/services/nix-stale-gcroots/default.nix
 #
 # Removes stale indirect GC roots created by `nix build` result links and
-# nix-direnv, so abandoned checkouts stop pinning store paths. Only the root
-# symlinks are removed; nix-direnv recreates its roots on the next load. Tool
-# state roots under ~/.local/state and ~/.cache are never touched. See ADR-0013.
+# nix-direnv, so abandoned checkouts stop pinning store paths. Root links under
+# /tmp are removed whatever their name, since `nix build --out-link` can name
+# them anything and /tmp can survive reboots. Only the root symlinks are removed;
+# nix-direnv recreates its roots on the next load. Tool state roots under
+# ~/.local/state and ~/.cache are never touched. See ADR-0013.
 {
   config,
   lib,
@@ -26,12 +28,14 @@
         target=$(readlink "$registry") || continue
         case "$target" in
           ${home}/.local/state/* | ${home}/.cache/*) continue ;;
-          ${home}/* | /tmp/*) ;;
-          *) continue ;;
-        esac
-        case "$target" in
-          */.direnv/*) ;;
-          */result | */result-*) ;;
+          /tmp/*) ;;
+          ${home}/*)
+            case "$target" in
+              */.direnv/*) ;;
+              */result | */result-*) ;;
+              *) continue ;;
+            esac
+            ;;
           *) continue ;;
         esac
         [ -L "$target" ] || continue

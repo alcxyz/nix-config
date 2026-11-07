@@ -103,6 +103,8 @@ in {
 
   moonlight-endpoint-setup-contract = import ./moonlight-endpoints.nix {inherit lib pkgs;};
 
+  home-cache-trim-contract = import ./home-cache-trim.nix {inherit lib pkgs;};
+
   credential-consent-contract = import ./credential-consent.nix {inherit lib pkgs;};
 
   k8s-backup-s3-interface-contract =

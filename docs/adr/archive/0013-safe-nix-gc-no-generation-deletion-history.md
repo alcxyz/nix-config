@@ -86,3 +86,9 @@ are retained with that system generation.
 - Validation is fail-closed: a broken current profile prevents both automatic pruning and its dependent NixOS GC.
 - Ten generations are retained consistently across NixOS, nix-darwin, Home Manager, and user profiles.
 - Recovery from future store corruption is easier: old generations remain as GC roots, so rolling back with `nix-env --rollback` or `darwin-rebuild switch --rollback` remains possible.
+
+## Text replaced on 2026-11-07
+
+> A daily Home Manager job (`services.nix-stale-gcroots`) on workstation profiles removes the user's own `result*` and nix-direnv root links whose symlink is older than 30 days. It
+> never touches profiles or tool state roots under `~/.local/state` and
+> `~/.cache`; nix-direnv recreates its roots the next time a project loads.

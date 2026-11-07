@@ -57,6 +57,7 @@ in
       "${configDir}/modules/home-manager/programs/tea/default.nix"
       "${configDir}/modules/home-manager/workspace/default.nix"
       "${configDir}/modules/home-manager/services/nix-stale-gcroots/default.nix"
+      "${configDir}/modules/home-manager/services/home-cache-trim/default.nix"
       "${configDir}/modules/shared/host-metadata.nix"
     ];
 
