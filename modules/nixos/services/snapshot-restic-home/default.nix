@@ -196,8 +196,10 @@
         --tag home \
         --keep-daily ${toString cfg.retention.daily} \
         --keep-weekly ${toString cfg.retention.weekly} \
-        --keep-monthly ${toString cfg.retention.monthly} \
-        --prune
+        --keep-monthly ${toString cfg.retention.monthly}
+      # Prune on its own: forget --prune prunes only when this forget removes
+      # a snapshot, and the daily backup has already forgotten the expired ones.
+      restic prune
       restic check
     '';
   };
