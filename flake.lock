@@ -363,11 +363,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793888667,
-        "narHash": "sha256-P8JJjissqBCEgbLtt/j1cRAFVTBoCUnWd3DgahZKPXI=",
+        "lastModified": 1793983508,
+        "narHash": "sha256-hx9WyYerSHGFma2t4IRwnANn32G6XOFqGZB1MYS9tyM=",
         "owner": "AvengeMedia",
         "repo": "danksearch",
-        "rev": "3197b8453c31f8eaa305001bbe741048c1834a49",
+        "rev": "edf0176c59729bdaa863055dc14c6f77a40c0438",
         "type": "github"
       },
       "original": {
@@ -692,11 +692,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793887706,
-        "narHash": "sha256-xEsX6ns8jRmdZQPKlx/CcFS50dbTfzs8WT01gUjtPHE=",
+        "lastModified": 1794005567,
+        "narHash": "sha256-zkZNVg+J/QXs56ali8gI26/b4HnrAkcfHZBFurnOSfs=",
         "ref": "main",
-        "rev": "8f4512ba8b2dc475f24510bfc87443efd43b295f",
-        "revCount": 6,
+        "rev": "89ad7b5bab05dfd7f77c1b6a342dfc8bb89bdc07",
+        "revCount": 9,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/hedgedoc.git"
       },
@@ -713,11 +713,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793757180,
-        "narHash": "sha256-gyV7AtCwLnOImcrfSETP4J3Ie96bz19DY47B7m7Y3HM=",
+        "lastModified": 1793979366,
+        "narHash": "sha256-7OoWDsYO9teiPxl0QdlS5lYE20Pue8/5mpscSL32FUA=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "b787c48e2ec57a9d098f5c2721882a3bc1e16f97",
+        "rev": "2c0c1f01521469cf0271180c453c79782d53c2f6",
         "type": "github"
       },
       "original": {
@@ -803,11 +803,11 @@
         "xdph": "xdph"
       },
       "locked": {
-        "lastModified": 1793872649,
-        "narHash": "sha256-jx73NY1kT1xyQa0Ma9n/YlN/2+QM4EgTm0csM5b2mQ4=",
+        "lastModified": 1793984293,
+        "narHash": "sha256-rqmgV0BeCtguyXNsmXjH5+bauyrpWA4imqz9B7zCtvQ=",
         "owner": "hyprwm",
         "repo": "Hyprland",
-        "rev": "f389f008228d51fa48bdd69a4c9e2b91f24bb2da",
+        "rev": "ab6141897d57e609e24c571a762c30c963e0885a",
         "type": "github"
       },
       "original": {
@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793975456,
-        "narHash": "sha256-3uTGz0Sle8/k6+9zB4r2MG73K3v1jq8sJP3JZYzp8U8=",
+        "lastModified": 1794011461,
+        "narHash": "sha256-Iv4Z1gW8qyc8Y/6yE4kJeT/Tfat07sz8i+jHf+HmwW4=",
         "ref": "dev",
-        "rev": "81eb2bbdaf2bc31794ef14efd3d87cef6eb81daa",
-        "revCount": 962,
+        "rev": "0b4f2aa9009e33dde59ee3e3397149d0d8e7ee60",
+        "revCount": 966,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1272,11 +1272,11 @@
         "restricted-codex-nixpkgs": "restricted-codex-nixpkgs"
       },
       "locked": {
-        "lastModified": 1793923977,
-        "narHash": "sha256-tIqr8cJPffe234ybrvkduLagIdxlxOvDDK6t0LOk+cs=",
+        "lastModified": 1794004897,
+        "narHash": "sha256-nrM0RoiDjD9yhmtBk6JLQsSvwQjqCUhaMOw2V7qpVu0=",
         "ref": "dev",
-        "rev": "fcda2409165b7e33cca79e13c09d151f4b9b894a",
-        "revCount": 95,
+        "rev": "e0059e4e271690462d6f9059053a77a521250ad3",
+        "revCount": 97,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
@@ -1338,11 +1338,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793444592,
-        "narHash": "sha256-WLDYeWOhDnz/OFbOFcuXv7thqNifxb0b0paxWo4tP5E=",
+        "lastModified": 1794011564,
+        "narHash": "sha256-S0NY9adNhD3nuvDNezbxDW/xl0PEoKUFgFErELS9lwM=",
         "ref": "dev",
-        "rev": "a9bf09ab0d31f6cecb5290a05b83784ae0213538",
-        "revCount": 97,
+        "rev": "8643ef85fe904714b2fe36de3b6b781e933ee0f6",
+        "revCount": 98,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git"
       },
@@ -1460,11 +1460,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793681533,
-        "narHash": "sha256-uEo1ebb6o/yanH2wYzd45Z8lx5oMK1tK1Jd53M75o40=",
+        "lastModified": 1794013360,
+        "narHash": "sha256-AsV5JXhDRVELAvUP2rPZ8bbIrRorFuRjcPrceqRKmdk=",
         "ref": "dev",
-        "rev": "2c8c3e48e79ca7ff8af7a53ddc67d5df1dc5b529",
-        "revCount": 619,
+        "rev": "133ba2f0fb63bb368df9736de1faf9ad3d23c142",
+        "revCount": 620,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git"
       },
@@ -1687,11 +1687,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793657466,
-        "narHash": "sha256-GoOvpdsjO5hqZuO6T6ok9u6sJEjO0iPli2zRr9oNUNw=",
+        "lastModified": 1793995029,
+        "narHash": "sha256-ZlE4BtMjWhfC6rFXLO9Qimn36Ene1INqCgKDDvazjhc=",
         "owner": "Mic92",
         "repo": "sops-nix",
-        "rev": "b18e01ce148eb3efff5de2f2d3181ca53b2b2a54",
+        "rev": "89a234ce2daf6e568a7d4b4fe250afdd23d84e20",
         "type": "github"
       },
       "original": {
