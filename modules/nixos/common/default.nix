@@ -51,6 +51,9 @@ in {
   programs.zsh.enable = config.alc.shell.enableZsh;
 
   nix = {
+    # The fleet is flake-only: without this NixOS keeps root's channels
+    # directory, which no host has, on NIX_PATH and every <nixpkgs> lookup warns.
+    channel.enable = false;
     settings = {
       experimental-features = [
         "nix-command"
