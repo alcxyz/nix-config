@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794011461,
-        "narHash": "sha256-Iv4Z1gW8qyc8Y/6yE4kJeT/Tfat07sz8i+jHf+HmwW4=",
+        "lastModified": 1794014167,
+        "narHash": "sha256-jlCLbWoYkI3rIz5+vFUyCebmM4jGt4zUHjl1i1McKFE=",
         "ref": "dev",
-        "rev": "0b4f2aa9009e33dde59ee3e3397149d0d8e7ee60",
-        "revCount": 966,
+        "rev": "ad18c36672823aa03b788b71e6253f02023e5bb4",
+        "revCount": 967,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
