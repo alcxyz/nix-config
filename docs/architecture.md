@@ -271,7 +271,12 @@ in the `triage` object of the generated inventory, which maps this flake's own
 inputs to their local checkouts (nix-packages ADR-0016). That agent starts the
 session in a new T3 Code thread when T3 Code runs and knows the checkout as a
 project, and runs Claude in the terminal otherwise, or with
-`NIXFLEET_TRIAGE_TERMINAL=1` (nix-packages#783).
+`NIXFLEET_TRIAGE_TERMINAL=1` (nix-packages#783). Every host other than xyz
+hands its failed run to xyz, whose T3 Code server the operator's apps use:
+it checks SSH both ways, copies the run record there and starts triage on
+xyz, which reaches the source host over SSH. On the Mac, `mac-ssh-on` lets
+xyz in; when xyz is unreachable, the host runs its own agent
+(nix-packages#787).
 
 ## Maintained project refresh
 

@@ -131,7 +131,9 @@
         case "$prompt" in
           "This is warning triage"*) title="nixfleet warning triage" ;;
         esac
-        run="$(printf '%s\n' "$prompt" | ${gnused}/bin/sed -n 's|.*/nix-deploy/runs/\([^/ ]*\)/.*|\1|p' | ${coreutils}/bin/head -n 1)"
+        # A run handed over from another host is copied under
+        # handoffs/<host>/<run>.
+        run="$(printf '%s\n' "$prompt" | ${gnused}/bin/sed -n -e 's|.*/nix-deploy/handoffs/\([^/ ]*\)/\([^/ ]*\)/.*|\2 from \1|p' -e 't' -e 's|.*/nix-deploy/runs/\([^/ ]*\)/.*|\1|p' | ${coreutils}/bin/head -n 1)"
         if [ -n "$run" ]; then
           title="$title: $run"
         fi
@@ -191,9 +193,13 @@
     };
     # Read only by nixfleet triage (nix-packages ADR-0016): the agent it
     # launches and the local checkouts of the operator's own flake inputs.
-    # Inputs without a local checkout are not mapped.
+    # Inputs without a local checkout are not mapped. Other hosts hand their
+    # failed runs to xyz, whose T3 Code server the operator's apps use; the
+    # hint is printed when xyz cannot reach the host back over SSH.
     triage = {
       agentCommand = ["${triageAgent}"];
+      triageHost = "xyz";
+      sshHint = "on the Mac, run mac-ssh-on; elsewhere, check that sshd runs and accepts xyz's key";
       inputCheckouts = {
         bivrost = "~/src/apps/bivrost";
         bivrost-dev = "~/src/apps/bivrost";

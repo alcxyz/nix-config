@@ -498,6 +498,12 @@ in {
       test "$(tail -n 2 t3-args | tr '\n' ' ')" = '. - '
       test "$(cat t3-prompt)" = "$prompt"
       rm t3-args
+      # A run handed over from another host is titled with its source.
+      handoff='A nixfleet deploy run needs triage. Read /home/u/.local/state/nix-deploy/handoffs/mac/20261107T101010.1Z-42/context.md first. The run was recorded on mac.'
+      PATH=$PWD/agentbin:$PWD/t3bin:$PATH "$agent" "$handoff" >out.txt
+      grep -Fxq 'nixfleet triage: 20261107T101010.1Z-42 from mac' t3-args
+      rm t3-args
+      jq -e '.triage.triageHost == "xyz" and (.triage.sshHint | contains("mac-ssh-on"))' ${config} >/dev/null
       for mode in terminal no-project no-t3; do
         rm -f claude-args
         case $mode in
