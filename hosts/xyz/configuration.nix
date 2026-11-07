@@ -246,9 +246,7 @@ in {
         "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
       # Three CI slots in all (two pool, one Docker). The Docker slot is nearly
-      # idle, so about two jobs run at once. Watch the disk that Plex,
-      # qBittorrent, Stash and Calibre share, and go back to one pool slot if
-      # they suffer (ADR-0106, #991).
+      # idle, so about two jobs run at once (ADR-0106, #991).
       capacity = 2;
     };
     # One Docker slot serves the few jobs that still select a Docker label.

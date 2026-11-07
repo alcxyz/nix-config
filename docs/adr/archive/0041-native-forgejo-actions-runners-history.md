@@ -534,3 +534,10 @@ gave up as busy three times in a row while its runners kept taking jobs.
   idle because restarting the resource policy or an API also restarts the
   runners that require it. `nixfleet runners restart` starts it on each
   host (nix-packages ADR-0017); it changes nothing about the runner hold.
+
+## Text replaced on 2026-11-07 (#991)
+
+The text as it stood while xyz's second pool slot was a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)).
+
+>   two jobs on `xyz`, which also runs games and media services, as a trial
+>   ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)), two on `xev`,

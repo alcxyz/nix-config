@@ -169,9 +169,8 @@ in {
     };
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
     # Jobs per runner (ADR-0041, ADR-0106): every Docker runner takes one; the
-    # Podman pool takes two on xyz, which also runs games and media, as a
-    # trial (#991), two on xev and one on the smaller nex and nux. The xyz and
-    # xev pool runners
+    # Podman pool takes two on xyz, which also runs games and media (#991), two
+    # on xev and one on the smaller nex and nux. The xyz and xev pool runners
     # also serve ci-fast in those slots.
     expectedCapacity = {
       xyz = 1;

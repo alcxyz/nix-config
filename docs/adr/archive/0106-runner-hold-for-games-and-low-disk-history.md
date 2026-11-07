@@ -163,3 +163,11 @@ The text as it stood before xyz's Podman store moved to ext4 ([#995](https://git
 > for buffered writes and limits dirty data for all pools together, so heavy CI
 > writes also slow the pools that Plex, qBittorrent, Stash and Calibre use. The
 > number of concurrent jobs is the lever that works.
+
+## Text replaced on 2026-11-07 (#991)
+
+The text as it stood while xyz's second pool slot was a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)).
+
+> once in practice. Its second pool slot is a trial
+> ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)): xyz goes back to
+> one pool slot if the disk its media services share suffers. xev runs three (one

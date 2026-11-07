@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07, updated 2026-11-05 (the runner restart pauses runners until their jobs finish, per nix-packages ADR-0017)
-**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine; 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991))
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine; 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991))
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -82,8 +82,7 @@ registration keeps those jobs to that user's repositories.
   workflows.
 - Runner admission is explicit in per-host capacity, set for the Docker and the
   Podman runner. Every Docker runner admits one job. The Podman pool admits
-  two jobs on `xyz`, which also runs games and media services, as a trial
-  ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)), two on `xev`,
+  two jobs on `xyz`, which also runs games and media services, two on `xev`,
   and one on `nex` and `nux`; the `xyz` and `xev` pool slots also serve
   `ci-fast` ([ADR-0097](0097-ci-fast-runner-label.md),
   [ADR-0106](0106-runner-hold-for-games-and-low-disk.md)).
