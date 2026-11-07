@@ -5,6 +5,7 @@
   gawk,
   git,
   gnugrep,
+  gnused,
   jq,
   nixDeploy,
   symlinkJoin,
@@ -104,20 +105,50 @@
     nixosHostNames
   ));
 
-  # nixfleet triage starts this agent in the flake checkout. It resolves the
-  # deep agent role when it runs, so no model is pinned here; agent-role and
-  # claude come from the user's PATH, where the agent stack installs them.
+  # nixfleet triage starts this agent in the flake checkout, with the prompt
+  # as its last argument (nix-packages#783). Where T3 Code runs and knows the
+  # checkout as a project, the session goes to a new T3 thread, so it stays
+  # visible and resumable, and the command exits once the thread has started.
+  # Otherwise, or with NIXFLEET_TRIAGE_TERMINAL=1, Claude runs in this
+  # terminal. The deep agent role is resolved at run time, so no model is
+  # pinned here. agent-role, claude and t3 come from the user's PATH, where the
+  # agent stack installs them. `t3 thread start` takes no effort setting, so a
+  # T3 session uses the provider's default effort for the role's model.
   triageAgent = writeShellScript "nixfleet-triage-agent" ''
-    for tool in agent-role claude; do
-      if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "nixfleet-triage-agent: $tool is not on PATH; install the agent stack to launch the triage agent" >&2
-        exit 127
-      fi
-    done
+    if ! command -v agent-role >/dev/null 2>&1; then
+      echo "nixfleet-triage-agent: agent-role is not on PATH; install the agent stack to launch the triage agent" >&2
+      exit 127
+    fi
     model="$(agent-role deep claude model)" || {
       echo "nixfleet-triage-agent: agent-role could not resolve the deep role's model" >&2
       exit 1
     }
+
+    if [ "''${NIXFLEET_TRIAGE_TERMINAL:-}" != 1 ] && [ "$#" -gt 0 ] && command -v t3 >/dev/null 2>&1; then
+      prompt="''${*: -1}"
+      if t3 thread list --project . >/dev/null 2>&1; then
+        title="nixfleet triage"
+        case "$prompt" in
+          "This is warning triage"*) title="nixfleet warning triage" ;;
+        esac
+        run="$(printf '%s\n' "$prompt" | ${gnused}/bin/sed -n 's|.*/nix-deploy/runs/\([^/ ]*\)/.*|\1|p' | ${coreutils}/bin/head -n 1)"
+        if [ -n "$run" ]; then
+          title="$title: $run"
+        fi
+        if thread="$(printf '%s\n' "$prompt" | t3 thread start --title "$title" --provider claudeAgent --model "$model" . -)"; then
+          echo "nixfleet-triage-agent: triage runs in the T3 Code thread \"$title\" ($thread). Open it in T3 Code, or read it with: t3 thread show $thread"
+          exit 0
+        fi
+        echo "nixfleet-triage-agent: T3 Code could not start a thread; running the agent in this terminal instead" >&2
+      else
+        echo "nixfleet-triage-agent: T3 Code is not running or has no project for $PWD; running the agent in this terminal instead" >&2
+      fi
+    fi
+
+    if ! command -v claude >/dev/null 2>&1; then
+      echo "nixfleet-triage-agent: claude is not on PATH; install the agent stack to launch the triage agent" >&2
+      exit 127
+    fi
     # Effort is optional for a role; without one, Claude keeps its default.
     effort="$(agent-role deep claude effort 2>/dev/null)" || effort=""
     if [ -n "$effort" ]; then

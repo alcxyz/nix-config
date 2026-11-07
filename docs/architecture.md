@@ -268,7 +268,10 @@ during the switch. Node
 reboots are separate (`kreboot`, `koff`, `kon`, or `nixfleet reboot` for the
 fleet); `nixfleet status` only reads state. For a failed deploy, `nixfleet triage` launches the agent configured
 in the `triage` object of the generated inventory, which maps this flake's own
-inputs to their local checkouts (nix-packages ADR-0016).
+inputs to their local checkouts (nix-packages ADR-0016). That agent starts the
+session in a new T3 Code thread when T3 Code runs and knows the checkout as a
+project, and runs Claude in the terminal otherwise, or with
+`NIXFLEET_TRIAGE_TERMINAL=1` (nix-packages#783).
 
 ## Maintained project refresh
 

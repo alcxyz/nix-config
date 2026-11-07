@@ -481,6 +481,34 @@ in {
       chmod +x hookbin/nixfleet-reboot-hook
       PATH=$PWD/hookbin:$PATH NIXFLEET_EVENT=run-start sh -c "$hook"
       grep -Fxq run-start hook-ran
+      # The triage agent hands the session to a T3 Code thread when T3 knows
+      # the checkout, and runs Claude in the terminal otherwise.
+      agent="$(jq -r '.triage.agentCommand[0]' ${config})"
+      prompt='A nixfleet deploy run needs triage. Read /home/u/.local/state/nix-deploy/runs/20261107T101010.1Z-42/context.md first.'
+      mkdir agentbin t3bin
+      printf '#!/bin/sh\ncase "$3" in model) echo opus ;; effort) echo high ;; esac\n' >agentbin/agent-role
+      printf '#!/bin/sh\nprintf "%%s\\n" "$@" >"$PWD/claude-args"\n' >agentbin/claude
+      printf '#!/bin/sh\ncase "$2" in\n  list) exit "''${T3_LIST_STATUS:-0}" ;;\n  start) cat >"$PWD/t3-prompt"; printf "%%s\\n" "$@" >"$PWD/t3-args"; echo thread-1 ;;\nesac\n' >t3bin/t3
+      chmod +x agentbin/* t3bin/t3
+      PATH=$PWD/agentbin:$PWD/t3bin:$PATH "$agent" "$prompt" >out.txt
+      test ! -e claude-args
+      grep -Fq thread-1 out.txt
+      grep -Fxq 'nixfleet triage: 20261107T101010.1Z-42' t3-args
+      grep -Fxq claudeAgent t3-args
+      grep -Fxq opus t3-args
+      test "$(tail -n 2 t3-args | tr '\n' ' ')" = '. - '
+      test "$(cat t3-prompt)" = "$prompt"
+      rm t3-args
+      for mode in terminal no-project no-t3; do
+        rm -f claude-args
+        case $mode in
+          terminal) PATH=$PWD/agentbin:$PWD/t3bin:$PATH NIXFLEET_TRIAGE_TERMINAL=1 "$agent" "$prompt" ;;
+          no-project) PATH=$PWD/agentbin:$PWD/t3bin:$PATH T3_LIST_STATUS=1 "$agent" "$prompt" 2>/dev/null ;;
+          no-t3) PATH=$PWD/agentbin:$PATH "$agent" "$prompt" ;;
+        esac
+        test ! -e t3-args
+        test "$(cat claude-args)" = "$(printf '%s\n' --model opus --effort high "$prompt")"
+      done
       # Help validates the actual generated inventory without deployment work.
       ${pkgs.nix-deploy}/bin/deploy --help >help.txt 2>error.txt && exit 1
       test ! -s error.txt
