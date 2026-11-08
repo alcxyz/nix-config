@@ -554,11 +554,10 @@ in {
       touch "$out"
     '';
 
-  maintained-dev-qa = mkRepoCheck "maintained-dev-qa" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.jq pkgs.shellcheck pkgs.shfmt] ''
-    shellcheck scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-apps.sh scripts/update-inputs/update-dms-plugins.sh scripts/update-inputs/update-tools.sh scripts/update-inputs/update-dev-tools.sh
-    shfmt -d -i 2 -ci scripts/update-inputs/update-maintained.sh scripts/update-inputs/update-apps.sh scripts/update-inputs/update-dms-plugins.sh scripts/update-inputs/update-tools.sh scripts/update-inputs/update-dev-tools.sh
-    python3 scripts/checks/test-maintained-dev-qa.py
-    python3 scripts/checks/test-tools-update.py
+  update-inputs = mkRepoCheck "update-inputs" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.git pkgs.jq pkgs.shellcheck pkgs.shfmt] ''
+    shellcheck scripts/update-inputs/update-dms-plugins.sh
+    shfmt -d -i 2 -ci scripts/update-inputs/update-dms-plugins.sh
+    python3 scripts/checks/test-update-inputs.py
   '';
 
   configuration-ci-contract = mkRepoCheck "configuration-ci-contract" [pkgs.python3 pkgs.bash pkgs.coreutils pkgs.gawk pkgs.git pkgs.jq pkgs.util-linux] ''

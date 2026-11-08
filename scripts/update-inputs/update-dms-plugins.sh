@@ -7,8 +7,15 @@ cp flake.lock "$lock_before"
 output_file=${GITHUB_OUTPUT:-/dev/stdout}
 
 # Always refresh nested dev sources: the bundle revision can stay unchanged
-# while a plugin receives a new integration commit.
-bash scripts/update-inputs/update-maintained.sh --dms-only
+# while a plugin receives a new integration commit. The list is the `dms` group
+# of the update entry point (ADR-0107); this validated path publishes its own
+# pull request instead of committing locally (ADR-0076).
+mapfile -t inputs < <(python3 scripts/update-inputs/update.py --list dms)
+if [[ ${#inputs[@]} -eq 0 ]]; then
+  echo "The dms update group is empty." >&2
+  exit 1
+fi
+nix flake update "${inputs[@]}"
 
 if cmp -s "$lock_before" flake.lock; then
   echo "Already up to date — nothing to do."

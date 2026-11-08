@@ -88,15 +88,8 @@ in
         "${pkgs.glibcLocales}/lib/locale/locale-archive";
     };
 
-    # Update and switch aliases (run from the nix-config checkout).
+    # Switch alias (run from the nix-config checkout); updates use `just update`.
     home.shellAliases = {
-      dms-update = "bash scripts/update-inputs/update-maintained.sh --dms-only";
-      apps-update = "bash scripts/update-inputs/update-apps.sh";
-      dev-apps-update = "bash scripts/update-inputs/update-maintained.sh";
-      tools-update = "bash scripts/update-inputs/update-tools.sh";
-      dev-tools-update = "bash scripts/update-inputs/update-dev-tools.sh";
-      # Compatibility with the former QA-specific name.
-      qaup = "bash scripts/update-inputs/update-maintained.sh";
       hmsw = "home-manager switch --flake .#alc-${hostName}";
     };
 

@@ -108,40 +108,13 @@ deploy-home HOST:
 workspace-status:
     workspace-sync --status
 
+# Update every input, or the named groups (apps, dev-apps, tools, dev-tools,
+# dms) and inputs; build the fleet and commit flake.lock only when green (ADR-0107).
 [group("update")]
-update *INPUTS:
-    nix flake update {{INPUTS}}
+update *NAMES:
+    python3 scripts/update-inputs/update.py {{NAMES}}
 
 # Lock nix-packages to the locally validated `promoted` revision (ADR-0080).
 [group("update")]
 lock-packages:
     bash scripts/update-inputs/lock-promoted-packages.sh
-
-# Refresh released apps (main branches); inspect the lock diff before switching.
-[group("update")]
-apps-update:
-    bash scripts/update-inputs/update-apps.sh
-
-# Refresh maintained apps' dev builds (dev branches); inspect the lock diff before switching.
-[group("update")]
-dev-apps-update:
-    bash scripts/update-inputs/update-maintained.sh
-
-# Refresh only the DMS bundle and maintained plugin inputs.
-[group("update")]
-dms-update:
-    bash scripts/update-inputs/update-maintained.sh --dms-only
-
-# Compatibility with the former QA-specific name.
-[group("update")]
-qa-update: dev-apps-update
-
-# Refresh released platform tools (main branches); inspect the lock diff before switching.
-[group("update")]
-tools-update:
-    bash scripts/update-inputs/update-tools.sh
-
-# Refresh the dev builds of released tools (dev branches); inspect the lock diff before switching.
-[group("update")]
-dev-tools-update:
-    bash scripts/update-inputs/update-dev-tools.sh
