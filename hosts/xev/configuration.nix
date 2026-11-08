@@ -201,16 +201,22 @@
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "ci-fast:docker://docker.io/library/docker:27-cli"
       ];
-      # Most jobs use the Podman pool. Three slots in all (two pool, one
-      # Docker): from 2026-10-24 to 2026-10-31 xev's jobs ran three or more
-      # at once for about a third of its busy time, and fewer slots keep CI
-      # off its cluster and Wolf work (ADR-0106).
-      capacity = 2;
+      # One pool slot, as every pool runner (ADR-0106), so the scratch is one
+      # job's limit. Job throwaway data in RAM, images on disk (ADR-0108,
+      # #1027); the tmpfs counts against the CI memory limits below.
+      scratch = {
+        enable = true;
+        size = "8G";
+      };
     };
     resourcePolicy.enable = true;
-    # Independent jobs share the existing aggregate resource budget; the
-    # host-wide CPU, memory, and I/O limits remain unchanged. One Docker slot
-    # serves the few jobs that still select a Docker label.
+    # The cluster comes first: CI stays at half the memory, with the throttle
+    # a few points below. That holds the 8G scratch beside the pool job and the
+    # rarely used Docker slot's job, about 6G for both (ADR-0108).
+    resourcePolicy.memoryHigh = "45%";
+    resourcePolicy.memoryMax = "50%";
+    # Both runners share that aggregate budget. One Docker slot serves the few
+    # jobs that still select a Docker label.
     capacity = 1;
     labels = [
       "forgejo-docker:docker://node:20-bookworm"

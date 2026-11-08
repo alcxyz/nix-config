@@ -149,6 +149,8 @@ in {
 
   forgejo-podman-store-reset-lifecycle = import ./forgejo-podman-store-reset-vm.nix {inherit pkgs;};
 
+  forgejo-podman-scratch-lifecycle = import ./forgejo-podman-scratch-vm.nix {inherit pkgs;};
+
   forgejo-runner-hold-lifecycle = import ./forgejo-runner-hold-vm.nix {inherit pkgs;};
 
   forgejo-docker-retention = import ./forgejo-docker-retention.nix {inherit lib pkgs;};
@@ -168,10 +170,10 @@ in {
         ;
     };
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
-    # Jobs per runner (ADR-0041, ADR-0106): every Docker runner takes one; the
-    # Podman pool takes two on xyz, which also runs games and media (#991), two
-    # on xev and one on the smaller nex and nux. The xyz and xev pool runners
-    # also serve ci-fast in those slots.
+    # Jobs per runner (ADR-0041, ADR-0106): every Docker runner and every
+    # Podman pool runner takes one, so each host's RAM scratch is one job's
+    # limit (ADR-0108). The xyz and xev pool runners also serve ci-fast in
+    # that slot.
     expectedCapacity = {
       xyz = 1;
       xev = 1;
@@ -179,8 +181,8 @@ in {
       nux = 1;
     };
     expectedPoolCapacity = {
-      xyz = 2;
-      xev = 2;
+      xyz = 1;
+      xev = 1;
       nex = 1;
       nux = 1;
     };
@@ -245,7 +247,8 @@ in {
     assert lib.all (host: host.config.systemd.services.forgejo-runner-podman.environment ? CONTAINERS_REGISTRIES_CONF) (lib.attrValues runnerHosts);
     assert lib.all (runner: runner.registryMirrorCaFile != null) (lib.attrValues runners);
     assert lib.all (host: lib.hasSuffix "-forgejo-docker-mirror-ca" host.config.systemd.services.forgejo-runner-docker.serviceConfig.ExecStartPre) (lib.attrValues runnerHosts);
-    assert lib.all (host: lib.hasSuffix "-forgejo-podman-mirror-ca" host.config.systemd.services.forgejo-runner-podman.serviceConfig.ExecStartPre) (lib.attrValues runnerHosts);
+    # With RAM scratch the scratch preparation follows the mirror CA setup.
+    assert lib.all (host: lib.hasSuffix "-forgejo-podman-mirror-ca" (lib.head (lib.toList host.config.systemd.services.forgejo-runner-podman.serviceConfig.ExecStartPre))) (lib.attrValues runnerHosts);
     assert lib.all (runner: runner.podmanCanary.enable && runner.isolatedDocker.enable && runner.resourcePolicy.enable) (lib.attrValues runners);
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedPoolCapacity.${host}) (lib.attrNames runners);
@@ -253,6 +256,10 @@ in {
     # nux never serve it, and no host runs an extra Podman runner (ADR-0097).
     assert lib.all (host: hasLabel "ci-fast" runners.${host}.podmanCanary) ["xyz" "xev"];
     assert lib.all (host: !(hasLabel "ci-fast" runners.${host}.podmanCanary)) ["nex" "nux"];
+    # Every pool runner keeps job scratch in RAM; only xyz's holds the jobs
+    # that need more than the others' scratch (ADR-0108).
+    assert lib.all (runner: runner.podmanCanary.scratch.enable) (lib.attrValues runners);
+    assert lib.all (host: hasLabel "forgejo-podman-large" runners.${host}.podmanCanary == (host == "xyz")) (lib.attrNames runners);
     assert lib.all (host: host.config.services.forgejo-actions-runner.runnerUnits == ["forgejo-actions-runner.service" "forgejo-podman-runner.service"]) (lib.attrValues runnerHosts);
     assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast) && !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
     # Runners are named host-engine (ADR-0041).
@@ -305,10 +312,12 @@ in {
     assert lib.all (host: host.systemd.services.forgejo-actions-runner.serviceConfig.KillMode == "mixed") serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
-    # xyz's slots share less memory beside the nix-daemon and the ARC.
-    assert buildSlice.MemoryHigh == "25%";
-    assert buildSlice.MemoryMax == "35%";
-    assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "40%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;
+    # The limits hold each host's RAM scratch plus one job's memory
+    # (ADR-0108): 16G on xyz, beside the nix-daemon and the ARC, and 8G on
+    # the 31 GiB servers, whose cluster keeps half the memory.
+    assert buildSlice.MemoryHigh == "40%";
+    assert buildSlice.MemoryMax == "45%";
+    assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "45%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;
     assert !(xyz.virtualisation.docker.daemon.settings ? "exec-opts");
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.after;
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.requires;

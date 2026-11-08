@@ -84,10 +84,21 @@
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
       ];
+      # Job throwaway data in RAM, images on disk (ADR-0108, #1027). The
+      # tmpfs counts against the CI memory limits below.
+      scratch = {
+        enable = true;
+        size = "8G";
+      };
     };
     resourcePolicy.enable = true;
     # k3s leaves headroom on this host; raised from the 50% default (#957).
     resourcePolicy.cpuQuotaPercent = 75;
+    # The cluster comes first: CI stays at half the memory, with the throttle
+    # a few points below. That holds the 8G scratch beside the pool job and the
+    # rarely used Docker slot's job, about 6G for both (ADR-0108).
+    resourcePolicy.memoryHigh = "45%";
+    resourcePolicy.memoryMax = "50%";
     # 8 threads shared with k3s and storage: one job per runner (ADR-0041).
     capacity = 1;
     labels = [

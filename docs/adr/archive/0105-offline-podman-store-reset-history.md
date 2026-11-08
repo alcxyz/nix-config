@@ -162,3 +162,19 @@ The text as it stood before xyz's Podman store moved to ext4 ([#995](https://git
 > store is a directory in the `forgejo-podman` ZFS dataset mounted at
 > `/var/lib/forgejo-podman`; on xev, nex and nux it is a directory on the root
 > filesystem.
+
+## Text replaced on 2026-11-08 (#1027)
+
+The text as it stood before the store could keep its containers and volumes in RAM scratch ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md), [#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)).
+
+> - **Due:** the last reset is at least 7 days old (`maxAgeDays`), or the
+>   filesystem holding the store is at least 70 percent used
+>   (`triggerUsedPercent`) and the last reset is at least six hours old. The
+>   first run only starts the age clock, kept in the unit's root-owned state
+>   directory.
+
+>   empty API cgroups, and that nothing is mounted at or below the store. Then
+>   rename the store directory to a hidden trash name beside it, on the same
+>   filesystem: a directory inside the mount, never a mount itself.
+
+> - **Delete:** remove the old store at the lowest CPU and I/O priority, through

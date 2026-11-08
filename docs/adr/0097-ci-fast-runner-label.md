@@ -2,7 +2,7 @@
 
 **Status:** Accepted; xyz and xev serve `ci-fast` from their pool runners
 **Date:** 2026-10-15
-**Amended:** 2026-10-31, the standby controller is retired ([ADR-0106](0106-runner-hold-for-games-and-low-disk.md)); 2026-11-03, the dedicated `xyz-fast` and `xev-fast` runners are retired and the pool runners serve `ci-fast` ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, a runner restart pauses the runner instead of waiting for an idle host ([ADR-0041](0041-native-forgejo-actions-runners.md))
+**Amended:** 2026-10-31, the standby controller is retired ([ADR-0106](0106-runner-hold-for-games-and-low-disk.md)); 2026-11-03, the dedicated `xyz-fast` and `xev-fast` runners are retired and the pool runners serve `ci-fast` ([#957](https://git.alc.xyz/alcxyz/nix-config/issues/957)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, a runner restart pauses the runner instead of waiting for an idle host ([ADR-0041](0041-native-forgejo-actions-runners.md)); 2026-11-08, one pool slot on xyz and xev ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027))
 **History:** [replaced text](archive/0097-ci-fast-runner-label-history.md)
 **Applies to:** `hosts/xyz/configuration.nix`, `hosts/xev/configuration.nix`,
 `modules/nixos/services/forgejo-actions-runner/`, platform workflows
@@ -41,8 +41,8 @@ then reports them `offline` within about a minute.
   label strands the job.
 - Each host runs one Podman runner unit beside its Docker runner; the runner
   module has no extra Podman runner units. Podman and Docker runner label
-  names never overlap. xyz and xev each run up to three jobs in their one build
-  slice (one Docker, two pool).
+  names never overlap. xyz and xev each run up to two jobs in their one build
+  slice (one Docker, one pool).
 
 Workflow authors use [CI runner labels](../ci-runner-labels.md).
 
@@ -72,8 +72,8 @@ Workflow authors use [CI runner labels](../ci-runner-labels.md).
 ## Consequences
 
 - With the variable unset, workflows behave as before.
-- Fast jobs share the pool slots: they wait while xyz's two pool slots and
-  xev's two are all busy or held, and a running fast job delays pool jobs. A
+- Fast jobs share the pool slots: they wait while the xyz and xev pool
+  slots are both busy or held, and a running fast job delays pool jobs. A
   fast job may land on xev while xyz is free.
 - During a game on xyz, or while xyz is off, xev serves fast jobs.
 - Runner labels are declared when the daemon starts, and the runner units do not

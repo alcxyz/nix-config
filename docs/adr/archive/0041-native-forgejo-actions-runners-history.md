@@ -541,3 +541,20 @@ The text as it stood while xyz's second pool slot was a trial ([#991](https://gi
 
 >   two jobs on `xyz`, which also runs games and media services, as a trial
 >   ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)), two on `xev`,
+
+## Text replaced on 2026-11-08 (#1027)
+
+The text as it stood before every pool runner went to one slot for RAM job scratch ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md), [#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)).
+
+>   Podman runner. Every Docker runner admits one job. The Podman pool admits
+>   two jobs on `xyz`, which also runs games and media services, two on `xev`,
+>   and one on `nex` and `nux`; the `xyz` and `xev` pool slots also serve
+>   `ci-fast`
+
+>   and a 50% hard memory limit; `xyz`, with its slots beside the nix-daemon's
+>   40G cap and the ZFS ARC, uses 25% and 35%.
+
+> - `xyz` and `xev` each contribute three slots (one Docker, two pool), each
+>   within one aggregate
+>   resource budget. On `xyz`, builds can consume up to half the workstation's
+>   CPU and 35% of its memory,

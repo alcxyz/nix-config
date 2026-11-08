@@ -25,10 +25,26 @@ cgroup_root=${CGROUP_ROOT:-/sys/fs/cgroup}
 docker_socket=${DOCKER_SOCKET:-/run/forgejo-docker/docker.sock}
 podman_socket=${PODMAN_SOCKET:-/run/forgejo-podman/podman.sock}
 store_path=${STORE_PATH:-/var/lib/forgejo-podman/storage}
+# The graphroot in RAM scratch, when the store's images and containers are
+# split (#1027): it holds the containers and volumes, which reference image
+# layers in the store, so the two are always reset together.
+scratch_store=${SCRATCH_STORE:-}
 restart_file=${RESTART_FILE:-/run/forgejo-podman-store-reset/restart}
 # The time of the last reset, kept where the API user cannot write.
 stamp=${STAMP_FILE:-/var/lib/forgejo-podman-store-reset/reset-at}
 trigger_used_percent=${TRIGGER_USED_PERCENT:-70}
+# Leftover containers and volumes in the RAM scratch reset it at this use, so
+# the largest job the host takes still fits beside them.
+scratch_trigger_percent=${SCRATCH_TRIGGER_PERCENT:-70}
+# A scratch this full fails every job's setup, so each failing job would
+# renew the quiet interval and keep the reset away for good.
+scratch_full_percent=${SCRATCH_FULL_PERCENT:-90}
+# The runner pause of nix-packages ADR-0017: a runner whose pause file exists
+# takes no new job and reports "paused tasks=<running>" as its status text.
+pause_dir=${PAUSE_DIR:-/run/nixfleet-runners/paused}
+pause_wait_seconds=${PAUSE_WAIT_SECONDS:-600}
+# The pauses this reset set, which its ExecStopPost removes if it is killed.
+pause_record=${PAUSE_RECORD:-/run/forgejo-podman-store-reset/paused}
 max_age_seconds=${MAX_AGE_SECONDS:-604800}
 # A full filesystem whose data is mostly not the store must not reset an
 # already fresh store on every run.
@@ -55,6 +71,8 @@ prune_units=(forgejo-runner-cache-prune.service forgejo-runner-cache-pressure-pr
 store_parent=${store_path%/*}
 store_name=${store_path##*/}
 trash_prefix=$store_parent/.$store_name.trash.
+scratch_parent=${scratch_store%/*}
+scratch_trash_prefix=$scratch_parent/.${scratch_store##*/}.trash.
 # Left by the cleanup this replaced (ADR-0083). Its store is reset at once.
 legacy_fence=${LEGACY_FENCE:-/run/forgejo-runner-aggregate-pressure/cleanup-in-flight}
 
@@ -69,12 +87,17 @@ fail() {
 valid_unit() { [[ $1 =~ ^[A-Za-z0-9_.@-]+\.service$ ]]; }
 
 umask 077
-for value in "$max_age_seconds" "$min_age_seconds" "$runner_stop_timeout" "$quiet_seconds" "$trash_seconds" "$poll_seconds" "$io_pressure_threshold"; do
+for value in "$max_age_seconds" "$min_age_seconds" "$runner_stop_timeout" "$quiet_seconds" "$trash_seconds" "$poll_seconds" "$io_pressure_threshold" "$pause_wait_seconds"; do
   [[ $value =~ ^[0-9]+$ ]] || exit 1
 done
 [[ $trigger_used_percent =~ ^[1-9][0-9]?$ ]] || exit 1
+[[ $scratch_trigger_percent =~ ^[1-9][0-9]?$ && $scratch_full_percent =~ ^[1-9][0-9]?$ ]] || exit 1
 [[ $game_enabled == 0 || $game_enabled == 1 ]] || exit 1
 [[ $store_path == /*/* && $store_name =~ ^[A-Za-z0-9_.-]+$ ]] || exit 1
+if [[ -n $scratch_store ]]; then
+  [[ $scratch_store == /*/* && ${scratch_store##*/} =~ ^[A-Za-z0-9_.-]+$ ]] || exit 1
+  [[ $scratch_parent != "$store_parent" ]] || exit 1
+fi
 IFS=$' \t\n' read -r -d '' -a runner_units <<<"$runner_units_text" || true
 ((${#runner_units[@]} > 1)) || exit 1
 [[ ${runner_units[0]} == forgejo-actions-runner.service &&
@@ -117,7 +140,17 @@ start_again() {
   done
   return "$status"
 }
+# Removes the pauses this reset set, so no runner starts paused.
+unpause() {
+  local unit
+  [[ -f $pause_record && ! -L $pause_record ]] || return 0
+  while IFS= read -r unit; do
+    valid_unit "$unit" && rm -f -- "$pause_dir/$unit"
+  done <"$pause_record"
+  rm -f -- "$pause_record"
+}
 if [[ ${1:-} == restart ]]; then
+  unpause
   [[ -f $restart_file && ! -L $restart_file ]] || exit 0
   units=()
   while IFS= read -r unit; do
@@ -135,6 +168,9 @@ fi
 [[ -d $state_dir && ! -L $state_dir && $(stat -c '%u:%a' -- "$state_dir") == "$EUID:700" ]] ||
   skip hold_state_missing
 [[ -d $store_parent && ! -L $store_parent ]] || skip store_parent_missing
+if [[ -n $scratch_store ]]; then
+  [[ -d $scratch_parent && ! -L $scratch_parent ]] || skip scratch_parent_missing
+fi
 
 # Sets io_pressure to the host's full avg10 stall in hundredths of a percent
 # and succeeds only for a readable sample at or below the reset's
@@ -204,12 +240,11 @@ remove_bounded() {
 # these checks or cannot be removed is reported and skipped, never followed,
 # and does not hold a reset. Fails only when a game, pressure or the deadline
 # stopped the deletion.
-delete_trash() {
-  local trash entry
+delete_trash_in() {
+  local parent=$1 prefix=$2 trash entry
   local -a trashes entries
-  trash_deadline=$((SECONDS + trash_seconds))
   shopt -s nullglob
-  trashes=("$trash_prefix"*)
+  trashes=("$prefix"*)
   shopt -u nullglob
   for trash in "${trashes[@]}"; do
     if [[ -L $trash || ! -d $trash ]]; then
@@ -224,7 +259,7 @@ delete_trash() {
     fi
     if ! [[ ! -L $trash && -d /proc/self/fd/8 &&
       $(stat -Lc '%d:%i' /proc/self/fd/8) == "$(stat -c '%d:%i' -- "$trash")" &&
-      $(stat -Lc '%d' /proc/self/fd/8) == "$(stat -c '%d' -- "$store_parent")" ]]; then
+      $(stat -Lc '%d' /proc/self/fd/8) == "$(stat -c '%d' -- "$parent")" ]]; then
       exec 8<&-
       printf 'trash_skipped reason=untrusted path=%s\n' "$trash"
       continue
@@ -242,16 +277,31 @@ delete_trash() {
     rmdir -- "$trash" 2>/dev/null || printf 'trash_skipped reason=not_removed path=%s\n' "$trash"
   done
 }
+# Scratch first: its trash is RAM that the next jobs need.
+delete_trash() {
+  trash_deadline=$((SECONDS + trash_seconds))
+  if [[ -n $scratch_store ]]; then
+    delete_trash_in "$scratch_parent" "$scratch_trash_prefix" || return 1
+  fi
+  delete_trash_in "$store_parent" "$trash_prefix"
+}
 
 # 1. Leftover trash first. It needs no stop, and a store reset waits for it so
-#    that filesystem use measures the store rather than its garbage.
+#    that filesystem use measures the store rather than its garbage. A reset
+#    of the scratch alone touches no disk, so it does not wait for the disk
+#    trash: deleting a large old store can take longer than one run.
 started=$SECONDS
+trash_left=0
 shopt -s nullglob
 leftover=("$trash_prefix"*)
+[[ -z $scratch_store ]] || leftover+=("$scratch_trash_prefix"*)
 shopt -u nullglob
 if ((${#leftover[@]} > 0)); then
-  delete_trash || skip trash_left
-  printf 'trash_deleted seconds=%s\n' $((SECONDS - started))
+  if delete_trash; then
+    printf 'trash_deleted seconds=%s\n' $((SECONDS - started))
+  else
+    trash_left=1
+  fi
 fi
 
 # 2. Is a reset due?
@@ -267,15 +317,30 @@ sample=$("$df_bin" --block-size=1 --output=size,avail "$store_parent" | awk 'NR 
 read -r total available <<<"$sample"
 [[ $total =~ ^[1-9][0-9]*$ && $available =~ ^[0-9]+$ ]] || skip store_unreadable
 used_percent=$(((total - available) * 100 / total))
+scratch_percent=none
+scratch_note=
+if [[ -n $scratch_store ]]; then
+  sample=$("$df_bin" --block-size=1 --output=size,avail "$scratch_parent" | awk 'NR == 2 { print $1, $2 }') ||
+    skip scratch_unreadable
+  read -r total available <<<"$sample"
+  [[ $total =~ ^[1-9][0-9]*$ && $available =~ ^[0-9]+$ ]] || skip scratch_unreadable
+  scratch_percent=$(((total - available) * 100 / total))
+  scratch_note=" scratch_percent=$scratch_percent"
+fi
 if [[ -e $legacy_fence || -L $legacy_fence ]]; then
   due=legacy_fence
 elif ((age >= max_age_seconds)); then
   due=store_age
 elif ((used_percent >= trigger_used_percent && age >= min_age_seconds)); then
   due=store_use
+elif [[ $scratch_percent != none ]] && ((scratch_percent >= scratch_trigger_percent)); then
+  # Containers and volumes that jobs left behind fill the RAM scratch. A
+  # reset always empties it, so it needs no minimum age.
+  due=scratch_use
 else
-  skip "not_due used_percent=$used_percent age_seconds=$age"
+  skip "not_due used_percent=$used_percent$scratch_note age_seconds=$age"
 fi
+if ((trash_left == 1)) && [[ $due != scratch_use ]]; then skip trash_left; fi
 
 # 3. Host and runner hold. The hold starts any runner whose start a gate
 #    refuses, so it must run.
@@ -355,21 +420,64 @@ recent_job() {
 # runner's shutdown timeout passes. Both checks run again right before each
 # stop; a job admitted between that check and the stop is the one window left.
 if job_containers; then skip "job_running socket=$job_socket"; fi
+# On a full scratch, whatever made the reset due, most new pool jobs fail and
+# each would renew the quiet interval, so the reset might never run. There
+# the Podman pool runner is paused instead: it takes no new job, and the reset
+# goes on only once the runner reports none running, and again right before
+# its stop. The Docker runner's jobs use their own store and keep the quiet
+# interval.
+pool=${runner_units[1]}
+scratch_full=0
+if [[ $scratch_percent != none ]] && ((scratch_percent >= scratch_full_percent)); then
+  scratch_full=1
+fi
+drain_pool=0
 for unit in "${to_stop[@]}"; do
-  if recent_job "$unit"; then skip "recent_job unit=$unit"; fi
+  recent_job "$unit" || continue
+  ((scratch_full == 1)) && [[ $unit == "$pool" ]] || skip "recent_job unit=$unit"
+  # A pause someone else set, such as a runner restart's, is theirs.
+  [[ ! -e $pause_dir/$pool ]] || skip "runner_paused unit=$pool"
+  drain_pool=1
 done
+quiet_needed() { ((drain_pool == 0)) || [[ $1 != "$pool" ]]; }
 
 # 4. Stop. From here on the unit's ExecStopPost starts these units again.
 printf '%s\n' "${api_units[@]}" "${to_stop[@]}" >"$restart_file.new"
 mv -f -- "$restart_file.new" "$restart_file"
-printf 'stopping due=%s used_percent=%s age_seconds=%s runners=%s\n' \
-  "$due" "$used_percent" "$age" "${to_stop[*]:-none}"
+printf 'stopping due=%s used_percent=%s%s age_seconds=%s runners=%s\n' \
+  "$due" "$used_percent" "$scratch_note" "$age" "${to_stop[*]:-none}"
+if ((drain_pool == 1)); then
+  printf '%s\n' "$pool" >"$pause_record"
+  install -d -m 0755 -- "$pause_dir"
+  : >"$pause_dir/$pool"
+  pause_deadline=$((SECONDS + pause_wait_seconds))
+  until [[ $(query show --property=StatusText --value "$pool" 2>/dev/null) == "paused tasks=0" ]]; do
+    if ((SECONDS >= pause_deadline)); then
+      unpause
+      skip "pool_not_drained unit=$pool"
+    fi
+    sleep "$poll_seconds"
+  done
+  printf 'drained unit=%s\n' "$pool"
+fi
 stop_started=$SECONDS
+# Succeeds while the reset's pause still holds the drained pool runner: a
+# runner restart removes every pause file when it ends.
+pool_still_drained() {
+  [[ -e $pause_dir/$pool ]] &&
+    [[ $(query show --property=StatusText --value "$pool" 2>/dev/null) == "paused tasks=0" ]]
+}
 for unit in "${to_stop[@]}"; do
   if job_containers; then skip "job_running socket=$job_socket"; fi
-  if recent_job "$unit"; then skip "recent_job unit=$unit"; fi
+  if quiet_needed "$unit" && recent_job "$unit"; then skip "recent_job unit=$unit"; fi
+  if ! quiet_needed "$unit" && ! pool_still_drained; then
+    unpause
+    skip "pool_unpaused unit=$unit"
+  fi
   timeout -k 5s "${runner_stop_timeout}s" "$systemctl_bin" stop "$unit" || fail "runner_stop unit=$unit"
 done
+# The drained runner is stopped; it must not start paused.
+unpause
 query is-active --quiet "$hold_unit" || skip hold_inactive
 # A runner started meanwhile (the runner hold releasing a held runner) may
 # have admitted a job, which the API stop would then wait for.
@@ -401,22 +509,42 @@ done
 while read -r _ _ _ _ mount_point _; do
   [[ $mount_point != "$store_path" && $mount_point != "$store_path"/* ]] ||
     skip "store_mounted path=$mount_point"
+  [[ -z $scratch_store || ($mount_point != "$scratch_store" && $mount_point != "$scratch_store"/*) ]] ||
+    skip "store_mounted path=$mount_point"
 done <"$mountinfo_file"
-trash=$trash_prefix$now
-if [[ -e $store_path || -L $store_path ]]; then
-  [[ -d $store_path && ! -L $store_path && ! -e $trash ]] || fail store_untrusted
+# Renames one store directory to its trash name.
+rename_store() {
+  local path=$1 parent=$2 trash=$3$now
+  [[ -e $path || -L $path ]] || return 0
+  [[ -d $path && ! -L $path && ! -e $trash ]] || fail "store_untrusted path=$path"
   # Same device, so mv is one rename(2) and never a copy.
-  [[ $(stat -c '%d' -- "$store_path") == "$(stat -c '%d' -- "$store_parent")" ]] || fail store_device
-  mv -T -- "$store_path" "$trash" || fail rename
+  [[ $(stat -c '%d' -- "$path") == "$(stat -c '%d' -- "$parent")" ]] || fail "store_device path=$path"
+  mv -T -- "$path" "$trash" || fail "rename path=$path"
+}
+# The scratch graphroot goes first: a crash between the two renames then
+# leaves an empty graphroot beside an intact image store, never containers
+# whose image layers are gone. A full scratch resets only the scratch: the
+# images stay valid without the containers, and pulling them again would
+# write the disk this scratch exists to spare.
+[[ -z $scratch_store ]] || rename_store "$scratch_store" "$scratch_parent" "$scratch_trash_prefix"
+if [[ $due != scratch_use ]]; then
+  rename_store "$store_path" "$store_parent" "$trash_prefix"
+  printf '%s\n' "$now" >"$stamp"
+  # Commit the rename and the stamp together, so a crash cannot keep the old
+  # store while the age clock restarts.
+  sync -- "$store_parent" "$stamp" || fail sync
 fi
-printf '%s\n' "$now" >"$stamp"
-# Commit the rename and the stamp together, so a crash cannot keep the old
-# store while the age clock restarts.
-sync -- "$store_parent" "$stamp" || fail sync
 if [[ -e $legacy_fence || -L $legacy_fence ]]; then
   "$remove_bin" -rf -- "$legacy_fence" || fail legacy_fence
 fi
 exec 9>&-
+# The scratch trash is RAM the restarted API and its next job need, and a
+# full scratch would fail the API's own start: free it now, whatever the
+# host's I/O pressure, since deleting from a tmpfs writes no disk.
+if [[ -n $scratch_store && -d $scratch_trash_prefix$now && ! -L $scratch_trash_prefix$now ]]; then
+  "$remove_bin" -rf --one-file-system -- "$scratch_trash_prefix$now" ||
+    printf 'trash_skipped reason=not_removed path=%s\n' "$scratch_trash_prefix$now"
+fi
 
 # 6. Start again at once; the start gates still decide each start.
 start_again "${api_units[@]}" "${to_stop[@]}" || fail start

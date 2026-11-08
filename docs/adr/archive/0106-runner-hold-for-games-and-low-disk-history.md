@@ -171,3 +171,23 @@ The text as it stood while xyz's second pool slot was a trial ([#991](https://gi
 > once in practice. Its second pool slot is a trial
 > ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)): xyz goes back to
 > one pool slot if the disk its media services share suffers. xev runs three (one
+
+## Text replaced on 2026-11-08 (#1027)
+
+The text as it stood before every pool runner went to one slot for RAM job scratch ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md), [#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)).
+
+> **Fewer slots.** xyz runs three CI slots instead of five (one Docker, two
+> pool) with a 25% memory throttle and a 35% hard limit. The Docker runners ran
+> 14 of 2,512 jobs from 2026-11-01 to 2026-11-05, so xyz runs about two jobs at
+> once in practice. It kept the second pool slot after a two-day trial
+> ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)): the pool's queue
+> wait at p90 fell from 7.7 to 1.5 minutes, with no sign of harm to the media
+> disks. Two other changes fall in the same window: a Renovate change in gitops
+> cut the job volume, and the same deploy moved the Podman store off ZFS
+> ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)), which removed CI
+> from the dirty-data limit the media pools share. The trial does not show that
+> two pool slots are harmless with the store on ZFS. xev runs three (one
+> Docker, two pool): from 2026-10-24 to 2026-10-31 its jobs ran three or more at
+> once for about a third of its busy time. nex and nux keep one slot per runner.
+> The xyz and xev pool runners also serve `ci-fast` in those slots
+> ([ADR-0097](0097-ci-fast-runner-label.md)).

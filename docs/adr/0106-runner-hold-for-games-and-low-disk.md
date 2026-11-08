@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-11-03, the xyz and xev pool runners serve `ci-fast` instead of dedicated runners ([ADR-0097](0097-ci-fast-runner-label.md)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, xyz's Podman store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991))
+**Amended:** 2026-11-03, the xyz and xev pool runners serve `ci-fast` instead of dedicated runners ([ADR-0097](0097-ci-fast-runner-label.md)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, xyz's Podman store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-08, one pool slot per host for RAM job scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027), [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
 **History:** [replaced text](archive/0106-runner-hold-for-games-and-low-disk-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/runner-hold.{nix,sh}`,
 `runner-start-gate.sh`, `modules/nixos/services/game-signal/`, the runner pool
@@ -91,21 +91,21 @@ carries a marker while it drains its jobs. After a hold ends the count starts
 again, so a runner whose start keeps failing, is refused or crash-loops is
 reported 30 minutes later.
 
-**Fewer slots.** xyz runs three CI slots instead of five (one Docker, two
-pool) with a 25% memory throttle and a 35% hard limit. The Docker runners ran
-14 of 2,512 jobs from 2026-11-01 to 2026-11-05, so xyz runs about two jobs at
-once in practice. It kept the second pool slot after a two-day trial
-([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)): the pool's queue
-wait at p90 fell from 7.7 to 1.5 minutes, with no sign of harm to the media
-disks. Two other changes fall in the same window: a Renovate change in gitops
-cut the job volume, and the same deploy moved the Podman store off ZFS
-([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)), which removed CI
-from the dirty-data limit the media pools share. The trial does not show that
-two pool slots are harmless with the store on ZFS. xev runs three (one
-Docker, two pool): from 2026-10-24 to 2026-10-31 its jobs ran three or more at
-once for about a third of its busy time. nex and nux keep one slot per runner.
-The xyz and xev pool runners also serve `ci-fast` in those slots
-([ADR-0097](0097-ci-fast-runner-label.md)).
+**Fewer slots.** Every runner host runs one Podman pool slot beside its
+Docker slot, so each host's RAM job scratch is one job's limit
+([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)). On xyz that is two CI
+slots instead of five, with a 40% memory throttle and a 45% hard limit that
+hold its 16G scratch and one job. The Docker runners ran 14 of 2,512 jobs from
+2026-11-01 to 2026-11-05, so a host runs about one job at once in practice.
+xyz ran a second pool slot from 2026-11-05 ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)), which cut the pool's p90
+queue wait from 7.7 to 1.5 minutes; it and xev's second slot went for the RAM
+scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)). Replaying the pool's arrivals from 2026-10-27 to 2026-11-05
+through ideal slots puts the busy-hour p90 wait at about 26 minutes with four
+pool slots in all, against 3.5 minutes with six. A fifth slot, on xps, is to
+bring it near 5.5 minutes; xev back to two slots is the fallback. The xyz and
+xev pool runners also serve `ci-fast` in their slot
+([ADR-0097](0097-ci-fast-runner-label.md)), and xyz's serves
+`forgejo-podman-large` (ADR-0108).
 
 **Background builds follow the signal.** On xyz the Wolf image context
 producer and the DMS updater skip their runs while the game signal file

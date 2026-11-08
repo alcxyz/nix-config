@@ -13,6 +13,12 @@
   holdUnit = "forgejo-runner-hold.service";
   builderState = "/var/lib/forgejo-podman";
   builderRuntime = "/run/forgejo-podman";
+  scratch = canary.scratch;
+  scratchPrepare = pkgs.writeShellApplication {
+    name = "forgejo-podman-scratch-prepare";
+    runtimeInputs = with pkgs; [coreutils findutils util-linux];
+    text = builtins.readFile ./podman-scratch-prepare.sh;
+  };
   socketPath = "${builderRuntime}/podman.sock";
   runnerState = "/var/lib/forgejo-podman-runner";
   settingsFormat = pkgs.formats.yaml {};
@@ -226,7 +232,54 @@ in {
       default = "${builderState}/storage";
       readOnly = true;
       internal = true;
-      description = "Podman image and container store of the canary API service.";
+      description = ''
+        Podman store on disk. With scratch it holds only the image store
+        (image layers and image metadata); otherwise also the containers and
+        volumes.
+      '';
+    };
+    scratch = {
+      enable = lib.mkEnableOption ''
+        a RAM-backed Podman graphroot for job throwaway data: container
+        writable layers, overlay copy-ups and volumes
+        (job workspaces, service data, Buildx state) live in a tmpfs, while
+        image layers stay in the image store on disk (#1027)
+      '';
+      size = lib.mkOption {
+        type = lib.types.strMatching "[1-9][0-9]*[MG]";
+        default = "8G";
+        example = "16G";
+        description = ''
+          Size limit of the scratch tmpfs, shared by all jobs on this host.
+          A job that writes past it fails with "No space left on device"
+          instead of pushing the host into memory pressure. tmpfs pages are
+          charged to forgejobuilds.slice and mounted noswap, so the slice's
+          memoryHigh must leave room for this size plus the jobs' own memory,
+          or the slice is throttled and, at memoryMax, OOM-killed.
+        '';
+      };
+      path = lib.mkOption {
+        type = lib.types.str;
+        default = "/run/forgejo-podman-scratch";
+        readOnly = true;
+        internal = true;
+        description = "Mount point of the scratch tmpfs.";
+      };
+    };
+    graphRoot = lib.mkOption {
+      type = lib.types.str;
+      default =
+        if scratch.enable
+        then "${scratch.path}/storage"
+        else canary.storageRoot;
+      defaultText = lib.literalExpression ''"''${scratch.path}/storage" when scratch is enabled, else storageRoot'';
+      readOnly = true;
+      internal = true;
+      description = ''
+        Podman graphroot: container layers and volumes, and without scratch
+        also the libpod database (with scratch, the transient store keeps
+        that in the runroot).
+      '';
     };
     package = lib.mkOption {
       type = lib.types.package;
@@ -457,9 +510,58 @@ in {
           # /etc/docker/certs.d and adds its *.crt to the system roots for
           # that host only. The builder's own directory keeps the CA to this
           # service, and rewriting it at each start drops an unset one.
-          ExecStartPre = "${mirrorCaSetup "forgejo-podman-mirror-ca" "${builderState}/.config/containers/certs.d"}";
-          ExecStart = "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay --root=${canary.storageRoot} --runroot=${builderRuntime}/storage system service --time=0";
+          ExecStartPre = let
+            mirrorCa = "${mirrorCaSetup "forgejo-podman-mirror-ca" "${builderState}/.config/containers/certs.d"}";
+          in
+            if scratch.enable
+            then [
+              mirrorCa
+              # As root: refuse to start unless the scratch tmpfs is mounted,
+              # empty the graphroot (its metadata went with the runroot), and
+              # move a store left from before scratch, which holds
+              # containers, aside as reset trash.
+              "+${lib.getExe scratchPrepare} ${lib.escapeShellArgs [scratch.path canary.graphRoot canary.storageRoot]}"
+            ]
+            else mirrorCa;
+          ExecStart = lib.concatStringsSep " " ([
+              "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay"
+              "--root=${canary.graphRoot}"
+            ]
+            # The transient store keeps the libpod database and container
+            # metadata in the runroot, out of the size-limited scratch, so a
+            # job that fills the scratch cannot fail the API's own writes.
+            ++ lib.optionals scratch.enable ["--imagestore=${canary.storageRoot}" "--transient-store"]
+            ++ ["--runroot=${builderRuntime}/storage system service --time=0"]);
         };
+        # The API starts after the tmpfs, and its root ExecStartPre refuses
+        # to start without it, so scratch never lands under the mount point.
+        # Only Wants: adding or removing the mount in a deploy must not stop
+        # a running API and cancel its job (restartIfChanged = false).
+        unitConfig = lib.mkIf scratch.enable {
+          WantsMountsFor = [scratch.path];
+        };
+      };
+
+      systemd.mounts = lib.optional scratch.enable {
+        description = "RAM scratch for the Podman CI store (#1027)";
+        what = "tmpfs";
+        where = scratch.path;
+        type = "tmpfs";
+        # No nosuid or nodev: container layers hold setuid binaries, and
+        # overlay whiteouts are device nodes. noswap keeps scratch off the
+        # swap disks under host memory pressure: the CI slice is throttled
+        # or, at its memoryMax, OOM-killed instead.
+        options = "size=${scratch.size},mode=0755,noswap";
+        unitConfig = {
+          DefaultDependencies = false;
+          # A deploy that turns scratch off leaves the tmpfs mounted and the
+          # running API on it, until `runners restart` moves the API to the
+          # disk store; unmount it then, or let the next reboot drop it.
+          X-StopOnRemoval = false;
+        };
+        before = ["local-fs.target" "umount.target"];
+        conflicts = ["umount.target"];
+        wantedBy = ["local-fs.target"];
       };
     })
     (lib.mkIf enabled {

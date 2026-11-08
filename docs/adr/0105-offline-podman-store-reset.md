@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995))
+**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills
 **History:** [replaced text](archive/0105-offline-podman-store-reset-history.md)
 **Supersedes:** [ADR-0083](archive/0083-podman-cleanup-completion-fence.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-store-reset.{nix,sh}`,
@@ -40,9 +40,14 @@ the host is idle.
 
 - **Due:** the last reset is at least 7 days old (`maxAgeDays`), or the
   filesystem holding the store is at least 70 percent used
-  (`triggerUsedPercent`) and the last reset is at least six hours old. The
-  first run only starts the age clock, kept in the unit's root-owned state
-  directory.
+  (`triggerUsedPercent`) and the last reset is at least six hours old, or the
+  RAM scratch holding its containers
+  ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)) is used to the host's
+  `scratchTriggerPercent` (70 percent by default, 20 on xyz). A full scratch means containers and volumes that jobs left
+  behind; that reset renames only the scratch part and keeps the images and
+  the age clock, and since it always empties the scratch it needs no minimum
+  age. The first run only starts the age clock, kept in the unit's
+  root-owned state directory.
 - **Idle:** the game signal reports no game (on a game host) and host I/O
   pressure is at or below `ioPressurePercent` (5 percent); the runner hold is
   active and every runner has its hold state directory; no Docker cache prune
@@ -50,7 +55,17 @@ the host is idle.
   systemd job, or stopped by whoever stopped it; neither API runs a
   `FORGEJO-ACTIONS-TASK-*` container; and no runner to be stopped has logged a
   job start in the last `quietMinutes` (15 minutes), since a job that is still
-  pulling its image or setting up has no task container yet. A reset stops no
+  pulling its image or setting up has no task container yet. A scratch at 90
+  percent or more is the recovery threshold: most new pool jobs fail there,
+  and each would renew that interval, so a recent pool job start does not
+  skip the reset. Instead the reset pauses the Podman pool runner through the
+  runner pause of nix-packages ADR-0017 (no new job), waits up to 10 minutes
+  for it to report none running, and checks the pause and the report again
+  right before the runner's stop, since a runner restart removes every pause
+  when it ends; it skips if either fails. A pause someone else set skips the
+  reset; the reset removes its own pause once the runner is stopped, and its
+  `ExecStopPost` removes it on any other exit. The Docker
+  runner, whose jobs use their own store, keeps the quiet interval. A reset stops no
   runner with a job it can see: on xyz the stop would cancel it after two
   minutes. A job still pulling its image more than 15 minutes after it
   started shows neither sign and remains a gap.
@@ -65,7 +80,12 @@ the host is idle.
   takes first, prove every runner and both APIs stopped with no pending job and
   empty API cgroups, and that nothing is mounted at or below the store. Then
   rename the store directory to a hidden trash name beside it, on the same
-  filesystem: a directory inside the mount, never a mount itself. On xyz the
+  filesystem: a directory inside the mount, never a mount itself. With RAM
+  scratch the store has two directories, the image store on disk and the
+  graphroot in the scratch tmpfs, whose containers reference the image
+  layers; both are renamed, the graphroot first, so a crash between the two
+  leaves an empty graphroot beside an intact image store. A reset for a full
+  scratch renames only the graphroot. On xyz the
   store is a directory in a bind mount from `/ext4` at
   `/var/lib/forgejo-podman`, on xev a directory on a dedicated ext4 partition
   mounted there, and on nex and nux a directory on the root filesystem. Sync the rename and the age stamp, then release the lock.
@@ -74,11 +94,15 @@ the host is idle.
   the start (for a game that began meanwhile, say) keeps the gate's `held`
   marker, and the runner hold starts it once its hold reason ends. Every
   runner host runs the hold.
-- **Delete:** remove the old store at the lowest CPU and I/O priority, through
+- **Delete:** the scratch part of the old store is deleted right after the
+  rename, before anything starts again: it is RAM that a full scratch would
+  deny the API's own start, and deleting it writes no disk. Remove the rest
+  of the old store at the lowest CPU and I/O priority, through
   a descriptor opened on it so the API user cannot redirect the removal. Stop
   while a game is detected, pressure rises above `ioPressurePercent` or 30
   minutes pass. Leftover trash is garbage that the next check deletes first; a
-  due reset waits until it is gone. The API user can create entries with the
+  due reset waits until it is gone, except a reset of the scratch alone, which
+  touches no disk. The API user can create entries with the
   trash name: one that is not a directory is unlinked without being followed,
   and one that fails the checks or cannot be removed is reported and skipped,
   so neither stops or holds a reset.

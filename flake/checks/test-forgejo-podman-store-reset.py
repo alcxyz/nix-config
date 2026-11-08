@@ -39,7 +39,18 @@ def unit(name):
 if args[0] == 'show':
     name = args[-1]
     wanted = [arg.split('=', 1)[1] for arg in args if arg.startswith('--property=')]
-    props = {'FreezerState': state['freezer']} if name == 'forgejobuilds.slice' else unit(name)
+    props = {'FreezerState': state['freezer']} if name == 'forgejobuilds.slice' else dict(unit(name))
+    # A runner whose pause file exists reports the pause (nix-packages ADR-0017).
+    pause = Path(os.environ['FAKE_PAUSE_DIR']) / name
+    if pause.exists() and 'StatusText' in wanted:
+        props['StatusText'] = state.get('paused_text', 'paused tasks=0')
+        # Simulates a runner restart that removes the pause after N reads.
+        if 'remove_pause_after_reads' in state:
+            state['remove_pause_after_reads'] -= 1
+            if state['remove_pause_after_reads'] <= 0:
+                pause.unlink()
+                del state['remove_pause_after_reads']
+            path.write_text(json.dumps(state))
     for key in wanted:
         print(props.get(key, '') if '--value' in args else f'{key}={props.get(key, "")}')
 elif args[0] == 'is-active':
@@ -48,6 +59,10 @@ elif args[0] in ('stop', 'start'):
     names = [arg for arg in args[1:] if not arg.startswith('--')]
     if args[0] in state.get('fail', []):
         sys.exit(1)
+    # Record any scratch trash the units would start beside.
+    if args[0] == 'start' and os.environ.get('FAKE_SCRATCH_PARENT'):
+        trash = sorted(p.name for p in Path(os.environ['FAKE_SCRATCH_PARENT']).glob('.storage.trash.*'))
+        state.setdefault('trash_at_start', []).append(trash)
     for name in names:
         if args[0] == 'stop':
             unit(name).update(ActiveState='inactive', SubState='dead', MainPID='0')
@@ -94,8 +109,12 @@ if journal.exists():
     sys.stdout.write(journal.read_text())
 '''
 
+# A path may have its own values in "<values>.<basename>", as the scratch has.
 FAKE_DF = r'''#!/bin/sh
-printf 'Size Avail\n%s\n' "$(cat "$FAKE_DF_VALUES")"
+for last; do :; done
+values=$FAKE_DF_VALUES
+[ -e "$values.${last##*/}" ] && values=$values.${last##*/}
+printf 'Size Avail\n%s\n' "$(cat "$values")"
 '''
 
 
@@ -218,7 +237,10 @@ class StoreResetTests(unittest.TestCase):
                    FAKE_STATE=str(self.fake_state),
                    FAKE_LOG=str(self.log),
                    FAKE_ENGINES=str(self.engines),
-                   FAKE_DF_VALUES=str(self.df))
+                   FAKE_DF_VALUES=str(self.df),
+                   PAUSE_DIR=str(self.root / 'paused'),
+                   PAUSE_RECORD=str(self.root / 'pause-record'),
+                   FAKE_PAUSE_DIR=str(self.root / 'paused'))
         env.update(extra)
         return subprocess.run(['bash', str(SCRIPT), *args], env=env,
                               capture_output=True, text=True, timeout=60)
@@ -253,6 +275,186 @@ class StoreResetTests(unittest.TestCase):
         self.assertTrue(self.stamp.exists())
         self.assertEqual(self.mutations(), [])
         self.assert_untouched()
+
+    def scratch(self):
+        """A RAM scratch graphroot beside the image store (#1027)."""
+        scratch_parent = self.root / 'scratch'
+        graph = scratch_parent / 'storage'
+        (graph / 'volumes' / 'workspace').mkdir(parents=True)
+        (graph / 'volumes' / 'workspace' / 'file').write_text('job\n')
+        return scratch_parent, graph
+
+    def test_scratch_is_reset_together_with_the_store(self):
+        scratch_parent, graph = self.scratch()
+        self.age_stamp(8 * DAY)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('reset due=store_age', result.stdout)
+        self.assertIn('scratch_percent=20', result.stdout)
+        self.assertFalse(graph.exists())
+        self.assertFalse(self.store.exists())
+        self.assertEqual(list(scratch_parent.glob('.storage.trash.*')), [])
+        self.assertEqual(self.trashes(), [])
+
+    def test_full_scratch_resets_at_any_age_and_is_freed_before_the_start(self):
+        scratch_parent, graph = self.scratch()
+        Path(f'{self.df}.scratch').write_text('100 60\n')
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, 'not_due used_percent=20 scratch_percent=40 age_seconds=')
+        self.assertEqual(self.mutations(), [])
+        Path(f'{self.df}.scratch').write_text('100 25\n')
+        # A busy host would leave the disk trash for later, never the scratch.
+        self.set_pressure(900)
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, 'io_pressure')
+        self.set_pressure(0)
+        result = self.run_reset(SCRATCH_STORE=str(graph), FAKE_SCRATCH_PARENT=str(scratch_parent))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertFalse(graph.exists())
+        self.assertEqual(list(scratch_parent.glob('.storage.trash.*')), [])
+        # The units started with the scratch trash already gone.
+        starts = json.loads(self.fake_state.read_text())['trash_at_start']
+        self.assertTrue(starts)
+        self.assertEqual(starts, [[] for _ in starts])
+        # The images and the age clock stay: only the scratch was reset.
+        self.assertTrue((self.store / 'db.sql').exists())
+        self.assertLess(time.time() - self.stamp.stat().st_mtime, 3600 + 60)
+        self.assertGreater(time.time() - self.stamp.stat().st_mtime, 500)
+
+
+    def test_full_scratch_pauses_and_drains_the_pool_runner(self):
+        scratch_parent, graph = self.scratch()
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        # Above the trigger but below full: a recent job start still holds it.
+        Path(f'{self.df}.scratch').write_text('100 25\n')
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'recent_job unit={POOL}')
+        self.assertTrue(graph.exists())
+        # Full: every job's setup fails, so the quiet interval no longer holds.
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        (self.engines / 'podman.sock').write_text(json.dumps([{'Names': ['/FORGEJO-ACTIONS-TASK-1_x']}]))
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, 'job_running')
+        (self.engines / 'podman.sock').write_text('[]')
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'drained unit={POOL}', result.stdout)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertFalse(graph.exists())
+        # No runner starts paused.
+        self.assertFalse((self.root / 'paused' / POOL).exists())
+        self.assertFalse((self.root / 'pause-record').exists())
+
+    def test_full_scratch_skips_when_the_pool_runner_does_not_drain(self):
+        scratch_parent, graph = self.scratch()
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.set_fake(paused_text='paused tasks=1')
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph), PAUSE_WAIT_SECONDS='1')
+        self.assert_skipped(result, f'pool_not_drained unit={POOL}')
+        self.assertTrue(graph.exists())
+        self.assertEqual(self.calls('stop'), [])
+        self.assertFalse((self.root / 'paused' / POOL).exists())
+
+    def test_full_scratch_leaves_someone_elses_pause_alone(self):
+        scratch_parent, graph = self.scratch()
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        (self.root / 'paused').mkdir()
+        (self.root / 'paused' / POOL).touch()
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'runner_paused unit={POOL}')
+        self.assertTrue((self.root / 'paused' / POOL).exists())
+
+    def test_a_pause_removed_before_the_stop_skips_the_reset(self):
+        scratch_parent, graph = self.scratch()
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(600)
+        # A runner restart ends and removes every pause right after the drain.
+        self.set_fake(remove_pause_after_reads=1)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'pool_unpaused unit={POOL}')
+        self.assertTrue(graph.exists())
+        self.assertNotIn(f'stop {POOL}', '\n'.join(self.calls('stop')))
+
+    def test_disk_trash_left_does_not_hold_a_scratch_reset(self):
+        scratch_parent, graph = self.scratch()
+        leftover = self.parent / '.storage.trash.1'
+        (leftover / 'overlay').mkdir(parents=True)
+        (leftover / 'overlay' / 'blob').write_text('old\n')
+        Path(f'{self.df}.scratch').write_text('100 20\n')
+        self.age_stamp(600)
+        # The disk deletion runs out of time at once.
+        result = self.run_reset(SCRATCH_STORE=str(graph), TRASH_SECONDS='0')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertFalse(graph.exists())
+        self.assertTrue(self.store.exists())
+        # An age reset still waits for it.
+        self.age_stamp(8 * DAY)
+        result = self.run_reset(SCRATCH_STORE=str(graph), TRASH_SECONDS='0')
+        self.assert_skipped(result, 'trash_left')
+        self.assertTrue(self.store.exists())
+
+    def test_a_killed_drain_leaves_no_runner_paused(self):
+        (self.root / 'paused').mkdir()
+        (self.root / 'paused' / POOL).touch()
+        (self.root / 'pause-record').write_text(f'{POOL}\n')
+        result = self.run_reset('restart')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.root / 'paused' / POOL).exists())
+        self.assertFalse((self.root / 'pause-record').exists())
+
+    def test_full_scratch_keeps_the_docker_runners_quiet_interval(self):
+        scratch_parent, graph = self.scratch()
+        # The Docker runner's job uses its own store: a full Podman scratch
+        # does not lift its guard, whatever made the reset due.
+        (self.journals / PRIMARY).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'recent_job unit={PRIMARY}')
+        self.assertTrue(graph.exists())
+
+    def test_full_scratch_lifts_the_pool_quiet_interval_for_an_age_reset_too(self):
+        scratch_parent, graph = self.scratch()
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(8 * DAY)
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('reset due=store_age', result.stdout)
+        self.assertFalse(graph.exists())
+        self.assertFalse(self.store.exists())
+
+    def test_leftover_scratch_trash_is_deleted_first(self):
+        scratch_parent, graph = self.scratch()
+        leftover = scratch_parent / '.storage.trash.1'
+        (leftover / 'overlay').mkdir(parents=True)
+        (leftover / 'overlay' / 'blob').write_text('old\n')
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('trash_deleted', result.stdout)
+        self.assertFalse(leftover.exists())
+        self.assertTrue(graph.exists())
+
+    def test_scratch_beside_the_store_is_refused(self):
+        result = self.run_reset(SCRATCH_STORE=str(self.parent / 'graph'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.mutations(), [])
 
     def test_due_reset_stops_renames_starts_then_deletes_trash(self):
         self.age_stamp(8 * DAY)

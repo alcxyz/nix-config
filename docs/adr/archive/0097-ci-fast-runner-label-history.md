@@ -356,3 +356,13 @@ The text as it stood before xyz's second pool slot ([#991](https://git.alc.xyz/a
   restarts (`forgejo-runner-restart`, started by `nixfleet runners restart`,
   restarts it once the host is idle; [ADR-0041](../0041-native-forgejo-actions-runners.md))
   or the host reboots.
+
+## Text replaced on 2026-11-08 (#1027)
+
+The text as it stood before every pool runner went to one slot for RAM job scratch ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md), [#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)).
+
+>   names never overlap. xyz and xev each run up to three jobs in their one build
+>   slice (one Docker, two pool).
+
+> - Fast jobs share the pool slots: they wait while xyz's two pool slots and
+>   xev's two are all busy or held, and a running fast job delays pool jobs.

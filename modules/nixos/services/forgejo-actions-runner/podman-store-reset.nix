@@ -49,6 +49,19 @@ in {
       default = 70;
       description = "Reset when usage of the filesystem holding the Podman store reaches this percentage, at most every six hours.";
     };
+    scratchTriggerPercent = lib.mkOption {
+      type = lib.types.ints.between 1 99;
+      default = 70;
+      description = ''
+        With RAM scratch (ADR-0108), reset the scratch alone, keeping the
+        images, when containers and volumes left behind by jobs fill it to
+        this percentage, at any age. Set it so the largest job the host takes
+        still fits beside the leftovers. At 90 percent or more, the recovery
+        threshold where most new pool jobs fail, any reset pauses the Podman
+        pool runner and waits for it to drain instead of waiting out its
+        quiet interval.
+      '';
+    };
     maxAgeDays = lib.mkOption {
       type = lib.types.ints.positive;
       default = 7;
@@ -89,6 +102,12 @@ in {
       restartIfChanged = false;
       environment = {
         STORE_PATH = cfg.podmanCanary.storageRoot;
+        SCRATCH_STORE = lib.optionalString cfg.podmanCanary.scratch.enable cfg.podmanCanary.graphRoot;
+        SCRATCH_TRIGGER_PERCENT = toString reset.scratchTriggerPercent;
+        # The runner pause that runner-restart.nix wires into every runner
+        # (FORGEJO_RUNNER_PAUSE_FILE); a full scratch drains the pool runner
+        # through it.
+        PAUSE_DIR = "/run/nixfleet-runners/paused";
         TRIGGER_USED_PERCENT = toString reset.triggerUsedPercent;
         MAX_AGE_SECONDS = toString (reset.maxAgeDays * 86400);
         IO_PRESSURE_THRESHOLD_HUNDREDTHS = toString (reset.ioPressurePercent * 100);
