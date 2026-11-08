@@ -1,4 +1,4 @@
-**History of** [ADR-0086](../0086-released-tool-inputs.md): text replaced on 2026-10-28 and 2026-10-30.
+**History of** [ADR-0086](../0086-released-tool-inputs.md): text replaced on 2026-10-28, 2026-10-30 and 2026-11-08.
 
 # ADR-0086: Refresh released platform tools with tools-update
 
@@ -65,3 +65,30 @@ From the decision, the tool list:
 
 videdupe was removed from nix-config: vidown ADR-023 moved its duplicate review
 into vidown, which `dev-apps-update` refreshes (ADR-0089).
+
+## Text replaced on 2026-11-08
+
+Title: Refresh released platform tools with tools-update
+
+**Applies to:** `flake.nix`, `scripts/update-inputs/update-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069
+
+`tools-update` (a shell alias, also `just tools-update`) refreshes one explicit
+list of tool inputs, each following its repository's released `main` branch:
+paperless-tools, regnskap, reportcraft, stashdb-pop, t3rry, hedgedoc and
+devstats. `scripts/update-inputs/update-tools.sh` is the current list. Tools on
+Forgejo write the branch explicitly as `?ref=main`; tools hosted on GitHub,
+such as t3rry, pin `github:alcxyz/<repo>/main` instead. The command only
+changes `flake.lock`; the owner inspects the change and activates it with
+`hmsw`. Its list does not overlap with `dev-tools-update`
+([ADR-0087](../0087-side-by-side-dev-tools.md)) or the app commands
+([ADR-0089](../0089-released-and-dev-app-inputs.md)).
+
+collector on xyz; tools-update refreshes both.
+
+own name through `dev-apps-update` (ADR-0089) rather than this list.
+
+- **Add the tools to `apps-update`:** this mixes released tools with the app
+  lists and changes what `apps-update` means.
+
+after a dependency change breaks the next build after `tools-update`; the
+previous lock and generation remain the rollback.

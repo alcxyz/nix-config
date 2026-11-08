@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-08
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, 2026-11-08 (update groups of `just update`, [ADR-0107](0107-update-entry-point-builds-before-commit.md))
 **History:** [replaced text](archive/0069-maintained-project-dev-qa-history.md)
 **Applies to:** `flake.nix`, maintained project input updates
 
@@ -29,13 +29,13 @@ split. These run `dev` daily: paw and vidown until they publish versioned
 releases, and Paperflow, DankSession and the DMS plugins, which cannot run
 twice on one host:
 
-- Released platform tools follow `main` through `tools-update`
+- Released platform tools follow `main` in the `tools` update group
   ([ADR-0086](0086-released-tool-inputs.md)). Their dev builds
-  (`paperless-tools-dev`, `regnskap-dev`, `t3rry-dev`) sit next to them and
-  are refreshed by `dev-tools-update`
-  ([ADR-0087](0087-side-by-side-dev-tools.md)), not `dev-apps-update`.
-- Released apps (Grove, Canopy, Bivrost) follow `main` through `apps-update`,
-  and `dev-apps-update` refreshes the app `dev` inputs
+  (`paperless-tools-dev`, `regnskap-dev`, `t3rry-dev`) sit next to them in
+  the `dev-tools` group
+  ([ADR-0087](0087-side-by-side-dev-tools.md)), not `dev-apps`.
+- Released apps (Grove, Canopy, Bivrost) follow `main` in the `apps` group,
+  and the `dev-apps` group holds the app `dev` inputs
   ([ADR-0089](0089-released-and-dev-app-inputs.md)): the side-by-side dev
   builds `grove-dev`, `canopy-dev` and `bivrost-dev`; paw and vidown, which
   have no versioned releases yet; and Paperflow, DankSession, the DMS bundle
@@ -53,18 +53,20 @@ aggregate DankSession input follow the existing top-level input, so there is
 one revision for its source and package. Continue building each other plugin
 helper from the same source used for its widget.
 
-`dev-apps-update` (a shell alias, also `just dev-apps-update`) explicitly
-refreshes the maintained app `dev` inputs listed above, the nested plugin
-inputs and the private `work` input
-([ADR-0089](0089-released-and-dev-app-inputs.md)) from this checkout, without requiring a development shell; `qaup` and `just qa-update`
-remain compatibility names for it. `dms-update` (or `just dms-update`)
-refreshes only the DMS subset: the bundle, DankSession and the nested plugin
-inputs. The scheduled DMS updater (the `nix-dms-update` user service and
-timer on xyz) refreshes the DMS subset even when the aggregate commit has not
-changed, then validates the resulting consumer.
+`just update dev-apps` ([ADR-0107](0107-update-entry-point-builds-before-commit.md)) explicitly refreshes the maintained app
+`dev` inputs listed above, the nested plugin inputs and the private `work`
+and `teams-chat` inputs
+([ADR-0089](0089-released-and-dev-app-inputs.md)) from this checkout, without
+requiring a development shell. `just update dms` refreshes only the DMS
+subset: the bundle, DankSession and the nested plugin inputs. Like every
+`just update`, both build the fleet first and commit only `flake.lock`, and
+only when the build passes. The scheduled DMS updater (the `nix-dms-update`
+user service and timer on xyz) refreshes the same `dms` group even when the
+aggregate commit has not changed, then validates the resulting consumer.
 Rebuild and switch commands continue to use committed or reviewed lockfiles;
-they do not implicitly fetch branch heads. No source changes, branch promotion,
-release, or activation is an implicit side effect of an update command.
+they do not implicitly fetch branch heads. No change to a source project,
+branch promotion, release, or activation is an implicit side effect of an
+update command.
 
 Leave upstream dependencies and unrelated internal services on their existing
 policies. Additional maintained projects can be added explicitly when their

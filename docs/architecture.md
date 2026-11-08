@@ -284,8 +284,11 @@ How the owner's tools and apps reach the hosts
 ([README](../README.md#maintained-projects),
 [ADR-0086](adr/0086-released-tool-inputs.md),
 [ADR-0087](adr/0087-side-by-side-dev-tools.md),
-[ADR-0089](adr/0089-released-and-dev-app-inputs.md)). The commands only move
-pins in `flake.lock`; a rebuild never moves an input to a newer branch head.
+[ADR-0089](adr/0089-released-and-dev-app-inputs.md),
+[ADR-0107](adr/0107-update-entry-point-builds-before-commit.md)).
+`just update` with a group name moves only pins in `flake.lock`, builds the
+whole `--all` fleet without activating it, and commits the lock only when that
+build passes; a rebuild never moves an input to a newer branch head.
 
 ```mermaid
 flowchart LR
@@ -294,16 +297,20 @@ flowchart LR
     relDev["dev branches<br/>dev builds"]
   end
 
-  tools["tools-update<br/>apps-update"]
-  devtools["dev-tools-update<br/>dev-apps-update<br/>dms-update"]
+  tools["just update tools<br/>just update apps"]
+  devtools["just update dev-tools<br/>just update dev-apps<br/>just update dms"]
   lockf[("flake.lock")]
-  inspect["Inspect lock diff"]
+  build["nix flake check --no-build<br/>deploy --build-only --all"]
+  commit["Commit flake.lock"]
+  undo["Left uncommitted:<br/>fix or git checkout flake.lock"]
   switch["Switch Home Manager<br/>or the system"]
   out["Release under its own name,<br/>dev build next to it as NAME-dev"]
 
   relMain --> tools --> lockf
   relDev --> devtools --> lockf
-  lockf --> inspect --> switch --> out
+  lockf --> build
+  build -- green --> commit --> switch --> out
+  build -- red --> undo
 ```
 
 Projects without releases yet, and apps that cannot run twice on one host,

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-10
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, 2026-11-08 (update groups of `just update`, [ADR-0107](0107-update-entry-point-builds-before-commit.md))
 **History:** [replaced text](archive/0090-install-bivrost-directly-history.md)
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `users/alc/linux/operator.nix`, `users/alc/darwin/mac.nix`, `flake/checks/default.nix`; amends ADR-0069 and ADR-0089
 
@@ -24,13 +24,13 @@ Bivrost flake and sets `programs.work.bivrost.package = null`.
 The work flake's module still supplies the catalogue, profiles and work
 sign-in browser rule. `bivrost` is a flake input, replacing ADR-0069's
 non-flake source input, and the work flake does not follow it. The work flake
-is refreshed with the apps by both `apps-update` and `dev-apps-update`
-([ADR-0089](0089-released-and-dev-app-inputs.md)). Its own locked Bivrost
+is refreshed with the apps by both the `apps` and the `dev-apps` update
+groups ([ADR-0089](0089-released-and-dev-app-inputs.md)). Its own locked Bivrost
 source is unused while the package option is unset.
 
-Bivrost follows `main` in `apps-update`, since v0.3.0 carried the route-scope
-hardening and the configuration catalogue (2026-10-10). A `bivrost-dev` build
-from `dev`, refreshed by `dev-apps-update`, is installed on xyz beside it;
+Bivrost follows `main` in the `apps` group, since v0.3.0 carried the
+route-scope hardening and the configuration catalogue (2026-10-10). A
+`bivrost-dev` build from `dev`, in the `dev-apps` group, is installed on xyz beside it;
 both read the same configuration.
 
 ## Alternatives and consequences

@@ -4,26 +4,29 @@ Multi-host NixOS, nix-darwin, and Home Manager flake managing workstations, serv
 
 ## Maintained projects
 
-The owner's own tools and apps are refreshed by four commands. Each one only
-updates `flake.lock` to the newest commit of its branches; inspect the lockfile
-changes, then switch with `deploy --hm` (or `deploy --nixos` for system
-configuration). Rebuilds never
+The owner's own tools and apps are refreshed by `just update` with a group
+name ([ADR-0107](docs/adr/0107-update-entry-point-builds-before-commit.md)).
+It moves only the group's inputs in `flake.lock` to the newest commit of their
+branches, builds the fleet (`nix flake check --no-build`, then
+`deploy --build-only --all`) and commits `flake.lock` alone when the build
+passes; it never pushes. When the build fails, the lock stays modified and
+uncommitted (undo with `git checkout flake.lock`). Then switch with
+`deploy --hm` (or `deploy --nixos` for system configuration). Rebuilds never
 fetch new branch heads, and no command promotes branches or creates releases.
 This repository itself promotes `dev` to `main` by pull request and tags each
 promotion with its date, such as `v2026.10.18`
 ([ADR-0098](docs/adr/0098-date-tagged-promotions.md)).
 
-| Command | Branch | Refreshes |
+| Group | Branch | Refreshes |
 |---|---|---|
-| `tools-update` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, t3rry, hedgedoc, devstats |
-| `dev-tools-update` | `dev` | `paperweight-dev`, `bokfor-dev`, `t3rry-dev` |
-| `apps-update` | `main` | Grove, Canopy, Bivrost, and the private flakes `work` and `teams-chat` (on `dev`) |
-| `dev-apps-update` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, `work`, `teams-chat`, Paperflow, DankSession, the DMS bundle and its maintained plugins |
+| `tools` | `main` | paperweight (paperless-tools), bokfor (regnskap), reportcraft, stashdb-pop, t3rry, hedgedoc, devstats |
+| `dev-tools` | `dev` | `paperweight-dev`, `bokfor-dev`, `t3rry-dev` |
+| `apps` | `main` | Grove, Canopy, Bivrost, and the private flakes `work` and `teams-chat` (on `dev`) |
+| `dev-apps` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, `work`, `teams-chat`, Paperflow, DankSession, the DMS bundle and its maintained plugins |
 
-`dms-update` refreshes only the DMS part of `dev-apps-update`. Each command is
-a shell alias and a `just` recipe of the same name; `qaup` and `just qa-update`
-remain old names for `dev-apps-update`. After first adding an alias, run
-`deploy --hm` once and open a new terminal to load it.
+`dms` refreshes only the DMS part of `dev-apps`. Group names and input names
+mix freely, as in `just update dms nixpkgs`, and `just update` alone updates
+every input.
 
 Daily work runs the released builds. A project with a `dev` branch that gets
 ahead of `main` also gets a dev build on xyz, installed next to the release
@@ -35,20 +38,21 @@ vidown) follow `dev` under their own names, and so do the apps that cannot run
 twice on one host (Paperflow, DankSession and the DMS plugins). Bivrost is
 installed from its own flake; its catalogue, profiles and sign-in rule come
 from the private work flake ([ADR-0090](docs/adr/0090-install-bivrost-directly.md)),
-which follows its `dev` branch and is refreshed by both `apps-update` and
-`dev-apps-update`. Both commands therefore need Forgejo SSH access, as
-`dev-apps-update` already did for vidown.
+which follows its `dev` branch and is in both the `apps` and `dev-apps`
+groups. Both groups therefore need Forgejo SSH access, as `dev-apps` already
+did for vidown.
 Grove, Canopy and paw are installed only on xyz and the mac
 (`users/alc/workstation-apps.nix`), together with the Git `ext::` transport
 that paw workspaces need.
 
-A project joins `tools-update` or `apps-update` once it releases from `main`
+A project joins the `tools` or `apps` group once it releases from `main`
 and has a flake package. The planned additions are tracked in
 [#591](https://git.alc.xyz/alcxyz/nix-config/issues/591). See
 [ADR-0069](docs/adr/0069-maintained-project-dev-qa.md),
 [ADR-0086](docs/adr/0086-released-tool-inputs.md),
-[ADR-0087](docs/adr/0087-side-by-side-dev-tools.md) and
-[ADR-0089](docs/adr/0089-released-and-dev-app-inputs.md).
+[ADR-0087](docs/adr/0087-side-by-side-dev-tools.md),
+[ADR-0089](docs/adr/0089-released-and-dev-app-inputs.md) and
+[ADR-0107](docs/adr/0107-update-entry-point-builds-before-commit.md).
 
 The DMS bundle stays the source interface: local input overrides select plugin
 development branches without changing the public bundle's release defaults, and
@@ -338,10 +342,10 @@ deploy --all --fail-unreachable
 # needs a reboot, without changing anything
 nixfleet status --all
 
-# Update flake inputs
+# Update every flake input, build the fleet, and commit flake.lock if green
 just update
 
-# Update a single input
+# Update one input, or a group such as tools, apps, dev-tools, dev-apps or dms
 just update home-manager
 
 # Lock nix-packages to its validated promoted revision (ADR-0080)

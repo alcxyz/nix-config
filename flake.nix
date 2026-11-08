@@ -52,15 +52,15 @@
 
     # Nightly development statistics collector: package and Home Manager
     # module; nix-secrets supplies its private settings. Released tool,
-    # refreshed by tools-update (ADR-0086).
+    # in the tools update group (ADR-0086).
     devstats = {
       url = "git+https://git.alc.xyz/alcxyz/devstats.git?ref=main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Installed from its own flake; the private work flake supplies only its
-    # work configuration (ADR-0090). Released app, refreshed by apps-update; its dev
-    # build is refreshed by dev-apps-update (ADR-0089).
+    # work configuration (ADR-0090). Released app in the apps update group; its dev
+    # build is in the dev-apps group (ADR-0089).
     bivrost = {
       url = "github:alcxyz/bivrost/main";
       inputs.nixpkgs.follows = "nixpkgs-azure-cli";
@@ -164,7 +164,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Dev builds next to the released tools (ADR-0087); refreshed by dev-tools-update.
+    # Dev builds next to the released tools (ADR-0087); in the dev-tools update group.
     paperless-tools-dev = {
       url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/paperless-tools.git?ref=dev";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -201,8 +201,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Released apps follow main and are refreshed by apps-update; their dev
-    # builds sit next to them and are refreshed by dev-apps-update (ADR-0089).
+    # Released apps follow main in the apps update group; their dev builds sit
+    # next to them in the dev-apps group (ADR-0089).
     grove = {
       url = "github:alcxyz/grove/main";
       inputs.nixpkgs.follows = "nixpkgs";

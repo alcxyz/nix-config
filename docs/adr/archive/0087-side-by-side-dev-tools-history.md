@@ -1,4 +1,4 @@
-**History of** [ADR-0087](../0087-side-by-side-dev-tools.md): text replaced on 2026-10-28.
+**History of** [ADR-0087](../0087-side-by-side-dev-tools.md): text replaced on 2026-10-28 and 2026-11-08.
 
 # ADR-0087: Install dev builds of released tools side by side
 
@@ -50,5 +50,22 @@ gets ahead of `main`.
   `dms-update`, because two copies of one widget in one shell make no sense.
 
 Each dev input adds a build to every activation that installs it, and the dev
+flake must keep building. A broken dev build blocks `hmsw` until it is fixed or
+the dev input is rolled back with the previous lock.
+
+## Text replaced on 2026-11-08
+
+**Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-dev-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0086
+
+`dev-tools-update` (a shell alias, also `just dev-tools-update`) refreshes a
+second, separate set of inputs,
+
+`scripts/update-inputs/update-dev-tools.sh` is the current list. Like
+`tools-update`, it only changes `flake.lock`; the owner inspects the change
+and activates it with `hmsw`. Its list does not overlap with `tools-update`
+or the app commands ([ADR-0089](../0089-released-and-dev-app-inputs.md)).
+
+the same files. The DMS plugins stay on `dms-update`, because two copies of
+
 flake must keep building. A broken dev build blocks `hmsw` until it is fixed or
 the dev input is rolled back with the previous lock.

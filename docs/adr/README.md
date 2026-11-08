@@ -82,7 +82,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0077](0077-ai-stack-profile-outside-home-manager.md) | Update the AI stack in its own profile, outside Home Manager | Accepted | T3 Code, AI providers, Home Manager |
 | [ADR-0080](0080-promoted-package-ref.md) | Promote validated package revisions as a ref, lock them on demand | Accepted | package promotion, T3 Code, deploy |
 | [ADR-0082](0082-fence-release-on-peer-evidence.md) | Release a self-fence only on positive peer evidence | Accepted | k3s, self-fence, kreboot |
-| [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools with tools-update | Accepted | flake inputs, release workflow |
+| [ADR-0086](0086-released-tool-inputs.md) | Refresh released platform tools from main | Accepted | flake inputs, release workflow |
 | [ADR-0087](0087-side-by-side-dev-tools.md) | Install dev builds of released tools side by side | Accepted | flake inputs, release workflow |
 | [ADR-0088](0088-tv-clients-share-one-appliance-profile.md) | TV clients share one appliance profile | Accepted | rpi0, rpi1, TV clients, Moonlight, Bluetooth audio |
 | [ADR-0089](0089-released-and-dev-app-inputs.md) | Released and dev app inputs | Accepted | flake inputs, release workflow |
@@ -98,6 +98,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0104](0104-ai-stack-on-system-nixpkgs.md) | Build nix-packages for the hosts with the hosts' own nixpkgs | Accepted | nix-packages, T3 Code, AI stack profile, frozen build toolchain |
 | [ADR-0105](0105-offline-podman-store-reset.md) | Reset the Podman CI store offline while the runners are idle | Accepted | Forgejo runners, Podman, xyz, xev, nex, nux |
 | [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) | Hold the CI runners while a game runs or the disk is low | Accepted | Forgejo runners, xyz, xev, nex, nux, games |
+| [ADR-0107](0107-update-entry-point-builds-before-commit.md) | One update entry point that builds the fleet before committing | Accepted | flake inputs, `just update`, deploy |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the

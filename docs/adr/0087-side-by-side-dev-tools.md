@@ -2,9 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-10-09
-**Amended:** 2026-10-28
+**Amended:** 2026-10-28, 2026-11-08 (update groups of `just update`, [ADR-0107](0107-update-entry-point-builds-before-commit.md))
 **History:** [replaced text](archive/0087-side-by-side-dev-tools-history.md)
-**Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-dev-tools.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0086
+**Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update.py`; amends ADR-0086
 
 ## Context
 
@@ -17,14 +17,15 @@ had a `dev` branch that got ahead of `main`, and t3rry later did as well.
 
 ## Decision
 
-`dev-tools-update` (a shell alias, also `just dev-tools-update`) refreshes a
+The `dev-tools` group of `just update` ([ADR-0107](0107-update-entry-point-builds-before-commit.md)) refreshes a
 second, separate set of inputs, `paperless-tools-dev`, `regnskap-dev` and
 `t3rry-dev`, which follow their repositories' `dev` branches (`?ref=dev` on
 Forgejo, `github:alcxyz/t3rry/dev` for t3rry).
-`scripts/update-inputs/update-dev-tools.sh` is the current list. Like
-`tools-update`, it only changes `flake.lock`; the owner inspects the change
-and activates it with `hmsw`. Its list does not overlap with `tools-update`
-or the app commands ([ADR-0089](0089-released-and-dev-app-inputs.md)).
+The `dev-tools` list in `scripts/update-inputs/update.py` is the current
+list. Like the `tools` group, it commits only `flake.lock`, after the fleet
+builds; the owner activates it with `hmsw`. Its list does not overlap with
+the `tools` group or the app groups
+([ADR-0089](0089-released-and-dev-app-inputs.md)).
 
 - `paperweight-dev` is installed on xyz next to `paperweight`. It wraps the dev
   build and sets `XDG_STATE_HOME` to `~/.local/state/paperweight-dev`, so its
@@ -50,9 +51,10 @@ gets ahead of `main`. The apps follow the same rule under ADR-0089.
 - **Pair every maintained app in the same way:** ADR-0089 pairs Grove and
   Canopy (and Bivrost, ADR-0090), but not the rest. Paperflow is a
   single-instance folder-watching service, and two copies would compete for
-  the same files. The DMS plugins stay on `dms-update`, because two copies of
+  the same files. The DMS plugins stay in the `dms` group, because two copies of
   one widget in one shell make no sense.
 
 Each dev input adds a build to every activation that installs it, and the dev
-flake must keep building. A broken dev build blocks `hmsw` until it is fixed or
-the dev input is rolled back with the previous lock.
+flake must keep building. A broken dev build keeps `just update` from
+committing the lock, and blocks `hmsw` until it is fixed or the dev input is
+rolled back with the previous lock.

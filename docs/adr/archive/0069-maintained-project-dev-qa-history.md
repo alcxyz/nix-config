@@ -1,4 +1,4 @@
-**History of** [ADR-0069](../0069-maintained-project-dev-qa.md): text replaced on 2026-10-28.
+**History of** [ADR-0069](../0069-maintained-project-dev-qa.md): text replaced on 2026-10-28 and 2026-11-08.
 
 # ADR-0069: Maintained project development QA inputs
 
@@ -71,3 +71,27 @@ The bundle takes them from their upstream repositories at exact revisions
 Development revisions can regress. Keep QA pins reviewable and use existing
 Nix/Home Manager generations or prior lockfiles to roll back. A successful
 build is not runtime QA, and a successful QA update is not a source release.
+
+## Text replaced on 2026-11-08
+
+- Released platform tools follow `main` through `tools-update`
+  ([ADR-0086](../0086-released-tool-inputs.md)). Their dev builds
+  (`paperless-tools-dev`, `regnskap-dev`, `t3rry-dev`) sit next to them and
+  are refreshed by `dev-tools-update`
+  ([ADR-0087](../0087-side-by-side-dev-tools.md)), not `dev-apps-update`.
+- Released apps (Grove, Canopy, Bivrost) follow `main` through `apps-update`,
+  and `dev-apps-update` refreshes the app `dev` inputs
+  ([ADR-0089](../0089-released-and-dev-app-inputs.md)): the side-by-side dev
+
+`dev-apps-update` (a shell alias, also `just dev-apps-update`) explicitly
+refreshes the maintained app `dev` inputs listed above, the nested plugin
+inputs and the private `work` input
+([ADR-0089](../0089-released-and-dev-app-inputs.md)) from this checkout, without requiring a development shell; `qaup` and `just qa-update`
+remain compatibility names for it. `dms-update` (or `just dms-update`)
+refreshes only the DMS subset: the bundle, DankSession and the nested plugin
+inputs. The scheduled DMS updater (the `nix-dms-update` user service and
+timer on xyz) refreshes the DMS subset even when the aggregate commit has not
+changed, then validates the resulting consumer.
+Rebuild and switch commands continue to use committed or reviewed lockfiles;
+they do not implicitly fetch branch heads. No source changes, branch promotion,
+release, or activation is an implicit side effect of an update command.

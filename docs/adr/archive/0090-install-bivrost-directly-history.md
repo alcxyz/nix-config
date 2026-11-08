@@ -1,4 +1,4 @@
-**History of** [ADR-0090](../0090-install-bivrost-directly.md): text replaced on 2026-10-28.
+**History of** [ADR-0090](../0090-install-bivrost-directly.md): text replaced on 2026-10-28 and 2026-11-08.
 
 # ADR-0090: Install Bivrost directly, configured by the work flake
 
@@ -44,3 +44,12 @@ installed on xyz.
 Removing the work flake's module now removes the work configuration but
 leaves a working neutral Bivrost. A check asserts that every operator home
 installs `pkgs.bivrost` and leaves the module's package unset.
+
+## Text replaced on 2026-11-08
+
+is refreshed with the apps by both `apps-update` and `dev-apps-update`
+([ADR-0089](../0089-released-and-dev-app-inputs.md)).
+
+Bivrost follows `main` in `apps-update`, since v0.3.0 carried the route-scope
+hardening and the configuration catalogue (2026-10-10). A `bivrost-dev` build
+from `dev`, refreshed by `dev-apps-update`, is installed on xyz beside it;

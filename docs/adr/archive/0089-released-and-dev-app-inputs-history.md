@@ -1,4 +1,4 @@
-**History of** [ADR-0089](../0089-released-and-dev-app-inputs.md): text replaced on 2026-10-28.
+**History of** [ADR-0089](../0089-released-and-dev-app-inputs.md): text replaced on 2026-10-28, 2026-11-04 and 2026-11-08.
 
 # ADR-0089: Released and dev app inputs
 
@@ -85,3 +85,29 @@ lock.
 Like the tool commands, both only change `flake.lock`, and apart from `work`
 the four update lists (`tools-update`, `dev-tools-update`, `apps-update`,
 `dev-apps-update`) do not overlap.
+
+## Text replaced on 2026-11-08
+
+**Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-apps.sh`, `scripts/update-inputs/update-maintained.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069 and ADR-0087
+
+- `apps-update` (a shell alias, also `just apps-update`) refreshes the
+  released apps on `main`: Grove, Canopy and Bivrost.
+
+- `dev-apps-update` (also `just dev-apps-update`; `qaup` and `just qa-update`
+  stay as old names) refreshes the dev builds on `dev`:
+
+split is worth designing for them. `dms-update` still refreshes the DMS
+    subset (ADR-0069).
+
+- The private work flake (input `work`) is in both commands. It stays one
+  input on its `dev` branch, whose `main` is not promoted, so either command
+  keeps its configuration current. Its Forgejo SSH URL makes `apps-update`
+  depend on Forgejo SSH access, as `dev-apps-update` already does for vidown.
+- The private `teams-chat` flake is in both commands in the same way, on its
+
+Like the tool commands, both only change `flake.lock`, and apart from `work`
+and `teams-chat` the four update lists (`tools-update`, `dev-tools-update`, `apps-update`,
+`dev-apps-update`) do not overlap. `scripts/update-inputs/update-apps.sh` and
+`scripts/update-inputs/update-maintained.sh` are the current app lists. A
+
+- **Update the work flake on its own, in neither command:**

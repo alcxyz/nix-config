@@ -2,9 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-10-10
-**Amended:** 2026-10-28, 2026-11-04 (the `teams-chat` input)
+**Amended:** 2026-10-28, 2026-11-04 (the `teams-chat` input), 2026-11-08 (update groups of `just update`, [ADR-0107](0107-update-entry-point-builds-before-commit.md))
 **History:** [replaced text](archive/0089-released-and-dev-app-inputs-history.md)
-**Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update-apps.sh`, `scripts/update-inputs/update-maintained.sh`, `users/alc/common.nix`, `justfile`; amends ADR-0069 and ADR-0087
+**Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update.py`; amends ADR-0069 and ADR-0087
 
 ## Context
 
@@ -23,14 +23,13 @@ branch set, so it followed whatever the repository's default branch was.
 
 The apps use the same released and dev split as the tools.
 
-- `apps-update` (a shell alias, also `just apps-update`) refreshes the
+- The `apps` group of `just update` ([ADR-0107](0107-update-entry-point-builds-before-commit.md)) refreshes the
   released apps on `main`: Grove, Canopy and Bivrost. Bivrost moved here on
   2026-10-10 with v0.3.0, which carried the route-scope
   hardening (bivrost #54) and the configuration catalogue; it is installed
   from its own flake and configured by the private work flake
   ([ADR-0090](0090-install-bivrost-directly.md)).
-- `dev-apps-update` (also `just dev-apps-update`; `qaup` and `just qa-update`
-  stay as old names) refreshes the dev builds on `dev`:
+- The `dev-apps` group refreshes the dev builds on `dev`:
   - `grove-dev`, `canopy-dev` and `bivrost-dev`, installed on xyz next to the
     releases under a `-dev` command name. `grove-dev` and `canopy-dev` share
     the release's configuration, cache and log, since changing their XDG
@@ -41,20 +40,21 @@ The apps use the same released and dev split as the tools.
     names and gain a released pin when they start versioned releases.
   - Paperflow, DankSession, the DMS bundle and the maintained plugins, which
     cannot run twice on one host. They stay on `dev` until a released and dev
-    split is worth designing for them. `dms-update` still refreshes the DMS
-    subset (ADR-0069).
-- The private work flake (input `work`) is in both commands. It stays one
-  input on its `dev` branch, whose `main` is not promoted, so either command
-  keeps its configuration current. Its Forgejo SSH URL makes `apps-update`
-  depend on Forgejo SSH access, as `dev-apps-update` already does for vidown.
-- The private `teams-chat` flake is in both commands in the same way, on its
+    split is worth designing for them. The `dms` group refreshes only the
+    DMS subset (ADR-0069).
+- The private work flake (input `work`) is in both groups. It stays one
+  input on its `dev` branch, whose `main` is not promoted, so either group
+  keeps its configuration current. Its Forgejo SSH URL makes `just update
+  apps` depend on Forgejo SSH access, as `dev-apps` already does for vidown.
+- The private `teams-chat` flake is in both groups in the same way, on its
   `dev` branch over Forgejo SSH. `work` and `teams-chat` are the only inputs
   the update lists share.
 
-Like the tool commands, both only change `flake.lock`, and apart from `work`
-and `teams-chat` the four update lists (`tools-update`, `dev-tools-update`, `apps-update`,
-`dev-apps-update`) do not overlap. `scripts/update-inputs/update-apps.sh` and
-`scripts/update-inputs/update-maintained.sh` are the current app lists. A
+Like the tool groups, both commit only `flake.lock`, after the fleet builds,
+and apart from `work` and `teams-chat` the four groups (`tools`, `dev-tools`,
+`apps`, `dev-apps`) do not overlap; `dms` is the DMS part of `dev-apps`. The
+`apps` and `dev-apps` lists in `scripts/update-inputs/update.py` are the
+current app lists. A
 released app gains a dev pair when its repository has a `dev` branch that
 gets ahead of `main`.
 
@@ -68,7 +68,7 @@ gets ahead of `main`.
 - **Give the dev builds their own XDG state:** isolates their caches but
   also changes where lazygit and the editor keep their state when opened from
   the dev build.
-- **Update the work flake on its own, in neither command:** a catalogue change
+- **Update the work flake on its own, in neither group:** a catalogue change
   once stayed undeployed because no command refreshed it.
 
 Daily `grove`, `canopy` and `bivrost` run their last release, which lags
