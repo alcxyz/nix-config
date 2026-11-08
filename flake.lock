@@ -692,11 +692,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794005567,
-        "narHash": "sha256-zkZNVg+J/QXs56ali8gI26/b4HnrAkcfHZBFurnOSfs=",
+        "lastModified": 1794048786,
+        "narHash": "sha256-c6xrb4GcLgqnr0OmrvIDM8o8nE2zOqSrdbOWaL1Ning=",
         "ref": "main",
-        "rev": "89ad7b5bab05dfd7f77c1b6a342dfc8bb89bdc07",
-        "revCount": 9,
+        "rev": "7f7abb3d3737299463af5d1dbb141ccee5c8da63",
+        "revCount": 10,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/hedgedoc.git"
       },
@@ -926,11 +926,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788119325,
-        "narHash": "sha256-nSHwM7TGeEdoGlcpF75PWM4i6jM1pLkUVcQUFXVuGZ4=",
+        "lastModified": 1794142756,
+        "narHash": "sha256-0zSlqkPXu+IBpS4bnkzwaieIzSYbIgpT0mtVwrsas9Y=",
         "owner": "sashetophizika",
         "repo": "hyprscratch",
-        "rev": "1f7bec62c1a3085fc3f899f90a63e9bcc6c13b9d",
+        "rev": "08580304cc47c31f2497da9ce67f2eb96e1de072",
         "type": "github"
       },
       "original": {
@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794071309,
-        "narHash": "sha256-7yKFsyXxxDQLLZlu7ECOIaQaDjY72fRFv/J8UdILN0Q=",
+        "lastModified": 1794119474,
+        "narHash": "sha256-EWccd79YaLfI8XVeeD6TdJnC28l5qxCn5t4OTx5h8YI=",
         "ref": "dev",
-        "rev": "9767bba0ff2e6b5e033288a89ee7b9595bc3d278",
-        "revCount": 974,
+        "rev": "79155f48419eaffe6fe6d785284c3f188ebef1fa",
+        "revCount": 979,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1153,11 +1153,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793871777,
-        "narHash": "sha256-DbFyxXHjP4SJDWVVIILkgrUZxj29cDusi8ULXoQGuZ8=",
+        "lastModified": 1794051415,
+        "narHash": "sha256-mJok3uMK0awq2MPKdSnvTxm3UD89KD3LclQzASgtY1s=",
         "owner": "NixOS",
         "repo": "nixos-hardware",
-        "rev": "d645c71a58dbae3eb17ff551a07aea13a541cb1a",
+        "rev": "1a8ff4f57ffe1f732beaa1db842247a381ea471d",
         "type": "github"
       },
       "original": {
@@ -1247,11 +1247,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1793726008,
-        "narHash": "sha256-jQp1wKvbwWdLBASTXkSi/VYmDJ5AbBi1WvcMt9HWJC8=",
+        "lastModified": 1793876309,
+        "narHash": "sha256-Wojg9lIH/hDH91iDVH2/EPw8oDSpxjxhXONbU1yf4Zg=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1d060086d60cb76a40cf37109f979d88a5bd6396",
+        "rev": "f9a75f41be3a74eab55d3a7679d34ad6cc0da977",
         "type": "github"
       },
       "original": {
@@ -2024,11 +2024,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793710187,
-        "narHash": "sha256-2q52IEMmKi/qUP4WCf3dA5uBLhG2n4/04wDt9nsbWzM=",
+        "lastModified": 1794070930,
+        "narHash": "sha256-4wh1trCPnttKBbtXqdTp1r/dTXHifvDwDj8sgnKRNN4=",
         "ref": "dev",
-        "rev": "a8fa964d1e243b1246097a65c713f1eda35fe54e",
-        "revCount": 183,
+        "rev": "11b98bff17e1cb9d51fc87cb828a0d48938f1fb3",
+        "revCount": 185,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git"
       },
