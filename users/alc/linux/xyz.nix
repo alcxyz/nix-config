@@ -204,6 +204,10 @@ in {
       hl.bind("SUPER + SHIFT + A", hl.dsp.window.move({ workspace = "name:teams" }))
       hl.bind("SUPER + ALT + A", hl.dsp.window.move({ workspace = "name:teams", follow = false }))
 
+      -- The receipt browser opens on its own named workspace
+      -- (programs.portalReceipts above), where the owner signs in to portals.
+      hl.bind("SUPER + R", hl.dsp.focus({ workspace = "name:receipts" }))
+
       -- The secondary panel is physically 4K even though it runs at 1440p in
       -- this layout. Its useful scrolling widths start at half the output.
       alc_scrolling_column_widths_by_monitor = {
