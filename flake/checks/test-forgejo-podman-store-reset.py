@@ -395,15 +395,23 @@ class StoreResetTests(unittest.TestCase):
         (leftover / 'overlay' / 'blob').write_text('old\n')
         Path(f'{self.df}.scratch').write_text('100 20\n')
         self.age_stamp(600)
-        # The disk deletion runs out of time at once.
-        result = self.run_reset(SCRATCH_STORE=str(graph), TRASH_SECONDS='0')
+        # The disk deletion runs out of time at once: a slow remover for the
+        # trash entries, which delete_trash_in passes as /proc/self/fd/8/...,
+        # so a tiny file cannot finish before the deadline check. The scratch
+        # trash's own removal names its path and stays fast.
+        slow_rm = self.bin / 'slow-rm'
+        slow_rm.write_text('#!/bin/sh\ncase "$*" in */proc/self/fd/*) exec sleep 30 ;; esac\nexec rm "$@"\n')
+        slow_rm.chmod(0o755)
+        result = self.run_reset(SCRATCH_STORE=str(graph), TRASH_SECONDS='0', REMOVE_BIN=str(slow_rm))
         self.assertEqual(result.returncode, 0, result.stderr)
+        # The slow remover was used and the deadline stopped it.
+        self.assertIn('trash_left reason=deadline', result.stdout)
         self.assertIn('reset due=scratch_use', result.stdout)
         self.assertFalse(graph.exists())
         self.assertTrue(self.store.exists())
         # An age reset still waits for it.
         self.age_stamp(8 * DAY)
-        result = self.run_reset(SCRATCH_STORE=str(graph), TRASH_SECONDS='0')
+        result = self.run_reset(SCRATCH_STORE=str(graph), TRASH_SECONDS='0', REMOVE_BIN=str(slow_rm))
         self.assert_skipped(result, 'trash_left')
         self.assertTrue(self.store.exists())
 
