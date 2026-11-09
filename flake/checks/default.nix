@@ -29,6 +29,7 @@ in {
     bash scripts/checks/test-runtime-storage-check.sh modules/nixos/services/forgejo-actions-runner/runtime-storage-check.sh
   '';
   git-identity-configuration-contract = import ./git-identity.nix {inherit lib pkgs;};
+  package-pins-contract = import ./package-pins.nix {inherit lib pkgs;};
 
   k3s-self-fence-contract = mkRepoCheck "k3s-self-fence-contract" [pkgs.python3] ''
     python3 modules/nixos/virtualisation/k3s/test-self-fence.py

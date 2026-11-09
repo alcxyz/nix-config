@@ -124,10 +124,6 @@ in
                 nixDeploy = np.nix-deploy;
               };
               reportcraft = inputs.reportcraft.packages.${system}.default;
-              openbao = inputs.nixpkgs-openbao.legacyPackages.${system}.openbao;
-              # Reuse the previous working package set, including each app's
-              # dependencies, until the current nixpkgs build regressions clear.
-              inherit (inputs.nixpkgs-azure-cli.legacyPackages.${system}) azure-cli khal calibre;
               nixbox-plymouth-theme = _prev.callPackage ../packages/nixbox-plymouth-theme {};
               nixbox-session-splash = _prev.callPackage ../packages/nixbox-session-splash {
                 inherit (_final) quickshell;
@@ -194,6 +190,11 @@ in
                 else _prev.opencode;
             }
         )
+        # Last, so a pin wins over the overlays above (ADR-0110).
+        (import ./overlays/pins.nix {
+          inherit lib inputs system;
+          pins = import ./pins.nix;
+        })
       ];
     in
       import nixpkgs {

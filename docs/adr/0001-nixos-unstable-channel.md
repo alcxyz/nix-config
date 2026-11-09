@@ -2,9 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Amended:** 2026-11-02
+**Amended:** 2026-11-09
 **History:** [replaced text](archive/0001-nixos-unstable-channel-history.md)
-**Applies to:** `flake.nix`, `flake/pkgs.nix`
+**Applies to:** `flake.nix`, `flake/pkgs.nix`, `flake/pins.nix`
 
 ## Context
 
@@ -20,12 +20,15 @@ Inputs that are intended to share this package set declare
 unless a reviewed compatibility exception requires changing them.
 
 This is not a claim that every input shares one evaluated package set.
-`flake.nix` retains independent pinned `nixpkgs-openbao` and
-`nixpkgs-azure-cli` inputs. `flake/pkgs.nix` selects OpenBao from the former,
-and Azure CLI, Khal, Calibre, the request-enabled FFmpeg dependency set and
-the Pi 3 Moonlight package from the latter. Other application flakes may
-retain their own dependency pins when they do not follow the primary input.
-These are selected-package exceptions, not a stable base for the fleet.
+`flake.nix` retains independent pinned `nixpkgs-openbao`,
+`nixpkgs-azure-cli` and `nixpkgs-previous` inputs. The package pins in
+`flake/pins.nix` ([ADR-0110](0110-package-pins-in-one-table.md)) take OpenBao
+from the first, Azure CLI, Khal and Calibre from the second, and packages a
+flake update broke from the third. `flake/pkgs.nix` also builds the
+request-enabled FFmpeg dependency set and the Pi 3 Moonlight package from
+`nixpkgs-azure-cli`. Other application flakes may retain their own dependency
+pins when they do not follow the primary input. These are selected-package
+exceptions, not a stable base for the fleet.
 
 Both nix-packages nixpkgs inputs follow the host package set. The managed AI
 stack updater instead overrides both with the running system's registry
@@ -44,6 +47,7 @@ does not remove the independent selected-package exceptions above.
 ## Consequences
 
 Update the primary lock periodically for security and package fixes. Regressions
-may require temporary package pins; review those exceptions when updating them.
+may require temporary package pins, which go in `flake/pins.nix` (ADR-0110);
+review those exceptions when updating them.
 Follows reduce duplicated package sets where used, but independent inputs and
 compatibility pins can still add separate closures and require consumer checks.

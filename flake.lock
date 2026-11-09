@@ -1245,6 +1245,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-previous": {
+      "locked": {
+        "lastModified": 1793726008,
+        "narHash": "sha256-jQp1wKvbwWdLBASTXkSi/VYmDJ5AbBi1WvcMt9HWJC8=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "1d060086d60cb76a40cf37109f979d88a5bd6396",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "1d060086d60cb76a40cf37109f979d88a5bd6396",
+        "type": "github"
+      }
+    },
     "nixpkgs_2": {
       "locked": {
         "lastModified": 1793876309,
@@ -1558,6 +1574,7 @@
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-azure-cli": "nixpkgs-azure-cli",
         "nixpkgs-openbao": "nixpkgs-openbao",
+        "nixpkgs-previous": "nixpkgs-previous",
         "pandora": "pandora",
         "paperflow": "paperflow",
         "paperless-tools": "paperless-tools",

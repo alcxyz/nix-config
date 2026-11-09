@@ -7,12 +7,18 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Hold host OpenBao at the reviewed 2.6.2 until adoption finishes and the
-    # next release is reviewed; remove once nixpkgs' version is accepted.
+    # next release is reviewed; remove once nixpkgs' version is accepted. Its
+    # pin is in flake/pins.nix (ADR-0110).
     nixpkgs-openbao.url = "github:NixOS/nixpkgs/6774f7bc253789b113a4f39285dc0fa100abeacc";
-    # Previous working package set for Azure CLI, Khal and Calibre. Azure CLI
-    # remains here until fabric supports invoke 3:
+    # Previous working package set for Azure CLI, Khal and Calibre (pinned in
+    # flake/pins.nix) and the request-enabled FFmpeg and Pi 3 Moonlight builds
+    # in flake/pkgs.nix. Azure CLI remains here until fabric supports invoke 3:
     # https://github.com/fabric/fabric/issues/2376
     nixpkgs-azure-cli.url = "github:NixOS/nixpkgs/55bfb4d7437bd4e09ab7cba58a43bd68eb310044";
+    # The nixpkgs revision the fleet ran before a regressing update, for the
+    # package pins in flake/pins.nix (ADR-0110); moving it moves every pin
+    # that names it.
+    nixpkgs-previous.url = "github:NixOS/nixpkgs/1d060086d60cb76a40cf37109f979d88a5bd6396";
 
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware/master";

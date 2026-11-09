@@ -124,8 +124,10 @@ flowchart LR
 The NixOS builder also asserts that k3s is enabled exactly on the hosts the
 inventory gives a `k8sRole`. See
 [ADR-0007](adr/0007-filtered-nix-packages-overlay.md) for the filtered package
-overlay and [ADR-0002](adr/0002-nix-secrets-separate-repository.md) for the
-private repository boundary.
+overlay, [ADR-0110](adr/0110-package-pins-in-one-table.md) for the package
+pins in `flake/pins.nix`, and
+[ADR-0002](adr/0002-nix-secrets-separate-repository.md) for the private
+repository boundary.
 
 ## Configuration layering
 

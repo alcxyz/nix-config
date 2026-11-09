@@ -31,3 +31,21 @@ inputs.<name>.inputs.nixpkgs.follows = "nixpkgs";
 - Agents and contributors must not switch this to a stable channel or remove `follows` overrides — doing so breaks the Hyprland/Wayland ecosystem inputs and introduces version inconsistencies across the dependency graph.
 - `flake.lock` must be updated periodically to pick up security fixes and package updates; occasional nixpkgs-unstable regressions may require temporarily pinning individual packages.
 - All inputs share one evaluated nixpkgs, keeping the store closure consistent and avoiding duplicate package sets.
+
+## Text replaced on 2026-11-09
+
+Before [ADR-0110](../0110-package-pins-in-one-table.md) moved the selected
+packages into `flake/pins.nix`, the Decision said:
+
+> This is not a claim that every input shares one evaluated package set.
+> `flake.nix` retains independent pinned `nixpkgs-openbao` and
+> `nixpkgs-azure-cli` inputs. `flake/pkgs.nix` selects OpenBao from the former,
+> and Azure CLI, Khal, Calibre, the request-enabled FFmpeg dependency set and
+> the Pi 3 Moonlight package from the latter. Other application flakes may
+> retain their own dependency pins when they do not follow the primary input.
+> These are selected-package exceptions, not a stable base for the fleet.
+
+and the Consequences began:
+
+> Update the primary lock periodically for security and package fixes. Regressions
+> may require temporary package pins; review those exceptions when updating them.

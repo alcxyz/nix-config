@@ -121,7 +121,8 @@ flake.nix                          # Inputs and flake-parts entry point
 flake/
   core.nix                         # Inventory, supported systems, shared package instances
   pkgs.nix                         # Package overlays and local package overrides
-  overlays/                        # Overlay patches (CA bundle policy)
+  pins.nix                         # Package pins from other nixpkgs revisions (ADR-0110)
+  overlays/                        # Overlay patches (CA bundle policy, package pins)
   hosts/                           # NixOS, nix-darwin, and Home Manager output construction
   modules.nix                      # Exported flake modules
   per-system.nix                   # Development shell, packages, and check composition

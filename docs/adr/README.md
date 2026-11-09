@@ -101,6 +101,7 @@ reused. The root `.ignore` hides the archive from `rg` and `fd`; use `rg -u` or
 | [ADR-0107](0107-update-entry-point-builds-before-commit.md) | One update entry point that builds the fleet before committing | Accepted | flake inputs, `just update`, deploy |
 | [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md) | Keep Podman CI job scratch in RAM, images on disk | Accepted | Forgejo runners, Podman, xyz, xev, nex, nux |
 | [ADR-0109](0109-shared-read-only-nix-store-for-podman-ci-jobs.md) | Give Podman CI jobs a shared, read-only Nix store per host | Accepted (trial on xyz) | Forgejo runners, Podman, Nix workflows, xyz |
+| [ADR-0110](0110-package-pins-in-one-table.md) | Keep package pins in one table | Accepted | `flake/pins.nix`, `flake/pkgs.nix` |
 
 The [original Kubernetes node lifecycle URL](0036-k8s-node-power-lifecycle.md)
 is retained as a compatibility pointer to ADR-0068. ADR-0036 identifies the
