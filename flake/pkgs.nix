@@ -54,6 +54,7 @@ in
             t3rry = inputs.t3rry.packages.${system} or {};
             t3rryDev = inputs.t3rry-dev.packages.${system} or {};
             vidown = inputs.vidown.packages.${system} or {};
+            lacksAwsLc = pkg: !(builtins.any (p: (p.pname or "") == "aws-lc") (pkg.buildInputs or []));
           in
             (lib.filterAttrs (n: _: builtins.elem n wanted) np)
             // (lib.filterAttrs (
@@ -161,6 +162,26 @@ in
                     ];
                   };
               });
+              # nixpkgs' cargoSetupHook now sets AWS_LC_SYS_USE_SYSTEM=1, so
+              # aws-lc-sys needs aws-lc as a build input (NixOS/nixpkgs#585124).
+              # Upstream added it to codex (#584667, with the other forced
+              # system libraries) and ncspot (#585208). Applies only while
+              # nixpkgs' package lacks aws-lc, so it ends by itself; then
+              # remove it.
+              codex =
+                if lacksAwsLc _prev.codex
+                then
+                  _prev.codex.overrideAttrs (old: {
+                    buildInputs = old.buildInputs ++ [_prev.aws-lc _prev.oniguruma _prev.sqlite _prev.zstd];
+                  })
+                else _prev.codex;
+              ncspot =
+                if lacksAwsLc _prev.ncspot
+                then
+                  _prev.ncspot.overrideAttrs (old: {
+                    buildInputs = old.buildInputs ++ [_prev.aws-lc];
+                  })
+                else _prev.ncspot;
             }
             # Raspberry Pi kernels omit modules that the generic NixOS module
             # closure expects. Apply nixos-hardware's allow-missing workaround
