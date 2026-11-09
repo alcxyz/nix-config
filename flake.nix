@@ -83,6 +83,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The weekly vendor-portal receipt fetcher (a dedicated Chromium).
+    portal-receipts = {
+      url = "git+ssh://git@git-ssh.alc.xyz/alcxyz/portal-receipts.git?ref=dev";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # color schemes, small extras
     nix-colors.url = "github:Misterio77/nix-colors";
 

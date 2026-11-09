@@ -50,8 +50,9 @@ DMS = [
     "dms-plugins/aiusage",
     "dms-plugins/displaycontrol",
 ]
-# `work` and `teams-chat` follow `dev` and are in both app groups (ADR-0089).
-SHARED_APPS = ["work", "teams-chat"]
+# `work`, `teams-chat` and `portal-receipts` follow `dev` and are in both app
+# groups (ADR-0089).
+SHARED_APPS = ["work", "teams-chat", "portal-receipts"]
 # Released apps on `main` (ADR-0089).
 APPS = ["grove", "canopy", "bivrost", *SHARED_APPS]
 # Maintained apps' dev builds on `dev` (ADR-0069, ADR-0089).

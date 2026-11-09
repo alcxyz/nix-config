@@ -64,6 +64,22 @@ in {
     t3DataDir = "${config.home.homeDirectory}/.t3-bn";
   };
 
+  # Fetches subscription receipts weekly from vendor portals through a
+  # dedicated Chromium (portal-receipts flake) and uploads the missing ones to
+  # Paperless, with the operator's own Paperless settings.
+  programs.portalReceipts = {
+    enable = true;
+    browser.executable = lib.getExe pkgs.chromium;
+    # Both come from the private operator module; fail at evaluation, not at
+    # run time, if it stops setting them.
+    paperless = {
+      url = config.home.sessionVariables.PAPERLESS_URL or (throw "portal-receipts needs PAPERLESS_URL from the private operator module.");
+      tokenFile = config.home.sessionVariables.PAPERLESS_API_TOKEN_FILE or (throw "portal-receipts needs PAPERLESS_API_TOKEN_FILE from the private operator module.");
+    };
+    # The notify command comes from the Home Manager profile.
+    path = ["${config.home.profileDirectory}/bin"];
+  };
+
   # Forwards watched Teams messages to T3 threads with no model in the path. The
   # work flake holds its policy, and its ledger owns the chats and threads. The
   # unit refuses to start until `teams-relay runtime-migrate` has seeded it.

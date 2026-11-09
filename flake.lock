@@ -1373,6 +1373,27 @@
         "type": "github"
       }
     },
+    "portal-receipts": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794193908,
+        "narHash": "sha256-eiCKmiSutoNoxZ4Dp6YZqtpYHL/oqjFZxNad7NVBB2A=",
+        "ref": "dev",
+        "rev": "e093dfa1f04dcb7556f2443d60bbb9d894b07108",
+        "revCount": 4,
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/portal-receipts.git"
+      },
+      "original": {
+        "ref": "dev",
+        "type": "git",
+        "url": "ssh://git@git-ssh.alc.xyz/alcxyz/portal-receipts.git"
+      }
+    },
     "pre-commit-hooks": {
       "inputs": {
         "flake-compat": "flake-compat_2",
@@ -1542,6 +1563,7 @@
         "paperless-tools": "paperless-tools",
         "paperless-tools-dev": "paperless-tools-dev",
         "paw": "paw",
+        "portal-receipts": "portal-receipts",
         "quickshell": "quickshell",
         "regnskap": "regnskap",
         "regnskap-dev": "regnskap-dev",

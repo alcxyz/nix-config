@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-10
-**Amended:** 2026-10-28, 2026-11-04 (the `teams-chat` input), 2026-11-08 (update groups of `just update`, [ADR-0107](0107-update-entry-point-builds-before-commit.md))
+**Amended:** 2026-10-28, 2026-11-04 (the `teams-chat` input), 2026-11-09 (the `portal-receipts` input), 2026-11-08 (update groups of `just update`, [ADR-0107](0107-update-entry-point-builds-before-commit.md))
 **History:** [replaced text](archive/0089-released-and-dev-app-inputs-history.md)
 **Applies to:** `flake.nix`, `flake/pkgs.nix`, `scripts/update-inputs/update.py`; amends ADR-0069 and ADR-0087
 
@@ -46,12 +46,13 @@ The apps use the same released and dev split as the tools.
   input on its `dev` branch, whose `main` is not promoted, so either group
   keeps its configuration current. Its Forgejo SSH URL makes `just update
   apps` depend on Forgejo SSH access, as `dev-apps` already does for vidown.
-- The private `teams-chat` flake is in both groups in the same way, on its
-  `dev` branch over Forgejo SSH. `work` and `teams-chat` are the only inputs
-  the update lists share.
+- The private `teams-chat` and `portal-receipts` flakes are in both groups in
+  the same way, on their `dev` branches over Forgejo SSH. `work`,
+  `teams-chat` and `portal-receipts` are the only inputs the update lists
+  share.
 
 Like the tool groups, both commit only `flake.lock`, after the fleet builds,
-and apart from `work` and `teams-chat` the four groups (`tools`, `dev-tools`,
+and apart from `work`, `teams-chat` and `portal-receipts` the four groups (`tools`, `dev-tools`,
 `apps`, `dev-apps`) do not overlap; `dms` is the DMS part of `dev-apps`. The
 `apps` and `dev-apps` lists in `scripts/update-inputs/update.py` are the
 current app lists. A

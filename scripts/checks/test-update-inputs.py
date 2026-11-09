@@ -31,7 +31,7 @@ DEV_TOOL_INPUTS = {
 APP_INPUTS = ["grove", "canopy", "bivrost"]
 # Inputs both app groups refresh (ADR-0089), by input and repository name.
 # They follow `dev` on Forgejo.
-SHARED_INPUTS = {"work": "bn-bootstrap", "teams-chat": "teams-chat"}
+SHARED_INPUTS = {"work": "bn-bootstrap", "teams-chat": "teams-chat", "portal-receipts": "portal-receipts"}
 # Dev builds of released apps, in the dev-apps group.
 DEV_APP_INPUTS = {"grove-dev": "grove", "canopy-dev": "canopy", "bivrost-dev": "bivrost"}
 DMS_INPUTS = [
@@ -46,7 +46,7 @@ DMS_INPUTS = [
     "dms-plugins/aiusage",
     "dms-plugins/displaycontrol",
 ]
-DEV_APPS_REST = ["paperflow", "grove-dev", "canopy-dev", "bivrost-dev", "paw", "vidown", "work", "teams-chat"]
+DEV_APPS_REST = ["paperflow", "grove-dev", "canopy-dev", "bivrost-dev", "paw", "vidown", "work", "teams-chat", "portal-receipts"]
 GROUPS = {
     "apps": APP_INPUTS + list(SHARED_INPUTS),
     "dev-apps": DMS_INPUTS + DEV_APPS_REST,
@@ -64,6 +64,7 @@ DEV_URLS = {
     "vidown": "git+ssh://git@git-ssh.alc.xyz/alcxyz/vidown.git?ref=dev",
     "work": "git+ssh://git@git-ssh.alc.xyz/alcxyz/bn-bootstrap.git?ref=dev",
     "teams-chat": "git+ssh://git@git-ssh.alc.xyz/alcxyz/teams-chat.git?ref=dev",
+    "portal-receipts": "git+ssh://git@git-ssh.alc.xyz/alcxyz/portal-receipts.git?ref=dev",
     "dms-plugins": "github:alcxyz/dms-plugins/dev",
     "quicksearch": "github:alcxyz/DankQuickSearch/dev",
     "vault": "github:alcxyz/DankVault/dev",
