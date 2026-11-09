@@ -66,7 +66,10 @@ in {
 
   # Fetches subscription receipts weekly from vendor portals through a
   # dedicated Chromium (portal-receipts flake) and uploads the missing ones to
-  # Paperless, with the operator's own Paperless settings.
+  # Paperless, with the operator's own Paperless settings. One source instead
+  # reads Thunderbird's local mailbox, read-only, for invoices sent as links;
+  # it starts Thunderbird on its own workspace when it is not running. All
+  # sources are on by default (the flake's sites.<name>.enable).
   programs.portalReceipts = {
     enable = true;
     browser.executable = lib.getExe pkgs.chromium;

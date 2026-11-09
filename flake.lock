@@ -1396,11 +1396,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794193908,
-        "narHash": "sha256-eiCKmiSutoNoxZ4Dp6YZqtpYHL/oqjFZxNad7NVBB2A=",
+        "lastModified": 1794230514,
+        "narHash": "sha256-ahlWbMbuC2s/+GYLLSgMM57MvJ/xpdxThlW/ZxO7FmM=",
         "ref": "dev",
-        "rev": "e093dfa1f04dcb7556f2443d60bbb9d894b07108",
-        "revCount": 4,
+        "rev": "e17026b3d420afa8fde6f2c6f1bf81705e604815",
+        "revCount": 6,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/portal-receipts.git"
       },
