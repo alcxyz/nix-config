@@ -363,11 +363,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793983508,
-        "narHash": "sha256-hx9WyYerSHGFma2t4IRwnANn32G6XOFqGZB1MYS9tyM=",
+        "lastModified": 1794151088,
+        "narHash": "sha256-qBUZQG2qUmhCAT6O3P2HaCgRQ1ZEf7C7+j1x/ekglVM=",
         "owner": "AvengeMedia",
         "repo": "danksearch",
-        "rev": "edf0176c59729bdaa863055dc14c6f77a40c0438",
+        "rev": "22e8ddb0782d7b799c2bc428e1dad32fa3593ac1",
         "type": "github"
       },
       "original": {
@@ -713,11 +713,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793979366,
-        "narHash": "sha256-7OoWDsYO9teiPxl0QdlS5lYE20Pue8/5mpscSL32FUA=",
+        "lastModified": 1794252721,
+        "narHash": "sha256-sD1rhEjMghSyWSUG2xEOw+FOVd2wnoWwi/809w8fRkI=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "2c0c1f01521469cf0271180c453c79782d53c2f6",
+        "rev": "f1db7c474bb49babfe9d8def532939e0c7404327",
         "type": "github"
       },
       "original": {
@@ -803,11 +803,11 @@
         "xdph": "xdph"
       },
       "locked": {
-        "lastModified": 1793984293,
-        "narHash": "sha256-rqmgV0BeCtguyXNsmXjH5+bauyrpWA4imqz9B7zCtvQ=",
+        "lastModified": 1794256489,
+        "narHash": "sha256-rDKpnNLMbhJrQrJgB8FNVDLgqJAK9SARlWoZL6M8vbQ=",
         "owner": "hyprwm",
         "repo": "Hyprland",
-        "rev": "ab6141897d57e609e24c571a762c30c963e0885a",
+        "rev": "fbc617ef7d5a2844d0fcafafc16aa980b2298ee6",
         "type": "github"
       },
       "original": {
@@ -926,11 +926,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794142756,
-        "narHash": "sha256-0zSlqkPXu+IBpS4bnkzwaieIzSYbIgpT0mtVwrsas9Y=",
+        "lastModified": 1794151086,
+        "narHash": "sha256-FjnnKnThczJMfxv22k0zsm983Qm1ZjPTdBv79Tw7Zhw=",
         "owner": "sashetophizika",
         "repo": "hyprscratch",
-        "rev": "08580304cc47c31f2497da9ce67f2eb96e1de072",
+        "rev": "8dc43d4eb334d5e3bd33ac4556b7bbcbfa5e5d59",
         "type": "github"
       },
       "original": {
@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794218972,
-        "narHash": "sha256-Dwb2S2t3i75B09VbZYz2+Tx3AvQTc2Pma6gTqhaldWA=",
+        "lastModified": 1794264073,
+        "narHash": "sha256-DoKlxt2NBffmD279X7NPlvES6nQfg94JXi6DzA4haCc=",
         "ref": "dev",
-        "rev": "ec108b1ebb8f32cca609447cddb0db8dd5b37287",
-        "revCount": 986,
+        "rev": "2312da6c582f2e70cd4bf9764d1329161d12a9e5",
+        "revCount": 990,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1153,11 +1153,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794051415,
-        "narHash": "sha256-mJok3uMK0awq2MPKdSnvTxm3UD89KD3LclQzASgtY1s=",
+        "lastModified": 1794222723,
+        "narHash": "sha256-jehPADpSIsWnyNHw/s44OHF9l6Y75QmW74sqO9cEe0A=",
         "owner": "NixOS",
         "repo": "nixos-hardware",
-        "rev": "1a8ff4f57ffe1f732beaa1db842247a381ea471d",
+        "rev": "919c16cf46a7acf9b44b2c2444bc39aa094eaa85",
         "type": "github"
       },
       "original": {
@@ -1263,11 +1263,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1793876309,
-        "narHash": "sha256-Wojg9lIH/hDH91iDVH2/EPw8oDSpxjxhXONbU1yf4Zg=",
+        "lastModified": 1794042290,
+        "narHash": "sha256-ziZn2PvCJE5JEEpqTdxXwJpPB+L3YqoCpTAMCzyaP3U=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "f9a75f41be3a74eab55d3a7679d34ad6cc0da977",
+        "rev": "f4a03c008967841f2a0b3cb7c436fc6fc31671f6",
         "type": "github"
       },
       "original": {
@@ -1288,11 +1288,11 @@
         "restricted-codex-nixpkgs": "restricted-codex-nixpkgs"
       },
       "locked": {
-        "lastModified": 1794060061,
-        "narHash": "sha256-PhIbidmX1XTZMvjdYfgJqlxEI2QG+yyrsxulPLyi6SI=",
+        "lastModified": 1794241699,
+        "narHash": "sha256-ssS33RGiULf6mEQIAsaXzRBHjo3NrBJdY6+H7iKITaE=",
         "ref": "dev",
-        "rev": "a174bc7d8157cfc3a7408154e49729b1c9bef0b9",
-        "revCount": 99,
+        "rev": "74a814a734b4f5d5409b10db684389778d878890",
+        "revCount": 100,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/pandora.git"
       },
@@ -1497,11 +1497,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794013360,
-        "narHash": "sha256-AsV5JXhDRVELAvUP2rPZ8bbIrRorFuRjcPrceqRKmdk=",
+        "lastModified": 1794245886,
+        "narHash": "sha256-VJ9MKZOuDq9sMYJuX2BhCxiUpX9XOLitpGX/OfWfyiQ=",
         "ref": "dev",
-        "rev": "133ba2f0fb63bb368df9736de1faf9ad3d23c142",
-        "revCount": 620,
+        "rev": "3e0b872e801f11e903b03ae617ae424888c68bef",
+        "revCount": 626,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/regnskap.git"
       },
