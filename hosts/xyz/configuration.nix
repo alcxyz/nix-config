@@ -261,6 +261,13 @@ in {
         enable = true;
         size = "16G";
       };
+      # Trial: opted-in Nix jobs use a persistent, read-only store as the
+      # lower layer of /nix/store instead of installing Nix (ADR-0109, #1038).
+      # On the CI disk, under root-owned /ext4/ci.
+      nixCache = {
+        enable = true;
+        dataPath = "/ext4/ci/forgejo-nix-cache";
+      };
     };
     # One Docker slot serves the few jobs that still select a Docker label.
     capacity = 1;

@@ -63,3 +63,77 @@ tea api -X DELETE /repos/alcxyz/<repo>/actions/variables/CI_FAST
 ```
 
 The value is read when a run is created, so it affects new runs only.
+
+## Host Nix store (trial on xyz)
+
+Pool hosts with `podmanCanary.nixCache` keep a read-only Nix store of
+cache.nixos.org paths and pinned GitHub, GitLab and SourceHut flake inputs
+([ADR-0109](adr/0109-shared-read-only-nix-store-for-podman-ci-jobs.md)). A
+Nix job opts in by mounting it as the lower layer of its `/nix/store`, so
+cached paths are neither downloaded nor written again; new paths go to the
+job's RAM scratch. The store is shown ID-mapped, owned by the job's root, so
+a path the job's database does not list is simply substituted again into its
+scratch. Hosts without it drop the mounts, and the job installs Nix as
+before, which also works on top of the store:
+
+```yaml
+jobs:
+  nix:
+    runs-on: forgejo-podman
+    container:
+      image: docker.io/library/node:20-bookworm
+      options: >-
+        -v /run/forgejo-nix-cache/nix/store:/nix/store:O
+        -v /run/forgejo-nix-cache/job:/nix-cache:ro
+        -v /run/forgejo-nix-cache-drop:/nix-cache-drop
+    steps:
+      - name: Use the host's Nix store
+        id: nix-cache
+        if: forgejo.event.pull_request.head.repo.fork != true
+        run: |
+          if [ -x /nix-cache/nix/bin/nix ] && [ -s /nix-cache/db/db.sqlite ]; then
+            mkdir -p /nix/var/nix/db /etc/nix
+            cp /nix-cache/db/db.sqlite /nix-cache/db/schema /nix/var/nix/db/
+            printf '%s\n' 'build-users-group =' 'experimental-features = nix-command flakes' 'sandbox = false' > /etc/nix/nix.conf
+            echo /nix-cache/nix/bin >> "$GITHUB_PATH"
+            /nix-cache/nix/bin/nix path-info --all | sort > /tmp/nix-paths-before
+            echo used=true >> "$GITHUB_OUTPUT"
+          fi
+      - uses: https://github.com/cachix/install-nix-action@v30
+        if: steps.nix-cache.outputs.used != 'true'
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            sandbox = false
+      # ... the job's Nix steps ...
+      - name: Offer the paths this run used to the host's store
+        if: >-
+          always() && steps.nix-cache.outputs.used == 'true' && forgejo.event_name == 'push'
+          && forgejo.ref == format('refs/heads/{0}', forgejo.event.repository.default_branch)
+        run: |
+          name="$(printf '%s' "$GITHUB_REPOSITORY" | tr '/' '_')-$GITHUB_RUN_ID-$GITHUB_JOB"
+          # Built in the job's own /tmp, then copied under a dot name the
+          # filler ignores and renamed at once, so the filler never reads a
+          # half-written list and the sweep never meets a long-lived one.
+          nix path-info --all | sort | comm -13 /tmp/nix-paths-before - |
+            xargs -r nix-store -qR --include-outputs | sort -u > /tmp/nix-offer.paths &&
+            cp /tmp/nix-offer.paths "/nix-cache-drop/.$name.paths" &&
+            mv "/nix-cache-drop/.$name.paths" "/nix-cache-drop/$name.paths" || true
+          cp flake.lock "/nix-cache-drop/.$name.lock" &&
+            mv "/nix-cache-drop/.$name.lock" "/nix-cache-drop/$name.lock" || true
+```
+
+The steps use POSIX shell only: act runs container steps with `sh`.
+
+The list holds the paths the run added and everything they reference,
+including the outputs of the derivations it instantiated that are already in
+the store. The filler roots the listed paths it already has again, which
+renews their age without fetching them, and substitutes the missing ones. It
+admits only what cache.nixos.org signed, and `github`, `gitlab` and
+`sourcehut` inputs pinned to a commit whose hash it verified; other paths
+and inputs (tarballs, git URLs, host overrides, submodules) are skipped, and
+jobs fetch those themselves. Lists are not private between jobs, which all
+run as one host user, so they must hold nothing but store paths and lock
+files. While a job runs, the filler only renews what it already has. A job's complete
+`nix path-info --all` would also name the whole lower store, so every push
+would renew every path and nothing would ever expire by age.

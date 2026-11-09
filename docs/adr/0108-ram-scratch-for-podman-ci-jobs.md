@@ -118,7 +118,7 @@ select a Docker label.
 - **A shared, cached Nix store per host** for the Nix jobs, which would cut
   most of their writes without RAM, but shares one readable store across all
   jobs and needs garbage collection and a change to every Nix workflow; a
-  follow-up.
+  follow-up, now [ADR-0109](0109-shared-read-only-nix-store-for-podman-ci-jobs.md).
 - **The whole store in RAM**: simpler, but images would be pulled and
   extracted again after every reboot and would take RAM.
 - **zram or a block device in RAM under the store**: compression would fit

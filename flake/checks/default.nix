@@ -151,6 +151,8 @@ in {
 
   forgejo-podman-scratch-lifecycle = import ./forgejo-podman-scratch-vm.nix {inherit pkgs;};
 
+  forgejo-podman-nix-cache-lifecycle = import ./forgejo-podman-nix-cache-vm.nix {inherit pkgs;};
+
   forgejo-runner-hold-lifecycle = import ./forgejo-runner-hold-vm.nix {inherit pkgs;};
 
   forgejo-docker-retention = import ./forgejo-docker-retention.nix {inherit lib pkgs;};
@@ -266,6 +268,16 @@ in {
     assert lib.all (host: runners.${host}.name == "${host}-docker" && runners.${host}.podmanCanary.name == "${host}-podman") (lib.attrNames runners);
     # The Docker runners carry one pool label and no aliases (#957).
     assert lib.all (runner: runner.labels == ["forgejo-docker:docker://node:20-bookworm"]) (lib.attrValues runners);
+    # The CI Nix store is a trial on xyz (ADR-0109). Its filler substitutes
+    # only from cache.nixos.org, admits only that cache's signatures, and
+    # sees no credentials.
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.enable == (host == "xyz")) (lib.attrNames runners);
+    assert lib.all (host: (runnerHosts.${host}.config.systemd.services ? forgejo-nix-cache-fill) == (host == "xyz")) (lib.attrNames runners);
+    assert runners.xyz.podmanCanary.nixCache.substituters == ["https://cache.nixos.org"];
+    assert runners.xyz.podmanCanary.nixCache.trustedPublicKeys == ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="];
+    assert runners.xyz.podmanCanary.nixCache.dataPath == "/ext4/ci/forgejo-nix-cache";
+    assert runners.xyz.podmanCanary.nixCache.jobVolumes == ["/run/forgejo-nix-cache/nix/store" "/run/forgejo-nix-cache/job" "/run/forgejo-nix-cache-drop"];
+    assert lib.all (unit: unit.serviceConfig.User == "forgejo-nix-cache" && unit.serviceConfig.CapabilityBoundingSet == "" && lib.elem "-/run/secrets" unit.serviceConfig.InaccessiblePaths && lib.elem "-/etc/nix" unit.serviceConfig.InaccessiblePaths) [runnerHosts.xyz.config.systemd.services.forgejo-nix-cache-fill];
       pkgs.runCommand "forgejo-runner-pool-contract" {
         nativeBuildInputs = [pkgs.gawk pkgs.gnugrep];
       } ''
@@ -273,6 +285,19 @@ in {
             runner_config="$(awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStarts.${host}})"
             grep -Fxq '  timeout: 3600s' "$runner_config"
             grep -Fxq '  shutdown_timeout: ${toString expectedShutdown.${host}}s' "$runner_config"
+            pool_config=${runners.${host}.podmanCanary.runnerConfig}
+            grep -Eq '^ *- /run/forgejo-podman/podman.sock$' "$pool_config"
+            ${
+              if runners.${host}.podmanCanary.nixCache.enable
+              then ''
+                for volume in /run/forgejo-nix-cache/nix/store /run/forgejo-nix-cache/job /run/forgejo-nix-cache-drop; do
+                  grep -Eq "^ *- $volume\$" "$pool_config"
+                done
+              ''
+              else ''
+                ! grep -q forgejo-nix-cache "$pool_config"
+              ''
+            }
           '')
           (lib.attrNames runnerStarts)}
         touch "$out"

@@ -73,7 +73,9 @@
         privileged = false;
         options = lib.concatStringsSep " " (map (name: "-e ${name}") (lib.attrNames canary.jobEnv));
         workdir_parent = null;
-        valid_volumes = [socketPath];
+        # The API socket, and with the Nix cache its read-only store, job
+        # directory and drop directory (ADR-0109).
+        valid_volumes = [socketPath] ++ canary.nixCache.jobVolumes;
         docker_host = "unix://${socketPath}";
         force_pull = false;
       };
@@ -220,6 +222,13 @@ in {
 
   options.services.forgejo-actions-runner.podmanCanary = {
     enable = lib.mkEnableOption "separate, qualified rootless Podman CI canary";
+    runnerConfig = lib.mkOption {
+      type = lib.types.package;
+      default = canaryInstance.config;
+      readOnly = true;
+      internal = true;
+      description = "Generated configuration of the Podman pool runner, for contract checks.";
+    };
     socketPath = lib.mkOption {
       type = lib.types.str;
       default = socketPath;
