@@ -1,7 +1,8 @@
 # ADR-0109: Give Podman CI jobs a shared, read-only Nix store per host
 
 **Status:** Accepted (trial on xyz)
-**Date:** 2026-11-09
+**Date:** 2026-11-09, updated 2026-11-09 (which runs offer lists)
+**History:** [replaced text](archive/0109-shared-read-only-nix-store-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/nix-cache.nix`,
 `nix-cache-{prepare,init,fill}.sh`, `podman-canary.nix` (`valid_volumes`),
 the Podman runner pool, and the Nix workflows that opt in
@@ -151,11 +152,27 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   store; the filler roots the listed paths it already has again, which
   renews them without fetching, and substitutes the missing ones. A job's
   whole `nix path-info --all` would name the entire lower store and keep
-  every path alive forever. The workflows publish only from pushes to their
-  default branches (`forgejo.ref` equal to the repository's default branch),
-  but any job could write there: a hostile list can only
-  make the filler fetch public signed paths or pinned public sources, and
-  keep paths alive, within the ingestion budget. The filler reads only
+  every path alive forever.
+
+  The workflows offer lists from pushes to the repository's default branch
+  (`forgejo.ref` equal to it) and from pull requests whose head branch is in
+  the same repository; fork pull requests neither use the store nor offer
+  lists. A list is only a hint: what enters is decided by the content rules
+  above, never by who offered it, and a pull request's code could write the
+  drop directory anyway, without the workflow's offer step. Offering from
+  default-branch pushes alone would leave the store nearly empty for
+  nix-packages, whose validation runs on pull requests and on pushes to
+  `main`, while its default branch is `dev`. Any job could write there: a
+  hostile list can only make the filler fetch public signed paths or pinned
+  public sources, and keep paths alive, within the ingestion budget. The
+  worst it can do is take the cache's use away, never its integrity: each
+  fill adds about `runLimit`, and collection then evicts the oldest root
+  directories whole, however much they hold, to get under `sizeCap`. A job
+  that keeps offering the same large list renews its paths on every fill, so
+  they stay recent: the store can sit at the cap holding only them, with
+  every other root evicted and ingestion stopped, until those offers stop
+  and the paths age out. Jobs then substitute what they miss into their
+  scratch, as without the store. The filler reads only
   regular files with plain names, never follows links, caps each file at
   16 MiB, and keeps only paths that follow Nix's rules (a 32-character
   base-32 hash, a name of at most 211 allowed characters not starting with a

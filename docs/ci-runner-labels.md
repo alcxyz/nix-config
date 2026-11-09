@@ -108,8 +108,11 @@ jobs:
       # ... the job's Nix steps ...
       - name: Offer the paths this run used to the host's store
         if: >-
-          always() && steps.nix-cache.outputs.used == 'true' && forgejo.event_name == 'push'
-          && forgejo.ref == format('refs/heads/{0}', forgejo.event.repository.default_branch)
+          always() && steps.nix-cache.outputs.used == 'true' && (
+            (forgejo.event_name == 'push'
+              && forgejo.ref == format('refs/heads/{0}', forgejo.event.repository.default_branch))
+            || (forgejo.event_name == 'pull_request'
+              && forgejo.event.pull_request.head.repo.full_name == forgejo.repository))
         run: |
           name="$(printf '%s' "$GITHUB_REPOSITORY" | tr '/' '_')-$GITHUB_RUN_ID-$GITHUB_JOB"
           # Built in the job's own /tmp, then copied under a dot name the
@@ -125,6 +128,9 @@ jobs:
 
 The steps use POSIX shell only: act runs container steps with `sh`.
 
+Pushes to the default branch and pull requests from the repository's own
+branches offer lists; fork pull requests neither use the store nor offer.
+
 The list holds the paths the run added and everything they reference,
 including the outputs of the derivations it instantiated that are already in
 the store. The filler roots the listed paths it already has again, which
@@ -135,5 +141,5 @@ and inputs (tarballs, git URLs, host overrides, submodules) are skipped, and
 jobs fetch those themselves. Lists are not private between jobs, which all
 run as one host user, so they must hold nothing but store paths and lock
 files. While a job runs, the filler only renews what it already has. A job's complete
-`nix path-info --all` would also name the whole lower store, so every push
+`nix path-info --all` would also name the whole lower store, so every run
 would renew every path and nothing would ever expire by age.
