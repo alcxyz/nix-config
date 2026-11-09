@@ -267,6 +267,9 @@ in {
       nixCache = {
         enable = true;
         dataPath = "/ext4/ci/forgejo-nix-cache";
+        # /ext4 also holds the Podman store, whose reset fires at 70% used:
+        # the filler stops adding, and evicts, at 65% used.
+        minFreePercent = 35;
         # Verified runs of these public repositories offer paths.
         offers = {
           forge = "https://git.alc.xyz";

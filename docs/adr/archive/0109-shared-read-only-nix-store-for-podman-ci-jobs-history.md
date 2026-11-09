@@ -410,3 +410,50 @@ The date line, and the first and last paragraphs of the "Offers are paused" bull
   holding only them, with every other root evicted and ingestion stopped,
   until those offers stop and the paths age out. Jobs then substitute what
   they miss into their scratch, as without the store. The filler reads only
+
+## Text replaced on 2026-11-10: the store only on xyz
+
+The status and date lines, and the parts of the Decision and Consequences that the extension to xev, nex and nux replaced:
+
+**Status:** Accepted (trial on xyz)
+**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge)
+
+filler user, preferably on the CI disk: `/ext4/ci/forgejo-nix-cache` on xyz.
+
+- **Location.** Every ancestor of `dataPath` must be a directory only root
+  can change; the preparation refuses the store otherwise, and a module
+  assertion keeps it out of `/var/lib/forgejo-podman`, which the API's user
+  owns and could plant links or swap directories in. Hosts whose only CI-disk
+  directory is builder-owned need a root-owned parent: nex and nux can use
+  `/var/lib`, which is on their CI disk; xev is not covered yet. The default,
+  `/var/lib/forgejo-ci-nix-cache`, avoids `/var/lib/forgejo-nix-cache`, which
+  ADR-0103's proxy may have left behind.
+
+- **Trial on xyz.** Only xyz enables it until the nix-packages validation is
+  measured with verified offers; then the other pool hosts and the other
+  Nix workflows (pandora, nix-config, teams-chat, vidown).
+
+Opted-in jobs on xyz skip installing Nix and do not download or unpack paths
+
+## Text replaced on 2026-11-10: collection only by age and cap, the store on the CI disk
+
+Parts of the Collection bullet and the Consequences that the extension replaced:
+
+- **Collection.** Each run that adds or renews paths makes one GC root
+  directory named by its time. Roots older than `maxAgeDays` (14) are
+  dropped, then the oldest roots until the store is under `sizeCap`, each
+  followed by `nix-store --gc`; the jobs' Nix stays rooted. Roots renewed
+  within the last day are never evicted for the cap: if only those remain,
+  the store stays over the cap and ingestion stays stopped, so a hostile
+  offer cannot evict what was offered within the last day. Right before each
+  `nix-store --gc` and each eviction, the filler checks for a running job as
+  above and skips the rest of the collection if there is one, since that
+  job's database copy may name paths a collection would delete.
+
+path in the VM. The store's growth writes to the CI disk once per new path
+instead of once per job. The store and its database are readable by every
+
+The store counts toward the CI disk's use for the store reset's trigger and
+the runner hold's disk floor; `sizeCap` and `minFreePercent` must leave both
+their margins. Busy hosts may defer adding, collection, and with it new
+snapshots after an expiry, for as long as jobs keep running.

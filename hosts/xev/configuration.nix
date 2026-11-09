@@ -208,6 +208,22 @@
         enable = true;
         size = "8G";
       };
+      # A shared, read-only Nix store for Podman Nix jobs (ADR-0109, #1038).
+      nixCache = {
+        enable = true;
+        # On the NVMe root, not the CI SSD, so it adds no wear
+        # there (owner, 9 Nov); a full 30G store leaves about 44G free, just
+        # above the filler's 20% floor, where it stops adding.
+        dataPath = "/var/lib/forgejo-ci-nix-cache";
+        # Small staging for flake inputs: the filler runs in the CI slice,
+        # whose budget here holds the 8G scratch and the job; it adds paths
+        # only between jobs, but a job can start while it stages an input.
+        stageSize = "1G";
+        offers = {
+          forge = "https://git.alc.xyz";
+          repos = ["alcxyz/nix-packages"];
+        };
+      };
     };
     resourcePolicy.enable = true;
     # The cluster comes first: CI stays at half the memory, with the throttle

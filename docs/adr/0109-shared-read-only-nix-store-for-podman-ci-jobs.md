@@ -1,7 +1,7 @@
 # ADR-0109: Give Podman CI jobs a shared, read-only Nix store per host
 
-**Status:** Accepted (trial on xyz)
-**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge)
+**Status:** Accepted
+**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge; xev, nex and nux)
 **History:** [replaced text](archive/0109-shared-read-only-nix-store-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/nix-cache.nix`,
 `nix-cache-{prepare,init,fill}.sh`, `podman-canary.nix` (`valid_volumes`),
@@ -53,7 +53,7 @@ VM spikes (#1038) ran the production rootless Podman API with RAM scratch:
 
 `services.forgejo-actions-runner.podmanCanary.nixCache` keeps a persistent
 Nix store per host as a chroot store at `dataPath`, owned by a dedicated
-filler user, preferably on the CI disk: `/ext4/ci/forgejo-nix-cache` on xyz.
+filler user, preferably on the CI disk: `/ext4/ci/forgejo-nix-cache` on xyz (the other hosts under Hosts, below).
 The Podman store reset ([ADR-0105](0105-offline-podman-store-reset.md))
 renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
 
@@ -61,8 +61,16 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   can change; the preparation refuses the store otherwise, and a module
   assertion keeps it out of `/var/lib/forgejo-podman`, which the API's user
   owns and could plant links or swap directories in. Hosts whose only CI-disk
-  directory is builder-owned need a root-owned parent: nex and nux can use
-  `/var/lib`, which is on their CI disk; xev is not covered yet. The default,
+  directory is builder-owned need a root-owned parent: nex and nux use
+  `/var/lib`, which is on their CI disk. xev's CI SSD is mounted at the
+  builder-owned `/var/lib/forgejo-podman`, so xev keeps the store on its
+  NVMe system disk's `/var/lib` instead, which also adds no wear to that SSD
+  (the owner's choice). There a full 30G store leaves about 44G of the 202G
+  free, just above the 40G floor of `minFreePercent` (less in practice, as
+  `sizeCap` counts NAR sizes, not blocks). When other growth on that disk
+  reaches the floor, the filler stops adding, as at `sizeCap`, overshooting
+  by at most the closure it last admitted, and jobs substitute what the
+  store lacks into their scratch. The default,
   `/var/lib/forgejo-ci-nix-cache`, avoids `/var/lib/forgejo-nix-cache`, which
   ADR-0103's proxy may have left behind.
 - **Exposed read-only and ID-mapped.** A root unit (`forgejo-nix-cache-prepare`)
@@ -136,7 +144,7 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   guarantee is content-based, not source-based.
 - **Verified offers, pulled by the filler.** Runs offer paths only through
   the forge, never through anything on the host. The filler looks the runs
-  of `offers.repos` (on xyz `alcxyz/nix-packages`) up through the anonymous
+  of `offers.repos` (`alcxyz/nix-packages` on every host) up through the anonymous
   API of `offers.forge` and takes an offer only from a run it verified
   itself, by its id: the run belongs to that public repository, has
   finished (success or failure), and is either a push to the repository's
@@ -228,11 +236,17 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   later run. A busy host therefore fills only between jobs.
 - **Collection.** Each run that adds or renews paths makes one GC root
   directory named by its time. Roots older than `maxAgeDays` (14) are
-  dropped, then the oldest roots until the store is under `sizeCap`, each
-  followed by `nix-store --gc`; the jobs' Nix stays rooted. Roots renewed
-  within the last day are never evicted for the cap: if only those remain,
-  the store stays over the cap and ingestion stays stopped, so a hostile
-  offer cannot evict what was offered within the last day. Right before each
+  dropped, then the oldest roots until the store is under `sizeCap` and its
+  filesystem is at least `minFreePercent` free, each followed by
+  `nix-store --gc`; the jobs' Nix stays rooted. So when something else
+  fills the disk, the store gives back space instead of keeping the host's
+  runner hold engaged. Roots renewed within the last day are never evicted:
+  if only those remain, the filler logs `cap_held` or `floor_held` and
+  ingestion stays stopped, so a hostile offer cannot evict what was offered
+  within the last day. The jobs' Nix is added outside the budget, since it
+  is small and jobs must not run an older Nix than the one that writes their
+  snapshots. A free-space reading that fails never evicts for the floor.
+  Right before each
   `nix-store --gc` and each eviction, the filler checks for a running job as
   above and skips the rest of the collection if there is one, since that
   job's database copy may name paths a collection would delete.
@@ -244,9 +258,17 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   while collection waited), it keeps the old snapshot, so jobs never see a
   path that is not kept. Paths the store holds but a job's snapshot does not
   list are harmless: the job substitutes them again into its upper.
-- **Trial on xyz.** Only xyz enables it until the nix-packages validation is
-  measured with verified offers; then the other pool hosts and the other
-  Nix workflows (pandora, nix-config, teams-chat, vidown).
+- **Hosts.** Every pool host keeps a store, each filled from the same
+  verified offers: xyz on its CI disk (`/ext4/ci/forgejo-nix-cache`), and
+  xev, nex and nux, which are cluster nodes with 31 GiB, on
+  `/var/lib/forgejo-ci-nix-cache` with `stageSize` 1G. The filler runs in
+  the CI slice (`forgejobuilds.slice`), whose budget there (memoryHigh 45%,
+  memoryMax 50%) holds the 8G scratch and the job. It adds paths only
+  between jobs, but a job can start while it stages an input, so a job
+  near the slice limit may meet up to the staging size plus Nix's own
+  memory more; the small staging keeps that narrow, and an input larger
+  than it fails and is left to the jobs. All use `sizeCap` 30G. The other Nix workflows
+  (pandora, nix-config, teams-chat, vidown) follow.
 
 Success is measured against the #1027 baseline on two criteria, not one: CI
 disk writes per day and per Nix job, and job time. Writes are an explicit
@@ -282,18 +304,32 @@ scratch then fits every host, or the reason they cannot is recorded here.
 
 ## Consequences
 
-Opted-in jobs on xyz skip installing Nix and do not download or unpack paths
+Opted-in jobs skip installing Nix and do not download or unpack paths
 the store already holds; their scratch holds only new paths, paths their
 snapshot does not list, and a copy of the database, about 1.2 KiB per valid
-path in the VM. The store's growth writes to the CI disk once per new path
-instead of once per job. The store and its database are readable by every
+path in the VM. The store's growth writes to its disk once per new path
+instead of once per job: the CI disk on xyz, the NVMe system disk on xev,
+nex and nux, so on xev the store's writes stay off the CI SSD, and the CI
+disk write rate measured there leaves them out. The store and its database are readable by every
 pool job on the host, which is acceptable only because they hold public,
 signed or hash-pinned content. ID-mapped binds need a filesystem that
 supports them; ext4 does.
 
-The store counts toward the CI disk's use for the store reset's trigger and
-the runner hold's disk floor; `sizeCap` and `minFreePercent` must leave both
-their margins. Busy hosts may defer adding, collection, and with it new
+The store counts toward the use of the filesystem it sits on: on xyz the
+CI disk, for the store reset's trigger and the runner hold's disk paths; on
+nex and nux the system disk, which also holds their Podman store, for both;
+on xev the system disk, for the runner hold only, which watches `/`. The
+hold drains below 30 GiB or 15% free and releases at 40 GiB and 20%, the
+filler's floor, so a full store on xev leaves about 14G of other growth
+before a drain; the store then gives back its older roots until the floor
+is met again. Where the store shares the Podman store's filesystem (xyz's
+`/ext4`, and the system disks of nex and nux), the store reset fires at 70%
+used, so there `minFreePercent` is 35: the filler stops adding, and evicts,
+at 65% used, and never holds that disk over the reset's trigger itself.
+They were at 40%, 46% and 51% used in November 2026, so a full store adds
+about 13 points on xyz's 234G `/ext4` and 3 on the others. On xev
+`minFreePercent` stays 20, matching the runner hold's release. `sizeCap`
+and `minFreePercent` must leave both margins. Busy hosts may defer adding, collection, and with it new
 snapshots after an expiry, for as long as jobs keep running.
 
 Known limits: the running-job check narrows the races but does not close
@@ -352,7 +388,9 @@ fill, and runs already read are not read again; a
 fill with a job
 running that only renews and neither adds nor collects; ingestion stopping
 at the cap; expiry by age keeping
-renewed paths; eviction by the cap; a store reset that leaves the store and
+renewed paths; eviction below the disk floor, sparing roots renewed within
+a day, and a path offered again afterwards; eviction by the cap; a store
+reset that leaves the store and
 its mount alone; a stopped unit leaving a placeholder that jobs still start
 on; and a store someone else owns refused with a placeholder, replaced on
 the next start with the drop directory's mode (0700) intact.

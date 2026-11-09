@@ -601,6 +601,22 @@ in
           assert in_cache("${dep}") and in_cache("${jobPayload}") and in_cache("${nixPkg}")
           assert not in_snapshot("${payload}") and in_snapshot("${jobPayload}")
 
+      with subtest("below the disk floor the store gives back its oldest roots, not those renewed within a day"):
+          machine.succeed(f"printf '[Service]\\nEnvironment=MIN_FREE_PERCENT=100\\n' > {dropin}/floor.conf && systemctl daemon-reload")
+          journal = run_fill()
+          assert "floor_held" in journal and "dropped=0" in journal, journal
+          assert in_cache("${jobPayload}")
+          for stamp in machine.succeed(f"ls {runs}").split():
+              machine.succeed(f"mv {runs}/{stamp} {runs}/{int(stamp) - 2 * 86400}")
+          journal = run_fill()
+          assert "floor_unreachable" in journal and re.search(r"dropped=[1-9]", journal), journal
+          assert not in_cache("${jobPayload}") and in_cache("${nixPkg}")
+          machine.succeed(f"rm {dropin}/floor.conf && systemctl daemon-reload")
+          # Offered again, the path returns with a recent root.
+          machine.succeed(f"printf '%s\\n' ${jobPayload} > {drop}/again.paths")
+          journal = run_fill()
+          assert "substituted=1" in journal and in_cache("${jobPayload}"), journal
+
       with subtest("the size cap drops the oldest roots but not those renewed within a day; the jobs' Nix stays"):
           machine.succeed(f"printf '[Service]\\nEnvironment=SIZE_CAP_BYTES=1\\n' > {dropin}/cap.conf && systemctl daemon-reload")
           journal = run_fill()

@@ -269,17 +269,23 @@ in {
     assert lib.all (host: runners.${host}.name == "${host}-docker" && runners.${host}.podmanCanary.name == "${host}-podman") (lib.attrNames runners);
     # The Docker runners carry one pool label and no aliases (#957).
     assert lib.all (runner: runner.labels == ["forgejo-docker:docker://node:20-bookworm"]) (lib.attrValues runners);
-    # The CI Nix store is a trial on xyz (ADR-0109). Its filler substitutes
-    # only from cache.nixos.org, admits only that cache's signatures, and
-    # sees no credentials.
-    assert lib.all (host: runners.${host}.podmanCanary.nixCache.enable == (host == "xyz")) (lib.attrNames runners);
-    assert lib.all (host: (runnerHosts.${host}.config.systemd.services ? forgejo-nix-cache-fill) == (host == "xyz")) (lib.attrNames runners);
-    assert runners.xyz.podmanCanary.nixCache.substituters == ["https://cache.nixos.org"];
-    assert runners.xyz.podmanCanary.nixCache.offers.forge == "https://git.alc.xyz" && runners.xyz.podmanCanary.nixCache.offers.repos == ["alcxyz/nix-packages"];
-    assert runners.xyz.podmanCanary.nixCache.trustedPublicKeys == ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="];
+    # Every pool host keeps the CI Nix store (ADR-0109): xyz on its CI disk,
+    # the cluster nodes on their NVMe /var/lib with smaller staging. Its
+    # filler substitutes only from cache.nixos.org, admits only that cache's
+    # signatures, and sees no credentials.
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.enable) (lib.attrNames runners);
+    assert lib.all (host: runnerHosts.${host}.config.systemd.services ? forgejo-nix-cache-fill) (lib.attrNames runners);
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.substituters == ["https://cache.nixos.org"]) (lib.attrNames runners);
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.offers.forge == "https://git.alc.xyz" && runners.${host}.podmanCanary.nixCache.offers.repos == ["alcxyz/nix-packages"]) (lib.attrNames runners);
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.trustedPublicKeys == ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="]) (lib.attrNames runners);
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.sizeCap == "30G") (lib.attrNames runners);
     assert runners.xyz.podmanCanary.nixCache.dataPath == "/ext4/ci/forgejo-nix-cache";
-    assert runners.xyz.podmanCanary.nixCache.jobVolumes == ["/run/forgejo-nix-cache/nix/store" "/run/forgejo-nix-cache/job"];
-    assert lib.all (unit: unit.serviceConfig.User == "forgejo-nix-cache" && unit.serviceConfig.CapabilityBoundingSet == "" && lib.elem "-/run/secrets" unit.serviceConfig.InaccessiblePaths && lib.elem "-/etc/nix" unit.serviceConfig.InaccessiblePaths) [runnerHosts.xyz.config.systemd.services.forgejo-nix-cache-fill];
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.dataPath == "/var/lib/forgejo-ci-nix-cache" && runners.${host}.podmanCanary.nixCache.stageSize == "1G") ["xev" "nex" "nux"];
+    # Where the store shares the Podman store's filesystem, its floor stays
+    # clear of the store reset's trigger (ADR-0105).
+    assert lib.all (host: 100 - runners.${host}.podmanCanary.nixCache.minFreePercent < runners.${host}.podmanStoreReset.triggerUsedPercent) ["xyz" "nex" "nux"];
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.jobVolumes == ["/run/forgejo-nix-cache/nix/store" "/run/forgejo-nix-cache/job"]) (lib.attrNames runners);
+    assert lib.all (host: let unit = runnerHosts.${host}.config.systemd.services.forgejo-nix-cache-fill; in unit.serviceConfig.User == "forgejo-nix-cache" && unit.serviceConfig.CapabilityBoundingSet == "" && lib.elem "-/run/secrets" unit.serviceConfig.InaccessiblePaths && lib.elem "-/etc/nix" unit.serviceConfig.InaccessiblePaths) (lib.attrNames runners);
       pkgs.runCommand "forgejo-runner-pool-contract" {
         nativeBuildInputs = [pkgs.gawk pkgs.gnugrep];
       } ''

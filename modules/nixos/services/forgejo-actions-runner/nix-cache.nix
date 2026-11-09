@@ -120,8 +120,9 @@ in {
         Bound of the store, as the sum of its NAR sizes. The filler stops
         adding paths for the run once the store reaches it, so a run
         overshoots by at most one closure, and its collection drops the
-        oldest GC roots until the store fits again. It counts toward the CI
-        disk's use for the store reset and the runner hold.
+        oldest GC roots until the store fits again. It counts toward the use
+        of the store's filesystem, and with it toward the store reset and the
+        runner hold where they watch that filesystem (ADR-0109).
       '';
     };
     runLimit = lib.mkOption {
@@ -149,8 +150,10 @@ in {
       type = lib.types.ints.between 0 100;
       default = 20;
       description = ''
-        Free space the filler leaves on the CI filesystem: it stops adding
-        paths for the run once less is free, as it does at `sizeCap`.
+        Free space the filler leaves on the store's filesystem: it stops
+        adding paths for the run once less is free, as it does at `sizeCap`,
+        and its collection then evicts the oldest roots not renewed within a
+        day until enough is free again, whatever else filled the disk.
       '';
     };
     maxAgeDays = lib.mkOption {

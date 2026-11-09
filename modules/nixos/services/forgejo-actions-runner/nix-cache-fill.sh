@@ -21,7 +21,7 @@ job=$root/job
 cap=$SIZE_CAP_BYTES
 min_free=$MIN_FREE_PERCENT
 run_limit=$RUN_LIMIT_BYTES
-# Roots renewed this recently are never evicted to meet the cap.
+# Roots renewed this recently are never evicted, for the cap or the floor.
 recent_seconds=86400
 list_max_bytes=${LIST_MAX_BYTES:-16777216}
 max_paths=${MAX_PATHS:-200000}
@@ -73,8 +73,8 @@ free_percent() {
   df --output=avail,size -B1 -- "$root" | awk 'NR == 2 { printf "%d", $1 * 100 / $2 }'
 }
 # The ingestion budget, checked before each closure and input: the store
-# under the size cap, at most RUN_LIMIT_BYTES added by this run, and the CI
-# filesystem at least MIN_FREE_PERCENT free. A run overshoots the cap and
+# under the size cap, at most RUN_LIMIT_BYTES added by this run, and the
+# store's filesystem at least MIN_FREE_PERCENT free. A run overshoots the cap and
 # its own limit by at most the closure it last admitted.
 run_start_bytes=
 over_budget() {
@@ -119,7 +119,9 @@ ingest_blocked() {
   return 1
 }
 
-# 1. The cache's own Nix, which jobs run from the lower store.
+# 1. The cache's own Nix, which jobs run from the lower store. Added outside
+# the budget: it is small, and jobs must not keep an older Nix than the one
+# that writes their database snapshots.
 : >"$work/nix.err"
 if nix-store --store "$store" --check-validity "$NIX_PACKAGE" 2>/dev/null ||
   { ! job_running && nix-store --store "$store" --realise "$NIX_PACKAGE" >/dev/null 2>"$work/nix.err"; }; then
@@ -451,9 +453,9 @@ printf 'fill lists=%s locks=%s requested=%s renewed=%s substituted=%s skipped=%s
   "$(wc -l <"$pending_paths")" "$(wc -l <"$pending_inputs")" "$offer_runs" "$offer_refused"
 
 # 6. Collect: drop roots older than the age limit, then the oldest roots
-# until the store is under the cap, but never roots renewed within the last
-# day: a hostile list cannot evict what jobs use now, and ingestion stays
-# stopped at the cap instead. Each deletion waits for no job container to
+# until the store is under the cap and its filesystem above the floor, but
+# never roots renewed within the last day: a hostile offer cannot evict what
+# was offered within a day, and ingestion stays stopped instead. Each deletion waits for no job container to
 # run right before it; a job that starts during a collection can still lose
 # a path its snapshot names.
 now=$(date +%s)
@@ -472,7 +474,17 @@ if job_running; then
 else
   nix-store --store "$store" --gc >/dev/null 2>&1 || true
   collected=1
-  while used=$(store_bytes) && ((used > cap)); do
+  # Over the cap, or with the filesystem below the floor because something
+  # else grew, the store gives back its oldest roots, so it never keeps a
+  # host's disk guard (the runner hold) engaged for long.
+  # A free-space reading that failed never evicts for the floor.
+  while used=$(store_bytes) && { free=$(free_percent) && [[ $free =~ ^[0-9]+$ ]] || free=100; } &&
+    ((used > cap || free < min_free)); do
+    if ((used > cap)); then
+      held=cap
+    else
+      held=floor
+    fi
     oldest=
     recent=0
     for dir in "$runs"/*; do
@@ -488,9 +500,9 @@ else
     done
     if [[ -z $oldest ]]; then
       if ((recent > 0)); then
-        printf 'cap_held bytes=%s cap=%s recent_roots=%s\n' "$used" "$cap" "$recent"
+        printf '%s_held bytes=%s cap=%s free_percent=%s recent_roots=%s\n' "$held" "$used" "$cap" "$free" "$recent"
       else
-        printf 'cap_unreachable bytes=%s cap=%s\n' "$used" "$cap"
+        printf '%s_unreachable bytes=%s cap=%s free_percent=%s\n' "$held" "$used" "$cap" "$free"
       fi
       break
     fi

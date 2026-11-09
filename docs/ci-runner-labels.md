@@ -64,7 +64,7 @@ tea api -X DELETE /repos/alcxyz/<repo>/actions/variables/CI_FAST
 
 The value is read when a run is created, so it affects new runs only.
 
-## Host Nix store (trial on xyz)
+## Host Nix store
 
 Pool hosts with `podmanCanary.nixCache` keep a read-only Nix store of
 cache.nixos.org paths and pinned GitHub, GitLab and SourceHut flake inputs

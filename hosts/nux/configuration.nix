@@ -142,6 +142,23 @@ in {
         enable = true;
         size = "8G";
       };
+      # A shared, read-only Nix store for Podman Nix jobs (ADR-0109, #1038).
+      nixCache = {
+        enable = true;
+        # On /var/lib, the NVMe disk that also holds its CI store.
+        dataPath = "/var/lib/forgejo-ci-nix-cache";
+        # Small staging for flake inputs: the filler runs in the CI slice,
+        # whose budget here holds the 8G scratch and the job; it adds paths
+        # only between jobs, but a job can start while it stages an input.
+        stageSize = "1G";
+        # The system disk also holds the Podman store, whose reset fires at
+        # 70% used: the filler stops adding, and evicts, at 65% used.
+        minFreePercent = 35;
+        offers = {
+          forge = "https://git.alc.xyz";
+          repos = ["alcxyz/nix-packages"];
+        };
+      };
     };
     resourcePolicy.enable = true;
     # k3s leaves headroom on this host; raised from the 50% default (#957).
