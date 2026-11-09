@@ -102,9 +102,12 @@ else let
     $N/nix-store --add /tmp/big
     echo ADD-OK
     if touch /nix-cache/x 2>/dev/null; then echo JOB-DIR-WRITABLE; exit 1; fi
-    # The workflow's list: the paths this job added and what they use.
+    # Bound through the API socket, the drop directory is still not writable.
+    if touch /nix-cache-drop/x 2>/dev/null; then echo DROP-DIR-WRITABLE; exit 1; fi
+    # A list of the paths this job added and what they use, which root places
+    # in the drop directory below, as no job can.
     $N/nix path-info --all | sort | comm -13 /tmp/before - |
-      xargs $N/nix-store -qR --include-outputs | sort -u > /nix-cache-drop/job.paths
+      xargs $N/nix-store -qR --include-outputs | sort -u > /joblist/job.paths
     echo READY
     while [ ! -e /srv/go ]; do sleep 1; done
   '';
@@ -275,7 +278,7 @@ in
           machine.succeed(f"test \"$(stat -c %d:%i {exposed})\" = \"$(stat -c %d:%i {data})\"")
           machine.succeed(f"test \"$(stat -c %U:%G {exposed} {exposed}/job/db.0/db.sqlite | sort -u)\" = forgejo-podman-builder:forgejo-podman")
           machine.succeed(f"test \"$(stat -c %U {data}/job/db.0/db.sqlite)\" = forgejo-nix-cache")
-          machine.succeed(f"test \"$(stat -c %U:%a {drop})\" = forgejo-nix-cache:1733")
+          machine.succeed(f"test \"$(stat -c %U:%a {drop})\" = forgejo-nix-cache:700")
           machine.fail(f"touch {exposed}/x")
           machine.succeed(f"test -d {exposed}/nix/store && test -s {exposed}/job/db/db.sqlite && ! test -e {exposed}/job/nix")
           # Mounts are assembled out of reach, in a private root-only tmpfs.
@@ -393,7 +396,8 @@ in
 
       with subtest("a job reads the lower store and writes only to its RAM scratch"):
           before = machine.succeed(snap)
-          container("job", f"{binds} -v /srv:/srv:ro", "/bin/busybox sh /srv/job.sh", wait=False)
+          machine.succeed("install -d -o forgejo-podman-builder /tmp/joblist")
+          container("job", f"{binds} -v /srv:/srv:ro -v /tmp/joblist:/joblist", "/bin/busybox sh /srv/job.sh", wait=False)
           machine.wait_until_succeeds("journalctl --sync && journalctl -o cat -t job | grep -q READY", timeout=300)
           out = machine.succeed("journalctl -o cat -t job")
           for marker in ["LOWER-READ-OK", "SUBSTITUTE-OK", "ADD-OK"]:
@@ -407,6 +411,7 @@ in
           assert machine.succeed(f"timeout 120 {podman} wait job").strip() == "0"
           assert machine.succeed(snap) == before, "a job changed the lower store"
           machine.succeed(f"{podman} rm job && rm /srv/go")
+          machine.succeed(f"cp /tmp/joblist/job.paths {drop}/job.paths")
           listed = machine.succeed(f"cat {drop}/job.paths").split()
           # Its new paths and the lower path they use.
           assert "${jobPayload}" in listed and "${dep}" in listed, listed
@@ -524,10 +529,10 @@ in
           # Fixed, the next start replaces the placeholder with the cache.
           machine.succeed(f"chown forgejo-nix-cache {data} && systemctl reset-failed {prepare} && systemctl start {prepare}")
           machine.succeed(f"test \"$(stat -c %d:%i {exposed})\" = \"$(stat -c %d:%i {data})\"")
-          machine.succeed(f"test \"$(stat -c %U:%a {drop})\" = forgejo-nix-cache:1733")
+          machine.succeed(f"test \"$(stat -c %U:%a {drop})\" = forgejo-nix-cache:700")
           # A second start keeps both as they are.
           machine.succeed(f"systemctl restart {prepare}")
-          machine.succeed(f"test \"$(stat -c %U:%a {drop})\" = forgejo-nix-cache:1733")
+          machine.succeed(f"test \"$(stat -c %U:%a {drop})\" = forgejo-nix-cache:700")
           machine.succeed(f"test \"$(stat -c %U {exposed})\" = forgejo-podman-builder")
     '';
   }

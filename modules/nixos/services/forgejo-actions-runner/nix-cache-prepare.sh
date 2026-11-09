@@ -26,18 +26,18 @@ filler_gid=$(id -g "$filler")
 builder_uid=$(id -u "$builder")
 builder_gid=$(getent group "$builder_group" | cut -d: -f3)
 
-# Path lists from jobs: a small tmpfs, sticky and writable by all but
-# listable only by the filler. It is not private between jobs: every job
-# runs as the same host user, which can open, replace or delete another
-# job's list by name, so lists carry only public store paths and lock
-# files. It exists whatever becomes of the cache below, and its mode is
-# restored on every run.
+# Path lists for the filler: a small tmpfs only the filler can use. Jobs
+# cannot write it: the Podman API they reach through its socket runs as the
+# builder, which would let any job, a fork's included, bind it whatever the
+# runner allows, so offers wait until the filler can verify which run made
+# one (ADR-0109). Root can still place a list there. It exists whatever
+# becomes of the cache below, and its mode is restored on every run.
 [[ -d $drop ]] || mkdir -m 0755 -- "$drop"
 if ! mountpoint -q -- "$drop"; then
   mount -t tmpfs -o "size=$drop_size,nosuid,nodev,noexec" tmpfs "$drop"
 fi
 chown "$filler_uid:$filler_gid" -- "$drop"
-chmod 1733 -- "$drop"
+chmod 0700 -- "$drop"
 [[ -d $exposed ]] || mkdir -m 0755 -- "$exposed"
 
 is_read_only() {

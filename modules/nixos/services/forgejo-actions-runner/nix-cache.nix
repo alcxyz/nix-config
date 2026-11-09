@@ -106,7 +106,7 @@ in {
       type = lib.types.str;
       default = "/run/forgejo-nix-cache-drop";
       readOnly = true;
-      description = "Directory where jobs leave path lists (`*.paths`) and flake locks (`*.lock`) for the filler.";
+      description = "Directory, writable only by the filler and root, holding path lists (`*.paths`) and flake locks (`*.lock`) for the filler (ADR-0109).";
     };
     dropSize = lib.mkOption {
       type = lib.types.strMatching "[1-9][0-9]*[MG]";
@@ -186,10 +186,11 @@ in {
       type = lib.types.listOf lib.types.str;
       readOnly = true;
       internal = true;
+      # Not the drop directory: the runner cannot tell a fork's job, which
+      # controls its own workflow, from a trusted one (ADR-0109).
       default = lib.optionals cache.enable [
         "${cache.path}/nix/store"
         "${cache.path}/job"
-        cache.dropPath
       ];
       description = "Host paths the pool runner lets jobs mount.";
     };
@@ -295,10 +296,10 @@ in {
           ${pkgs.coreutils}/bin/touch ${fillStamp}
         ''}";
         ExecStart = lib.getExe fill;
-        # The filler cannot delete dotfiles, links or directories that jobs
-        # leave in the drop directory. Root drops what has lain there since
-        # before the previous fill started, by change time and never following
-        # links, so an offer a job is still writing, which is newer, survives.
+        # The filler removes only the lists it reads. Root drops anything else
+        # that has lain in the drop directory since before the previous fill
+        # started, by change time and never following links, so a list still
+        # being written, which is newer, survives.
         ExecStartPost = "-+${pkgs.writeShellScript "forgejo-nix-cache-drop-sweep" ''
           if [ -e ${fillStamp}.prev ]; then
             ${pkgs.findutils}/bin/find ${cache.dropPath} -mindepth 1 ! -cnewer ${fillStamp}.prev -delete

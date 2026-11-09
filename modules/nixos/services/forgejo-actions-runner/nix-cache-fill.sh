@@ -129,8 +129,8 @@ else
   printf 'nix_unavailable path=%s error=%s\n' "$NIX_PACKAGE" "$(tail -n 1 "$work/nix.err")"
 fi
 
-# 2. Take the lists. Every job can write the drop directory, so each entry is
-# untrusted: plain names, regular files only, never followed, size-capped,
+# 2. Take the lists. Only the filler and root can write the drop directory
+# (ADR-0109), but each entry is still treated as untrusted: plain names, regular files only, never followed, size-capped,
 # and only well-formed store paths are kept. Only *.paths and *.lock are
 # read and removed; anything else, such as a list still being written under
 # a dot or .tmp name, is left alone and swept by root once it is older than

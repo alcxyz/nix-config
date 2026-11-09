@@ -73,8 +73,8 @@
         privileged = false;
         options = lib.concatStringsSep " " (map (name: "-e ${name}") (lib.attrNames canary.jobEnv));
         workdir_parent = null;
-        # The API socket, and with the Nix cache its read-only store, job
-        # directory and drop directory (ADR-0109).
+        # The API socket, and with the Nix cache its read-only store and job
+        # directory (ADR-0109).
         valid_volumes = [socketPath] ++ canary.nixCache.jobVolumes;
         docker_host = "unix://${socketPath}";
         force_pull = false;

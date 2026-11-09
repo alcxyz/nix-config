@@ -277,7 +277,7 @@ in {
     assert runners.xyz.podmanCanary.nixCache.substituters == ["https://cache.nixos.org"];
     assert runners.xyz.podmanCanary.nixCache.trustedPublicKeys == ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="];
     assert runners.xyz.podmanCanary.nixCache.dataPath == "/ext4/ci/forgejo-nix-cache";
-    assert runners.xyz.podmanCanary.nixCache.jobVolumes == ["/run/forgejo-nix-cache/nix/store" "/run/forgejo-nix-cache/job" "/run/forgejo-nix-cache-drop"];
+    assert runners.xyz.podmanCanary.nixCache.jobVolumes == ["/run/forgejo-nix-cache/nix/store" "/run/forgejo-nix-cache/job"];
     assert lib.all (unit: unit.serviceConfig.User == "forgejo-nix-cache" && unit.serviceConfig.CapabilityBoundingSet == "" && lib.elem "-/run/secrets" unit.serviceConfig.InaccessiblePaths && lib.elem "-/etc/nix" unit.serviceConfig.InaccessiblePaths) [runnerHosts.xyz.config.systemd.services.forgejo-nix-cache-fill];
       pkgs.runCommand "forgejo-runner-pool-contract" {
         nativeBuildInputs = [pkgs.gawk pkgs.gnugrep];
@@ -291,12 +291,19 @@ in {
             ${
               if runners.${host}.podmanCanary.nixCache.enable
               then ''
-                for volume in /run/forgejo-nix-cache/nix/store /run/forgejo-nix-cache/job /run/forgejo-nix-cache-drop; do
+                for volume in /run/forgejo-nix-cache/nix/store /run/forgejo-nix-cache/job; do
                   grep -Eq "^ *- $volume\$" "$pool_config"
                 done
+                if grep -q forgejo-nix-cache-drop "$pool_config"; then
+                  echo "the pool runner lets jobs mount the drop directory" >&2
+                  exit 1
+                fi
               ''
               else ''
-                ! grep -q forgejo-nix-cache "$pool_config"
+                if grep -q forgejo-nix-cache "$pool_config"; then
+                  echo "a pool runner without the cache lets jobs mount it" >&2
+                  exit 1
+                fi
               ''
             }
           '')

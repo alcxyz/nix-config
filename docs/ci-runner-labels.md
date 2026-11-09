@@ -85,7 +85,6 @@ jobs:
       options: >-
         -v /run/forgejo-nix-cache/nix/store:/nix/store:O
         -v /run/forgejo-nix-cache/job:/nix-cache:ro
-        -v /run/forgejo-nix-cache-drop:/nix-cache-drop
     steps:
       - name: Use the host's Nix store
         id: nix-cache
@@ -96,7 +95,6 @@ jobs:
             cp /nix-cache/db/db.sqlite /nix-cache/db/schema /nix/var/nix/db/
             printf '%s\n' 'build-users-group =' 'experimental-features = nix-command flakes' 'sandbox = false' > /etc/nix/nix.conf
             echo /nix-cache/nix/bin >> "$GITHUB_PATH"
-            /nix-cache/nix/bin/nix path-info --all | sort > /tmp/nix-paths-before
             echo used=true >> "$GITHUB_OUTPUT"
           fi
       - uses: https://github.com/cachix/install-nix-action@v30
@@ -106,40 +104,14 @@ jobs:
             experimental-features = nix-command flakes
             sandbox = false
       # ... the job's Nix steps ...
-      - name: Offer the paths this run used to the host's store
-        if: >-
-          always() && steps.nix-cache.outputs.used == 'true' && (
-            (forgejo.event_name == 'push'
-              && forgejo.ref == format('refs/heads/{0}', forgejo.event.repository.default_branch))
-            || (forgejo.event_name == 'pull_request'
-              && forgejo.event.pull_request.head.repo.full_name == forgejo.repository))
-        run: |
-          name="$(printf '%s' "$GITHUB_REPOSITORY" | tr '/' '_')-$GITHUB_RUN_ID-$GITHUB_JOB"
-          # Built in the job's own /tmp, then copied under a dot name the
-          # filler ignores and renamed at once, so the filler never reads a
-          # half-written list and the sweep never meets a long-lived one.
-          nix path-info --all | sort | comm -13 /tmp/nix-paths-before - |
-            xargs -r nix-store -qR --include-outputs | sort -u > /tmp/nix-offer.paths &&
-            cp /tmp/nix-offer.paths "/nix-cache-drop/.$name.paths" &&
-            mv "/nix-cache-drop/.$name.paths" "/nix-cache-drop/$name.paths" || true
-          cp flake.lock "/nix-cache-drop/.$name.lock" &&
-            mv "/nix-cache-drop/.$name.lock" "/nix-cache-drop/$name.lock" || true
 ```
 
 The steps use POSIX shell only: act runs container steps with `sh`.
 
-Pushes to the default branch and pull requests from the repository's own
-branches offer lists; fork pull requests neither use the store nor offer.
-
-The list holds the paths the run added and everything they reference,
-including the outputs of the derivations it instantiated that are already in
-the store. The filler roots the listed paths it already has again, which
-renews their age without fetching them, and substitutes the missing ones. It
-admits only what cache.nixos.org signed, and `github`, `gitlab` and
-`sourcehut` inputs pinned to a commit whose hash it verified; other paths
-and inputs (tarballs, git URLs, host overrides, submodules) are skipped, and
-jobs fetch those themselves. Lists are not private between jobs, which all
-run as one host user, so they must hold nothing but store paths and lock
-files. While a job runs, the filler only renews what it already has. A job's complete
-`nix path-info --all` would also name the whole lower store, so every run
-would renew every path and nothing would ever expire by age.
+Jobs cannot offer path lists to the store for now: the filler's drop
+directory is writable only by the filler. A job reaches the Podman API
+through its socket and could bind any path the API's user can write, and a
+fork's job controls its own workflow, so no runner setting could keep forks
+out of a directory jobs can write. The store keeps
+what it holds until the filler can verify which run made an offer
+([#1038](https://git.alc.xyz/alcxyz/nix-config/issues/1038)).
