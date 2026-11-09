@@ -1,4 +1,4 @@
-"""Hermetic contracts for the update entry point, its groups and the inputs they name (ADR-0069, ADR-0086, ADR-0087, ADR-0089, ADR-0107)."""
+"""Hermetic contracts for the update entry point, its groups and the inputs they name (ADR-0069, ADR-0080, ADR-0086, ADR-0087, ADR-0089, ADR-0107)."""
 
 from __future__ import annotations
 
@@ -85,6 +85,9 @@ UPSTREAM_PINNED_INPUTS = {
     "screenshot": "DMS-Screenshot",
 }
 
+# Owner inputs in no fixed group: `own` adds them to the groups' members.
+OWN_ONLY_INPUTS = ["nix-packages", "nix-secrets", "pandora"]
+
 OLD_COMMANDS = ["apps-update", "dev-apps-update", "dms-update", "qa-update", "qaup", "tools-update", "dev-tools-update"]
 
 
@@ -110,7 +113,7 @@ class GroupContracts(unittest.TestCase):
         names = set()
         for node in lock["nodes"].values():
             names.update(node.get("inputs", {}))
-        self.assertFalse(set(GROUPS) & names)
+        self.assertFalse((set(GROUPS) | {"own"}) & names)
 
     def test_groups_name_real_inputs(self):
         # --list checks a plain input name against flake.lock, so listing every
@@ -130,7 +133,15 @@ class GroupContracts(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("unknown group or input 'no-such-input'", result.stderr)
-        self.assertIn("apps, dev-apps, tools, dev-tools, dms", result.stderr)
+        self.assertIn("apps, dev-apps, tools, dev-tools, dms, own", result.stderr)
+
+    def test_own_is_every_group_and_the_owner_only_inputs(self):
+        own = list_inputs("own")
+        self.assertEqual(len(own), len(set(own)))
+        members = {name for inputs in GROUPS.values() for name in inputs}
+        self.assertEqual(set(own), members | set(OWN_ONLY_INPUTS))
+        for third_party in ("nixpkgs", "home-manager", "dankMaterialShell", "dms-plugins/worldclock"):
+            self.assertNotIn(third_party, own)
 
     def test_dev_tools_pair_with_released_tools(self):
         self.assertLessEqual(set(DEV_TOOL_INPUTS.values()), set(TOOL_INPUTS))
@@ -270,7 +281,7 @@ INITIAL_LOCK = {
 }
 
 
-class EntryPointTests(unittest.TestCase):
+class UpdateRepoCase(unittest.TestCase):
     """Runs update.py in a scratch Git repository with nix and deploy stubbed."""
 
     def setUp(self):
@@ -290,15 +301,44 @@ class EntryPointTests(unittest.TestCase):
             case "$*" in
               "flake update"*)
                 if [[ ${FAKE_LOCK:-change} == change ]]; then
-                  python3 - <<'PY'
+                  python3 - "$@" <<'PY'
             import json
+            import sys
             lock = json.load(open("flake.lock"))
             lock["nodes"]["nixpkgs"]["locked"] = {"rev": "d" * 40, "lastModified": 1762473600}
+            # A full update moves nix-packages to the newest dev, as Nix does,
+            # unless an override pins it.
+            arguments = sys.argv[1:]
+            if "--override-input" in arguments:
+                url = arguments[arguments.index("--override-input") + 2]
+                lock["nodes"]["nix-packages"]["locked"]["rev"] = url.split("rev=")[1]
+            elif "nix-packages" in lock["nodes"] and len(arguments) == 2:
+                lock["nodes"]["nix-packages"]["locked"]["rev"] = "e" * 40
             json.dump(lock, open("flake.lock", "w"))
             PY
                 fi
                 ;;
-              "flake check --no-build") [[ ${FAKE_CHECK_FAIL:-0} != 1 ]] ;;
+              "flake check --no-build")
+                [[ ${FAKE_CHECK_FAIL:-0} != 1 ]]
+                checks=$(( $(cat "$FAKE_CALLS.checks" 2>/dev/null || echo 0) + 1 ))
+                echo "$checks" > "$FAKE_CALLS.checks"
+                if (( checks <= ${FAKE_CHECK_INVALID:-0} )); then
+                  echo "… while checking the derivation 'checks.x86_64-linux.demo'" >&2
+                  echo "error: path '/nix/store/0000000000000000000000000000000a-demo.drv' is not valid" >&2
+                  exit 1
+                fi
+                ;;
+              "eval --raw .#"*) ;;
+              "flake metadata --json "*) printf '{"locked":{"revCount":%s}}\\n' "${FAKE_PROMOTED_COUNT:-20}" ;;
+              "flake lock --override-input nix-packages "*)
+                python3 - "$5" <<'PY'
+            import json, sys
+            lock = json.load(open("flake.lock"))
+            node = lock["nodes"]["nix-packages"]["locked"]
+            node["rev"] = sys.argv[1].split("rev=")[1]
+            json.dump(lock, open("flake.lock", "w"))
+            PY
+                ;;
               *) echo "unexpected nix invocation: $*" >&2; exit 90 ;;
             esac
             """,
@@ -351,6 +391,16 @@ class EntryPointTests(unittest.TestCase):
 
     def commit_count(self) -> int:
         return int(self.git("rev-list", "--count", "HEAD"))
+
+    def assert_left_uncommitted(self, result):
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.commit_count(), 1)
+        self.assertEqual(self.git("status", "--porcelain"), " M flake.lock\n")
+        self.assertIn("flake.lock is left modified and uncommitted", result.stderr)
+        self.assertIn("git checkout flake.lock", result.stderr)
+
+
+class EntryPointTests(UpdateRepoCase):
 
     def test_green_path_commits_only_flake_lock(self):
         # Untracked files are outside a Git flake, so they do not block.
@@ -419,18 +469,26 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(self.calls_made(), ["nix flake update nixpkgs"])
         self.assertEqual(self.commit_count(), 1)
 
-    def assert_left_uncommitted(self, result):
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(self.commit_count(), 1)
-        self.assertEqual(self.git("status", "--porcelain"), " M flake.lock\n")
-        self.assertIn("flake.lock is left modified and uncommitted", result.stderr)
-        self.assertIn("git checkout flake.lock", result.stderr)
-
     def test_failed_check_leaves_the_lock_uncommitted(self):
         result = self.run_update("nixpkgs", FAKE_CHECK_FAIL="1")
         self.assert_left_uncommitted(result)
         self.assertIn("nix flake check --no-build failed", result.stderr)
         self.assertEqual(len(self.calls_made()), 2)
+
+    def test_invalid_derivation_is_instantiated_and_checked_again(self):
+        result = self.run_update("nixpkgs", FAKE_CHECK_INVALID="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.calls_made()[1:4],
+            ["nix flake check --no-build", "nix eval --raw .#checks.x86_64-linux.demo.drvPath", "nix flake check --no-build"],
+        )
+        self.assertEqual(self.commit_count(), 2)
+
+    def test_invalid_derivation_gives_up_after_three_checks(self):
+        result = self.run_update("nixpkgs", FAKE_CHECK_INVALID="9")
+        self.assert_left_uncommitted(result)
+        self.assertEqual(self.calls_made().count("nix flake check --no-build"), 3)
+        self.assertNotIn("deploy", "\n".join(self.calls_made()))
 
     def test_failed_build_names_targets_and_leaves_the_lock_uncommitted(self):
         result = self.run_update("nixpkgs", FAKE_DEPLOY_FAIL="1")
@@ -438,6 +496,117 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn("deploy --build-only --all failed", result.stderr)
         self.assertIn("failed targets: xyz home-manager, xps system", result.stderr)
         self.assertIn("deploy: run record: /state/nix-deploy/runs/test", result.stderr)
+
+
+class PackagesLockTests(UpdateRepoCase):
+    """nix-packages follows its validated `promoted` branch, never the newest dev (ADR-0080)."""
+
+    def make_packages(self, url: str | None = None) -> None:
+        source = Path(self.temporary.name) / "nix-packages"
+        source.mkdir()
+
+        def run(*arguments: str) -> str:
+            return subprocess.run(
+                ["git", "-c", "user.name=T", "-c", "user.email=t@example.invalid", *arguments],
+                cwd=source, env=self.environment, check=True, capture_output=True, text=True,
+            ).stdout.strip()
+
+        run("init", "--quiet", "--initial-branch=dev")
+        run("commit", "--quiet", "--allow-empty", "-m", "one")
+        self.locked = run("rev-parse", "HEAD")
+        run("commit", "--quiet", "--allow-empty", "-m", "two")
+        self.promoted = run("rev-parse", "HEAD")
+        run("branch", "promoted")
+        lock = json.loads((self.repo / "flake.lock").read_text())
+        lock["nodes"]["root"]["inputs"]["nix-packages"] = "nix-packages"
+        lock["nodes"]["nix-packages"] = {
+            "locked": {"rev": self.locked, "revCount": 10, "type": "git", "url": url or f"file://{source}", "ref": "dev"},
+            "original": {"type": "git", "url": url or f"file://{source}", "ref": "dev"},
+        }
+        (self.repo / "flake.lock").write_text(json.dumps(lock, indent=2) + "\n")
+        self.git("commit", "--quiet", "-am", "add nix-packages")
+
+    def locked_packages(self) -> str:
+        return json.loads((self.repo / "flake.lock").read_text())["nodes"]["nix-packages"]["locked"]["rev"]
+
+    def test_every_input_locks_packages_to_promoted_not_dev(self):
+        self.make_packages()
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls_made()
+        # The update itself pins nix-packages, so Nix never fetches its dev.
+        self.assertRegex(calls[1], rf"^nix flake update --override-input nix-packages git\+file://\S+\?ref=dev&rev={self.promoted}$")
+        self.assertEqual(self.locked_packages(), self.promoted)
+        self.assertIn(f"- nix-packages: {self.locked[:7]} -> {self.promoted[:7]}", self.git("log", "-1", "--format=%B"))
+
+    def test_named_packages_skip_flake_update(self):
+        self.make_packages()
+        result = self.run_update("nix-packages")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse([call for call in self.calls_made() if call.startswith("nix flake update")])
+        self.assertRegex(self.calls_made()[1], rf"^nix flake lock --override-input nix-packages \S+&rev={self.promoted}$")
+        self.assertEqual(self.locked_packages(), self.promoted)
+
+    def test_other_names_leave_packages_alone(self):
+        self.make_packages()
+        result = self.run_update("nixpkgs")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls_made()[0], "nix flake update nixpkgs")
+        self.assertNotIn("nix-packages", "\n".join(self.calls_made()))
+        self.assertEqual(self.locked_packages(), self.locked)
+
+    def assert_keeps_locked(self, promoted_count: str):
+        self.make_packages()
+        result = self.run_update("nix-packages", "nixpkgs", FAKE_PROMOTED_COUNT=promoted_count)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("is not newer than the locked", result.stderr)
+        self.assertEqual(self.locked_packages(), self.locked)
+
+    def test_older_promoted_keeps_the_locked_revision(self):
+        self.assert_keeps_locked("5")
+
+    def test_promoted_as_old_keeps_the_locked_revision(self):
+        # As lock-promoted-packages.sh: the same count on another line is not newer.
+        self.assert_keeps_locked("10")
+
+    def test_lock_without_a_count_keeps_the_locked_revision(self):
+        self.make_packages()
+        lock = json.loads((self.repo / "flake.lock").read_text())
+        del lock["nodes"]["nix-packages"]["locked"]["revCount"]
+        (self.repo / "flake.lock").write_text(json.dumps(lock, indent=2) + "\n")
+        self.git("commit", "--quiet", "-am", "drop the count")
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("does not record how old", result.stderr)
+        self.assertEqual(self.locked_packages(), self.locked)
+
+    def test_unreadable_promoted_keeps_the_locked_revision(self):
+        self.make_packages(url=f"file://{self.temporary.name}/missing")
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("could not read nix-packages's promoted branch", result.stderr)
+        self.assertEqual(self.locked_packages(), self.locked)
+
+
+class PathPackagesTests(UpdateRepoCase):
+    def test_a_path_input_updates_without_promoted(self):
+        lock = json.loads((self.repo / "flake.lock").read_text())
+        lock["nodes"]["root"]["inputs"]["nix-packages"] = "nix-packages"
+        lock["nodes"]["nix-packages"] = {
+            "locked": {"type": "path", "path": "/src/nix-packages", "narHash": "sha256-x"},
+            "original": {"type": "path", "path": "/src/nix-packages"},
+        }
+        (self.repo / "flake.lock").write_text(json.dumps(lock, indent=2) + "\n")
+        self.git("commit", "--quiet", "-am", "path nix-packages")
+        for names in ((), ("nix-packages", "nixpkgs")):
+            with self.subTest(names=names):
+                self.calls.unlink(missing_ok=True)
+                result = self.run_update(*names)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("nix-packages is not a git input", result.stderr)
+                self.assertNotIn("--override-input", "\n".join(self.calls_made()))
+                self.assertEqual(self.calls_made()[0], "nix flake update" + "".join(f" {n}" for n in names))
+                self.git("reset", "--quiet", "--hard", "HEAD~1")
 
 
 class DmsUpdaterTests(unittest.TestCase):

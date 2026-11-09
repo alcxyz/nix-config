@@ -24,9 +24,13 @@ promotion with its date, such as `v2026.10.18`
 | `apps` | `main` | Grove, Canopy, Bivrost, and the private flakes `work` and `teams-chat` (on `dev`) |
 | `dev-apps` | `dev` | `grove-dev`, `canopy-dev`, `bivrost-dev`, paw, vidown, `work`, `teams-chat`, Paperflow, DankSession, the DMS bundle and its maintained plugins |
 
-`dms` refreshes only the DMS part of `dev-apps`. Group names and input names
-mix freely, as in `just update dms nixpkgs`, and `just update` alone updates
-every input.
+`dms` refreshes only the DMS part of `dev-apps`. `own` refreshes every input
+from the owner's repositories: all of the groups above plus nix-packages,
+nix-secrets and pandora, and any new one without a list to edit. Group names
+and input names mix freely, as in `just update dms nixpkgs`, and `just update`
+alone updates every input. nix-packages always goes to its validated `promoted`
+branch ([ADR-0080](docs/adr/0080-promoted-package-ref.md)), never the newest
+`dev`.
 
 Daily work runs the released builds. A project with a `dev` branch that gets
 ahead of `main` also gets a dev build on xyz, installed next to the release

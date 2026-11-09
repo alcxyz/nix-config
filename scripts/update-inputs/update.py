@@ -4,10 +4,12 @@
 Usage: update.py [NAME...]
        update.py --list [NAME...]
 
-With no NAME every input is updated. A NAME is a group (see GROUPS) or a flake
-input name, such as `nixpkgs` or `dms-plugins/aiusage`, mixed freely. After the
-lock changes, `nix flake check --no-build` and `deploy --build-only --all` must
-pass before flake.lock is committed; otherwise it stays modified and
+With no NAME every input is updated. A NAME is a group (see GROUPS, plus
+`own`: every input from the owner's repositories) or a flake input name, such
+as `nixpkgs` or `dms-plugins/aiusage`, mixed freely. nix-packages is locked to
+its validated `promoted` branch rather than the newest `dev` (ADR-0080). After
+the lock changes, `nix flake check --no-build` and `deploy --build-only --all`
+must pass before flake.lock is committed; otherwise it stays modified and
 uncommitted. Nothing is pushed or activated. `--list` prints the inputs the
 names resolve to and changes nothing.
 """
@@ -18,6 +20,7 @@ import datetime
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -74,6 +77,24 @@ GROUPS = {
     "dev-tools": DEV_TOOLS,
     "dms": DMS,
 }
+# `own` is computed from flake.lock, so a new input from the owner's
+# repositories joins it without a list to maintain: every top-level input
+# fetched from them, plus the nested DMS overrides, which need explicit updates.
+OWN = "own"
+OWN_SOURCE = re.compile(r"^(?:https|ssh)://(?:git@)?git(?:-ssh)?\.alc\.xyz/alcxyz/")
+OWN_GITHUB_OWNER = "alcxyz"
+
+# The package flake is locked to the revision package promotion validated, never
+# to the newest `dev` (ADR-0080).
+PACKAGES = "nix-packages"
+PROMOTED_BRANCH = "promoted"
+
+# `nix flake check` sometimes reports a derivation it has just evaluated as
+# "not valid", because the .drv was never written to the store. Instantiating the
+# named check on its own writes it, after which the check passes.
+INVALID_DRV = re.compile(r"error: path '/nix/store/[^']+\.drv' is not valid")
+CHECKED_ATTRIBUTE = re.compile(r"while checking the (derivation|NixOS configuration) '([^']+)'")
+CHECK_ATTEMPTS = 3
 
 UNDO = "git checkout flake.lock"
 
@@ -112,6 +133,24 @@ def resolve_node(lock: dict, path: list[str]) -> str | None:
     return node
 
 
+def is_own(node: dict) -> bool:
+    original = node.get("original", {})
+    if original.get("type") == "github":
+        return original.get("owner") == OWN_GITHUB_OWNER
+    return original.get("type") == "git" and bool(OWN_SOURCE.match(original.get("url", "")))
+
+
+def own_inputs(lock: dict) -> list[str]:
+    """Every top-level input from the owner's repositories, then the nested DMS overrides."""
+    inputs = [
+        name
+        for name, target in root_inputs(lock).items()
+        if not isinstance(target, list) and is_own(lock["nodes"].get(target, {}))
+    ]
+    inputs += [name for name in DMS if "/" in name and resolve_node(lock, name.split("/")) is not None]
+    return inputs
+
+
 def resolve_names(names: list[str], lock_path: Path) -> list[str]:
     """Expand groups and check input names; an empty list means every input."""
     lock = None
@@ -119,12 +158,16 @@ def resolve_names(names: list[str], lock_path: Path) -> list[str]:
     for name in names:
         if name in GROUPS:
             candidates = GROUPS[name]
+        elif name == OWN:
+            if lock is None:
+                lock = load_lock(lock_path)
+            candidates = own_inputs(lock)
         else:
             if lock is None:
                 lock = load_lock(lock_path)
             if resolve_node(lock, name.split("/")) is None:
                 raise UsageError(
-                    f"unknown group or input '{name}'; groups: {', '.join(GROUPS)}; "
+                    f"unknown group or input '{name}'; groups: {', '.join([*GROUPS, OWN])}; "
                     "inputs are the names in flake.lock (for example nixpkgs or dms-plugins/aiusage)"
                 )
             candidates = [name]
@@ -192,6 +235,87 @@ def failed_targets(report_path: Path) -> list[str]:
     return targets
 
 
+def packages_target(node: dict) -> tuple[str, str]:
+    """Return the nix-packages revision to lock and why: `promoted`, or the
+    current revision when `promoted` cannot be read or is not newer, as
+    lock-promoted-packages.sh decides."""
+    original, locked = node["original"], node["locked"]
+    current = locked["rev"]
+    url = original.get("url", "")
+    if not re.match(r"^(https|ssh|file)://", url):
+        return current, f"{PACKAGES} has an unsupported URL; keeping {current[:7]}"
+    try:
+        listing = subprocess.run(
+            ["git", "ls-remote", url, f"refs/heads/{PROMOTED_BRANCH}"],
+            text=True, capture_output=True, timeout=30, check=True,
+        ).stdout.split()
+    except (subprocess.SubprocessError, OSError):
+        listing = []
+    promoted = listing[0] if listing else ""
+    if not re.fullmatch(r"[0-9a-f]{40}", promoted):
+        return current, f"could not read {PACKAGES}'s {PROMOTED_BRANCH} branch; keeping {current[:7]}"
+    if promoted == current:
+        return current, f"{PACKAGES} is already at {PROMOTED_BRANCH} {current[:7]}"
+    locked_count = locked.get("revCount")
+    if not isinstance(locked_count, int):
+        return current, f"flake.lock does not record how old {PACKAGES} {current[:7]} is; keeping it"
+    metadata = subprocess.run(
+        ["nix", "flake", "metadata", "--json", f"git+{url}?ref={original.get('ref', 'HEAD')}&rev={promoted}"],
+        text=True, capture_output=True,
+    )
+    try:
+        promoted_count = json.loads(metadata.stdout)["locked"]["revCount"]
+    except (ValueError, KeyError, TypeError):
+        return current, f"could not tell how old {PROMOTED_BRANCH} {promoted[:7]} is; keeping {current[:7]}"
+    if promoted_count <= locked_count:
+        return current, f"{PROMOTED_BRANCH} {promoted[:7]} is not newer than the locked {current[:7]}; keeping it"
+    return promoted, f"locking {PACKAGES} to {PROMOTED_BRANCH} {promoted[:7]}"
+
+
+def packages_override(node: dict) -> tuple[list[str], str]:
+    """Return the Nix arguments that lock nix-packages to its target revision,
+    and that revision. Passing them to the update itself means Nix never
+    fetches the unvalidated `dev`."""
+    target, reason = packages_target(node)
+    say(reason)
+    original = node["original"]
+    url = f"git+{original['url']}?ref={original.get('ref', 'HEAD')}&rev={target}"
+    return ["--override-input", PACKAGES, url], target
+
+
+def packages_locked(node: dict, target: str, lock_path: Path) -> bool:
+    after = load_lock(lock_path)
+    after_node = after["nodes"][root_inputs(after)[PACKAGES]]
+    # A changed original would make the next evaluation relock from the moving ref.
+    return after_node["locked"].get("rev") == target and after_node["original"] == node["original"]
+
+
+def flake_check() -> bool:
+    """Run `nix flake check --no-build`, instantiating a check it reports as not
+    valid and trying again, up to CHECK_ATTEMPTS runs."""
+    for attempt in range(1, CHECK_ATTEMPTS + 1):
+        process = subprocess.Popen(["nix", "flake", "check", "--no-build"], stderr=subprocess.PIPE, text=True)
+        assert process.stderr is not None
+        output = []
+        for line in process.stderr:
+            sys.stderr.write(line)
+            output.append(line)
+        if process.wait() == 0:
+            return True
+        text = "".join(output)
+        checked = CHECKED_ATTRIBUTE.findall(text)
+        if not INVALID_DRV.search(text) or not checked or attempt == CHECK_ATTEMPTS:
+            return False
+        kind, attribute = checked[-1]
+        if kind == "NixOS configuration":
+            attribute += ".config.system.build.toplevel"
+        say(f"nix flake check did not write a derivation of {attribute}; instantiating it and checking again")
+        instantiate = subprocess.run(["nix", "eval", "--raw", f".#{attribute}.drvPath"], stdout=subprocess.DEVNULL)
+        if instantiate.returncode != 0:
+            return False
+    return False
+
+
 def red(step: str, targets: list[str] | None = None) -> int:
     say(f"{step} failed; flake.lock is left modified and uncommitted.")
     if targets:
@@ -220,12 +344,30 @@ def update(names: list[str]) -> int:
         return 1
 
     before_text = lock_path.read_text()
-    say("nix flake update " + (" ".join(inputs) if inputs else "(every input)"))
-    if subprocess.run(["nix", "flake", "update", *inputs]).returncode != 0:
+    before = json.loads(before_text)
+    # nix-packages never follows `dev`: when the update covers it, the update
+    # itself locks it to `promoted` (or keeps it), so Nix never fetches `dev`.
+    packages = PACKAGES in root_inputs(before) and (not inputs or PACKAGES in inputs)
+    if packages:
+        node = before["nodes"][root_inputs(before)[PACKAGES]]
+        # Only a git input has a `promoted` branch to follow; another kind, such
+        # as a local path checkout, updates like any other input.
+        if node.get("original", {}).get("type") != "git" or node.get("locked", {}).get("type") != "git":
+            say(f"{PACKAGES} is not a git input, so it is updated without its {PROMOTED_BRANCH} branch")
+            packages = False
+    others = [name for name in inputs if name != PACKAGES or not packages]
+    override: list[str] = []
+    if packages:
+        override, target = packages_override(node)
+    command = ["update", *others] if others or not inputs else ["lock"]
+    say(f"nix flake {command[0]} " + (" ".join(others) if others else "(every input)" if not inputs else PACKAGES))
+    if subprocess.run(["nix", "flake", *command, *override]).returncode != 0:
         if lock_path.read_text() == before_text:
-            say("nix flake update failed; flake.lock is unchanged.")
+            say(f"nix flake {command[0]} failed; flake.lock is unchanged.")
             return 1
-        return red("nix flake update")
+        return red(f"nix flake {command[0]}")
+    if packages and not packages_locked(node, target, lock_path):
+        return red(f"locking {PACKAGES} to {target[:7]}")
     after_text = lock_path.read_text()
     if after_text == before_text:
         say("flake.lock did not change; nothing to build or commit.")
@@ -233,7 +375,7 @@ def update(names: list[str]) -> int:
     changes = changed_inputs(json.loads(before_text), json.loads(after_text))
 
     say("nix flake check --no-build")
-    if subprocess.run(["nix", "flake", "check", "--no-build"]).returncode != 0:
+    if not flake_check():
         return red("nix flake check --no-build")
 
     say("deploy --build-only --all")

@@ -109,7 +109,8 @@ workspace-status:
     workspace-sync --status
 
 # Update every input, or the named groups (apps, dev-apps, tools, dev-tools,
-# dms) and inputs; build the fleet and commit flake.lock only when green (ADR-0107).
+# dms, own) and inputs; build the fleet and commit flake.lock only when green
+# (ADR-0107). nix-packages goes to its validated `promoted` branch (ADR-0080).
 [group("update")]
 update *NAMES:
     python3 scripts/update-inputs/update.py {{NAMES}}

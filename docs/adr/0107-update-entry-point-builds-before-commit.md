@@ -2,7 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-11-08
-**Applies to:** `justfile`, `scripts/update-inputs/update.py`, `scripts/update-inputs/update-dms-plugins.sh`, `users/alc/common.nix`, `scripts/checks/test-update-inputs.py`; amends ADR-0069, ADR-0086, ADR-0087, ADR-0089 and ADR-0090
+**Amended:** 2026-11-09
+**History:** [replaced text](archive/0107-update-entry-point-builds-before-commit-history.md)
+**Applies to:** `justfile`, `scripts/update-inputs/update.py`, `scripts/update-inputs/update-dms-plugins.sh`, `users/alc/common.nix`, `scripts/checks/test-update-inputs.py`; amends ADR-0069, ADR-0086, ADR-0087, ADR-0089 and ADR-0090; follows ADR-0080
 
 ## Context
 
@@ -37,11 +39,26 @@ update flake inputs by hand.
   - `dev-apps`: the maintained apps' dev builds, the DMS bundle, DankSession
     and the maintained plugins, plus `work` and `teams-chat` (ADR-0069,
     ADR-0089);
-  - `dms`: only the DMS part of `dev-apps` (ADR-0069).
+  - `dms`: only the DMS part of `dev-apps` (ADR-0069);
+  - `own`: every top-level input fetched from the owner's repositories (the
+    `alcxyz` account on GitHub or git.alc.xyz), plus the nested DMS plugin
+    overrides. It is computed from `flake.lock` rather than listed, so a new
+    input from those repositories joins it without an edit; it covers every
+    other group and the inputs in none of them (nix-packages, nix-secrets and
+    pandora).
 
   `update.py` holds the lists; `update.py --list [NAME...]` prints what the
   names resolve to without changing anything. No group name may be an input
   name.
+- nix-packages never follows its `dev` branch here. Whenever the update
+  covers it (every input, `own`, or its name), it is locked to the
+  nix-packages `promoted` branch that package promotion validated
+  ([ADR-0080](0080-promoted-package-ref.md)), by the rule `just lock-packages`
+  uses: the locked revision stays when `promoted` cannot be read, is not newer
+  (by commit count) or the lock records no count. The chosen revision goes to
+  `nix flake update` as `--override-input`, so Nix never fetches the
+  unvalidated `dev`, which could otherwise fail the update before the
+  package lock is set.
 - It refuses to start while any tracked file, `flake.lock` included, differs
   from `HEAD`, staged or not. The build sees the working tree but the commit
   holds only `flake.lock`, so the build must test exactly what is committed.
@@ -52,6 +69,13 @@ update flake inputs by hand.
   which builds every host's system and Home Manager configuration that
   `deploy --all` covers from the current checkout without activating
   anything.
+- Nix 2.35's `nix flake check --no-build` sometimes reports a derivation it
+  has just evaluated as `path '…drv' is not valid`, because it never wrote
+  the `.drv` to the store; on 2026-11-09 it did so for two checks after a
+  nixpkgs update, and evaluating the named check alone with `nix eval` wrote
+  the file, after which the check passed. On that error, the update
+  evaluates the derivation (or NixOS configuration) that the error names and
+  runs the check again, three runs at most. Any other failure fails at once.
 - When both pass, it commits `flake.lock` alone with the configured Git
   identity, as `chore(flake): update <all inputs | the names given>`, with
   each changed input and its old and new short revision and date in the body.
@@ -87,3 +111,10 @@ Hosts with `deployAll = false` are outside `--all` and outside this build.
   and the previous lock and generations remain the rollback.
 - The aliases are gone; after the next Home Manager switch the shell no
   longer offers them.
+- `just update` and `just update own` can no longer move nix-packages past
+  what promotion validated, so a full update needs no separate
+  `just lock-packages`. `just lock-packages` stays for moving only the
+  package lock.
+- The retry hides only the unwritten-derivation error, and only for three
+  runs. Its cause in Nix is not yet known; when a Nix update fixes it, the
+  retry can go.
