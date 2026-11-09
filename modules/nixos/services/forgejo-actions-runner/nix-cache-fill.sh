@@ -1,4 +1,4 @@
-# Fill the persistent CI Nix store from job path lists, collect it by age
+# Fill the persistent CI Nix store from verified path lists, collect it by age
 # and size, and publish a database snapshot for jobs (ADR-0109).
 #
 # Runs as the credential-free filler user with its own nix.conf. It adds
@@ -9,7 +9,8 @@
 #
 # Environment: CACHE_ROOT DROP_DIR NIX_PACKAGE MAX_AGE_DAYS SIZE_CAP_BYTES
 # MIN_FREE_PERCENT RUN_LIMIT_BYTES STATE_DIRECTORY, and optionally LIST_MAX_BYTES,
-# MAX_PATHS, MAX_INPUTS, FETCH_TIMEOUT.
+# MAX_PATHS, MAX_INPUTS, FETCH_TIMEOUT, and OFFER_FORGE with OFFER_REPOS
+# (space-separated owner/repo) and OFFER_MAX_RUNS for verified offers.
 export LC_ALL=C
 root=$CACHE_ROOT
 drop=$DROP_DIR
@@ -159,6 +160,150 @@ for entry in "$drop"/*; do
     esac
   fi
 done
+
+# 2b. Verified offers, pulled from the forge (ADR-0109). No job can write
+# anywhere the filler reads, so the filler looks runs up itself through the
+# forge's anonymous API and takes an offer only from a run it verified: in an
+# allowed public repository, finished, and either a push to that
+# repository's default branch or a pull request whose head and base are that
+# repository, never a fork. The paths come from the run's own job logs, as
+# "nix-cache-offer <store path>" lines, and the flake lock from the
+# repository at the run's commit, never from anything a job hands over. A run
+# is read once; one still running is looked up again at the next fill.
+fetch_url() {
+  curl -q --silent --fail --proto '=https' --max-redirs 0 --max-time 60 \
+    --max-filesize "$list_max_bytes" --output "$2" -- "$1"
+}
+# The HTTP status of a fetch into OUT, 000 when it did not complete.
+fetch_status() {
+  curl -q --silent --proto '=https' --max-redirs 0 --max-time 60 \
+    --max-filesize "$list_max_bytes" --output "$2" --write-out '%{http_code}' -- "$1" ||
+    printf '000'
+}
+offer_runs=0
+offer_refused=0
+offer_max_runs=${OFFER_MAX_RUNS:-20}
+seen=$STATE_DIRECTORY/offer-runs.seen
+touch -- "$seen"
+if [[ -n ${OFFER_FORGE:-} && -n ${OFFER_REPOS:-} ]]; then
+  for repo in $OFFER_REPOS; do
+    if ! [[ $repo =~ ^[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}$ ]]; then
+      printf 'offer_repo_invalid repo=%s\n' "$repo"
+      continue
+    fi
+    base=$OFFER_FORGE/api/v1/repos/$repo
+    if ! fetch_url "$base" "$work/repo.json" ||
+      ! default_branch=$(jq -er --arg repo "$repo" '
+        select(.full_name == $repo and .private == false)
+        | .default_branch | select(type == "string" and test("^[A-Za-z0-9._/-]{1,200}$"))
+      ' "$work/repo.json" 2>/dev/null) ||
+      ! fetch_url "$base/actions/runs?page=1&limit=$offer_max_runs" "$work/runs.json"; then
+      printf 'offer_repo_unavailable repo=%s\n' "$repo"
+      continue
+    fi
+    jq -r '.workflow_runs[]?.id | select(type == "number" and . > 0 and . == floor)' \
+      "$work/runs.json" >"$work/run-ids" 2>/dev/null || : >"$work/run-ids"
+    while IFS= read -r id; do
+      if grep -qxF -- "$repo $id" "$seen"; then
+        continue
+      fi
+      # The run itself, looked up by id, not the listing's copy of it.
+      if ! fetch_url "$base/actions/runs/$id" "$work/run.json"; then
+        printf 'offer_retry repo=%s run=%s reason=run\n' "$repo" "$id"
+        continue
+      fi
+      verdict=$(jq -r --arg repo "$repo" --arg branch "$default_branch" --argjson id "$id" '
+        (.event_payload | if type == "string" then (try fromjson catch null) else . end) as $p
+        | if .id != $id or .repository.full_name != $repo then "refused run"
+          elif (.status | IN("waiting", "running", "blocked")) then "pending"
+          elif (.status | IN("success", "failure") | not) then "done"
+          elif (.commit_sha | type != "string" or (test("^[0-9a-f]{40}$") | not)) then "refused commit"
+          elif .event == "push" and .trigger_event == "push"
+            and $p.ref == "refs/heads/\($branch)" and $p.repository.full_name == $repo
+            then "verified \(.commit_sha)"
+          elif .event == "pull_request" and .trigger_event == "pull_request"
+            and .is_fork_pull_request == false
+            and $p.pull_request.head.repo.full_name == $repo
+            and $p.pull_request.base.repo.full_name == $repo
+            then "verified \(.commit_sha)"
+          else "refused event"
+          end
+      ' "$work/run.json" 2>/dev/null) || verdict="refused malformed"
+      case $verdict in
+        pending)
+          continue
+          ;;
+        verified\ *)
+          commit=${verdict#verified }
+          # A run reads "failure" as soon as one job fails, while others may
+          # still run and print offers: every job must have finished. A job
+          # list that cannot be read is tried again at the next fill.
+          if ! fetch_url "$base/actions/runs/$id/jobs" "$work/jobs.json" ||
+            ! jq -e 'type == "array" and all(.[];
+                (.id | type == "number" and . > 0 and . == floor) and (.status | type == "string"))' \
+              "$work/jobs.json" >/dev/null 2>&1; then
+            printf 'offer_retry repo=%s run=%s reason=jobs\n' "$repo" "$id"
+            continue
+          fi
+          if jq -e 'any(.[]; .status | IN("success", "failure", "cancelled", "skipped") | not)' \
+            "$work/jobs.json" >/dev/null 2>&1; then
+            continue
+          fi
+          # Every job that ran, a cancelled one included, may have printed
+          # offers. A cancelled job's log may not exist, so only the logs of
+          # jobs that finished hold the run back when they cannot be fetched.
+          jq -r '.[] | select(.status | IN("success", "failure", "cancelled")) | "\(.id) \(.status)"' \
+            "$work/jobs.json" >"$work/job-ids" 2>/dev/null || : >"$work/job-ids"
+          : >"$work/offer.paths"
+          complete=1
+          while read -r job_id job_status; do
+            if fetch_url "$base/actions/jobs/$job_id/logs" "$work/job.log"; then
+              sed -nE 's/^[0-9T:.Z-]+ nix-cache-offer (\/nix\/store\/[^ ]+)\r?$/\1/p' "$work/job.log" |
+                grep -Ex "$store_re" | grep -v '\.drv$' >>"$work/offer.paths" || true
+            elif [[ $job_status != cancelled ]]; then
+              complete=0
+            fi
+          done <"$work/job-ids"
+          # A log or lock that could not be fetched leaves the run for the
+          # next fill, as long as it stays among the latest runs.
+          if ((!complete)); then
+            printf 'offer_retry repo=%s run=%s reason=log\n' "$repo" "$id"
+            continue
+          fi
+          if [[ ! -s $work/offer.paths ]]; then
+            printf 'offer_none repo=%s run=%s\n' "$repo" "$id"
+          else
+            # A repository without a flake lock answers 404.
+            case $(fetch_status "$OFFER_FORGE/$repo/raw/commit/$commit/flake.lock" "$work/lock.json") in
+              200)
+                mv -- "$work/lock.json" "$work/locks/$locks.json"
+                locks=$((locks + 1))
+                ;;
+              404) ;;
+              *)
+                printf 'offer_retry repo=%s run=%s reason=lock\n' "$repo" "$id"
+                continue
+                ;;
+            esac
+            cat -- "$work/offer.paths" >>"$work/paths.raw"
+            offer_runs=$((offer_runs + 1))
+            printf 'offer_taken repo=%s run=%s commit=%s paths=%s\n' "$repo" "$id" "$commit" "$(sort -u "$work/offer.paths" | wc -l)"
+          fi
+          ;;
+        done)
+          printf 'offer_skipped repo=%s run=%s\n' "$repo" "$id"
+          ;;
+        refused\ *)
+          offer_refused=$((offer_refused + 1))
+          printf 'offer_refused repo=%s run=%s reason=%s\n' "$repo" "$id" "${verdict#refused }"
+          ;;
+      esac
+      printf '%s %s\n' "$repo" "$id" >>"$seen"
+    done <"$work/run-ids"
+  done
+  # Remember the latest runs only.
+  tail -n 5000 -- "$seen" >"$seen.new" && mv -- "$seen.new" "$seen"
+fi
 # Merge into the pending queue, keeping each entry's first arrival, and drop
 # the oldest beyond the bound.
 merge_pending() {
@@ -300,10 +445,10 @@ if [[ -s $work/valid ]]; then
   mkdir -p -- "$run_dir"
   sort -u "$work/valid" | xargs ln -sf -t "$run_dir" --
 fi
-printf 'fill lists=%s locks=%s requested=%s renewed=%s substituted=%s skipped=%s inputs=%s inputs_present=%s inputs_failed=%s inputs_refused=%s staging_left=%s pending_paths=%s pending_inputs=%s\n' \
+printf 'fill lists=%s locks=%s requested=%s renewed=%s substituted=%s skipped=%s inputs=%s inputs_present=%s inputs_failed=%s inputs_refused=%s staging_left=%s pending_paths=%s pending_inputs=%s offers=%s offers_refused=%s\n' \
   "$lists" "$locks" "$requested" "$renewed" "$substituted" "$((requested - renewed - substituted))" \
   "$inputs" "$inputs_present" "$inputs_failed" "$inputs_refused" "$staging_left" \
-  "$(wc -l <"$pending_paths")" "$(wc -l <"$pending_inputs")"
+  "$(wc -l <"$pending_paths")" "$(wc -l <"$pending_inputs")" "$offer_runs" "$offer_refused"
 
 # 6. Collect: drop roots older than the age limit, then the oldest roots
 # until the store is under the cap, but never roots renewed within the last

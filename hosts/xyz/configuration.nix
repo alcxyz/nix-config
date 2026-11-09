@@ -267,6 +267,11 @@ in {
       nixCache = {
         enable = true;
         dataPath = "/ext4/ci/forgejo-nix-cache";
+        # Verified runs of these public repositories offer paths.
+        offers = {
+          forge = "https://git.alc.xyz";
+          repos = ["alcxyz/nix-packages"];
+        };
       };
     };
     # One Docker slot serves the few jobs that still select a Docker label.

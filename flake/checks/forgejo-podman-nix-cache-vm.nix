@@ -7,6 +7,7 @@
 if pkgs.stdenv.hostPlatform.system != "x86_64-linux"
 then pkgs.runCommand "forgejo-podman-nix-cache-unsupported-platform" {} ''touch "$out"''
 else let
+  inherit (pkgs) lib;
   # A static busybox as a plain file: the image has no /nix of its own, as
   # node:20-bookworm has none.
   fixtureImage = pkgs.dockerTools.buildLayeredImage {
@@ -23,6 +24,12 @@ else let
   deferPayload = pkgs.writeText "nix-cache-fixture-defer-payload" "signed, offered while a job runs\n";
   limitA = pkgs.writeText "nix-cache-fixture-limit-a" "signed, offered past the run limit\n";
   limitB = pkgs.writeText "nix-cache-fixture-limit-b" "signed, offered past the run limit too\n";
+  # Paths offered through CI runs on the forge fixture, all signed: only the
+  # verified runs' paths may enter.
+  offers =
+    lib.genAttrs ["pr" "push" "late" "partial" "flaky" "fork" "forged" "branch" "repo" "missing"] (name:
+      pkgs.writeText "nix-cache-fixture-offer-${name}" "signed, offered by the ${name} run\n");
+  offerPaths = lib.attrValues offers;
   # A directory path, which Nix must delete in a job (chmod, then unlink)
   # before it substitutes it again.
   dirPayload = pkgs.runCommand "nix-cache-fixture-dir" {} ''
@@ -40,7 +47,7 @@ else let
   fixtureCert = pkgs.runCommand "nix-cache-fixture-cert" {nativeBuildInputs = [pkgs.openssl];} ''
     mkdir -p "$out"
     openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=fixture.example \
-      -addext "subjectAltName=DNS:github.com,DNS:api.github.com,DNS:codeload.github.com,DNS:git.sr.ht,DNS:fixture.example" \
+      -addext "subjectAltName=DNS:github.com,DNS:api.github.com,DNS:codeload.github.com,DNS:git.sr.ht,DNS:fixture.example,DNS:forge.example" \
       -keyout "$out/key.pem" -out "$out/cert.pem" 2>/dev/null
   '';
   # Records every request's host, path and headers. A repository owned by
@@ -59,6 +66,16 @@ else let
             self.wfile.write(body)
 
         def do_GET(self):
+            # The forge: static files under /srv/http/forge, one directory
+            # per API path holding its body as "_", queries ignored.
+            if self.headers.get("Host", "").split(":")[0] == "forge.example":
+                with open("/srv/forge.log", "a") as log:
+                    log.write(json.dumps({"path": self.path, "headers": dict(self.headers)}) + "\n")
+                body = "/srv/http/forge" + self.path.split("?")[0] + "/_"
+                if ".." in body or not os.path.isfile(body):
+                    return self.reply(404)
+                with open(body, "rb") as f:
+                    return self.reply(200, f.read(), [("Content-Type", "application/json")])
             with open("/srv/http.log", "a") as log:
                 log.write(json.dumps({"path": self.path, "headers": dict(self.headers)}) + "\n")
             if "/private/" in self.path:
@@ -150,7 +167,7 @@ in
           cores = 2;
           diskSize = 8192;
           docker.enable = true;
-          additionalPaths = [nixPkg payload jobPayload capPayload deferPayload limitA limitB dirPayload unsigned otherKey localOnly];
+          additionalPaths = [nixPkg payload jobPayload capPayload deferPayload limitA limitB dirPayload unsigned otherKey localOnly] ++ offerPaths;
         };
         nix.settings = {
           experimental-features = ["nix-command"];
@@ -163,7 +180,7 @@ in
         environment.etc."git-credentials".text = "https://fixture:planted-secret@github.com\n";
         systemd.tmpfiles.rules = ["f /root/.netrc 0600 root root - machine github.com login fixture password planted-secret"];
         security.pki.certificateFiles = ["${fixtureCert}/cert.pem"];
-        networking.hosts.${fixtureAddress} = ["github.com" "api.github.com" "codeload.github.com" "git.sr.ht" "fixture.example"];
+        networking.hosts.${fixtureAddress} = ["github.com" "api.github.com" "codeload.github.com" "git.sr.ht" "fixture.example" "forge.example"];
         systemd.services.fixture-https = {
           wantedBy = ["multi-user.target"];
           path = [pkgs.iproute2];
@@ -189,6 +206,10 @@ in
               enable = true;
               package = nixPkg;
               substituters = ["file:///srv/nix-fixture"];
+              offers = {
+                forge = "https://forge.example";
+                repos = ["acme/pkgs"];
+              };
               # Replaced by the key the test generates (a runtime drop-in).
               trustedPublicKeys = ["fixture-placeholder:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="];
               # The VM disk is small and mostly free; the test sets its own
@@ -293,8 +314,8 @@ in
       with subtest("fixtures: a signed cache and pinned flake inputs, public, private and refused"):
           machine.succeed("nix-store --generate-binary-cache-key fixture-1 /root/sk /srv-pk && mkdir -p /srv/http && mv /srv-pk /srv/pk")
           machine.succeed("nix-store --generate-binary-cache-key other-1 /root/other-sk /root/other-pk")
-          machine.succeed(f"nix copy --to {fixture} ${nixPkg} ${payload} ${jobPayload} ${capPayload} ${deferPayload} ${limitA} ${limitB} ${dirPayload} ${unsigned} ${otherKey}")
-          machine.succeed(f"nix store sign --store {fixture} -k /root/sk -r ${nixPkg} ${payload} ${jobPayload} ${capPayload} ${deferPayload} ${limitA} ${limitB} ${dirPayload}")
+          machine.succeed(f"nix copy --to {fixture} ${nixPkg} ${payload} ${jobPayload} ${capPayload} ${deferPayload} ${limitA} ${limitB} ${dirPayload} ${unsigned} ${otherKey} ${toString offerPaths}")
+          machine.succeed(f"nix store sign --store {fixture} -k /root/sk -r ${nixPkg} ${payload} ${jobPayload} ${capPayload} ${deferPayload} ${limitA} ${limitB} ${dirPayload} ${toString offerPaths}")
           machine.succeed(f"nix store sign --store {fixture} -k /root/other-sk ${otherKey}")
           machine.succeed("cp ${jobScript} /srv/job.sh && cp ${unlistedScript} /srv/unlisted.sh && chmod -R a+rX /srv")
           pk = machine.succeed("cat /srv/pk").strip()
@@ -427,6 +448,104 @@ in
           assert "renewed=1 substituted=1 skipped=1" in journal, journal
           assert in_cache("${jobPayload}") and in_snapshot("${jobPayload}")
           machine.fail(f"find {data}/nix/store -maxdepth 1 -name '*-big' | grep -q .")
+
+      with subtest("verified offers: only finished runs of the repository's own branches, read from the forge"):
+          forge = "/srv/http/forge"
+          forge_api = "/api/v1/repos/acme/pkgs"
+
+          def put(path, body):
+              text = body if isinstance(body, str) else json.dumps(body)
+              machine.succeed(f"mkdir -p {forge}{path} && cat > {forge}{path}/_ <<'EOF'\n{text}\nEOF")
+
+          def pr(head, fork):
+              return json.dumps({"pull_request": {"head": {"repo": {"full_name": head, "fork": fork}}, "base": {"repo": {"full_name": "acme/pkgs", "fork": False}}}})
+
+          def push(ref):
+              return json.dumps({"ref": ref, "repository": {"full_name": "acme/pkgs"}})
+
+          offer = {${lib.concatMapStringsSep ", " (name: "\"${name}\": \"${offers.${name}}\"") (lib.attrNames offers)}}
+          # id: (offer, event, is_fork_pull_request, payload, status, repository)
+          forge_runs = {
+              101: ("pr", "pull_request", False, pr("acme/pkgs", False), "success", "acme/pkgs"),
+              102: ("push", "push", False, push("refs/heads/dev"), "failure", "acme/pkgs"),
+              103: ("fork", "pull_request", True, pr("mallory/pkgs", True), "success", "acme/pkgs"),
+              104: ("forged", "pull_request", False, pr("mallory/pkgs", True), "success", "acme/pkgs"),
+              105: ("branch", "push", False, push("refs/heads/main"), "success", "acme/pkgs"),
+              106: ("repo", "pull_request", False, pr("acme/pkgs", False), "success", "evil/pkgs"),
+              107: ("late", "pull_request", False, pr("acme/pkgs", False), "running", "acme/pkgs"),
+              # Failed while a second job still runs and has yet to offer.
+              109: ("partial", "pull_request", False, pr("acme/pkgs", False), "failure", "acme/pkgs"),
+              # Its log cannot be fetched at first.
+              110: ("flaky", "pull_request", False, pr("acme/pkgs", False), "success", "acme/pkgs"),
+          }
+          forge_commit = {i: format(i, "040x") for i in [*forge_runs, 108]}
+          put(forge_api, {"full_name": "acme/pkgs", "private": False, "default_branch": "dev"})
+          # Run 108 is listed but cannot be looked up: an unverified offer.
+          put(f"{forge_api}/actions/runs", {"workflow_runs": [{"id": i} for i in [*forge_runs, 108]]})
+          put(f"{forge_api}/actions/jobs/1080/logs", f"2026-11-09T10:00:00.0000000Z nix-cache-offer {offer['missing']}")
+
+          def put_run(i, status):
+              name, event, is_fork, payload, _, repo = forge_runs[i]
+              put(f"{forge_api}/actions/runs/{i}", {"id": i, "repository": {"full_name": repo}, "status": status, "event": event, "trigger_event": event, "is_fork_pull_request": is_fork, "event_payload": payload, "commit_sha": forge_commit[i]})
+
+          def offer_log(name):
+              return "\n".join([
+                  "2026-11-09T10:00:00.0000000Z build output naming /nix/store/not-an-offer",
+                  f"2026-11-09T10:00:01.0000000Z nix-cache-offer {offer[name]}",
+                  "2026-11-09T10:00:01.1000000Z nix-cache-offer ${payload.drvPath}",
+                  f"nix-cache-offer {offer['missing']}",
+              ])
+
+          for i, (name, *_, status, repo) in forge_runs.items():
+              put_run(i, status)
+              put(f"{forge_api}/actions/runs/{i}/jobs", [{"id": i * 10, "status": "success"}])
+              if i != 110:
+                  put(f"{forge_api}/actions/jobs/{i * 10}/logs", offer_log(name))
+              # The push's repository state has no flake lock: a 404, not a retry.
+              if i != 102:
+                  put(f"/acme/pkgs/raw/commit/{forge_commit[i]}/flake.lock", {"nodes": {}, "root": "root", "version": 7})
+          put(f"{forge_api}/actions/runs/109/jobs", [{"id": 1090, "status": "failure"}, {"id": 1091, "status": "running"}])
+          put(f"{forge_api}/actions/jobs/1090/logs", "2026-11-09T10:00:00.0000000Z lint failed")
+          journal = run_fill()
+          for i in [101, 102]:
+              assert f"offer_taken repo=acme/pkgs run={i} commit={forge_commit[i]} paths=1" in journal, journal
+          for i, reason in [(103, "event"), (104, "event"), (105, "event"), (106, "run")]:
+              assert f"offer_refused repo=acme/pkgs run={i} reason={reason}" in journal, journal
+          assert "offer_retry repo=acme/pkgs run=110 reason=log" in journal, journal
+          assert "offer_retry repo=acme/pkgs run=108 reason=run" in journal, journal
+          assert "offers=2 offers_refused=4" in journal and "locks=1 " in journal, journal
+          assert in_cache(offer["pr"]) and in_cache(offer["push"]) and in_snapshot(offer["pr"])
+          for name in ["partial", "flaky", "fork", "forged", "branch", "repo", "late", "missing"]:
+              assert not in_cache(offer[name]), name
+          assert not in_cache("${payload.drvPath}")
+          forge_requests = [json.loads(line) for line in machine.succeed("cat /srv/forge.log").splitlines()]
+          forge_paths = [r["path"] for r in forge_requests]
+          # The lock comes from the repository at a verified run's commit only.
+          for i in [101, 102]:
+              assert f"/acme/pkgs/raw/commit/{forge_commit[i]}/flake.lock" in forge_paths, forge_paths
+          for i in [103, 104, 105, 106, 107, 109, 110]:
+              assert not any(forge_commit[i] in p for p in forge_paths), (i, forge_paths)
+          for i in [103, 104, 105, 106, 107]:
+              assert f"{forge_api}/actions/runs/{i}/jobs" not in forge_paths, (i, forge_paths)
+          # Run 109's finished job was not read while the other still ran.
+          assert f"{forge_api}/actions/jobs/1090/logs" not in forge_paths, forge_paths
+          for r in forge_requests:
+              assert not any(k.lower() in ("authorization", "proxy-authorization", "cookie") for k in r["headers"]), r
+          # Runs and jobs still running, and logs that failed, are looked up
+          # again; read runs are not. A cancelled job's offers count, and a
+          # cancelled job without a log does not hold its run back.
+          put_run(107, "success")
+          put(f"{forge_api}/actions/runs/109/jobs", [{"id": 1090, "status": "failure"}, {"id": 1091, "status": "cancelled"}, {"id": 1092, "status": "cancelled"}])
+          put(f"{forge_api}/actions/jobs/1091/logs", offer_log("partial"))
+          put(f"{forge_api}/actions/jobs/1100/logs", offer_log("flaky"))
+          journal = run_fill()
+          for i in [107, 109, 110]:
+              assert f"offer_taken repo=acme/pkgs run={i} " in journal, journal
+          assert "offers=3 offers_refused=0" in journal, journal
+          assert in_cache(offer["late"]) and in_cache(offer["partial"]) and in_cache(offer["flaky"])
+          assert not in_cache(offer["missing"])
+          for i in [101, 102, 103, 104, 105, 106]:
+              assert f"run={i} " not in journal, journal
 
       with subtest("while a job runs the filler only renews; deferred paths are added once it ends"):
           machine.succeed(f"printf '%s\\n' ${deferPayload} ${dep} > {drop}/busy.paths")

@@ -1,7 +1,7 @@
 # ADR-0109: Give Podman CI jobs a shared, read-only Nix store per host
 
 **Status:** Accepted (trial on xyz)
-**Date:** 2026-11-09, updated 2026-11-09 (which runs offer lists; offers paused)
+**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge)
 **History:** [replaced text](archive/0109-shared-read-only-nix-store-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/nix-cache.nix`,
 `nix-cache-{prepare,init,fill}.sh`, `podman-canary.nix` (`valid_volumes`),
@@ -134,24 +134,41 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   It never builds: `.drv` entries are dropped, `max-jobs = 0`, and a path is
   only realised by substitution, so locally built paths never enter. The
   guarantee is content-based, not source-based.
-- **Offers are paused.** The filler reads path lists (`*.paths`) and flake
-  locks (`*.lock`) from `/run/forgejo-nix-cache-drop`, a 64M tmpfs owned by
-  the filler with mode 0700, which no job can write. Every job reaches the
-  Podman API through its socket, and the API runs as the builder and binds
-  any path the builder can reach, whatever the runner's `valid_volumes`
-  allows; the runner cannot tell a fork pull request's job from a trusted
-  run's, and a fork's job controls its own workflow. With the directory
-  writable by the builder, a fork could forge offers, or replace or delete a
-  trusted run's list by its predictable name. So only file permissions keep
-  jobs out, and the runner also leaves the directory out of
-  `valid_volumes`. The store therefore keeps what it holds and, once the
-  filler has worked off the entries earlier lists left in its queue (below),
-  renews nothing, so its roots expire after `maxAgeDays`, until the filler
-  can verify which run made an offer
-  ([#1038](https://git.alc.xyz/alcxyz/nix-config/issues/1038)). Root can
-  still place a list there by hand, or empty the queue
-  (`/var/lib/forgejo-nix-cache-fill/pending.*`) to drop what is still
-  waiting.
+- **Verified offers, pulled by the filler.** Runs offer paths only through
+  the forge, never through anything on the host. The filler looks the runs
+  of `offers.repos` (on xyz `alcxyz/nix-packages`) up through the anonymous
+  API of `offers.forge` and takes an offer only from a run it verified
+  itself, by its id: the run belongs to that public repository, has
+  finished (success or failure), and is either a push to the repository's
+  default branch or a pull request whose head and base are that repository
+  and that Forgejo does not mark as a fork pull request (the owner's
+  choice). A cancelled or skipped run, a refused one, and one that cannot be
+  looked up offer nothing. A run with a job still running (a run reads
+  "failure" as soon as one job fails), or that, its job list, the log of a
+  job that finished or its lock could not be fetched, is looked up again at
+  the next fill for as long as it stays among the latest runs; the logs of
+  cancelled jobs are read too, as far as they exist; a repository state without a flake lock
+  (404) offers its paths alone. A run is otherwise read once (the last 5000
+  are remembered), and each outcome is logged (`offer_taken`,
+  `offer_refused`, `offer_none`, `offer_skipped`, `offer_retry`). The
+  paths come from the verified run's own job logs, as lines
+  `nix-cache-offer <store path>`, and the flake lock from the repository at
+  the run's commit, fetched by the filler, so a job hands over nothing the
+  filler trusts. The filler sends no credentials, follows no redirects,
+  accepts only HTTPS and caps every response at 16 MiB. Each fill looks at
+  the latest `offers.maxRuns` (20) runs per repository. Every host's filler
+  reads every verified run, wherever it ran.
+
+  No job can write anywhere the filler reads. `/run/forgejo-nix-cache-drop`,
+  a 64M tmpfs owned by the filler with mode 0700, takes lists only from root
+  (by hand). Every job reaches the Podman API through its socket, and the
+  API runs as the builder and binds any path the builder can reach, whatever
+  the runner's `valid_volumes` allows; the runner cannot tell a fork pull
+  request's job from a trusted run's, and a fork's job controls its own
+  workflow. With a directory the builder could write, a fork could forge
+  offers, or replace or delete a trusted run's list by its predictable name.
+  So only file permissions keep jobs out, and the runner also leaves the
+  directory out of `valid_volumes`.
 
   Lists carry only public store paths and lock files. The filler moves what
   it reads into a queue in its private state directory
@@ -160,34 +177,34 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   every fill. An entry leaves it once it is added, found present, or tried
   and refused (a refused input type, a failed fetch or pin check, a path no
   trusted cache serves); entries held back by a running job or the budget
-  wait for a later fill. After each fill, root deletes every entry in the
-  drop directory that has lain there since before the previous fill started
-  (by change time, never following links), so dotfiles and directories,
-  which the filler cannot remove, do not pile up, while a list still being
-  written, which is newer, survives. A list names the paths a run added and
-  everything they reference, including outputs already in the store; the
-  filler roots the listed paths it already has again, which renews them
-  without fetching, and substitutes the missing ones. A job's whole
-  `nix path-info --all` would name the entire lower store and keep every
-  path alive forever.
+  wait for a later fill. Root can empty the queue
+  (`/var/lib/forgejo-nix-cache-fill/pending.*`) to drop what is still
+  waiting. After each fill, root deletes every entry in the drop directory
+  that has lain there since before the previous fill started (by change
+  time, never following links). An offer names the signed paths a run
+  added; the filler roots the listed paths it already has again, which
+  renews them without fetching, and substitutes the missing ones with their
+  closures. A job's whole `nix path-info --all` would name the entire lower
+  store and keep every path alive forever. So a path that runs only read
+  from the store is not renewed: it expires `maxAgeDays` after the last
+  offer that named it, or earlier under the cap, and the next run that needs
+  it fetches it into its scratch and offers it again.
 
-  When offers return, the owner's choice stands: runs offer lists from
-  pushes to the repository's default branch and from pull requests whose
-  head branch is in the same repository, never from fork pull requests.
   Offering from default-branch pushes alone would leave the store nearly
   empty for nix-packages, whose validation runs on pull requests and on
-  pushes to `main`, while its default branch is `dev`. A list is only a
+  pushes to `main`, while its default branch is `dev`. An offer is only a
   hint: what enters is decided by the content rules above, never by who
-  offered it. A hostile list can only make the filler fetch public signed
-  paths or pinned public sources, and keep paths alive, within the
-  ingestion budget. The worst it can do is take the cache's use away, never
-  its integrity: each fill adds about `runLimit`, and collection then evicts
-  the oldest root directories whole, however much they hold, to get under
-  `sizeCap`. A source that keeps offering the same large list renews its
-  paths on every fill, so they stay recent: the store can sit at the cap
-  holding only them, with every other root evicted and ingestion stopped,
-  until those offers stop and the paths age out. Jobs then substitute what
-  they miss into their scratch, as without the store. The filler reads only
+  offered it. A hostile offer, from a pull request on the repository's own
+  branches, can only make the filler fetch public signed paths or pinned
+  public sources, and keep paths alive, within the ingestion budget. The
+  worst it can do is take the cache's use away, never its integrity: each
+  fill adds about `runLimit`, and collection then evicts the oldest root
+  directories whole, however much they hold, to get under `sizeCap`. A
+  source that keeps offering the same large list renews its paths on every
+  fill, so they stay recent: the store can sit at the cap holding only them,
+  with every other root evicted and ingestion stopped, until those offers
+  stop and the paths age out. Jobs then substitute what they miss into their
+  scratch, as without the store. The filler reads only
   regular files with plain names, never follows links, caps each file at
   16 MiB, and keeps only paths that follow Nix's rules (a 32-character
   base-32 hash, a name of at most 211 allowed characters not starting with a
@@ -215,7 +232,7 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   followed by `nix-store --gc`; the jobs' Nix stays rooted. Roots renewed
   within the last day are never evicted for the cap: if only those remain,
   the store stays over the cap and ingestion stays stopped, so a hostile
-  list cannot evict what jobs use now. Right before each
+  offer cannot evict what was offered within the last day. Right before each
   `nix-store --gc` and each eviction, the filler checks for a running job as
   above and skips the rest of the collection if there is one, since that
   job's database copy may name paths a collection would delete.
@@ -228,8 +245,8 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   path that is not kept. Paths the store holds but a job's snapshot does not
   list are harmless: the job substitutes them again into its upper.
 - **Trial on xyz.** Only xyz enables it until the nix-packages validation is
-  measured; then the other pool hosts and the other Nix workflows (pandora,
-  nix-config, teams-chat, vidown).
+  measured with verified offers; then the other pool hosts and the other
+  Nix workflows (pandora, nix-config, teams-chat, vidown).
 
 Success is measured against the #1027 baseline on two criteria, not one: CI
 disk writes per day and per Nix job, and job time. Writes are an explicit
@@ -321,7 +338,18 @@ into its RAM scratch and leaves the lower store unchanged; that no bind of
 the store is writable from a container; a job that cannot write the drop
 directory even when it binds it through the API socket; a job's list, placed
 by root, renewing the lower path
-it used and adding its signed path but not its local one; a fill with a job
+it used and adding its signed path but not its local one; verified offers
+from a forge fixture, where a finished pull request on the repository's own
+branches and a failed push to its default branch are taken, while a fork
+pull request, a pull request whose payload names another head repository, a
+push to another branch, a run of another repository and a run that cannot
+be looked up offer nothing although all their paths are signed, the lock is
+fetched only at verified commits, no request carries credentials, offer
+lines without a log timestamp and `.drv` entries are ignored, a repository
+state without a lock still offers, a running run, a failed run with a job
+still running and a run whose log could not be fetched are taken at a later
+fill, and runs already read are not read again; a
+fill with a job
 running that only renews and neither adds nor collects; ingestion stopping
 at the cap; expiry by age keeping
 renewed paths; eviction by the cap; a store reset that leaves the store and

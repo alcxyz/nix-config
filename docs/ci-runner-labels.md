@@ -95,6 +95,7 @@ jobs:
             cp /nix-cache/db/db.sqlite /nix-cache/db/schema /nix/var/nix/db/
             printf '%s\n' 'build-users-group =' 'experimental-features = nix-command flakes' 'sandbox = false' > /etc/nix/nix.conf
             echo /nix-cache/nix/bin >> "$GITHUB_PATH"
+            /nix-cache/nix/bin/nix path-info --all | sort > /tmp/nix-paths-before
             echo used=true >> "$GITHUB_OUTPUT"
           fi
       - uses: https://github.com/cachix/install-nix-action@v30
@@ -104,14 +105,34 @@ jobs:
             experimental-features = nix-command flakes
             sandbox = false
       # ... the job's Nix steps ...
+      - name: Offer the paths this run fetched
+        if: always()
+        run: |
+          # Printed to this job's log, where the hosts' fillers read them
+          # once they have verified the run (ADR-0109).
+          # Only paths cache.nixos.org signed, not the .drv files and
+          # sources evaluation writes locally.
+          if [ -s /tmp/nix-paths-before ]; then
+            nix path-info --all | sort | comm -13 /tmp/nix-paths-before -
+          else
+            nix path-info --all
+          fi | grep -v '\.drv$' | xargs -r nix path-info --sigs |
+            awk '/[[:space:]]cache\.nixos\.org-1:/ { print "nix-cache-offer " $1 }' || true
 ```
 
 The steps use POSIX shell only: act runs container steps with `sh`.
 
-Jobs cannot offer path lists to the store for now: the filler's drop
-directory is writable only by the filler. A job reaches the Podman API
-through its socket and could bind any path the API's user can write, and a
-fork's job controls its own workflow, so no runner setting could keep forks
-out of a directory jobs can write. The store keeps
-what it holds until the filler can verify which run made an offer
-([#1038](https://git.alc.xyz/alcxyz/nix-config/issues/1038)).
+A job offers paths only by printing `nix-cache-offer <store path>` lines to
+its own log: the cache.nixos.org-signed paths it added on top of the host's
+store, or in its whole store where it installed Nix itself. It writes nothing on the host. Each
+host's filler lists the recent runs of the repositories in
+`nixCache.offers.repos` through the forge's anonymous API, verifies each
+run itself, reads the offer lines from the logs of runs that pass, and
+fetches `flake.lock` from the repository at the run's commit. A run passes
+when it has finished and is a push to the repository's default branch or a
+pull request from one of the repository's own branches; fork pull requests
+and anything else offer nothing. The filler still admits only what
+cache.nixos.org signed and `github`, `gitlab` and `sourcehut` inputs pinned
+to a commit whose hash it verified, so an offer is only a hint. Offers must
+name nothing but public store paths, since job logs of public repositories
+are public.

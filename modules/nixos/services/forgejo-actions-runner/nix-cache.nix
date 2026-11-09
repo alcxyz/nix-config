@@ -50,7 +50,7 @@
   };
   fill = pkgs.writeShellApplication {
     name = "forgejo-nix-cache-fill";
-    runtimeInputs = with pkgs; [coreutils diffutils findutils gawk git gnugrep jq sqlite cache.package];
+    runtimeInputs = with pkgs; [coreutils curl diffutils findutils gawk git gnugrep gnused jq sqlite cache.package];
     text = builtins.readFile ./nix-cache-fill.sh;
   };
   # The filler's whole Nix configuration: no host nix.conf, netrc, access
@@ -182,6 +182,35 @@ in {
       default = ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="];
       description = "The only keys whose signatures admit a path into the store.";
     };
+    offers = {
+      forge = lib.mkOption {
+        type = lib.types.nullOr (lib.types.strMatching "https://[A-Za-z0-9.-]+(:[0-9]+)?");
+        default = null;
+        example = "https://git.example.org";
+        description = ''
+          Forgejo instance whose CI runs may offer paths. The filler looks
+          runs up through its anonymous API and takes an offer only from a
+          run it verified: in one of `repos`, finished, and a push to the
+          repository's default branch or a pull request whose head and base
+          are that repository, never a fork (ADR-0109).
+        '';
+      };
+      repos = lib.mkOption {
+        type = lib.types.listOf (lib.types.strMatching "[A-Za-z0-9._-]+/[A-Za-z0-9._-]+");
+        default = [];
+        example = ["owner/packages"];
+        description = ''
+          Public repositories, as owner/name, whose verified runs offer
+          paths: the `nix-cache-offer <store path>` lines in their job logs,
+          and the flake lock at the run's commit.
+        '';
+      };
+      maxRuns = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 20;
+        description = "Most recent runs per repository the filler looks at on each run; each is read once.";
+      };
+    };
     jobVolumes = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       readOnly = true;
@@ -198,6 +227,10 @@ in {
 
   config = lib.mkIf enabled {
     assertions = [
+      {
+        assertion = cache.offers.repos == [] || cache.offers.forge != null;
+        message = "podmanCanary.nixCache.offers.repos needs offers.forge.";
+      }
       {
         assertion = lib.hasPrefix "/" cache.dataPath && !(lib.hasPrefix "/var/lib/forgejo-podman/" cache.dataPath) && cache.dataPath != "/var/lib/forgejo-podman";
         message = "podmanCanary.nixCache.dataPath must be absolute and outside /var/lib/forgejo-podman, whose owner is the Podman API's user.";
@@ -251,6 +284,9 @@ in {
       environment = {
         CACHE_ROOT = cache.dataPath;
         DROP_DIR = cache.dropPath;
+        OFFER_FORGE = lib.optionalString (cache.offers.forge != null) cache.offers.forge;
+        OFFER_REPOS = lib.concatStringsSep " " cache.offers.repos;
+        OFFER_MAX_RUNS = toString cache.offers.maxRuns;
         NIX_PACKAGE = "${cache.package}";
         MAX_AGE_DAYS = toString cache.maxAgeDays;
         SIZE_CAP_BYTES = toString (sizeBytes cache.sizeCap);

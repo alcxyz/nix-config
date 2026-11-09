@@ -275,6 +275,7 @@ in {
     assert lib.all (host: runners.${host}.podmanCanary.nixCache.enable == (host == "xyz")) (lib.attrNames runners);
     assert lib.all (host: (runnerHosts.${host}.config.systemd.services ? forgejo-nix-cache-fill) == (host == "xyz")) (lib.attrNames runners);
     assert runners.xyz.podmanCanary.nixCache.substituters == ["https://cache.nixos.org"];
+    assert runners.xyz.podmanCanary.nixCache.offers.forge == "https://git.alc.xyz" && runners.xyz.podmanCanary.nixCache.offers.repos == ["alcxyz/nix-packages"];
     assert runners.xyz.podmanCanary.nixCache.trustedPublicKeys == ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="];
     assert runners.xyz.podmanCanary.nixCache.dataPath == "/ext4/ci/forgejo-nix-cache";
     assert runners.xyz.podmanCanary.nixCache.jobVolumes == ["/run/forgejo-nix-cache/nix/store" "/run/forgejo-nix-cache/job"];
