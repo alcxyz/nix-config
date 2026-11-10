@@ -451,6 +451,15 @@ in {
           webURL = "https://t3code.alc.xyz";
         }
       ];
+      # devstats, served at /devstats/ through the same proxy, linked from
+      # deck's top bar and overview (nix-packages #691).
+      tool = [
+        {
+          label = "Stats";
+          path = "/devstats/";
+          description = "Development activity across Forgejo and GitHub";
+        }
+      ];
     };
   };
 
