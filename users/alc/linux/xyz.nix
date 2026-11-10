@@ -69,15 +69,21 @@ in {
   # Paperless, with the operator's own Paperless settings. One source instead
   # reads Thunderbird's local mailbox, read-only, for invoices sent as links;
   # it starts Thunderbird on its own workspace when it is not running. All
-  # sources are on by default (the flake's sites.<name>.enable).
+  # sources are on by default (the flake's sites.<name>.enable). A daily run
+  # fetches statements that need a sign-in on the owner's phone, only after the
+  # owner confirms in chat through the accounting service (the flake's ADR-0002).
   programs.portalReceipts = {
     enable = true;
     browser.executable = lib.getExe pkgs.chromium;
-    # Both come from the private operator module; fail at evaluation, not at
+    # These come from the private operator module; fail at evaluation, not at
     # run time, if it stops setting them.
     paperless = {
       url = config.home.sessionVariables.PAPERLESS_URL or (throw "portal-receipts needs PAPERLESS_URL from the private operator module.");
       tokenFile = config.home.sessionVariables.PAPERLESS_API_TOKEN_FILE or (throw "portal-receipts needs PAPERLESS_API_TOKEN_FILE from the private operator module.");
+    };
+    bokfor = {
+      url = config.home.sessionVariables.BOKFOR_DESK_URL or (throw "portal-receipts needs BOKFOR_DESK_URL from the private operator module.");
+      tokenFile = config.home.sessionVariables.BOKFOR_DESK_TOKEN_FILE or (throw "portal-receipts needs BOKFOR_DESK_TOKEN_FILE from the private operator module.");
     };
     # The notify command comes from the Home Manager profile.
     path = ["${config.home.profileDirectory}/bin"];

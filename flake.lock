@@ -1132,11 +1132,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794209913,
-        "narHash": "sha256-bHJvMRL2UDt5b9MivyD//YG4bov4NggtjxOKI3Mn7+s=",
+        "lastModified": 1794303340,
+        "narHash": "sha256-lAOJtPGiS5i9z24n5EpU0nTC97fJFOT31L/JxAd8bGI=",
         "ref": "dev",
-        "rev": "c7b2bf27a82f19e5816e3f36faa40ef57aae52b1",
-        "revCount": 1001,
+        "rev": "b00910fa48d8d0dad3e0add473ffd66af043fff5",
+        "revCount": 1003,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
@@ -1396,11 +1396,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794266656,
-        "narHash": "sha256-Xqt1bcIAvi5VfKZyJyhlI4HHcWa2JVdV1gTlR2ZoOBU=",
+        "lastModified": 1794308012,
+        "narHash": "sha256-pWWCdB57B8rYMpHvsdSo/SGoOWPqSZbkz4RQu7laWak=",
         "ref": "dev",
-        "rev": "4effb3dd0b92abc70c82d440e9d7cf0793960a3f",
-        "revCount": 10,
+        "rev": "cd09d3203f7a414f2e0f7739cd69a0a3115cf336",
+        "revCount": 12,
         "type": "git",
         "url": "ssh://git@git-ssh.alc.xyz/alcxyz/portal-receipts.git"
       },
