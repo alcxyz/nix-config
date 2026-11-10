@@ -7,6 +7,30 @@
   runtimeRoot = "/run/nixbox-private-browser-worker";
   publicRuntimeRoot = "/run/nixbox-public-browser-worker";
   publicKdeConnectHostPort = 1716;
+  # Wolf's fixed ports with host networking: the legacy set, the public
+  # browser's and the protected browser's.
+  wolfTCPPorts = [
+    47984
+    47989
+    48010
+    49984
+    49989
+    50010
+    48984
+    48989
+    49010
+  ];
+  wolfUDPPorts = [
+    47999
+    48100
+    48200
+    49999
+    50100
+    50200
+    48999
+    49100
+    49200
+  ];
   nvidiaPackage = config.hardware.nvidia.package;
   nvrtcRuntime = pkgs.callPackage ./nvrtc-runtime.nix {};
   workerStreamLayout = pkgs.writeShellApplication {
@@ -48,29 +72,16 @@ in {
   # isolated Moonlight port sets on every qualified worker so either
   # rescheduled singleton remains reachable without host-specific exceptions.
   networking.firewall = {
-    allowedTCPPorts = [
-      publicKdeConnectHostPort
-      47984
-      47989
-      48010
-      49984
-      49989
-      50010
-      48984
-      48989
-      49010
-    ];
-    allowedUDPPorts = [
-      publicKdeConnectHostPort
-      47999
-      48100
-      48200
-      49999
-      50100
-      50200
-      48999
-      49100
-      49200
-    ];
+    allowedTCPPorts = [publicKdeConnectHostPort] ++ wolfTCPPorts;
+    allowedUDPPorts = [publicKdeConnectHostPort] ++ wolfUDPPorts;
   };
+
+  # Most of these ports lie in the kernel's ephemeral range (32768-60999). An
+  # outgoing connection that draws one as its source port blocks Wolf's bind
+  # for as long as it lives: after a reboot on 2026-11-10, k3s's loopback
+  # connection to etcd took 48984, and the protected browser's Wolf failed
+  # with "bind: Address already in use" until that connection closed.
+  # Reserving the ports keeps them out of the ephemeral pool.
+  boot.kernel.sysctl."net.ipv4.ip_local_reserved_ports" =
+    lib.concatMapStringsSep "," toString (lib.unique (wolfTCPPorts ++ wolfUDPPorts));
 }
