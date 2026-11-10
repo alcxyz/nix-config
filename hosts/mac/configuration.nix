@@ -43,10 +43,13 @@
     bash = pkgs.bashInteractive;
     zsh = pkgs.zsh;
   };
+  # Five generations per profile, as on xps: the store shares its APFS
+  # container with the rest of the disk (ADR-0013).
   nixGenerationRetention = pkgs.writeShellScript "nix-generation-retention" ''
     export SUDO_BIN=/usr/bin/sudo
     exec ${lib.getExe pkgs.nix-gc-maintenance} \
       --automatic-retention \
+      --keep 5 \
       --user ${lib.escapeShellArg accountUsername} \
       --home ${lib.escapeShellArg accountHomeDirectory}
   '';

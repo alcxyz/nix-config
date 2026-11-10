@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Amended:** 2026-11-07
+**Amended:** 2026-11-10
 **History:** [replaced text](archive/0013-safe-nix-gc-no-generation-deletion-history.md)
 **Applies to:** all managed NixOS and nix-darwin hosts, Home Manager profiles, `nix.gc`
 
@@ -40,7 +40,9 @@ or when the Nix filesystem has less than 15% free. NixOS hosts may lower the
 retained count with `alc.nix.keepGenerations`: the small, rarely changed
 SD-card TV clients built from the `nixbox-direct-client` profile (`rpi0` to
 `rpi3`) keep 3, and `xps`, whose disk is shared with media and workstation
-state, keeps 5. nix-darwin hosts keep the default 10. When triggered, it
+state, keeps 5. The nix-darwin host `mac` passes `--keep 5` to its
+retention job for the same reason: its store shares an APFS container with
+the rest of the disk. When triggered, it
 validates every current profile closure before pruning each profile back to
 the retained count. Any validation failure aborts retention and the dependent
 GC.

@@ -92,3 +92,7 @@ are retained with that system generation.
 > A daily Home Manager job (`services.nix-stale-gcroots`) on workstation profiles removes the user's own `result*` and nix-direnv root links whose symlink is older than 30 days. It
 > never touches profiles or tool state roots under `~/.local/state` and
 > `~/.cache`; nix-direnv recreates its roots the next time a project loads.
+
+## Text replaced on 2026-11-10
+
+> nix-darwin hosts keep the default 10.
