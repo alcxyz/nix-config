@@ -12,6 +12,8 @@ import unittest
 SCRIPT = Path(sys.argv.pop(1)).resolve()
 PRIMARY = 'forgejo-actions-runner.service'
 POOL = 'forgejo-podman-runner.service'
+# A host's second pool slot, on the same API and scratch.
+POOL2 = 'forgejo-podman-runner-2.service'
 HOLD = 'forgejo-runner-hold.service'
 GAME = 'game-signal.service'
 RUNNERS = [PRIMARY, POOL]
@@ -43,7 +45,7 @@ if args[0] == 'show':
     # A runner whose pause file exists reports the pause (nix-packages ADR-0017).
     pause = Path(os.environ['FAKE_PAUSE_DIR']) / name
     if pause.exists() and 'StatusText' in wanted:
-        props['StatusText'] = state.get('paused_text', 'paused tasks=0')
+        props['StatusText'] = state.get('paused_texts', {}).get(name, state.get('paused_text', 'paused tasks=0'))
         # Simulates a runner restart that removes the pause after N reads.
         if 'remove_pause_after_reads' in state:
             state['remove_pause_after_reads'] -= 1
@@ -349,6 +351,68 @@ class StoreResetTests(unittest.TestCase):
         # No runner starts paused.
         self.assertFalse((self.root / 'paused' / POOL).exists())
         self.assertFalse((self.root / 'pause-record').exists())
+
+    def second_slot(self):
+        (self.state_dir / 'runners' / POOL2).mkdir()
+        self.update_units(**{POOL2: running()})
+        return {'RUNNER_UNITS': f'{PRIMARY} {POOL} {POOL2}'}
+
+    def test_full_scratch_drains_both_pool_slots(self):
+        scratch_parent, graph = self.scratch()
+        units = self.second_slot()
+        # Only the second slot started a job recently; both take no new one.
+        (self.journals / POOL2).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 25\n')
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph), **units)
+        self.assert_skipped(result, f'recent_job unit={POOL2}')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        result = self.run_reset(SCRATCH_STORE=str(graph), **units)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'drained unit={POOL}', result.stdout)
+        self.assertIn(f'drained unit={POOL2}', result.stdout)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertFalse(graph.exists())
+        stops = '\n'.join(self.calls('stop'))
+        self.assertIn(f'stop {POOL}', stops)
+        self.assertIn(f'stop {POOL2}', stops)
+        self.assertEqual(self.calls('start')[-1], f'start {DOCKER} {PODMAN} {PRIMARY} {POOL} {POOL2}')
+        for unit in (POOL, POOL2):
+            self.assertFalse((self.root / 'paused' / unit).exists())
+        self.assertFalse((self.root / 'pause-record').exists())
+
+    def test_full_scratch_leaves_a_pause_on_the_second_slot_alone(self):
+        scratch_parent, graph = self.scratch()
+        units = self.second_slot()
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        (self.root / 'paused').mkdir()
+        (self.root / 'paused' / POOL2).touch()
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph), **units)
+        self.assert_skipped(result, f'runner_paused unit={POOL2}')
+        self.assertTrue((self.root / 'paused' / POOL2).exists())
+        self.assertFalse((self.root / 'paused' / POOL).exists())
+        self.assertTrue(graph.exists())
+
+    def test_full_scratch_skips_when_the_second_slot_does_not_drain(self):
+        scratch_parent, graph = self.scratch()
+        units = self.second_slot()
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        # The first slot drains; the second still runs a job.
+        self.set_fake(paused_texts={POOL2: 'paused tasks=1'})
+        self.age_stamp(600)
+        result = self.run_reset(SCRATCH_STORE=str(graph), PAUSE_WAIT_SECONDS='1', **units)
+        self.assertIn(f'drained unit={POOL}', result.stdout)
+        self.assert_skipped(result, f'pool_not_drained unit={POOL2}')
+        self.assertTrue(graph.exists())
+        self.assertEqual(self.calls('stop'), [])
+        for unit in (POOL, POOL2):
+            self.assertFalse((self.root / 'paused' / unit).exists())
 
     def test_full_scratch_skips_when_the_pool_runner_does_not_drain(self):
         scratch_parent, graph = self.scratch()
@@ -735,7 +799,10 @@ class StoreResetTests(unittest.TestCase):
         self.assertEqual(self.trashes(), [])
 
     def test_invalid_runner_lists_are_rejected(self):
-        for units in ('', PRIMARY, f'{POOL} {PRIMARY}', f'{PRIMARY} {POOL} bad;unit'):
+        for units in ('', PRIMARY, f'{POOL} {PRIMARY}', f'{PRIMARY} {POOL} bad;unit',
+                      f'{PRIMARY} {POOL2}', f'{PRIMARY} {POOL2} {POOL}',
+                      f'{PRIMARY} {POOL} forgejo-podman-runner-3.service',
+                      f'{PRIMARY} {POOL} {POOL2} {POOL2}'):
             with self.subTest(units=units):
                 self.assertEqual(self.run_reset(RUNNER_UNITS=units).returncode, 1)
                 self.assertEqual(self.calls(), [])

@@ -9,9 +9,9 @@ Forgejo Actions runners for the alcxyz repositories are configured in
 
 | Label | Served by | Use for |
 |-------|-----------|---------|
-| `forgejo-podman` | xyz, xev, nex, nux | The default shared pool for container jobs. |
+| `forgejo-podman` | xyz (two slots), xev, nex, nux | The default shared pool for container jobs. |
 | `ci-fast` | xyz and xev (their pool runners, in the same slots as `forgejo-podman`) | Heavy jobs on a project you are iterating on. Never runs on nex or nux; the job waits instead. |
-| `forgejo-podman-large` | xyz only (its pool runner, in the same slot as `forgejo-podman`) | Jobs whose throwaway data exceeds the other hosts' 8G RAM scratch, up to xyz's 16G, such as the nix-packages Nix update jobs ([ADR-0108](adr/0108-ram-scratch-for-podman-ci-jobs.md)). Waits while xyz is held for a game or off. |
+| `forgejo-podman-large` | xyz only (its first pool slot, in the same slot as `forgejo-podman`, so one such job at a time) | Jobs whose throwaway data exceeds the other hosts' 8G RAM scratch, up to about 12.8G of xyz's shared 24G, such as the nix-packages Nix update jobs ([ADR-0108](adr/0108-ram-scratch-for-podman-ci-jobs.md)). Waits while xyz is held for a game or off. |
 | `forgejo-docker` | the Docker runners on xyz, xev, nex and nux | Jobs that need the Docker engine rather than Podman. Prefer `forgejo-podman`. |
 
 No other labels exist. The Docker aliases `forgejo-docker-primary`,
@@ -37,11 +37,11 @@ jobs:
 Leave light jobs on `forgejo-podman`. With the variable unset, the job uses the
 shared pool as before.
 
-`ci-fast` jobs run on the pool runners of xyz and xev (one slot each),
-which serve `forgejo-podman` jobs in the same slots. Whichever runner polls
-first takes the job, so a fast job may land on xev while xyz is free. A fast
-job never waits while one of these slots is free, but it waits while both
-are busy, shared-pool jobs included. Most jobs take about 2 minutes, so
+`ci-fast` jobs run on the pool runners of xyz (two slots) and xev (one
+slot), which serve `forgejo-podman` jobs in the same slots. Whichever runner
+polls first takes the job, so a fast job may land on xev while xyz is free. A
+fast job never waits while one of these three slots is free, but it waits
+while all three are busy, shared-pool jobs included. Most jobs take about 2 minutes, so
 a slot frees quickly.
 
 While a game runs on xyz, or xyz is off, its runners take no jobs and xev

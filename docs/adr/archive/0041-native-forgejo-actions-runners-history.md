@@ -558,3 +558,22 @@ The text as it stood before every pool runner went to one slot for RAM job scrat
 >   within one aggregate
 >   resource budget. On `xyz`, builds can consume up to half the workstation's
 >   CPU and 35% of its memory,
+
+## Text replaced on 2026-11-10 (#1027)
+
+The text as it stood before xyz took a second pool slot and 64%/69% memory limits ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md), [#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)).
+
+>   (ADR-0108); `xyz`, with
+>   its slots beside the nix-daemon's 40G cap and the ZFS ARC, 40% and 45%. `nux` and `nex` raise the CPU
+
+> - `xyz` and `xev` each contribute two slots (one Docker, one pool), each
+>   within one aggregate
+>   resource budget. On `xyz`, builds can consume up to half the workstation's
+>   CPU and 45% of its memory, while memory reclaim and scheduling weights favor
+>   interactive workloads under contention.
+
+>   Podman runner. Every Docker runner and every Podman pool runner admits one
+>   job, so each host's RAM job scratch is one job's limit
+>   ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)); the `xyz` and `xev`
+>   pool slots also serve `ci-fast`, and the `xyz` one `forgejo-podman-large` ([ADR-0097](../0097-ci-fast-runner-label.md),
+>   [ADR-0106](../0106-runner-hold-for-games-and-low-disk.md)).

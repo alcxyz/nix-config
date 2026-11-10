@@ -102,6 +102,10 @@ IFS=$' \t\n' read -r -d '' -a runner_units <<<"$runner_units_text" || true
 ((${#runner_units[@]} > 1)) || exit 1
 [[ ${runner_units[0]} == forgejo-actions-runner.service &&
   ${runner_units[1]} == forgejo-podman-runner.service ]] || exit 1
+# The Podman pool runners: the first, then a second slot.
+pool_units=("${runner_units[@]:1}")
+((${#pool_units[@]} == 1)) ||
+  [[ ${#pool_units[@]} == 2 && ${pool_units[1]} == forgejo-podman-runner-2.service ]] || exit 1
 for unit in "${runner_units[@]}" "$hold_unit" "$game_unit"; do
   valid_unit "$unit" || exit 1
 done
@@ -422,11 +426,17 @@ recent_job() {
 if job_containers; then skip "job_running socket=$job_socket"; fi
 # On a full scratch, whatever made the reset due, most new pool jobs fail and
 # each would renew the quiet interval, so the reset might never run. There
-# the Podman pool runner is paused instead: it takes no new job, and the reset
-# goes on only once the runner reports none running, and again right before
-# its stop. The Docker runner's jobs use their own store and keep the quiet
-# interval.
-pool=${runner_units[1]}
+# the running Podman pool runners are paused instead: they take no new job,
+# and the reset goes on only once each reports none running, and again right
+# before its stop. The Docker runner's jobs use their own store and keep the
+# quiet interval.
+is_pool() {
+  local unit
+  for unit in "${pool_units[@]}"; do
+    [[ $1 == "$unit" ]] && return 0
+  done
+  return 1
+}
 scratch_full=0
 if [[ $scratch_percent != none ]] && ((scratch_percent >= scratch_full_percent)); then
   scratch_full=1
@@ -434,12 +444,19 @@ fi
 drain_pool=0
 for unit in "${to_stop[@]}"; do
   recent_job "$unit" || continue
-  ((scratch_full == 1)) && [[ $unit == "$pool" ]] || skip "recent_job unit=$unit"
-  # A pause someone else set, such as a runner restart's, is theirs.
-  [[ ! -e $pause_dir/$pool ]] || skip "runner_paused unit=$pool"
+  if ((scratch_full == 0)) || ! is_pool "$unit"; then skip "recent_job unit=$unit"; fi
   drain_pool=1
 done
-quiet_needed() { ((drain_pool == 0)) || [[ $1 != "$pool" ]]; }
+drain=()
+if ((drain_pool == 1)); then
+  for unit in "${to_stop[@]}"; do
+    is_pool "$unit" || continue
+    # A pause someone else set, such as a runner restart's, is theirs.
+    [[ ! -e $pause_dir/$unit ]] || skip "runner_paused unit=$unit"
+    drain+=("$unit")
+  done
+fi
+quiet_needed() { ((drain_pool == 0)) || ! is_pool "$1"; }
 
 # 4. Stop. From here on the unit's ExecStopPost starts these units again.
 printf '%s\n' "${api_units[@]}" "${to_stop[@]}" >"$restart_file.new"
@@ -447,30 +464,34 @@ mv -f -- "$restart_file.new" "$restart_file"
 printf 'stopping due=%s used_percent=%s%s age_seconds=%s runners=%s\n' \
   "$due" "$used_percent" "$scratch_note" "$age" "${to_stop[*]:-none}"
 if ((drain_pool == 1)); then
-  printf '%s\n' "$pool" >"$pause_record"
+  printf '%s\n' "${drain[@]}" >"$pause_record"
   install -d -m 0755 -- "$pause_dir"
-  : >"$pause_dir/$pool"
-  pause_deadline=$((SECONDS + pause_wait_seconds))
-  until [[ $(query show --property=StatusText --value "$pool" 2>/dev/null) == "paused tasks=0" ]]; do
-    if ((SECONDS >= pause_deadline)); then
-      unpause
-      skip "pool_not_drained unit=$pool"
-    fi
-    sleep "$poll_seconds"
+  for unit in "${drain[@]}"; do
+    : >"$pause_dir/$unit"
   done
-  printf 'drained unit=%s\n' "$pool"
+  pause_deadline=$((SECONDS + pause_wait_seconds))
+  for unit in "${drain[@]}"; do
+    until [[ $(query show --property=StatusText --value "$unit" 2>/dev/null) == "paused tasks=0" ]]; do
+      if ((SECONDS >= pause_deadline)); then
+        unpause
+        skip "pool_not_drained unit=$unit"
+      fi
+      sleep "$poll_seconds"
+    done
+    printf 'drained unit=%s\n' "$unit"
+  done
 fi
 stop_started=$SECONDS
-# Succeeds while the reset's pause still holds the drained pool runner: a
+# Succeeds while the reset's pause still holds a drained pool runner: a
 # runner restart removes every pause file when it ends.
 pool_still_drained() {
-  [[ -e $pause_dir/$pool ]] &&
-    [[ $(query show --property=StatusText --value "$pool" 2>/dev/null) == "paused tasks=0" ]]
+  [[ -e $pause_dir/$1 ]] &&
+    [[ $(query show --property=StatusText --value "$1" 2>/dev/null) == "paused tasks=0" ]]
 }
 for unit in "${to_stop[@]}"; do
   if job_containers; then skip "job_running socket=$job_socket"; fi
   if quiet_needed "$unit" && recent_job "$unit"; then skip "recent_job unit=$unit"; fi
-  if ! quiet_needed "$unit" && ! pool_still_drained; then
+  if ! quiet_needed "$unit" && ! pool_still_drained "$unit"; then
     unpause
     skip "pool_unpaused unit=$unit"
   fi

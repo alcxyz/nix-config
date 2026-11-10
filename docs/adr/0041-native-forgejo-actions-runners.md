@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07, updated 2026-11-05 (the runner restart pauses runners until their jobs finish, per nix-packages ADR-0017)
-**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine; 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-08, one pool slot per host and higher memory limits for RAM job scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027), [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine; 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-08, one pool slot per host and higher memory limits for RAM job scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027), [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-10, a second pool slot and 64%/69% memory limits on xyz ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -82,9 +82,11 @@ registration keeps those jobs to that user's repositories.
   workflows.
 - Runner admission is explicit in per-host capacity, set for the Docker and the
   Podman runner. Every Docker runner and every Podman pool runner admits one
-  job, so each host's RAM job scratch is one job's limit
-  ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); the `xyz` and `xev`
-  pool slots also serve `ci-fast`, and the `xyz` one `forgejo-podman-large` ([ADR-0097](0097-ci-fast-runner-label.md),
+  job. xev, nex and nux run one pool runner, so their RAM job scratch is one
+  job's limit; xyz runs two, which share its scratch
+  ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)). The `xyz` and `xev`
+  pool slots also serve `ci-fast`, and xyz's first slot alone serves
+  `forgejo-podman-large` ([ADR-0097](0097-ci-fast-runner-label.md),
   [ADR-0106](0106-runner-hold-for-games-and-low-disk.md)).
 - Runner shutdown stops polling before it waits up to `shutdownTimeoutSeconds`
   for admitted work to finish, then cancels it. That is the normal job timeout
@@ -125,7 +127,8 @@ registration keeps those jobs to that user's repositories.
   and a 50% hard memory limit. `xev`, `nex` and `nux` keep the 50% limit, since
   their cluster comes first, and throttle at 45% to hold their RAM job scratch
   (ADR-0108); `xyz`, with
-  its slots beside the nix-daemon's 40G cap and the ZFS ARC, 40% and 45%. `nux` and `nex` raise the CPU
+  its two pool slots' 24G scratch beside the nix-daemon's 40G cap and the
+  ZFS ARC, 64% and 69%. `nux` and `nex` raise the CPU
   ceiling to 75%, since k3s leaves them headroom; their storage latency
   decides whether they go further. Its I/O weight (10) is best
   effort. With the
@@ -196,10 +199,10 @@ limit across the containers Forgejo Runner creates.
 - `nex` and `nux` contribute one slot per runner. This spreads eligible work
   without allowing concurrent runner jobs to amplify local resource contention
   on the smaller cluster members.
-- `xyz` and `xev` each contribute two slots (one Docker, one pool), each
-  within one aggregate
+- `xyz` contributes three slots (one Docker, two pool) and `xev` two (one
+  Docker, one pool), each within one aggregate
   resource budget. On `xyz`, builds can consume up to half the workstation's
-  CPU and 45% of its memory, while memory reclaim and scheduling weights favor
+  CPU and 69% of its memory, while memory reclaim and scheduling weights favor
   interactive workloads under contention.
 - The policy does not provide a hard ZFS I/O guarantee. Nested Docker work is
   contained only through the dedicated CI daemon of ADR-0072, not by limits on

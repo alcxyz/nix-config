@@ -174,9 +174,9 @@ in {
     };
     runners = lib.mapAttrs (_: host: host.config.services.forgejo-actions-runner) runnerHosts;
     # Jobs per runner (ADR-0041, ADR-0106): every Docker runner and every
-    # Podman pool runner takes one, so each host's RAM scratch is one job's
-    # limit (ADR-0108). The xyz and xev pool runners also serve ci-fast in
-    # that slot.
+    # Podman pool runner takes one. xev, nex and nux run one pool runner, so
+    # their RAM scratch is one job's limit; xyz runs two, which share its
+    # scratch (ADR-0108). The xyz and xev pool runners also serve ci-fast.
     expectedCapacity = {
       xyz = 1;
       xev = 1;
@@ -202,6 +202,13 @@ in {
       map (unit: host.config.systemd.services.${lib.removeSuffix ".service" unit})
       (lib.tail host.config.services.forgejo-actions-runner.runnerUnits);
     hasLabel = name: runner: lib.any (label: lib.hasPrefix "${name}:docker://" label) runner.labels;
+    # Only xyz runs a second pool slot.
+    poolUnits = host:
+      ["forgejo-podman-runner.service"]
+      ++ lib.optional (host == "xyz") "forgejo-podman-runner-2.service";
+    poolConfigs = host:
+      [runners.${host}.podmanCanary.runnerConfig]
+      ++ lib.optional runners.${host}.podmanCanary.secondSlot.enable runners.${host}.podmanCanary.secondSlot.runnerConfig;
   in
     assert lib.all (runner: runner.enable) (lib.attrValues runners);
     assert lib.all (runner: runner.podmanStoreReset.enable && runner.runnerHold.diskSpace.enable && runner.runnerHold.alert.enable) (lib.attrValues runners);
@@ -256,14 +263,27 @@ in {
     assert lib.all (host: runners.${host}.capacity == expectedCapacity.${host}) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.capacity == expectedPoolCapacity.${host}) (lib.attrNames runners);
     # The xyz and xev pool runners serve ci-fast in their pool slots; nex and
-    # nux never serve it, and no host runs an extra Podman runner (ADR-0097).
+    # nux never serve it. The retired ci-fast standby runners stay gone
+    # (ADR-0097).
     assert lib.all (host: hasLabel "ci-fast" runners.${host}.podmanCanary) ["xyz" "xev"];
     assert lib.all (host: !(hasLabel "ci-fast" runners.${host}.podmanCanary)) ["nex" "nux"];
     # Every pool runner keeps job scratch in RAM; only xyz's holds the jobs
     # that need more than the others' scratch (ADR-0108).
     assert lib.all (runner: runner.podmanCanary.scratch.enable) (lib.attrValues runners);
     assert lib.all (host: hasLabel "forgejo-podman-large" runners.${host}.podmanCanary == (host == "xyz")) (lib.attrNames runners);
-    assert lib.all (host: host.config.services.forgejo-actions-runner.runnerUnits == ["forgejo-actions-runner.service" "forgejo-podman-runner.service"]) (lib.attrValues runnerHosts);
+    assert lib.all (host: runners.${host}.runnerUnits == ["forgejo-actions-runner.service"] ++ poolUnits host) (lib.attrNames runners);
+    assert lib.all (host: runners.${host}.podmanCanary.secondSlot.enable == (host == "xyz")) (lib.attrNames runners);
+    # Large jobs run one at a time: exactly one runner unit on xyz serves
+    # forgejo-podman-large, and its second slot serves the other pool labels.
+    assert lib.all (host:
+      builtins.length (lib.filter (labels: lib.elem "forgejo-podman-large" labels) (lib.attrValues runners.${host}.runnerLabelNames))
+      == (
+        if host == "xyz"
+        then 1
+        else 0
+      )) (lib.attrNames runners);
+    assert runners.xyz.runnerLabelNames."forgejo-podman-runner-2.service" == ["forgejo-podman" "ci-fast"];
+    assert runners.xyz.podmanCanary.secondSlot.name == "xyz-podman-2";
     assert lib.all (host: !(host.config.systemd.services ? forgejo-podman-runner-fast) && !(host.config.systemd.services ? forgejo-podman-runner-fast-standby) && !(host.config.systemd.sockets ? forgejo-podman-runner-fast-status)) (lib.attrValues runnerHosts);
     # Runners are named host-engine (ADR-0041).
     assert lib.all (host: runners.${host}.name == "${host}-docker" && runners.${host}.podmanCanary.name == "${host}-podman") (lib.attrNames runners);
@@ -280,7 +300,10 @@ in {
     assert lib.all (host: runners.${host}.podmanCanary.nixCache.trustedPublicKeys == ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="]) (lib.attrNames runners);
     assert lib.all (host: runners.${host}.podmanCanary.nixCache.sizeCap == "30G") (lib.attrNames runners);
     assert runners.xyz.podmanCanary.nixCache.dataPath == "/ext4/ci/forgejo-nix-cache";
-    assert lib.all (host: runners.${host}.podmanCanary.nixCache.dataPath == "/var/lib/forgejo-ci-nix-cache" && runners.${host}.podmanCanary.nixCache.stageSize == "1G") ["xev" "nex" "nux"];
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.dataPath == "/var/lib/forgejo-ci-nix-cache") ["xev" "nex" "nux"];
+    # The filler runs in the CI slice; its staging counts in each host's
+    # CI memory budget (ADR-0108).
+    assert lib.all (host: runners.${host}.podmanCanary.nixCache.stageSize == "1G") (lib.attrNames runners);
     # Where the store shares the Podman store's filesystem, its floor stays
     # clear of the store reset's trigger (ADR-0105).
     assert lib.all (host: 100 - runners.${host}.podmanCanary.nixCache.minFreePercent < runners.${host}.podmanStoreReset.triggerUsedPercent) ["xyz" "nex" "nux"];
@@ -293,8 +316,17 @@ in {
             runner_config="$(awk '/--config/ { print $NF }' ${lib.escapeShellArg runnerStarts.${host}})"
             grep -Fxq '  timeout: 3600s' "$runner_config"
             grep -Fxq '  shutdown_timeout: ${toString expectedShutdown.${host}}s' "$runner_config"
-            pool_config=${runners.${host}.podmanCanary.runnerConfig}
+            for pool_config in ${lib.escapeShellArgs (poolConfigs host)}; do
+            grep -Fxq '  capacity: 1' "$pool_config"
             grep -Eq '^ *- /run/forgejo-podman/podman.sock$' "$pool_config"
+            # Jobs may mount the API socket and the cache's store and job
+            # directory, and nothing else.
+            volumes=$(awk '/^  valid_volumes:/ { listed = 1; next } listed && /^  - / { print $2; next } listed { exit }' "$pool_config")
+            expected_volumes=${lib.escapeShellArg (lib.concatLines (["/run/forgejo-podman/podman.sock"] ++ runners.${host}.podmanCanary.nixCache.jobVolumes))}
+            if [ "$volumes"$'\n' != "$expected_volumes" ]; then
+              echo "$pool_config lets jobs mount: $volumes" >&2
+              exit 1
+            fi
             ${
               if runners.${host}.podmanCanary.nixCache.enable
               then ''
@@ -313,6 +345,7 @@ in {
                 fi
               ''
             }
+            done
           '')
           (lib.attrNames runnerStarts)}
         touch "$out"
@@ -352,11 +385,12 @@ in {
     assert lib.all (host: host.systemd.services.forgejo-actions-runner.serviceConfig.KillMode == "mixed") serverConfigs;
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
-    # The limits hold each host's RAM scratch plus one job's memory
-    # (ADR-0108): 16G on xyz, beside the nix-daemon and the ARC, and 8G on
-    # the 31 GiB servers, whose cluster keeps half the memory.
-    assert buildSlice.MemoryHigh == "40%";
-    assert buildSlice.MemoryMax == "45%";
+    # The limits hold each host's RAM scratch plus its jobs' memory
+    # (ADR-0108): 24G for xyz's two pool slots, beside the nix-daemon and the
+    # ARC, and 8G for one slot on the 31 GiB servers, whose cluster keeps
+    # half the memory.
+    assert buildSlice.MemoryHigh == "64%";
+    assert buildSlice.MemoryMax == "69%";
     assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "45%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;
     assert !(xyz.virtualisation.docker.daemon.settings ? "exec-opts");
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.after;

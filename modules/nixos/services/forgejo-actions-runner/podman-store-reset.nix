@@ -56,9 +56,10 @@ in {
         With RAM scratch (ADR-0108), reset the scratch alone, keeping the
         images, when containers and volumes left behind by jobs fill it to
         this percentage, at any age. Set it so the largest job the host takes
-        still fits beside the leftovers. At 90 percent or more, the recovery
+        still fits beside the leftovers; with a second pool slot, the
+        largest job of each slot. At 90 percent or more, the recovery
         threshold where most new pool jobs fail, any reset pauses the Podman
-        pool runner and waits for it to drain instead of waiting out its
+        pool runners and waits for them to drain instead of waiting out their
         quiet interval.
       '';
     };
@@ -105,7 +106,7 @@ in {
         SCRATCH_STORE = lib.optionalString cfg.podmanCanary.scratch.enable cfg.podmanCanary.graphRoot;
         SCRATCH_TRIGGER_PERCENT = toString reset.scratchTriggerPercent;
         # The runner pause that runner-restart.nix wires into every runner
-        # (FORGEJO_RUNNER_PAUSE_FILE); a full scratch drains the pool runner
+        # (FORGEJO_RUNNER_PAUSE_FILE); a full scratch drains the pool runners
         # through it.
         PAUSE_DIR = "/run/nixfleet-runners/paused";
         TRIGGER_USED_PERCENT = toString reset.triggerUsedPercent;

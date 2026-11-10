@@ -457,3 +457,17 @@ The store counts toward the CI disk's use for the store reset's trigger and
 the runner hold's disk floor; `sizeCap` and `minFreePercent` must leave both
 their margins. Busy hosts may defer adding, collection, and with it new
 snapshots after an expiry, for as long as jobs keep running.
+
+## Text replaced on 2026-11-10 (#1027, staging)
+
+The text as it stood while xyz's filler staged with 4G, before its second pool slot ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)).
+
+>      own throwaway store on the unit's private `/var/tmp`, a tmpfs of
+>      `stageSize` (4G) that also holds Nix's download caches, its NAR hash is
+
+> - **Hosts.** Every pool host keeps a store, each filled from the same
+>   verified offers: xyz on its CI disk (`/ext4/ci/forgejo-nix-cache`), and
+>   xev, nex and nux, which are cluster nodes with 31 GiB, on
+>   `/var/lib/forgejo-ci-nix-cache` with `stageSize` 1G. The filler runs in
+>   the CI slice (`forgejobuilds.slice`), whose budget there (memoryHigh 45%,
+>   memoryMax 50%) holds the 8G scratch and the job.

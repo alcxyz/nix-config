@@ -191,3 +191,23 @@ The text as it stood before every pool runner went to one slot for RAM job scrat
 > once for about a third of its busy time. nex and nux keep one slot per runner.
 > The xyz and xev pool runners also serve `ci-fast` in those slots
 > ([ADR-0097](0097-ci-fast-runner-label.md)).
+
+## Text replaced on 2026-11-10 (#1027)
+
+The text as it stood before xyz took a second pool slot that leaves out `forgejo-podman-large` ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)).
+
+> **Fewer slots.** Every runner host runs one Podman pool slot beside its
+> Docker slot, so each host's RAM job scratch is one job's limit
+> ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)). On xyz that is two CI
+> slots instead of five, with a 40% memory throttle and a 45% hard limit that
+> hold its 16G scratch and one job. The Docker runners ran 14 of 2,512 jobs from
+> 2026-11-01 to 2026-11-05, so a host runs about one job at once in practice.
+> xyz ran a second pool slot from 2026-11-05 ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)), which cut the pool's p90
+> queue wait from 7.7 to 1.5 minutes; it and xev's second slot went for the RAM
+> scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)). Replaying the pool's arrivals from 2026-10-27 to 2026-11-05
+> through ideal slots puts the busy-hour p90 wait at about 26 minutes with four
+> pool slots in all, against 3.5 minutes with six. A fifth slot, on xps, is to
+> bring it near 5.5 minutes; xev back to two slots is the fallback. The xyz and
+> xev pool runners also serve `ci-fast` in their slot
+> ([ADR-0097](../0097-ci-fast-runner-label.md)), and xyz's serves
+> `forgejo-podman-large` (ADR-0108).

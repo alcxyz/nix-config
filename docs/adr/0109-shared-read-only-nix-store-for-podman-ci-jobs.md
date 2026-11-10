@@ -1,7 +1,7 @@
 # ADR-0109: Give Podman CI jobs a shared, read-only Nix store per host
 
 **Status:** Accepted
-**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge; xev, nex and nux)
+**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge; xev, nex and nux; 1G of filler staging on xyz)
 **History:** [replaced text](archive/0109-shared-read-only-nix-store-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/nix-cache.nix`,
 `nix-cache-{prepare,init,fill}.sh`, `podman-canary.nix` (`valid_volumes`),
@@ -130,7 +130,7 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
      An input whose store path, which follows from its `narHash`, is already
      valid is rooted again without fetching. A missing one is fetched into its
      own throwaway store on the unit's private `/var/tmp`, a tmpfs of
-     `stageSize` (4G) that also holds Nix's download caches, its NAR hash is
+     `stageSize` (1G on every host) that also holds Nix's download caches, its NAR hash is
      compared with the pin there, and only then is it copied into the cache,
      so a mismatch never reaches it. The staging store and the caches are
      deleted after every input, so a rejected input leaves no bytes behind;
@@ -261,9 +261,11 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
 - **Hosts.** Every pool host keeps a store, each filled from the same
   verified offers: xyz on its CI disk (`/ext4/ci/forgejo-nix-cache`), and
   xev, nex and nux, which are cluster nodes with 31 GiB, on
-  `/var/lib/forgejo-ci-nix-cache` with `stageSize` 1G. The filler runs in
-  the CI slice (`forgejobuilds.slice`), whose budget there (memoryHigh 45%,
-  memoryMax 50%) holds the 8G scratch and the job. It adds paths only
+  `/var/lib/forgejo-ci-nix-cache`. Every host stages with `stageSize` 1G,
+  so the filler is capped at 3G. The filler runs in the CI slice
+  (`forgejobuilds.slice`), whose budget (memoryHigh 45% and memoryMax 50% on
+  the cluster nodes, 64% and 69% on xyz) holds the scratch and the jobs
+  ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)). It adds paths only
   between jobs, but a job can start while it stages an input, so a job
   near the slice limit may meet up to the staging size plus Nix's own
   memory more; the small staging keeps that narrow, and an input larger

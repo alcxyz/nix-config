@@ -358,6 +358,7 @@ in {
           "-/run/forgejo-podman"
           "-/var/lib/sops-nix"
           "-/var/lib/forgejo-podman-runner"
+          "-/var/lib/forgejo-podman-runner-2"
           "-/var/lib/forgejo-actions-runner"
         ];
         ProtectSystem = "strict";

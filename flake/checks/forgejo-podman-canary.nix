@@ -163,6 +163,29 @@ else let
   duplicateName = evaluate true validLabels {
     services.forgejo-actions-runner.podmanCanary.name = lib.mkForce "fixture-docker";
   };
+  # A second pool slot on the same API with fewer labels, its own
+  # registration and state, and one slot.
+  second = "forgejo-podman-runner-2.service";
+  secondSlot = evaluate true (validLabels ++ [fastLabel]) {
+    services.forgejo-actions-runner.podmanCanary.secondSlot = {
+      enable = true;
+      labels = [fastLabel];
+    };
+  };
+  secondUnit = secondSlot.systemd.services.forgejo-podman-runner-2;
+  secondConfigFile = secondSlot.services.forgejo-actions-runner.podmanCanary.secondSlot.runnerConfig;
+  secondForeignLabel = evaluate true validLabels {
+    services.forgejo-actions-runner.podmanCanary.secondSlot = {
+      enable = true;
+      labels = [fastLabel];
+    };
+  };
+  secondSameName = evaluate true validLabels {
+    services.forgejo-actions-runner.podmanCanary.secondSlot = {
+      enable = true;
+      name = "fixture-podman";
+    };
+  };
 in
   assert !(enabled.systemd.services ? forgejo-podman-storage-ready);
   assert lib.elem "forgejo-podman-storage-ready.service" dedicatedStorage.systemd.services.forgejo-runner-podman.requires;
@@ -298,6 +321,23 @@ in
   # differs from the Docker runner's.
   assert failedAssertion duplicateLabel "Podman CI canary label names must be unique.";
   assert failedAssertion duplicateName "Podman CI canary registration name must differ from the Docker runner name.";
+  assert !(twoLabels.systemd.services ? forgejo-podman-runner-2);
+  assert failedAssertions secondSlot == failedAssertions twoLabels;
+  assert secondSlot.services.forgejo-actions-runner.runnerUnits == [primary canary second];
+  assert secondSlot.services.forgejo-actions-runner.runnerLabelNames.${second} == ["ci-fast"];
+  assert secondSlot.systemd.services.forgejo-runner-hold.environment.RUNNER_UNITS == "${both} ${second}";
+  assert secondUnit.environment.RUNNER_UNIT == second;
+  assert secondUnit.environment.DOCKER_HOST == "unix:///run/forgejo-podman/podman.sock";
+  assert secondUnit.serviceConfig.User == "forgejo-podman-runner";
+  assert secondUnit.serviceConfig.WorkingDirectory == "/var/lib/forgejo-podman-runner-2";
+  assert secondUnit.serviceConfig.RuntimeDirectory == "forgejo-podman-runner-2";
+  assert builtins.elem "d /var/lib/forgejo-podman-runner-2 0750 forgejo-podman-runner forgejo-podman -" secondSlot.systemd.tmpfiles.rules;
+  assert lib.hasInfix " /var/lib/forgejo-podman-runner-2/.runner " secondUnit.preStart;
+  assert lib.hasInfix " fixture-podman-2 " secondUnit.preStart;
+  assert lib.hasInfix " ${fastLabel} \\\n" secondUnit.preStart;
+  assert lib.hasInfix "< /run/fixture/podman-registration-token" secondUnit.preStart;
+  assert failedAssertion secondForeignLabel "The second Podman pool slot must serve a non-empty subset of the first slot's labels.";
+  assert failedAssertion secondSameName "The second Podman pool slot needs its own registration name.";
   assert !(api.environment ? CONTAINERS_REGISTRIES_CONF);
   assert lib.hasPrefix "/nix/store/" mirroredApi.environment.CONTAINERS_REGISTRIES_CONF;
   assert failedAssertions mirrored == failedAssertions enabled;
@@ -321,6 +361,12 @@ in
       grep -Fxq '  workdir_parent: /var/lib/forgejo-podman-runner/host-work' ${canaryConfigFile}
       # The Podman runner sets no runner variables.
       if grep -Fq 'envs:' ${canaryConfigFile}; then exit 1; fi
+      # The second slot takes one job with its own labels, state and env file.
+      grep -Fxq '  capacity: 1' ${secondConfigFile}
+      grep -Fxq '  - ${fastLabel}' ${secondConfigFile}
+      if grep -Fq '${lib.head validLabels}' ${secondConfigFile}; then exit 1; fi
+      grep -Fxq '  env_file: /run/forgejo-podman-runner-2/job.env' ${secondConfigFile}
+      grep -Fxq '  workdir_parent: /var/lib/forgejo-podman-runner-2/host-work' ${secondConfigFile}
       # The cache is a docker.io mirror in front of docker.io itself, so both
       # engines fall back to it; the host's other registries stay as they are.
       python3 - ${mirroredApi.environment.CONTAINERS_REGISTRIES_CONF} <<'PY'

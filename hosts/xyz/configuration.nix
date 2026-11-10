@@ -229,11 +229,11 @@ in {
     };
     shutdownTimeoutSeconds = 120;
     # Reset the Podman store offline while the runners are idle (ADR-0105).
-    # Leftovers reset the 16G scratch at 20%, so a forgejo-podman-large job
-    # of up to 12.8G still fits (ADR-0108).
+    # Leftovers reset the 24G scratch at 13% (3.1G), so a forgejo-podman-large
+    # job of up to 12.8G and a pool job of up to 8G still fit (ADR-0108).
     podmanStoreReset = {
       enable = true;
-      scratchTriggerPercent = 20;
+      scratchTriggerPercent = 13;
     };
     # Engines pull docker.io images through the LAN cache, falling back to
     # docker.io when it is down (#917).
@@ -246,20 +246,29 @@ in {
       package = pkgs.callPackage "${inputs.nix-packages}/pkgs/forgejo-runner-cancellation" {};
       # The pool runner also serves ci-fast, opted-in jobs for the fast
       # hosts (ADR-0097), and forgejo-podman-large, jobs whose scratch only
-      # xyz's RAM holds (ADR-0108), in the same slot as pool jobs. It has
-      # one slot, as every pool runner, beside the nearly idle Docker slot
-      # (ADR-0106).
+      # xyz's RAM holds (ADR-0108), in the same slot as pool jobs.
       labels = [
         "forgejo-podman:docker://docker.io/library/docker:27-cli"
         "ci-fast:docker://docker.io/library/docker:27-cli"
         "forgejo-podman-large:docker://docker.io/library/docker:27-cli"
       ];
-      # Job throwaway data in RAM, images on disk (ADR-0108, #1027). 16G holds
-      # the largest measured job, a Nix update with 12.7G live, with a
-      # quarter to spare. The tmpfs counts against the CI memory limits below.
+      # A second pool slot, beside the nearly idle Docker slot (ADR-0106).
+      # It leaves out forgejo-podman-large, so large jobs never run two at
+      # a time.
+      secondSlot = {
+        enable = true;
+        labels = [
+          "forgejo-podman:docker://docker.io/library/docker:27-cli"
+          "ci-fast:docker://docker.io/library/docker:27-cli"
+        ];
+      };
+      # Job throwaway data in RAM, images on disk (ADR-0108, #1027), shared
+      # by both slots: 16G for a large job, whose largest measured kept 12.7G
+      # live, and 8G for a pool job, the other hosts' scratch. The tmpfs
+      # counts against the CI memory limits below.
       scratch = {
         enable = true;
-        size = "16G";
+        size = "24G";
       };
       # Trial: opted-in Nix jobs use a persistent, read-only store as the
       # lower layer of /nix/store instead of installing Nix (ADR-0109, #1038).
@@ -267,6 +276,9 @@ in {
       nixCache = {
         enable = true;
         dataPath = "/ext4/ci/forgejo-nix-cache";
+        # The filler runs in the CI slice: 1G of staging, as on the other
+        # hosts, caps it at 3G within the CI memory limits below.
+        stageSize = "1G";
         # /ext4 also holds the Podman store, whose reset fires at 70% used:
         # the filler stops adding, and evicts, at 65% used.
         minFreePercent = 35;
@@ -280,15 +292,21 @@ in {
     # One Docker slot serves the few jobs that still select a Docker label.
     capacity = 1;
     # Bound the runner daemon and all nested workers within one budget. Low
-    # weights make builds yield to desktop, game and media work. The limits
-    # hold the 16G scratch plus one job's own memory (ADR-0108). Beside them
-    # are the nix-daemon's 40G cap, which can overcommit the host when a
-    # large deploy build meets a full CI slice, and the ZFS ARC, which
-    # shrinks under pressure.
+    # weights make builds yield to desktop, game and media work. Of the
+    # 62.3 GiB, the throttle at 64% (39.9 GiB) holds the full 24G scratch,
+    # two pool jobs' 6 GiB each (a large job takes 4.5 GiB) and the Nix
+    # store filler's 3G cap with 0.9 GiB to spare for the engines (0.1 to
+    # 0.2 GiB idle) and the rarely used Docker job. While the jobs keep to
+    # those budgets, which nothing enforces per job, a full scratch fails a
+    # write before the slice is throttled (ADR-0108). The hard limit at 69%
+    # (43.0 GiB) leaves 19.3 GiB for the desktop, the services and the ZFS
+    # ARC, which shrinks under pressure. The nix-daemon's 40G cap sits beside
+    # them, so a large deploy build that meets a full CI slice can still
+    # overcommit the host.
     resourcePolicy = {
       enable = true;
-      memoryHigh = "40%";
-      memoryMax = "45%";
+      memoryHigh = "64%";
+      memoryMax = "69%";
     };
     labels = [
       "forgejo-docker:docker://node:20-bookworm"

@@ -87,7 +87,18 @@
     description = "Forgejo Podman pool runner (${canary.name})";
     inherit (canary) labels capacity name registrationTokenFile registrationScope;
   };
-  instances = [canaryInstance];
+  # A second pool slot on the same API and scratch, with its own
+  # registration, so a label left out of it, such as forgejo-podman-large,
+  # never runs two jobs at once.
+  secondSlot = canary.secondSlot;
+  secondInstance = mkInstance {
+    serviceName = "forgejo-podman-runner-2";
+    description = "Forgejo Podman pool runner (${secondSlot.name})";
+    inherit (secondSlot) labels name;
+    inherit (canary) registrationTokenFile registrationScope;
+    capacity = 1;
+  };
+  instances = [canaryInstance] ++ lib.optional secondSlot.enable secondInstance;
   # An owner token passes no scope, so registrations from before the option
   # keep their recorded identity and are not repeated.
   scopeArgument = instance:
@@ -205,8 +216,9 @@ in {
       ++ lib.optionals canary.enable (map (instance: instance.unit) instances);
     description = ''
       Runner units sharing the dedicated CI aggregate: the primary Docker
-      runner first, then the Podman runner. The runner hold and the Podman
-      store reset take this list.
+      runner first, then the Podman pool runner and, with a second slot,
+      forgejo-podman-runner-2. The runner hold and the Podman store reset
+      take this list.
     '';
   };
 
@@ -332,6 +344,34 @@ in {
       defaultText = lib.literalExpression "config.services.forgejo-actions-runner.capacity";
       description = "Concurrent jobs of the Podman runner; follows the Docker runner by default.";
     };
+    secondSlot = {
+      enable = lib.mkEnableOption ''
+        a second Podman pool runner, `forgejo-podman-runner-2`, with its own
+        registration and one slot, on the same API, store and scratch as the
+        first. Unlike a higher `capacity`, it can serve fewer labels, so jobs
+        of a label it leaves out never run two at a time. Both slots' jobs
+        share the scratch tmpfs: size it, and the memory limits, for both
+      '';
+      labels = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = canary.labels;
+        defaultText = lib.literalExpression "config.services.forgejo-actions-runner.podmanCanary.labels";
+        description = "Labels of the second slot, a subset of the first slot's.";
+      };
+      name = lib.mkOption {
+        type = lib.types.str;
+        default = "${canary.name}-2";
+        defaultText = lib.literalExpression ''"''${config.services.forgejo-actions-runner.podmanCanary.name}-2"'';
+        description = "Forgejo registration name of the second slot.";
+      };
+      runnerConfig = lib.mkOption {
+        type = lib.types.package;
+        default = secondInstance.config;
+        readOnly = true;
+        internal = true;
+        description = "Generated configuration of the second pool runner, for contract checks.";
+      };
+    };
     logLevel = lib.mkOption {
       type = lib.types.enum [
         "trace"
@@ -399,6 +439,19 @@ in {
         {
           assertion = canary.name != cfg.name;
           message = "Podman CI canary registration name must differ from the Docker runner name.";
+        }
+        {
+          assertion =
+            !secondSlot.enable
+            || (secondSlot.labels
+              != []
+              && lib.all (label: lib.elem label canary.labels) secondSlot.labels
+              && uniqueLabelNames secondSlot.labels);
+          message = "The second Podman pool slot must serve a non-empty subset of the first slot's labels.";
+        }
+        {
+          assertion = !secondSlot.enable || !(lib.elem secondSlot.name [canary.name cfg.name]);
+          message = "The second Podman pool slot needs its own registration name.";
         }
         {
           assertion = lib.hasPrefix "/" canary.registrationTokenFile;
