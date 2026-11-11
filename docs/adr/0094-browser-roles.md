@@ -27,7 +27,7 @@ trust and privacy advantage Helium had. On macOS Origin is a paid product.
 ## Decision
 
 - **Brave Origin is the only Chromium browser on Linux.** It holds the xyz
-  media, work sign-in and CDP profiles (Super+V and Super+Z, port 9223), the
+  media, work sign-in and CDP profiles (Super+V, and Super+X on its own workspace; port 9223), the
   Bivrost sign-in browser, the xps protected couch browser and the xps local
   couch browser, and every Brave slot in the Wolf catalog: the public lobby
   browser and the private browser. Sync, Widevine, uBlock Origin and CDP were

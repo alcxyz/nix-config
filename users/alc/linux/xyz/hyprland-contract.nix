@@ -42,7 +42,11 @@
       assertion =
         lib.hasInfix ''hl.bind("SUPER + B", hl.dsp.exec_cmd("zen --no-remote -profile /home/alc/.zen/alcxyz"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + V", hl.dsp.exec_cmd('brave-origin --profile-directory="Default" --remote-debugging-port=9223'))'' luaBinds
-        && lib.hasInfix ''hl.bind("SUPER + Z", hl.dsp.exec_cmd('brave-origin --profile-directory="Profile 2" --remote-debugging-port=9223'))'' luaBinds
+        && !lib.hasInfix ''hl.bind("SUPER + Z",'' luaBinds
+        && lib.hasInfix ''local brave_workspace = "name:brave"'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + X", function()'' luaBinds
+        && lib.hasInfix ''w.class == "brave-origin" and w.workspace and w.workspace.name == "brave"'' luaBinds
+        && lib.hasInfix ''{ workspace = brave_workspace .. " silent" }'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notifications open"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + O", hl.dsp.exec_cmd("dms ipc call hypr toggleOverview"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))'' luaBinds

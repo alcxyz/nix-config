@@ -14,7 +14,26 @@ hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
 hl.bind("ALT + RETURN", hl.dsp.exec_cmd(term))
 hl.bind("SUPER + B", hl.dsp.exec_cmd("zen --no-remote -profile /home/alc/.zen/alcxyz"))
 hl.bind("SUPER + V", hl.dsp.exec_cmd('brave-origin --profile-directory="Default" --remote-debugging-port=9223'))
-hl.bind("SUPER + Z", hl.dsp.exec_cmd('brave-origin --profile-directory="Profile 2" --remote-debugging-port=9223'))
+
+-- Super+X opens Brave Origin's Profile 2 on its own workspace, and starts a
+-- window of that profile there when the workspace holds no Brave Origin
+-- window. All profiles share one browser process and window class, so the
+-- workspace, not the window, identifies the profile. A window from an already
+-- running browser maps on the active workspace, so focus it before launching;
+-- the exec rule places the window of a cold start.
+local brave_workspace = "name:brave"
+hl.bind("SUPER + X", function()
+	hl.dispatch(hl.dsp.focus({ workspace = brave_workspace }))
+	for _, w in ipairs(hl.get_windows()) do
+		if w.class == "brave-origin" and w.workspace and w.workspace.name == "brave" then
+			return
+		end
+	end
+	hl.dispatch(hl.dsp.exec_cmd(
+		'brave-origin --profile-directory="Profile 2" --remote-debugging-port=9223',
+		{ workspace = brave_workspace .. " silent" }
+	))
+end)
 hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))
 hl.bind("SUPER + E", hl.dsp.focus({ workspace = 7 }))
 hl.bind("SUPER + SHIFT + E", hl.dsp.window.move({ workspace = 7 }))
