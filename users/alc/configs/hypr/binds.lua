@@ -34,6 +34,8 @@ hl.bind("SUPER + X", function()
 		{ workspace = brave_workspace .. " silent" }
 	))
 end)
+hl.bind("SUPER + SHIFT + X", hl.dsp.window.move({ workspace = brave_workspace }))
+hl.bind("SUPER + ALT + X", hl.dsp.window.move({ workspace = brave_workspace, follow = false }))
 hl.bind("SUPER + T", hl.dsp.exec_cmd("hyprland-mail-workspace"))
 hl.bind("SUPER + E", hl.dsp.focus({ workspace = 7 }))
 hl.bind("SUPER + SHIFT + E", hl.dsp.window.move({ workspace = 7 }))

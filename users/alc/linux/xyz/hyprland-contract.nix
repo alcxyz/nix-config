@@ -47,13 +47,14 @@
         && lib.hasInfix ''hl.bind("SUPER + X", function()'' luaBinds
         && lib.hasInfix ''w.class == "brave-origin" and w.workspace and w.workspace.name == "brave"'' luaBinds
         && lib.hasInfix ''{ workspace = brave_workspace .. " silent" }'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + SHIFT + X", hl.dsp.window.move({ workspace = brave_workspace }))'' luaBinds
+        && lib.hasInfix ''hl.bind("SUPER + ALT + X", hl.dsp.window.move({ workspace = brave_workspace, follow = false }))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notifications open"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + O", hl.dsp.exec_cmd("dms ipc call hypr toggleOverview"))'' luaBinds
         && lib.hasInfix ''hl.bind("SUPER + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))'' luaBinds
         && !lib.hasInfix ''hl.bind("SUPER + ALT + V",'' luaBinds
-        && !lib.hasInfix ''hl.bind("SUPER + ALT + X",'' luaBinds
         && !lib.hasInfix ''hl.bind("SUPER + ALT + Z",'' luaBinds;
-      message = "Browser and infrequent utility shortcuts must remain stable without consuming the Super+Alt movement layer.";
+      message = "Browser and infrequent utility shortcuts must remain stable; Super+Alt is the movement layer, so only the Brave workspace's Super+Alt+X may use it.";
     }
     {
       assertion =
