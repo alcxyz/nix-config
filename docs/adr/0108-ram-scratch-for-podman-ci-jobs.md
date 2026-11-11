@@ -2,10 +2,10 @@
 
 **Status:** Accepted
 **Date:** 2026-11-08
-**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027))
+**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz
 **History:** [replaced text](archive/0108-ram-scratch-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-canary.nix`,
-`podman-scratch-prepare.sh`, the store reset of
+`podman-scratch-prepare.sh`, the runner module's `resourcePolicy`, the store reset of
 [ADR-0105](0105-offline-podman-store-reset.md), the runner pool on xyz, xev,
 nex and nux
 
@@ -66,9 +66,10 @@ disk and survive reboots.
   which may then fail the same way; such a job already fails on the other
   three hosts. The Docker slot uses its own store and no scratch.
 - **Memory.** tmpfs pages are charged to the cgroup that writes them, here
+  the Podman API's unit `forgejo-runner-podman.service` in
   `forgejobuilds.slice`, which also holds the Docker slot's job. The tmpfs is
   mounted `noswap`, so scratch never reaches the swap disks: under memory
-  pressure the slice is throttled at memoryHigh or OOM-killed at memoryMax,
+  pressure CI is throttled at memoryHigh or OOM-killed at memoryMax,
   inside its own budget. Each host's throttle holds its full scratch beside
   a memory budget for each pool job, so a full scratch fails a write before
   the slice is throttled while the jobs keep to those budgets. Nothing
@@ -78,23 +79,58 @@ disk and survive reboots.
   hard limit (about 14.0 and 15.6 GiB), since their cluster comes first:
   about 15.6 GiB stays for the cluster services, which used 7 to 11G in
   November 2026, and 8G of scratch leaves about 6 GiB under the throttle for
-  the job. On the 62.3 GiB xyz it is 64%, with a 69% hard limit (39.9 and
-  43.0 GiB): the 24G scratch, two pool jobs' 6 GiB each, as on the other
-  hosts (a large job, in the first slot only, takes 4.5 GiB, the 4.8 GB
-  measured), and the 3G cap of the shared Nix store's filler, which also
-  runs in the slice with 1G of staging
-  ([ADR-0109](0109-shared-read-only-nix-store-for-podman-ci-jobs.md)), leave
-  0.9 GiB for the engines, which idled at 0.1 to 0.2 GiB in November 2026,
-  and the rarely used Docker job. The filler stages
-  an input only when it finds no job running, so it meets full jobs only
-  for one input. The hard limit leaves 19.3 GiB for
-  the desktop (about 14 GiB in November 2026), the services and the ZFS ARC,
-  which shrinks under pressure to 2 GiB. A game holds the runners and
+  the job. On the 62.3 GiB xyz CI's limits are 64%, with a 69% hard limit
+  (39.9 and 43.0 GiB), and half the CPUs, split across the CI units since
+  the slice there is the shared budget below:
+  - The Podman API throttles at 59% (36.8 GiB), which holds the 24G scratch
+    and two pool jobs' 6 GiB each, as on the other hosts (a large job, in
+    the first slot only, takes 4.5 GiB, the 4.8 GB measured), with 0.8 GiB
+    for the engine, which idled at 0.1 to 0.2 GiB in November 2026. Its
+    hard limit is 61% (38.0 GiB), and it gets 40% of the CPUs.
+  - The Docker engine and its one job, which is light (Tofu plans, probes),
+    throttle at 2% (1.2 GiB), with a 3% (1.9 GiB) hard limit and 7% of the
+    CPUs. In one budget it took what the pool slots left; now it can no
+    longer borrow their unused memory, and a heavier Docker job needs a
+    larger share taken from the API's.
+  - The shared Nix store's filler keeps its 3G cap, with 1G of staging
+    ([ADR-0109](0109-shared-read-only-nix-store-for-podman-ci-jobs.md)), and
+    gets 3% of the CPUs. It stages an input only when it finds no job
+    running, so it meets full jobs only for one input.
+
+  The hard limits add up to 42.9 GiB, within the 69%, and the CPU shares to
+  the 50%. The throttles add up to slightly more than 64% with the filler's
+  cap, and each holds its own unit. A game holds the runners and
   cancels their jobs after a two-minute grace
   ([ADR-0106](0106-runner-hold-for-games-and-low-disk.md)), so a game meets
-  a full CI slice for at most those minutes and the cleanup after.
-  The nix-daemon's 40G cap sits beside the CI limit, so a large deploy build
-  that meets a full CI slice can still overcommit the host.
+  full CI for at most those minutes and the cleanup after.
+- **One budget for the nix-daemon and CI on xyz.** The nix-daemon's builds
+  (deploys, agents' local builds and remote build clients) have their own
+  40G cap, and on their own the two caps added up to more than xyz's RAM.
+  With `resourcePolicy.sharedBudget`, `forgejobuilds.slice` itself is the
+  shared budget: a 77% (48.0 GiB) hard limit, CPU and I/O weights 10, no
+  throttle and no CPU ceiling. The nix-daemon runs in its child slice
+  `forgejobuilds-nixdaemon.slice`, with default weights inside it, no CPU
+  ceiling, and its 40G cap, 2G of swap and `OOMPolicy=continue`. The CI
+  units stay directly in `forgejobuilds.slice`, so their cgroup paths, which
+  workflows in many repositories name as the BuildKit cgroup-parent, do not
+  change. When both are busy they compete inside the budget, and at its
+  limit the kernel kills the largest process in it, normally a build,
+  never anything outside. That leaves 14.3 GiB for the desktop (about
+  14 GiB in November 2026), the services and the ZFS ARC, which shrinks
+  under pressure to 2 GiB, so with both full and a busy desktop the rest of
+  the host has little margin left. The low weights make all building, deploy
+  builds included, yield to the desktop. CI's CPU shares are set at runtime
+  from the processor count, by the resource policy unit and by the
+  nix-daemon's start, which also clears a ceiling left on the slice. xev,
+  nex and nux run no shared budget: CI's limits stay on their slice and
+  their nix-daemon outside it.
+- **Cgroup-parent for BuildKit.** A Podman pool job that starts BuildKit
+  through the rootless API must give the API's delegated cgroup,
+  `/forgejobuilds.slice/forgejo-runner-podman.service`, as its
+  cgroup-parent. Each Podman runner start also passes the running API's
+  `ControlGroup` to its jobs as `FORGEJO_PODMAN_CGROUP_PARENT`, so
+  workflows can use it instead of naming the slice, with that path as the
+  fallback.
 - **Never on disk by accident.** The API starts after the tmpfs mount
   (`WantsMountsFor`), and its root `ExecStartPre` refuses to start unless a
   tmpfs is mounted there. The dependency is only a want, so a deploy that
@@ -161,6 +197,13 @@ select a Docker label.
   risk data on other filesystems, and leave longer-lived job data on the SSD.
 - **ZFS with compression and block cloning**: rejected by the owner; the
   runner hosts stay alike on ext4.
+- **A new parent slice over the nix-daemon and a renamed CI slice** (for
+  example `builds.slice` over `builds-forgejobuilds.slice`): it keeps CI's
+  limits on one cgroup, but moves the engines' cgroups, which about 20
+  repositories name as the BuildKit cgroup-parent, many of them building
+  from `main`; rejected by the owner.
+- **Lower separate caps for the daemon and CI**: each would leave the
+  other's share unused when only one is busy; the owner chose one budget.
 
 ## Consequences
 
@@ -186,6 +229,27 @@ keeps its old size, which the new memory limits may not hold, until a
 `systemctl reload` of its mount unit once it is emptied (`runners restart`
 empties it but does not remount it) or the next reboot. Shrink it while the
 runners are idle.
+
+Turning the shared budget on takes effect at the switch, without a reboot.
+systemd applies a changed unit's memory limits to its running cgroup when
+the switch reloads it, so the slice's new limits and the engines' shares
+apply at once, although the engines (`restartIfChanged = false`) keep
+running. That includes the Docker engine's new 1.9 GiB hard limit, so a
+Docker job running above it at the switch is OOM-killed; that is rare, as
+the engine peaked at 92 MB after a boot in November 2026, but the switch
+is best made while xyz's CI is idle. The switch restarts the nix-daemon in its child slice, and that
+start moves CI's CPU ceiling from the slice onto the CI units, which takes
+effect on running units too. The daemon's unit has `KillMode=process`: a
+build that outlives the restart keeps the daemon's old cgroup in use, and
+then the daemon is certain to run in the child slice only from its next
+restart once that cgroup is empty, or from the next boot. `runners
+restart`, while the runners are idle, restarts the units the switch left on
+an older definition, the Podman runners among them, which then pass
+`FORGEJO_PODMAN_CGROUP_PARENT`; until then their jobs use the fallback,
+the same path. Turning the budget off again restores CI's limits on the
+slice, and the resource policy, without the budget, clears the units' own
+CPU shares when it runs (at `runners restart` or boot), since those
+runtime values outlast the units' restarts.
 
 The VM check `forgejo-podman-scratch-lifecycle` runs the production API with
 a 256M scratch: image layers on disk and container data in RAM charged to the

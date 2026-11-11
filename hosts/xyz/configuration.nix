@@ -130,10 +130,10 @@ in {
   # Builds through the host daemon (deploys, local builds and remote build
   # clients) run in nix-daemon.service, which had no memory limit. Overlapping
   # compiles after a flake update froze the host. Cap the daemon so the kernel
-  # kills the largest build instead. The ZFS ARC (up to 16G, reclaimable) and
-  # the desktop share the rest. CI jobs run their own Nix in containers under
-  # forgejobuilds.slice and its separate cap, so a deploy that overlaps busy CI
-  # can still overcommit RAM.
+  # kills the largest build instead. CI jobs run their own Nix in containers
+  # under forgejobuilds.slice. The daemon runs in that slice's child
+  # forgejobuilds-nixdaemon.slice, so the slice's shared limit (77%, below)
+  # keeps the daemon and CI together from overcommitting the host.
   systemd.services.nix-daemon.serviceConfig = {
     MemoryMax = "40G";
     # Swapping builds to disk is what stalls the whole host.
@@ -291,22 +291,42 @@ in {
     };
     # One Docker slot serves the few jobs that still select a Docker label.
     capacity = 1;
-    # Bound the runner daemon and all nested workers within one budget. Low
-    # weights make builds yield to desktop, game and media work. Of the
-    # 62.3 GiB, the throttle at 64% (39.9 GiB) holds the full 24G scratch,
-    # two pool jobs' 6 GiB each (a large job takes 4.5 GiB) and the Nix
-    # store filler's 3G cap with 0.9 GiB to spare for the engines (0.1 to
-    # 0.2 GiB idle) and the rarely used Docker job. While the jobs keep to
-    # those budgets, which nothing enforces per job, a full scratch fails a
-    # write before the slice is throttled (ADR-0108). The hard limit at 69%
-    # (43.0 GiB) leaves 19.3 GiB for the desktop, the services and the ZFS
-    # ARC, which shrinks under pressure. The nix-daemon's 40G cap sits beside
-    # them, so a large deploy build that meets a full CI slice can still
-    # overcommit the host.
+    # forgejobuilds.slice is one budget for CI and the nix-daemon (ADR-0108):
+    # its hard limit at 77% (48.0 GiB of 62.3 GiB) leaves 14.3 GiB for the
+    # desktop, the services and the ZFS ARC, which shrinks under pressure.
+    # Its low weights make all building yield to desktop, game and media
+    # work. CI's own limits, 64% throttle, 69% hard limit and half the CPUs,
+    # are split across the CI units, since the slice also holds the daemon:
+    # - The Podman API throttles at 59% (36.8 GiB), which holds the full 24G
+    #   scratch its jobs write and two pool jobs' 6 GiB each (a large job
+    #   takes 4.5 GiB) with 0.8 GiB for the engine (0.1 to 0.2 GiB idle).
+    #   While the jobs keep to those budgets, which nothing enforces per job,
+    #   a full scratch fails a write before the API is throttled. Hard
+    #   limit 61% (38.0 GiB); 40% of the CPUs.
+    # - The Docker engine and its one light job (tofu plans, probes): 2%
+    #   (1.2 GiB) throttle, 3% (1.9 GiB) hard limit, 7% of the CPUs.
+    # - The Nix store filler keeps its 3G cap; 3% of the CPUs.
+    # The hard limits add up to 42.9 GiB, within the 69%, and the CPU
+    # shares to the 50% ceiling.
     resourcePolicy = {
       enable = true;
       memoryHigh = "64%";
       memoryMax = "69%";
+      sharedBudget = {
+        enable = true;
+        memoryMax = "77%";
+        podmanApi = {
+          memoryHigh = "59%";
+          memoryMax = "61%";
+          cpuQuotaPercent = 40;
+        };
+        dockerEngine = {
+          memoryHigh = "2%";
+          memoryMax = "3%";
+          cpuQuotaPercent = 7;
+        };
+        nixCacheFillCpuQuotaPercent = 3;
+      };
     };
     labels = [
       "forgejo-docker:docker://node:20-bookworm"

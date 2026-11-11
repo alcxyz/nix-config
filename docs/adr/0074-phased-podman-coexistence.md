@@ -1,7 +1,7 @@
 # ADR-0074: Qualify Podman through staged Docker coexistence
 
 **Status:** Accepted; Docker stays beside Podman, and no Docker engine is qualified for retirement
-**Date:** 2026-09-23
+**Date:** 2026-09-23, updated 2026-11-11 (xyz's split of the combined budget, per ADR-0108)
 **Amended:** 2026-10-31, both runtimes share the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) instead of a pressure controller and teardown boundary; 2026-11-02, workflows select `forgejo-podman` and the canary label is retired; 2026-11-03, the xyz and xev pool runners serve `ci-fast`
 **History:** [replaced text](archive/0074-phased-podman-coexistence-history.md)
 **Area:** host container runtimes, development and CI
@@ -43,7 +43,10 @@ Both CI runtimes share `forgejobuilds.slice` and one runner hold
 existing combined CPU and memory budget. The hold marks each runner it stops
 on its own, and a manually stopped runner is not marked or restarted. One
 budget for both runtimes deliberately couples their CI capacity: separate
-full-size budgets would increase the host's maximum CI allocation. The
+full-size budgets would increase the host's maximum CI allocation. On xyz,
+where the slice also holds the nix-daemon, the combined budget is split
+between the engines and the Nix store filler in shares that add up to it
+([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)). The
 application Docker daemon remains outside this boundary.
 
 The Docker and Podman runners on every host build the same qualified runner

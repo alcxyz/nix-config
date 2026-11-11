@@ -138,6 +138,9 @@ in {
         # and drops a CA that is no longer configured.
         ExecStartPre = "${mirrorCaSetup "forgejo-docker-mirror-ca" dockerCertsDir}";
         Slice = "forgejobuilds.slice";
+        # With the shared budget, this engine's share of CI's limits.
+        MemoryHigh = lib.mkIf cfg.resourcePolicy.sharedBudget.enable cfg.resourcePolicy.sharedBudget.dockerEngine.memoryHigh;
+        MemoryMax = lib.mkIf cfg.resourcePolicy.sharedBudget.enable cfg.resourcePolicy.sharedBudget.dockerEngine.memoryMax;
         Delegate = true;
         NotifyAccess = "all";
         Restart = "no";

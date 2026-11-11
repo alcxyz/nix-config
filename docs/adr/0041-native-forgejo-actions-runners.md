@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-07, updated 2026-11-05 (the runner restart pauses runners until their jobs finish, per nix-packages ADR-0017)
-**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine; 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-08, one pool slot per host and higher memory limits for RAM job scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027), [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-10, a second pool slot and 64%/69% memory limits on xyz ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
+**Amended:** 2026-10-31, fewer slots on xyz and xev, and the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guards; 2026-11-02, one `forgejo-docker` pool label and a 75% CPU ceiling on nux and nex; 2026-11-03, the Docker aliases and host-name labels retired; 2026-11-03, the dedicated `ci-fast` runners retired; 2026-11-03, runners named host-engine; 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-08, one pool slot per host and higher memory limits for RAM job scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027), [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-10, a second pool slot and 64%/69% memory limits on xyz ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-11, xyz's slice is one budget shared with the nix-daemon ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
 **History:** [replaced text](archive/0041-native-forgejo-actions-runners-history.md)
 **Applies to:** Forgejo Actions runner services, `hosts/xyz`, `hosts/xev`, `hosts/nux`, `hosts/nex`
 
@@ -127,8 +127,13 @@ registration keeps those jobs to that user's repositories.
   and a 50% hard memory limit. `xev`, `nex` and `nux` keep the 50% limit, since
   their cluster comes first, and throttle at 45% to hold their RAM job scratch
   (ADR-0108); `xyz`, with
-  its two pool slots' 24G scratch beside the nix-daemon's 40G cap and the
-  ZFS ARC, 64% and 69%. `nux` and `nex` raise the CPU
+  its two pool slots' 24G scratch, 64% and 69%. On `xyz` the slice is
+  instead one 77% memory budget shared with the nix-daemon, which runs in
+  its child slice `forgejobuilds-nixdaemon.slice`, and keeps the low CPU
+  and I/O weights, so all building yields to the desktop; CI's own CPU
+  ceiling and memory limits are split across the CI units in the slice,
+  whose cgroup paths stay the same
+  ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)). `nux` and `nex` raise the CPU
   ceiling to 75%, since k3s leaves them headroom; their storage latency
   decides whether they go further. Its I/O weight (10) is best
   effort. With the

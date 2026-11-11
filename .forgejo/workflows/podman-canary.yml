@@ -66,7 +66,9 @@ jobs:
           trap 'exit 130' INT
           trap 'exit 143' TERM
           if [ "$RUNTIME_ENGINE" = podman ]; then
-            set -- --driver-opt cgroup-parent=/forgejobuilds.slice/forgejo-runner-podman.service
+            # The pool runner names the Podman API's delegated cgroup; a
+            # runner started before it did gets the long-standing path.
+            set -- --driver-opt "cgroup-parent=${FORGEJO_PODMAN_CGROUP_PARENT:-/forgejobuilds.slice/forgejo-runner-podman.service}"
           else
             set --
           fi

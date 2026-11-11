@@ -50,3 +50,32 @@ The text as it stood before xyz took a second pool slot sharing a 24G scratch ([
 > the jobs' own memory; the sizes and memory limits are per host in its
 > configuration. A job that needs more scratch than its host offers fails
 > clearly instead of slowing the host.
+
+## Text replaced on 2026-11-11 (shared memory budget on xyz)
+
+The text as it stood before the nix-daemon and CI on xyz shared one memory
+budget in `forgejobuilds.slice`.
+
+> - **Memory.** tmpfs pages are charged to the cgroup that writes them, here
+>   `forgejobuilds.slice`, which also holds the Docker slot's job. The tmpfs is
+>   mounted `noswap`, so scratch never reaches the swap disks: under memory
+>   pressure the slice is throttled at memoryHigh or OOM-killed at memoryMax,
+>   inside its own budget.
+
+>   the job. On the 62.3 GiB xyz it is 64%, with a 69% hard limit (39.9 and
+>   43.0 GiB): the 24G scratch, two pool jobs' 6 GiB each, as on the other
+>   hosts (a large job, in the first slot only, takes 4.5 GiB, the 4.8 GB
+>   measured), and the 3G cap of the shared Nix store's filler, which also
+>   runs in the slice with 1G of staging
+>   ([ADR-0109](../0109-shared-read-only-nix-store-for-podman-ci-jobs.md)), leave
+>   0.9 GiB for the engines, which idled at 0.1 to 0.2 GiB in November 2026,
+>   and the rarely used Docker job. The filler stages
+>   an input only when it finds no job running, so it meets full jobs only
+>   for one input. The hard limit leaves 19.3 GiB for
+>   the desktop (about 14 GiB in November 2026), the services and the ZFS ARC,
+>   which shrinks under pressure to 2 GiB. A game holds the runners and
+>   cancels their jobs after a two-minute grace
+>   ([ADR-0106](../0106-runner-hold-for-games-and-low-disk.md)), so a game meets
+>   a full CI slice for at most those minutes and the cleanup after.
+>   The nix-daemon's 40G cap sits beside the CI limit, so a large deploy build
+>   that meets a full CI slice can still overcommit the host.

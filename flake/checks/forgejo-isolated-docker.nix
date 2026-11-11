@@ -9,7 +9,8 @@ else let
     name = "forgejo-runner-orphan-check";
     text = "exit 0";
   };
-  evaluate = isolated:
+  evaluate = isolated: evaluateWith isolated {};
+  evaluateWith = isolated: extra:
     (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       system = pkgs.stdenv.hostPlatform.system;
       specialArgs.inputs = {};
@@ -38,10 +39,21 @@ else let
             };
           };
         })
+        {services.forgejo-actions-runner = extra;}
       ];
     }).config;
   host = evaluate true;
   legacy = evaluate false;
+  # The resource policy on the shared host Docker daemon, which has no
+  # forgejo-runner-docker.service: its script must not touch that unit.
+  legacyPolicy = (evaluateWith false {resourcePolicy.enable = true;}).systemd.services.forgejo-runner-resource-policy.serviceConfig.ExecStart;
+  mockGetconf = pkgs.writeShellScript "mock-getconf" ''
+    test "''${1:-}" = _NPROCESSORS_ONLN || exit 1
+    printf '%s\n' 4
+  '';
+  mockSystemctl = pkgs.writeShellScript "mock-systemctl" ''
+    printf '%s\n' "$*" >> "''${FORGEJO_RUNNER_TEST_OUTPUT:?}"
+  '';
   runner = host.services.forgejo-actions-runner;
   services = host.systemd.services;
   orphanMonitor = services.forgejo-runner-orphan-check.serviceConfig;
@@ -147,5 +159,11 @@ in
       shellcheck -x ${holdSource} ${runnerStartGateSource} ${apiStartGateSource} ${diskHelperSource}
       shellcheck -x ${gameSignalSource} ${gameScanSource}
       GAME_SCAN_FILE=${gameScanSource} DISK_HELPER_FILE=${diskHelperSource} python3 ${tests} ${holdSource} ${runnerStartGateSource} ${gameSignalSource}
+      # On the shared host daemon the policy sets only the slice's ceiling.
+      FORGEJO_RUNNER_GETCONF=${mockGetconf} \
+        FORGEJO_RUNNER_SYSTEMCTL=${mockSystemctl} \
+        FORGEJO_RUNNER_TEST_OUTPUT="$TMPDIR/legacy-policy" \
+        ${legacyPolicy}
+      test "$(cat "$TMPDIR/legacy-policy")" = "set-property --runtime forgejobuilds.slice CPUQuota=200%"
       touch "$out"
     ''

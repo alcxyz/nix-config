@@ -577,3 +577,12 @@ The text as it stood before xyz took a second pool slot and 64%/69% memory limit
 >   ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)); the `xyz` and `xev`
 >   pool slots also serve `ci-fast`, and the `xyz` one `forgejo-podman-large` ([ADR-0097](../0097-ci-fast-runner-label.md),
 >   [ADR-0106](../0106-runner-hold-for-games-and-low-disk.md)).
+
+## Text replaced on 2026-11-11 (shared memory budget on xyz)
+
+The text as it stood before xyz's slice became one budget shared with the
+nix-daemon ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)).
+
+>   (ADR-0108); `xyz`, with
+>   its two pool slots' 24G scratch beside the nix-daemon's 40G cap and the
+>   ZFS ARC, 64% and 69%. `nux` and `nex` raise the CPU

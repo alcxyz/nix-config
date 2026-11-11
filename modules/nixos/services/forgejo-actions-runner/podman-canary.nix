@@ -20,6 +20,24 @@
     text = builtins.readFile ./podman-scratch-prepare.sh;
   };
   socketPath = "${builderRuntime}/podman.sock";
+  # The rootless API may create cgroups only below its own delegated cgroup,
+  # so a job that starts a BuildKit container (docker buildx's
+  # docker-container driver) must pass that cgroup as its cgroup-parent.
+  # Each runner start reads where the running API is, so workflows need not
+  # name the slice; the configured path serves only when no API runs.
+  cgroupParentLine = pkgs.writeShellApplication {
+    name = "forgejo-podman-cgroup-parent";
+    runtimeInputs = [pkgs.systemd];
+    text = ''
+      systemctl_command="''${FORGEJO_PODMAN_SYSTEMCTL:-systemctl}"
+      cgroup="$("$systemctl_command" show --property=ControlGroup --value ${apiUnit} 2>/dev/null || true)"
+      case "$cgroup" in
+        /?*) ;;
+        *) cgroup=/forgejobuilds.slice/${apiUnit} ;;
+      esac
+      printf 'FORGEJO_PODMAN_CGROUP_PARENT=%s\n' "$cgroup"
+    '';
+  };
   runnerState = "/var/lib/forgejo-podman-runner";
   settingsFormat = pkgs.formats.yaml {};
   labelName = label: builtins.head (lib.splitString ":" label);
@@ -190,6 +208,7 @@
       env_tmp="$(mktemp ${lib.escapeShellArg instance.runtime}/env.XXXXXX)"
       chmod 0600 "$env_tmp"
       ${literalEnvScript}
+      ${lib.getExe cgroupParentLine} >> "$env_tmp"
       mv "$env_tmp" ${lib.escapeShellArg instance.envFile}
 
       ${lib.getExe registerFromFile} \
@@ -274,9 +293,11 @@ in {
           Size limit of the scratch tmpfs, shared by all jobs on this host.
           A job that writes past it fails with "No space left on device"
           instead of pushing the host into memory pressure. tmpfs pages are
-          charged to forgejobuilds.slice and mounted noswap, so the slice's
-          memoryHigh must leave room for this size plus the jobs' own memory,
-          or the slice is throttled and, at memoryMax, OOM-killed.
+          charged to the Podman API's unit in forgejobuilds.slice and mounted
+          noswap, so CI's memoryHigh (with resourcePolicy.sharedBudget, the
+          API's own share) must leave room for this size plus the jobs' own
+          memory, or the slice (or the API) is throttled and, at memoryMax,
+          OOM-killed.
         '';
       };
       path = lib.mkOption {
@@ -382,6 +403,13 @@ in {
         "fatal"
       ];
       default = cfg.logLevel;
+    };
+    cgroupParentCommand = lib.mkOption {
+      type = lib.types.package;
+      readOnly = true;
+      internal = true;
+      default = cgroupParentLine;
+      description = "Prints the job env line naming the running Podman API's cgroup, which each runner start writes.";
     };
     jobEnv = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
@@ -559,6 +587,10 @@ in {
           RuntimeDirectoryMode = "0755";
           UMask = "0007";
           Slice = "forgejobuilds.slice";
+          # With the shared budget, this API's share of CI's limits. Its
+          # jobs write the RAM scratch, so the tmpfs is charged here.
+          MemoryHigh = lib.mkIf cfg.resourcePolicy.sharedBudget.enable cfg.resourcePolicy.sharedBudget.podmanApi.memoryHigh;
+          MemoryMax = lib.mkIf cfg.resourcePolicy.sharedBudget.enable cfg.resourcePolicy.sharedBudget.podmanApi.memoryMax;
           Delegate = true;
           KillMode = "control-group";
           OOMPolicy = "continue";

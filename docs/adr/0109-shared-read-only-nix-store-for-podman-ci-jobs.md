@@ -1,7 +1,7 @@
 # ADR-0109: Give Podman CI jobs a shared, read-only Nix store per host
 
 **Status:** Accepted
-**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge; xev, nex and nux; 1G of filler staging on xyz)
+**Date:** 2026-11-09, updated 2026-11-10 (verified offers pulled from the forge; xev, nex and nux; 1G of filler staging on xyz; 2026-11-11, xyz's split of CI's limits, per ADR-0108)
 **History:** [replaced text](archive/0109-shared-read-only-nix-store-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/nix-cache.nix`,
 `nix-cache-{prepare,init,fill}.sh`, `podman-canary.nix` (`valid_volumes`),
@@ -264,7 +264,8 @@ renames only `/var/lib/forgejo-podman/storage` and leaves it alone.
   `/var/lib/forgejo-ci-nix-cache`. Every host stages with `stageSize` 1G,
   so the filler is capped at 3G. The filler runs in the CI slice
   (`forgejobuilds.slice`), whose budget (memoryHigh 45% and memoryMax 50% on
-  the cluster nodes, 64% and 69% on xyz) holds the scratch and the jobs
+  the cluster nodes, 64% and 69% on xyz, where they are split across the
+  CI units and the filler gets 3% of the CPUs) holds the scratch and the jobs
   ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)). It adds paths only
   between jobs, but a job can start while it stages an input, so a job
   near the slice limit may meet up to the staging size plus Nix's own

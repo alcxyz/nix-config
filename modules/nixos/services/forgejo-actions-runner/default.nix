@@ -90,35 +90,97 @@
 
   labelsWanted = lib.concatStringsSep "," cfg.labels;
 
+  sharedBudget = resourcePolicyCfg.sharedBudget;
+  # The CI units that split CI's limits when the slice is the shared budget.
+  # Only units this host defines: set-property fails on a missing one.
+  sharedCpuUnits =
+    lib.optional isolated {
+      unit = "forgejo-runner-docker.service";
+      percent = sharedBudget.dockerEngine.cpuQuotaPercent;
+    }
+    ++ lib.optional cfg.podmanCanary.enable {
+      unit = "forgejo-runner-podman.service";
+      percent = sharedBudget.podmanApi.cpuQuotaPercent;
+    }
+    ++ lib.optional (cfg.podmanCanary.enable && cfg.podmanCanary.nixCache.enable) {
+      unit = "forgejo-nix-cache-fill.service";
+      percent = sharedBudget.nixCacheFillCpuQuotaPercent;
+    };
+  processorCount = ''
+    set -euo pipefail
+
+    getconf_command="''${FORGEJO_RUNNER_GETCONF:-getconf}"
+    systemctl_command="''${FORGEJO_RUNNER_SYSTEMCTL:-systemctl}"
+    online_processors="$("$getconf_command" _NPROCESSORS_ONLN)"
+
+    case "$online_processors" in
+      "" | *[!0-9]*)
+        echo "getconf returned an invalid online processor count: $online_processors" >&2
+        exit 1
+        ;;
+    esac
+    if ((online_processors < 1)); then
+      echo "getconf returned no online processors" >&2
+      exit 1
+    fi
+
+  '';
   resourcePolicyApply = pkgs.writeShellApplication {
     name = "forgejo-runner-resource-policy-apply";
     runtimeInputs = [
       pkgs.glibc.bin
       pkgs.systemd
     ];
-    text = ''
-      set -euo pipefail
-
-      getconf_command="''${FORGEJO_RUNNER_GETCONF:-getconf}"
-      systemctl_command="''${FORGEJO_RUNNER_SYSTEMCTL:-systemctl}"
-      online_processors="$("$getconf_command" _NPROCESSORS_ONLN)"
-
-      case "$online_processors" in
-        "" | *[!0-9]*)
-          echo "getconf returned an invalid online processor count: $online_processors" >&2
-          exit 1
-          ;;
-      esac
-      if ((online_processors < 1)); then
-        echo "getconf returned no online processors" >&2
-        exit 1
-      fi
-
-      quota_percent=$((online_processors * ${toString resourcePolicyCfg.cpuQuotaPercent}))
-      exec "$systemctl_command" set-property --runtime forgejobuilds.slice \
-        "CPUQuota=''${quota_percent}%"
-    '';
+    text =
+      processorCount
+      + (
+        if sharedBudget.enable
+        then
+          # The slice also holds the nix-daemon, so it carries no CPU ceiling
+          # (an empty value clears one set before); each CI unit gets its
+          # share of CI's ceiling instead. A loaded unit keeps the runtime
+          # value across its restarts, and an active one takes it at once.
+          ''
+            "$systemctl_command" set-property --runtime forgejobuilds.slice CPUQuota=
+          ''
+          + lib.concatMapStrings (entry: ''
+            "$systemctl_command" set-property --runtime ${entry.unit} \
+              "CPUQuota=$((online_processors * ${toString entry.percent}))%"
+          '')
+          sharedCpuUnits
+        else
+          # Clear the CI units' own shares, which a host that ran the
+          # shared budget keeps until reboot, so they share the slice's
+          # ceiling again.
+          lib.concatMapStrings (entry: ''
+            "$systemctl_command" set-property --runtime ${entry.unit} CPUQuota=
+          '')
+          sharedCpuUnits
+          + ''
+            quota_percent=$((online_processors * ${toString resourcePolicyCfg.cpuQuotaPercent}))
+            exec "$systemctl_command" set-property --runtime forgejobuilds.slice \
+              "CPUQuota=''${quota_percent}%"
+          ''
+      );
   };
+  # One unit's share of CI's memory limits, set in its serviceConfig.
+  sharedMemoryOption = name: high: max: {
+    memoryHigh = lib.mkOption {
+      type = lib.types.str;
+      example = high;
+      description = "Memory throttling threshold of the ${name}, its share of CI's memoryHigh.";
+    };
+    memoryMax = lib.mkOption {
+      type = lib.types.str;
+      example = max;
+      description = "Hard memory limit of the ${name}, its share of CI's memoryMax.";
+    };
+  };
+  sharedCpuOption = name:
+    lib.mkOption {
+      type = lib.types.ints.between 1 100;
+      description = "CPU ceiling of the ${name} as a percentage of the online processors, its share of cpuQuotaPercent.";
+    };
 
   cachePressurePrune = pkgs.writeShellApplication {
     name = "forgejo-runner-cache-pressure-prune";
@@ -325,6 +387,30 @@ in {
         default = "50%";
         description = "Aggregate hard memory limit for runner containers.";
       };
+
+      sharedBudget = {
+        enable = lib.mkEnableOption ''
+          one memory budget for the host's Nix daemon and its CI: the CI
+          slice's own limits become sharedBudget.memoryMax, and
+          nix-daemon.service runs in its child slice
+          forgejobuilds-nixdaemon.slice, without CI's CPU ceiling. The CI
+          units keep their paths directly in forgejobuilds.slice, and CI's
+          memoryHigh, memoryMax and cpuQuotaPercent are split across them,
+          since the slice can no longer carry them
+        '';
+        memoryMax = lib.mkOption {
+          type = lib.types.str;
+          example = "77%";
+          description = "Hard memory limit of forgejobuilds.slice, shared by the Nix daemon's builds and CI.";
+        };
+        podmanApi =
+          sharedMemoryOption "Podman API, which holds the RAM scratch and the pool jobs" "59%" "61%"
+          // {cpuQuotaPercent = sharedCpuOption "Podman API";};
+        dockerEngine =
+          sharedMemoryOption "Docker engine and its job" "2%" "3%"
+          // {cpuQuotaPercent = sharedCpuOption "Docker engine";};
+        nixCacheFillCpuQuotaPercent = sharedCpuOption "Nix store filler, whose memory has its own cap";
+      };
     };
 
     secretsFile = lib.mkOption {
@@ -437,6 +523,12 @@ in {
         assertion = cfg.cachePressure.criticalPercent > cfg.cachePressure.triggerPercent;
         message = "services.forgejo-actions-runner.cachePressure.criticalPercent must exceed triggerPercent.";
       }
+      {
+        # The units' shares together stay within CI's own ceiling, as the
+        # slice's single ceiling did.
+        assertion = sharedBudget.enable -> resourcePolicyCfg.enable && isolated && lib.foldl' (sum: entry: sum + entry.percent) 0 sharedCpuUnits <= resourcePolicyCfg.cpuQuotaPercent;
+        message = "services.forgejo-actions-runner.resourcePolicy.sharedBudget needs the isolated engines, and its units' CPU shares must not exceed cpuQuotaPercent.";
+      }
     ];
 
     users.groups.forgejo-runner = {};
@@ -483,12 +575,32 @@ in {
 
     systemd.slices.forgejobuilds = lib.mkIf resourcePolicyCfg.enable {
       description = "Aggregate Forgejo Actions build resources";
-      sliceConfig = {
-        CPUWeight = resourcePolicyCfg.cpuWeight;
-        IOWeight = resourcePolicyCfg.ioWeight;
-        MemoryHigh = resourcePolicyCfg.memoryHigh;
-        MemoryMax = resourcePolicyCfg.memoryMax;
-      };
+      sliceConfig =
+        {
+          CPUWeight = resourcePolicyCfg.cpuWeight;
+          IOWeight = resourcePolicyCfg.ioWeight;
+        }
+        // (
+          if sharedBudget.enable
+          then {MemoryMax = sharedBudget.memoryMax;}
+          else {
+            MemoryHigh = resourcePolicyCfg.memoryHigh;
+            MemoryMax = resourcePolicyCfg.memoryMax;
+          }
+        );
+    };
+
+    # The daemon serves deploys, local builds and remote build clients. Its
+    # child slice has default weights inside the shared budget and no CPU
+    # ceiling. A switch restarts the daemon into it, whose ExecStartPre also
+    # moves CI's CPU ceiling from the slice onto the CI units at once; it
+    # ignores a failure, so it can never keep the daemon from starting.
+    systemd.slices.forgejobuilds-nixdaemon = lib.mkIf sharedBudget.enable {
+      description = "Nix daemon builds inside the shared Forgejo build budget";
+    };
+    systemd.services.nix-daemon.serviceConfig = lib.mkIf sharedBudget.enable {
+      Slice = "forgejobuilds-nixdaemon.slice";
+      ExecStartPre = ["-+${lib.getExe resourcePolicyApply}"];
     };
 
     systemd.services.forgejo-runner-resource-policy = lib.mkIf resourcePolicyCfg.enable {

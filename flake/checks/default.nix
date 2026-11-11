@@ -358,6 +358,9 @@ in {
     policyUnit = xyz.systemd.services.forgejo-runner-resource-policy;
     daemonUnit = xyz.systemd.services.forgejo-runner-docker;
     buildSlice = xyz.systemd.slices.forgejobuilds.sliceConfig;
+    shared = runner.resourcePolicy.sharedBudget;
+    services = xyz.systemd.services;
+    percent = value: lib.toInt (lib.removeSuffix "%" value);
     serverConfigs = [
       self.nixosConfigurations.xev.config
       self.nixosConfigurations.nux.config
@@ -365,12 +368,21 @@ in {
     ];
     serverRunners = map (host: host.services.forgejo-actions-runner) serverConfigs;
     mockGetconf = pkgs.writeShellScript "mock-getconf" ''
-      test "''${1:-}" = _NPROCESSORS_ONLN
+      test "''${1:-}" = _NPROCESSORS_ONLN || exit 1
       printf '%s\n' "''${MOCK_PROCESSORS:?}"
     '';
     mockSystemctl = pkgs.writeShellScript "mock-systemctl" ''
-      printf '%s\n' "$*" > "''${FORGEJO_RUNNER_TEST_OUTPUT:?}"
+      printf '%s\n' "$*" >> "''${FORGEJO_RUNNER_TEST_OUTPUT:?}"
     '';
+    # Answers a ControlGroup query with MOCK_CGROUP, or fails with MOCK_FAIL
+    # set; an inactive unit has an empty ControlGroup.
+    mockShowSystemctl = pkgs.writeShellScript "mock-show-systemctl" ''
+      test "$*" = "show --property=ControlGroup --value forgejo-runner-podman.service" || exit 1
+      if [ -n "''${MOCK_FAIL:-}" ]; then exit 1; fi
+      printf '%s\n' "''${MOCK_CGROUP:-}"
+    '';
+    cgroupParent = lib.getExe runner.podmanCanary.cgroupParentCommand;
+    serverPolicy = (lib.head serverConfigs).systemd.services.forgejo-runner-resource-policy.serviceConfig.ExecStart;
   in
     assert runner.resourcePolicy.enable;
     assert runner.isolatedDocker.enable;
@@ -389,8 +401,8 @@ in {
     # (ADR-0108): 24G for xyz's two pool slots, beside the nix-daemon and the
     # ARC, and 8G for one slot on the 31 GiB servers, whose cluster keeps
     # half the memory.
-    assert buildSlice.MemoryHigh == "64%";
-    assert buildSlice.MemoryMax == "69%";
+    assert runner.resourcePolicy.memoryHigh == "64%";
+    assert runner.resourcePolicy.memoryMax == "69%";
     assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "45%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;
     assert !(xyz.virtualisation.docker.daemon.settings ? "exec-opts");
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.after;
@@ -398,6 +410,56 @@ in {
     assert builtins.elem "forgejobuilds.slice" policyUnit.after;
     assert builtins.elem "forgejobuilds.slice" policyUnit.requires;
     assert policyUnit.partOf == [];
+    # On xyz the slice is one budget for CI and the nix-daemon (ADR-0108).
+    # The daemon runs in its child slice, with default weights, no CPU
+    # ceiling and its own caps. The CI units stay directly in the slice, so
+    # their cgroup paths do not change, and split CI's own limits.
+    assert shared.enable;
+    assert buildSlice
+    == {
+      CPUWeight = 10;
+      IOWeight = 10;
+      MemoryMax = "77%";
+    };
+    assert xyz.systemd.slices.forgejobuilds-nixdaemon.sliceConfig == {};
+    assert services.nix-daemon.serviceConfig.Slice == "forgejobuilds-nixdaemon.slice";
+    assert services.nix-daemon.serviceConfig.MemoryMax == "40G";
+    assert services.nix-daemon.serviceConfig.MemorySwapMax == "2G";
+    assert services.nix-daemon.serviceConfig.OOMPolicy == "continue";
+    assert services.nix-daemon.serviceConfig.ExecStartPre == ["-+${policyUnit.serviceConfig.ExecStart}"];
+    assert lib.all (unit: services.${unit}.serviceConfig.Slice == "forgejobuilds.slice") ["forgejo-runner-docker" "forgejo-runner-podman" "forgejo-nix-cache-fill"];
+    assert runner.podmanCanary.scratch.size == "24G";
+    assert services.forgejo-runner-podman.serviceConfig.MemoryHigh == "59%";
+    assert services.forgejo-runner-podman.serviceConfig.MemoryMax == "61%";
+    assert services.forgejo-runner-docker.serviceConfig.MemoryHigh == "2%";
+    assert services.forgejo-runner-docker.serviceConfig.MemoryMax == "3%";
+    assert services.forgejo-nix-cache-fill.serviceConfig.MemoryMax == toString (3 * 1024 * 1024 * 1024);
+    # The API's throttle holds the full scratch and two pool jobs' 6 GiB
+    # (36 of 62.3 GiB is 57.8%). The hard limits add up within CI's 69%,
+    # the filler's 3G being under 5% of the host, and the CPU shares to its
+    # 50%; CI's hard limit stays within the shared budget.
+    assert percent services.forgejo-runner-podman.serviceConfig.MemoryHigh >= 58;
+    assert percent services.forgejo-runner-podman.serviceConfig.MemoryMax + percent services.forgejo-runner-docker.serviceConfig.MemoryMax + 5 <= percent runner.resourcePolicy.memoryMax;
+    assert percent runner.resourcePolicy.memoryMax < percent shared.memoryMax;
+    assert shared.podmanApi.cpuQuotaPercent + shared.dockerEngine.cpuQuotaPercent + shared.nixCacheFillCpuQuotaPercent == runner.resourcePolicy.cpuQuotaPercent;
+    # The other runner hosts keep CI's limits on the slice and their daemon
+    # outside it.
+    assert lib.all (host: !host.services.forgejo-actions-runner.resourcePolicy.sharedBudget.enable) serverConfigs;
+    assert lib.all (host: !(host.systemd.slices ? forgejobuilds-nixdaemon) && !(host.systemd.services.nix-daemon.serviceConfig ? Slice)) serverConfigs;
+    assert lib.all (host: lib.all (unit: !(host.systemd.services.${unit}.serviceConfig ? MemoryHigh)) ["forgejo-runner-docker" "forgejo-runner-podman"]) serverConfigs;
+    # Jobs get the running Podman API's cgroup as their BuildKit
+    # cgroup-parent, written at every Podman runner start (tested below).
+    assert lib.all (host: let
+      podmanRunners = lib.filter (lib.hasPrefix "forgejo-podman-runner") host.services.forgejo-actions-runner.runnerUnits;
+    in
+      podmanRunners
+      != []
+      && lib.all (unit: let
+        service = host.systemd.services.${lib.removeSuffix ".service" unit};
+      in
+        lib.hasInfix (builtins.unsafeDiscardStringContext "${lib.getExe host.services.forgejo-actions-runner.podmanCanary.cgroupParentCommand} >> \"$env_tmp\"") (builtins.unsafeDiscardStringContext service.preStart)
+        && lib.elem "forgejo-runner-podman.service" service.after)
+      podmanRunners) ([xyz] ++ serverConfigs);
       pkgs.runCommand "forgejo-runner-resource-policy-contract" {} ''
         for fixture in "4 200" "5 250" "32 1600"; do
           set -- $fixture
@@ -406,9 +468,41 @@ in {
             FORGEJO_RUNNER_GETCONF=${mockGetconf} \
             FORGEJO_RUNNER_SYSTEMCTL=${mockSystemctl} \
             FORGEJO_RUNNER_TEST_OUTPUT="$output" \
-            ${policyUnit.serviceConfig.ExecStart}
-          test "$(cat "$output")" = "set-property --runtime forgejobuilds.slice CPUQuota=$2%"
+            ${serverPolicy}
+          # Without the shared budget the CI units' own shares are cleared,
+          # in case the host ran it before, and the slice gets the ceiling.
+          printf '%s\n' \
+            "set-property --runtime forgejo-runner-docker.service CPUQuota=" \
+            "set-property --runtime forgejo-runner-podman.service CPUQuota=" \
+            "set-property --runtime forgejo-nix-cache-fill.service CPUQuota=" \
+            "set-property --runtime forgejobuilds.slice CPUQuota=$2%" > "$TMPDIR/expected-$1"
+          cmp "$output" "$TMPDIR/expected-$1"
         done
+
+        # With the shared budget the slice loses its ceiling and each CI
+        # unit gets its share.
+        output="$TMPDIR/systemctl-shared"
+        MOCK_PROCESSORS=32 \
+          FORGEJO_RUNNER_GETCONF=${mockGetconf} \
+          FORGEJO_RUNNER_SYSTEMCTL=${mockSystemctl} \
+          FORGEJO_RUNNER_TEST_OUTPUT="$output" \
+          ${policyUnit.serviceConfig.ExecStart}
+        printf '%s\n' \
+          "set-property --runtime forgejobuilds.slice CPUQuota=" \
+          "set-property --runtime forgejo-runner-docker.service CPUQuota=224%" \
+          "set-property --runtime forgejo-runner-podman.service CPUQuota=1280%" \
+          "set-property --runtime forgejo-nix-cache-fill.service CPUQuota=96%" > "$TMPDIR/expected-shared"
+        cmp "$output" "$TMPDIR/expected-shared"
+
+        # A runner announces the running API's cgroup, and the long-standing
+        # path only when no API runs or the query fails.
+        export FORGEJO_PODMAN_SYSTEMCTL=${mockShowSystemctl}
+        path=/forgejobuilds.slice/forgejo-runner-podman.service
+        test "$(MOCK_CGROUP=/elsewhere.slice/forgejo-runner-podman.service ${cgroupParent})" = "FORGEJO_PODMAN_CGROUP_PARENT=/elsewhere.slice/forgejo-runner-podman.service"
+        test "$(MOCK_CGROUP=$path ${cgroupParent})" = "FORGEJO_PODMAN_CGROUP_PARENT=$path"
+        test "$(MOCK_CGROUP= ${cgroupParent})" = "FORGEJO_PODMAN_CGROUP_PARENT=$path"
+        test "$(MOCK_CGROUP=/ ${cgroupParent})" = "FORGEJO_PODMAN_CGROUP_PARENT=$path"
+        test "$(MOCK_FAIL=1 ${cgroupParent})" = "FORGEJO_PODMAN_CGROUP_PARENT=$path"
 
         for invalid_count in 0 invalid; do
           output="$TMPDIR/invalid-systemctl-$invalid_count"
@@ -416,7 +510,7 @@ in {
             FORGEJO_RUNNER_GETCONF=${mockGetconf} \
             FORGEJO_RUNNER_SYSTEMCTL=${mockSystemctl} \
             FORGEJO_RUNNER_TEST_OUTPUT="$output" \
-            ${policyUnit.serviceConfig.ExecStart}; then
+            ${serverPolicy}; then
             echo "resource policy accepted invalid processor count: $invalid_count" >&2
             exit 1
           fi
