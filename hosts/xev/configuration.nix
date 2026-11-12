@@ -185,7 +185,13 @@
       alert.enable = true;
     };
     # Reset the Podman store offline while the runners are idle (ADR-0105).
-    podmanStoreReset.enable = true;
+    # Leftovers reset the 4G scratch at 25% (1G) or the volume filesystem at
+    # 25% (about 0.9G; its inode tables take 6.25% of the 4G device), so a
+    # pool job still has 3G of scratch and about 2.8G of volumes (ADR-0108).
+    podmanStoreReset = {
+      enable = true;
+      scratchTriggerPercent = 25;
+    };
     # Engines pull docker.io images through the LAN cache, falling back to
     # docker.io when it is down (#917).
     registryMirror = "registry-cache.alc.xyz";
@@ -204,9 +210,16 @@
       # One pool slot, as every pool runner (ADR-0106), so the scratch is one
       # job's limit. Job throwaway data in RAM, images on disk (ADR-0108,
       # #1027); the tmpfs counts against the CI memory limits below.
+      # The 8G a pool job had in the tmpfs is split in two: 4G of tmpfs for
+      # its container layers, and 4G of zram for its volumes, where BuildKit
+      # builds that run dpkg work (ADR-0108).
       scratch = {
         enable = true;
-        size = "8G";
+        size = "4G";
+        volumes = {
+          enable = true;
+          size = "4G";
+        };
       };
       # A shared, read-only Nix store for Podman Nix jobs (ADR-0109, #1038).
       nixCache = {
@@ -216,7 +229,7 @@
         # above the filler's 20% floor, where it stops adding.
         dataPath = "/var/lib/forgejo-ci-nix-cache";
         # Small staging for flake inputs: the filler runs in the CI slice,
-        # whose budget here holds the 8G scratch and the job; it adds paths
+        # whose budget here holds the 4G scratch and the job; it adds paths
         # only between jobs, but a job can start while it stages an input.
         stageSize = "1G";
         offers = {
@@ -227,10 +240,12 @@
     };
     resourcePolicy.enable = true;
     # The cluster comes first: CI stays at half the memory, with the throttle
-    # a few points below. That holds the 8G scratch beside the pool job and the
-    # rarely used Docker slot's job, about 6G for both (ADR-0108).
-    resourcePolicy.memoryHigh = "45%";
-    resourcePolicy.memoryMax = "50%";
+    # a few points below, and its 4G of zram for volumes, which no cgroup is
+    # charged for, comes off both limits (about 12.8%). The throttle holds
+    # the 4G scratch beside the pool job and the rarely used Docker slot's
+    # job, about 6G for both (ADR-0108).
+    resourcePolicy.memoryHigh = "32%";
+    resourcePolicy.memoryMax = "37%";
     # Both runners share that aggregate budget. One Docker slot serves the few
     # jobs that still select a Docker label.
     capacity = 1;

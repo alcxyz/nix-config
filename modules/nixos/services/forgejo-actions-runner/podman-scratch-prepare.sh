@@ -13,17 +13,21 @@ set -euo pipefail
 # The store reset's next check deletes that trash at the lowest priority
 # (ADR-0105), and the image store starts empty.
 #
-# Volumes live on disk beside the image store, not in the scratch: BuildKit
-# (containerd's overlay snapshotter) leaves out the "userxattr" option when
-# its state is on tmpfs, and its overlays in the rootless user namespace then
-# fail dpkg's directory renames with EXDEV (ADR-0108). Their metadata went
-# with the runroot as well, so volumes an earlier API left behind are moved
-# aside under the same trash name for the reset to delete.
+# Volumes are not in the scratch: BuildKit (containerd's overlay snapshotter)
+# leaves out the "userxattr" option when its state is on tmpfs, and its
+# overlays in the rootless user namespace then fail dpkg's directory renames
+# with EXDEV (ADR-0108). With `ram` as the fifth argument they live in an
+# ext4 filesystem in RAM, which podman-volumes-prepare makes; with `disk`, in
+# the volume directory on disk beside the image store. Their metadata went
+# with the runroot as well, so volumes an earlier API left in that directory
+# are moved aside under the same trash name for the reset to delete, and with
+# volumes in RAM the empty directory goes.
 
 scratch=${1:?scratch mount point required}
 graph_root=${2:?graphroot required}
 store=${3:?disk store required}
 volumes=${4:?volume directory required}
+volume_home=${5:-disk}
 owner=${SCRATCH_OWNER:-forgejo-podman-builder}
 group=${SCRATCH_GROUP:-forgejo-podman}
 
@@ -32,6 +36,7 @@ group=${SCRATCH_GROUP:-forgejo-podman}
   exit 1
 }
 [[ $graph_root == "$scratch"/* && ! -L $graph_root ]] || exit 1
+[[ $volume_home == disk || $volume_home == ram ]] || exit 1
 # Beside the store, so its trash is on the filesystem the reset cleans.
 [[ ${volumes%/*} == "${store%/*}" && $volumes != "$store" && ! -L $volumes ]] || exit 1
 find "$scratch" -mindepth 1 -maxdepth 1 -exec rm -rf --one-file-system -- {} +
@@ -58,4 +63,8 @@ if [[ -d $volumes ]] && [[ -n $(find "$volumes" -mindepth 1 -maxdepth 1 -print -
   sync -- "${store%/*}"
   echo "Moved the volumes an earlier API left aside as $trash; the store reset deletes them."
 fi
-install -d -m 0700 -o "$owner" -g "$group" -- "$volumes"
+if [[ $volume_home == disk ]]; then
+  install -d -m 0700 -o "$owner" -g "$group" -- "$volumes"
+elif [[ -d $volumes ]]; then
+  rmdir -- "$volumes"
+fi

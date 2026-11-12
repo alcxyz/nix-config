@@ -586,3 +586,15 @@ nix-daemon ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)).
 >   (ADR-0108); `xyz`, with
 >   its two pool slots' 24G scratch beside the nix-daemon's 40G cap and the
 >   ZFS ARC, 64% and 69%. `nux` and `nex` raise the CPU
+
+## Text replaced on 2026-11-12 (ADR-0108, volumes in zram)
+
+The passages as they stood before CI's volumes moved to zram and the runner hosts' memory limits shrank by its size ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)).
+
+>   and a 50% hard memory limit. `xev`, `nex` and `nux` keep the 50% limit, since
+>   their cluster comes first, and throttle at 45% to hold their RAM job scratch
+>   (ADR-0108); `xyz`, with
+>   its two pool slots' 24G scratch, 64% and 69%. On `xyz` the slice is
+>   instead one 77% memory budget shared with the nix-daemon, which runs in
+
+> 2026-11-11, xyz's slice is one budget shared with the nix-daemon ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md))

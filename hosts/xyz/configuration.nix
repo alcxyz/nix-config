@@ -229,11 +229,15 @@ in {
     };
     shutdownTimeoutSeconds = 120;
     # Reset the Podman store offline while the runners are idle (ADR-0105).
-    # Leftovers reset the 24G scratch at 13% (3.1G), so a forgejo-podman-large
-    # job of up to 12.8G and a pool job of up to 8G still fit (ADR-0108).
+    # Leftovers reset the 16G scratch at 5% (0.8G) and the volume filesystem
+    # at 5% (about 0.4G; its inode tables take 0.5G of the 8G device). Below
+    # that, a pool job beside a forgejo-podman-large job of up to 12.8G keeps
+    # 2.4G for its container layers (3.2G with no leftovers), less than the
+    # 4G it gets on the other hosts, and two pool jobs share about 7.1G of
+    # volumes, 3.5G each (ADR-0108).
     podmanStoreReset = {
       enable = true;
-      scratchTriggerPercent = 13;
+      scratchTriggerPercent = 5;
     };
     # Engines pull docker.io images through the LAN cache, falling back to
     # docker.io when it is down (#917).
@@ -263,12 +267,22 @@ in {
         ];
       };
       # Job throwaway data in RAM, images on disk (ADR-0108, #1027), shared
-      # by both slots: 16G for a large job, whose largest measured kept 12.7G
-      # live, and 8G for a pool job, the other hosts' scratch. The tmpfs
-      # counts against the CI memory limits below.
+      # by both slots: 24G in all, as before, 16G of tmpfs for container
+      # layers and 8G of zram for volumes, where BuildKit builds that run
+      # dpkg work. Two pool jobs get the other hosts' 4G of each. A large
+      # job, whose largest measured kept 12.7G live in its container, leaves
+      # a pool job beside it only 3.2G of tmpfs for its layers, while that
+      # job's volumes share the 8G with the large job's workspace. A 17G and
+      # 7G split would favour that rarer pairing over two pool jobs. The
+      # tmpfs counts against the CI memory limits below, and the zram is set
+      # aside from them.
       scratch = {
         enable = true;
-        size = "24G";
+        size = "16G";
+        volumes = {
+          enable = true;
+          size = "8G";
+        };
       };
       # Trial: opted-in Nix jobs use a persistent, read-only store as the
       # lower layer of /nix/store instead of installing Nix (ADR-0109, #1038).
@@ -292,32 +306,35 @@ in {
     # One Docker slot serves the few jobs that still select a Docker label.
     capacity = 1;
     # forgejobuilds.slice is one budget for CI and the nix-daemon (ADR-0108):
-    # its hard limit at 77% (48.0 GiB of 62.3 GiB) leaves 14.3 GiB for the
-    # desktop, the services and the ZFS ARC, which shrinks under pressure.
-    # Its low weights make all building yield to desktop, game and media
-    # work. CI's own limits, 64% throttle, 69% hard limit and half the CPUs,
-    # are split across the CI units, since the slice also holds the daemon:
-    # - The Podman API throttles at 59% (36.8 GiB), which holds the full 24G
+    # its hard limit at 64% (39.9 GiB of 62.3 GiB), with the 8G of zram for
+    # CI's volumes, which no cgroup is charged for, beside it, leaves
+    # 14.4 GiB for the desktop, the services and the ZFS ARC, which shrinks
+    # under pressure. Its low weights make all building yield to desktop,
+    # game and media work. CI's own limits, 51% throttle, 56% hard limit
+    # (each 8G of zram, 12.8%, below what they were with the volumes in the
+    # tmpfs) and half the CPUs, are split across the CI units, since the
+    # slice also holds the daemon:
+    # - The Podman API throttles at 46% (28.7 GiB), which holds the full 16G
     #   scratch its jobs write and two pool jobs' 6 GiB each (a large job
-    #   takes 4.5 GiB) with 0.8 GiB for the engine (0.1 to 0.2 GiB idle).
+    #   takes 4.5 GiB) with 0.7 GiB for the engine (0.1 to 0.2 GiB idle).
     #   While the jobs keep to those budgets, which nothing enforces per job,
     #   a full scratch fails a write before the API is throttled. Hard
-    #   limit 61% (38.0 GiB); 40% of the CPUs.
+    #   limit 48% (29.9 GiB); 40% of the CPUs.
     # - The Docker engine and its one light job (tofu plans, probes): 2%
     #   (1.2 GiB) throttle, 3% (1.9 GiB) hard limit, 7% of the CPUs.
     # - The Nix store filler keeps its 3G cap; 3% of the CPUs.
-    # The hard limits add up to 42.9 GiB, within the 69%, and the CPU
+    # The hard limits add up to 34.8 GiB, within the 56%, and the CPU
     # shares to the 50% ceiling.
     resourcePolicy = {
       enable = true;
-      memoryHigh = "64%";
-      memoryMax = "69%";
+      memoryHigh = "51%";
+      memoryMax = "56%";
       sharedBudget = {
         enable = true;
-        memoryMax = "77%";
+        memoryMax = "64%";
         podmanApi = {
-          memoryHigh = "59%";
-          memoryMax = "61%";
+          memoryHigh = "46%";
+          memoryMax = "48%";
           cpuQuotaPercent = 40;
         };
         dockerEngine = {

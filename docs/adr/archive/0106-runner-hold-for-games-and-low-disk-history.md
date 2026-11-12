@@ -211,3 +211,12 @@ The text as it stood before xyz took a second pool slot that leaves out `forgejo
 > xev pool runners also serve `ci-fast` in their slot
 > ([ADR-0097](../0097-ci-fast-runner-label.md)), and xyz's serves
 > `forgejo-podman-large` (ADR-0108).
+
+## Text replaced on 2026-11-12 (ADR-0108, volumes in zram)
+
+The passages as they stood before CI's volumes moved to zram and xyz's tmpfs and memory limits shrank by its size ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)).
+
+> a time. Both share xyz's 24G scratch within a 64% memory throttle and a 69%
+> hard limit.
+
+> 2026-11-10, a second pool slot on xyz that leaves out `forgejo-podman-large` ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027))

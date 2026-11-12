@@ -55,16 +55,23 @@ in {
       description = ''
         With RAM scratch (ADR-0108), reset the scratch alone, keeping the
         images, when containers left behind by jobs fill it to
-        this percentage, at any age. Set it so the largest job the host takes
-        still fits beside the leftovers; with a second pool slot, the
-        largest job of each slot. At 90 percent or more, the recovery
-        threshold where most new pool jobs fail, any reset pauses the Podman
-        pool runners and waits for them to drain instead of waiting out their
-        quiet interval. Independently of this percentage, any container on
-        the API other than a running `FORGEJO-ACTIONS-TASK-*` one makes the
-        same reset due at the next quiet check, since with the volumes on
-        disk a leftover can keep running while it adds little to the
-        scratch. A running task container counts as a job even when no
+        this percentage, at any age; with volumes in RAM
+        (podmanCanary.scratch.volumes), also when leftover volumes fill the
+        volume filesystem to it, or when that filesystem has had an ext4
+        error, is read-only or is not mounted, since the API's next start
+        makes it again. The volume filesystem counts only while the running
+        API uses it, so a deploy that has not restarted the API yet changes
+        nothing. Set it so the
+        largest job the host takes still fits beside the leftovers in each;
+        with a second pool slot, the largest job of each slot. At 90 percent
+        or more of either, the recovery threshold where most new pool jobs
+        fail, and for an unusable volume filesystem, any reset pauses the
+        Podman pool runners and waits for them to drain instead of waiting
+        out their quiet interval. Independently of this percentage, any
+        container on the API other than a running `FORGEJO-ACTIONS-TASK-*`
+        one makes the same reset due at the next quiet check, since a
+        leftover can keep running and holding memory while it adds little to
+        the scratch. A running task container counts as a job even when no
         runner owns it any more, and holds every reset until it is removed.
       '';
     };
@@ -109,6 +116,11 @@ in {
       environment = {
         STORE_PATH = cfg.podmanCanary.storageRoot;
         SCRATCH_STORE = lib.optionalString cfg.podmanCanary.scratch.enable cfg.podmanCanary.graphRoot;
+        # The volume filesystem in RAM, which the API's start makes afresh.
+        VOLUME_MOUNT = lib.optionalString (cfg.podmanCanary.scratch.enable && cfg.podmanCanary.scratch.volumes.enable) cfg.podmanCanary.scratch.volumes.path;
+        # Written by the API start that made it: the reset checks the volume
+        # filesystem only while the running API uses it.
+        VOLUME_STAMP = cfg.podmanCanary.scratch.volumes.startedFile;
         SCRATCH_TRIGGER_PERCENT = toString reset.scratchTriggerPercent;
         # The runner pause that runner-restart.nix wires into every runner
         # (FORGEJO_RUNNER_PAUSE_FILE); a full scratch drains the pool runners

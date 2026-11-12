@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills; 2026-11-12, volumes on disk beside the store, which the API's start moves aside as trash ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, leftover containers reset the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
+**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills; 2026-11-12, volumes on disk beside the store, which the API's start moves aside as trash ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, leftover containers reset the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, volumes in a filesystem on zram that the API's start makes afresh, whose use or failure also resets the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
 **History:** [replaced text](archive/0105-offline-podman-store-reset-history.md)
 **Supersedes:** [ADR-0083](archive/0083-podman-cleanup-completion-fence.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-store-reset.{nix,sh}`,
@@ -41,14 +41,32 @@ the host is idle.
 - **Due:** the last reset is at least 7 days old (`maxAgeDays`), or the
   filesystem holding the store is at least 70 percent used
   (`triggerUsedPercent`) and the last reset is at least six hours old, or the
-  RAM scratch holding its containers
-  ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)) is used to the host's
-  `scratchTriggerPercent` (70 percent by default, 13 on xyz), or the Podman
-  API with that scratch holds any container other than a running
-  `FORGEJO-ACTIONS-TASK-*` one. A full scratch, like such a container, means
-  containers that jobs left behind; that reset renames only the scratch part
-  and keeps the images and the age clock, and since it always empties the
-  scratch it needs no minimum age. The first run only starts the age clock,
+  RAM scratch holding its containers, or the volume filesystem in RAM
+  ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), is used to the
+  host's `scratchTriggerPercent` (70 percent by default, 25 on xev, nex and
+  nux, 5 on xyz; the volume filesystem in bytes or in inodes, whichever is
+  fuller, since inodes used up fail every new volume as a full filesystem
+  does), or that volume filesystem is unusable, or the Podman API
+  with that scratch holds any container other than a running
+  `FORGEJO-ACTIONS-TASK-*` one. The volume filesystem counts only while the
+  running API uses it: the API start that made it writes its systemd
+  invocation ID to `/run/forgejo-podman-volumes.started`, and while that
+  does not match the API's, as after a deploy that has not restarted it,
+  the check logs `volumes=not_in_use` and ignores the filesystem; while
+  it does use it, each check also compacts the filesystem's zram device. It
+  is unusable when not mounted, when another filesystem is mounted there,
+  when the mount or its superblock is read-only, or when ext4's error count
+  (`/sys/fs/ext4/<device>/errors_count`), zero on the fresh filesystem, is
+  not: under `errors=remount-ro` an ext4 error stops every write, but on
+  the hosts' kernel, 7.3.3 in the VM check, `mountinfo` still shows the
+  mount and its superblock `rw`, the superblock with `emergency_ro`. A
+  failed write of file data is no ext4 error, and the check does not see
+  it (ADR-0108). A full scratch or volume filesystem, like
+  such a container, means containers or volumes that jobs left behind; that
+  reset renames only the scratch part, its API start makes the volume
+  filesystem afresh, and it keeps the images and the age clock, and since it
+  always empties the scratch it needs no minimum age. The first run only
+  starts the age clock,
   kept in the unit's root-owned state directory.
 - **Idle:** the game signal reports no game (on a game host) and host I/O
   pressure is at or below `ioPressurePercent` (5 percent); the runner hold is
@@ -57,8 +75,10 @@ the host is idle.
   systemd job, or stopped by whoever stopped it; neither API runs a
   `FORGEJO-ACTIONS-TASK-*` container; and no runner to be stopped has logged a
   job start in the last `quietMinutes` (15 minutes), since a job that is still
-  pulling its image or setting up has no task container yet. A scratch at 90
-  percent or more is the recovery threshold: most new pool jobs fail there,
+  pulling its image or setting up has no task container yet. A scratch or
+  volume filesystem at 90 percent or more (of its bytes or its inodes), or
+  an unusable volume filesystem,
+  is the recovery threshold: most new pool jobs fail there,
   and each would renew that interval, so a recent pool job start does not
   skip the reset. Instead the reset pauses the Podman pool runner through the
   runner pause of nix-packages ADR-0017 (no new job), waits up to 10 minutes
@@ -107,10 +127,12 @@ the host is idle.
   touches no disk. The API user can create entries with the
   trash name: one that is not a directory is unlinked without being followed,
   and one that fails the checks or cannot be removed is reported and skipped,
-  so neither stops or holds a reset. With RAM scratch the volumes are on disk
-  beside the store, and their metadata goes with the API's runroot, so the
-  API's start moves a non-empty volume directory aside under the store's
-  trash name, and the reset deletes it like the rest of the old store.
+  so neither stops or holds a reset. With RAM scratch the volumes' metadata
+  goes with the API's runroot. With the volumes in RAM, the API's start
+  makes their filesystem afresh, which frees their memory; with them on
+  disk beside the store, and once when they move to RAM, it moves a
+  non-empty volume directory aside under the store's trash name, and the
+  reset deletes it like the rest of the old store.
 
 The rename is the only mutation that needs exclusion, and it cannot outlive the
 process that holds the lock, so no completion fence exists. The lock is

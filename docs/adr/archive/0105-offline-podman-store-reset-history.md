@@ -186,3 +186,28 @@ disk beside the store ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)).
 
 >   `scratchTriggerPercent` (70 percent by default, 20 on xyz). A full scratch means containers and volumes that jobs left
 >   behind; that reset renames only the scratch part and keeps the images and
+
+## Text replaced on 2026-11-12 (ADR-0108, volumes in zram)
+
+The passages as they stood before the volumes moved from the disk beside the
+store to a filesystem on zram that the API's start makes afresh
+([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)).
+
+> **Amended:** 2026-10-31, the runner hold of [ADR-0106](../0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills; 2026-11-12, volumes on disk beside the store, which the API's start moves aside as trash ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, leftover containers reset the scratch alone ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md))
+
+>   RAM scratch holding its containers
+>   ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)) is used to the host's
+>   `scratchTriggerPercent` (70 percent by default, 13 on xyz), or the Podman
+>   API with that scratch holds any container other than a running
+>   `FORGEJO-ACTIONS-TASK-*` one. A full scratch, like such a container, means
+>   containers that jobs left behind; that reset renames only the scratch part
+>   and keeps the images and the age clock, and since it always empties the
+>   scratch it needs no minimum age. The first run only starts the age clock,
+
+>   pulling its image or setting up has no task container yet. A scratch at 90
+>   percent or more is the recovery threshold: most new pool jobs fail there,
+
+>   so neither stops or holds a reset. With RAM scratch the volumes are on disk
+>   beside the store, and their metadata goes with the API's runroot, so the
+>   API's start moves a non-empty volume directory aside under the store's
+>   trash name, and the reset deletes it like the rest of the old store.

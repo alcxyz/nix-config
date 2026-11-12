@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-11-03, the xyz and xev pool runners serve `ci-fast` instead of dedicated runners ([ADR-0097](0097-ci-fast-runner-label.md)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, xyz's Podman store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-08, one pool slot per host for RAM job scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027), [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-10, a second pool slot on xyz that leaves out `forgejo-podman-large` ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027))
+**Amended:** 2026-11-03, the xyz and xev pool runners serve `ci-fast` instead of dedicated runners ([ADR-0097](0097-ci-fast-runner-label.md)); 2026-11-05, a second pool slot on xyz as a trial ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-05, xyz's Podman store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-07, xyz keeps its second pool slot ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)); 2026-11-08, one pool slot per host for RAM job scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027), [ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-10, a second pool slot on xyz that leaves out `forgejo-podman-large` ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-12, xyz's scratch split into tmpfs and volumes on zram, with lower memory limits ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
 **History:** [replaced text](archive/0106-runner-hold-for-games-and-low-disk-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/runner-hold.{nix,sh}`,
 `runner-start-gate.sh`, `modules/nixos/services/game-signal/`, the runner pool
@@ -97,8 +97,9 @@ Docker slot, so each one's RAM job scratch is one job's limit
 slots instead of five: `forgejo-podman-runner` serves the pool labels and
 `forgejo-podman-large`, and `forgejo-podman-runner-2`, a second registration
 on the same Podman API, serves only the pool labels, so large jobs run one at
-a time. Both share xyz's 24G scratch within a 64% memory throttle and a 69%
-hard limit. The Docker runners ran 14 of 2,512 jobs from 2026-11-01 to
+a time. Both share xyz's RAM scratch, 16G of tmpfs and 8G of volumes on
+zram, within a 51% memory throttle and a 56% hard limit, with the zram set
+aside beside them. The Docker runners ran 14 of 2,512 jobs from 2026-11-01 to
 2026-11-05, so a host runs about one job per pool slot at once in practice.
 xyz ran a second pool slot from 2026-11-05 ([#991](https://git.alc.xyz/alcxyz/nix-config/issues/991)), which cut the pool's p90
 queue wait from 7.7 to 1.5 minutes; it and xev's second slot went for the RAM

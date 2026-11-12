@@ -14,14 +14,22 @@
   builderState = "/var/lib/forgejo-podman";
   builderRuntime = "/run/forgejo-podman";
   scratch = canary.scratch;
-  # With scratch, volumes stay on disk beside the image store (ADR-0108):
-  # BuildKit leaves out overlay's "userxattr" option when its state is on
-  # tmpfs, and dpkg's directory renames in its builds then fail with EXDEV.
-  scratchVolumes = "${builderState}/volumes";
+  # With scratch, volumes are not in the tmpfs (ADR-0108): BuildKit leaves
+  # out overlay's "userxattr" option when its state is on tmpfs, and dpkg's
+  # directory renames in its builds then fail with EXDEV. They are in an ext4
+  # filesystem on a zram device, or else on disk beside the image store.
+  ramVolumes = scratch.volumes;
+  ramVolumesEnabled = scratch.enable && ramVolumes.enable;
+  diskVolumes = "${builderState}/volumes";
   scratchPrepare = pkgs.writeShellApplication {
     name = "forgejo-podman-scratch-prepare";
     runtimeInputs = with pkgs; [coreutils findutils util-linux];
     text = builtins.readFile ./podman-scratch-prepare.sh;
+  };
+  volumesPrepare = pkgs.writeShellApplication {
+    name = "forgejo-podman-volumes-prepare";
+    runtimeInputs = with pkgs; [coreutils e2fsprogs gnugrep kmod psmisc util-linux];
+    text = builtins.readFile ./podman-volumes-prepare.sh;
   };
   socketPath = "${builderRuntime}/podman.sock";
   # The rootless API may create cgroups only below its own delegated cgroup,
@@ -278,8 +286,9 @@ in {
       internal = true;
       description = ''
         Podman store on disk. With scratch it holds only the image store
-        (image layers and image metadata), and volumes sit beside it;
-        otherwise it also holds the containers and volumes.
+        (image layers and image metadata), and volumes sit beside it unless
+        they are in RAM (scratch.volumes); otherwise it also holds the
+        containers and volumes.
       '';
     };
     scratch = {
@@ -287,8 +296,9 @@ in {
         a RAM-backed Podman graphroot for job throwaway data: container
         writable layers and overlay copy-ups live in a tmpfs, while image
         layers stay in the image store on disk and volumes (job workspaces,
-        service data, Buildx state) in a directory beside it, since BuildKit
-        builds that run dpkg fail with their state on tmpfs (#1027, ADR-0108)
+        service data, Buildx state) in a directory beside it, or in RAM with
+        scratch.volumes, since BuildKit builds that run dpkg fail with their
+        state on tmpfs (#1027, ADR-0108)
       '';
       size = lib.mkOption {
         type = lib.types.strMatching "[1-9][0-9]*[MG]";
@@ -312,6 +322,67 @@ in {
         internal = true;
         description = "Mount point of the scratch tmpfs.";
       };
+      volumes = {
+        enable = lib.mkEnableOption ''
+          Podman volumes (job workspaces, service data, Buildx state) in
+          RAM: an ext4 filesystem on a zram block device, compressed, made
+          fresh at every start of the API, instead of the directory on disk.
+          BuildKit's overlay snapshotter keeps its "userxattr" option on
+          ext4, so its builds that run dpkg work, as they do not on tmpfs
+          (ADR-0108). Only with scratch.enable; without it, the volumes stay
+          in the store on disk
+        '';
+        size = lib.mkOption {
+          type = lib.types.strMatching "[1-9][0-9]*[MG]";
+          default = "4G";
+          example = "8G";
+          description = ''
+            Size of the zram device and its filesystem, shared by all jobs on
+            this host. A job that writes past it fails with "No space left
+            on device". zram memory is charged to no cgroup, so this size is
+            set aside from CI's memory outside forgejobuilds.slice: take it
+            off scratch.size and off CI's memory limits (with
+            resourcePolicy.sharedBudget, also off the shared budget), so CI's
+            RAM does not grow. Stored data never needs more memory than this
+            size, however poorly it compresses, and compression only lowers
+            what it uses. zram's own table (about 0.4 percent of the size)
+            comes on top, and after many deletes zsmalloc can hold more than
+            the stored data until it is compacted, which the store reset does
+            at each check; leave a margin for both.
+          '';
+        };
+        path = lib.mkOption {
+          type = lib.types.str;
+          default = "/run/forgejo-podman-volumes";
+          readOnly = true;
+          internal = true;
+          description = "Mount point of the volume filesystem in RAM.";
+        };
+        startedFile = lib.mkOption {
+          type = lib.types.str;
+          default = "/run/forgejo-podman-volumes.started";
+          readOnly = true;
+          internal = true;
+          description = ''
+            Holds the systemd invocation ID of the API start that made the
+            volume filesystem, so the store reset checks the filesystem only
+            while the running API uses it.
+          '';
+        };
+      };
+    };
+    volumePath = lib.mkOption {
+      type = lib.types.str;
+      default =
+        if ramVolumesEnabled
+        then "${ramVolumes.path}/volumes"
+        else if scratch.enable
+        then diskVolumes
+        else "${canary.storageRoot}/volumes";
+      defaultText = lib.literalExpression ''"''${scratch.volumes.path}/volumes" with volumes in RAM, else a directory on disk'';
+      readOnly = true;
+      internal = true;
+      description = "Where the Podman API keeps its volumes.";
     };
     graphRoot = lib.mkOption {
       type = lib.types.str;
@@ -324,8 +395,9 @@ in {
       internal = true;
       description = ''
         Podman graphroot: container layers, and without scratch also the
-        volumes and the libpod database (with scratch, volumes are on disk
-        and the transient store keeps the database in the runroot).
+        volumes and the libpod database (with scratch, volumes are in
+        volumePath and the transient store keeps the database in the
+        runroot).
       '';
     };
     package = lib.mkOption {
@@ -487,6 +559,12 @@ in {
           message = "The second Podman pool slot needs its own registration name.";
         }
         {
+          # Without scratch the volumes stay in the store on disk, so the
+          # option would be silently ignored.
+          assertion = !ramVolumes.enable || scratch.enable;
+          message = "services.forgejo-actions-runner.podmanCanary.scratch.volumes.enable requires scratch.enable.";
+        }
+        {
           assertion = lib.hasPrefix "/" canary.registrationTokenFile;
           message = "Podman CI canary requires an absolute registrationTokenFile path.";
         }
@@ -613,15 +691,30 @@ in {
             mirrorCa = "${mirrorCaSetup "forgejo-podman-mirror-ca" "${builderState}/.config/containers/certs.d"}";
           in
             if scratch.enable
-            then [
-              mirrorCa
-              # As root: refuse to start unless the scratch tmpfs is mounted,
-              # empty the graphroot (its metadata went with the runroot), and
-              # move a store left from before scratch, which holds
-              # containers, and volumes an earlier API left, aside as reset
-              # trash.
-              "+${lib.getExe scratchPrepare} ${lib.escapeShellArgs [scratch.path canary.graphRoot canary.storageRoot scratchVolumes]}"
-            ]
+            then
+              [
+                mirrorCa
+                # As root: refuse to start unless the scratch tmpfs is mounted,
+                # empty the graphroot (its metadata went with the runroot), and
+                # move a store left from before scratch, which holds
+                # containers, and volumes an earlier API left on disk, aside as
+                # reset trash.
+                "+${lib.getExe scratchPrepare} ${lib.escapeShellArgs [
+                  scratch.path
+                  canary.graphRoot
+                  canary.storageRoot
+                  diskVolumes
+                  (
+                    if ramVolumesEnabled
+                    then "ram"
+                    else "disk"
+                  )
+                ]}"
+              ]
+              # As root: make the volume filesystem in RAM afresh, refuse to
+              # start unless it is ext4 on this unit's zram device, and record
+              # this start as the one that made it, for the store reset.
+              ++ lib.optional ramVolumesEnabled "+${lib.getExe volumesPrepare} ${lib.escapeShellArgs [ramVolumes.path ramVolumes.size ramVolumes.startedFile]}"
             else mirrorCa;
           ExecStart = lib.concatStringsSep " " ([
               "${pkgs.podman}/bin/podman --remote=false --cgroup-manager=cgroupfs --storage-driver=overlay"
@@ -630,7 +723,7 @@ in {
             # The transient store keeps the libpod database and container
             # metadata in the runroot, out of the size-limited scratch, so a
             # job that fills the scratch cannot fail the API's own writes.
-            ++ lib.optionals scratch.enable ["--imagestore=${canary.storageRoot}" "--volumepath=${scratchVolumes}" "--transient-store"]
+            ++ lib.optionals scratch.enable ["--imagestore=${canary.storageRoot}" "--volumepath=${canary.volumePath}" "--transient-store"]
             ++ ["--runroot=${builderRuntime}/storage system service --time=0"]);
         };
         # The API starts after the tmpfs, and its root ExecStartPre refuses

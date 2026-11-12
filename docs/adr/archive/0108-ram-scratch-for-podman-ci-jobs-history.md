@@ -1,4 +1,4 @@
-**History of** [ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md): text replaced on 2026-11-10, 2026-11-11 and 2026-11-12.
+**History of** [ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md): text replaced on 2026-11-10, 2026-11-11 and 2026-11-12 (twice).
 
 ## Text replaced on 2026-11-10 (#1027)
 
@@ -107,3 +107,129 @@ their state on tmpfs.
 > the slice reaches no memory.high event and the API keeps serving another
 > job's container, an API restart that empties the scratch, a fresh tmpfs that
 > keeps the images,
+
+## Text replaced on 2026-11-12 (volumes in zram)
+
+The passages as they stood before the volumes moved from the disk beside the
+image store to an ext4 filesystem on zram, set aside from CI's memory, with
+the tmpfs and CI's limits shrunk by its size.
+
+> # ADR-0108: Keep Podman CI job scratch in RAM, images and volumes on disk
+
+> **Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz; 2026-11-12, volumes on disk beside the image store, since BuildKit builds that run dpkg failed with their state on tmpfs; 2026-11-12, any container that no running job owns resets the scratch at the next quiet check
+
+> `podman-scratch-prepare.sh`, the runner module's `resourcePolicy`, the store reset of
+
+> with it on disk, the graphroot still on tmpfs.
+
+> store (`--imagestore`). Volumes (job workspaces, service data, Buildx state)
+> are in `/var/lib/forgejo-podman/volumes` beside it (`--volumepath`).
+> Container writable layers and copy-ups are in RAM; image layers and volumes
+> are on disk, and image layers survive reboots.
+
+> - **Volumes on disk.** BuildKit's state is a volume, and on tmpfs its builds
+>   that run dpkg fail (see Context). Podman places volumes by one path for
+>   all, and buildx creates the state volume itself, without options, so the
+>   volumes leave the scratch together. The volume directory is on the store's
+>   filesystem, whose use the store reset's disk trigger already measures.
+
+> - **One tmpfs per host.** The tmpfs `size` is a per-host option, and every
+>   pool slot on a host shares it. xev, nex and nux run one pool slot
+>   ([ADR-0106](../0106-runner-hold-for-games-and-low-disk.md)), so their 8G is
+>   that job's limit. xyz runs two, which share 24G: 16G for a
+>   `forgejo-podman-large` job, which only its first slot takes, and 8G for a
+>   pool job, the other hosts' limit. A job that writes past the free space
+>   fails with "No space left on device". The tmpfs cannot give each job its
+>   own limit, since every job container writes as the same user, so a pool
+>   job that writes more than 8G on xyz takes room from the other slot's job,
+>   which may then fail the same way; such a job already fails on the other
+>   three hosts. The Docker slot uses its own store and no scratch.
+
+>   bounds the slice. On the 31 GiB xev, nex and nux it is 45%, with a 50%
+>   hard limit (about 14.0 and 15.6 GiB), since their cluster comes first:
+>   about 15.6 GiB stays for the cluster services, which used 7 to 11G in
+>   November 2026, and 8G of scratch leaves about 6 GiB under the throttle for
+>   the job. On the 62.3 GiB xyz CI's limits are 64%, with a 69% hard limit
+>   (39.9 and 43.0 GiB), and half the CPUs, split across the CI units since
+>   the slice there is the shared budget below:
+>   - The Podman API throttles at 59% (36.8 GiB), which holds the 24G scratch
+
+>     the first slot only, takes 4.5 GiB, the 4.8 GB measured), with 0.8 GiB
+
+>     hard limit is 61% (38.0 GiB), and it gets 40% of the CPUs.
+
+>   The hard limits add up to 42.9 GiB, within the 69%, and the CPU shares to
+>   the 50%. The throttles add up to slightly more than 64% with the filler's
+
+>   shared budget: a 77% (48.0 GiB) hard limit, CPU and I/O weights 10, no
+>   throttle and no CPU ceiling. The nix-daemon runs in its child slice
+
+>   never anything outside. That leaves 14.3 GiB for the desktop (about
+>   14 GiB in November 2026), the services and the ZFS ARC, which shrinks
+>   under pressure to 2 GiB, so with both full and a busy desktop the rest of
+>   the host has little margin left. The low weights make all building, deploy
+
+>   adds or removes the mount never stops a running API and its job.
+>   The tmpfs is not one of the runner hold's disk-floor paths
+
+>   The volume directory's metadata went with the runroot too, so the same
+>   `ExecStartPre` moves a non-empty volume directory aside under the reset's
+>   trash name, and the reset deletes it at its lowest priority. Containers
+>   that jobs leave behind while the API runs fill the
+>   scratch; the store reset clears the scratch alone, keeping the images, at
+>   any age once it reaches the host's `scratchTriggerPercent`: 70 percent by
+>   default, 13 percent (3.1G) on xyz so a 12.8G large job and an 8G pool job
+>   still fit its 24G. At 90 percent,
+>   the recovery threshold, most new pool jobs fail, so the reset then pauses
+>   the pool runners and waits for them to drain instead of waiting out their
+>   quiet interval,
+
+>   task container on either engine still holds the reset. Since the volumes
+>   are on disk, a leftover adds little to the scratch while it can keep
+>   running and holding memory in the CI slice: a cancelled job's EXIT trap
+>   never runs, so the containers it started stay. On xev, before the volumes
+>   moved, such leftovers held 33 to 51 percent of its 8G for hours in November
+>   2026, below the trigger, and image builds that needed more failed with "No
+>   space left on device". So any container that no running job owns (anything
+>   but a running `FORGEJO-ACTIONS-TASK-*` container) also makes the same
+>   reset of the scratch alone due, at the next check that finds the runners
+>   quiet. Its age
+>   and disk triggers clear the graphroot and the image store together. Either
+>   way it frees the scratch before the API starts again
+>   ([ADR-0105](../0105-offline-podman-store-reset.md)).
+
+>   through the LAN cache. Turning scratch off uses the image store as the
+>   graphroot again, with the volumes under it, which needs no migration; the
+>   volume directory beside it stays until scratch is turned on again, when the
+>   API's start moves it aside.
+> - **Jobs larger than 8G of scratch** select `forgejo-podman-large`, which
+>   only xyz's first pool slot serves, one at a time: the nix-packages Nix
+>   update jobs (`update-t3code.yml` and `update-packages.yml`), one of which
+>   kept 12.7G live. Such a job with its
+
+> - **zram or a block device in RAM under the store**: compression would fit
+>   more, but its memory is not charged to the CI slice, and a full device
+>   fails writes with I/O errors that ext4 turns into a read-only filesystem
+>   rather than "disk full".
+
+> CI SSD writes are expected to fall, though by less than the 90 percent
+> first estimated: what remains is image pulls, image imports, filesystem
+> metadata and the volumes, which the trace of
+> [#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027) did not measure
+> apart from the container layers (job workspaces, nested containers' data
+> volumes such as PostgreSQL's, and BuildKit's state, into which each build
+> extracts its base images). Jobs spend less time waiting on the
+> SATA disks. The hosts give the tmpfs size, at most, of RAM to CI on top of
+> the jobs' own memory; the sizes and memory limits are per host in its
+> configuration. A job that needs more scratch than its host offers fails
+
+> additions wait longer. A reboot or an unmounted tmpfs loses
+
+> runners are idle.
+
+> a 256M scratch: image layers and volumes on disk and container data in RAM
+> charged to the slice, an oversized write that fails with "No space left on device" while
+
+> job's container, an API restart that empties the scratch and moves a leftover
+> volume aside for the reset to delete, a fresh tmpfs that keeps the images,
+> the API refusing to start without the tmpfs, the migration of an old store,

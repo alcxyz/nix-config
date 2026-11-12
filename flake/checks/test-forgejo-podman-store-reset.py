@@ -114,12 +114,22 @@ if journal.exists():
     sys.stdout.write(journal.read_text())
 '''
 
-# A path may have its own values in "<values>.<basename>", as the scratch has.
+# A path may have its own values in "<values>.<basename>", as the scratch has,
+# and its own inode counts in "<values>.inodes.<basename>"; any other has
+# 100 inodes, all free.
 FAKE_DF = r'''#!/bin/sh
 for last; do :; done
 values=$FAKE_DF_VALUES
 [ -e "$values.${last##*/}" ] && values=$values.${last##*/}
-printf 'Size Avail\n%s\n' "$(cat "$values")"
+line=$(cat "$values")
+case " $* " in
+*itotal*)
+  inodes="100 100"
+  [ -e "$FAKE_DF_VALUES.inodes.${last##*/}" ] && inodes=$(cat "$FAKE_DF_VALUES.inodes.${last##*/}")
+  line="$line $inodes"
+  ;;
+esac
+printf 'Size Avail\n%s\n' "$line"
 '''
 
 
@@ -392,6 +402,202 @@ class StoreResetTests(unittest.TestCase):
         result = self.run_reset()
         self.assert_skipped(result, 'not_due used_percent=20 age_seconds=')
         self.assertNotIn('leftover_containers', result.stdout)
+        self.assertEqual(self.mutations(), [])
+
+    INVOCATION = '0123456789abcdef0123456789abcdef'
+
+    def volume_filesystem(self, options='rw,relatime', super_options='rw,discard,errors=remount-ro'):
+        """The volume filesystem in RAM (ADR-0108), as mountinfo shows it,
+        made by the running API's start."""
+        mount = self.root / 'run' / 'forgejo-podman-volumes'
+        with self.mountinfo.open('a') as mountinfo:
+            mountinfo.write(f'23 1 252:1 / {mount} {options} - ext4 /dev/zram1 {super_options}\n')
+        self.ext4 = self.root / 'sys-fs-ext4'
+        (self.ext4 / 'zram1').mkdir(parents=True, exist_ok=True)
+        self.set_errors(0)
+        # zram's sysfs, where the reset compacts the device.
+        self.zram = self.root / 'sys-block'
+        (self.zram / 'zram1').mkdir(parents=True, exist_ok=True)
+        (self.zram / 'zram1' / 'compact').write_text('')
+        self.volume_stamp = self.root / 'run' / 'forgejo-podman-volumes.started'
+        self.volume_stamp.parent.mkdir(exist_ok=True)
+        self.volume_stamp.write_text(self.INVOCATION + '\n')
+        props = running()
+        props['InvocationID'] = self.INVOCATION
+        self.update_units(**{PODMAN: props})
+        return mount
+
+    def set_errors(self, count):
+        (self.ext4 / 'zram1' / 'errors_count').write_text(f'{count}\n')
+
+    def volume_env(self, graph, mount, **extra):
+        return dict(SCRATCH_STORE=str(graph), VOLUME_MOUNT=str(mount),
+                    VOLUME_STAMP=str(self.volume_stamp), EXT4_SYSFS=str(self.ext4),
+                    ZRAM_SYSFS=str(self.zram), **extra)
+
+    def test_leftover_volumes_reset_the_scratch_alone(self):
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        Path(f'{self.df}.{mount.name}').write_text('100 75\n')
+        self.age_stamp(600)
+        result = self.run_reset(**self.volume_env(graph, mount))
+        self.assert_skipped(result, 'not_due used_percent=20 scratch_percent=20 volume_percent=25 volume_inode_percent=0 age_seconds=')
+        self.assertEqual(self.mutations(), [])
+        # Each check compacts the device's memory.
+        self.assertEqual((self.zram / 'zram1' / 'compact').read_text(), '1\n')
+        Path(f'{self.df}.{mount.name}').write_text('100 25\n')
+        result = self.run_reset(**self.volume_env(graph, mount, FAKE_SCRATCH_PARENT=str(scratch_parent)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('volume_percent=75', result.stdout)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        # The API's start makes the volumes again; the images and the age
+        # clock stay.
+        self.assertTrue(any('forgejo-runner-podman.service' in call for call in self.calls('start')))
+        self.assertTrue((self.store / 'db.sql').exists())
+        self.assertGreater(time.time() - self.stamp.stat().st_mtime, 500)
+
+    def test_leftover_inodes_reset_the_scratch_alone(self):
+        """Many small files use up the inodes before the bytes."""
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        Path(f'{self.df}.{mount.name}').write_text('100 95\n')
+        Path(f'{self.df}.inodes.{mount.name}').write_text('100 50\n')
+        self.age_stamp(600)
+        result = self.run_reset(**self.volume_env(graph, mount))
+        self.assert_skipped(result, 'not_due used_percent=20 scratch_percent=20 volume_percent=5 volume_inode_percent=50 age_seconds=')
+        self.assertEqual(self.mutations(), [])
+        Path(f'{self.df}.inodes.{mount.name}').write_text('100 25\n')
+        result = self.run_reset(**self.volume_env(graph, mount, FAKE_SCRATCH_PARENT=str(scratch_parent)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('volume_percent=5 volume_inode_percent=75', result.stdout)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertTrue(any(PODMAN in call for call in self.calls('start')))
+        self.assertTrue((self.store / 'db.sql').exists())
+
+    def test_used_up_inodes_drain_the_pool_and_reset(self):
+        """With no inode left every new volume fails, as on a full
+        filesystem, so a recent job does not hold the reset."""
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        Path(f'{self.df}.{mount.name}').write_text('100 99\n')
+        Path(f'{self.df}.inodes.{mount.name}').write_text('100 0\n')
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        self.age_stamp(600)
+        result = self.run_reset(**self.volume_env(graph, mount, FAKE_SCRATCH_PARENT=str(scratch_parent)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('volume_percent=1 volume_inode_percent=100', result.stdout)
+        self.assertIn(f'drained unit={POOL}', result.stdout)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertTrue((self.store / 'db.sql').exists())
+        # Below the recovery threshold a recent job still holds it.
+        Path(f'{self.df}.inodes.{mount.name}').write_text('100 20\n')
+        self.age_stamp(600)
+        result = self.run_reset(**self.volume_env(graph, mount))
+        self.assert_skipped(result, f'recent_job unit={POOL}')
+
+    def test_unreadable_inode_counts_trigger_nothing(self):
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        Path(f'{self.df}.inodes.{mount.name}').write_text('0 0\n')
+        self.age_stamp(600)
+        result = self.run_reset(**self.volume_env(graph, mount))
+        self.assert_skipped(result, 'volumes_unreadable')
+        self.assertEqual(self.mutations(), [])
+
+    def assert_unusable(self, graph, mount, scratch_parent, state):
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        result = self.run_reset(**self.volume_env(graph, mount, FAKE_SCRATCH_PARENT=str(scratch_parent)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'volume_state={state}', result.stdout)
+        # Every job fails on it, so a recent job does not hold the reset.
+        self.assertIn(f'drained unit={POOL}', result.stdout)
+        self.assertIn('reset due=volumes_unusable', result.stdout)
+        # A reset of the scratch alone: the images stay.
+        self.assertTrue((self.store / 'db.sql').exists())
+
+    def test_an_ext4_error_drains_the_pool_and_resets(self):
+        """In the VM check, on the hosts' kernel 7.3.3, ext4's errors=remount-ro
+        leaves the mount and the superblock rw in mountinfo (the superblock
+        adds emergency_ro); its error count shows the error."""
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        self.set_errors(1)
+        self.age_stamp(600)
+        self.assert_unusable(graph, mount, scratch_parent, 'fs_error')
+
+    def test_a_read_only_volume_filesystem_drains_the_pool_and_resets(self):
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem('ro,relatime')
+        self.age_stamp(600)
+        self.assert_unusable(graph, mount, scratch_parent, 'read_only')
+
+    def test_a_read_only_superblock_drains_the_pool_and_resets(self):
+        """Kernels from before ext4's emergency_ro state mark only the
+        superblock read-only after an error."""
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem(super_options='ro,discard,errors=remount-ro')
+        self.age_stamp(600)
+        self.assert_unusable(graph, mount, scratch_parent, 'read_only')
+
+    def test_an_unmounted_volume_filesystem_drains_the_pool_and_resets(self):
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        self.mountinfo.write_text('22 1 0:21 / / rw - ext4 /dev/root rw\n')
+        self.age_stamp(600)
+        self.assert_unusable(graph, mount, scratch_parent, 'unmounted')
+
+    def test_another_filesystem_at_the_volume_mount_drains_the_pool_and_resets(self):
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        with self.mountinfo.open('a') as mountinfo:
+            mountinfo.write(f'24 23 0:30 / {mount} rw,relatime - tmpfs tmpfs rw\n')
+        self.age_stamp(600)
+        self.assert_unusable(graph, mount, scratch_parent, 'foreign')
+
+    def test_an_api_from_before_the_volumes_moved_is_left_alone(self):
+        """A deploy gives the reset VOLUME_MOUNT while the running API, which
+        a deploy does not restart, still keeps its volumes on disk."""
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        self.mountinfo.write_text('22 1 0:21 / / rw - ext4 /dev/root rw\n')
+        (self.journals / POOL).write_text(
+            'time="2026-10-31T12:00:00+01:00" level=info msg="task 9 repo is o/r x y"\n')
+        self.age_stamp(600)
+        # No API start has made a filesystem yet, or an earlier API did.
+        for stamp in (None, 'fedcba9876543210fedcba9876543210\n'):
+            if stamp is None:
+                self.volume_stamp.unlink()
+            else:
+                self.volume_stamp.write_text(stamp)
+            result = self.run_reset(**self.volume_env(graph, mount))
+            self.assert_skipped(result, 'not_due used_percent=20 scratch_percent=20 volumes=not_in_use age_seconds=')
+            self.assertNotIn('volume_state', result.stdout)
+            self.assertEqual(self.mutations(), [])
+            self.assertFalse((self.root / 'paused').exists())
+        # An inactive API has no invocation ID to match.
+        props = stopped()
+        props['InvocationID'] = ''
+        self.update_units(**{PODMAN: props})
+        self.volume_stamp.write_text('\n')
+        result = self.run_reset(**self.volume_env(graph, mount))
+        self.assertIn('volumes=not_in_use', result.stdout)
+        self.assertEqual(self.mutations(), [])
+
+    def test_an_unreadable_error_count_triggers_nothing(self):
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        (self.ext4 / 'zram1' / 'errors_count').unlink()
+        self.age_stamp(600)
+        result = self.run_reset(**self.volume_env(graph, mount))
+        self.assert_skipped(result, 'volumes_unreadable')
+        self.assertEqual(self.mutations(), [])
+
+    def test_volumes_in_ram_need_the_scratch(self):
+        mount = self.volume_filesystem()
+        result = self.run_reset(VOLUME_MOUNT=str(mount))
+        self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.mutations(), [])
 
     def test_full_scratch_pauses_and_drains_the_pool_runner(self):

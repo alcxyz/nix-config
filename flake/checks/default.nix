@@ -309,6 +309,15 @@ in {
     assert lib.all (host: 100 - runners.${host}.podmanCanary.nixCache.minFreePercent < runners.${host}.podmanStoreReset.triggerUsedPercent) ["xyz" "nex" "nux"];
     assert lib.all (host: runners.${host}.podmanCanary.nixCache.jobVolumes == ["/run/forgejo-nix-cache/nix/store" "/run/forgejo-nix-cache/job"]) (lib.attrNames runners);
     assert lib.all (host: let unit = runnerHosts.${host}.config.systemd.services.forgejo-nix-cache-fill; in unit.serviceConfig.User == "forgejo-nix-cache" && unit.serviceConfig.CapabilityBoundingSet == "" && lib.elem "-/run/secrets" unit.serviceConfig.InaccessiblePaths && lib.elem "-/etc/nix" unit.serviceConfig.InaccessiblePaths) (lib.attrNames runners);
+    # Volumes in RAM without scratch would stay on disk unnoticed, so the
+    # configuration refuses them (ADR-0108).
+    assert let
+      noScratch = runnerHosts.xev.extendModules {
+        modules = [{services.forgejo-actions-runner.podmanCanary.scratch.enable = lib.mkForce false;}];
+      };
+    in
+      lib.any (check: !check.assertion && lib.hasInfix "scratch.volumes.enable requires scratch.enable" check.message)
+      noScratch.config.assertions;
       pkgs.runCommand "forgejo-runner-pool-contract" {
         nativeBuildInputs = [pkgs.gawk pkgs.gnugrep];
       } ''
@@ -398,12 +407,19 @@ in {
     assert buildSlice.CPUWeight == 10;
     assert buildSlice.IOWeight == 10;
     # The limits hold each host's RAM scratch plus its jobs' memory
-    # (ADR-0108): 24G for xyz's two pool slots, beside the nix-daemon and the
-    # ARC, and 8G for one slot on the 31 GiB servers, whose cluster keeps
-    # half the memory.
-    assert runner.resourcePolicy.memoryHigh == "64%";
-    assert runner.resourcePolicy.memoryMax == "69%";
-    assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "45%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "50%") serverConfigs;
+    # (ADR-0108): 16G for xyz's two pool slots, beside the nix-daemon and the
+    # ARC, and 4G for one slot on the 31 GiB servers, whose cluster keeps
+    # half the memory. The volumes' zram (8G on xyz, 4G on the servers) is
+    # charged to no cgroup and set aside from those limits, about 12.8% of
+    # each host, so CI's RAM is what it was with the volumes in the tmpfs.
+    assert runner.resourcePolicy.memoryHigh == "51%";
+    assert runner.resourcePolicy.memoryMax == "56%";
+    assert lib.all (host: host.systemd.slices.forgejobuilds.sliceConfig.MemoryHigh == "32%" && host.systemd.slices.forgejobuilds.sliceConfig.MemoryMax == "37%") serverConfigs;
+    assert lib.all (host: let
+      scratch = host.services.forgejo-actions-runner.podmanCanary.scratch;
+    in
+      scratch.enable && scratch.size == "4G" && scratch.volumes.enable && scratch.volumes.size == "4G")
+    serverConfigs;
     assert !(xyz.virtualisation.docker.daemon.settings ? "exec-opts");
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.after;
     assert builtins.elem "forgejo-runner-resource-policy.service" runnerUnit.requires;
@@ -419,7 +435,7 @@ in {
     == {
       CPUWeight = 10;
       IOWeight = 10;
-      MemoryMax = "77%";
+      MemoryMax = "64%";
     };
     assert xyz.systemd.slices.forgejobuilds-nixdaemon.sliceConfig == {};
     assert services.nix-daemon.serviceConfig.Slice == "forgejobuilds-nixdaemon.slice";
@@ -428,17 +444,18 @@ in {
     assert services.nix-daemon.serviceConfig.OOMPolicy == "continue";
     assert services.nix-daemon.serviceConfig.ExecStartPre == ["-+${policyUnit.serviceConfig.ExecStart}"];
     assert lib.all (unit: services.${unit}.serviceConfig.Slice == "forgejobuilds.slice") ["forgejo-runner-docker" "forgejo-runner-podman" "forgejo-nix-cache-fill"];
-    assert runner.podmanCanary.scratch.size == "24G";
-    assert services.forgejo-runner-podman.serviceConfig.MemoryHigh == "59%";
-    assert services.forgejo-runner-podman.serviceConfig.MemoryMax == "61%";
+    assert runner.podmanCanary.scratch.size == "16G";
+    assert runner.podmanCanary.scratch.volumes.enable && runner.podmanCanary.scratch.volumes.size == "8G";
+    assert services.forgejo-runner-podman.serviceConfig.MemoryHigh == "46%";
+    assert services.forgejo-runner-podman.serviceConfig.MemoryMax == "48%";
     assert services.forgejo-runner-docker.serviceConfig.MemoryHigh == "2%";
     assert services.forgejo-runner-docker.serviceConfig.MemoryMax == "3%";
     assert services.forgejo-nix-cache-fill.serviceConfig.MemoryMax == toString (3 * 1024 * 1024 * 1024);
     # The API's throttle holds the full scratch and two pool jobs' 6 GiB
-    # (36 of 62.3 GiB is 57.8%). The hard limits add up within CI's 69%,
+    # (28 of 62.3 GiB is 44.9%). The hard limits add up within CI's 56%,
     # the filler's 3G being under 5% of the host, and the CPU shares to its
     # 50%; CI's hard limit stays within the shared budget.
-    assert percent services.forgejo-runner-podman.serviceConfig.MemoryHigh >= 58;
+    assert percent services.forgejo-runner-podman.serviceConfig.MemoryHigh >= 45;
     assert percent services.forgejo-runner-podman.serviceConfig.MemoryMax + percent services.forgejo-runner-docker.serviceConfig.MemoryMax + 5 <= percent runner.resourcePolicy.memoryMax;
     assert percent runner.resourcePolicy.memoryMax < percent shared.memoryMax;
     assert shared.podmanApi.cpuQuotaPercent + shared.dockerEngine.cpuQuotaPercent + shared.nixCacheFillCpuQuotaPercent == runner.resourcePolicy.cpuQuotaPercent;

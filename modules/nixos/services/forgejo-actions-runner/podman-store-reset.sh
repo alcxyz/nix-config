@@ -27,19 +27,31 @@ podman_socket=${PODMAN_SOCKET:-/run/forgejo-podman/podman.sock}
 store_path=${STORE_PATH:-/var/lib/forgejo-podman/storage}
 # The graphroot in RAM scratch, when the store's images and containers are
 # split (#1027): it holds the containers, which reference image layers in
-# the store, so the two are always reset together. Volumes are on disk beside
-# the store (ADR-0108); the API's start moves those an earlier API left aside
-# under the store's trash name, which this deletes.
+# the store, so the two are always reset together. Volumes are in RAM too, on
+# the ext4 filesystem on zram mounted at VOLUME_MOUNT, which the API's start
+# makes afresh, or else on disk beside the store (ADR-0108); the API's start
+# moves those an earlier API left on disk aside under the store's trash name,
+# which this deletes.
 scratch_store=${SCRATCH_STORE:-}
+volume_mount=${VOLUME_MOUNT:-}
+# The API start that made the volume filesystem writes its systemd
+# invocation ID here: an API started before a deploy that moved its volumes
+# to RAM still uses the disk, and its filesystem is not checked.
+volume_stamp=${VOLUME_STAMP:-/run/forgejo-podman-volumes.started}
+ext4_sysfs=${EXT4_SYSFS:-/sys/fs/ext4}
+zram_sysfs=${ZRAM_SYSFS:-/sys/block}
 restart_file=${RESTART_FILE:-/run/forgejo-podman-store-reset/restart}
 # The time of the last reset, kept where the API user cannot write.
 stamp=${STAMP_FILE:-/var/lib/forgejo-podman-store-reset/reset-at}
 trigger_used_percent=${TRIGGER_USED_PERCENT:-70}
-# Leftover containers in the RAM scratch reset it at this use, so
-# the largest job the host takes still fits beside them.
+# Leftover containers and volumes in the RAM scratch, or in the volume
+# filesystem, reset them at this use of either, so the largest job the host
+# takes still fits beside them. The volume filesystem's use is the larger of
+# its byte and inode use.
 scratch_trigger_percent=${SCRATCH_TRIGGER_PERCENT:-70}
-# A scratch this full fails every job's setup, so each failing job would
-# renew the quiet interval and keep the reset away for good.
+# A scratch or volume filesystem this full fails every job's setup, so each
+# failing job would renew the quiet interval and keep the reset away for
+# good.
 scratch_full_percent=${SCRATCH_FULL_PERCENT:-90}
 # The runner pause of nix-packages ADR-0017: a runner whose pause file exists
 # takes no new job and reports "paused tasks=<running>" as its status text.
@@ -99,6 +111,10 @@ done
 if [[ -n $scratch_store ]]; then
   [[ $scratch_store == /*/* && ${scratch_store##*/} =~ ^[A-Za-z0-9_.-]+$ ]] || exit 1
   [[ $scratch_parent != "$store_parent" ]] || exit 1
+  [[ -z $volume_mount || ($volume_mount == /*/* && $volume_mount != */) ]] || exit 1
+  [[ -z $volume_mount || $volume_stamp == /*/* ]] || exit 1
+else
+  [[ -z $volume_mount ]] || exit 1
 fi
 IFS=$' \t\n' read -r -d '' -a runner_units <<<"$runner_units_text" || true
 ((${#runner_units[@]} > 1)) || exit 1
@@ -324,6 +340,8 @@ read -r total available <<<"$sample"
 [[ $total =~ ^[1-9][0-9]*$ && $available =~ ^[0-9]+$ ]] || skip store_unreadable
 used_percent=$(((total - available) * 100 / total))
 scratch_percent=none
+volume_percent=none
+volume_state=
 scratch_note=
 leftover_note=
 leftovers=none
@@ -336,9 +354,9 @@ if [[ -n $scratch_store ]]; then
   scratch_note=" scratch_percent=$scratch_percent"
   # Containers that no running job owns: those a job started through the API
   # and left behind, when it was cancelled before its cleanup ran or its
-  # cleanup failed. Their volumes are on disk, so a leftover can keep running
-  # and holding memory while adding little to the scratch; any one of them
-  # makes a scratch reset due. An unreadable list triggers nothing.
+  # cleanup failed. A leftover can keep running and holding memory while
+  # adding little to the scratch; any one of them makes a scratch reset due.
+  # An unreadable list triggers nothing.
   leftovers=$("$curl_bin" --silent --show-error --fail --max-time 10 --connect-timeout 2 \
     --unix-socket "$podman_socket" 'http://localhost/containers/json?all=true' 2>/dev/null |
     "$jq_bin" -e 'if type != "array" then error("not a container list") else
@@ -347,6 +365,74 @@ if [[ -n $scratch_store ]]; then
     leftovers=unknown
   [[ $leftovers =~ ^[0-9]+$ ]] || leftovers=unknown
   leftover_note=" leftover_containers=$leftovers"
+  if [[ -n $volume_mount ]]; then
+    # The volume filesystem, when the running API made it. It is unusable,
+    # and every job that creates a volume fails, after an ext4 error, when
+    # read-only, not mounted or covered by another filesystem; only the
+    # API's next start makes it again, except under another filesystem,
+    # where that start refuses and an operator must unmount it. Under errors=remount-ro an ext4 error
+    # stops all writes, but on the hosts' kernel (7.3.3 in the VM check)
+    # mountinfo still shows the mount and the superblock rw, the superblock
+    # with emergency_ro: the error count that ext4 keeps in its superblock,
+    # zero on a fresh filesystem, shows it. A failed write of file data is
+    # not an ext4 error and is not counted (ADR-0108).
+    api_invocation=$(timeout -k 2s 10s "$systemctl_bin" show --property=InvocationID --value forgejo-runner-podman.service 2>/dev/null) ||
+      api_invocation=
+    volume_started=
+    # read, not $(<file): an API start removes the file, and bash 5.2 exits
+    # on a failed $(<file) under set -e.
+    if [[ -f $volume_stamp && ! -L $volume_stamp ]]; then
+      { read -r volume_started <"$volume_stamp"; } 2>/dev/null || volume_started=
+    fi
+    if [[ ! $api_invocation =~ ^[0-9a-f]{32}$ || $volume_started != "$api_invocation" ]]; then
+      scratch_note+=" volumes=not_in_use"
+    else
+      # Mount options, filesystem type, source and superblock options.
+      volume_fields=$(awk -v mount="$volume_mount" '$5 == mount {
+          for (i = 7; i <= NF && $i != "-"; i++) {}
+          fields = $6 " " $(i + 1) " " $(i + 2) " " $(i + 3)
+        } END { print fields }' "$mountinfo_file") || skip volumes_unreadable
+      read -r volume_options volume_type volume_source volume_super <<<"$volume_fields"
+      volume_device=${volume_source#/dev/}
+      if [[ -z $volume_options ]]; then
+        volume_state=unmounted
+      elif [[ $volume_type != ext4 || ! $volume_device =~ ^zram[0-9]+$ ]]; then
+        volume_state=foreign
+      elif [[ ,$volume_options, == *,ro,* || ,$volume_super, == *,ro,* ]]; then
+        volume_state=read_only
+      else
+        # read, not $(<file): bash 5.2 exits on a failed $(<file) under set -e
+        # even with || after it.
+        { read -r volume_errors <"$ext4_sysfs/$volume_device/errors_count"; } 2>/dev/null ||
+          skip volumes_unreadable
+        [[ $volume_errors =~ ^[0-9]+$ ]] || skip volumes_unreadable
+        if ((volume_errors > 0)); then
+          volume_state=fs_error
+        else
+          # Bytes and inodes: a leftover volume of many small or empty
+          # files can use up the inodes while few bytes are used, and then
+          # every new volume fails with "No space left on device" as on a
+          # full filesystem. The fuller of the two counts.
+          sample=$("$df_bin" --block-size=1 --output=size,avail,itotal,iavail "$volume_mount" |
+            awk 'NR == 2 { print $1, $2, $3, $4 }') || skip volumes_unreadable
+          read -r total available inodes inodes_free <<<"$sample"
+          [[ $total =~ ^[1-9][0-9]*$ && $available =~ ^[0-9]+$ &&
+            $inodes =~ ^[1-9][0-9]*$ && $inodes_free =~ ^[0-9]+$ ]] || skip volumes_unreadable
+          volume_percent=$(((total - available) * 100 / total))
+          volume_inode_percent=$(((inodes - inodes_free) * 100 / inodes))
+          scratch_note+=" volume_percent=$volume_percent volume_inode_percent=$volume_inode_percent"
+          ((volume_inode_percent <= volume_percent)) || volume_percent=$volume_inode_percent
+          # zsmalloc keeps partly used pages after frees until it compacts,
+          # which the kernel does on its own only under memory pressure;
+          # compacting here keeps the device's memory near what it stores.
+          if [[ -w $zram_sysfs/$volume_device/compact ]]; then
+            { echo 1 >"$zram_sysfs/$volume_device/compact"; } 2>/dev/null || true
+          fi
+        fi
+      fi
+    fi
+    [[ -z $volume_state ]] || scratch_note+=" volume_state=$volume_state"
+  fi
 fi
 if [[ -e $legacy_fence || -L $legacy_fence ]]; then
   due=legacy_fence
@@ -354,9 +440,16 @@ elif ((age >= max_age_seconds)); then
   due=store_age
 elif ((used_percent >= trigger_used_percent && age >= min_age_seconds)); then
   due=store_use
+elif [[ -n $volume_state ]]; then
+  # The API's next start makes the volume filesystem again.
+  due=volumes_unusable
 elif [[ $scratch_percent != none ]] && ((scratch_percent >= scratch_trigger_percent)); then
   # Containers that jobs left behind fill the RAM scratch. A
   # reset always empties it, so it needs no minimum age.
+  due=scratch_use
+elif [[ $volume_percent != none ]] && ((volume_percent >= scratch_trigger_percent)); then
+  # Volumes that jobs left behind fill the volume filesystem in RAM, its
+  # bytes or its inodes, which the API's next start makes again.
   due=scratch_use
 elif [[ $leftovers =~ ^[1-9][0-9]*$ ]]; then
   # The same reset of the scratch alone, at the next quiet check.
@@ -366,7 +459,7 @@ else
 fi
 # A reset of the scratch alone keeps the images and the age clock.
 scratch_only=0
-[[ $due != scratch_use && $due != leftover_containers ]] || scratch_only=1
+case $due in scratch_use | volumes_unusable | leftover_containers) scratch_only=1 ;; esac
 if ((trash_left == 1 && scratch_only == 0)); then skip trash_left; fi
 
 # 3. Host and runner hold. The hold starts any runner whose start a gate
@@ -462,6 +555,11 @@ is_pool() {
 }
 scratch_full=0
 if [[ $scratch_percent != none ]] && ((scratch_percent >= scratch_full_percent)); then
+  scratch_full=1
+fi
+# The volume filesystem's use counts its inodes too: with none left, every
+# new volume fails as on a full filesystem.
+if [[ -n $volume_state ]] || { [[ $volume_percent != none ]] && ((volume_percent >= scratch_full_percent)); }; then
   scratch_full=1
 fi
 drain_pool=0
