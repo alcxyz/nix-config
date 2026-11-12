@@ -96,6 +96,9 @@ import os, sys
 from pathlib import Path
 socket = sys.argv[sys.argv.index('--unix-socket') + 1]
 reply = Path(os.environ['FAKE_ENGINES']) / Path(socket).name
+# The list with stopped containers may have its own reply, "<socket>.all".
+if sys.argv[-1].endswith('?all=true') and reply.with_name(reply.name + '.all').exists():
+    reply = reply.with_name(reply.name + '.all')
 if not reply.exists():
     sys.exit(7)
 sys.stdout.write(reply.read_text())
@@ -326,6 +329,70 @@ class StoreResetTests(unittest.TestCase):
         self.assertLess(time.time() - self.stamp.stat().st_mtime, 3600 + 60)
         self.assertGreater(time.time() - self.stamp.stat().st_mtime, 500)
 
+
+    def leftover_list(self, containers):
+        (self.engines / 'podman.sock.all').write_text(json.dumps(
+            [{'Names': [f'/{name}'], 'State': state} for name, state in containers]))
+
+    def test_leftover_containers_reset_the_scratch_alone(self):
+        scratch_parent, graph = self.scratch()
+        self.age_stamp(600)
+        # A cancelled job's service still runs and its build container stopped.
+        self.leftover_list([('happy_galileo', 'running'), ('quirky_mcclintock', 'exited')])
+        result = self.run_reset(SCRATCH_STORE=str(graph), FAKE_SCRATCH_PARENT=str(scratch_parent))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('leftover_containers=2', result.stdout)
+        self.assertIn('reset due=leftover_containers', result.stdout)
+        self.assertFalse(graph.exists())
+        self.assertEqual(list(scratch_parent.glob('.storage.trash.*')), [])
+        # The images and the age clock stay: only the scratch was reset.
+        self.assertTrue((self.store / 'db.sql').exists())
+        self.assertGreater(time.time() - self.stamp.stat().st_mtime, 500)
+
+    def test_running_job_containers_are_no_leftovers(self):
+        scratch_parent, graph = self.scratch()
+        self.age_stamp(600)
+        self.leftover_list([('FORGEJO-ACTIONS-TASK-7_WORKFLOW-x_JOB-build', 'running')])
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, 'not_due used_percent=20 scratch_percent=20 age_seconds=')
+        self.assertIn('leftover_containers=0', result.stdout)
+        self.assertEqual(self.mutations(), [])
+        # A job container that stopped and was never removed is one.
+        self.leftover_list([('FORGEJO-ACTIONS-TASK-7_WORKFLOW-x_JOB-build', 'exited')])
+        result = self.run_reset(SCRATCH_STORE=str(graph), FAKE_SCRATCH_PARENT=str(scratch_parent))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('reset due=leftover_containers', result.stdout)
+
+    def test_leftovers_wait_for_a_quiet_pool(self):
+        scratch_parent, graph = self.scratch()
+        self.age_stamp(600)
+        self.leftover_list([('happy_galileo', 'running')])
+        (self.journals / POOL).write_text('level=info msg="task 9 repo is alcxyz/example"\n')
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'recent_job unit={POOL}')
+        self.assertEqual(self.mutations(), [])
+        self.assertTrue(graph.exists())
+
+    def test_an_unreadable_container_list_triggers_nothing(self):
+        scratch_parent, graph = self.scratch()
+        self.age_stamp(600)
+        (self.engines / 'podman.sock.all').write_text('{"message": "busy"}')
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, 'not_due used_percent=20 scratch_percent=20 age_seconds=')
+        self.assertIn('leftover_containers=unknown', result.stdout)
+        (self.engines / 'podman.sock.all').unlink()
+        (self.engines / 'podman.sock').unlink()
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assertIn('leftover_containers=unknown', result.stdout)
+        self.assertEqual(self.mutations(), [])
+
+    def test_leftovers_need_the_scratch(self):
+        self.age_stamp(600)
+        self.leftover_list([('happy_galileo', 'running')])
+        result = self.run_reset()
+        self.assert_skipped(result, 'not_due used_percent=20 age_seconds=')
+        self.assertNotIn('leftover_containers', result.stdout)
+        self.assertEqual(self.mutations(), [])
 
     def test_full_scratch_pauses_and_drains_the_pool_runner(self):
         scratch_parent, graph = self.scratch()

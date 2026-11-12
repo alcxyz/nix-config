@@ -60,7 +60,12 @@ in {
         largest job of each slot. At 90 percent or more, the recovery
         threshold where most new pool jobs fail, any reset pauses the Podman
         pool runners and waits for them to drain instead of waiting out their
-        quiet interval.
+        quiet interval. Independently of this percentage, any container on
+        the API other than a running `FORGEJO-ACTIONS-TASK-*` one makes the
+        same reset due at the next quiet check, since with the volumes on
+        disk a leftover can keep running while it adds little to the
+        scratch. A running task container counts as a job even when no
+        runner owns it any more, and holds every reset until it is removed.
       '';
     };
     maxAgeDays = lib.mkOption {

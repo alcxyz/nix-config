@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-11-08
-**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz; 2026-11-12, volumes on disk beside the image store, since BuildKit builds that run dpkg failed with their state on tmpfs
+**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz; 2026-11-12, volumes on disk beside the image store, since BuildKit builds that run dpkg failed with their state on tmpfs; 2026-11-12, any container that no running job owns resets the scratch at the next quiet check
 **History:** [replaced text](archive/0108-ram-scratch-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-canary.nix`,
 `podman-scratch-prepare.sh`, the runner module's `resourcePolicy`, the store reset of
@@ -174,7 +174,16 @@ are on disk, and image layers survive reboots.
   the pool runners and waits for them to drain instead of waiting out their
   quiet interval,
   whatever made it due; the Docker runner keeps the interval, and a running
-  task container on either engine still holds the reset. Its age
+  task container on either engine still holds the reset. Since the volumes
+  are on disk, a leftover adds little to the scratch while it can keep
+  running and holding memory in the CI slice: a cancelled job's EXIT trap
+  never runs, so the containers it started stay. On xev, before the volumes
+  moved, such leftovers held 33 to 51 percent of its 8G for hours in November
+  2026, below the trigger, and image builds that needed more failed with "No
+  space left on device". So any container that no running job owns (anything
+  but a running `FORGEJO-ACTIONS-TASK-*` container) also makes the same
+  reset of the scratch alone due, at the next check that finds the runners
+  quiet. Its age
   and disk triggers clear the graphroot and the image store together. Either
   way it frees the scratch before the API starts again
   ([ADR-0105](0105-offline-podman-store-reset.md)).
@@ -307,5 +316,6 @@ job's container, an API restart that empties the scratch and moves a leftover
 volume aside for the reset to delete, a fresh tmpfs that keeps the images,
 the API refusing to start without the tmpfs, the migration of an old store,
 a reset by age that clears both parts, a scratch filled to the last byte that
-resets alone and keeps the images, and deploys that turn scratch off and on
+resets alone and keeps the images, containers a finished job left behind that
+reset the scratch alone at the next check, and deploys that turn scratch off and on
 under a running API.

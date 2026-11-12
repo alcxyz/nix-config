@@ -325,6 +325,8 @@ read -r total available <<<"$sample"
 used_percent=$(((total - available) * 100 / total))
 scratch_percent=none
 scratch_note=
+leftover_note=
+leftovers=none
 if [[ -n $scratch_store ]]; then
   sample=$("$df_bin" --block-size=1 --output=size,avail "$scratch_parent" | awk 'NR == 2 { print $1, $2 }') ||
     skip scratch_unreadable
@@ -332,6 +334,19 @@ if [[ -n $scratch_store ]]; then
   [[ $total =~ ^[1-9][0-9]*$ && $available =~ ^[0-9]+$ ]] || skip scratch_unreadable
   scratch_percent=$(((total - available) * 100 / total))
   scratch_note=" scratch_percent=$scratch_percent"
+  # Containers that no running job owns: those a job started through the API
+  # and left behind, when it was cancelled before its cleanup ran or its
+  # cleanup failed. Their volumes are on disk, so a leftover can keep running
+  # and holding memory while adding little to the scratch; any one of them
+  # makes a scratch reset due. An unreadable list triggers nothing.
+  leftovers=$("$curl_bin" --silent --show-error --fail --max-time 10 --connect-timeout 2 \
+    --unix-socket "$podman_socket" 'http://localhost/containers/json?all=true' 2>/dev/null |
+    "$jq_bin" -e 'if type != "array" then error("not a container list") else
+      [.[] | select(((.State == "running") and ((.Names // []) | any(.[]; type == "string" and
+        (ltrimstr("/") | startswith("FORGEJO-ACTIONS-TASK-"))))) | not)] | length end' 2>/dev/null) ||
+    leftovers=unknown
+  [[ $leftovers =~ ^[0-9]+$ ]] || leftovers=unknown
+  leftover_note=" leftover_containers=$leftovers"
 fi
 if [[ -e $legacy_fence || -L $legacy_fence ]]; then
   due=legacy_fence
@@ -343,10 +358,16 @@ elif [[ $scratch_percent != none ]] && ((scratch_percent >= scratch_trigger_perc
   # Containers that jobs left behind fill the RAM scratch. A
   # reset always empties it, so it needs no minimum age.
   due=scratch_use
+elif [[ $leftovers =~ ^[1-9][0-9]*$ ]]; then
+  # The same reset of the scratch alone, at the next quiet check.
+  due=leftover_containers
 else
-  skip "not_due used_percent=$used_percent$scratch_note age_seconds=$age"
+  skip "not_due used_percent=$used_percent$scratch_note age_seconds=$age$leftover_note"
 fi
-if ((trash_left == 1)) && [[ $due != scratch_use ]]; then skip trash_left; fi
+# A reset of the scratch alone keeps the images and the age clock.
+scratch_only=0
+[[ $due != scratch_use && $due != leftover_containers ]] || scratch_only=1
+if ((trash_left == 1 && scratch_only == 0)); then skip trash_left; fi
 
 # 3. Host and runner hold. The hold starts any runner whose start a gate
 #    refuses, so it must run.
@@ -463,8 +484,8 @@ quiet_needed() { ((drain_pool == 0)) || ! is_pool "$1"; }
 # 4. Stop. From here on the unit's ExecStopPost starts these units again.
 printf '%s\n' "${api_units[@]}" "${to_stop[@]}" >"$restart_file.new"
 mv -f -- "$restart_file.new" "$restart_file"
-printf 'stopping due=%s used_percent=%s%s age_seconds=%s runners=%s\n' \
-  "$due" "$used_percent" "$scratch_note" "$age" "${to_stop[*]:-none}"
+printf 'stopping due=%s used_percent=%s%s age_seconds=%s%s runners=%s\n' \
+  "$due" "$used_percent" "$scratch_note" "$age" "$leftover_note" "${to_stop[*]:-none}"
 if ((drain_pool == 1)); then
   printf '%s\n' "${drain[@]}" >"$pause_record"
   install -d -m 0755 -- "$pause_dir"
@@ -550,7 +571,7 @@ rename_store() {
 # images stay valid without the containers, and pulling them again would
 # write the disk this scratch exists to spare.
 [[ -z $scratch_store ]] || rename_store "$scratch_store" "$scratch_parent" "$scratch_trash_prefix"
-if [[ $due != scratch_use ]]; then
+if ((scratch_only == 0)); then
   rename_store "$store_path" "$store_parent" "$trash_prefix"
   printf '%s\n' "$now" >"$stamp"
   # Commit the rename and the stamp together, so a crash cannot keep the old

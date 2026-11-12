@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills; 2026-11-12, volumes on disk beside the store, which the API's start moves aside as trash ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
+**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills; 2026-11-12, volumes on disk beside the store, which the API's start moves aside as trash ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, leftover containers reset the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
 **History:** [replaced text](archive/0105-offline-podman-store-reset-history.md)
 **Supersedes:** [ADR-0083](archive/0083-podman-cleanup-completion-fence.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-store-reset.{nix,sh}`,
@@ -43,11 +43,13 @@ the host is idle.
   (`triggerUsedPercent`) and the last reset is at least six hours old, or the
   RAM scratch holding its containers
   ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)) is used to the host's
-  `scratchTriggerPercent` (70 percent by default, 13 on xyz). A full scratch means containers that jobs left
-  behind; that reset renames only the scratch part and keeps the images and
-  the age clock, and since it always empties the scratch it needs no minimum
-  age. The first run only starts the age clock, kept in the unit's
-  root-owned state directory.
+  `scratchTriggerPercent` (70 percent by default, 13 on xyz), or the Podman
+  API with that scratch holds any container other than a running
+  `FORGEJO-ACTIONS-TASK-*` one. A full scratch, like such a container, means
+  containers that jobs left behind; that reset renames only the scratch part
+  and keeps the images and the age clock, and since it always empties the
+  scratch it needs no minimum age. The first run only starts the age clock,
+  kept in the unit's root-owned state directory.
 - **Idle:** the game signal reports no game (on a game host) and host I/O
   pressure is at or below `ioPressurePercent` (5 percent); the runner hold is
   active and every runner has its hold state directory; no Docker cache prune

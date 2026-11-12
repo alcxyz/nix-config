@@ -243,6 +243,23 @@ in
           assert machine.succeed(f"{podman} images -q").strip() != ""
           machine.succeed(f"test \"$(df --output=pcent {scratch} | tail -1 | tr -dc 0-9)\" -lt 10")
 
+      with subtest("containers a finished job left behind reset the scratch at the next quiet check"):
+          # A cancelled job's service keeps running; its build container stopped.
+          machine.succeed(f"{podman} create --network none --name orphan-service scratch-fixture:local /bin/busybox sleep 600")
+          machine.succeed(f"{podman} start orphan-service")
+          machine.succeed(f"{podman} create --network none --name orphan-build scratch-fixture:local")
+          machine.succeed(f"systemctl start {reset}", timeout=600)
+          journal = machine.succeed(f"journalctl -u {reset} -o cat")
+          assert "reset due=leftover_containers" in journal, journal
+          wait_units()
+          assert machine.succeed(f"{podman} ps -aq").strip() == ""
+          # Only the scratch was reset: the images stay on disk.
+          assert machine.succeed(f"{podman} images -q").strip() != ""
+          # With nothing left behind, the next check changes nothing.
+          machine.succeed(f"systemctl start {reset}", timeout=600)
+          last = machine.succeed(f"journalctl -u {reset} -o cat | grep -E '^(skipped|reset) ' | tail -1")
+          assert "reason=not_due" in last and "leftover_containers=0" in last, last
+
       with subtest("deploys that turn scratch off and on leave the running API alone"):
           pid = machine.succeed(f"systemctl show -p MainPID --value {api}").strip()
           machine.succeed("/run/current-system/specialisation/noScratch/bin/switch-to-configuration test", timeout=300)
