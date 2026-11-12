@@ -1,4 +1,4 @@
-**History of** [ADR-0102](../0102-loopback-remote-view-of-xyz.md): text replaced on 2026-11-01.
+**History of** [ADR-0102](../0102-loopback-remote-view-of-xyz.md): text replaced on 2026-11-01 and 2026-11-12.
 
 # ADR-0102: View and drive xyz's live desktop through a loopback wayvnc
 
@@ -146,3 +146,15 @@ request, not against a deliberately hostile process running as the operator.
   with its key to capture what the operator types through the view, including
   that password. This is accepted under the same-user limit, as for the
   consent dialog, which such a process could imitate as well.
+
+## Replaced on 2026-11-12
+
+Date line: **Date:** 2026-10-26, last changed 2026-11-01 (the SSH key is the only credential: wayvnc on a private Unix socket without VNC authentication)
+
+From Consequences:
+
+- Unlocking the lock screen and approving the consent dialog through the
+  desk were verified on 2026-10-31. Hyprlock's display-off helper remembers
+  the outputs of the lock it started in, so switching `remote-desk` while
+  locked can leave displays it no longer covers on, or retry ones that are
+  disabled, until the next unlock.
