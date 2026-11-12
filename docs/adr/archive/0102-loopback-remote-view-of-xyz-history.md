@@ -158,3 +158,17 @@ From Consequences:
   the outputs of the lock it started in, so switching `remote-desk` while
   locked can leave displays it no longer covers on, or retry ones that are
   disabled, until the next unlock.
+
+## Replaced later on 2026-11-12
+
+Date line: **Date:** 2026-10-26, last changed 2026-11-12 (the lock's display-off helper treats outputs the desk disabled or removed as awake)
+
+From Consequences:
+
+- Unlocking the lock screen and approving the consent dialog through the
+  desk were verified on 2026-10-31. Hyprlock's display-off helper remembers
+  the outputs of the lock it started in, so switching `remote-desk` while
+  locked can leave displays it no longer covers on until the next unlock.
+  When it wakes them, it counts an output that `remote-desk` has disabled,
+  or a virtual output that is gone, as awake, so ending the desk while
+  locked does not keep it retrying after the unlock.

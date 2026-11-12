@@ -1,7 +1,7 @@
 # ADR-0102: View and drive xyz's live desktop through a loopback wayvnc
 
 **Status:** Accepted
-**Date:** 2026-10-26, last changed 2026-11-12 (the lock's display-off helper treats outputs the desk disabled or removed as awake)
+**Date:** 2026-10-26, last changed 2026-11-12 (the lock's display-off helper adds the outputs enabled at each blank)
 **History:** [ADR-0102 history](archive/0102-loopback-remote-view-of-xyz-history.md)
 **Applies to:** `modules/home-manager/services/remote-view/`, `users/alc/linux/xyz.nix`, `hosts/xyz/configuration.nix`, `hosts/mac/configuration.nix`, `modules/shared/pkgsets.nix` (`desk`), `inventory.nix` (`xyz-lan`)
 
@@ -134,8 +134,9 @@ request, not against a deliberately hostile process running as the operator.
   are off.
 - Unlocking the lock screen and approving the consent dialog through the
   desk were verified on 2026-10-31. Hyprlock's display-off helper remembers
-  the outputs of the lock it started in, so switching `remote-desk` while
-  locked can leave displays it no longer covers on until the next unlock.
+  every output it has switched off during the lock and adds the enabled ones
+  each time it switches them off, so ending the desk while locked can leave
+  the physical displays on until the lock next switches them off or ends.
   When it wakes them, it counts an output that `remote-desk` has disabled,
   or a virtual output that is gone, as awake, so ending the desk while
   locked does not keep it retrying after the unlock.

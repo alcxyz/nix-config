@@ -15,10 +15,23 @@ with lib; let
     set -eu
 
     state="''${1:?expected on or off}"
+    # A lock's helpers pass the lock they serve. Once a newer lock owns the
+    # state files, exit 3 without touching the outputs it now controls. If
+    # the lock's requested state changed since the caller read it, exit 4 and
+    # leave the newer request to its own transition.
+    owner="''${2:-}"
     runtime_dir="''${XDG_RUNTIME_DIR:?}"
     targets_file="$runtime_dir/hyprlock-dpms-outputs"
     exec 8>"$runtime_dir/hyprland-dpms.lock"
     ${pkgs.util-linux}/bin/flock 8
+    if [ -n "$owner" ]; then
+      if [ "$(${pkgs.coreutils}/bin/head -n 1 "$runtime_dir/hyprlock-dpms-owner" 2>/dev/null)" != "$owner" ]; then
+        exit 3
+      fi
+      if [ "$(${pkgs.coreutils}/bin/head -n 1 "$runtime_dir/hyprlock-dpms-state" 2>/dev/null)" != "$state" ]; then
+        exit 4
+      fi
+    fi
 
     case "$state" in
       on)
@@ -119,29 +132,52 @@ with lib; let
     desired_state="''${XDG_RUNTIME_DIR:?}/hyprlock-dpms-state"
     targets_file="''${XDG_RUNTIME_DIR:?}/hyprlock-dpms-outputs"
     wake_file="''${XDG_RUNTIME_DIR:?}/hyprlock-dpms-woke"
+    # The lock whose Hypridle runs this callback. Hypridle starts callbacks
+    # asynchronously, so one can still run after that lock's cleanup has
+    # retired its Hypridle (requested the final wake), or after a newer lock
+    # owns the state files; it must then leave them alone.
+    owner="''${HYPRLOCK_DPMS_OWNER:-}"
     case "$state" in
-      off)
-        # Keep the outputs captured before the first sleep. A deeply sleeping
-        # DisplayPort sink may disappear from later compositor queries, but it
-        # still has to be part of the next wake attempt.
-        if [ ! -s "$targets_file" ]; then
-          ${pkgs.hyprland}/bin/hyprctl monitors all -j \
-            | ${pkgs.jq}/bin/jq -r '.[] | select(.disabled != true) | .name' \
-            >"$targets_file"
+      off | on) ;;
+      *) exit 2 ;;
+    esac
+
+    (
+      exec 7>"''${XDG_RUNTIME_DIR:?}/hyprland-dpms.lock"
+      ${pkgs.util-linux}/bin/flock 7
+      if [ -n "$owner" ]; then
+        if [ "$(${pkgs.coreutils}/bin/head -n 1 "''${XDG_RUNTIME_DIR:?}/hyprlock-dpms-owner" 2>/dev/null)" != "$owner" ] \
+          || [ ! -d "$owner" ] || [ -e "$owner/dpms-retired" ]; then
+          exit 3
         fi
-        echo off >"$desired_state"
-        exec ${dpmsScript} off
-        ;;
-      on)
-        echo on >"$desired_state"
-        : >"$wake_file"
+      fi
+      if [ "$state" = off ]; then
+        # Keep the outputs captured before earlier sleeps, including one taken
+        # over from an earlier lock's unfinished wake. A deeply sleeping
+        # DisplayPort sink may disappear from later compositor queries, but it
+        # still has to be part of the next wake attempt. Add the outputs
+        # enabled now, such as one connected or re-enabled since.
+        {
+          ${pkgs.coreutils}/bin/cat "$targets_file" 2>/dev/null || true
+          ${pkgs.hyprland}/bin/hyprctl monitors all -j \
+            | ${pkgs.jq}/bin/jq -r '.[] | select(.disabled != true) | .name'
+        } | ${pkgs.gawk}/bin/awk 'NF && !seen[$0]++' >"$targets_file.new" || exit 1
+        ${pkgs.coreutils}/bin/mv -f "$targets_file.new" "$targets_file" || exit 1
+        echo off >"$desired_state" || exit 1
+      else
+        echo on >"$desired_state" || exit 1
+        : >"$wake_file" || exit 1
         # Do not clear the requested state here. The DRM commit can report On
         # briefly and regress later; the lock-lifetime guardian owns stable
         # convergence and the eventual cleanup.
-        exec ${dpmsScript} on
-        ;;
-      *) exit 2 ;;
-    esac
+      fi
+    ) || {
+      status="$?"
+      ((status == 3)) && exit 0
+      exit "$status"
+    }
+
+    exec ${dpmsScript} "$state" "$owner"
   '';
 
   dpmsGuardianScript = pkgs.writeShellScript "hyprland-lock-dpms-guardian" ''
@@ -207,7 +243,11 @@ with lib; let
         fi
       fi
 
-      if ! ${dpmsScript} "$state" >/dev/null 2>&1; then
+      ${dpmsScript} "$state" "$owner" >/dev/null 2>&1
+      dpms_status="$?"
+      if ((dpms_status == 3)); then
+        return 1
+      elif ((dpms_status != 0)); then
         stable_unlocked_samples=0
         return 0
       fi
@@ -291,10 +331,20 @@ with lib; let
     # which a guardian holds while it removes them; a DPMS transition holds
     # it for a few seconds at most. If it stays busy, still lock, but start
     # no display companions and leave the displays on.
+    # An earlier lock still waking its outputs (its unlock released the
+    # guard while a connector had not settled) stops once this lock owns the
+    # state. Take that wake over, as if this lock had woken them itself: keep
+    # the requested on and its targets, so this lock's guardian and cleanup
+    # finish it. Only the wake marker goes, since it would end an immediate
+    # blank.
     if (
       exec 7>"''${XDG_RUNTIME_DIR:?}/hyprland-dpms.lock"
       ${pkgs.util-linux}/bin/flock -w 10 7 || exit 1
-      ${pkgs.coreutils}/bin/rm -f "$desired_state" "$targets_file" "$wake_file"
+      if [ "$(${pkgs.coreutils}/bin/head -n 1 "$desired_state" 2>/dev/null)" = on ]; then
+        ${pkgs.coreutils}/bin/rm -f "$wake_file"
+      else
+        ${pkgs.coreutils}/bin/rm -f "$desired_state" "$targets_file" "$wake_file"
+      fi
       printf '%s\n' "$lock_runtime_dir" >"''${XDG_RUNTIME_DIR:?}/hyprlock-dpms-owner"
     ) 9>&-; then
       dpms_owned=true
@@ -302,12 +352,34 @@ with lib; let
       dpms_owned=false
       echo "lock-screen: the display mutex stayed busy; locking with displays left on" >&2
     fi
+    owner_file="''${XDG_RUNTIME_DIR:?}/hyprlock-dpms-owner"
     lock_log="$lock_runtime_dir/hyprlock.log"
+    retired_marker="$lock_runtime_dir/dpms-retired"
     idle_pid=""
     guardian_pid=""
     companions_cleaned=false
+    lock_guard_released=false
+
+    owns_dpms_state() {
+      [ "$(${pkgs.coreutils}/bin/head -n 1 "$owner_file" 2>/dev/null)" = "$lock_runtime_dir" ]
+    }
+
+    # Remove the state files under the DPMS mutex, unless a newer lock owns
+    # them by now.
+    release_dpms_state() {
+      (
+        exec 7>"''${XDG_RUNTIME_DIR:?}/hyprland-dpms.lock"
+        ${pkgs.util-linux}/bin/flock 7
+        owns_dpms_state || exit 0
+        ${pkgs.coreutils}/bin/rm -f "$desired_state" "$targets_file" "$wake_file"
+      ) 9>&-
+    }
 
     run_display_idle_daemon() {
+      # Hypridle's callbacks inherit this and act only while this lock owns
+      # the display state.
+      export HYPRLOCK_DPMS_OWNER="$lock_runtime_dir"
+
       if ! $display_off_immediately; then
         exec ${pkgs.hypridle}/bin/hypridle \
           --quiet \
@@ -361,22 +433,54 @@ with lib; let
 
       # Only issue a wake transition if the lock-owned idle daemon actually
       # requested DPMS-off. A redundant DPMS-on sequence also creates atomic
-      # commits and can aggravate the same multi-output driver race.
-      if $dpms_owned && [ -e "$desired_state" ]; then
+      # commits and can aggravate the same multi-output driver race. Request
+      # it before releasing the guard below, so a lock started after the
+      # release finds the wake to take over. In the same hold of the mutex,
+      # retire this lock's Hypridle: a callback it started before being
+      # killed must not request off after this final wake.
+      wake_requested=false
+      if $dpms_owned && (
+        exec 7>"''${XDG_RUNTIME_DIR:?}/hyprland-dpms.lock"
+        ${pkgs.util-linux}/bin/flock 7
+        owns_dpms_state || exit 1
+        : >"$retired_marker"
+        [ -e "$desired_state" ] || exit 1
         echo on >"$desired_state"
         : >"$wake_file"
-        ${dpmsScript} on >/dev/null 2>&1 || true
+      ) 9>&-; then
+        wake_requested=true
+      fi
 
+      # Once the session is unlocked, release the single-lock guard before
+      # waking the displays. A target that cannot wake (a monitor switched
+      # off at its button leaves the cable) keeps the retries below going
+      # for 30 seconds, and a lock started meanwhile must not be dropped. The
+      # new lock takes the display state over and the retries stop.
+      compositor_locked="$(${pkgs.hyprland}/bin/hyprctl -j locked 2>/dev/null \
+        | ${pkgs.jq}/bin/jq -r '.locked' 2>/dev/null)"
+      if [ "$compositor_locked" = false ]; then
+        exec 9>&-
+        lock_guard_released=true
+      fi
+
+      if $wake_requested; then
         # Validate wake independently of the background guardian before the
         # lock process exits. Background children can receive SIGHUP with an
         # interactive caller, and the cleanup contract must not depend on one
         # surviving long enough to remove its runtime files.
         stable_samples=0
         for _ in $(${pkgs.coreutils}/bin/seq 1 30); do
-          if ${dpmsScript} on >/dev/null 2>&1; then
+          ${dpmsScript} on "$lock_runtime_dir" >/dev/null 2>&1
+          dpms_status="$?"
+          if ((dpms_status == 3)); then
+            break
+          elif ((dpms_status == 4)) && [ ! -e "$desired_state" ]; then
+            # The guardian saw the wake settle first and removed the request.
+            break
+          elif ((dpms_status == 0)); then
             stable_samples=$((stable_samples + 1))
             if ((stable_samples >= 5)); then
-              ${pkgs.coreutils}/bin/rm -f "$desired_state" "$targets_file" "$wake_file"
+              release_dpms_state
               break
             fi
           else
@@ -386,14 +490,14 @@ with lib; let
         done
       fi
 
-      if [ -n "$guardian_pid" ] && [ ! -e "$desired_state" ]; then
+      if [ -n "$guardian_pid" ] && { ! owns_dpms_state || [ ! -e "$desired_state" ]; }; then
         kill "$guardian_pid" 2>/dev/null || true
         wait "$guardian_pid" 2>/dev/null || true
         guardian_pid=""
       elif [ -n "$guardian_pid" ]; then
         # A target is still unavailable after the bounded synchronous retry.
-        # Leave the guardian alive for normal compositor-launched locks; the
-        # next lock invocation also clears any stale state defensively.
+        # Leave the guardian alive for normal compositor-launched locks. A
+        # newer lock stops it and takes over the unfinished wake.
         guardian_pid=""
       fi
     }
@@ -401,7 +505,17 @@ with lib; let
     cleanup() {
       cleanup_companions
       ${pkgs.coreutils}/bin/rm -f "$lock_log"
-      ${pkgs.coreutils}/bin/rmdir "$lock_runtime_dir" 2>/dev/null || true
+      # A late Hypridle callback checks the retirement marker and this
+      # directory under the DPMS mutex, so remove both in one hold of it:
+      # the callback then sees either the marker or no directory. If the
+      # mutex stays busy, leave them; a retired directory is harmless.
+      (
+        exec 7>"''${XDG_RUNTIME_DIR:?}/hyprland-dpms.lock"
+        ${pkgs.util-linux}/bin/flock -w 10 7 || exit 0
+        ${pkgs.coreutils}/bin/rm -f "$retired_marker"
+        ${pkgs.coreutils}/bin/rmdir "$lock_runtime_dir" 2>/dev/null \
+          || : >"$retired_marker"
+      ) 9>&-
     }
     trap cleanup EXIT
 
@@ -427,6 +541,8 @@ with lib; let
 
     run_locker() {
       companions_cleaned=false
+      # A restored lock starts a new Hypridle for the same owner.
+      ${pkgs.coreutils}/bin/rm -f "$retired_marker"
       : >"$lock_log"
       "$HYPRLOCK" "''${hyprlock_args[@]}" \
         > >(${pkgs.coreutils}/bin/tee "$lock_log") 2>&1 &
@@ -477,6 +593,12 @@ with lib; let
         lock_status=0
       else
         lock_status="$?"
+      fi
+
+      # The guard went with the unlock, so a locked compositor now belongs
+      # to a newer lock rather than to a crashed Hyprlock.
+      if $lock_guard_released; then
+        exit "$lock_status"
       fi
 
       compositor_locked="$(${pkgs.hyprland}/bin/hyprctl -j locked 2>/dev/null \
