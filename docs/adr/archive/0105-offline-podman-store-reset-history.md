@@ -1,4 +1,4 @@
-**History of** [ADR-0105](../0105-offline-podman-store-reset.md): text replaced on 2026-10-31.
+**History of** [ADR-0105](../0105-offline-podman-store-reset.md): text replaced on 2026-10-31, 2026-11-02, 2026-11-05, 2026-11-08 and 2026-11-12.
 
 ## Text replaced on 2026-10-31 (ADR-0106)
 
@@ -178,3 +178,11 @@ The text as it stood before the store could keep its containers and volumes in R
 >   filesystem: a directory inside the mount, never a mount itself.
 
 > - **Delete:** remove the old store at the lowest CPU and I/O priority, through
+
+## Text replaced on 2026-11-12 (ADR-0108, volumes on disk)
+
+The text as it stood before the volumes moved out of the RAM scratch to the
+disk beside the store ([ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md)).
+
+>   `scratchTriggerPercent` (70 percent by default, 20 on xyz). A full scratch means containers and volumes that jobs left
+>   behind; that reset renames only the scratch part and keeps the images and

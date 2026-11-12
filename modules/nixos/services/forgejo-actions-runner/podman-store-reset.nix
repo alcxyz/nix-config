@@ -54,7 +54,7 @@ in {
       default = 70;
       description = ''
         With RAM scratch (ADR-0108), reset the scratch alone, keeping the
-        images, when containers and volumes left behind by jobs fill it to
+        images, when containers left behind by jobs fill it to
         this percentage, at any age. Set it so the largest job the host takes
         still fits beside the leftovers; with a second pool slot, the
         largest job of each slot. At 90 percent or more, the recovery

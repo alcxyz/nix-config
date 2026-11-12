@@ -1,4 +1,4 @@
-**History of** [ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md): text replaced on 2026-11-10.
+**History of** [ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md): text replaced on 2026-11-10, 2026-11-11 and 2026-11-12.
 
 ## Text replaced on 2026-11-10 (#1027)
 
@@ -79,3 +79,31 @@ budget in `forgejobuilds.slice`.
 >   a full CI slice for at most those minutes and the cleanup after.
 >   The nix-daemon's 40G cap sits beside the CI limit, so a large deploy build
 >   that meets a full CI slice can still overcommit the host.
+
+## Text replaced on 2026-11-12 (volumes on disk)
+
+The text as it stood before the volumes moved out of the scratch to the disk
+beside the image store, since BuildKit builds that run dpkg failed with
+their state on tmpfs.
+
+> # ADR-0108: Keep Podman CI job scratch in RAM, images on disk
+
+> the existing disk store at `/var/lib/forgejo-podman/storage` as its image
+> store (`--imagestore`). Container writable layers, copy-ups and every volume
+> (job workspaces, service data, Buildx state) are in RAM; image layers stay on
+> disk and survive reboots.
+
+>   Containers and volumes that jobs leave behind while the API runs fill the
+>   scratch; the store reset clears the scratch alone, keeping the images, at
+
+>   through the LAN cache. Turning scratch off uses the image store as the
+>   graphroot again, which needs no migration.
+
+> CI SSD writes are expected to fall by about 90 percent, to image pulls,
+> image imports and filesystem metadata. Jobs spend less time waiting on the
+
+> a 256M scratch: image layers on disk and container data in RAM charged to the
+> slice, an oversized write that fails with "No space left on device" while
+> the slice reaches no memory.high event and the API keeps serving another
+> job's container, an API restart that empties the scratch, a fresh tmpfs that
+> keeps the images,

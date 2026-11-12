@@ -14,6 +14,10 @@
   builderState = "/var/lib/forgejo-podman";
   builderRuntime = "/run/forgejo-podman";
   scratch = canary.scratch;
+  # With scratch, volumes stay on disk beside the image store (ADR-0108):
+  # BuildKit leaves out overlay's "userxattr" option when its state is on
+  # tmpfs, and dpkg's directory renames in its builds then fail with EXDEV.
+  scratchVolumes = "${builderState}/volumes";
   scratchPrepare = pkgs.writeShellApplication {
     name = "forgejo-podman-scratch-prepare";
     runtimeInputs = with pkgs; [coreutils findutils util-linux];
@@ -274,16 +278,17 @@ in {
       internal = true;
       description = ''
         Podman store on disk. With scratch it holds only the image store
-        (image layers and image metadata); otherwise also the containers and
-        volumes.
+        (image layers and image metadata), and volumes sit beside it;
+        otherwise it also holds the containers and volumes.
       '';
     };
     scratch = {
       enable = lib.mkEnableOption ''
         a RAM-backed Podman graphroot for job throwaway data: container
-        writable layers, overlay copy-ups and volumes
-        (job workspaces, service data, Buildx state) live in a tmpfs, while
-        image layers stay in the image store on disk (#1027)
+        writable layers and overlay copy-ups live in a tmpfs, while image
+        layers stay in the image store on disk and volumes (job workspaces,
+        service data, Buildx state) in a directory beside it, since BuildKit
+        builds that run dpkg fail with their state on tmpfs (#1027, ADR-0108)
       '';
       size = lib.mkOption {
         type = lib.types.strMatching "[1-9][0-9]*[MG]";
@@ -318,9 +323,9 @@ in {
       readOnly = true;
       internal = true;
       description = ''
-        Podman graphroot: container layers and volumes, and without scratch
-        also the libpod database (with scratch, the transient store keeps
-        that in the runroot).
+        Podman graphroot: container layers, and without scratch also the
+        volumes and the libpod database (with scratch, volumes are on disk
+        and the transient store keeps the database in the runroot).
       '';
     };
     package = lib.mkOption {
@@ -613,8 +618,9 @@ in {
               # As root: refuse to start unless the scratch tmpfs is mounted,
               # empty the graphroot (its metadata went with the runroot), and
               # move a store left from before scratch, which holds
-              # containers, aside as reset trash.
-              "+${lib.getExe scratchPrepare} ${lib.escapeShellArgs [scratch.path canary.graphRoot canary.storageRoot]}"
+              # containers, and volumes an earlier API left, aside as reset
+              # trash.
+              "+${lib.getExe scratchPrepare} ${lib.escapeShellArgs [scratch.path canary.graphRoot canary.storageRoot scratchVolumes]}"
             ]
             else mirrorCa;
           ExecStart = lib.concatStringsSep " " ([
@@ -624,7 +630,7 @@ in {
             # The transient store keeps the libpod database and container
             # metadata in the runroot, out of the size-limited scratch, so a
             # job that fills the scratch cannot fail the API's own writes.
-            ++ lib.optionals scratch.enable ["--imagestore=${canary.storageRoot}" "--transient-store"]
+            ++ lib.optionals scratch.enable ["--imagestore=${canary.storageRoot}" "--volumepath=${scratchVolumes}" "--transient-store"]
             ++ ["--runroot=${builderRuntime}/storage system service --time=0"]);
         };
         # The API starts after the tmpfs, and its root ExecStartPre refuses

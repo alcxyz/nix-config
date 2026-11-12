@@ -1,8 +1,8 @@
-# ADR-0108: Keep Podman CI job scratch in RAM, images on disk
+# ADR-0108: Keep Podman CI job scratch in RAM, images and volumes on disk
 
 **Status:** Accepted
 **Date:** 2026-11-08
-**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz
+**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz; 2026-11-12, volumes on disk beside the image store, since BuildKit builds that run dpkg failed with their state on tmpfs
 **History:** [replaced text](archive/0108-ram-scratch-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-canary.nix`,
 `podman-scratch-prepare.sh`, the runner module's `resourcePolicy`, the store reset of
@@ -37,14 +37,30 @@ graphroot (`go.podman.io/storage` `drivers/overlay` `dir2`, `store.go`,
 `layers.go` `pickStoreLocation`). Wiping the graphroot leaves a consistent
 image store.
 
+BuildKit, which jobs start through the API with `docker buildx`'s
+docker-container driver, keeps its snapshots in a volume. Its overlay
+snapshotter, containerd's, mounts overlayfs with the `userxattr` option
+inside a user namespace, except when its state directory is on tmpfs
+(containerd `overlayutils.NeedsUserXAttr`, from containerd PR 7772 of 2022,
+before tmpfs gained user xattrs in Linux 6.6). Without the option the
+rootless overlay cannot store its xattrs, and renaming a new directory into a
+directory from a lower layer fails with `EXDEV`, which dpkg does not work
+around: from 2026-11-09, with volumes in the scratch, BuildKit builds that
+installed Debian packages failed on all four hosts with "unable to
+install new version of './etc/cron.hourly': Invalid cross-device link" or the
+like, while Alpine `apk` builds passed. On kernel 7.3.3 and Podman 6.1.4 a
+build of such a Dockerfile fails with BuildKit's state on tmpfs and passes
+with it on disk, the graphroot still on tmpfs.
+
 ## Decision
 
 `services.forgejo-actions-runner.podmanCanary.scratch` puts the Podman API's
 graphroot in a tmpfs at `/run/forgejo-podman-scratch` (`--root`), and keeps
 the existing disk store at `/var/lib/forgejo-podman/storage` as its image
-store (`--imagestore`). Container writable layers, copy-ups and every volume
-(job workspaces, service data, Buildx state) are in RAM; image layers stay on
-disk and survive reboots.
+store (`--imagestore`). Volumes (job workspaces, service data, Buildx state)
+are in `/var/lib/forgejo-podman/volumes` beside it (`--volumepath`).
+Container writable layers and copy-ups are in RAM; image layers and volumes
+are on disk, and image layers survive reboots.
 
 - **Metadata outside the scratch.** The API runs a transient store
   (`--transient-store`): the libpod database and the container and volume
@@ -53,6 +69,12 @@ disk and survive reboots.
   writes; the API still records, lists and removes containers. Without it,
   the VM check showed the database failing with "database or disk is full"
   for every job once one job had filled the scratch.
+
+- **Volumes on disk.** BuildKit's state is a volume, and on tmpfs its builds
+  that run dpkg fail (see Context). Podman places volumes by one path for
+  all, and buildx creates the state volume itself, without options, so the
+  volumes leave the scratch together. The volume directory is on the store's
+  filesystem, whose use the store reset's disk trigger already measures.
 
 - **One tmpfs per host.** The tmpfs `size` is a per-host option, and every
   pool slot on a host shares it. xev, nex and nux run one pool slot
@@ -140,7 +162,10 @@ disk and survive reboots.
 - **Leftovers.** systemd removes the runroot whenever the API stops, so the
   tmpfs holds nothing an API start can still reference: the API's root
   `ExecStartPre` empties all of it, trash from an interrupted reset included.
-  Containers and volumes that jobs leave behind while the API runs fill the
+  The volume directory's metadata went with the runroot too, so the same
+  `ExecStartPre` moves a non-empty volume directory aside under the reset's
+  trash name, and the reset deletes it at its lowest priority. Containers
+  that jobs leave behind while the API runs fill the
   scratch; the store reset clears the scratch alone, keeping the images, at
   any age once it reaches the host's `scratchTriggerPercent`: 70 percent by
   default, 13 percent (3.1G) on xyz so a 12.8G large job and an 8G pool job
@@ -157,7 +182,9 @@ disk and survive reboots.
   holds containers (a graphroot from before) aside under the reset's trash
   name; the reset's next check deletes it, and images are pulled again once
   through the LAN cache. Turning scratch off uses the image store as the
-  graphroot again, which needs no migration.
+  graphroot again, with the volumes under it, which needs no migration; the
+  volume directory beside it stays until scratch is turned on again, when the
+  API's start moves it aside.
 - **Jobs larger than 8G of scratch** select `forgejo-podman-large`, which
   only xyz's first pool slot serves, one at a time: the nix-packages Nix
   update jobs (`update-t3code.yml` and `update-packages.yml`), one of which
@@ -171,6 +198,22 @@ select a Docker label.
 
 ## Alternatives Considered
 
+- **Volumes in the scratch too**, as first decided: it kept their writes off
+  the SSD as well, but BuildKit's builds that run dpkg fail there (see
+  Context).
+- **BuildKit's native snapshotter**, set by each workflow
+  (`--buildkitd-flags --oci-worker-snapshotter=native`): the state could stay
+  in RAM, but it copies each layer whole. Building the GitOps Policy CI image
+  took 1.0G of state with overlayfs and ran out of 6G of tmpfs at 5.3G with
+  native, beyond a pool job's 8G with its container. The `fuse-overlayfs`
+  snapshotter is not in the `buildx-stable-1` image.
+- **Only BuildKit's state volume on disk**: Podman offers no per-volume
+  default location, and buildx names a new volume for each builder and
+  creates it without options; each workflow would have to create it first as
+  a bind to a host directory.
+- **A BuildKit whose containerd checks for user xattrs** instead of tmpfs, as
+  a patched image or an upstream fix: it would let the volumes return to the
+  scratch, but needs a maintained image or an upstream release first.
 - **One pool slot on every host**, xyz included: each tmpfs is one job's
   limit, but a replay of the pool's November arrivals put the busy-hour p90
   queue wait at 26 minutes with four slots in all, against 3.5 with six.
@@ -207,8 +250,13 @@ select a Docker label.
 
 ## Consequences
 
-CI SSD writes are expected to fall by about 90 percent, to image pulls,
-image imports and filesystem metadata. Jobs spend less time waiting on the
+CI SSD writes are expected to fall, though by less than the 90 percent
+first estimated: what remains is image pulls, image imports, filesystem
+metadata and the volumes, which the trace of
+[#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027) did not measure
+apart from the container layers (job workspaces, nested containers' data
+volumes such as PostgreSQL's, and BuildKit's state, into which each build
+extracts its base images). Jobs spend less time waiting on the
 SATA disks. The hosts give the tmpfs size, at most, of RAM to CI on top of
 the jobs' own memory; the sizes and memory limits are per host in its
 configuration. A job that needs more scratch than its host offers fails
@@ -252,11 +300,11 @@ CPU shares when it runs (at `runners restart` or boot), since those
 runtime values outlast the units' restarts.
 
 The VM check `forgejo-podman-scratch-lifecycle` runs the production API with
-a 256M scratch: image layers on disk and container data in RAM charged to the
-slice, an oversized write that fails with "No space left on device" while
+a 256M scratch: image layers and volumes on disk and container data in RAM
+charged to the slice, an oversized write that fails with "No space left on device" while
 the slice reaches no memory.high event and the API keeps serving another
-job's container, an API restart that empties the scratch, a fresh tmpfs that
-keeps the images,
+job's container, an API restart that empties the scratch and moves a leftover
+volume aside for the reset to delete, a fresh tmpfs that keeps the images,
 the API refusing to start without the tmpfs, the migration of an old store,
 a reset by age that clears both parts, a scratch filled to the last byte that
 resets alone and keeps the images, and deploys that turn scratch off and on

@@ -1,5 +1,6 @@
 # RAM scratch for the Podman CI store (#1027): the graphroot in a tmpfs, the
-# image store on disk, with the production API unit and the store reset.
+# image store and volumes on disk, with the production API unit and the store
+# reset.
 {pkgs}:
 if pkgs.stdenv.hostPlatform.system != "x86_64-linux"
 then pkgs.runCommand "forgejo-podman-scratch-unsupported-platform" {} ''touch "$out"''
@@ -77,6 +78,7 @@ in
       graph = "${canary.graphRoot}"
       scratch = "${canary.scratch.path}"
       parent = store.rsplit("/", 1)[0]
+      volumes = parent + "/volumes"
       api = "forgejo-runner-podman.service"
       reset = "${reset}"
       units = ["forgejo-runner-docker.service", api, "forgejo-actions-runner.service", "forgejo-podman-runner.service"]
@@ -112,21 +114,24 @@ in
           assert "size=262144k" in options and "noswap" in options, options
           cmd = machine.succeed(f"systemctl show -p ExecStart --value {api}")
           assert f"--root={graph}" in cmd and f"--imagestore={store}" in cmd and "--transient-store" in cmd, cmd
+          assert f"--volumepath={volumes}" in cmd, cmd
           machine.succeed(f"{podman} load < ${fixtureImage}")
           # Image layers and image metadata are on disk; nothing image-sized is in RAM.
           machine.succeed(f"test -s {store}/overlay-images/images.json")
           machine.succeed(f"find {store}/overlay -name busybox -path '*/diff/*' | grep -q .")
           machine.fail(f"find {graph} -name busybox -path '*/diff/*' | grep -q .")
 
-      with subtest("container writes and volumes land in RAM, charged to the CI slice"):
+      with subtest("container writes land in RAM, charged to the CI slice, and volumes on disk"):
           before = shmem()
           code, out = run("small", "/bin/busybox sh -c 'dd if=/dev/zero of=/fill bs=1M count=64 && dd if=/dev/zero of=/data/fill bs=1M count=32'", "-v fixture-volume:/data")
           assert code == 0, out
-          machine.succeed(f"test -d {graph}/volumes/fixture-volume")
           grown = shmem() - before
-          assert grown >= 90 * 2**20, f"slice shmem grew only {grown} bytes"
-          # None of it reached the disk store.
+          assert grown >= 60 * 2**20, f"slice shmem grew only {grown} bytes"
+          # The container's writes reached neither the image store nor the
+          # volumes; the volume is beside the image store, not in the scratch.
           machine.fail(f"find {store} -name fill | grep -q .")
+          machine.succeed(f"test -s {volumes}/fixture-volume/_data/fill")
+          machine.fail(f"find {graph} -path '*fixture-volume*' | grep -q .")
           machine.succeed(f"{podman} rm small && {podman} volume rm fixture-volume")
           assert shmem() - before < 16 * 2**20
 
@@ -164,19 +169,27 @@ in
           machine.succeed(f"{podman} rm after-reboot")
 
       with subtest("an API restart empties what the earlier API left in the scratch"):
-          assert run("restart-leftover", "/bin/busybox dd if=/dev/zero of=/fill bs=1M count=32")[0] == 0
+          # No trash appeared from the restarts above: the image store never
+          # looks like a store from before scratch, and no volume was left.
+          machine.fail(f"ls -d {parent}/.storage.trash.* 2>/dev/null")
+          assert run("restart-leftover", "/bin/busybox dd if=/dev/zero of=/data/fill bs=1M count=32", "-v leftover-data:/data")[0] == 0
           # Trash that an interrupted store reset left in the tmpfs goes too.
           machine.succeed(f"mkdir -p {scratch}/.storage.trash.1 && fallocate -l 64M {scratch}/.storage.trash.1/blob")
           machine.succeed(f"systemctl restart {api}")
           wait_units()
           assert machine.succeed(f"{podman} ps -aq").strip() == ""
+          assert "leftover-data" not in machine.succeed(f"{podman} volume ls -q")
           machine.fail(f"find {graph} -name fill | grep -q .")
           machine.fail(f"test -e {scratch}/.storage.trash.1")
+          # The leftover volume went aside on disk, for the reset to delete.
+          machine.fail(f"test -e {volumes}/leftover-data")
+          machine.succeed(f"test -s {parent}/.storage.trash.*.volumes/leftover-data/_data/fill")
+          machine.succeed(f"systemctl start {reset}", timeout=600)
+          machine.fail(f"ls -d {parent}/.storage.trash.* 2>/dev/null")
+          assert run("after-restart", "/bin/busybox true", "-v fresh-data:/data")[0] == 0
+          machine.succeed(f"{podman} rm after-restart && {podman} volume rm fresh-data")
 
       with subtest("the API refuses to start without the tmpfs"):
-          # No trash appeared from the restarts above: the image store never
-          # looks like a store from before scratch.
-          machine.fail(f"ls -d {parent}/.storage.trash.* 2>/dev/null")
           machine.succeed(f"systemctl stop forgejo-podman-runner.service {api}")
           # A runtime drop-in makes the mount fail; the API only wants it, so
           # its own check is what must refuse the start.

@@ -26,14 +26,16 @@ docker_socket=${DOCKER_SOCKET:-/run/forgejo-docker/docker.sock}
 podman_socket=${PODMAN_SOCKET:-/run/forgejo-podman/podman.sock}
 store_path=${STORE_PATH:-/var/lib/forgejo-podman/storage}
 # The graphroot in RAM scratch, when the store's images and containers are
-# split (#1027): it holds the containers and volumes, which reference image
-# layers in the store, so the two are always reset together.
+# split (#1027): it holds the containers, which reference image layers in
+# the store, so the two are always reset together. Volumes are on disk beside
+# the store (ADR-0108); the API's start moves those an earlier API left aside
+# under the store's trash name, which this deletes.
 scratch_store=${SCRATCH_STORE:-}
 restart_file=${RESTART_FILE:-/run/forgejo-podman-store-reset/restart}
 # The time of the last reset, kept where the API user cannot write.
 stamp=${STAMP_FILE:-/var/lib/forgejo-podman-store-reset/reset-at}
 trigger_used_percent=${TRIGGER_USED_PERCENT:-70}
-# Leftover containers and volumes in the RAM scratch reset it at this use, so
+# Leftover containers in the RAM scratch reset it at this use, so
 # the largest job the host takes still fits beside them.
 scratch_trigger_percent=${SCRATCH_TRIGGER_PERCENT:-70}
 # A scratch this full fails every job's setup, so each failing job would
@@ -338,7 +340,7 @@ elif ((age >= max_age_seconds)); then
 elif ((used_percent >= trigger_used_percent && age >= min_age_seconds)); then
   due=store_use
 elif [[ $scratch_percent != none ]] && ((scratch_percent >= scratch_trigger_percent)); then
-  # Containers and volumes that jobs left behind fill the RAM scratch. A
+  # Containers that jobs left behind fill the RAM scratch. A
   # reset always empties it, so it needs no minimum age.
   due=scratch_use
 else
