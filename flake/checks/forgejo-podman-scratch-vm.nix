@@ -106,10 +106,29 @@ in
           preStart = lib.mkForce "";
           script = lib.mkForce "exec sleep infinity";
         };
+        # Reports the runner pause as forgejo-runner does (nix-packages
+        # ADR-0017): one running job while /run/fixture-job exists.
         systemd.services.forgejo-podman-runner = {
           unitConfig.StartLimitIntervalSec = 0;
           preStart = lib.mkForce "";
-          script = lib.mkForce "exec sleep infinity";
+          serviceConfig.NotifyAccess = lib.mkForce "all";
+          script = lib.mkForce ''
+            pause=/run/nixfleet-runners/paused/forgejo-podman-runner.service
+            last=
+            while :; do
+              if [ ! -e "$pause" ]; then
+                status=running
+              elif [ -e /run/fixture-job ]; then
+                status="paused tasks=1"
+              else
+                status="paused tasks=0"
+              fi
+              if [ "$status" != "$last" ]; then
+                systemd-notify --status="$status" && last=$status
+              fi
+              sleep 0.5
+            done
+          '';
         };
         environment.systemPackages = [pkgs.docker];
         # A deploy that turns scratch off, and the first deploy that turns it
@@ -389,6 +408,52 @@ in
           assert int(usage.rstrip("%")) < 5, usage
           assert run("after-inodes", "/bin/busybox true", "-v after-inodes-data:/data")[0] == 0
           machine.succeed(f"{podman} rm after-inodes && {podman} volume rm after-inodes-data")
+
+      with subtest("a job running on a full volume filesystem: the pool is paused, and the reset waits for it"):
+          pause = "/run/nixfleet-runners/paused/forgejo-podman-runner.service"
+          job = "FORGEJO-ACTIONS-TASK-1_WORKFLOW-fixture_JOB-build"
+          # Volumes a cancelled job left behind fill the filesystem.
+          code, out = run("volume-leak", "/bin/busybox dd if=/dev/urandom of=/data/fill bs=1M count=600", "-v leaked-data:/data")
+          assert code != 0 and "No space left on device" in out, out
+          machine.succeed(f"{podman} rm volume-leak")
+          usage = machine.succeed(f"df --output=pcent {vmount} | tail -1").strip()
+          assert int(usage.rstrip("%")) >= 90, usage
+          # A pool job still runs; its runner reports it once paused.
+          machine.succeed(f"{podman} create --network none --name {job} scratch-fixture:local /bin/busybox sleep 600")
+          machine.succeed(f"{podman} start {job} && touch /run/fixture-job")
+          dropin = "/run/systemd/system/forgejo-podman-store-reset.service.d"
+          machine.succeed(f"mkdir -p {dropin} && printf '[Service]\\nEnvironment=PAUSE_WAIT_SECONDS=5\\n' > {dropin}/wait.conf && systemctl daemon-reload")
+          # A job that outlasts the wait: the reset unpauses the pool and
+          # leaves everything running.
+          machine.succeed(f"systemctl start {reset}", timeout=600)
+          last = machine.succeed(f"journalctl -u {reset} -o cat | grep -E '^(skipped|pausing|reset) ' | tail -2")
+          print("FULL_JOB_TIMEOUT", last)
+          assert "pausing units=forgejo-podman-runner.service" in last, last
+          assert "skipped reason=pool_not_drained unit=forgejo-podman-runner.service" in last, last
+          machine.fail(f"test -e {pause}")
+          machine.succeed("systemctl is-active forgejo-podman-runner.service")
+          assert job in machine.succeed(f"{podman} ps --format '{{{{.Names}}}}'")
+          machine.succeed(f"rm -r {dropin} && systemctl daemon-reload")
+          # Within the wait: the job ends while the pool is paused.
+          machine.succeed(f"systemctl start --no-block {reset}")
+          machine.wait_until_succeeds(f"test -e {pause}", timeout=60)
+          machine.wait_until_succeeds("systemctl show -p StatusText --value forgejo-podman-runner.service | grep -qx 'paused tasks=1'", timeout=30)
+          machine.succeed("systemctl is-active forgejo-podman-runner.service")
+          # The job's cleanup removes its container before its runner
+          # reports it done.
+          machine.succeed(f"{podman} rm -f {job} && rm /run/fixture-job")
+          machine.wait_until_succeeds(f"journalctl -u {reset} -o cat | grep -E '^(skipped|reset) ' | tail -1 | grep -q '^reset '", timeout=300)
+          journal = machine.succeed(f"journalctl -u {reset} -o cat | grep -E '^(pausing|drained|reset) ' | tail -3")
+          print("FULL_JOB_RESET", journal)
+          assert "drained unit=forgejo-podman-runner.service" in journal and "reset due=scratch_use" in journal, journal
+          machine.fail(f"test -e {pause}")
+          wait_units()
+          made_by_running_api()
+          assert "leaked-data" not in machine.succeed(f"{podman} volume ls -q")
+          usage = machine.succeed(f"df --output=pcent {vmount} | tail -1").strip()
+          assert int(usage.rstrip("%")) < 10, usage
+          assert run("after-full-job", "/bin/busybox true", "-v after-full-data:/data")[0] == 0
+          machine.succeed(f"{podman} rm after-full-job && {podman} volume rm after-full-data")
 
       with subtest("writes the zram device cannot store: data errors are not counted, metadata errors are"):
           # zram fails a write when it cannot allocate memory for it; its

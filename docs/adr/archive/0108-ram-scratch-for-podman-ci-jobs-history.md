@@ -1,4 +1,4 @@
-**History of** [ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md): text replaced on 2026-11-10, 2026-11-11 and 2026-11-12 (twice).
+**History of** [ADR-0108](../0108-ram-scratch-for-podman-ci-jobs.md): text replaced on 2026-11-10, 2026-11-11, 2026-11-12 (twice) and 2026-11-13.
 
 ## Text replaced on 2026-11-10 (#1027)
 
@@ -233,3 +233,16 @@ the tmpfs and CI's limits shrunk by its size.
 > job's container, an API restart that empties the scratch and moves a leftover
 > volume aside for the reset to delete, a fresh tmpfs that keeps the images,
 > the API refusing to start without the tmpfs, the migration of an old store,
+
+## Text replaced on 2026-11-13 (a running pool job on a full filesystem)
+
+The passages as they stood before a full scratch or volume filesystem
+drained a running Podman pool job instead of skipping the reset for it.
+
+> **Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz; 2026-11-12, volumes on disk beside the image store, since BuildKit builds that run dpkg failed with their state on tmpfs; 2026-11-12, any container that no running job owns resets the scratch at the next quiet check; 2026-11-12, volumes in an ext4 filesystem on zram, set aside from CI's memory, instead of on disk
+
+>   either, the recovery threshold, or with an unusable volume filesystem,
+>   most new pool jobs fail, so the reset then pauses the pool runners and
+>   waits for them to drain instead of waiting out their quiet interval,
+>   whatever made it due; the Docker runner keeps the interval, and a running
+>   task container on either engine still holds the reset. A leftover

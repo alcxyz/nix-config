@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-11-08
-**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz; 2026-11-12, volumes on disk beside the image store, since BuildKit builds that run dpkg failed with their state on tmpfs; 2026-11-12, any container that no running job owns resets the scratch at the next quiet check; 2026-11-12, volumes in an ext4 filesystem on zram, set aside from CI's memory, instead of on disk
+**Amended:** 2026-11-10, a second pool slot on xyz sharing a 24G scratch ([#1027](https://git.alc.xyz/alcxyz/nix-config/issues/1027)); 2026-11-11, one memory budget for the nix-daemon and CI on xyz; 2026-11-12, volumes on disk beside the image store, since BuildKit builds that run dpkg failed with their state on tmpfs; 2026-11-12, any container that no running job owns resets the scratch at the next quiet check; 2026-11-12, volumes in an ext4 filesystem on zram, set aside from CI's memory, instead of on disk; 2026-11-13, a full scratch or volume filesystem drains a running pool job instead of skipping the reset for it
 **History:** [replaced text](archive/0108-ram-scratch-for-podman-ci-jobs-history.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-canary.nix`,
 `podman-scratch-prepare.sh`, `podman-volumes-prepare.sh`, the runner module's `resourcePolicy`, the store reset of
@@ -307,9 +307,15 @@ survive reboots.
   and the pool runners again. At 90 percent of
   either, the recovery threshold, or with an unusable volume filesystem,
   most new pool jobs fail, so the reset then pauses the pool runners and
-  waits for them to drain instead of waiting out their quiet interval,
-  whatever made it due; the Docker runner keeps the interval, and a running
-  task container on either engine still holds the reset. A leftover
+  waits for them to drain, a running pool job and its task container
+  included, instead of waiting out their quiet interval or skipping for
+  that job, whatever made it due. In November 2026 leaked volumes from
+  cancelled jobs filled the volume filesystem on xyz and nux while jobs kept
+  arriving and failing, and a reset that skipped for each running job could
+  wait for a check that happened to fall between two jobs. The wait is
+  bounded by 10 minutes for both slots together; a longer job unpauses the
+  pool until the next check. The Docker runner keeps the interval, and a
+  running task container on its engine still holds the reset. A leftover
   container can add little to either while it keeps running and holding
   memory in the CI slice: a cancelled job's EXIT trap never runs, so the
   containers it started stay. On xev, while the volumes were in the tmpfs,

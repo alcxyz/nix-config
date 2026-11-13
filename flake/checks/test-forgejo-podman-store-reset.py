@@ -46,6 +46,12 @@ if args[0] == 'show':
     pause = Path(os.environ['FAKE_PAUSE_DIR']) / name
     if pause.exists() and 'StatusText' in wanted:
         props['StatusText'] = state.get('paused_texts', {}).get(name, state.get('paused_text', 'paused tasks=0'))
+        # Simulates a running job that ends after N reads of the status.
+        busy = state.get('busy_reads', {})
+        if busy.get(name, 0) > 0:
+            props['StatusText'] = 'paused tasks=1'
+            busy[name] -= 1
+            path.write_text(json.dumps(state))
         # Simulates a runner restart that removes the pause after N reads.
         if 'remove_pause_after_reads' in state:
             state['remove_pause_after_reads'] -= 1
@@ -101,7 +107,18 @@ if sys.argv[-1].endswith('?all=true') and reply.with_name(reply.name + '.all').e
     reply = reply.with_name(reply.name + '.all')
 if not reply.exists():
     sys.exit(7)
-sys.stdout.write(reply.read_text())
+text = reply.read_text()
+# A job container that is gone after N more lists, "<socket>.reads".
+reads = reply.with_name(reply.name + '.reads')
+if not sys.argv[-1].endswith('?all=true') and reads.exists():
+    left = int(reads.read_text())
+    if left <= 0:
+        text = '[]'
+        reply.write_text(text)
+        reads.unlink()
+    else:
+        reads.write_text(str(left - 1))
+sys.stdout.write(text)
 '''
 
 # Each unit's journal is a file; a missing one is an empty journal.
@@ -612,10 +629,6 @@ class StoreResetTests(unittest.TestCase):
         self.assertTrue(graph.exists())
         # Full: every job's setup fails, so the quiet interval no longer holds.
         Path(f'{self.df}.scratch').write_text('100 5\n')
-        (self.engines / 'podman.sock').write_text(json.dumps([{'Names': ['/FORGEJO-ACTIONS-TASK-1_x']}]))
-        result = self.run_reset(SCRATCH_STORE=str(graph))
-        self.assert_skipped(result, 'job_running')
-        (self.engines / 'podman.sock').write_text('[]')
         result = self.run_reset(SCRATCH_STORE=str(graph))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f'drained unit={POOL}', result.stdout)
@@ -624,6 +637,129 @@ class StoreResetTests(unittest.TestCase):
         # No runner starts paused.
         self.assertFalse((self.root / 'paused' / POOL).exists())
         self.assertFalse((self.root / 'pause-record').exists())
+
+    def job_container(self, socket='podman.sock', reads=None):
+        """A running job's task container; with reads, it is gone after
+        that many more lists, as its job's cleanup removes it."""
+        (self.engines / socket).write_text(json.dumps([{'Names': ['/FORGEJO-ACTIONS-TASK-1_x']}]))
+        if reads is not None:
+            (self.engines / f'{socket}.reads').write_text(str(reads))
+
+    def test_a_running_pool_job_holds_a_reset_below_the_full_mark(self):
+        scratch_parent, graph = self.scratch()
+        Path(f'{self.df}.scratch').write_text('100 25\n')
+        self.age_stamp(600)
+        self.job_container()
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'job_running socket={self.root}/run/podman.sock')
+        self.assertEqual(self.mutations(), [])
+        self.assertFalse((self.root / 'paused').exists())
+        self.assertTrue(graph.exists())
+
+    def test_full_scratch_pauses_the_pool_and_resets_once_its_job_ends(self):
+        """Leaked volumes fill the volume filesystem while jobs keep coming:
+        a running pool job no longer skips the reset; the pool is paused, so
+        it takes no new job, and the reset waits for the running one."""
+        scratch_parent, graph = self.scratch()
+        mount = self.volume_filesystem()
+        Path(f'{self.df}.{mount.name}').write_text('100 0\n')
+        self.age_stamp(600)
+        # The runner reports its job for two status reads, and its container
+        # outlives that report by one list.
+        self.set_fake(busy_reads={POOL: 2})
+        self.job_container(reads=3)
+        result = self.run_reset(**self.volume_env(graph, mount, FAKE_SCRATCH_PARENT=str(scratch_parent)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('volume_percent=100', result.stdout)
+        self.assertIn(f'pausing units={POOL}', result.stdout)
+        self.assertIn(f'drained unit={POOL}', result.stdout)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertFalse(graph.exists())
+        self.assertTrue((self.store / 'db.sql').exists())
+        # The runner was stopped only after its job ended.
+        self.assertEqual(json.loads(self.fake_state.read_text())['busy_reads'], {POOL: 0})
+        self.assertFalse((self.engines / 'podman.sock.reads').exists())
+        self.assertIn(f'stop {POOL}', self.calls('stop'))
+        self.assertFalse((self.root / 'paused' / POOL).exists())
+        self.assertFalse((self.root / 'pause-record').exists())
+
+    def test_full_scratch_drains_a_running_job_on_both_pool_slots(self):
+        scratch_parent, graph = self.scratch()
+        units = self.second_slot()
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(600)
+        self.set_fake(busy_reads={POOL: 1, POOL2: 3})
+        self.job_container(reads=2)
+        result = self.run_reset(SCRATCH_STORE=str(graph), FAKE_SCRATCH_PARENT=str(scratch_parent), **units)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'pausing units={POOL} {POOL2}', result.stdout)
+        self.assertIn(f'drained unit={POOL2}', result.stdout)
+        self.assertIn('reset due=scratch_use', result.stdout)
+        self.assertFalse(graph.exists())
+        for unit in (POOL, POOL2):
+            self.assertFalse((self.root / 'paused' / unit).exists())
+
+    def test_full_scratch_unpauses_when_a_pool_job_outlasts_the_wait(self):
+        scratch_parent, graph = self.scratch()
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(600)
+        self.set_fake(paused_text='paused tasks=1')
+        self.job_container()
+        result = self.run_reset(SCRATCH_STORE=str(graph), PAUSE_WAIT_SECONDS='1')
+        self.assertIn(f'pausing units={POOL}', result.stdout)
+        self.assert_skipped(result, f'pool_not_drained unit={POOL}')
+        self.assertEqual(self.calls('stop'), [])
+        self.assertTrue(graph.exists())
+        self.assertFalse((self.root / 'paused' / POOL).exists())
+        self.assertFalse((self.root / 'pause-record').exists())
+
+    def test_full_scratch_unpauses_when_a_job_container_outlasts_the_wait(self):
+        """The runner reports no job, but a task container still runs."""
+        scratch_parent, graph = self.scratch()
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(600)
+        self.job_container()
+        result = self.run_reset(SCRATCH_STORE=str(graph), PAUSE_WAIT_SECONDS='1')
+        self.assertIn(f'drained unit={POOL}', result.stdout)
+        self.assert_skipped(result, f'pool_not_drained socket={self.root}/run/podman.sock')
+        self.assertEqual(self.calls('stop'), [])
+        self.assertTrue(graph.exists())
+        self.assertFalse((self.root / 'paused' / POOL).exists())
+        self.assertFalse((self.root / 'pause-record').exists())
+
+    def test_full_scratch_still_skips_a_docker_job(self):
+        scratch_parent, graph = self.scratch()
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(600)
+        self.job_container('docker.sock')
+        self.job_container()
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'job_running socket={self.root}/run/docker.sock')
+        self.assertEqual(self.mutations(), [])
+        self.assertFalse((self.root / 'paused').exists())
+
+    def test_full_scratch_skips_a_job_no_running_pool_runner_can_drain(self):
+        scratch_parent, graph = self.scratch()
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        self.age_stamp(600)
+        self.update_units(**{POOL: stopped()})
+        self.job_container()
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'job_running socket={self.root}/run/podman.sock')
+        self.assertEqual(self.mutations(), [])
+        self.assertFalse((self.root / 'paused').exists())
+
+    def test_full_scratch_leaves_someone_elses_pause_alone_with_a_job_running(self):
+        scratch_parent, graph = self.scratch()
+        Path(f'{self.df}.scratch').write_text('100 5\n')
+        (self.root / 'paused').mkdir()
+        (self.root / 'paused' / POOL).touch()
+        self.age_stamp(600)
+        self.job_container()
+        result = self.run_reset(SCRATCH_STORE=str(graph))
+        self.assert_skipped(result, f'runner_paused unit={POOL}')
+        self.assertTrue((self.root / 'paused' / POOL).exists())
+        self.assertEqual(self.mutations(), [])
 
     def second_slot(self):
         (self.state_dir / 'runners' / POOL2).mkdir()

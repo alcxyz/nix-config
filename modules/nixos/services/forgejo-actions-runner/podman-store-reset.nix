@@ -66,8 +66,11 @@ in {
         with a second pool slot, the largest job of each slot. At 90 percent
         or more of either, the recovery threshold where most new pool jobs
         fail, and for an unusable volume filesystem, any reset pauses the
-        Podman pool runners and waits for them to drain instead of waiting
-        out their quiet interval. Independently of this percentage, any
+        Podman pool runners and waits up to 10 minutes for them to drain,
+        running pool jobs and their task containers included, instead of
+        waiting out their quiet interval or skipping for a running pool job;
+        a job that runs longer unpauses them until the next check.
+        Independently of this percentage, any
         container on the API other than a running `FORGEJO-ACTIONS-TASK-*`
         one makes the same reset due at the next quiet check, since a
         leftover can keep running and holding memory while it adds little to
@@ -145,7 +148,8 @@ in {
         ExecStart = lib.getExe helper;
         # Starts whatever a failed or killed run left stopped.
         ExecStopPost = lib.mkBefore ["${lib.getExe helper} restart"];
-        # Leftover trash (30 minutes), runner stops (bounded by the runners'
+        # Leftover trash (30 minutes), the pool drain on a full scratch (10
+        # minutes), runner stops (bounded by the runners'
         # stop timeouts, normally seconds since the runners are idle), the API
         # stop and start, and the new trash (30 minutes).
         TimeoutStartSec = "140min";

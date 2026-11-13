@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-31
-**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills; 2026-11-12, volumes on disk beside the store, which the API's start moves aside as trash ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, leftover containers reset the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, volumes in a filesystem on zram that the API's start makes afresh, whose use or failure also resets the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md))
+**Amended:** 2026-10-31, the runner hold of [ADR-0106](0106-runner-hold-for-games-and-low-disk.md) replaces the pressure guard's part, and runners are stopped only when idle; 2026-11-02, the retired CI Nix cache proxy no longer supplies Nix paths; 2026-11-05, xyz's store moves to ext4 ([#995](https://git.alc.xyz/alcxyz/nix-config/issues/995)); 2026-11-08, the store may keep its containers and volumes in RAM scratch ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)), and the reset clears both parts by age or disk use and the scratch alone when it fills; 2026-11-12, volumes on disk beside the store, which the API's start moves aside as trash ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, leftover containers reset the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-12, volumes in a filesystem on zram that the API's start makes afresh, whose use or failure also resets the scratch alone ([ADR-0108](0108-ram-scratch-for-podman-ci-jobs.md)); 2026-11-13, a full scratch or volume filesystem drains a running pool job instead of skipping for it
 **History:** [replaced text](archive/0105-offline-podman-store-reset-history.md)
 **Supersedes:** [ADR-0083](archive/0083-podman-cleanup-completion-fence.md)
 **Applies to:** `modules/nixos/services/forgejo-actions-runner/podman-store-reset.{nix,sh}`,
@@ -79,15 +79,25 @@ the host is idle.
   volume filesystem at 90 percent or more (of its bytes or its inodes), or
   an unusable volume filesystem,
   is the recovery threshold: most new pool jobs fail there,
-  and each would renew that interval, so a recent pool job start does not
-  skip the reset. Instead the reset pauses the Podman pool runner through the
-  runner pause of nix-packages ADR-0017 (no new job), waits up to 10 minutes
-  for it to report none running, and checks the pause and the report again
-  right before the runner's stop, since a runner restart removes every pause
-  when it ends; it skips if either fails. A pause someone else set skips the
+  and each would renew that interval, while a pool job that is still
+  running would skip every check that finds it, so neither a recent pool
+  job start nor a running Podman task container skips the reset. Instead
+  the reset pauses the running Podman pool runners (both slots on xyz)
+  through the runner pause of nix-packages ADR-0017 (no new job) and waits,
+  up to 10 minutes for all of them together, for each to report none
+  running and then for the Podman API to run no task container, since a
+  runner reports its job done before the job's container is gone. It checks
+  the pause and the report again right before each runner's stop, since a
+  runner restart removes every pause when it ends. If the wait runs out, or
+  either check fails, it removes its pauses and skips, and the next check,
+  15 minutes after this one started, tries again: a job that runs longer
+  keeps the pool paused for at most 10 minutes of each check while the
+  filesystem stays full. A Podman task container that no running pool
+  runner can drain still skips the reset. A pause someone else set skips the
   reset; the reset removes its own pause once the runner is stopped, and its
   `ExecStopPost` removes it on any other exit. The Docker
-  runner, whose jobs use their own store, keeps the quiet interval. A reset stops no
+  runner, whose jobs use their own store, keeps the quiet interval, and a
+  task container on its API skips the reset. A reset stops no
   runner with a job it can see: on xyz the stop would cancel it after two
   minutes. A job still pulling its image more than 15 minutes after it
   started shows neither sign and remains a gap.

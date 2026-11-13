@@ -508,10 +508,11 @@ for unit in "${runner_units[@]}"; do
     *) skip "runner_transition unit=$unit state=$active:$sub" ;;
   esac
 done
-# Succeeds while either engine runs a job container.
+# Succeeds while an engine at one of the given sockets runs a job container,
+# and names the first such socket in job_socket.
 job_containers() {
   local socket containers status
-  for socket in "$docker_socket" "$podman_socket"; do
+  for socket in "$@"; do
     containers=$("$curl_bin" --silent --show-error --fail --max-time 10 --connect-timeout 2 \
       --unix-socket "$socket" http://localhost/containers/json) || skip "engine_api_unavailable socket=$socket"
     status=0
@@ -536,16 +537,14 @@ recent_job() {
   lines=$("$journalctl_bin" --unit="$1" --since="@$since" --output=cat --no-pager --quiet 2>/dev/null) || return 0
   grep -Eq 'msg="task [0-9]+ repo is ' <<<"$lines"
 }
-# The reset never stops a runner with a job: the stop would cancel it once the
-# runner's shutdown timeout passes. Both checks run again right before each
-# stop; a job admitted between that check and the stop is the one window left.
-if job_containers; then skip "job_running socket=$job_socket"; fi
 # On a full scratch, whatever made the reset due, most new pool jobs fail and
-# each would renew the quiet interval, so the reset might never run. There
-# the running Podman pool runners are paused instead: they take no new job,
-# and the reset goes on only once each reports none running, and again right
-# before its stop. The Docker runner's jobs use their own store and keep the
-# quiet interval.
+# each would renew the quiet interval, so the reset might never run; a pool
+# job that is still running would hold it the same way, check after check,
+# while each new job fails. There the running Podman pool runners are paused
+# instead: they take no new job, and the reset goes on only once each reports
+# none running and the Podman API runs no job container, and again right
+# before its stop. The Docker runner's jobs use their own store and keep both
+# guards.
 is_pool() {
   local unit
   for unit in "${pool_units[@]}"; do
@@ -562,7 +561,21 @@ fi
 if [[ -n $volume_state ]] || { [[ $volume_percent != none ]] && ((volume_percent >= scratch_full_percent)); }; then
   scratch_full=1
 fi
+pool_running=0
+for unit in "${to_stop[@]}"; do
+  if is_pool "$unit"; then pool_running=1; fi
+done
+# The reset never stops a runner with a job: the stop would cancel it once the
+# runner's shutdown timeout passes. Both checks run again right before each
+# stop; a job admitted between that check and the stop is the one window left.
+# The Docker API is asked first, so a job there always skips.
 drain_pool=0
+if job_containers "$docker_socket" "$podman_socket"; then
+  if ((scratch_full == 0 || pool_running == 0)) || [[ $job_socket != "$podman_socket" ]]; then
+    skip "job_running socket=$job_socket"
+  fi
+  drain_pool=1
+fi
 for unit in "${to_stop[@]}"; do
   recent_job "$unit" || continue
   if ((scratch_full == 0)) || ! is_pool "$unit"; then skip "recent_job unit=$unit"; fi
@@ -590,6 +603,9 @@ if ((drain_pool == 1)); then
   for unit in "${drain[@]}"; do
     : >"$pause_dir/$unit"
   done
+  printf 'pausing units=%s\n' "${drain[*]}"
+  # One deadline for every slot and the job containers: a job that runs
+  # longer leaves the pool unpaused until the next check tries again.
   pause_deadline=$((SECONDS + pause_wait_seconds))
   for unit in "${drain[@]}"; do
     until [[ $(query show --property=StatusText --value "$unit" 2>/dev/null) == "paused tasks=0" ]]; do
@@ -601,6 +617,14 @@ if ((drain_pool == 1)); then
     done
     printf 'drained unit=%s\n' "$unit"
   done
+  # A runner reports its job done before the job's container is gone.
+  while job_containers "$podman_socket"; do
+    if ((SECONDS >= pause_deadline)); then
+      unpause
+      skip "pool_not_drained socket=$podman_socket"
+    fi
+    sleep "$poll_seconds"
+  done
 fi
 stop_started=$SECONDS
 # Succeeds while the reset's pause still holds a drained pool runner: a
@@ -610,7 +634,7 @@ pool_still_drained() {
     [[ $(query show --property=StatusText --value "$1" 2>/dev/null) == "paused tasks=0" ]]
 }
 for unit in "${to_stop[@]}"; do
-  if job_containers; then skip "job_running socket=$job_socket"; fi
+  if job_containers "$docker_socket" "$podman_socket"; then skip "job_running socket=$job_socket"; fi
   if quiet_needed "$unit" && recent_job "$unit"; then skip "recent_job unit=$unit"; fi
   if ! quiet_needed "$unit" && ! pool_still_drained "$unit"; then
     unpause
