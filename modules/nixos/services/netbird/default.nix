@@ -83,6 +83,8 @@ in {
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        # The wait below ends after 3 minutes; this also bounds `netbird up`.
+        TimeoutStartSec = "5min";
         Environment = [
           "HOME=/root"
           "XDG_CONFIG_HOME=/root/.config"
@@ -101,9 +103,20 @@ in {
 
         # Wait for the daemon to settle. A transient management outage must not
         # be mistaken for an unregistered peer and create another identity.
-        attempts=0
-        while [ "$attempts" -lt 30 ]; do
-          status="$(netbird status 2>&1 || true)"
+        # After a boot the daemon can take over a minute to reach management,
+        # so wait up to 3 minutes of uptime (monotonic, unlike the wall clock,
+        # which NTP may step at boot). Each status call is capped, since one
+        # can hang while the daemon's socket is unavailable. The boot check
+        # waits for boot to finish, so it sees this unit's result.
+        uptime_seconds() {
+          local up _
+          read -r up _ </proc/uptime
+          printf '%s\n' "''${up%.*}"
+        }
+        deadline=$(($(uptime_seconds) + 180))
+        status=""
+        while [ "$(uptime_seconds)" -lt "$deadline" ]; do
+          status="$(timeout 10 netbird status 2>&1 || true)"
 
           if printf '%s\n' "$status" | grep -q ': Connected'; then
             cleanup_dns
@@ -114,8 +127,7 @@ in {
             break
           fi
 
-          attempts=$((attempts + 1))
-          sleep 1
+          sleep 2
         done
 
         if ! printf '%s\n' "$status" | grep -q 'NeedsLogin'; then
@@ -132,7 +144,10 @@ in {
     system.activationScripts.netbird-login = lib.stringAfter ["setupSecrets"] ''
       if [ -e /run/systemd/system ]; then
         ${pkgs.systemd}/bin/systemctl daemon-reload || true
-        ${pkgs.systemd}/bin/systemctl restart netbird-managed-login.service || true
+        # Without blocking, so activation does not wait for the login's wait.
+        # During a NetBird outage the switch can still wait up to about 3
+        # minutes when it starts multi-user.target, which is ordered after it.
+        ${pkgs.systemd}/bin/systemctl restart --no-block netbird-managed-login.service || true
       fi
     '';
   };
