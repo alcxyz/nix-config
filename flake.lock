@@ -1110,11 +1110,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794853868,
-        "narHash": "sha256-RZ8PfDbBT2Kpo/BB/eDrwrXUtj5dTqKE8cUpZTHv9pA=",
+        "lastModified": 1794875468,
+        "narHash": "sha256-mEqS4tsuMzt64RtfVO6fqjOAfGa2Ptbyfz8WMCylQnk=",
         "ref": "dev",
-        "rev": "3ce09ec73152548f86aa65708f727e3ebc4ab39a",
-        "revCount": 1033,
+        "rev": "aaedb0ef127d14cfc07ea566dad0f01b275cd150",
+        "revCount": 1036,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-packages.git"
       },
@@ -1132,11 +1132,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794740938,
-        "narHash": "sha256-SQI2sQAVNqj0SAvxvP6LtLcC3q8DKCnS+Z1I2rpwgqg=",
+        "lastModified": 1794878943,
+        "narHash": "sha256-j31FKFDttTtWtjftGQK+nBrCIqRgFs2/0yPmhKn3NJo=",
         "ref": "dev",
-        "rev": "c5b693784f08ed66ed3700126fa7027c52463dd3",
-        "revCount": 1029,
+        "rev": "7cf16609c412faf9347874c2ef27b121bd33dad7",
+        "revCount": 1030,
         "type": "git",
         "url": "https://git.alc.xyz/alcxyz/nix-secrets.git"
       },
