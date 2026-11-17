@@ -33,6 +33,8 @@ in {
             inputs.nix-secrets.nixosModules.storageBackupPolicy
             inputs.sops-nix.nixosModules.sops
             inputs.nix-secrets.nixosModules.operatorLogin
+            # Private host roles, each gated on its own host name.
+            inputs.nix-secrets.nixosModules.privateHostModules
           ];
         }
     )
