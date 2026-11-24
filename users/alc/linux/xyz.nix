@@ -489,5 +489,16 @@ in {
       remote = "dropbox";
       localPath = "${config.home.homeDirectory}/Cloud/Dropbox";
     };
+
+    # One-way mirror of the Madideal account's whole drive (#1087): local
+    # changes under localPath are overwritten or deleted by the next sync.
+    oneDrive = {
+      enable = true;
+      remote = "onedrive-madideal";
+      localPath = "${config.home.homeDirectory}/Cloud/OneDriveMadideal";
+      # The Personal Vault ("Cofre Pessoal" in Portuguese) cannot be listed
+      # while locked.
+      exclude = ["/Cofre Pessoal/**"];
+    };
   };
 }

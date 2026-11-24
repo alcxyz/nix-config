@@ -7,9 +7,13 @@
 }:
 with lib; let
   cfg = config.services.cloud-sync;
+  # One systemd ExecStart argument: double-quoted, with backslashes, quotes,
+  # specifiers (%) and variable references ($) escaped, so folder names with
+  # spaces stay whole.
+  systemdArg = s: "\"" + replaceStrings ["\\" "\"" "%" "$"] ["\\\\" "\\\"" "%%" "$$"] s + "\"";
 in {
   options.services.cloud-sync = {
-    enable = mkEnableOption "Cloud Drive Sync (Google Drive, Dropbox & Nextcloud)";
+    enable = mkEnableOption "Cloud Drive Sync (Google Drive, Dropbox, Nextcloud & OneDrive)";
 
     syncInterval = mkOption {
       type = types.str;
@@ -91,6 +95,44 @@ in {
       };
       default = {};
     };
+
+    oneDrive = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkEnableOption "one-way OneDrive mirror";
+          remote = mkOption {
+            type = types.str;
+            default = "onedrive";
+            description = "rclone remote name for OneDrive";
+          };
+          path = mkOption {
+            type = types.str;
+            default = "";
+            description = "Folder within the remote to mirror; empty mirrors the whole drive, shortcuts to shared folders included";
+          };
+          localPath = mkOption {
+            type = types.path;
+            description = "Local mirror of the remote: the next sync deletes files added here and overwrites local edits";
+          };
+          exclude = mkOption {
+            type = types.listOf types.str;
+            default = [];
+            example = ["/Personal Vault/**"];
+            description = "rclone --exclude patterns, for example the Personal Vault, which cannot be listed while locked and would fail every sync";
+          };
+          syncArgs = mkOption {
+            type = types.str;
+            default = "--filter-from ${config.xdg.configHome}/rclone/filters.txt";
+            description = "Additional rclone sync arguments";
+          };
+        };
+      };
+      default = {};
+      description = ''
+        Mirror OneDrive one way, remote to local, with `rclone sync` rather
+        than `bisync`, so nothing local is written to folders others share.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -149,6 +191,22 @@ in {
           };
         };
       })
+      (mkIf cfg.oneDrive.enable {
+        cloud-sync-onedrive = {
+          Unit = {
+            Description = "Mirror OneDrive with rclone (one way)";
+            After = ["network-online.target"];
+            Wants = ["network-online.target"];
+          };
+          Service = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.rclone}/bin/rclone sync ${systemdArg "${cfg.oneDrive.remote}:${cfg.oneDrive.path}"} ${systemdArg (toString cfg.oneDrive.localPath)} ${concatMapStringsSep " " (p: "--exclude ${systemdArg p}") cfg.oneDrive.exclude} ${cfg.oneDrive.syncArgs}";
+            TimeoutStartSec = "2h";
+            StandardOutput = "journal";
+            StandardError = "journal";
+          };
+        };
+      })
     ];
 
     systemd.user.timers = mkMerge [
@@ -179,6 +237,17 @@ in {
           Unit.Description = "Run Nextcloud sync";
           Timer = {
             OnBootSec = "15min";
+            OnUnitActiveSec = cfg.syncInterval;
+            Persistent = true;
+          };
+          Install.WantedBy = ["timers.target"];
+        };
+      })
+      (mkIf cfg.oneDrive.enable {
+        cloud-sync-onedrive = {
+          Unit.Description = "Run OneDrive mirror";
+          Timer = {
+            OnBootSec = "20min";
             OnUnitActiveSec = cfg.syncInterval;
             Persistent = true;
           };
