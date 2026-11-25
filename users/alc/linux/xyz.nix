@@ -129,6 +129,8 @@ in {
     inputs.pandora.homeManagerModules.subscriptionReport
     # Refreshes the deck PR review service report from its journal on xps (xyz only).
     inputs.nix-secrets.homeManagerModules.deckReviewReport
+    # Refreshes the deck question links page from the cluster (xyz only).
+    inputs.nix-secrets.homeManagerModules.deckQuestionReport
     # Nightly development statistics collector and its private settings.
     inputs.devstats.homeManagerModules.default
     inputs.nix-secrets.homeManagerModules.devstats
