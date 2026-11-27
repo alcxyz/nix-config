@@ -53,11 +53,19 @@
     "kernel.hardlockup_panic" = 1;
   };
 
-  # Read-only diagnostics: ship pressure and disk statistics to nex, and take
-  # one SMART report of the NVMe and four SATA drives per boot.
+  # Read-only diagnostics: ship pressure and disk statistics and the kernel
+  # console to nex, and take one SMART report of the NVMe and four SATA drives
+  # per boot. kdump stays off: the crash kernel of boot.crashDump stops in a
+  # rescue shell instead of saving a dump and rebooting.
   services.pressure-recorder.sender = {
     enable = true;
     url = "http://192.168.1.16:19532";
+    netconsole = {
+      enable = true;
+      interface = "enp10s0";
+      localAddress = "192.168.1.13";
+      remoteAddress = "192.168.1.16";
+    };
   };
   services.smart-report = {
     enable = true;

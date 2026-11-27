@@ -63,11 +63,12 @@
 
   services.netbird.managed.enable = true;
 
-  # Receives the pressure record shipped from xev.
+  # Receives the pressure record and the kernel console of xev.
   services.pressure-recorder.receiver = {
     enable = true;
     listenAddress = "192.168.1.16";
     allowedSources = ["192.168.1.13"];
+    netconsole.sources.xev.address = "192.168.1.13";
     # Read-only, so the record can be read at a freeze without root.
     readers = [username];
   };

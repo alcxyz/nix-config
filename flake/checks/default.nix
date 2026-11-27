@@ -160,6 +160,33 @@ in {
 
   storage-health-freshness-lifecycle = import ./storage-health-freshness-vm.nix {inherit pkgs;};
 
+  pressure-recorder-netconsole = import ./pressure-recorder-netconsole-vm.nix {inherit pkgs;};
+
+  # xev's kernel console reaches nex. kdump stays off: nixpkgs' crash kernel
+  # boots into a rescue shell and waits for an operator instead of saving a
+  # dump and rebooting.
+  xev-crash-capture-contract = let
+    xev = self.nixosConfigurations.xev.config;
+    nex = self.nixosConfigurations.nex.config;
+    sender = xev.services.pressure-recorder.sender.netconsole;
+    receiver = nex.services.pressure-recorder.receiver;
+    source = receiver.netconsole.sources.xev;
+  in
+    assert sender.enable;
+    assert sender.remoteAddress == receiver.listenAddress;
+    assert sender.localAddress == source.address;
+    assert sender.port == source.port;
+    assert sender.localAddress == xev.k3s.nodeIp && sender.interface == xev.k3s.nodeInterface;
+    assert builtins.elem "netconsole" xev.boot.kernelModules;
+    assert builtins.elem "loglevel=7" xev.boot.kernelParams;
+    assert !xev.boot.crashDump.enable;
+    assert !(lib.any (lib.hasPrefix "crashkernel=") xev.boot.kernelParams);
+    assert nex.systemd.sockets.netconsole-xev.socketConfig.IPAddressAllow == source.address;
+    assert nex.systemd.services.netconsole-xev.serviceConfig.SyslogIdentifier == "netconsole-xev";
+      pkgs.runCommand "xev-crash-capture-contract" {} ''
+        touch "$out"
+      '';
+
   forgejo-orphan-monitor-credential-isolation = import ./forgejo-orphan-monitor-vm.nix {inherit pkgs;};
 
   forgejo-runner-pool-contract = let
