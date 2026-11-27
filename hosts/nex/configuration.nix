@@ -19,6 +19,7 @@
     "${configDir}/modules/nixos/virtualisation/k3s/default.nix"
     "${configDir}/modules/nixos/virtualisation/longhorn-prereqs/default.nix"
     "${configDir}/modules/nixos/services/netbird/default.nix"
+    "${configDir}/modules/nixos/services/pressure-recorder/default.nix"
   ];
 
   alc.private.openbaoClusterPolicy.enable = true;
@@ -60,6 +61,13 @@
   };
 
   services.netbird.managed.enable = true;
+
+  # Receives the pressure record shipped from xev.
+  services.pressure-recorder.receiver = {
+    enable = true;
+    listenAddress = "192.168.1.16";
+    allowedSources = ["192.168.1.13"];
+  };
 
   services.forgejo-actions-runner = {
     enable = true;

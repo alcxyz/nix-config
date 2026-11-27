@@ -19,6 +19,7 @@
     "${configDir}/modules/nixos/services/rustfs-native/default.nix"
     inputs.nix-secrets.nixosModules.rustfsApplicationPolicy
     "${configDir}/modules/nixos/services/netbird/default.nix"
+    "${configDir}/modules/nixos/services/pressure-recorder/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/default.nix"
     "${configDir}/modules/nixos/services/wolf-streaming/worker-runtime.nix"
     "${configDir}/modules/nixos/hardware/nvidia.nix"
@@ -49,6 +50,12 @@
     "kernel.panic" = 10;
     "kernel.softlockup_panic" = 1;
     "kernel.hardlockup_panic" = 1;
+  };
+
+  # Read-only diagnostics: ship pressure and disk statistics to nex.
+  services.pressure-recorder.sender = {
+    enable = true;
+    url = "http://192.168.1.16:19532";
   };
 
   # ADR-0062/0064 preparation only; bulk mounts and consumers are activated
