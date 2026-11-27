@@ -42,12 +42,15 @@
   hardware.nvidia.enable = true;
 
   # xev freezes hard without a kernel message (gitops#1318). systemd pings the
-  # SP5100 TCO watchdog, which resets the host after a kernel panic or a
-  # userspace hang; it did not end any real freeze, see below. A detected
-  # lockup panics so its log reaches nex before the reboot. The
-  # kubelet also sets kernel.panic to 10; set it from boot so a panic reboots
-  # while k3s is down or fenced.
-  systemd.settings.Manager.RuntimeWatchdogSec = "1min";
+  # board's Super I/O watchdog (below), which resets the host when systemd
+  # stops pinging it, after a kernel panic or a hang. A detected lockup panics
+  # so its log reaches nex before the reboot. The kubelet also sets
+  # kernel.panic to 10; set it from boot so a panic reboots while k3s is down
+  # or fenced.
+  systemd.settings.Manager = {
+    RuntimeWatchdogSec = "1min";
+    WatchdogDevice = "/dev/watchdog1";
+  };
   boot.kernel.sysctl = {
     "kernel.panic" = 10;
     "kernel.softlockup_panic" = 1;
@@ -62,15 +65,63 @@
 
   # The SP5100 TCO lives in the SoC's FCH, so a freeze of the whole SoC stops
   # it too: a one-off test showed it resets the board after a panic, yet no
-  # real freeze ever ended by it. Load the Super I/O watchdog, which has its
-  # own clock and drives the board reset line, next to it. Loading does not
-  # start its timer; systemd keeps using /dev/watchdog0 until a follow-up
-  # moves it, once the kernel log shows the chip was found. The soft
-  # dependency loads sp5100_tco first, so it stays watchdog0 at every boot.
+  # real freeze ever ended by it. The ITE IT8686E Super I/O watchdog
+  # (it87_wdt, found as "Chip IT8686 revision 2") sits outside the SoC and
+  # drives the board reset line; whether it keeps counting through a full SoC
+  # freeze (its LPC clock comes from the SoC) shows only at a real freeze. The
+  # soft dependency loads sp5100_tco first, so as long as it registers its
+  # device (as it does on this firmware), the board watchdog is watchdog1,
+  # which systemd opens.
   boot.kernelModules = ["it87_wdt"];
   boot.extraModprobeConfig = ''
     softdep it87_wdt pre: sp5100_tco
   '';
+
+  # One-off check that the board watchdog can reset the host. Five minutes
+  # after the timer starts (time to check that systemd has moved to the board
+  # watchdog), it panics with the automatic reboot off, but only in the boot
+  # it was armed for (the boot ID below, read from xev before this change),
+  # with the IT87 watchdog active and the SP5100 not. Any reboot changes the
+  # boot ID, so it can never fire at a later boot; otherwise it records and
+  # logs why and does nothing. The marker keeps it from running twice; remove
+  # this block after the test.
+  systemd.timers.board-watchdog-test = {
+    description = "Run the one-off board watchdog reset test";
+    wantedBy = ["timers.target"];
+    unitConfig.ConditionPathExists = "!/var/lib/board-watchdog-test/triggered";
+    timerConfig = {
+      OnActiveSec = "5min";
+      AccuracySec = "1s";
+    };
+  };
+  systemd.services.board-watchdog-test = {
+    description = "One-off board watchdog reset test: panic with automatic reboot off";
+    unitConfig.ConditionPathExists = "!/var/lib/board-watchdog-test/triggered";
+    serviceConfig = {
+      Type = "oneshot";
+      StateDirectory = "board-watchdog-test";
+    };
+    script = ''
+      wd=/sys/class/watchdog/watchdog1
+      identity="$(cat "$wd/identity" 2>/dev/null || echo missing)"
+      state="$(cat "$wd/state" 2>/dev/null || echo missing)"
+      tco_state="$(cat /sys/class/watchdog/watchdog0/state 2>/dev/null || echo missing)"
+      armed_boot=cb66bbf7-6ff1-4580-9658-3041e4ded3b3
+      boot="$(cat /proc/sys/kernel/random/boot_id)"
+      status="device=$wd identity=$identity state=$state timeout=$(cat "$wd/timeout" 2>/dev/null || echo missing) watchdog0_state=$tco_state boot=$boot"
+      if [ "$boot" != "$armed_boot" ] || [ "$identity" != "IT87 WDT" ] || [ "$state" != active ] || [ "$tco_state" = active ]; then
+        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) skipped: $status" > "$STATE_DIRECTORY/triggered"
+        sync
+        echo "board-watchdog-test: skipped, needs the armed boot, watchdog1 IT87 active and watchdog0 inactive ($status)" > /dev/kmsg
+        exit 0
+      fi
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) panicked: $status" > "$STATE_DIRECTORY/triggered"
+      sync
+      echo "board-watchdog-test: panicking with kernel.panic=0 ($status); only the board watchdog can reset the host" > /dev/kmsg
+      echo 0 > /proc/sys/kernel/panic
+      echo c > /proc/sysrq-trigger
+    '';
+  };
 
   # Read-only diagnostics: ship pressure and disk statistics and the kernel
   # console to nex, and take one SMART report of the NVMe and four SATA drives
