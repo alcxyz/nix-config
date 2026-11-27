@@ -26,6 +26,24 @@
     if cfg.mirrorSchedule == null
     then ""
     else cfg.mirrorSchedule;
+  extraSources = cfg.mirrorExtraSources;
+  extraBuckets = lib.concatMap (source: source.buckets) extraSources;
+  remoteVariable = name: "RCLONE_CONFIG_${lib.toUpper name}";
+  # rclone reads a bare number as KiB/s, so a unit is required.
+  bandwidthLimitType = lib.types.strMatching "[0-9]+(\\.[0-9]+)?[BKMGTP]";
+  # S3 bucket naming: no slash or empty name can reach the overlap guard or
+  # turn a bucket sync into a sync of the remote's root.
+  # Also no consecutive dots and no IPv4-address form, as S3 requires.
+  bucketNameType =
+    lib.types.addCheck (lib.types.strMatching "[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
+    (name:
+      builtins.match ".*\\.\\..*" name
+      == null
+      && builtins.match "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" name == null);
+  bandwidthArgument = limit:
+    if limit == null
+    then ""
+    else limit;
 in {
   options.services.k8s-backup-s3 = {
     enable = lib.mkEnableOption "host-level RustFS S3 target for Kubernetes backups";
@@ -106,7 +124,13 @@ in {
     mirrorSourceEndpoint = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Optional authoritative S3 endpoint to mirror into this target.";
+      description = ''
+        Optional authoritative S3 endpoint to mirror into this target. Once a
+        verified pass has seen it list a bucket, a later pass that finds it empty
+        fails before any change, as a lost or misconfigured source would look.
+        To empty it on purpose, remove the default-source-had-buckets file in the
+        mirror's state directory (/var/lib/k8s-backup-s3-mirror).
+      '';
     };
 
     mirrorSchedule = lib.mkOption {
@@ -119,6 +143,63 @@ in {
       type = lib.types.ints.positive;
       default = 4;
       description = "Maximum concurrent workers used by each S3 mirror pass.";
+    };
+
+    mirrorBandwidthLimit = lib.mkOption {
+      type = lib.types.nullOr bandwidthLimitType;
+      default = null;
+      example = "5M";
+      description = ''
+        rclone --bwlimit for the copies from mirrorSourceEndpoint, a number with a
+        binary unit: B, K, M, G, T or P (bytes, KiB ... PiB per second; 5M is
+        5 MiB/s). Null leaves them unlimited. Listings and checks are not limited.
+      '';
+    };
+
+    mirrorExtraSources = lib.mkOption {
+      type = lib.types.listOf (lib.types.submodule {
+        options = {
+          name = lib.mkOption {
+            type = lib.types.strMatching "[a-z][a-z0-9]{0,15}";
+            description = "rclone remote name for this source; not source or replica.";
+          };
+          endpoint = lib.mkOption {
+            type = lib.types.str;
+            description = "S3 endpoint of this source.";
+          };
+          buckets = lib.mkOption {
+            type = lib.types.nonEmptyListOf bucketNameType;
+            description = ''
+              Buckets mirrored from this source instead of from mirrorSourceEndpoint.
+              The credentials need only list and read them; the source need not
+              allow listing its buckets. A pass fails if mirrorSourceEndpoint also
+              lists one of them, rather than mirror two sources into one replica
+              bucket.
+            '';
+          };
+          accessKeyFile = lib.mkOption {
+            type = lib.types.path;
+            description = "File holding this source's access key, loaded as a systemd credential.";
+          };
+          secretKeyFile = lib.mkOption {
+            type = lib.types.path;
+            description = "File holding this source's secret key, loaded as a systemd credential.";
+          };
+          bandwidthLimit = lib.mkOption {
+            type = lib.types.nullOr bandwidthLimitType;
+            default = null;
+            example = "10M";
+            description = "rclone --bwlimit for the copies from this source, with a unit as in mirrorBandwidthLimit; null leaves them unlimited.";
+          };
+        };
+      });
+      default = [];
+      description = ''
+        Further S3 sources, each mirroring named buckets into this target with its
+        own endpoint, credentials and bandwidth limit. Every other bucket still
+        comes from mirrorSourceEndpoint, and each pass verifies and snapshots all
+        of them together.
+      '';
     };
 
     mirrorChecksumBuckets = lib.mkOption {
@@ -140,11 +221,17 @@ in {
       description = ''
         Weekday on which a mirror pass reconciles and verifies every object. A pass
         on any other day copies and checks only what the source received since the
-        last verified pass, so it never lists the replica, and it does not remove
-        objects deleted at the source. A pass also runs in full when no verified
-        pass is recorded or the last full one is over a week old, so a failed full
-        pass is retried by the next run. With null, every pass runs in full.
-        Setting a day changes when objects are verified, not what a full pass does.
+        last verified pass for each bucket a full pass has already verified under
+        its current source and endpoint, so for those it never lists the replica
+        and does not remove objects deleted at the source. Any other bucket gets a
+        full sync (with --delete-after) and verification inside that pass: a new
+        bucket, one whose source or endpoint changed, one that moved and came back
+        or rejoined the plan, and every bucket on the first run after an upgrade
+        from a version without these records. A pass also runs in full when no
+        verified pass is recorded or the last full one is over a week old, so a
+        failed full pass is retried by the next run. With null, every pass runs in
+        full. Setting a day changes when objects are verified, not what a full pass
+        does.
       '';
     };
 
@@ -257,6 +344,25 @@ in {
       {
         assertion = cfg.mirrorSourceEndpoint == null || cfg.mirrorSchedule != null;
         message = "services.k8s-backup-s3.mirrorSchedule is required when mirroring is enabled.";
+      }
+      {
+        assertion = extraSources == [] || mirrorEnabled;
+        message = "services.k8s-backup-s3.mirrorExtraSources requires mirrorSourceEndpoint.";
+      }
+      {
+        assertion = let
+          names = map (source: source.name) extraSources;
+        in
+          lib.unique names == names && !(builtins.elem "source" names) && !(builtins.elem "replica" names);
+        message = "services.k8s-backup-s3.mirrorExtraSources names must be unique and not source or replica.";
+      }
+      {
+        assertion = lib.unique extraBuckets == extraBuckets;
+        message = "services.k8s-backup-s3.mirrorExtraSources must not list a bucket twice.";
+      }
+      {
+        assertion = builtins.all (source: source.endpoint != localEndpoint) extraSources;
+        message = "A Kubernetes backup mirror source and the local S3 endpoint must differ.";
       }
     ];
 
@@ -453,10 +559,16 @@ in {
         ++ lib.optional (cfg.mirrorSnapshotRetention > 0) config.boot.zfs.package;
       serviceConfig = {
         Type = "oneshot";
-        LoadCredential = [
-          "s3_access_key:${cfg.accessKeyFile}"
-          "s3_secret_key:${cfg.secretKeyFile}"
-        ];
+        LoadCredential =
+          [
+            "s3_access_key:${cfg.accessKeyFile}"
+            "s3_secret_key:${cfg.secretKeyFile}"
+          ]
+          ++ lib.concatMap (source: [
+            "source_${source.name}_access_key:${source.accessKeyFile}"
+            "source_${source.name}_secret_key:${source.secretKeyFile}"
+          ])
+          extraSources;
         StateDirectory = "k8s-backup-s3-mirror";
         TimeoutStartSec = "12h";
         Nice = 15;
@@ -520,6 +632,9 @@ in {
           : >"$STATE_DIRECTORY/full-pending"
         fi
         echo "mirror pass scope=$pass_scope"
+        # Per bucket, the marker of the assignment a full pass last verified.
+        initialized_dir="$STATE_DIRECTORY/initialized"
+        mkdir -p "$initialized_dir"
 
         runtime_dir="$(mktemp -d)"
         trap 'rm -rf "$runtime_dir"' EXIT
@@ -528,14 +643,29 @@ in {
         # Both endpoints use the existing systemd credential files.
         export RCLONE_CONFIG="$runtime_dir/rclone.conf"
         : >"$RCLONE_CONFIG"
-        RCLONE_S3_ACCESS_KEY_ID="$(cat "$CREDENTIALS_DIRECTORY/s3_access_key")"
-        RCLONE_S3_SECRET_ACCESS_KEY="$(cat "$CREDENTIALS_DIRECTORY/s3_secret_key")"
-        export RCLONE_S3_ACCESS_KEY_ID RCLONE_S3_SECRET_ACCESS_KEY
+        # Credentials go to each remote: rclone treats RCLONE_S3_* as flags, which
+        # would override every remote's own keys.
+        RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID="$(cat "$CREDENTIALS_DIRECTORY/s3_access_key")"
+        RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY="$(cat "$CREDENTIALS_DIRECTORY/s3_secret_key")"
+        RCLONE_CONFIG_REPLICA_ACCESS_KEY_ID="$RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID"
+        RCLONE_CONFIG_REPLICA_SECRET_ACCESS_KEY="$RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY"
+        export RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY
+        export RCLONE_CONFIG_REPLICA_ACCESS_KEY_ID RCLONE_CONFIG_REPLICA_SECRET_ACCESS_KEY
         export RCLONE_S3_PROVIDER=Other RCLONE_S3_ENV_AUTH=false
         export RCLONE_S3_FORCE_PATH_STYLE=true
         export RCLONE_CONFIG_SOURCE_TYPE=s3 RCLONE_CONFIG_REPLICA_TYPE=s3
         export RCLONE_CONFIG_SOURCE_ENDPOINT=${lib.escapeShellArg cfg.mirrorSourceEndpoint}
         export RCLONE_CONFIG_REPLICA_ENDPOINT=${lib.escapeShellArg localEndpoint}
+        ${lib.concatMapStrings (source: let
+            variable = remoteVariable source.name;
+          in ''
+            export ${variable}_TYPE=s3
+            export ${variable}_ENDPOINT=${lib.escapeShellArg source.endpoint}
+            ${variable}_ACCESS_KEY_ID="$(cat "$CREDENTIALS_DIRECTORY/source_${source.name}_access_key")"
+            ${variable}_SECRET_ACCESS_KEY="$(cat "$CREDENTIALS_DIRECTORY/source_${source.name}_secret_key")"
+            export ${variable}_ACCESS_KEY_ID ${variable}_SECRET_ACCESS_KEY
+          '')
+          extraSources}
 
         rclone() {
           command rclone --quiet --stats 0 --retries 3 --low-level-retries 10 "$@"
@@ -623,15 +753,16 @@ in {
 
           for attempt in $(seq 1 5); do
             recent_filter
-            write_inventory source "$bucket" "$recent" "''${recent_args[@]}"
+            write_inventory "$source_alias" "$bucket" "$recent" "''${recent_args[@]}"
             recent_stats="$(inventory_stats "$recent")"
 
             recent_filter
             if rclone copy --ignore-times --no-traverse --metadata "''${recent_args[@]}" \
+              "''${bandwidth_args[@]}" \
               --transfers ${toString cfg.mirrorMaxWorkers} \
               --checkers ${toString cfg.mirrorMaxWorkers} \
               --s3-upload-concurrency 1 --multi-thread-streams 0 \
-              "source:$bucket" "replica:$bucket" >/dev/null; then
+              "$source_alias:$bucket" "replica:$bucket" >/dev/null; then
               cp "$recent" "$missing"
               verify_listing_gaps "$bucket" "$missing" "$inventory/recent-unresolved.jsonl" >/dev/null
               missing_objects="$(wc -l <"$missing" | tr -d ' ')"
@@ -666,12 +797,104 @@ in {
         rclone lsjson --dirs-only source: \
           | jq -r '.[] | select(.IsDir == true) | .Path' >"$inventory_dir/buckets"
         mapfile -t buckets <"$inventory_dir/buckets"
-        if [ "''${#buckets[@]}" -eq 0 ]; then
-          echo "authoritative backup target contains no buckets; refusing an empty mirror" >&2
+        # The default source once listed buckets in a verified pass: an empty
+        # listing now is far more likely a lost or misconfigured source than an
+        # intended change, so refuse before any change. An operator who empties
+        # it on purpose removes this record.
+        if [ "''${#buckets[@]}" -eq 0 ] && [ -e "$STATE_DIRECTORY/default-source-had-buckets" ]; then
+          echo "the default backup source lists no buckets, but a verified pass saw some; refusing (remove $STATE_DIRECTORY/default-source-had-buckets if it was emptied on purpose)" >&2
           exit 1
         fi
 
+        # Each bucket's source remote and bandwidth limit. A bucket that another
+        # source owns must not also come from the default one: two sources
+        # syncing into one replica bucket would delete each other's objects.
+        plan_sources=()
+        plan_endpoints=()
+        plan_buckets=()
+        plan_limits=()
+        extra_buckets=(${lib.escapeShellArgs extraBuckets})
         for bucket in "''${buckets[@]}"; do
+          for owned in "''${extra_buckets[@]}"; do
+            if [ "$bucket" = "$owned" ]; then
+              echo "bucket $bucket is on the default source but mirrored from another source; refusing" >&2
+              exit 1
+            fi
+          done
+          plan_sources+=(source)
+          plan_endpoints+=("$RCLONE_CONFIG_SOURCE_ENDPOINT")
+          plan_buckets+=("$bucket")
+          plan_limits+=(${lib.escapeShellArg (bandwidthArgument cfg.mirrorBandwidthLimit)})
+        done
+        ${lib.concatMapStrings (source:
+          lib.concatMapStrings (bucket: ''
+            plan_sources+=(${source.name})
+            plan_endpoints+=(${lib.escapeShellArg source.endpoint})
+            plan_buckets+=(${lib.escapeShellArg bucket})
+            plan_limits+=(${lib.escapeShellArg (bandwidthArgument source.bandwidthLimit)})
+          '')
+          source.buckets)
+        extraSources}
+        # On the combined plan: an empty default source is fine while another
+        # source supplies buckets, but a pass with nothing to mirror is refused.
+        if [ "''${#plan_buckets[@]}" -eq 0 ]; then
+          echo "the backup sources contain no buckets; refusing an empty mirror" >&2
+          exit 1
+        fi
+
+        # A bucket that leaves the plan loses its markers before any sync. Other
+        # buckets keep advancing last-verified meanwhile, so if it comes back an
+        # incremental pass would miss what it received while out; without a
+        # marker it gets a full pass instead.
+        planned_markers=()
+        for bucket in "''${plan_buckets[@]}"; do
+          planned_markers+=("$(printf '%s' "$bucket" | sha256sum | cut -d ' ' -f 1)")
+        done
+        for existing in "$initialized_dir"/*; do
+          [ -e "$existing" ] || continue
+          keep=false
+          for planned in "''${planned_markers[@]}"; do
+            if [ "''${existing##*/}" = "$planned" ]; then
+              keep=true
+            fi
+          done
+          if [ "$keep" = false ]; then
+            rm -rf -- "$existing"
+          fi
+        done
+
+        for index in "''${!plan_buckets[@]}"; do
+          source_alias="''${plan_sources[$index]}"
+          bucket="''${plan_buckets[$index]}"
+          bandwidth_args=()
+          if [ -n "''${plan_limits[$index]}" ]; then
+            bandwidth_args=(--bwlimit "''${plan_limits[$index]}")
+          fi
+          # A bucket gets a full pass until one has verified it under its current
+          # assignment (remote, endpoint), whatever the pass scope: an incremental
+          # pass copies only recent objects and would never bring over the older
+          # ones of a new source, a repointed endpoint or a new bucket. Each
+          # bucket has a directory holding the marker of the assignment a full
+          # pass last verified. Every other assignment's marker goes before
+          # anything touches the bucket's replica: a sync from this assignment
+          # may delete objects only the other one had, so after it, even a
+          # failed one, going back must take a full pass. Names are digests, so
+          # no bucket name or endpoint becomes a path.
+          bucket_markers="$initialized_dir/$(printf '%s' "$bucket" | sha256sum | cut -d ' ' -f 1)"
+          marker_name="$(printf '%s\n%s\n%s' "$source_alias" "''${plan_endpoints[$index]}" "$bucket" | sha256sum | cut -d ' ' -f 1)"
+          marker="$bucket_markers/$marker_name"
+          if [ -d "$bucket_markers" ]; then
+            for other in "$bucket_markers"/*; do
+              if [ "$other" != "$marker" ]; then
+                rm -f -- "$other"
+              fi
+            done
+          fi
+          bucket_scope="$pass_scope"
+          if [ ! -e "$marker" ]; then
+            bucket_scope=full
+          fi
+          echo "mirror source=$source_alias bucket=$bucket scope=$bucket_scope bwlimit=''${plan_limits[$index]:-none}"
           rclone mkdir "replica:$bucket"
 
           bucket_inventory="$(mktemp -d "$inventory_dir/bucket.XXXXXX")"
@@ -681,7 +904,7 @@ in {
           if [ "$recent_since" -gt 0 ]; then
             copy_recent "$bucket" "$bucket_inventory"
           fi
-          if [ "$pass_scope" = incremental ]; then
+          if [ "$bucket_scope" = incremental ]; then
             continue
           fi
 
@@ -695,7 +918,7 @@ in {
             # database WAL), so comparing live aggregate totals after the copy
             # can never converge even when every object observed at the start
             # was replicated correctly.
-            write_inventory source "$bucket" "$source_checkpoint"
+            write_inventory "$source_alias" "$bucket" "$source_checkpoint"
             # Retry transient requests before the bounded full-pass retry.
             # Limit transfer/check workers and multipart fan-out independently
             # so a few large objects cannot multiply upload concurrency.
@@ -711,10 +934,11 @@ in {
             sync_log="$bucket_inventory/sync.$attempt.log"
             sync_status=0
             rclone_logged "$sync_log" sync "''${comparison[@]}" --delete-after --metadata --no-unicode-normalization \
+              "''${bandwidth_args[@]}" \
               --transfers ${toString cfg.mirrorMaxWorkers} \
               --checkers ${toString cfg.mirrorMaxWorkers} \
               --s3-upload-concurrency 1 --multi-thread-streams 0 \
-              "source:$bucket" "replica:$bucket" >/dev/null || sync_status=$?
+              "$source_alias:$bucket" "replica:$bucket" >/dev/null || sync_status=$?
             # What --quiet would have shown, including errors a retry then recovered.
             grep -E '(ERROR|CRITICAL) *:' "$sync_log" >&2 || true
             if [ "$sync_status" -ne 0 ]; then
@@ -751,6 +975,8 @@ in {
               reconciled_copies="$(cat "$bucket_inventory"/sync.*.log | grep -c ': Copied (' || true)"
               reconciled_deletes="$(cat "$bucket_inventory"/sync.*.log | grep -c ': Deleted' || true)"
               echo "verified bucket=$bucket checkpoint_bytes=$checkpoint_bytes checkpoint_objects=$checkpoint_objects direct_stat_objects=$verified_by_stat_objects attempts=$attempt reconciled_copies=$reconciled_copies reconciled_deletes=$reconciled_deletes"
+              mkdir -p "$bucket_markers"
+              : >"$marker"
               break
             fi
 
@@ -767,6 +993,9 @@ in {
         # Every bucket passed. A snapshot failure below still fails the service,
         # but does not make the next pass copy this one's objects again.
         write_state last-verified
+        if [ "''${#buckets[@]}" -gt 0 ]; then
+          : >"$STATE_DIRECTORY/default-source-had-buckets"
+        fi
         if [ "$pass_scope" = full ]; then
           write_state last-full
           rm -f "$STATE_DIRECTORY/full-pending"

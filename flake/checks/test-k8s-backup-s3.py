@@ -22,11 +22,16 @@ SNAPSHOT_SCRIPT = Path(sys.argv.pop(1)).read_text()
 INCREMENTAL_SCRIPT = Path(sys.argv.pop(1)).read_text()
 STORAGE_SCRIPT = Path(sys.argv.pop(1)).read_text()
 LOCAL_BACKUP_SCRIPT = Path(sys.argv.pop(1)).read_text()
+SPLIT_SCRIPT = Path(sys.argv.pop(1)).read_text()
+SPLIT_BASE_INCREMENTAL_SCRIPT = Path(sys.argv.pop(1)).read_text()
+SPLIT_INCREMENTAL_SCRIPT = Path(sys.argv.pop(1)).read_text()
 SNAPSHOT_PROPERTY = "org.nix-config:k8s-backup-s3-mirror"
 DATASET = "fixture/k8s-backups"
 RCLONE = shutil.which("rclone")
 ACCESS = "synthetic-access"
 SECRET = "synthetic-secret/+="
+EXTRA_ACCESS = "synthetic-extra-access"
+EXTRA_SECRET = "synthetic-extra-secret/+="
 KEY = 'nested/object with spaces "quoted"\n'
 STAMP = "2026-01-01T00:00:00.000Z"
 SYSTEM_HEADERS = {
@@ -36,6 +41,14 @@ SYSTEM_HEADERS = {
     "content-disposition",
     "content-language",
 }
+
+
+def initialized_marker(remote, endpoint, bucket):
+    """The mirror's record that a full pass verified this bucket under this
+    assignment: a directory per bucket, a marker per remote and endpoint."""
+    directory = hashlib.sha256(bucket.encode()).hexdigest()
+    name = hashlib.sha256(f"{remote}\n{endpoint}\n{bucket}".encode()).hexdigest()
+    return Path(directory) / name
 
 
 class Store(ThreadingHTTPServer):
@@ -59,6 +72,7 @@ class Store(ThreadingHTTPServer):
         self.put_failures = 0
         self.growing = False
         self.listings = 0
+        self.access = ACCESS
 
     @property
     def endpoint(self):
@@ -96,7 +110,7 @@ class Handler(BaseHTTPRequestHandler):
             else store.bucket_object_headers.setdefault(bucket, {})
         )
         # Require the synthetic file-provided access key to reach the client.
-        if ACCESS not in self.headers.get("Authorization", ""):
+        if f"Credential={store.access}/" not in self.headers.get("Authorization", ""):
             self.reply(403)
             return
         if self.command == "GET" and not key:
@@ -165,6 +179,27 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(404 if key else 200)
         elif self.command == "GET" and key in bucket_objects:
             self.reply(body=bucket_objects[key], **bucket_headers.get(key, {}))
+        elif self.command == "PUT" and key and self.headers.get("x-amz-copy-source"):
+            # CopyObject, which rclone uses to update a replica object's
+            # modification time in place: keep the source's bytes.
+            copied_bucket, _, copied_key = (
+                unquote(self.headers["x-amz-copy-source"]).lstrip("/").partition("/")
+            )
+            copied_objects = (
+                store.objects
+                if copied_bucket == "fixture"
+                else store.bucket_objects.setdefault(copied_bucket, {})
+            )
+            if copied_key not in copied_objects:
+                self.reply(404, b"<Error><Code>NoSuchKey</Code></Error>")
+                return
+            data = copied_objects[copied_key]
+            bucket_objects[key] = data
+            body = (
+                f'<CopyObjectResult><LastModified>{STAMP}</LastModified>'
+                f'<ETag>"{hashlib.md5(data).hexdigest()}"</ETag></CopyObjectResult>'
+            )
+            self.reply(body=body.encode(), Content_Type="application/xml")
         elif self.command == "PUT":
             data = self.rfile.read(int(self.headers.get("Content-Length", 0)))
             if key and (store.fail_put or store.put_failures > 0):
@@ -218,8 +253,11 @@ class MirrorTests(unittest.TestCase):
         (self.bin / "rclone").write_text(
             f"#!{sys.executable}\n"
             "import json, os, sys\n"
-            f"assert os.environ['RCLONE_S3_ACCESS_KEY_ID'] == {ACCESS!r}\n"
-            f"assert os.environ['RCLONE_S3_SECRET_ACCESS_KEY'] == {SECRET!r}\n"
+            f"assert os.environ['RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID'] == {ACCESS!r}\n"
+            f"assert os.environ['RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY'] == {SECRET!r}\n"
+            f"assert os.environ['RCLONE_CONFIG_REPLICA_ACCESS_KEY_ID'] == {ACCESS!r}\n"
+            f"assert os.environ['RCLONE_CONFIG_REPLICA_SECRET_ACCESS_KEY'] == {SECRET!r}\n"
+            "assert 'RCLONE_S3_ACCESS_KEY_ID' not in os.environ\n"
             f"with open({str(self.root / 'calls')!r}, 'a') as f:\n"
             "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
             f"with open({str(self.root / 'events')!r}, 'a') as f:\n"
@@ -608,9 +646,16 @@ class IncrementalTests(MirrorTests):
         moment = datetime.now(timezone.utc) - timedelta(hours=hours)
         return moment.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    def record(self, *, verified=24, full=48):
+    def record(self, *, verified=24, full=48, initialized=True):
         self.source.objects["new-block"] = b"recent"
         self.source.modified["new-block"] = self.hours_ago(1)
+        if initialized:
+            # A full pass has verified every bucket from this source.
+            for bucket in self.source.buckets:
+                marker = self.state / "initialized" / initialized_marker(
+                    "source", self.source.endpoint, bucket)
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text("")
         now = int(time.time())
         (self.state / "last-verified").write_text(f"{now - verified * 3600}\n")
         (self.state / "last-full").write_text(f"{now - full * 3600}\n")
@@ -627,6 +672,23 @@ class IncrementalTests(MirrorTests):
             for event in events
             if event[:2] == ["zfs", "snapshot"]
         ]
+
+    def test_a_bucket_without_a_full_pass_gets_one_inside_an_incremental_pass(self):
+        # State from before per-bucket markers, or a bucket new since the last
+        # full pass: its older objects must still arrive.
+        self.record(initialized=False)
+        self.source.objects["old-block"] = b"older than the last verified pass"
+        result, syncs = self.run_mirror()
+        self.assertIn("mirror pass scope=incremental", result.stdout)
+        self.assertIn("bucket=fixture scope=full", result.stdout)
+        self.assertEqual(len(syncs), 1)
+        self.assertEqual(self.replica.objects["old-block"], b"older than the last verified pass")
+        self.assertTrue((self.state / "initialized" / initialized_marker(
+            "source", self.source.endpoint, "fixture")).exists())
+        self.assertEqual(self.snapshot_scopes(), ["incremental"])
+        result, syncs = self.run_mirror()
+        self.assertIn("bucket=fixture scope=incremental", result.stdout)
+        self.assertEqual(syncs, [])
 
     def test_incremental_copies_recent_objects_without_listing_replica(self):
         self.record()
@@ -830,6 +892,302 @@ install() {{ printf '%s\\n' "$*" > {str(marker)!r}; }}
         ):
             with self.subTest(values=values):
                 self.run_storage(success=False, **values)
+
+
+class SplitSourceTests(unittest.TestCase):
+    """A bucket from a further source with its own credentials and limits."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.source = Store({KEY: b"checkpoint"})
+        self.extra = Store({})
+        self.extra.access = EXTRA_ACCESS
+        self.extra.buckets = []
+        # The extra source's reader may not list buckets.
+        self.extra.fail_listing = "buckets"
+        self.extra.bucket_objects["extra-bucket"] = {"wal/000000010000000000000001": b"wal"}
+        self.replica = Store({})
+        for store in (self.source, self.extra, self.replica):
+            threading.Thread(target=store.serve_forever, daemon=True).start()
+            self.addCleanup(store.server_close)
+            self.addCleanup(store.shutdown)
+        credentials = self.root / "credentials"
+        credentials.mkdir()
+        for name, value in (("s3_access_key", ACCESS), ("s3_secret_key", SECRET),
+                            ("source_extra_access_key", EXTRA_ACCESS),
+                            ("source_extra_secret_key", EXTRA_SECRET)):
+            (credentials / name).write_text(value + "\n")
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        # Each remote gets its own access and secret key, and no backend-wide
+        # variable could override them.
+        (self.bin / "rclone").write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, sys\n"
+            f"assert os.environ['RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID'] == {ACCESS!r}\n"
+            f"assert os.environ['RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY'] == {SECRET!r}\n"
+            f"assert os.environ['RCLONE_CONFIG_REPLICA_ACCESS_KEY_ID'] == {ACCESS!r}\n"
+            f"assert os.environ['RCLONE_CONFIG_REPLICA_SECRET_ACCESS_KEY'] == {SECRET!r}\n"
+            "if 'RCLONE_CONFIG_EXTRA_TYPE' in os.environ:\n"
+            f"    assert os.environ['RCLONE_CONFIG_EXTRA_ACCESS_KEY_ID'] == {EXTRA_ACCESS!r}\n"
+            f"    assert os.environ['RCLONE_CONFIG_EXTRA_SECRET_ACCESS_KEY'] == {EXTRA_SECRET!r}\n"
+            "assert not [name for name in os.environ if name.startswith('RCLONE_S3_') and "
+            "name.endswith(('ACCESS_KEY_ID', 'SECRET_ACCESS_KEY'))]\n"
+            f"with open({str(self.root / 'calls')!r}, 'a') as f:\n"
+            "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            # A replica inventory that fails, as after a sync.
+            "if os.environ.get('FAIL_REPLICA_INVENTORY') and 'lsjson' in sys.argv and "
+            "'--recursive' in sys.argv and sys.argv[-1].startswith('replica:'):\n"
+            "    sys.exit(7)\n"
+            f"os.execv({RCLONE!r}, [{RCLONE!r}] + sys.argv[1:])\n"
+        )
+        (self.bin / "rclone").chmod(0o755)
+        (self.bin / "sleep").write_text("#!/bin/sh\nexit 0\n")
+        (self.bin / "sleep").chmod(0o755)
+        (self.bin / "zfs").write_text("#!/bin/sh\necho 'unexpected zfs' >&2\nexit 99\n")
+        (self.bin / "zfs").chmod(0o755)
+        (self.bin / "date").write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = "+%a" ] && [ -n "$FAKE_WEEKDAY" ]; then\n'
+            '  echo "$FAKE_WEEKDAY"\n'
+            "  exit 0\n"
+            "fi\n"
+            f'exec {shutil.which("date")} "$@"\n'
+        )
+        (self.bin / "date").chmod(0o755)
+        self.state = self.root / "state"
+        self.state.mkdir()
+        self.env = {
+            "STATE_DIRECTORY": str(self.state),
+            "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+            "HOME": str(self.root),
+            "TMPDIR": str(self.root),
+            "CREDENTIALS_DIRECTORY": str(credentials),
+        }
+
+    def run_mirror(self, success=True, script=SPLIT_SCRIPT, extra=None):
+        (self.root / "calls").write_text("")
+        script = script.replace("http://192.0.2.11:9000", self.source.endpoint)
+        script = script.replace("http://192.0.2.12:9000", (extra or self.extra).endpoint)
+        script = script.replace("http://192.0.2.10:9000", self.replica.endpoint)
+        result = subprocess.run(["bash", "-c", script], env=self.env, text=True,
+                                capture_output=True, timeout=30, check=False)
+        self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in (self.root / "calls").read_text().splitlines()]
+        for value in (ACCESS, SECRET, EXTRA_ACCESS, EXTRA_SECRET):
+            self.assertNotIn(value, result.stdout + result.stderr + json.dumps(calls))
+        return result, calls
+
+    def test_each_bucket_comes_from_its_source_with_its_limit(self):
+        result, calls = self.run_mirror()
+        self.assertEqual(self.replica.bucket_objects["extra-bucket"],
+                         {"wal/000000010000000000000001": b"wal"})
+        self.assertEqual(self.replica.objects, {KEY: b"checkpoint"})
+        syncs = {call[-2]: call for call in calls if "sync" in call}
+        self.assertEqual(set(syncs), {"source:fixture", "extra:extra-bucket"})
+        for remote, limit in (("source:fixture", "5M"), ("extra:extra-bucket", "10M")):
+            call = syncs[remote]
+            self.assertEqual(call[call.index("--bwlimit") + 1], limit)
+            self.assertEqual(call[-1], "replica:" + remote.split(":", 1)[1])
+        # Neither listing nor stat is rate limited.
+        self.assertFalse([call for call in calls if "lsjson" in call and "--bwlimit" in call])
+        self.assertIn("mirror source=extra bucket=extra-bucket scope=full bwlimit=10M",
+                      result.stdout)
+        # The extra source is never asked to list its buckets, and the default
+        # source never serves the extra bucket.
+        self.assertNotIn(("GET", ""), self.extra.requests)
+        self.assertFalse([path for _, path in self.source.requests
+                          if path.startswith("extra-bucket")])
+        self.assertIn("verified bucket=extra-bucket", result.stdout)
+
+    def test_an_extra_source_added_after_a_full_pass_gets_a_full_first_pass(self):
+        self.env["FAKE_WEEKDAY"] = "Mon"
+        # A Monday with no verified pass: full, from the default source only.
+        result, calls = self.run_mirror(script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        self.assertIn("mirror pass scope=full", result.stdout)
+        self.assertNotIn("extra-bucket", self.replica.bucket_objects)
+        # The extra source is added the next day. The pass is incremental, but
+        # the new bucket's old object (2026-01-01) must arrive all the same.
+        result, calls = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT)
+        self.assertIn("mirror pass scope=incremental", result.stdout)
+        self.assertIn("bucket=fixture scope=incremental", result.stdout)
+        self.assertIn("bucket=extra-bucket scope=full", result.stdout)
+        self.assertEqual(self.replica.bucket_objects["extra-bucket"],
+                         {"wal/000000010000000000000001": b"wal"})
+        self.assertEqual([call[-2] for call in calls if "sync" in call], ["extra:extra-bucket"])
+        self.assertEqual(self.markers(), {
+            initialized_marker("source", self.source.endpoint, "fixture"),
+            initialized_marker("extra", self.extra.endpoint, "extra-bucket")})
+        # The run after that is incremental for both.
+        result, calls = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT)
+        self.assertIn("bucket=extra-bucket scope=incremental", result.stdout)
+        self.assertEqual([call for call in calls if "sync" in call], [])
+
+    def markers(self):
+        root = self.state / "initialized"
+        return {path.relative_to(root) for path in root.rglob("*") if path.is_file()}
+
+    def initialize(self):
+        """A default-source full pass, then the extra source verified once."""
+        self.env["FAKE_WEEKDAY"] = "Mon"
+        self.run_mirror(script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        result, _ = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT)
+        self.assertIn("bucket=extra-bucket scope=full", result.stdout)
+        result, _ = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT)
+        self.assertIn("bucket=extra-bucket scope=incremental", result.stdout)
+
+    def start(self, store):
+        threading.Thread(target=store.serve_forever, daemon=True).start()
+        self.addCleanup(store.server_close)
+        self.addCleanup(store.shutdown)
+        return store
+
+    def test_a_repointed_endpoint_gets_a_full_pass(self):
+        self.initialize()
+        # The same remote name and bucket at a new endpoint, holding an older
+        # object the old one never had.
+        moved = Store({})
+        moved.access = EXTRA_ACCESS
+        moved.buckets = []
+        moved.fail_listing = "buckets"
+        moved.bucket_objects["extra-bucket"] = {
+            "wal/000000010000000000000001": b"wal", "base/old": b"older base backup"}
+        self.start(moved)
+        result, calls = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT, extra=moved)
+        self.assertIn("mirror pass scope=incremental", result.stdout)
+        self.assertIn("bucket=extra-bucket scope=full", result.stdout)
+        self.assertEqual(self.replica.bucket_objects["extra-bucket"]["base/old"],
+                         b"older base backup")
+        # Only the new assignment's marker remains for the bucket.
+        self.assertEqual(self.markers(), {
+            initialized_marker("source", self.source.endpoint, "fixture"),
+            initialized_marker("extra", moved.endpoint, "extra-bucket")})
+        result, calls = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT, extra=moved)
+        self.assertIn("bucket=extra-bucket scope=incremental", result.stdout)
+
+    def test_a_bucket_moved_away_and_back_gets_a_full_pass(self):
+        self.initialize()
+        # The bucket moves to the default source, which verifies it in full...
+        self.source.buckets = ["fixture", "extra-bucket"]
+        self.source.bucket_objects["extra-bucket"] = {"wal/000000010000000000000001": b"wal"}
+        result, calls = self.run_mirror(script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        self.assertIn("mirror source=source bucket=extra-bucket scope=full", result.stdout)
+        self.assertNotIn(initialized_marker("extra", self.extra.endpoint, "extra-bucket"),
+                         self.markers())
+        # ...and moves back, where an older object now waits.
+        self.source.buckets = ["fixture"]
+        self.extra.bucket_objects["extra-bucket"]["base/old"] = b"older base backup"
+        result, calls = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT)
+        self.assertIn("mirror source=extra bucket=extra-bucket scope=full", result.stdout)
+        self.assertEqual(self.replica.bucket_objects["extra-bucket"]["base/old"],
+                         b"older base backup")
+        self.assertEqual(self.markers(), {
+            initialized_marker("source", self.source.endpoint, "fixture"),
+            initialized_marker("extra", self.extra.endpoint, "extra-bucket")})
+
+    def test_a_bucket_back_in_the_plan_gets_a_full_pass(self):
+        self.env["FAKE_WEEKDAY"] = "Mon"
+        self.source.buckets = ["fixture", "second"]
+        self.source.bucket_objects["second"] = {"dump/1": b"first dump"}
+        # Both buckets are verified, then a pass is incremental for both.
+        result, _ = self.run_mirror(script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        self.assertIn("mirror pass scope=full", result.stdout)
+        result, _ = self.run_mirror(script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        self.assertIn("bucket=second scope=incremental", result.stdout)
+        # second leaves the plan for one pass while fixture passes and
+        # last-verified advances; its markers go.
+        self.source.buckets = ["fixture"]
+        # Backdated, so the pass's advance is visible within one second.
+        verified = int(time.time()) - 7200
+        (self.state / "last-verified").write_text(f"{verified}\n")
+        result, calls = self.run_mirror(script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        self.assertNotIn("bucket=second", result.stdout)
+        self.assertGreater(int((self.state / "last-verified").read_text()), verified)
+        self.assertEqual(self.markers(), {
+            initialized_marker("source", self.source.endpoint, "fixture")})
+        # It received an object while out, older than the last verified pass,
+        # so an incremental pass would never copy it.
+        self.source.bucket_objects["second"]["dump/2"] = b"written while out"
+        self.source.buckets = ["fixture", "second"]
+        result, calls = self.run_mirror(script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        self.assertIn("mirror pass scope=incremental", result.stdout)
+        self.assertIn("bucket=fixture scope=incremental", result.stdout)
+        self.assertIn("bucket=second scope=full", result.stdout)
+        self.assertEqual(self.replica.bucket_objects["second"]["dump/2"], b"written while out")
+
+    def test_a_failed_pass_after_reassignment_still_forces_a_full_pass_back(self):
+        # Assignment A (the extra endpoint) holds an older object and is
+        # verified, so the replica has it.
+        self.extra.bucket_objects["extra-bucket"]["base/old"] = b"older base backup"
+        self.initialize()
+        self.assertIn("base/old", self.replica.bucket_objects["extra-bucket"])
+        # Assignment B lacks it. Its full sync deletes it from the replica, and
+        # the inventory after the sync fails, so the pass fails.
+        other = Store({})
+        other.access = EXTRA_ACCESS
+        other.buckets = []
+        other.fail_listing = "buckets"
+        other.bucket_objects["extra-bucket"] = {"wal/000000010000000000000001": b"wal"}
+        self.start(other)
+        self.env["FAIL_REPLICA_INVENTORY"] = "1"
+        result, calls = self.run_mirror(success=False, script=SPLIT_INCREMENTAL_SCRIPT,
+                                        extra=other)
+        del self.env["FAIL_REPLICA_INVENTORY"]
+        self.assertIn("bucket=extra-bucket scope=full", result.stdout)
+        self.assertIn("extra:extra-bucket", [call[-2] for call in calls if "sync" in call])
+        self.assertNotIn("base/old", self.replica.bucket_objects["extra-bucket"])
+        # Neither assignment counts as verified for the bucket any more.
+        self.assertEqual(self.markers(), {
+            initialized_marker("source", self.source.endpoint, "fixture")})
+        # Back to A: a full pass, which restores the older object.
+        result, calls = self.run_mirror(script=SPLIT_INCREMENTAL_SCRIPT)
+        self.assertIn("mirror pass scope=incremental", result.stdout)
+        self.assertIn("bucket=extra-bucket scope=full", result.stdout)
+        self.assertEqual(self.replica.bucket_objects["extra-bucket"]["base/old"],
+                         b"older base backup")
+
+    def test_an_empty_default_source_is_fine_while_another_supplies_buckets(self):
+        self.source.buckets = []
+        result, calls = self.run_mirror()
+        self.assertIn("verified bucket=extra-bucket", result.stdout)
+        self.assertEqual([call[-2] for call in calls if "sync" in call], ["extra:extra-bucket"])
+
+    def test_an_empty_default_source_that_had_buckets_is_refused(self):
+        result, _ = self.run_mirror()
+        record = self.state / "default-source-had-buckets"
+        self.assertTrue(record.exists())
+        # The default source now lists nothing, though extra sources still
+        # supply buckets: the pass refuses before any change.
+        self.source.buckets = []
+        replica = dict(self.replica.objects)
+        result, calls = self.run_mirror(success=False)
+        self.assertIn("the default backup source lists no buckets, but a verified pass saw "
+                      "some; refusing", result.stderr)
+        self.assertFalse([call for call in calls
+                          if "sync" in call or "copy" in call or "mkdir" in call])
+        self.assertEqual(self.replica.objects, replica)
+        # Removing the record, as the operator would for an intended change,
+        # lets the pass run from the extra source alone.
+        record.unlink()
+        result, calls = self.run_mirror()
+        self.assertEqual([call[-2] for call in calls if "sync" in call], ["extra:extra-bucket"])
+        self.assertFalse(record.exists())
+
+    def test_a_pass_with_nothing_to_mirror_is_refused(self):
+        self.source.buckets = []
+        result, calls = self.run_mirror(success=False, script=SPLIT_BASE_INCREMENTAL_SCRIPT)
+        self.assertIn("the backup sources contain no buckets; refusing an empty mirror",
+                      result.stderr)
+        self.assertFalse([call for call in calls if "sync" in call or "mkdir" in call])
+
+    def test_a_bucket_on_both_sources_refuses_before_any_copy(self):
+        self.source.buckets = ["fixture", "extra-bucket"]
+        result, calls = self.run_mirror(success=False)
+        self.assertIn("bucket extra-bucket is on the default source but mirrored from another "
+                      "source; refusing", result.stderr)
+        self.assertFalse([call for call in calls if "sync" in call or "copy" in call])
 
 
 class LocalBackupTests(unittest.TestCase):

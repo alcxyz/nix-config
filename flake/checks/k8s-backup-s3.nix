@@ -64,6 +64,25 @@
       mirrorFullVerificationDay = "Sat";
       mirrorSnapshotRetention = 2;
     });
+  splitPolicy =
+    mirrorPolicy
+    // {
+      mirrorBandwidthLimit = "5M";
+      mirrorExtraSources = [
+        {
+          name = "extra";
+          endpoint = "http://192.0.2.12:9000";
+          buckets = ["extra-bucket"];
+          accessKeyFile = "/run/credentials/k8s-backup-extra-access";
+          secretKeyFile = "/run/credentials/k8s-backup-extra-secret";
+          bandwidthLimit = "10M";
+        }
+      ];
+    };
+  splitMirror = evaluate splitPolicy;
+  splitBaseIncremental = evaluate (mirrorPolicy // {mirrorFullVerificationDay = "Sat";});
+  splitIncremental = evaluate (splitPolicy // {mirrorFullVerificationDay = "Sat";});
+  extraSource = builtins.head splitPolicy.mirrorExtraSources;
   disabled = evaluate {enable = false;};
   evaluateLocalBackup = localBackup:
     (zfs.extendModules {
@@ -148,6 +167,33 @@ in
   assert mounted.config.services.k8s-backup-s3.quota == null;
   assert mounted.config.services.k8s-backup-s3.mirrorSchedule == null;
   assert mirror.config.services.k8s-backup-s3.mirrorSnapshotRetention == 0;
+  assert mirror.config.systemd.services.k8s-backup-s3-mirror.serviceConfig.LoadCredential
+  == [
+    "s3_access_key:/run/credentials/k8s-backup-access"
+    "s3_secret_key:/run/credentials/k8s-backup-secret"
+  ];
+  assert builtins.elem "source_extra_access_key:/run/credentials/k8s-backup-extra-access"
+  splitMirror.config.systemd.services.k8s-backup-s3-mirror.serviceConfig.LoadCredential;
+  assert fails (zfsPolicy // {mirrorExtraSources = splitPolicy.mirrorExtraSources;});
+  assert fails (splitPolicy // {mirrorExtraSources = [extraSource extraSource];});
+  assert fails (splitPolicy // {mirrorExtraSources = [(extraSource // {name = "source";})];});
+  assert fails (splitPolicy // {mirrorExtraSources = [extraSource (extraSource // {name = "other";})];});
+  assert fails (splitPolicy // {mirrorExtraSources = [(extraSource // {endpoint = "http://192.0.2.10:9000";})];});
+  assert fails (splitPolicy // {mirrorExtraSources = [(extraSource // {buckets = [];})];});
+  assert fails (splitPolicy // {mirrorBandwidthLimit = "fast";});
+  # rclone reads a bare number as KiB/s.
+  assert fails (splitPolicy // {mirrorBandwidthLimit = "1048576";});
+  assert fails (splitPolicy // {mirrorExtraSources = [(extraSource // {bandwidthLimit = "10";})];});
+  assert builtins.all (bucket: fails (splitPolicy // {mirrorExtraSources = [(extraSource // {buckets = [bucket];})];})) [
+    ""
+    "fixture/wal"
+    "Fixture"
+    "a"
+    "-fixture"
+    "fixture..wal"
+    "192.0.2.10"
+  ];
+  assert !(fails (splitPolicy // {mirrorExtraSources = [(extraSource // {buckets = ["fixture.wal" "postgres-1.2"];})];}));
   assert !(builtins.elem mirror.config.boot.zfs.package mirror.config.systemd.services.k8s-backup-s3-mirror.path);
   assert builtins.elem snapshotMirror.config.boot.zfs.package snapshotMirror.config.systemd.services.k8s-backup-s3-mirror.path;
   assert builtins.elem pkgs.util-linux zfs.config.systemd.services.k8s-backup-s3-storage.path;
@@ -203,6 +249,9 @@ in
         ${pkgs.writeText "k8s-backup-s3-snapshot-fixture.sh" snapshotMirror.config.systemd.services.k8s-backup-s3-mirror.script} \
         ${pkgs.writeText "k8s-backup-s3-incremental-fixture.sh" incrementalMirror.config.systemd.services.k8s-backup-s3-mirror.script} \
         ${pkgs.writeText "k8s-backup-s3-storage-fixture.sh" zfs.config.systemd.services.k8s-backup-s3-storage.script} \
-        ${pkgs.writeText "xyz-local-backup-disabled-fixture.sh" (builtins.unsafeDiscardStringContext directLocalBackupPackage.text)}
+        ${pkgs.writeText "xyz-local-backup-disabled-fixture.sh" (builtins.unsafeDiscardStringContext directLocalBackupPackage.text)} \
+        ${pkgs.writeText "k8s-backup-s3-split-fixture.sh" splitMirror.config.systemd.services.k8s-backup-s3-mirror.script} \
+        ${pkgs.writeText "k8s-backup-s3-split-base-incremental-fixture.sh" splitBaseIncremental.config.systemd.services.k8s-backup-s3-mirror.script} \
+        ${pkgs.writeText "k8s-backup-s3-split-incremental-fixture.sh" splitIncremental.config.systemd.services.k8s-backup-s3-mirror.script}
       touch "$out"
     ''
