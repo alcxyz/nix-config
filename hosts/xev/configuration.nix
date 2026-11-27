@@ -41,9 +41,10 @@
   boot.binfmt.emulatedSystems = ["aarch64-linux"];
   hardware.nvidia.enable = true;
 
-  # xev freezes hard without a kernel message (gitops#1318). The SP5100 TCO
-  # watchdog resets a frozen host instead of waiting for the operator, and a
-  # detected lockup panics so its log reaches pstore before the reboot. The
+  # xev freezes hard without a kernel message (gitops#1318). systemd pings the
+  # SP5100 TCO watchdog, which resets the host after a kernel panic or a
+  # userspace hang; it did not end any real freeze, see below. A detected
+  # lockup panics so its log reaches nex before the reboot. The
   # kubelet also sets kernel.panic to 10; set it from boot so a panic reboots
   # while k3s is down or fenced.
   systemd.settings.Manager.RuntimeWatchdogSec = "1min";
@@ -59,46 +60,17 @@
   # idle power. Remove it once a firmware fix is in place.
   boot.kernelParams = ["processor.max_cstate=1"];
 
-  # One-off check that the TCO watchdog can reset this board. Two minutes
-  # after the unit first appears, it records a marker, turns off the
-  # automatic reboot after a panic and panics the kernel: only the watchdog
-  # can then bring the host back, within about a minute. The marker keeps it
-  # from running again; remove this block after the test.
-  systemd.timers.watchdog-reset-test = {
-    description = "Run the one-off watchdog reset test";
-    wantedBy = ["timers.target"];
-    unitConfig.ConditionPathExists = "!/var/lib/watchdog-reset-test/triggered";
-    timerConfig = {
-      OnActiveSec = "2min";
-      AccuracySec = "1s";
-    };
-  };
-  systemd.services.watchdog-reset-test = {
-    description = "One-off watchdog reset test: panic with automatic reboot off";
-    unitConfig.ConditionPathExists = "!/var/lib/watchdog-reset-test/triggered";
-    serviceConfig = {
-      Type = "oneshot";
-      StateDirectory = "watchdog-reset-test";
-    };
-    script = ''
-      wd=/sys/class/watchdog/watchdog0
-      state="$(cat "$wd/state" 2>/dev/null || echo missing)"
-      status="identity=$(cat "$wd/identity" 2>/dev/null || echo missing) state=$state timeout=$(cat "$wd/timeout" 2>/dev/null || echo missing)"
-      # Record what was armed, on disk and through netconsole, so a host that
-      # stays down can be told apart from a test that never had a watchdog.
-      if [ "$state" != active ]; then
-        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) skipped: $status" > "$STATE_DIRECTORY/triggered"
-        sync
-        echo "watchdog-reset-test: skipped, watchdog0 not active ($status)" > /dev/kmsg
-        exit 0
-      fi
-      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) panicked: $status" > "$STATE_DIRECTORY/triggered"
-      sync
-      echo "watchdog-reset-test: panicking with kernel.panic=0 ($status); only the watchdog can reset the host" > /dev/kmsg
-      echo 0 > /proc/sys/kernel/panic
-      echo c > /proc/sysrq-trigger
-    '';
-  };
+  # The SP5100 TCO lives in the SoC's FCH, so a freeze of the whole SoC stops
+  # it too: a one-off test showed it resets the board after a panic, yet no
+  # real freeze ever ended by it. Load the Super I/O watchdog, which has its
+  # own clock and drives the board reset line, next to it. Loading does not
+  # start its timer; systemd keeps using /dev/watchdog0 until a follow-up
+  # moves it, once the kernel log shows the chip was found. The soft
+  # dependency loads sp5100_tco first, so it stays watchdog0 at every boot.
+  boot.kernelModules = ["it87_wdt"];
+  boot.extraModprobeConfig = ''
+    softdep it87_wdt pre: sp5100_tco
+  '';
 
   # Read-only diagnostics: ship pressure and disk statistics and the kernel
   # console to nex, and take one SMART report of the NVMe and four SATA drives
