@@ -23,10 +23,11 @@
 # merged, sectors written, ms writing, I/Os in progress, ms doing I/O,
 # weighted ms doing I/O, then discard and flush counters.
 #
-# Reading the record on the receiver:
-#   sudo journalctl -D /var/log/journal/remote -t pressure-recorder --since -1h
-#   sudo journalctl -D /var/log/journal/remote -t pressure-recorder -n 200
-#   sudo journalctl -D /var/log/journal/remote -t pressure-recorder \
+# Reading the record on the receiver (as root, or as a user listed in
+# `receiver.readers`, without sudo):
+#   journalctl -D /var/log/journal/remote -t pressure-recorder --since -1h
+#   journalctl -D /var/log/journal/remote -t pressure-recorder -n 200
+#   journalctl -D /var/log/journal/remote -t pressure-recorder \
 #     --since '2026-01-01 03:00' --until '2026-01-01 03:30' -o short-precise
 # The last lines before a gap in the timestamps are the final samples the
 # sender shipped. On the sender, `journalctl --namespace=pressure` shows the
@@ -96,6 +97,18 @@ in {
         type = lib.types.str;
         default = "1G";
         description = "Disk space the received journals may use in total.";
+      };
+
+      readers = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        example = ["alice"];
+        description = ''
+          Users who may read the received journals without root. They join the
+          receiver's group. The receiver writes its journal files with mode
+          0640 into /var/log/journal/remote (mode 0755), so the group can read
+          them but not change, add or delete them.
+        '';
       };
     };
   };
@@ -180,6 +193,8 @@ in {
       # and dbus's reload trigger. The same nologin as a path leaves
       # system-path unchanged.
       users.users.systemd-journal-remote.shell = "${pkgs.shadow}/bin/nologin";
+
+      users.groups.systemd-journal-remote.members = cfg.receiver.readers;
 
       systemd.sockets.systemd-journal-remote = {
         listenStreams = lib.mkForce [

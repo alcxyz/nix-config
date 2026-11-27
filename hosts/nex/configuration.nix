@@ -3,6 +3,7 @@
   pkgs,
   inputs,
   configDir,
+  username,
   ...
 }: {
   imports = [
@@ -67,6 +68,8 @@
     enable = true;
     listenAddress = "192.168.1.16";
     allowedSources = ["192.168.1.13"];
+    # Read-only, so the record can be read at a freeze without root.
+    readers = [username];
   };
 
   services.forgejo-actions-runner = {
