@@ -634,6 +634,25 @@ in {
       modules/nixos/services/snapshot-restic-home/snapshot-cleanup.sh
   '';
 
+  # A switch that changes the boot check's ignored units reruns the check
+  # once through the recheck unit; the check itself never restarts.
+  nixfleet-boot-check-recheck-contract = let
+    host = self.nixosConfigurations.nux.config;
+    check = host.systemd.services.nixfleet-boot-check;
+    recheck = host.systemd.services.nixfleet-boot-check-recheck;
+  in
+    assert !check.restartIfChanged;
+    assert recheck.restartIfChanged;
+    assert builtins.elem "multi-user.target" recheck.wantedBy;
+    assert recheck.serviceConfig.Type == "oneshot" && recheck.serviceConfig.RemainAfterExit;
+    assert recheck.serviceConfig.RuntimeDirectoryPreserve == "yes";
+    assert recheck.environment.NIXFLEET_BOOT_CHECK_IGNORED_UNITS == check.environment.NIXFLEET_BOOT_CHECK_IGNORED_UNITS;
+    assert builtins.elem "forge-mirror-audit.service" host.services.nixfleet-boot-check.ignoredFailedUnits;
+      mkRepoCheck "nixfleet-boot-check-recheck-contract" [pkgs.bash pkgs.coreutils pkgs.gnugrep] ''
+        bash modules/nixos/services/nixfleet-boot-check/test-recheck.sh \
+          modules/nixos/services/nixfleet-boot-check/recheck.sh
+      '';
+
   storage-health-monitor-contract = let
     host = self.nixosConfigurations.xyz.config;
     monitored = host.services.storage-health-monitor.units;

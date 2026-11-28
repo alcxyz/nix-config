@@ -72,6 +72,9 @@ in {
   services.forge-mirror-audit = {
     enable = true;
     schedule = "*-*-* 00/8:00:00"; # every 8 hours
+    # Findings go to the audit's own check, pinged through the storage
+    # monitor's project base, instead of failing the boot check.
+    alert.enable = true;
   };
 
   k3s = {

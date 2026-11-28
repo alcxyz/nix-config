@@ -17,6 +17,12 @@
     runtimeInputs = [pkgs.coreutils pkgs.gnused pkgs.systemd];
     text = builtins.readFile ./boot-check.sh;
   };
+  recheck = pkgs.writeShellApplication {
+    name = "nixfleet-boot-check-recheck";
+    runtimeInputs = [pkgs.coreutils pkgs.gnugrep pkgs.systemd];
+    text = builtins.readFile ./recheck.sh;
+  };
+  ignoredUnits = lib.concatStringsSep " " cfg.ignoredFailedUnits;
   runnerType = lib.types.submodule {
     options = {
       unit = lib.mkOption {
@@ -71,11 +77,16 @@ in {
   config = lib.mkIf cfg.enable {
     systemd.services.nixfleet-boot-check = {
       description = "Check that the host booted as intended for nixfleet";
-      # Only a boot is checked; a switch must not rerun the check.
+      # The check unit itself never restarts on a switch. The recheck unit
+      # below reruns it once when a switch changes the ignored units, or on
+      # its first arrival when the check is not a finished pass (failed,
+      # reset or still running). So a result can come from a rerun in the
+      # middle of a switch, which reads the failed units while the switch is
+      # still starting others.
       restartIfChanged = false;
       environment = {
         NIXFLEET_BOOT_CHECK_WAIT_SECONDS = toString cfg.waitSeconds;
-        NIXFLEET_BOOT_CHECK_IGNORED_UNITS = lib.concatStringsSep " " cfg.ignoredFailedUnits;
+        NIXFLEET_BOOT_CHECK_IGNORED_UNITS = ignoredUnits;
         NIXFLEET_BOOT_CHECK_RUNNERS =
           lib.concatMapStringsSep " " (runner: "${runner.unit}=${toString runner.holdMarkerDirectory}") cfg.runnerUnits;
       };
@@ -93,6 +104,30 @@ in {
         # Keep the result for nixfleet even if the unit is stopped.
         RuntimeDirectoryPreserve = "yes";
         UMask = "0022";
+      };
+    };
+
+    # A switch that changes the ignored units reruns the check once, so a
+    # failure the new list forgives clears without a reboot. Other switches
+    # leave the check alone; see recheck.sh.
+    systemd.services.nixfleet-boot-check-recheck = {
+      description = "Rerun the nixfleet boot check when its ignored units change";
+      wantedBy = ["multi-user.target"];
+      environment = {
+        NIXFLEET_BOOT_CHECK_IGNORED_UNITS = ignoredUnits;
+        NIXFLEET_BOOT_CHECK_RECHECK_RECORD = "/run/nixfleet-boot-check-recheck/ignored-units";
+        NIXFLEET_BOOT_CHECK_UNIT = unitName;
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        # Active after its run, so a switch restarts it only when its unit
+        # changes rather than starting it again with every target.
+        RemainAfterExit = true;
+        ExecStart = lib.getExe recheck;
+        RuntimeDirectory = "nixfleet-boot-check-recheck";
+        RuntimeDirectoryMode = "0700";
+        # The record must outlive the restart that compares against it.
+        RuntimeDirectoryPreserve = "yes";
       };
     };
 

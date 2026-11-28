@@ -8,10 +8,13 @@
     git = "/git";
     coreutils = "/coreutils";
     forge-mirror = "/forge-mirror";
+    curl = "/curl";
+    gnugrep = "/gnugrep";
+    python3 = "/python3";
     writeShellScript = _: text: text;
     writeText = name: text: "/policy/${name}-${toString (builtins.stringLength text)}";
   };
-  evaluate = serviceName: serviceModule: settings:
+  evaluateWith = extra: serviceName: serviceModule: settings:
     lib.evalModules {
       specialArgs = {
         inputs = {};
@@ -26,6 +29,23 @@
               type = lib.types.attrsOf (lib.types.attrsOf (lib.types.attrsOf lib.types.anything));
             };
             systemd = lib.mkOption {type = lib.types.attrs;};
+            # Stand-ins for the common modules the audit alert reads and
+            # extends.
+            services.storage-health-monitor = {
+              enable = lib.mkEnableOption "storage monitor stand-in";
+              pingBaseFile = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+              };
+            };
+            networking.hostName = lib.mkOption {
+              type = lib.types.str;
+              default = "Fixture";
+            };
+            services.nixfleet-boot-check.ignoredFailedUnits = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+            };
           };
           config = {
             services.${serviceName} =
@@ -40,10 +60,42 @@
             };
           };
         }
+        {config = extra;}
       ];
     };
+  evaluate = evaluateWith {};
   evaluateAudit = evaluate "forge-mirror-audit" ../../modules/nixos/services/forge-mirror-audit;
   evaluatePull = evaluate "forge-mirror-pull" ../../modules/nixos/services/forge-mirror-pull;
+  auditSettings = {
+    forgejoUrl = "https://forge.example";
+    forgejoUser = "forgejo-account";
+    githubUser = "github-account";
+    githubPrimaryRepositories = [];
+    githubDeniedRepositories = [];
+    requiredPrivateRepositories = [];
+  };
+  monitored = {
+    services.storage-health-monitor = {
+      enable = true;
+      pingBaseFile = "/run/fixture-project-base";
+    };
+  };
+  evaluateMonitoredAudit = evaluateWith monitored "forge-mirror-audit" ../../modules/nixos/services/forge-mirror-audit;
+  auditAlertMessage = "services.forge-mirror-audit.alert needs a project pingBaseFile, supplied explicitly or by storage-health-monitor.pingBaseFile.";
+  failedAssertion = evaluated: message:
+    lib.any (entry: !entry.assertion && entry.message == message) evaluated.config.assertions;
+  auditAlertOff = evaluateMonitoredAudit auditSettings;
+  auditAlertMonitored = evaluateMonitoredAudit (auditSettings // {alert.enable = true;});
+  auditAlertExplicit = evaluateAudit (auditSettings
+    // {
+      alert = {
+        enable = true;
+        pingBaseFile = "/run/fixture-explicit-base";
+        slug = "fixture-audit";
+      };
+    });
+  auditAlertMissingBase = evaluateAudit (auditSettings // {alert.enable = true;});
+  auditService = evaluated: evaluated.config.systemd.services.forge-mirror-audit.serviceConfig;
   assertionsPass = evaluated: lib.all (entry: entry.assertion) evaluated.config.assertions;
   auditExec = evaluated: evaluated.config.systemd.services.forge-mirror-audit.serviceConfig.ExecStart;
   pullExec = evaluated: evaluated.config.systemd.services.forge-mirror-pull.serviceConfig.ExecStart;
@@ -163,4 +215,26 @@ in
   assert !(lib.hasInfix "GITHUB_USER=" (pullExec pullPopulated));
   assert !(builtins.tryEval (pullExec pullEmptyScalar)).success;
   assert !(builtins.tryEval (pullExec pullMissingScalar)).success;
-  assert !(assertionsPass pullMissingCredentials); true
+  assert !(assertionsPass pullMissingCredentials);
+  # The alert defaults follow the storage monitor and leave the unit alone
+  # until enabled.
+  assert auditAlertOff.config.services.forge-mirror-audit.alert.slug == "forge-mirror-audit-fixture";
+  assert auditAlertOff.config.services.forge-mirror-audit.alert.pingBaseFile == "/run/fixture-project-base";
+  assert (evaluateAudit auditSettings).config.services.forge-mirror-audit.alert.pingBaseFile == null;
+  assert auditAlertOff.config.services.nixfleet-boot-check.ignoredFailedUnits == [];
+  assert lib.hasInfix "exec /forge-mirror/bin/forge-mirror audit" (auditExec auditAlertOff);
+  assert !(auditService auditAlertOff ? RuntimeDirectory);
+  # Enabled, it pings the shared project base and no longer fails the boot
+  # check.
+  assert assertionsPass auditAlertMonitored;
+  assert auditAlertMonitored.config.services.nixfleet-boot-check.ignoredFailedUnits == ["forge-mirror-audit.service"];
+  assert (auditService auditAlertMonitored).RuntimeDirectory == "forge-mirror-audit";
+  assert lib.hasInfix "base /run/fixture-project-base forge-mirror-audit-fixture" (auditExec auditAlertMonitored);
+  assert lib.hasInfix "send_ping /start" (auditExec auditAlertMonitored);
+  assert lib.hasInfix "send_ping /fail" (auditExec auditAlertMonitored);
+  assert lib.hasInfix "exit \"$status\"" (auditExec auditAlertMonitored);
+  assert !(lib.hasInfix "exec /forge-mirror/bin/forge-mirror audit" (auditExec auditAlertMonitored));
+  assert lib.hasInfix "base /run/fixture-explicit-base fixture-audit" (auditExec auditAlertExplicit);
+  # Without a project base the alert is refused.
+  assert failedAssertion auditAlertMissingBase auditAlertMessage;
+  assert !(failedAssertion auditAlertMonitored auditAlertMessage); true
